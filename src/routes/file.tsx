@@ -62,15 +62,21 @@ import {
 import { createDialog } from "@/components/dialogs/dialog";
 
 const createComfirmDialog = () => {
-  const { open, Component } = createDialog({
+  const { open, close, submit, Component } = createDialog({
     title: "Delete Files",
     description: "This operation deletes selected files",
-    content:
+    content: () =>
       "Are you really sure you want to delete these files?",
-    onConfirm() {},
 
-    cancelText: "Cancel",
-    confirmText: "Confirm",
+    cancel: <Button onClick={() => close()}>Cancel</Button>,
+    confirm: (
+      <Button
+        variant="destructive"
+        onClick={() => submit(true)}
+      >
+        Confirm
+      </Button>
+    ),
   });
 
   return { open, Component };

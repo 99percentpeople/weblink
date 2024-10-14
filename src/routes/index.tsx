@@ -82,8 +82,8 @@ export default function Home(props: RouteSectionProps) {
       })
       .toSorted(
         (c1, c2) =>
-          (c2.message?.createdAt ?? c2.client.createAt) -
-          (c1.message?.createdAt ?? c1.client.createAt),
+          (c2.message?.createdAt ?? 0) -
+          (c1.message?.createdAt ?? 0),
       );
   });
 
