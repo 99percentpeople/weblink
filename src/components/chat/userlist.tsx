@@ -208,12 +208,15 @@ export const UserItem: Component<UserItemProps> = (
                     </Badge>
                   </p>
                   {renderLastMessage()}
-                  <span class="muted float-end text-nowrap text-xs">
-                    {new Date(
-                      props.message?.createdAt ??
-                        props.client.createAt,
-                    ).toLocaleString()}
-                  </span>
+                  <Show when={props.message?.createdAt}>
+                    {(createdAt) => (
+                      <span class="muted float-end text-nowrap text-xs">
+                        {new Date(
+                          createdAt(),
+                        ).toLocaleString()}
+                      </span>
+                    )}
+                  </Show>
                 </div>
               </Show>
             </A>
