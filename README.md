@@ -1,71 +1,82 @@
 # Weblink
 
-## 简介
+## Introduction
 
-这是一个基于 WebRTC 的纯 Web 聊天软件，支持文字聊天、文件传输、视频通话，并且通过 P2P 连接、Firebase 信令服务器和 Vercel 部署实现无服务器架构。无需下载，直接通过浏览器使用。
+This is a pure web-based chat software built on WebRTC, supporting text chat, file transfer, video calls, and a serverless architecture powered by P2P connections, Firebase signaling, and Vercel deployment. No downloads are required, and it can be used directly in the browser.
+
+[**中文介绍**](README_CN.md)
 
 ![Chat Example 1](screenshots/example_dark_cn.png)
 
 ![Chat Example 2](screenshots/example_light_cn.png)
 
-## 功能
+## Features
 
-- P2P连接
-- 实时文字聊天
-- 文件传输
-- 文件存储
-- 视频通话
-- 使用 Firebase 进行信令
-- 无服务器架构，Vercel 部署
+- P2P connection
 
-## 特色功能
+- Real-time text chat
 
-1. **分块传输**：大文件会被分成小块逐步传输，以减少网络波动对传输的影响，并允许断点续传功能的实现。
+- File transfer
 
-2. **断点续传**：支持在文件传输过程中断开连接后自动恢复传输，用户无需重新上传或下载文件。
+- File storage
 
-3. **压缩传输**：传输时可以开启压缩，将文件以区块为单位压缩后再传输，以节省带宽和提高传输速度。
+- Video calls
 
-4. **DataChannel 多通道传输**：支持使用多个 DataChannel 进行并行传输，提升数据传输性能，确保在高并发情况下仍然有良好的传输速度。
+- Signaling using Firebase
 
-5. **多人聊天**：同一个房间的不同客户端可以互相连接，采用Mesh方案。
+- Serverless architecture with Vercel deployment
 
-6. **IndexedDB 文件缓存**：传输的文件区块缓存在浏览器的 IndexedDB 中，避免传输大文件时占用过多内存。
+## Special Features
 
-7. **端到端加密**：使用对称式加密技术，所有信令均通过加密传输，确保信令消息的隐私和安全。
+1. Chunked Transfer: Large files are divided into smaller chunks for gradual transfer, reducing the impact of network fluctuations and enabling the resumable transfer feature.
 
-## 使用方法
+2. Resumable Transfer: Supports automatic recovery of file transfers after connection disruptions, allowing users to resume uploads or downloads without starting over.
 
-### 直接使用
+3. Compressed Transfer: Enables file compression during transfer, compressing files in chunks to save bandwidth and improve transfer speed.
 
-该项目已通过vercel部署，[点击访问](https://web1ink.vercel.app)。
+4. Multi-channel Data Transfer: Supports using multiple DataChannels for parallel transfers, improving data transfer performance and ensuring high speed even under heavy load.
 
-### 本地运行
+5. Multi-party Chat: Different clients in the same room can connect to each other using a mesh network scheme.
 
-```bash
+6. IndexedDB File Caching: Transferred file chunks are cached in the browser's IndexedDB, preventing large files from occupying too much memory during transfers.
+
+7. End-to-end Encryption: Uses symmetric encryption for end-to-end encrypted signaling, ensuring the privacy and security of signaling messages.
+
+## Usage
+
+### Direct Use
+
+This project is deployed on Vercel. [Click here to access](https://web1ink.vercel.app).
+
+### Run Locally
+
+```base
 git clone https://github.com/99percentpeople/weblink.git
 cd weblink
 pnpm install
 ```
 
-确保你已经在项目中配置了 Firebase 的密钥（如下所示），然后运行以下命令：
+Make sure you configure the Firebase keys in the project (as shown below), then run the following command:
 
-```bash
+```base
 pnpm dev
 ```
 
-### 部署到 Vercel
+### Deploy to Vercel
 
-你可以通过以下步骤将项目部署到 Vercel：
+To deploy this project to Vercel, follow these steps:
 
-1. 前往 Vercel 网站 并登录（或创建一个账号）。
-2. 连接你的 GitHub 仓库，选择你克隆的仓库。
-3. 在 Vercel 项目设置中，找到 Environment Variables（环境变量），添加你的 Firebase API 密钥等环境变量（如下所示）。
-4. 单击 "Deploy" 按钮，Vercel 将自动构建并部署你的项目。
+1. Go to the Vercel website and log in (or create an account).
 
-### 环境变量配置 (Firebase)
+2. Connect your GitHub repository and select the cloned repository.
 
-在本地开发和部署到 Vercel 时，你需要配置 Firebase 的密钥。以下是需要添加的 Firebase 环境变量：
+3. In your Vercel project settings, find "Environment Variables" and add the Firebase API key and other environment variables (as shown below).
+
+4. Click the "Deploy" button, and Vercel will automatically build and deploy your project.
+
+### Environment Variables Configuration (Firebase)
+
+You will need to configure Firebase keys for both local development and deployment to Vercel. Add the following Firebase environment variables:
 
 `VITE_FIREBASE_API_KEY`
 
@@ -79,19 +90,19 @@ pnpm dev
 
 `VITE_FIREBASE_APP_ID`
 
-### Vercel 环境变量配置
+### Vercel Environment Variables Configuration
 
-部署到 Vercel 时，请按照以下步骤设置环境变量：
+For Vercel deployment, set the environment variables by following these steps:
 
-1. 打开你的 Vercel 项目，进入 "Settings"。
+1. Open your Vercel project and go to "Settings."
 
-2. 找到 Environment Variables。
+2. Find "Environment Variables."
 
-3. 分别添加上述 Firebase 配置项，将对应的值填入字段中。
+3. Add the Firebase configuration items above and input the corresponding values.
 
-### 本地环境变量 (.env.local)
+### Local Environment Variables (.env.local)
 
-在本地开发时，创建一个 .env.local 文件，将 Firebase 密钥添加到其中：
+For local development, create a .env.local file and add the Firebase keys:
 
 ```env
 VITE_FIREBASE_API_KEY=your-firebase-api-key
@@ -102,41 +113,47 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-firebase-app-id
 ```
 
-## 注意事项
+## Notes
 
-### 配置 TURN 服务器（非局域网连接）
+### Configuring TURN Server (Non-LAN Connections)
 
-如果你在非局域网（NAT 环境）下使用 P2P 连接，可能需要配置 TURN 服务器以确保能够建立连接。在设置页面中，你可以根据以下格式配置 TURN 服务器：
+If you are using P2P connections outside a local area network (in a NAT environment), you may need to configure a TURN server to ensure connections are established. In the settings page, you can configure the TURN server with the following format:
 
-- **TURN 配置格式**：
+**TURN Configuration Format:**
 
-  ```
-  turn:turn1.example.com:3478|user1|pass1|longterm
-  turns:turn2.example.com:5349|user2|pass2|hmac
-  ```
+```
+turn:turn1.example.com:3478|user1|pass1|longterm
+turns:turn2.example.com:5349|user2|pass2|hmac
+```
 
-  - `turn:` 表示使用普通的 TURN 协议（UDP/TCP）。
-  - `turns:` 表示使用安全的 TURN 协议（TLS）。
-  - `example.com` 是你配置的 TURN 服务器域名。
-  - `3478` 和 `5349` 是 TURN 服务的默认端口（可以根据服务器设置更改）。
-  - `user1` 和 `user2` 是认证用户名。
-  - `pass1` 和 `pass2` 是对应的认证密码。
-  - `longterm` 和 `hmac` 表示认证方法，分别为长期凭证和 HMAC 签名认证。
+- turn: specifies the use of the standard TURN protocol (UDP/TCP).
 
-## 贡献
+- turns: specifies the use of a secure TURN protocol (TLS).
 
-欢迎贡献代码！请遵循以下步骤：
+- example.com is the domain of your TURN server.
 
-1. Fork 本仓库
+- 3478 and 5349 are the default TURN service ports (can be changed depending on server settings).
 
-2. 创建一个分支 (git checkout -b feature/your-feature)
+- user1 and user2 are the authentication usernames.
 
-3. 提交你的更改 (git commit -am 'Add some feature')
+- pass1 and pass2 are the corresponding authentication passwords.
 
-4. 推送到分支 (git push origin feature/your-feature)
+- longterm and hmac specify the authentication methods, representing long-term credentials and HMAC signed authentication.
 
-5. 创建一个 Pull Request
+## Contribution
 
-## 许可证
+Contributions are welcome! Please follow these steps:
 
-该项目基于 [MIT License](LICENSE) 开源。
+1. Fork this repository
+
+2. Create a branch (git checkout -b feature/your-feature)
+
+3. Commit your changes (git commit -am 'Add some feature')
+
+4. Push to the branch (git push origin feature/your-feature)
+
+5. Create a Pull Request
+
+## License
+
+This project is open-sourced under the [MIT License](LICENSE).
