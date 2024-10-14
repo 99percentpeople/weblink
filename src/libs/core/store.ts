@@ -40,19 +40,21 @@ export type CompressionLevel =
   | 8
   | 9;
 
-export const [appOptions, setAppOptions] = makePersisted(
-  createStore<{
-    channelsNumber: number;
-    chunkSize: number;
-    ordered: boolean;
-    bufferedAmountLowThreshold: number;
-    maxMomeryCacheSlices: number;
-    videoMaxBitrate: number;
-    audioMaxBitrate: number;
-    compressionLevel: CompressionLevel;
-    blockSize: number;
-    servers: ConnectionOptions;
-  }>({
+export type AppOption = {
+  channelsNumber: number;
+  chunkSize: number;
+  ordered: boolean;
+  bufferedAmountLowThreshold: number;
+  maxMomeryCacheSlices: number;
+  videoMaxBitrate: number;
+  audioMaxBitrate: number;
+  compressionLevel: CompressionLevel;
+  blockSize: number;
+  servers: ConnectionOptions;
+};
+
+export const getDefaultAppOptions = () => {
+  return {
     channelsNumber: 2,
     chunkSize: 1024 * 1024,
     blockSize: 64 * 1024,
@@ -65,9 +67,13 @@ export const [appOptions, setAppOptions] = makePersisted(
       stuns: ["stun:stun1.l.google.com"],
     },
     compressionLevel: 0,
-  }),
+  } satisfies AppOption;
+};
+
+export const [appOptions, setAppOptions] = makePersisted(
+  createStore<AppOption>(getDefaultAppOptions()),
   {
-    name: "transfer",
+    name: "app_options",
     storage: localStorage,
   },
 );

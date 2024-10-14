@@ -26,10 +26,7 @@ import { clientProfile, appOptions } from "./store";
 import { cacheManager } from "../services/cache-serivce";
 import { transferManager } from "../services/transfer-service";
 import { getRangesLength } from "../utils/range";
-import {
-  ClientService,
-  
-} from "./services/type";
+import { ClientService } from "./services/type";
 
 import {
   messageStores,
@@ -147,7 +144,6 @@ export const WebRTCProvider: Component<
       client: {
         clientId: clientProfile.clientId,
         name: clientProfile.name,
-
         avatar: clientProfile.avatar,
       },
     }) as ClientService;
