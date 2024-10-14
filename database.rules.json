@@ -1,0 +1,16 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": "auth != null",
+        "passwordHash": {
+          ".read": false,
+          ".write": "auth != null && !data.exists() && newData.isString()"
+        }
+      }
+    }
+  }
+}
