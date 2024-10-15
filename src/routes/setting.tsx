@@ -98,119 +98,6 @@ function parseTurnServers(
   return turnServers;
 }
 
-const MediaSetting: Component = () => {
-  const cameras = createCameras();
-  const microphones = createMicrophones();
-  const speakers = createSpeakers();
-
-  return (
-    <>
-      <Show when={cameras().length > 1}>
-        <label class="flex flex-col gap-2">
-          <Label>Camera</Label>
-          <Select
-            defaultValue={camera()}
-            value={camera()}
-            onChange={(value) => {
-              setCamera(value);
-            }}
-            options={cameras()}
-            optionTextValue="label"
-            optionValue="deviceId"
-            itemComponent={(props) => (
-              <SelectItem
-                item={props.item}
-                value={props.item.rawValue?.deviceId}
-              >
-                {props.item.rawValue?.label.length === 0
-                  ? "Default"
-                  : props.item.rawValue?.label}
-              </SelectItem>
-            )}
-          >
-            <SelectTrigger>
-              <SelectValue<MediaDeviceInfoType>>
-                {(state) =>
-                  state.selectedOption().label.length === 0
-                    ? "Default"
-                    : state.selectedOption().label
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent />
-          </Select>
-        </label>
-      </Show>
-      <Show when={speakers().length > 1}>
-        <label class="flex flex-col gap-2">
-          <Label>Speaker</Label>
-          <Select
-            value={speaker()}
-            onChange={(value) => {
-              setSpeaker(value);
-            }}
-            options={speakers()}
-            optionTextValue="label"
-            optionValue="deviceId"
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>
-                {props.item.rawValue?.label}
-              </SelectItem>
-            )}
-          >
-            <SelectTrigger>
-              <SelectValue<MediaDeviceInfoType>>
-                {(state) => state.selectedOption().label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent />
-          </Select>
-        </label>
-      </Show>
-      <Show when={microphones().length > 1}>
-        <label class="flex flex-col gap-2">
-          <Label>Microphone</Label>
-          <Select
-            value={microphone()}
-            onChange={(value) => {
-              setMicrophone(value);
-            }}
-            options={microphones()}
-            optionTextValue="label"
-            optionValue="deviceId"
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>
-                {props.item.rawValue?.label}
-              </SelectItem>
-            )}
-          >
-            <SelectTrigger>
-              <SelectValue<MediaDeviceInfoType>>
-                {(state) => state.selectedOption().label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent />
-          </Select>
-        </label>
-      </Show>
-
-      <Show when={localStream()}>
-        <video
-          class="max-h-64 w-full object-contain"
-          muted
-          autoplay
-          controls
-          ref={(ref) => {
-            createEffect(() => {
-              ref.srcObject = localStream();
-            });
-          }}
-        />
-      </Show>
-    </>
-  );
-};
-
 export default function Settings() {
   return (
     <>
@@ -242,7 +129,7 @@ export default function Settings() {
           <label class="flex flex-col gap-2">
             <Label>Stun Servers</Label>
             <Textarea
-              placeholder="stun:stun1.l.google.com"
+              placeholder="stun.l.google.com:19302"
               ref={(ref) => {
                 createEffect(() => {
                   textareaAutoResize(ref, () =>
@@ -521,3 +408,123 @@ export default function Settings() {
     </>
   );
 }
+
+const MediaSetting: Component = () => {
+  const cameras = createCameras();
+  const microphones = createMicrophones();
+  const speakers = createSpeakers();
+
+  const availableCameras = createMemo(() =>
+    cameras().filter((cam) => cam.deviceId !== ""),
+  );
+  const availableMicrophones = createMemo(() =>
+    microphones().filter((mic) => mic.deviceId !== ""),
+  );
+  const availableSpeakers = createMemo(() =>
+    speakers().filter((speaker) => speaker.deviceId !== ""),
+  );
+
+  return (
+    <>
+      <Show when={availableCameras().length !== 0}>
+        <label class="flex flex-col gap-2">
+          <Label>Camera</Label>
+          <Select
+            defaultValue={camera()}
+            value={camera()}
+            onChange={(value) => {
+              setCamera(value);
+            }}
+            options={cameras()}
+            optionTextValue="label"
+            optionValue="deviceId"
+            itemComponent={(props) => (
+              <SelectItem
+                item={props.item}
+                value={props.item.rawValue?.deviceId}
+              >
+                {props.item.rawValue?.label}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger>
+              <SelectValue<MediaDeviceInfoType>>
+                {(state) =>
+                  state.selectedOption().label.length === 0
+                    ? "Default"
+                    : state.selectedOption().label
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+        </label>
+      </Show>
+      <Show when={availableMicrophones().length !== 0}>
+        <label class="flex flex-col gap-2">
+          <Label>Microphone</Label>
+          <Select
+            value={microphone()}
+            onChange={(value) => {
+              setMicrophone(value);
+            }}
+            options={microphones()}
+            optionTextValue="label"
+            optionValue="deviceId"
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>
+                {props.item.rawValue?.label}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger>
+              <SelectValue<MediaDeviceInfoType>>
+                {(state) => state.selectedOption().label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+        </label>
+      </Show>
+      <Show when={availableSpeakers().length !== 0}>
+        <label class="flex flex-col gap-2">
+          <Label>Speaker</Label>
+          <Select
+            value={speaker()}
+            onChange={(value) => {
+              setSpeaker(value);
+            }}
+            options={speakers()}
+            optionTextValue="label"
+            optionValue="deviceId"
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>
+                {props.item.rawValue?.label}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger>
+              <SelectValue<MediaDeviceInfoType>>
+                {(state) => state.selectedOption().label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+        </label>
+      </Show>
+      <Show when={localStream()}>
+        <video
+          class="max-h-64 w-full object-contain"
+          muted
+          autoplay
+          controls
+          ref={(ref) => {
+            createEffect(() => {
+              ref.srcObject = localStream();
+            });
+          }}
+        />
+      </Show>
+    </>
+  );
+};

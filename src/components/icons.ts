@@ -28,6 +28,10 @@ import IconLogout from "@material-symbols/svg-400/outlined/logout.svg?component-
 import IconCasino from "@material-symbols/svg-400/outlined/casino.svg?component-solid";
 import IconConnectWithoutContract from "@material-symbols/svg-400/outlined/connect_without_contact.svg?component-solid";
 import IconDataInfoAlert from "@material-symbols/svg-400/outlined/data_info_alert.svg?component-solid";
+import IconCameraFilled from "@material-design-icons/svg/filled/camera.svg?component-solid";
+import IconPhotoFilled from "@material-design-icons/svg/filled/photo.svg?component-solid";
+import IconContentPaste from "@material-symbols/svg-400/outlined/content_paste.svg?component-solid";
+import IconInventory from "@material-symbols/svg-400/outlined/inventory.svg?component-solid";
 export {
   IconDownload,
   IconDelete,
@@ -59,4 +63,8 @@ export {
   IconCasino,
   IconConnectWithoutContract,
   IconDataInfoAlert,
+  IconCameraFilled,
+  IconPhotoFilled,
+  IconContentPaste,
+  IconInventory,
 };

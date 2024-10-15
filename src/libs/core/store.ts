@@ -64,7 +64,7 @@ export const getDefaultAppOptions = () => {
     videoMaxBitrate: 128 * 1024 * 1024,
     audioMaxBitrate: 512 * 1024,
     servers: {
-      stuns: ["stun:stun1.l.google.com"],
+      stuns: ["stun:stun.l.google.com:19302"],
     },
     compressionLevel: 0,
   } satisfies AppOption;

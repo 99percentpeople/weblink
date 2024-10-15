@@ -8,6 +8,8 @@ import QRCode from "qrcode";
 import { useColorMode } from "@kobalte/core";
 import { clientProfile } from "@/libs/core/store";
 import { useWebRTC } from "@/libs/core/rtc-context";
+import { Button } from "@/components/ui/button";
+import { CopyToClipboard } from "@/components/copy-to-clipboard";
 const Client: Component = (props) => {
   const { colorMode } = useColorMode();
   const { roomStatus } = useWebRTC();
@@ -36,7 +38,8 @@ const Client: Component = (props) => {
       >
         <div
           class="absolute left-1/2 top-1/2 flex -translate-x-1/2
-            -translate-y-1/2 flex-col items-center"
+            -translate-y-1/2 flex-col items-center gap-2 text-nowrap
+            text-muted-foreground"
         >
           <canvas
             class="hover:cursor-pointer"
@@ -67,19 +70,16 @@ const Client: Component = (props) => {
               });
             }}
           />
-          <p class="text-sm text-muted-foreground">
-            Room ID: <span>{clientProfile.roomId}</span>
+          <p class="flex items-center gap-2">
+            <CopyToClipboard>
+              <a class="select-all hover:underline">
+                {url()}
+              </a>
+            </CopyToClipboard>
           </p>
-          <Show when={clientProfile.password}>
-            {(pwd) => (
-              <p class="text-sm text-muted-foreground">
-                Password: <span>{pwd()}</span>
-              </p>
-            )}
-          </Show>
-
-          <p class="text-nowrap text-muted-foreground">
-            Scan QR Code to join the room
+          <p class="muted">
+            Get other devices to open the link or scan the
+            QR code in order to connect
           </p>
         </div>
       </Show>

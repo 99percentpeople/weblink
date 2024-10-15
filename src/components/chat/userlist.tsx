@@ -18,16 +18,18 @@ import { A } from "@solidjs/router";
 import { ClientInfo, Client } from "@/libs/core/type";
 import { Badge } from "../ui/badge";
 
-import IconCameraFilled from "@material-design-icons/svg/filled/camera.svg?component-solid";
-import IconPhotoFilled from "@material-design-icons/svg/filled/photo.svg?component-solid";
-import IconInsertDriveFile from "@material-design-icons/svg/filled/insert_drive_file.svg?component-solid";
 import {
   messageStores,
   StoreMessage,
 } from "@/libs/core/messge";
 import { PortableContextMenu } from "../portable-contextmenu";
 import { ContextMenuItem } from "../ui/context-menu";
-import { IconDelete } from "../icons";
+import {
+  IconCameraFilled,
+  IconDelete,
+  IconInsertDriveFile,
+  IconPhotoFilled,
+} from "../icons";
 import { createDialog } from "../dialogs/dialog";
 import { sessionService } from "@/libs/services/session-service";
 import { createComfirmDialog } from "../ui/confirm-delete-dialog";
