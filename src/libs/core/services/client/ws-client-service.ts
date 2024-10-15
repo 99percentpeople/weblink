@@ -62,6 +62,10 @@ export class WebSocketClientService
         case "leave":
           this.emit("leave", signal.data as TransferClient);
           break;
+        case "ping":
+          this.socket?.send(
+            JSON.stringify({ type: "pong" }),
+          );
         default:
           break;
       }

@@ -84,6 +84,8 @@ You will need to configure Firebase keys for both local development and deployme
 
 `VITE_FIREBASE_APP_ID`
 
+`VITE_FIREBASE_DATABASE_URL`
+
 ### Vercel Environment Variables Configuration
 
 For Vercel deployment, set the environment variables by following these steps:
@@ -105,6 +107,7 @@ VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-firebase-app-id
+VITE_FIREBASE_DATABASE_URL=your-database-url
 ```
 
 ## Notes

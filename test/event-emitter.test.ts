@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { MultiEventEmitter } from "./event-emitter";
+import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 
 // 定义事件类型
 interface MyEvents {

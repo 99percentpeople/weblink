@@ -78,6 +78,8 @@ pnpm dev
 
 `VITE_FIREBASE_APP_ID`
 
+`VITE_FIREBASE_DATABASE_URL`
+
 ### Vercel 环境变量配置
 
 部署到 Vercel 时，请按照以下步骤设置环境变量：
@@ -99,6 +101,7 @@ VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-firebase-app-id
+VITE_FIREBASE_DATABASE_URL=your-database-url
 ```
 
 ## 注意事项
