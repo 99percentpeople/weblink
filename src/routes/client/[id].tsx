@@ -188,7 +188,7 @@ export default function ClientPage(
                   "calc(1rem + var(--scrollbar-width, 0px))",
               }}
             >
-              <IconArrowDownward class="size-10" />
+              <IconArrowDownward class="size-6 sm:size-8" />
             </FloatingButton>
 
             <DialogComponent class="flex max-h-[90%] flex-col" />

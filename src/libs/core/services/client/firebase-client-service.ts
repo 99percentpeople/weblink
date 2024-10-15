@@ -21,7 +21,7 @@ import {
 import { Client, TransferClient } from "../../type";
 import { FirebaseSignalingService } from "../signaling/firebase-signaling-service";
 import {
-  comparePassword,
+  comparePasswordHash,
   hashPassword,
 } from "../../utils/encrypt";
 
@@ -92,7 +92,7 @@ export class FirebaseClientService
         );
       }
 
-      const passwordMatch = await comparePassword(
+      const passwordMatch = await comparePasswordHash(
         this.password,
         roomData.passwordHash,
       );

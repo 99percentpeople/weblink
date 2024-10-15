@@ -21,16 +21,14 @@ export interface ClientService {
 
   createClient(): Promise<void>;
   updateClient(options: UpdateClientOptions): Promise<void>;
+
   destroy(): void;
 }
 
 export type Unsubscribe = () => void;
 
 export interface SignalingService {
-  sendSignal: (
-    signal: RawSignal,
-    options?: SendSignalOptions,
-  ) => Promise<void>;
+  sendSignal: (signal: RawSignal) => Promise<void>;
   listenForSignal: (
     callback: (signal: ClientSignal) => void,
   ) => void;
@@ -44,7 +42,7 @@ export interface SignalingService {
 
 export interface RawSignal {
   type: string;
-  data: string;
+  data: any;
 }
 
 export interface ClientSignal extends RawSignal {

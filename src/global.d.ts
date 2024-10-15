@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-/// <reference types="@solidjs/start/env" />
 /// <reference types="vite-plugin-pwa/info" />
 /// <reference types="vite-plugin-pwa/solid" />
 
@@ -12,6 +11,9 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string;
   readonly VITE_FIREBASE_MEASUREMENT_ID: string;
   readonly VITE_FIREBASE_DATABASE_URL: string;
+  readonly VITE_WEBSOCKET_URL: string;
+
+  readonly VITE_BACKEND: string;
 }
 
 interface ImportMeta {
@@ -22,9 +24,13 @@ declare module "virtual:pwa-register/solid" {
   import type { Accessor, Setter } from "solid-js";
   import type { RegisterSWOptions } from "vite-plugin-pwa/types";
 
-  export function useRegisterSW(options?: RegisterSWOptions): {
+  export function useRegisterSW(
+    options?: RegisterSWOptions,
+  ): {
     needRefresh: [Accessor<boolean>, Setter<boolean>];
     offlineReady: [Accessor<boolean>, Setter<boolean>];
-    updateServiceWorker: (reloadPage?: boolean) => Promise<void>;
+    updateServiceWorker: (
+      reloadPage?: boolean,
+    ) => Promise<void>;
   };
 }

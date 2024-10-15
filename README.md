@@ -4,6 +4,8 @@
 
 This is a pure web-based chat software built on WebRTC, supporting text chat, file transfer, video calls, and a serverless architecture powered by P2P connections, Firebase signaling, and Vercel deployment. No downloads are required, and it can be used directly in the browser.
 
+This project is deployed on Vercel. [Click here to access](https://web1ink.vercel.app).
+
 [**中文介绍**](README_CN.md)
 
 ![Chat Example 1](screenshots/example_dark_cn.png)
@@ -22,10 +24,6 @@ This is a pure web-based chat software built on WebRTC, supporting text chat, fi
 
 - Video calls
 
-- Signaling using Firebase
-
-- Serverless architecture with Vercel deployment
-
 ## Special Features
 
 1. Chunked Transfer: Large files are divided into smaller chunks for gradual transfer, reducing the impact of network fluctuations and enabling the resumable transfer feature.
@@ -43,10 +41,6 @@ This is a pure web-based chat software built on WebRTC, supporting text chat, fi
 7. End-to-end Encryption: Uses symmetric encryption for end-to-end encrypted signaling, ensuring the privacy and security of signaling messages.
 
 ## Usage
-
-### Direct Use
-
-This project is deployed on Vercel. [Click here to access](https://web1ink.vercel.app).
 
 ### Run Locally
 

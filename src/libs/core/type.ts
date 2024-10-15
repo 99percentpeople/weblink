@@ -17,7 +17,6 @@ export type ClientServiceEventMap = {
 
 export interface Client {
   clientId: ClientID;
-
   name: string;
   avatar: string | null;
 }

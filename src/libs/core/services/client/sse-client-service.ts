@@ -3,15 +3,16 @@ import {
   ClientServiceInitOptions,
   SignalingService,
 } from "@/libs/core/services/type";
-import { Client } from "../../type";
+import { TransferClient } from "../../type";
 import { SseSignalingService } from "../signaling/sse-signaling-service";
 import { UpdateClientOptions } from "./firebase-client-service";
 
 export class SseClientService implements ClientService {
   private serverUrl: string;
   private roomId: string;
-  private client: Client;
+  private client: TransferClient;
   private eventSource: EventSource | null = null;
+  private password: string | null = null;
   private signalingServices: Map<
     string,
     SseSignalingService
@@ -25,13 +26,12 @@ export class SseClientService implements ClientService {
   }
 
   constructor(options: ClientServiceInitOptions) {
-    const { roomId, clientId, name, password } = options;
+    const { roomId, client, password } = options;
     this.serverUrl = "/api";
     this.roomId = roomId;
     this.client = {
-      clientId: clientId,
-      createAt: Date.now(),
-      name: name,
+      ...client,
+      createdAt: Date.now(),
     };
     if (password) {
       this.setRoomPassword(password);
@@ -53,7 +53,7 @@ export class SseClientService implements ClientService {
     }
   }
 
-  async createClient(password?: string): Promise<void> {
+  async createClient(): Promise<void> {
     const resp = await fetch(
       `${this.serverUrl}/rooms/${this.roomId}/clients`,
       {
@@ -61,7 +61,7 @@ export class SseClientService implements ClientService {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...this.client,
-          password,
+          password: this.password,
         }),
       },
     );
@@ -122,11 +122,13 @@ export class SseClientService implements ClientService {
     }
   }
 
-  listenForJoin(callback: (client: Client) => void): void {
+  listenForJoin(
+    callback: (client: TransferClient) => void,
+  ): void {
     this.eventSource?.addEventListener(
       "client-joined",
       (e) => {
-        callback(JSON.parse(e.data) as Client);
+        callback(JSON.parse(e.data) as TransferClient);
       },
       {
         signal: this.controller.signal,
@@ -134,11 +136,13 @@ export class SseClientService implements ClientService {
     );
   }
 
-  listenForLeave(callback: (client: Client) => void): void {
+  listenForLeave(
+    callback: (client: TransferClient) => void,
+  ): void {
     this.eventSource?.addEventListener(
       "client-left",
       (e) => {
-        callback(JSON.parse(e.data) as Client);
+        callback(JSON.parse(e.data) as TransferClient);
       },
       {
         signal: this.controller.signal,

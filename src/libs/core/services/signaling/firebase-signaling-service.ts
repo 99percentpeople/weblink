@@ -62,10 +62,10 @@ export class FirebaseSignalingService
     return this._targetClientId;
   }
 
-  async sendSignal(
-    { type, data }: RawSignal,
-    { bocast }: SendSignalOptions = {},
-  ): Promise<void> {
+  async sendSignal({
+    type,
+    data,
+  }: RawSignal): Promise<void> {
     let sendData = data;
     if (this.password) {
       sendData = await encryptData(this.password, data);
@@ -76,7 +76,7 @@ export class FirebaseSignalingService
       data: sendData,
       senderId: this._sessionId,
       clientId: this._clientId,
-      targetClientId: bocast ? null : this._targetClientId,
+      targetClientId: this._targetClientId,
     });
     onDisconnect(singnalRef).remove();
   }

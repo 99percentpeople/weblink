@@ -52,17 +52,12 @@ export class SseSignalingService
     return this._targetClientId;
   }
 
-  async sendSignal(
-    signal: RawSignal,
-    options: SendSignalOptions = {},
-  ): Promise<void> {
+  async sendSignal(signal: RawSignal): Promise<void> {
     const payload: ClientSignal = {
       ...signal,
       sessionId: this._sessionId,
       clientId: this._clientId,
-      targetClientId: options.bocast
-        ? null
-        : this._targetClientId,
+      targetClientId: this._targetClientId,
     };
 
     await fetch(

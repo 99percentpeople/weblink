@@ -249,10 +249,6 @@ export default function File() {
     getFacetedUniqueValues: getFacetedUniqueValues(),
     getFacetedMinMaxValues: getFacetedMinMaxValues(),
 
-    debugTable: true,
-    debugHeaders: true,
-    debugColumns: false,
-
     getRowId: (row) => row.id,
   });
   const { open, Component: DialogComponent } =

@@ -495,7 +495,6 @@ export class FileTransmitter {
           bufferedAmountLowThreshold;
         return new Promise<RTCDataChannel>(
           async (reslove) => {
-            await waitChannel(channel);
             if (
               channel.bufferedAmount <=
               channel.bufferedAmountLowThreshold

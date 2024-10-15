@@ -35,6 +35,21 @@ import {
   SendTextMessage,
 } from "./messge";
 import { sessionService } from "../services/session-service";
+import { WebSocketClientService } from "./services/client/ws-client-service";
+import { SseClientService } from "./services/client/sse-client-service";
+
+function getServiceConstructor() {
+  switch (import.meta.env.VITE_BACKEND) {
+    case "FIREBASE":
+      return FirebaseClientService;
+    case "WEBSOCKET":
+      return WebSocketClientService;
+    case "SSE":
+      return SseClientService;
+    default:
+      throw Error("invalid backend type");
+  }
+}
 
 export function getRandomUnsignedShort() {
   return Math.floor(Math.random() * 6553);
@@ -138,7 +153,9 @@ export const WebRTCProvider: Component<
     if (sessionService.clientService) {
       return true;
     }
-    const cs = new FirebaseClientService({
+    const ClientServiceConstructor =
+      getServiceConstructor();
+    const cs = new ClientServiceConstructor({
       roomId: clientProfile.roomId,
       password: clientProfile.password,
       client: {

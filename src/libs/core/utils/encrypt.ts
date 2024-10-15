@@ -47,9 +47,10 @@ function isValidBase64String(str: string) {
   return str.length % 4 === 0 && base64Regex.test(str);
 }
 
-export async function comparePassword(
+export async function comparePasswordHash(
   password: string,
   storedHash: string,
+  saltLength: number = 16,
   iterations: number = 100000,
   hash = "SHA-256",
 ): Promise<boolean> {
@@ -64,7 +65,6 @@ export async function comparePassword(
     );
 
     // 提取盐
-    const saltLength = 16; // 根据你在 hashPassword 中设置的盐长度
     const salt = combined.slice(0, saltLength);
 
     // 提取存储的哈希值

@@ -4,6 +4,8 @@
 
 这是一个基于 WebRTC 的纯 Web 聊天软件，支持文字聊天、文件传输、视频通话，并且通过 P2P 连接、Firebase 信令服务器和 Vercel 部署实现无服务器架构。无需下载，直接通过浏览器使用。
 
+该项目已通过vercel部署，[点击访问](https://web1ink.vercel.app)。
+
 [**Introduction in English**](README.md)
 
 ![Chat Example 1](screenshots/example_dark_cn.png)
@@ -17,8 +19,7 @@
 - 文件传输
 - 文件存储
 - 视频通话
-- 使用 Firebase 进行信令
-- 无服务器架构，Vercel 部署
+- 无服务器架构
 
 ## 特色功能
 
@@ -37,10 +38,6 @@
 7. **端到端加密**：使用对称式加密技术，所有信令均通过加密传输，确保信令消息的隐私和安全。
 
 ## 使用方法
-
-### 直接使用
-
-该项目已通过vercel部署，[点击访问](https://web1ink.vercel.app)。
 
 ### 本地运行
 
