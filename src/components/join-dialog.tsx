@@ -57,7 +57,7 @@ export const createRoomDialog = () => {
                   setClientProfile(getDefaultProfile());
                 }}
               >
-                <IconCasino />
+                <IconCasino class="size-6" />
               </Button>
             </div>
           </label>
@@ -194,7 +194,7 @@ export default function JoinRoom() {
             variant="destructive"
             size="icon"
           >
-            <IconLogout />
+            <IconLogout class="size-6" />
           </Button>
         }
       >
@@ -210,7 +210,7 @@ export default function JoinRoom() {
           }}
           disabled={!!roomStatus.roomId}
         >
-          <IconLogin />
+          <IconLogin class="size-6" />
         </Button>
       </Show>
     </>

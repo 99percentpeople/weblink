@@ -203,7 +203,7 @@ export default function ClientPage(
                   size="icon"
                   variant="ghost"
                 >
-                  <IconChevronLeft />
+                  <IconChevronLeft class="size-8" />
                 </Button>
 
                 <Avatar>
@@ -230,7 +230,7 @@ export default function ClientPage(
                     variant="ghost"
                     class="ml-auto"
                   >
-                    <IconMenu />
+                    <IconMenu class="size-6" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent class="w-48">
                     <DropdownMenuItem

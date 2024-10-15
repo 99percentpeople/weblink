@@ -152,7 +152,7 @@ export default function File() {
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Button variant="ghost" size="icon">
-                <IconMoreHoriz />
+                <IconMoreHoriz class="size-6" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>

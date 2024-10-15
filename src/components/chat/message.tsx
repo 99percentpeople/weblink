@@ -296,7 +296,7 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                             )}
                             download={info().fileName}
                           >
-                            <IconDownload class="size-8" />
+                            <IconDownload class="size-6" />
                           </Button>
                         </>
                       )}
@@ -319,7 +319,7 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                           );
                         }}
                       >
-                        <IconRestore class="size-8" />
+                        <IconRestore class="size-6" />
                       </Button>
                     </Show>
                   </div>
@@ -555,7 +555,7 @@ export const ChatBar: Component<
       </form>
       <div class="flex justify-end gap-1">
         <Button as="label" variant="ghost" size="icon">
-          <IconAttachFile />
+          <IconAttachFile class="size-6" />
           <Input
             multiple
             class="hidden"
@@ -579,7 +579,7 @@ export const ChatBar: Component<
           variant="ghost"
           size="icon"
         >
-          <IconSend />
+          <IconSend class="size-6" />
         </Button>
       </div>
     </div>

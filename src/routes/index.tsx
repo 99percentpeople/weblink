@@ -16,12 +16,11 @@ import {
   Suspense,
 } from "solid-js";
 import { cn } from "@/libs/cn";
-import { useWebRTC } from "@/libs/core/rtc-context";
+
 import {
   A,
   RouteSectionProps,
   useCurrentMatches,
-  useSearchParams,
 } from "@solidjs/router";
 import { ClientID, ClientInfo } from "@/libs/core/type";
 
