@@ -7,8 +7,8 @@ import {
 import { isServer } from "solid-js/web";
 
 export interface ModalProps<T extends any> {
-  title?: string;
-  description?: string;
+  title?: () => string;
+  description?: () => string;
   content?: Component<{
     submit: (data: T) => void;
     close: () => void;
@@ -64,29 +64,6 @@ export const createModal = <T extends any>(
     });
   };
 
-  // const closeDialog = (result: T) => {
-  //   setIsOpen(false);
-
-  //   const reslove = reslovePromise();
-  //   if (reslove) {
-  //     reslove({
-  //       result,
-  //       cancel: false,
-  //     });
-  //   }
-  // };
-
-  // const cancel = () => {
-  //   setIsOpen(false);
-  //   const reslove = reslovePromise();
-  //   if (reslove) {
-  //     reslove({
-  //       result: undefined,
-  //       cancel: true,
-  //     });
-  //   }
-  // };
-
   const Component = options.component;
 
   const renderContent = () => {
@@ -105,9 +82,9 @@ export const createModal = <T extends any>(
         class={props.class}
         isOpen={isOpen()}
         onClose={close}
-        title={options?.title}
+        title={options?.title?.()}
         content={renderContent()}
-        description={options.description}
+        description={options?.description?.()}
         confirm={options?.confirm}
         cancel={options?.cancel}
       />

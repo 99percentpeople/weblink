@@ -61,7 +61,9 @@ import {
   IconDataInfoAlert,
   IconDelete,
 } from "@/components/icons";
-import { createComfirmDialog } from "@/components/ui/confirm-delete-dialog";
+import { createComfirmDeleteClientDialog } from "@/components/ui/confirm-delete-dialog";
+import { t } from "@/i18n";
+import { ConnectionBadge } from "@/components/chat/userlist";
 export default function ClientPage(
   props: RouteSectionProps,
 ) {
@@ -83,20 +85,32 @@ export default function ClientPage(
 
   const { open: openDialog, Component: DialogComponent } =
     createDialog({
-      title: `${client()?.name} connection status`,
+      title: () =>
+        t("common.client_info_dialog.title", {
+          name: client()?.name,
+        }),
       content: (props) => (
-        <Show when={clientInfo()} fallback={<>Leave</>}>
+        <Show
+          when={clientInfo()}
+          fallback={t("common.client_info_dialog.leave")}
+        >
           {(info) => (
             <div class="grid grid-cols-3 gap-4 overflow-y-auto">
-              <p class="justify-self-end">Status</p>
+              <p class="justify-self-end">
+                {t("common.client_info_dialog.status")}
+              </p>
               <p class="col-span-2">
                 {info()?.onlineStatus}
               </p>
-              <p class="justify-self-end">Client ID</p>
+              <p class="justify-self-end">
+                {t("common.client_info_dialog.client_id")}
+              </p>
               <p class="col-span-2 text-sm">
                 {info().clientId}
               </p>
-              <p class="justify-self-end">Create At</p>
+              <p class="justify-self-end">
+                {t("common.client_info_dialog.created_at")}
+              </p>
               <p class="col-span-2">
                 {new Date(
                   info().createdAt,
@@ -160,7 +174,8 @@ export default function ClientPage(
     createSignal<HTMLElement>();
   const size = createElementSize(bottomElem);
 
-  const { open, Component } = createComfirmDialog();
+  const { open, Component } =
+    createComfirmDeleteClientDialog();
 
   return (
     <div class="flex h-full w-full flex-col">
@@ -215,14 +230,8 @@ export default function ClientPage(
                   </AvatarFallback>
                 </Avatar>
                 <h4 class={cn("h4")}>{client().name}</h4>
-                <Badge class="text-xs" variant="secondary">
-                  <Show
-                    when={clientInfo()}
-                    fallback={"leave"}
-                  >
-                    {clientInfo()?.onlineStatus}
-                  </Show>
-                </Badge>
+                <ConnectionBadge client={clientInfo()} />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     as={Button}
@@ -240,7 +249,7 @@ export default function ClientPage(
                       }}
                     >
                       <IconDataInfoAlert class="size-4" />
-                      Connection status
+                      {t("chat.menu.connection_status")}
                     </DropdownMenuItem>
                     <Show
                       when={
@@ -257,7 +266,7 @@ export default function ClientPage(
                           }}
                         >
                           <IconConnectWithoutContract class="size-4" />
-                          Connect
+                          {t("chat.menu.connect")}
                         </DropdownMenuItem>
                       )}
                     </Show>
@@ -273,7 +282,7 @@ export default function ClientPage(
                       }}
                     >
                       <IconDelete class="size-4" />
-                      Delete client
+                      {t("chat.menu.delete_client")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -288,10 +297,7 @@ export default function ClientPage(
                       "Files",
                     );
 
-                  if (
-                    hasFiles
-                    // client().onlineStatus === "online"
-                  ) {
+                  if (hasFiles) {
                     ev.dataTransfer.dropEffect = "move";
                   } else {
                     ev.dataTransfer.dropEffect = "none";

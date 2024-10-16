@@ -47,8 +47,6 @@ export class WebSocketClientService
     wsUrl.searchParams.append("room", this.roomId);
     if (this.password) {
       const hash = await hashPassword(this.password);
-      console.log(`password hash`, hash);
-
       wsUrl.searchParams.append("pwd", hash);
     }
     this.socket = new WebSocket(wsUrl);
@@ -84,7 +82,7 @@ export class WebSocketClientService
             const passwordHash = message.data;
             if (passwordHash) {
               if (!this.password) {
-                return reject("password required");
+                return reject(new Error("password required"));
               }
 
               const passwordMatch =
@@ -93,7 +91,7 @@ export class WebSocketClientService
                   passwordHash,
                 );
               if (!passwordMatch) {
-                return reject("incorrect password");
+                return reject(new Error("incorrect password"));
               }
             }
             resolve(this.socket!);
@@ -145,7 +143,6 @@ export class WebSocketClientService
     this.on("leave", callback);
   }
   async createClient() {
-    // Client is connected upon instantiation
     const socket = await this.initialize();
 
     socket.send(
@@ -175,6 +172,5 @@ export class WebSocketClientService
 
   async updateClient(options: UpdateClientOptions) {
     this.client.name = options.name ?? this.client.name;
-    // Send update to server if needed
   }
 }

@@ -41,7 +41,7 @@ export const PortableContextMenu: Component<
           <ContextMenuTrigger
             as={Child}
           ></ContextMenuTrigger>
-          <ContextMenuContent class="w-64">
+          <ContextMenuContent class="w-48">
             {props.menu(() => {})}
           </ContextMenuContent>
         </ContextMenu>

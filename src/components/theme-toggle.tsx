@@ -10,10 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { t } from "@/i18n";
 
-
-
-export function ModeToggle() {
+export function ThemeToggle() {
   const { setColorMode } = useColorMode();
 
   return (
@@ -32,7 +31,6 @@ export function ModeToggle() {
           class="absolute size-6 rotate-90 scale-0 transition-all
             dark:rotate-0 dark:scale-100"
         />
-        <span class="sr-only">Toggle theme</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem
@@ -40,21 +38,21 @@ export function ModeToggle() {
           onSelect={() => setColorMode("light")}
         >
           <IconLightMode class="size-4" />
-          <span>Light</span>
+          <span>{t("common.theme_toggle.light")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           class="gap-2"
           onSelect={() => setColorMode("dark")}
         >
           <IconDarkMode class="size-4" />
-          <span>Dark</span>
+          <span>{t("common.theme_toggle.dark")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           class="gap-2"
           onSelect={() => setColorMode("system")}
         >
           <IconComputer class="size-4" />
-          <span>System</span>
+          <span>{t("common.theme_toggle.system")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

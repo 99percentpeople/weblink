@@ -1,0 +1,182 @@
+{
+  "setting": {
+    "title": "设置",
+    "appearance": {
+      "title": "外观",
+      "theme": {
+        "title": "主题",
+        "description": "更改应用程序的主题"
+      },
+      "language": {
+        "title": "语言",
+        "description": "更改应用程序的语言"
+      }
+    },
+    "connection": {
+      "title": "连接",
+      "auto_join": {
+        "title": "自动加入",
+        "description": "应用程序启动时自动加入房间"
+      },
+      "stun_servers": {
+        "title": "STUN 服务器",
+        "description": "更改应用程序的 STUN 服务器"
+      },
+      "turn_servers": {
+        "title": "TURN 服务器",
+        "description": "更改应用程序的 TURN 服务器"
+      }
+    },
+    "stream": {
+      "title": "视频通话设置",
+      "video_max_bitrate": {
+        "title": "视频最大比特率",
+        "description": "更改应用程序的视频最大比特率"
+      },
+      "audio_max_bitrate": {
+        "title": "音频最大比特率",
+        "description": "更改应用程序的音频最大比特率"
+      }
+    },
+    "sender": {
+      "title": "文件发送设置",
+      "num_channels": {
+        "title": "通道数",
+        "description": "更改发送者的通道数，适当调整可能可以提高传输速度"
+      },
+      "chunk_size": {
+        "title": "区块大小",
+        "description": "每个传输区块的大小"
+      },
+      "block_size": {
+        "title": "块大小",
+        "description": "每次发送的块大小"
+      },
+      "max_buffer_amount": {
+        "title": "最大缓冲区数量",
+        "description": "更改发送者的最大缓冲区数量"
+      },
+      "ordered": {
+        "title": "有序",
+        "description": "当启用时，发送端将按顺序发送块"
+      },
+      "compression_level": {
+        "title": "压缩级别",
+        "description": "更改发送者的压缩级别，0 表示无压缩，9 表示最大压缩，对于已压缩的文件，启用此选项可能会降低传输速度",
+        "no_compression": "0 (无压缩)"
+      }
+    },
+    "receiver": {
+      "title": "文件接收设置",
+      "max_cached_chunks": {
+        "title": "最大缓存块数",
+        "description": "更改接收者的最大缓存块数"
+      }
+    },
+    "media": {
+      "title": "媒体设置",
+      "video_codec": {
+        "title": "视频编解码器",
+        "description": "更改媒体的视频编解码器"
+      }
+    }
+  },
+  "cache": {
+    "title": "文件缓存",
+    "usage": "{{value}} 已用, {{max}} 总共, {{remaining}} 剩余",
+    "search_input": "搜索缓存文件..."
+  },
+  "404": {
+    "title": "404 未找到",
+    "description": "页面未找到，路径为 {{path}}",
+    "home": "返回首页"
+  },
+  "chat": {
+    "title": "聊天",
+    "menu": {
+      "connect": "连接",
+      "connection_status": "连接状态",
+      "delete_client": "删除客户端"
+    },
+    "index": {
+      "description": "扫描二维码或分享链接以连接到此房间"
+    }
+  },
+  "video": {
+    "title": "视频通话",
+    "device": {
+      "screen": "屏幕",
+      "camera": "摄像头"
+    },
+    "no_stream": "没有流"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "浅色模式",
+      "dark": "深色模式",
+      "system": "跟随系统"
+    },
+    "join_form": {
+      "title": "编辑房间信息",
+      "description": "在这里编辑房间信息。点击提交完成编辑。",
+      "client_id": {
+        "title": "客户端 ID (只读)",
+        "description": "房间的客户端 ID，代表你的身份，可以在设置中更改"
+      },
+      "room_id": {
+        "title": "房间 ID",
+        "description": "房间的 ID"
+      },
+      "name": "名称",
+      "avatar_url": "头像 URL",
+      "password": {
+        "title": "房间密码",
+        "description": "房间的密码，可以为空",
+        "placeholder": "输入房间密码"
+      },
+      "auto_join": "下次自动加入"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "确认删除",
+      "description": "删除后将无法恢复，请谨慎操作",
+      "content": "确认删除选中的文件？"
+    },
+    "file_table": {
+      "name": "名称",
+      "size": "大小",
+      "last_modified": "最后修改",
+      "status": "状态"
+    },
+    "client_info_dialog": {
+      "title": "客户端 {{name}} 信息",
+      "status": "状态",
+      "client_id": "客户端 ID",
+      "created_at": "创建时间",
+      "stats_reports": "统计报告",
+      "leave": "离开"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "删除客户端",
+      "description": "删除后将无法恢复，请谨慎操作",
+      "content": "确认删除客户端？"
+    },
+    "status": {
+      "online": "在线",
+      "connecting": "连接中",
+      "offline": "离线",
+      "leave": "离开"
+    },
+    "action": {
+      "copy": "复制",
+      "paste": "粘贴",
+      "delete": "删除",
+      "download": "下载",
+      "cancel": "取消",
+      "confirm": "确定",
+      "actions": "操作",
+      "close": "关闭",
+      "change": "更改",
+      "open": "打开"
+    }
+  }
+}

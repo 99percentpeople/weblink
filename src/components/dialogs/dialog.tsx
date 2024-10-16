@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/libs/cn";
 import {
   BaseModalProps,
@@ -16,38 +15,22 @@ import {
 } from "./base";
 
 const BaseDialog: Component<BaseModalProps> = (props) => {
-  const [isSubmitting, setIsSubmitting] =
-    createSignal<boolean>(false);
-  // const handleConfirm = async () => {
-  //   if (props.onConfirm) {
-  //     setIsSubmitting(true);
-  //     let result: any = null;
-  //     try {
-  //       result = await props.onConfirm();
-  //       props.onClose(result);
-  //     } catch (err) {
-  //     } finally {
-  //       setIsSubmitting(false);
-  //     }
-  //   } else {
-  //     props.onCancel()
-  //   }
-  // };
   return (
     <Dialog
       open={props.isOpen}
       onOpenChange={() => props.onClose()}
     >
-      <DialogContent class={cn(props.class)}>
+      <DialogContent
+        class={cn(
+          "flex flex-col overflow-hidden",
+          props.class,
+        )}
+      >
         <DialogHeader>
-          {props.title && (
-            <DialogTitle>{props.title}</DialogTitle>
-          )}
-          {props.description && (
-            <DialogDescription>
-              {props.description}
-            </DialogDescription>
-          )}
+          <DialogTitle>{props.title}</DialogTitle>
+          <DialogDescription>
+            {props.description}
+          </DialogDescription>
         </DialogHeader>
         {props.content}
         <DialogFooter>

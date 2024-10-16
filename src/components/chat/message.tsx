@@ -34,13 +34,10 @@ import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { ClientID, ClientInfo } from "@/libs/core/type";
 import { createDrawer } from "../dialogs/drawer";
 import {
-  ContextMenu,
-  ContextMenuContent,
   ContextMenuItem,
   ContextMenuShortcut,
-  ContextMenuTrigger,
 } from "../ui/context-menu";
-import { createMediaQuery } from "@solid-primitives/media";
+
 import { convertImageToPNG } from "@/libs/utils/conver-to-png";
 
 import "photoswipe/style.css";
@@ -66,6 +63,7 @@ import {
   IconSend,
 } from "../icons";
 import { sessionService } from "@/libs/services/session-service";
+import { t } from "@/i18n";
 export interface MessageCardProps {
   message: StoreMessage;
 }
@@ -364,7 +362,7 @@ export const MessageContent: Component<MessageCardProps> = (
               }}
             >
               <IconContentCopy class="size-4" />
-              Copy
+              {t("common.action.copy")}
               <ContextMenuShortcut>
                 ⌘ + C
               </ContextMenuShortcut>
@@ -383,7 +381,7 @@ export const MessageContent: Component<MessageCardProps> = (
               }}
             >
               <IconContentCopy class="size-4" />
-              Copy Name
+              {t("common.action.copy")}
               <ContextMenuShortcut>
                 ⌘ + C
               </ContextMenuShortcut>
@@ -415,7 +413,7 @@ export const MessageContent: Component<MessageCardProps> = (
                 }}
               >
                 <IconFileCopy class="size-4" />
-                Copy Image
+                {t("common.action.copy")}
                 <ContextMenuShortcut>
                   ⌘ + P
                 </ContextMenuShortcut>
@@ -432,7 +430,7 @@ export const MessageContent: Component<MessageCardProps> = (
           }}
         >
           <IconDelete class="size-4" />
-          Delete
+          {t("common.action.delete")}
         </ContextMenuItem>
       </>
     );

@@ -3,9 +3,9 @@ import {
   EventHandler,
   MultiEventEmitter,
 } from "../utils/event-emitter";
-import { appOptions } from "../core/store";
 import { formatBtyeSize } from "../utils/format-filesize";
 import { ChunkRange, getSubRanges } from "../utils/range";
+import { appOptions } from "@/options";
 
 export interface ChunkMetaData {
   id: string;
@@ -66,8 +66,6 @@ export interface IDBChunkCacheOptions {
 export class IDBChunkCache implements ChunkCache {
   static DBNAME_PREFIX: string = "file-";
   info: Accessor<FileMetaData | null>;
-  // private chunkStore?: IDBObjectStore;
-  // private infoStore?: IDBObjectStore;
   private infoSetter: Setter<FileMetaData | null>;
   private db: Promise<IDBDatabase> | IDBDatabase;
   private status: "storing" | "merging" | "done" | "error" =
@@ -76,8 +74,10 @@ export class IDBChunkCache implements ChunkCache {
   private eventEmitter =
     new MultiEventEmitter<ChunkCacheEventMap>();
   public readonly id: string;
+
+  // memory cache
   private memoryCache: Array<[number, ArrayBufferLike]> =
-    []; // 内存缓存
+    [];
 
   private maxMomeryCacheSize: number =
     appOptions.maxMomeryCacheSlices;

@@ -1,0 +1,180 @@
+{
+  "setting": {
+    "title": "Setting",
+    "appearance": {
+      "title": "Appearance",
+      "theme": {
+        "title": "Theme",
+        "description": "Change the theme of the app"
+      },
+      "language": {
+        "title": "Language",
+        "description": "Change the language of the app"
+      }
+    },
+    "connection": {
+      "title": "Connection",
+      "auto_join": {
+        "title": "Auto join",
+        "description": "Auto join a room when the app is launched"
+      },
+      "stun_servers": {
+        "title": "STUN Servers",
+        "description": "Change the STUN servers of the app"
+      },
+      "turn_servers": {
+        "title": "TURN Servers",
+        "description": "Change the TURN servers of the app"
+      }
+    },
+    "stream": {
+      "title": "Video Call Settings",
+      "video_max_bitrate": {
+        "title": "Video Max Bitrate",
+        "description": "Change the video max bitrate of the stream"
+      },
+      "audio_max_bitrate": {
+        "title": "Audio Max Bitrate",
+        "description": "Change the audio max bitrate of the stream"
+      }
+    },
+    "sender": {
+      "title": "File Sender Settings",
+      "num_channels": {
+        "title": "NO. of Channels",
+        "description": "The number of channels of the sender, appropriate adjustment may improve the transfer speed"
+      },
+      "chunk_size": {
+        "title": "Chunk Size",
+        "description": "The size of each chunk of the sender"
+      },
+      "block_size": {
+        "title": "Block Size",
+        "description": "The size of each block of the sender"
+      },
+      "max_buffer_amount": {
+        "title": "Max Buffer Amount",
+        "description": "The max buffer amount of the sender"
+      },
+      "ordered": {
+        "title": "Ordered",
+        "description": "When enabled, the sender will send blocks in order"
+      },
+      "compression_level": {
+        "title": "Compression Level",
+        "description": "Change the compression level of the sender, 0 means no compression, 9 means maximum compression, enabling this option may reduce the transfer speed for compressed files",
+        "no_compression": "0 (No Compression)"
+      }
+    },
+    "receiver": {
+      "title": "File Receiver Settings",
+      "max_cached_chunks": {
+        "title": "Max Cached Chunks",
+        "description": "Change the max cached chunks of the receiver"
+      }
+    },
+    "media": {
+      "title": "Media Settings",
+      "video_codec": {
+        "title": "Video Codec",
+        "description": "Change the video codec of the media"
+      },
+      "audio_codec": {
+        "title": "Audio Codec",
+        "description": "Change the audio codec of the media"
+      }
+    }
+  },
+  "cache": {
+    "title": "File Cache",
+    "search_input": "Search for cached files...",
+    "usage": "{{value}} used, {{max}} total, {{remaining}} remaining"
+  },
+  "404": {
+    "title": "404 Not Found",
+    "description": "The page you are looking for does not exist, path: {{path}}",
+    "home": "Go to Home"
+  },
+  "chat": {
+    "title": "Chat",
+    "menu": {
+      "connect": "Connect",
+      "connection_status": "Connection Status",
+      "delete_client": "Delete Client"
+    },
+    "index": {
+      "description": "Scan the QR code or share the link to connect to this room"
+    }
+  },
+  "video": {
+    "device": {
+      "screen": "Screen",
+      "camera": "Camera"
+    },
+    "no_stream": "No Stream"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "Light Mode",
+      "dark": "Dark Mode",
+      "system": "System"
+    },
+    "join_form": {
+      "title": "Edit Room Info",
+      "description": "Edit the room info here. Click submit to finish editing.",
+      "client_id": {
+        "title": "Client ID (Read Only)",
+        "description": "The client ID of the room, representing your identity, which can be changed in settings"
+      },
+      "room_id": {
+        "title": "Room ID",
+        "description": "The room ID of the room"
+      },
+      "name": "Name",
+      "avatar_url": "Avatar URL",
+      "password": "Room Password",
+      "auto_join": "Auto Join Next Time"
+    },
+    "file_table": {
+      "name": "Name",
+      "size": "Size",
+      "last_modified": "Last Modified",
+      "status": "Status"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "Delete Files",
+      "description": "This operation deletes selected files",
+      "content": "Are you really sure you want to delete these files?"
+    },
+    "client_info_dialog": {
+      "title": "Client {{name}} Info",
+      "status": "Status",
+      "client_id": "Client ID",
+      "created_at": "Created At",
+      "stats_reports": "Stats Reports",
+      "leave": "Leave"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "Delete Client",
+      "description": "This operation deletes the client and messages",
+      "content": "Are you really sure you want to delete this client?"
+    },
+    "status": {
+      "online": "Online",
+      "connecting": "Connecting",
+      "offline": "Offline",
+      "leave": "Leave"
+    },
+    "action": {
+      "copy": "Copy",
+      "paste": "Paste",
+      "delete": "Delete",
+      "download": "Download",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "actions": "Actions",
+      "close": "Close",
+      "change": "Change"
+    }
+  }
+}

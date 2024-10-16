@@ -1,23 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { createDialog } from "../dialogs/dialog";
+import { t } from "@/i18n";
 
-export const createComfirmDialog = () => {
+export const createComfirmDeleteClientDialog = () => {
   const { open, close, submit, Component } = createDialog({
-    title: "Delete Clients",
-    description:
-      "This operation will delete the client and messages",
+    title: () => t("common.confirm_delete_client_dialog.title"),
+    description: () =>
+      t("common.confirm_delete_client_dialog.description"),
     content: () =>
-      "Are you really sure you want to delete this client",
+      t("common.confirm_delete_client_dialog.content"),
 
     confirm: (
       <Button
         variant="destructive"
         onClick={() => submit(true)}
       >
-        Confirm
+        {t("common.action.confirm")}
       </Button>
     ),
-    cancel: <Button onClick={() => close()}>Cancel</Button>,
+    cancel: <Button onClick={() => close()}>{t("common.action.cancel")}</Button>,
   });
 
   return { open, Component };

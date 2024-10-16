@@ -1,8 +1,6 @@
-import { Unsubscribe } from "firebase/database";
 import {
   getConfiguration,
   handleOffer,
-  appOptions,
 } from "./store";
 import { SignalingService } from "./services/type";
 import {
@@ -11,6 +9,7 @@ import {
 } from "../utils/event-emitter";
 import { SessionMessage } from "./messge";
 import { waitChannel } from "./utils/channel";
+import { appOptions } from "@/options";
 
 export interface PeerSessionOptions {
   polite?: boolean;

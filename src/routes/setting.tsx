@@ -5,7 +5,7 @@ import {
   createSignal,
   Show,
 } from "solid-js";
-import { Input } from "@/components/ui/input";
+
 import { optional } from "@/libs/core/utils/optional";
 import {
   Switch,
@@ -15,18 +15,14 @@ import {
 } from "@/components/ui/switch";
 import {
   clientProfile,
-  CompressionLevel,
   setClientProfile,
-  setAppOptions,
-  appOptions,
-  TurnServerOptions,
 } from "@/libs/core/store";
 import {
   createCameras,
   createMicrophones,
   createSpeakers,
 } from "@solid-primitives/devices";
-import { Button } from "@/components/ui/button";
+
 import {
   Select,
   SelectContent,
@@ -35,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { localStream } from "@/libs/stream";
-import { ModeToggle } from "@/components/mode-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Slider,
   SliderFill,
@@ -52,6 +48,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import { reconcile } from "solid-js/store";
+import { LocaleSelector, t } from "@/i18n";
+import {
+  TurnServerOptions,
+  appOptions,
+  setAppOptions,
+  CompressionLevel,
+} from "@/options";
 
 type MediaDeviceInfoType = Omit<MediaDeviceInfo, "toJSON">;
 
@@ -72,20 +75,19 @@ function parseTurnServers(
   const turnServers = lines.map((line) => {
     const parts = line.split("|");
     if (parts.length !== 4)
-      throw Error(`配置格式错误：${line}`);
+      throw Error(`config error: ${line}`);
     const [url, username, password, authMethod] = parts.map(
       (part) => part.trim(),
     );
-    // 验证输入
     if (!/^turns?:/.test(url)) {
-      throw Error(`URL 格式错误：${url}`);
+      throw Error(`URL format error: ${url}`);
     }
     if (
       authMethod !== "longterm" &&
       authMethod !== "hmac"
     ) {
       throw Error(
-        `认证方式错误，应为 "longterm" 或 "hmac"：${authMethod}`,
+        `auth method error, should be "longterm" or "hmac": ${authMethod}`,
       );
     }
     return {
@@ -103,31 +105,63 @@ export default function Settings() {
     <>
       <div class="container">
         <div class="grid gap-4 py-4">
-          <h3 class="h3">Appearance</h3>
+          <h3 id="appearance" class="h3">
+            {t("setting.appearance.title")}
+          </h3>
 
-          <label class="flex items-center justify-between gap-2">
-            <Label>Theme</Label>
-            <div class="col-span-2 md:col-span-3">
-              <ModeToggle />
+          <label class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <Label>
+                {t("setting.appearance.theme.title")}
+              </Label>
+
+              <div class="ml-auto">
+                <ThemeToggle />
+              </div>
             </div>
+            <p class="muted">
+              {t("setting.appearance.theme.description")}
+            </p>
           </label>
 
-          <Switch
-            class="flex items-center justify-between"
-            checked={clientProfile.autoJoin}
-            onChange={(isChecked) =>
-              setClientProfile("autoJoin", isChecked)
-            }
-          >
-            <SwitchLabel>Auto join</SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-
-          <h2 class="h3">Connection</h2>
           <label class="flex flex-col gap-2">
-            <Label>Stun Servers</Label>
+            <Label>
+              {t("setting.appearance.language.title")}
+            </Label>
+            <LocaleSelector />
+            <p class="muted">
+              {t("setting.appearance.language.description")}
+            </p>
+          </label>
+
+          <h3 id="connection" class="h3">
+            {t("setting.connection.title")}
+          </h3>
+          <label class="flex flex-col gap-2">
+            <Switch
+              class="flex items-center justify-between"
+              checked={clientProfile.autoJoin}
+              onChange={(isChecked) =>
+                setClientProfile("autoJoin", isChecked)
+              }
+            >
+              <SwitchLabel>
+                {t("setting.connection.auto_join.title")}
+              </SwitchLabel>
+              <SwitchControl>
+                <SwitchThumb />
+              </SwitchControl>
+            </Switch>
+            <p class="muted">
+              {t(
+                "setting.connection.auto_join.description",
+              )}
+            </p>
+          </label>
+          <label class="flex flex-col gap-2">
+            <Label>
+              {t("setting.connection.stun_servers.title")}
+            </Label>
             <Textarea
               placeholder="stun.l.google.com:19302"
               ref={(ref) => {
@@ -148,9 +182,16 @@ export default function Settings() {
                 )
               }
             />
+            <p class="muted">
+              {t(
+                "setting.connection.stun_servers.description",
+              )}
+            </p>
           </label>
           <label class="flex flex-col gap-2">
-            <Label>Turn Servers</Label>
+            <Label>
+              {t("setting.connection.turn_servers.title")}
+            </Label>
             <Textarea
               ref={(ref) => {
                 createEffect(() => {
@@ -182,78 +223,115 @@ export default function Settings() {
                 )
               }
             />
+            <p class="muted">
+              {t(
+                "setting.connection.turn_servers.description",
+              )}
+            </p>
           </label>
 
-          <h3 class="h3">Stream</h3>
+          <h3 id="stream" class="h3">
+            {t("setting.stream.title")}
+          </h3>
+          <label class="flex flex-col gap-2">
+            <Slider
+              minValue={512 * 1024}
+              maxValue={200 * 1024 * 1024}
+              step={512 * 1024}
+              defaultValue={[appOptions.videoMaxBitrate]}
+              getValueLabel={({ values }) =>
+                `${formatBitSize(values[0], 0)}ps`
+              }
+              class="gap-2"
+              onChange={(value) => {
+                setAppOptions("videoMaxBitrate", value[0]);
+              }}
+            >
+              <div class="flex w-full justify-between">
+                <SliderLabel>
+                  {t(
+                    "setting.stream.video_max_bitrate.title",
+                  )}
+                </SliderLabel>
+                <SliderValueLabel />
+              </div>
+              <SliderTrack>
+                <SliderFill />
+                <SliderThumb />
+                <SliderThumb />
+              </SliderTrack>
+            </Slider>
+            <p class="muted">
+              {t(
+                "setting.stream.video_max_bitrate.description",
+              )}
+            </p>
+          </label>
+          <label class="flex flex-col gap-2">
+            <Slider
+              minValue={1024}
+              maxValue={512 * 1024}
+              step={1024}
+              defaultValue={[appOptions.audioMaxBitrate]}
+              getValueLabel={({ values }) =>
+                `${formatBitSize(values[0], 0)}ps`
+              }
+              class="gap-2"
+              onChange={(value) => {
+                setAppOptions("audioMaxBitrate", value[0]);
+              }}
+            >
+              <div class="flex w-full justify-between">
+                <SliderLabel>
+                  {t(
+                    "setting.stream.audio_max_bitrate.title",
+                  )}
+                </SliderLabel>
+                <SliderValueLabel />
+              </div>
+              <SliderTrack>
+                <SliderFill />
+                <SliderThumb />
+                <SliderThumb />
+              </SliderTrack>
+            </Slider>
+            <p class="muted">
+              {t(
+                "setting.stream.audio_max_bitrate.description",
+              )}
+            </p>
+          </label>
 
-          <Slider
-            minValue={512 * 1024}
-            maxValue={200 * 1024 * 1024}
-            step={512 * 1024}
-            defaultValue={[appOptions.videoMaxBitrate]}
-            getValueLabel={({ values }) =>
-              `${formatBitSize(values[0], 0)}ps`
-            }
-            class="gap-2"
-            onChange={(value) => {
-              setAppOptions("videoMaxBitrate", value[0]);
-            }}
-          >
-            <div class="flex w-full justify-between">
-              <SliderLabel>Video max bitrate</SliderLabel>
-              <SliderValueLabel />
-            </div>
-            <SliderTrack>
-              <SliderFill />
-              <SliderThumb />
-              <SliderThumb />
-            </SliderTrack>
-          </Slider>
+          <h3 id="sender" class="h3">
+            {t("setting.sender.title")}
+          </h3>
+          <label class="flex flex-col gap-2">
+            <Slider
+              minValue={1}
+              maxValue={8}
+              defaultValue={[appOptions.channelsNumber]}
+              class="gap-2"
+              onChange={(value) => {
+                setAppOptions("channelsNumber", value[0]);
+              }}
+            >
+              <div class="flex w-full justify-between">
+                <SliderLabel>
+                  {t("setting.sender.num_channels.title")}
+                </SliderLabel>
+                <SliderValueLabel />
+              </div>
+              <SliderTrack>
+                <SliderFill />
+                <SliderThumb />
+                <SliderThumb />
+              </SliderTrack>
+            </Slider>
+            <p class="muted">
+              {t("setting.sender.num_channels.description")}
+            </p>
+          </label>
 
-          <Slider
-            minValue={1024}
-            maxValue={512 * 1024}
-            step={1024}
-            defaultValue={[appOptions.audioMaxBitrate]}
-            getValueLabel={({ values }) =>
-              `${formatBitSize(values[0], 0)}ps`
-            }
-            class="gap-2"
-            onChange={(value) => {
-              setAppOptions("audioMaxBitrate", value[0]);
-            }}
-          >
-            <div class="flex w-full justify-between">
-              <SliderLabel>Audio max bitrate</SliderLabel>
-              <SliderValueLabel />
-            </div>
-            <SliderTrack>
-              <SliderFill />
-              <SliderThumb />
-              <SliderThumb />
-            </SliderTrack>
-          </Slider>
-
-          <h2 class="h3">Sender</h2>
-          <Slider
-            minValue={1}
-            maxValue={8}
-            defaultValue={[appOptions.channelsNumber]}
-            class="gap-2"
-            onChange={(value) => {
-              setAppOptions("channelsNumber", value[0]);
-            }}
-          >
-            <div class="flex w-full justify-between">
-              <SliderLabel>No. of channels</SliderLabel>
-              <SliderValueLabel />
-            </div>
-            <SliderTrack>
-              <SliderFill />
-              <SliderThumb />
-              <SliderThumb />
-            </SliderTrack>
-          </Slider>
           <Slider
             minValue={appOptions.blockSize}
             maxValue={1024 * 1024 * 10}
@@ -268,7 +346,9 @@ export default function Settings() {
             }}
           >
             <div class="flex w-full justify-between">
-              <SliderLabel>Chunk size</SliderLabel>
+              <SliderLabel>
+                {t("setting.sender.chunk_size.title")}
+              </SliderLabel>
               <SliderValueLabel />
             </div>
             <SliderTrack>
@@ -291,7 +371,9 @@ export default function Settings() {
             }}
           >
             <div class="flex w-full justify-between">
-              <SliderLabel>Block size</SliderLabel>
+              <SliderLabel>
+                {t("setting.sender.block_size.title")}
+              </SliderLabel>
               <SliderValueLabel />
             </div>
             <SliderTrack>
@@ -319,78 +401,10 @@ export default function Settings() {
             }}
           >
             <div class="flex w-full justify-between">
-              <SliderLabel>Max buffer amount</SliderLabel>
-              <SliderValueLabel />
-            </div>
-            <SliderTrack>
-              <SliderFill />
-              <SliderThumb />
-              <SliderThumb />
-            </SliderTrack>
-          </Slider>
-
-          <Switch
-            class="flex items-center justify-between"
-            checked={appOptions.ordered}
-            onChange={(isChecked) =>
-              setAppOptions("ordered", isChecked)
-            }
-          >
-            <SwitchLabel>Ordered</SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-
-          <Slider
-            minValue={0}
-            maxValue={9}
-            step={1}
-            defaultValue={[appOptions.compressionLevel]}
-            getValueLabel={({ values }) =>
-              values[0] === 0
-                ? "0 (No Compression)"
-                : `${values[0]}`
-            }
-            class="gap-2"
-            onChange={(value) => {
-              setAppOptions(
-                "compressionLevel",
-                value[0] as CompressionLevel,
-              );
-            }}
-          >
-            <div class="flex w-full justify-between">
-              <SliderLabel>Compression Level</SliderLabel>
-              <SliderValueLabel />
-            </div>
-            <SliderTrack>
-              <SliderFill />
-              <SliderThumb />
-              <SliderThumb />
-            </SliderTrack>
-          </Slider>
-
-          <h2 class="h3">Receiver</h2>
-          <Slider
-            minValue={1}
-            maxValue={128}
-            step={1}
-            defaultValue={[appOptions.maxMomeryCacheSlices]}
-            getValueLabel={({ values }) =>
-              `${values[0]} (${formatBtyeSize(values[0] * appOptions.chunkSize, 0)})`
-            }
-            class="gap-2"
-            onChange={(value) => {
-              setAppOptions(
-                "maxMomeryCacheSlices",
-                value[0],
-              );
-            }}
-          >
-            <div class="flex w-full justify-between">
               <SliderLabel>
-                Max number of cached chunk slices
+                {t(
+                  "setting.sender.max_buffer_amount.title",
+                )}
               </SliderLabel>
               <SliderValueLabel />
             </div>
@@ -401,7 +415,109 @@ export default function Settings() {
             </SliderTrack>
           </Slider>
 
-          <h2 class="h3">Media</h2>
+          <label class="flex flex-col gap-2">
+            <Switch
+              class="flex items-center justify-between"
+              checked={appOptions.ordered}
+              onChange={(isChecked) =>
+                setAppOptions("ordered", isChecked)
+              }
+            >
+              <SwitchLabel>
+                {t("setting.sender.ordered.title")}
+              </SwitchLabel>
+              <SwitchControl>
+                <SwitchThumb />
+              </SwitchControl>
+            </Switch>
+            <p class="muted">
+              {t("setting.sender.ordered.description")}
+            </p>
+          </label>
+          <label class="flex flex-col gap-2">
+            <Slider
+              minValue={0}
+              maxValue={9}
+              step={1}
+              defaultValue={[appOptions.compressionLevel]}
+              getValueLabel={({ values }) =>
+                values[0] === 0
+                  ? t(
+                      "setting.sender.compression_level.no_compression",
+                    )
+                  : `${values[0]}`
+              }
+              class="gap-2"
+              onChange={(value) => {
+                setAppOptions(
+                  "compressionLevel",
+                  value[0] as CompressionLevel,
+                );
+              }}
+            >
+              <div class="flex w-full justify-between">
+                <SliderLabel>
+                  {t(
+                    "setting.sender.compression_level.title",
+                  )}
+                </SliderLabel>
+                <SliderValueLabel />
+              </div>
+              <SliderTrack>
+                <SliderFill />
+                <SliderThumb />
+                <SliderThumb />
+              </SliderTrack>
+            </Slider>
+            <p class="muted">
+              {t(
+                "setting.sender.compression_level.description",
+              )}
+            </p>
+          </label>
+          <h3 id="receiver" class="h3">
+            {t("setting.receiver.title")}
+          </h3>
+          <label class="flex flex-col gap-2">
+            <Slider
+              minValue={1}
+              maxValue={128}
+              step={1}
+              defaultValue={[
+                appOptions.maxMomeryCacheSlices,
+              ]}
+              getValueLabel={({ values }) =>
+                `${values[0]} (${formatBtyeSize(values[0] * appOptions.chunkSize, 0)})`
+              }
+              class="gap-2"
+              onChange={(value) => {
+                setAppOptions(
+                  "maxMomeryCacheSlices",
+                  value[0],
+                );
+              }}
+            >
+              <div class="flex w-full justify-between">
+                <SliderLabel>
+                  {t(
+                    "setting.receiver.max_cached_chunks.title",
+                  )}
+                </SliderLabel>
+                <SliderValueLabel />
+              </div>
+              <SliderTrack>
+                <SliderFill />
+                <SliderThumb />
+                <SliderThumb />
+              </SliderTrack>
+            </Slider>
+            <p class="muted">
+              {t(
+                "setting.receiver.max_cached_chunks.description",
+              )}
+            </p>
+          </label>
+
           <MediaSetting />
         </div>
       </div>
@@ -424,8 +540,21 @@ const MediaSetting: Component = () => {
     speakers().filter((speaker) => speaker.deviceId !== ""),
   );
 
+  const availableDevices = createMemo(() => {
+    return [
+      ...availableCameras(),
+      ...availableMicrophones(),
+      ...availableSpeakers(),
+    ];
+  });
+
   return (
     <>
+      <Show when={availableDevices().length !== 0}>
+        <h3 id="media" class="h3">
+          {t("setting.media.title")}
+        </h3>
+      </Show>
       <Show when={availableCameras().length !== 0}>
         <label class="flex flex-col gap-2">
           <Label>Camera</Label>

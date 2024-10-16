@@ -5,7 +5,6 @@ import {
 } from "@/components/ui/avatar";
 import {
   Component,
-  For,
   ComponentProps,
   splitProps,
   createMemo,
@@ -15,7 +14,7 @@ import {
 } from "solid-js";
 import { cn } from "@/libs/cn";
 import { A } from "@solidjs/router";
-import { ClientInfo, Client } from "@/libs/core/type";
+import { Client, ClientInfo } from "@/libs/core/type";
 import { Badge } from "../ui/badge";
 
 import {
@@ -30,9 +29,10 @@ import {
   IconInsertDriveFile,
   IconPhotoFilled,
 } from "../icons";
-import { createDialog } from "../dialogs/dialog";
+
 import { sessionService } from "@/libs/services/session-service";
-import { createComfirmDialog } from "../ui/confirm-delete-dialog";
+import { createComfirmDeleteClientDialog } from "../ui/confirm-delete-dialog";
+import { t } from "@/i18n";
 export const getInitials = (name = "") =>
   name
     .split(" ")
@@ -79,11 +79,12 @@ export const UserItem: Component<UserItemProps> = (
     "class",
   ]);
 
-  const clientInfo = createMemo(
+  const clientInfo = createMemo<ClientInfo | undefined>(
     () => sessionService.clientInfo[local.client.clientId],
   );
 
-  const { open, Component } = createComfirmDialog();
+  const { open, Component } =
+    createComfirmDeleteClientDialog();
 
   const renderLastMessage = () => {
     switch (props.message?.type) {
@@ -160,7 +161,8 @@ export const UserItem: Component<UserItemProps> = (
                 close();
               }}
             >
-              <IconDelete class="size-4" /> Delete
+              <IconDelete class="size-4" />
+              {t("common.action.delete")}
             </ContextMenuItem>
           </>
         )}
@@ -195,19 +197,9 @@ export const UserItem: Component<UserItemProps> = (
                     <span class="line-clamp-1 text-ellipsis font-bold">
                       {props.client.name}
                     </span>
-                    <Badge
-                      class="text-xs"
-                      variant="secondary"
-                    >
-                      <Show
-                        when={clientInfo()}
-                        fallback={"leave"}
-                      >
-                        <span>
-                          {clientInfo().onlineStatus}
-                        </span>
-                      </Show>
-                    </Badge>
+                    <ConnectionBadge
+                      client={clientInfo()}
+                    />
                   </p>
                   {renderLastMessage()}
                   <Show when={props.message?.createdAt}>
@@ -228,4 +220,20 @@ export const UserItem: Component<UserItemProps> = (
     </>
   );
 };
-// export default UserList;
+
+export const ConnectionBadge: Component<{
+  client?: ClientInfo;
+}> = (props) => {
+  return (
+    <Badge class="text-xs" variant="secondary">
+      <Show
+        when={props.client?.onlineStatus}
+        fallback={t("common.status.leave")}
+      >
+        {(status) => (
+          <span>{t(`common.status.${status}`)}</span>
+        )}
+      </Show>
+    </Badge>
+  );
+};

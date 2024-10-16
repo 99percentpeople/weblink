@@ -1,7 +1,7 @@
 import { localStream } from "@/libs/stream";
 import { WebRTCProvider } from "@/libs/core/rtc-context";
 import { ParentComponent } from "solid-js";
-import { appOptions } from "@/libs/core/store";
+import { appOptions } from "@/options";
 
 function changeAudioEncoding(
   parameters: RTCRtpSendParameters,

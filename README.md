@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a pure web-based chat software built on WebRTC, supporting text chat, file transfer, video calls, and a serverless architecture powered by P2P connections, Firebase signaling, and Vercel deployment. No downloads are required, and it can be used directly in the browser.
+Weblink is a browser-based chat application built on WebRTC, requiring no downloads and usable directly in your browser. It offers a serverless, peer-to-peer architecture powered by Firebase signaling and deployed on Vercel. The application supports real-time text chat, file transfer, file storage, video calls, and multi-party communication through a mesh network. Advanced features include chunked and compressed file transfers for efficient and resumable large file sharing, multi-channel data transfer using multiple DataChannels for faster performance, and IndexedDB caching to minimize memory usage during transfers. End-to-end encryption ensures privacy and security with encrypted signaling messages.
 
 This project is deployed on Vercel. [Click here to access](https://web1ink.vercel.app).
 
@@ -11,34 +11,6 @@ This project is deployed on Vercel. [Click here to access](https://web1ink.verce
 ![Chat Example 1](screenshots/example_dark_cn.png)
 
 ![Chat Example 2](screenshots/example_light_cn.png)
-
-## Features
-
-- P2P connection
-
-- Real-time text chat
-
-- File transfer
-
-- File storage
-
-- Video calls
-
-## Special Features
-
-1. Chunked Transfer: Large files are divided into smaller chunks for gradual transfer, reducing the impact of network fluctuations and enabling the resumable transfer feature.
-
-2. Resumable Transfer: Supports automatic recovery of file transfers after connection disruptions, allowing users to resume uploads or downloads without starting over.
-
-3. Compressed Transfer: Enables file compression during transfer, compressing files in chunks to save bandwidth and improve transfer speed.
-
-4. Multi-channel Data Transfer: Supports using multiple DataChannels for parallel transfers, improving data transfer performance and ensuring high speed even under heavy load.
-
-5. Multi-party Chat: Different clients in the same room can connect to each other using a mesh network scheme.
-
-6. IndexedDB File Caching: Transferred file chunks are cached in the browser's IndexedDB, preventing large files from occupying too much memory during transfers.
-
-7. End-to-end Encryption: Uses symmetric encryption for end-to-end encrypted signaling, ensuring the privacy and security of signaling messages.
 
 ## Usage
 
@@ -53,7 +25,10 @@ pnpm install
 Make sure you configure the Firebase keys in the project (as shown below), then run the following command:
 
 ```base
+# Development
 pnpm dev
+# Build
+pnpm build
 ```
 
 ### Deploy to Vercel
@@ -96,11 +71,19 @@ For Vercel deployment, set the environment variables by following these steps:
 
 3. Add the Firebase configuration items above and input the corresponding values.
 
+### WEBSOCKET Configuration
+
+This application can deploy its own WEBSOCKET server, and a WEBSOCKET server is provided. You can choose to use it or not. For details, please refer to [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server).
+
 ### Local Environment Variables (.env.local)
 
 For local development, create a .env.local file and add the Firebase keys:
 
 ```env
+# backend choose FIREBASE or WEBSOCKET
+
+# FIREBASE
+VITE_BACKEND=FIREBASE
 VITE_FIREBASE_API_KEY=your-firebase-api-key
 VITE_FIREBASE_AUTH_DOMAIN=your-firebase-auth-domain
 VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
@@ -108,6 +91,10 @@ VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-firebase-app-id
 VITE_FIREBASE_DATABASE_URL=your-database-url
+
+# WEBSOCKET
+VITE_BACKEND=WEBSOCKET
+VITE_WEBSOCKET_URL=your-websocket-url
 ```
 
 ## Notes
@@ -123,33 +110,9 @@ turn:turn1.example.com:3478|user1|pass1|longterm
 turns:turn2.example.com:5349|user2|pass2|hmac
 ```
 
-- turn: specifies the use of the standard TURN protocol (UDP/TCP).
-
-- turns: specifies the use of a secure TURN protocol (TLS).
-
-- example.com is the domain of your TURN server.
-
-- 3478 and 5349 are the default TURN service ports (can be changed depending on server settings).
-
-- user1 and user2 are the authentication usernames.
-
-- pass1 and pass2 are the corresponding authentication passwords.
-
-- longterm and hmac specify the authentication methods, representing long-term credentials and HMAC signed authentication.
-
 ## Contribution
 
-Contributions are welcome! Please follow these steps:
-
-1. Fork this repository
-
-2. Create a branch (git checkout -b feature/your-feature)
-
-3. Commit your changes (git commit -am 'Add some feature')
-
-4. Push to the branch (git push origin feature/your-feature)
-
-5. Create a Pull Request
+Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## License
 

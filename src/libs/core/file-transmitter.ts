@@ -1,7 +1,4 @@
-import {
-  waitBufferedAmountLowThreshold,
-  waitChannel,
-} from "./utils/channel";
+import { waitBufferedAmountLowThreshold } from "./utils/channel";
 import {
   ChunkCache,
   FileMetaData,
@@ -35,7 +32,7 @@ import {
   deflateSync,
   inflateSync,
 } from "fflate";
-import { CompressionLevel } from "./store";
+import { CompressionLevel } from "@/options";
 
 export enum TransferMode {
   Send = 1,

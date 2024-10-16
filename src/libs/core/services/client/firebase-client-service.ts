@@ -67,13 +67,12 @@ export class FirebaseClientService
 
   private async setRoomPassword() {
     if (!this.password) return;
-    const roomRef = ref(this.db, `rooms/${this.roomId}`);
     const passwordHash = await hashPassword(this.password);
-    const roomSnapshot = await get(roomRef);
+    const roomSnapshot = await get(this.roomRef);
     const roomData = roomSnapshot.val();
     if (!roomData) {
-      await update(roomRef, { passwordHash });
-      await onDisconnect(roomRef).update({
+      await update(this.roomRef, { passwordHash });
+      await onDisconnect(this.roomRef).update({
         passwordHash: null,
       });
     }
@@ -81,15 +80,12 @@ export class FirebaseClientService
 
   async createClient() {
     // 获取房间数据
-    const roomRef = ref(this.db, `rooms/${this.roomId}`);
-    const roomSnapshot = await get(roomRef);
+    const roomSnapshot = await get(this.roomRef);
     const roomData = roomSnapshot.val();
 
     if (roomData && roomData.passwordHash) {
       if (!this.password) {
-        throw new Error(
-          "The room requires a password to join.",
-        );
+        throw new Error("password required");
       }
 
       const passwordMatch = await comparePasswordHash(
@@ -98,7 +94,7 @@ export class FirebaseClientService
       );
 
       if (!passwordMatch) {
-        throw new Error("Password error.");
+        throw new Error("incorrect password");
       }
     }
     // 创建客户端
@@ -200,7 +196,7 @@ export class FirebaseClientService
     const unsubscribe = onChildRemoved(
       clientsRef,
       (snapshot) => {
-        const data = snapshot.val() as TransferClient;
+        const data = snapshot.val() as TransferClient; 
         if (!data) return;
         if (data.clientId === this.client.clientId) return;
         console.log(`client ${data.clientId} leave`);

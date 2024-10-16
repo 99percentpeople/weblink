@@ -11,7 +11,7 @@ import {
   onMount,
   ParentProps,
 } from "solid-js";
-
+import { Toaster } from "@/components/ui/sonner"
 import ChatProvider from "./components/chat/chat-provider";
 import Nav from "@/components/nav";
 import { ReloadPrompt } from "./components/reload-prompt";
@@ -26,6 +26,7 @@ import {
 } from "./libs/core/store";
 import { useWebRTC } from "./libs/core/rtc-context";
 import { createRoomDialog } from "./components/join-dialog";
+import { toast } from "solid-sonner";
 
 const JoinRoom = lazy(
   () => import("./components/join-dialog"),
@@ -48,10 +49,28 @@ const requestWakeLock = async () => {
 };
 
 const InnerApp = (props: ParentProps) => {
-  const { joinRoom } = useWebRTC();
+  const { joinRoom, roomStatus } = useWebRTC();
   const [search, setSearch] = useSearchParams();
 
+  const onJoinRoom = async () => {
+    await joinRoom().catch((err) => {
+      console.error(err);
+      toast.error(err.message);
+    });
+  };
+
+  onMount(async () => {
+    if (!roomStatus.roomId) {
+      if (clientProfile.autoJoin) {
+        await onJoinRoom();
+      }
+    }
+  });
+
   createEffect(async () => {
+    if (roomStatus.roomId) {
+      return;
+    }
     let reset = false;
     if (search.id && search.id !== clientProfile.roomId) {
       setClientProfile("roomId", search.id);
@@ -74,10 +93,10 @@ const InnerApp = (props: ParentProps) => {
       if (clientProfile.firstTime) {
         const result = await open();
         if (!result.cancel) {
-          joinRoom();
+          await onJoinRoom();
         }
       } else {
-        joinRoom();
+        await onJoinRoom();
       }
     }
   });
@@ -127,6 +146,7 @@ export default function App(props: RouteSectionProps) {
 
   return (
     <>
+      <Toaster />
       <ColorModeScript storageType={storageManager.type} />
       <ColorModeProvider storageManager={storageManager}>
         <ChatProvider>

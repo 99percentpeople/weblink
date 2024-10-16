@@ -17,6 +17,7 @@ import {
 import { camera, microphone, speaker } from "./setting";
 import { createCameras } from "@solid-primitives/devices";
 import { sessionService } from "@/libs/services/session-service";
+import { t } from "@/i18n";
 
 export interface VideoChatProps {}
 
@@ -85,7 +86,7 @@ export default function Message() {
               when={localStream()}
               fallback={
                 <div class="absolute inset-0 content-center text-center">
-                  No Stream
+                  {t("video.no_stream")}
                 </div>
               }
             >
@@ -122,12 +123,18 @@ export default function Message() {
                 }
               >
                 <Button size="sm" onClick={openScreen}>
-                  {localStream() ? "Change" : "Open"} Screen
+                  {localStream()
+                    ? t("common.action.change")
+                    : t("common.action.open")}
+                  {t("video.device.screen")}
                 </Button>
               </Show>
               <Show when={cameras().length !== 0}>
                 <Button size="sm" onClick={openCamera}>
-                  {localStream() ? "Change" : "Open"} Camera
+                  {localStream()
+                    ? t("common.action.change")
+                    : t("common.action.open")}
+                  {t("video.device.camera")}
                 </Button>
               </Show>
 
@@ -137,7 +144,8 @@ export default function Message() {
                   onClick={closeStream}
                   variant="destructive"
                 >
-                  Close
+                  {t("common.action.close")}
+                  {t("video.device.screen")}
                 </Button>
               </Show>
             </div>

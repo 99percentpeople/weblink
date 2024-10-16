@@ -22,7 +22,7 @@ import {
   TransferMode,
 } from "./file-transmitter";
 import { v4 } from "uuid";
-import { clientProfile, appOptions } from "./store";
+import { clientProfile,  } from "./store";
 import { cacheManager } from "../services/cache-serivce";
 import { transferManager } from "../services/transfer-service";
 import { getRangesLength } from "../utils/range";
@@ -37,6 +37,7 @@ import {
 import { sessionService } from "../services/session-service";
 import { WebSocketClientService } from "./services/client/ws-client-service";
 import { SseClientService } from "./services/client/sse-client-service";
+import { appOptions } from "@/options";
 
 function getServiceConstructor() {
   switch (import.meta.env.VITE_BACKEND) {
@@ -74,7 +75,7 @@ export interface SendOptions {
 }
 
 export interface WebRTCContextProps {
-  joinRoom: () => Promise<boolean>;
+  joinRoom: () => Promise<void>;
   leaveRoom: () => void;
   requestFile(
     target: ClientID,
@@ -147,11 +148,11 @@ export const WebRTCProvider: Component<
 
   // targetClientId, connection
 
-  const joinRoom = async (): Promise<boolean> => {
+  const joinRoom = async (): Promise<void> => {
     console.log(`join room`, clientProfile);
 
     if (sessionService.clientService) {
-      return true;
+      return;
     }
     const ClientServiceConstructor =
       getServiceConstructor();
@@ -164,12 +165,9 @@ export const WebRTCProvider: Component<
         avatar: clientProfile.avatar,
       },
     }) as ClientService;
-    try {
-      await cs.createClient();
-    } catch (err) {
-      console.error(err);
-      return false;
-    }
+
+    await cs.createClient();
+
     sessionService.setClientService(cs);
 
     cs.listenForJoin(
@@ -427,8 +425,6 @@ export const WebRTCProvider: Component<
     });
 
     setRoomStatus("roomId", clientProfile.roomId);
-
-    return true;
   };
 
   const leaveRoom = async () => {

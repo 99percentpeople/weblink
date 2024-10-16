@@ -23,18 +23,18 @@ import {
   SwitchThumb,
 } from "./ui/switch";
 import { IconCasino, IconLogin, IconLogout } from "./icons";
+import { toast } from "solid-sonner";
+import { t } from "@/i18n";
 
 export const createRoomDialog = () => {
-  const { open, close, submit, Component } = createDialog({
-    title: "Edit profile",
-    description:
-      "Make changes to your profile here. Click submit when you're done.",
+  const { open, close, Component } = createDialog({
+    title: () => t("common.join_form.title"),
+    description: () => t("common.join_form.description"),
     content: (props) => (
       <>
-        <div class="h-0"></div>
         <form
           id="join-room"
-          class="grid gap-4 py-4"
+          class="grid gap-4 p-1 overflow-y-auto"
           onSubmit={(ev) => {
             ev.preventDefault();
             setClientProfile("firstTime", false);
@@ -42,27 +42,26 @@ export const createRoomDialog = () => {
           }}
         >
           <label class="flex flex-col gap-2">
-            <span>Client ID</span>
-            <div class="col-span-2 flex gap-1 md:col-span-3">
+            <span>
+              {t("common.join_form.client_id.title")}
+            </span>
+            <div class="flex gap-1">
               <Input
                 required
+                readonly
                 value={clientProfile.clientId}
                 readOnly={true}
                 class="flex-1"
               />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  setClientProfile(getDefaultProfile());
-                }}
-              >
-                <IconCasino class="size-6" />
-              </Button>
             </div>
+            <p class="muted">
+              {t("common.join_form.client_id.description")}
+            </p>
           </label>
           <label class="flex flex-col gap-2">
-            <span>Room ID</span>
+            <span>
+              {t("common.join_form.room_id.title")}
+            </span>
             <Input
               required
               value={clientProfile.roomId}
@@ -76,7 +75,7 @@ export const createRoomDialog = () => {
             />
           </label>
           <label class="flex flex-col gap-2">
-            <span>Name</span>
+            <span>{t("common.join_form.name")}</span>
             <Input
               required
               value={clientProfile.name}
@@ -90,7 +89,7 @@ export const createRoomDialog = () => {
             />
           </label>
           <label class="flex flex-col gap-2">
-            <span>Avatar Url</span>
+            <span>{t("common.join_form.avatar_url")}</span>
             <Input
               placeholder="Enter a link or upload an image"
               type="url"
@@ -132,8 +131,13 @@ export const createRoomDialog = () => {
             </div>
           </label>
           <label class="flex flex-col gap-2">
-            <span>Password</span>
+            <span>
+              {t("common.join_form.password.title")}
+            </span>
             <Input
+              placeholder={t(
+                "common.join_form.password.placeholder",
+              )}
               value={clientProfile.password ?? ""}
               onInput={(ev) =>
                 setClientProfile(
@@ -151,7 +155,9 @@ export const createRoomDialog = () => {
               setClientProfile("autoJoin", isChecked)
             }
           >
-            <SwitchLabel>Auto join</SwitchLabel>
+            <SwitchLabel>
+              {t("common.join_form.auto_join")}
+            </SwitchLabel>
             <SwitchControl>
               <SwitchThumb />
             </SwitchControl>
@@ -161,12 +167,12 @@ export const createRoomDialog = () => {
     ),
     confirm: (
       <Button type="submit" form="join-room">
-        Confirm
+        {t("common.action.confirm")}
       </Button>
     ),
     cancel: (
       <Button variant="destructive" onClick={() => close()}>
-        Cancel
+        {t("common.action.cancel")}
       </Button>
     ),
   });
@@ -176,13 +182,7 @@ export const createRoomDialog = () => {
 export default function JoinRoom() {
   const { joinRoom, roomStatus, leaveRoom } = useWebRTC();
   const { open, Component } = createRoomDialog();
-  onMount(async () => {
-    if (!roomStatus.roomId) {
-      if (clientProfile.autoJoin) {
-        await joinRoom();
-      }
-    }
-  });
+
   return (
     <>
       <Component />
@@ -201,12 +201,13 @@ export default function JoinRoom() {
         <Button
           size="icon"
           onClick={async () => {
-            // if (clientProfile.firstTime) {
             const result = await open();
             if (result.cancel) return;
-            // }
 
-            joinRoom();
+            await joinRoom().catch((err) => {
+              console.error(err);
+              toast.error(err.message);
+            });
           }}
           disabled={!!roomStatus.roomId}
         >

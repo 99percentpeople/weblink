@@ -60,21 +60,28 @@ import {
   IconSearch700,
 } from "@/components/icons";
 import { createDialog } from "@/components/dialogs/dialog";
+import { t } from "@/i18n";
 
 const createComfirmDialog = () => {
   const { open, close, submit, Component } = createDialog({
-    title: "Delete Files",
-    description: "This operation deletes selected files",
+    title: () => t("common.confirm_delete_files_dialog.title"),
+    description: () => t(
+      "common.confirm_delete_files_dialog.description",
+    ),
     content: () =>
-      "Are you really sure you want to delete these files?",
+      t("common.confirm_delete_files_dialog.content"),
 
-    cancel: <Button onClick={() => close()}>Cancel</Button>,
+    cancel: (
+      <Button onClick={() => close()}>
+        {t("common.action.cancel")}
+      </Button>
+    ),
     confirm: (
       <Button
         variant="destructive"
         onClick={() => submit(true)}
       >
-        Confirm
+        {t("common.action.confirm")}
       </Button>
     ),
   });
@@ -122,7 +129,7 @@ export default function File() {
       enableGlobalFilter: false,
     }),
     columnHelper.accessor("fileName", {
-      header: "Name",
+      header: t("common.file_table.name"),
       cell: (info) => (
         <p class="max-w-xs overflow-hidden text-ellipsis">
           {info.getValue()}
@@ -131,11 +138,11 @@ export default function File() {
       enableGlobalFilter: true,
     }),
     columnHelper.accessor("fileSize", {
-      header: "Size",
+      header: t("common.file_table.size"),
       cell: (info) => formatBtyeSize(info.getValue(), 1),
     }),
     columnHelper.accessor("lastModified", {
-      header: "Last Modify",
+      header: t("common.file_table.last_modified"),
       cell: (info) => {
         const value = info.getValue();
         return value ? (
@@ -155,7 +162,7 @@ export default function File() {
                 <IconMoreHoriz class="size-6" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
+            <DropdownMenuContent class="w-48">
               <Show when={row.original.file}>
                 {(file) => (
                   <DropdownMenuItem
@@ -168,7 +175,7 @@ export default function File() {
                     }}
                   >
                     <IconDownload class="size-4" />
-                    Download
+                    {t("common.action.download")}
                   </DropdownMenuItem>
                 )}
               </Show>
@@ -180,7 +187,7 @@ export default function File() {
                 }}
               >
                 <IconDelete class="size-4" />
-                Delete
+                {t("common.action.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -257,7 +264,7 @@ export default function File() {
     <>
       <DialogComponent />
       <div class="container flex min-h-[calc(100%-3rem)] flex-col gap-4 py-4">
-        <h2 class="h2">Cache</h2>
+        <h2 class="h2">{t("cache.title")}</h2>
 
         <Show when={storage()}>
           {(storage) => (
@@ -265,7 +272,11 @@ export default function File() {
               value={storage().usage}
               maxValue={storage().quota}
               getValueLabel={({ value, max }) =>
-                `${formatBtyeSize(value)} used, ${formatBtyeSize(max)} total, ${formatBtyeSize(max - value)} remaining`
+                t("cache.usage", {
+                  value: formatBtyeSize(value),
+                  max: formatBtyeSize(max),
+                  remaining: formatBtyeSize(max - value),
+                })
               }
             >
               <div class="muted mb-1 flex justify-end text-sm">
@@ -287,7 +298,7 @@ export default function File() {
 
             <input
               type="search"
-              placeholder="Search files ..."
+              placeholder={t("cache.search_input")}
               class="h-full w-full bg-transparent outline-none"
               value={globalFilter()}
               onInput={(ev) =>
@@ -302,10 +313,10 @@ export default function File() {
               <DropdownMenuTrigger>
                 <Button variant="outline">
                   <IconMenu class="mr-2 size-4" />
-                  Actions
+                  {t("common.action.actions")}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
+              <DropdownMenuContent class="w-48">
                 <DropdownMenuItem
                   class="gap-2"
                   onSelect={() => {
@@ -325,14 +336,14 @@ export default function File() {
                   }}
                 >
                   <IconDownload class="size-4" />
-                  Download
+                  {t("common.action.download")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   class="gap-2"
                   onSelect={() => table.resetRowSelection()}
                 >
                   <IconClose700 class="size-4" />
-                  Cancel
+                  {t("common.action.cancel")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   class="gap-2"
@@ -348,7 +359,8 @@ export default function File() {
                     table.resetRowSelection();
                   }}
                 >
-                  <IconDelete class="size-4" /> Delete
+                  <IconDelete class="size-4" />
+                  {t("common.action.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

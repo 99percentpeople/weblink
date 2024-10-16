@@ -1,13 +1,11 @@
-import {
-  makePersisted,
-  storageSync,
-} from "@solid-primitives/storage";
+import { makePersisted } from "@solid-primitives/storage";
 import { createStore } from "solid-js/store";
 import { faker } from "@faker-js/faker";
 import { Client } from "./type";
 import { v4 } from "uuid";
 import { SignalingService } from "./services/type";
 import { generateHMAC } from "./utils/hmac";
+import { appOptions } from "@/options";
 
 export interface ClientProfile extends Client {
   roomId: string;
@@ -15,68 +13,6 @@ export interface ClientProfile extends Client {
   autoJoin: boolean;
   firstTime: boolean;
 }
-
-export type TurnServerOptions = {
-  url: string;
-  username: string;
-  password: string;
-  authMethod: string;
-};
-
-type ConnectionOptions = {
-  stuns: string[];
-  turns?: TurnServerOptions[];
-};
-
-export type CompressionLevel =
-  | 0
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5
-  | 6
-  | 7
-  | 8
-  | 9;
-
-export type AppOption = {
-  channelsNumber: number;
-  chunkSize: number;
-  ordered: boolean;
-  bufferedAmountLowThreshold: number;
-  maxMomeryCacheSlices: number;
-  videoMaxBitrate: number;
-  audioMaxBitrate: number;
-  compressionLevel: CompressionLevel;
-  blockSize: number;
-  servers: ConnectionOptions;
-};
-
-export const getDefaultAppOptions = () => {
-  return {
-    channelsNumber: 2,
-    chunkSize: 1024 * 1024,
-    blockSize: 64 * 1024,
-    ordered: false,
-    bufferedAmountLowThreshold: 512 * 1024,
-    maxMomeryCacheSlices: 12,
-    videoMaxBitrate: 128 * 1024 * 1024,
-    audioMaxBitrate: 512 * 1024,
-    servers: {
-      stuns: ["stun:stun.l.google.com:19302"],
-    },
-    compressionLevel: 0,
-  } satisfies AppOption;
-};
-
-export const [appOptions, setAppOptions] = makePersisted(
-  createStore<AppOption>(getDefaultAppOptions()),
-  {
-    name: "app_options",
-    storage: localStorage,
-  },
-);
 
 export async function getConfiguration() {
   const servers: RTCIceServer[] = [];

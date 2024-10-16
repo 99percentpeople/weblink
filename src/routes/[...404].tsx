@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { t } from "@/i18n";
 import { A, RouteSectionProps } from "@solidjs/router";
 
 export default function NotFound(props: RouteSectionProps) {
@@ -8,9 +9,9 @@ export default function NotFound(props: RouteSectionProps) {
         justify-center gap-8 p-4"
     >
       <h1 class="max-6-xs text-6xl font-thin uppercase">
-        404 Not Found
+        {t("404.title")}
       </h1>
-      <p>/{props.params.path}</p>
+      <p>{t("404.description", { path: props.params.path })}</p>
       {/* <p>
         Visit{" "}
         <a
@@ -24,7 +25,7 @@ export default function NotFound(props: RouteSectionProps) {
       </p> */}
       <p class="my-4">
         <Button as={A} href="/" variant="outline" class="">
-          Home
+          {t("404.home")}
         </Button>
       </p>
     </main>

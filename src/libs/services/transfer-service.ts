@@ -8,8 +8,8 @@ import {
 } from "../core/file-transmitter";
 import { FileID } from "../core/type";
 import { ChunkCache } from "../cache/chunk-cache";
-import { appOptions } from "../core/store";
 import { waitBufferedAmountLowThreshold } from "../core/utils/channel";
+import { appOptions } from "@/options";
 
 class TransfererFactory {
   readonly transferers: Record<FileID, FileTransmitter>;

@@ -10,6 +10,7 @@ import { clientProfile } from "@/libs/core/store";
 import { useWebRTC } from "@/libs/core/rtc-context";
 import { Button } from "@/components/ui/button";
 import { CopyToClipboard } from "@/components/copy-to-clipboard";
+import { t } from "@/i18n";
 const Client: Component = (props) => {
   const { colorMode } = useColorMode();
   const { roomStatus } = useWebRTC();
@@ -78,8 +79,7 @@ const Client: Component = (props) => {
             </CopyToClipboard>
           </p>
           <p class="muted">
-            Get other devices to open the link or scan the
-            QR code in order to connect
+            {t("chat.index.description")}
           </p>
         </div>
       </Show>
