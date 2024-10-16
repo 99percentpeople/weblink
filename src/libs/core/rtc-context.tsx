@@ -22,7 +22,7 @@ import {
   TransferMode,
 } from "./file-transmitter";
 import { v4 } from "uuid";
-import { clientProfile,  } from "./store";
+import { clientProfile } from "./store";
 import { cacheManager } from "../services/cache-serivce";
 import { transferManager } from "../services/transfer-service";
 import { getRangesLength } from "../utils/range";
@@ -178,7 +178,6 @@ export const WebRTCProvider: Component<
           sessionService.addClient(targetClient);
         if (!session) {
           console.error(`no client service setted`);
-
           return;
         }
         // const updateStats = async (pc: RTCPeerConnection) => {
@@ -406,20 +405,24 @@ export const WebRTCProvider: Component<
         messageStores.setClient(targetClient);
 
         if (!session.polite) {
-          await session.connect().catch((err) => {
+          try {
+            await session.connect();
+          } catch (err) {
+            console.error(err);
             if (
               Object.values(sessionService.sessions)
                 .length === 0
             ) {
               leaveRoom();
+              throw err;
             }
-            throw err;
-          });
+          }
         }
       },
     );
 
     cs.listenForLeave((client) => {
+      console.log(`client ${client.clientId} leave`);
       sessionService.destorySession(client.clientId);
       setRemoteStreams(client.clientId, undefined!);
     });
@@ -435,17 +438,12 @@ export const WebRTCProvider: Component<
 
     updateRemoteStreams(null);
 
-    // Object.values(peerSessions).forEach((session) =>
-    //   session.destory(),
-    // );
-
     sessionService.destoryAllSession();
     setRoomStatus("roomId", null);
     setRoomStatus("profile", null);
-    // setPeerSessions(reconcile({}));
+
     setRemoteStreams(reconcile({}));
     removeAllDataCahnnels();
-    // setClientSessionInfo(reconcile({}));
   };
 
   onCleanup(() => {
@@ -655,10 +653,6 @@ export const WebRTCProvider: Component<
 
     await transferer.initialize();
   };
-
-  createEffect(() => {
-    // setRoomStatus("profile", clientService()?.info ?? null);
-  });
 
   return (
     <WebRTCContext.Provider

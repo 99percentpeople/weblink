@@ -53,6 +53,7 @@ export class WebSocketClientService
 
     this.socket.addEventListener("message", (ev) => {
       const signal: RawSignal = JSON.parse(ev.data);
+      console.log("ws message", signal);
       switch (signal.type) {
         case "join":
           this.emit("join", signal.data as TransferClient);
@@ -156,8 +157,8 @@ export class WebSocketClientService
     this.signalingServices.forEach((service) =>
       service.destroy(),
     );
-    this.socket?.close();
     this.eventListeners.clear();
+    this.socket?.close();
   }
   private emit(event: string, data: any) {
     const listeners = this.eventListeners.get(event) || [];

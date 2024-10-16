@@ -44,8 +44,8 @@ class SessionService {
   destorySession(target: ClientID) {
     const session = this.sessions[target];
     if (!session) return;
-    this.service?.removeSender(target);
     session.destory();
+    this.service?.removeSender(target);
     this.setClientInfo(target, undefined!);
     this.setSessions(target, undefined!);
   }

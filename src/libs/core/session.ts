@@ -1,7 +1,4 @@
-import {
-  getConfiguration,
-  handleOffer,
-} from "./store";
+import { getConfiguration, handleOffer } from "./store";
 import { SignalingService } from "./services/type";
 import {
   EventHandler,
@@ -94,9 +91,9 @@ export class PeerSession {
 
   private async createConnection() {
     if (this.peerConnection) {
-      // console.warn(
-      //   `session between ${this.sender.clientId} and ${this.sender.targetClientId} has already been created`,
-      // );
+      console.warn(
+        `session between ${this.sender.clientId} and ${this.sender.targetClientId} has already been created`,
+      );
       return;
     }
     console.log(
@@ -121,10 +118,10 @@ export class PeerSession {
     pc.addEventListener(
       "icecandidate",
       async (ev: RTCPeerConnectionIceEvent) => {
-        console.log(
-          `client ${this.clientId} onIcecandidate`,
-        );
         if (ev.candidate) {
+          console.log(
+            `client ${this.clientId} onIcecandidate`,
+          );
           this.sender.sendSignal({
             type: "candidate",
             data: JSON.stringify({
@@ -151,7 +148,6 @@ export class PeerSession {
           console.log(
             "ICE connection lost, trying to reconnect...",
           );
-          // this.handleNetworkReconnection();
         } else if (
           state === "connected" ||
           state === "completed"
@@ -507,10 +503,6 @@ export class PeerSession {
   }
 
   async connect() {
-    if (!this.peerConnection) {
-      await this.listen();
-    }
-
     const pc = this.peerConnection;
     if (!pc) {
       console.warn(`listen failed`);
