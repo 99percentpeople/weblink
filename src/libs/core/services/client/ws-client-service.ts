@@ -104,6 +104,12 @@ export class WebSocketClientService
                 );
               }
             }
+            this.socket?.send(
+              JSON.stringify({
+                type: "join",
+                data: this.client,
+              }),
+            );
             resolve(this.socket!);
           } else if (message.type === "error") {
             reject(message.data);
@@ -194,14 +200,7 @@ export class WebSocketClientService
     this.on("leave", callback);
   }
   async createClient() {
-    const socket = await this.initialize();
-
-    socket.send(
-      JSON.stringify({
-        type: "join",
-        data: this.client,
-      }),
-    );
+    await this.initialize();
   }
   destroy() {
     this.signalingServices.forEach((service) =>
