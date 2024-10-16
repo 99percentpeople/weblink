@@ -6,13 +6,13 @@ Weblink 是一个基于 WebRTC 的纯网页聊天应用程序，无需下载，�
 
 该项目已通过vercel部署，[点击访问](https://web1ink.vercel.app)。
 
+中国大陆用户，可以使用部署在阿里云上的 [https://webl.ink](https://webl.ink) 。
+
 [**Introduction in English**](README.md)
 
 ![Chat Example 1](screenshots/example_dark_cn.png)
 
 ![Chat Example 2](screenshots/example_light_cn.png)
-
-
 
 ## 使用方法
 

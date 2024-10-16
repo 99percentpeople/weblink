@@ -6,6 +6,8 @@ Weblink is a browser-based chat application built on WebRTC, requiring no downlo
 
 This project is deployed on Vercel. [Click here to access](https://web1ink.vercel.app).
 
+For mainland Chinese users, you can use [https://webl.ink](https://webl.ink) which deployed on aliyun instead.
+
 [**中文介绍**](README_CN.md)
 
 ![Chat Example 1](screenshots/example_dark_cn.png)
