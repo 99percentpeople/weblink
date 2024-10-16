@@ -4,7 +4,7 @@ import {
   hashPassword,
 } from "../../utils/encrypt";
 import { WebSocketSignalingService } from "../signaling/ws-signaling-service";
-import { ClientSignal, RawSignal } from "../type";
+import { RawSignal } from "../type";
 import {
   ClientService,
   ClientServiceInitOptions,
@@ -25,6 +25,10 @@ export class WebSocketClientService
 
   private eventListeners: Map<string, Array<Function>> =
     new Map();
+
+  private maxReconnectAttempts = 3;
+  private reconnectAttempts = 0;
+  private reconnectInterval = 5000; // 5秒
 
   get info() {
     return this.client;
@@ -70,9 +74,10 @@ export class WebSocketClientService
       }
     });
 
-    this.socket?.addEventListener("close", () => {}, {
-      once: true,
-    });
+    this.socket?.addEventListener(
+      "close",
+      this.handleDisconnect,
+    );
 
     return new Promise<WebSocket>((resolve, reject) => {
       this.socket?.addEventListener(
@@ -83,7 +88,9 @@ export class WebSocketClientService
             const passwordHash = message.data;
             if (passwordHash) {
               if (!this.password) {
-                return reject(new Error("password required"));
+                return reject(
+                  new Error("password required"),
+                );
               }
 
               const passwordMatch =
@@ -92,7 +99,9 @@ export class WebSocketClientService
                   passwordHash,
                 );
               if (!passwordMatch) {
-                return reject(new Error("incorrect password"));
+                return reject(
+                  new Error("incorrect password"),
+                );
               }
             }
             resolve(this.socket!);
@@ -103,6 +112,47 @@ export class WebSocketClientService
         { once: true },
       );
     });
+  }
+
+  private handleDisconnect = () => {
+    if (
+      this.reconnectAttempts < this.maxReconnectAttempts
+    ) {
+      console.log(`WebSocket closed, reconnecting...`);
+      setTimeout(
+        () => this.reconnect(),
+        this.reconnectInterval,
+      );
+    } else {
+      console.log(`Reconnect failed, send leave message`);
+      this.destroy();
+    }
+  };
+
+  private async reconnect() {
+    try {
+      await this.initialize();
+      this.reconnectAttempts = 0;
+      console.log(`Reconnect success`);
+    } catch (error) {
+      this.reconnectAttempts++;
+      console.log(
+        `Reconnect failed, attempt: ${this.reconnectAttempts}`,
+      );
+      if (
+        this.reconnectAttempts < this.maxReconnectAttempts
+      ) {
+        setTimeout(
+          () => this.reconnect(),
+          this.reconnectInterval,
+        );
+      } else {
+        console.log(
+          `Reach max reconnect attempts, send leave message`,
+        );
+        this.destroy();
+      }
+    }
   }
 
   getSender(
@@ -158,7 +208,16 @@ export class WebSocketClientService
       service.destroy(),
     );
     this.eventListeners.clear();
+
+    this.socket?.send(
+      JSON.stringify({
+        type: "leave",
+        data: this.client,
+      }),
+    );
+
     this.socket?.close();
+    this.socket = null;
   }
   private emit(event: string, data: any) {
     const listeners = this.eventListeners.get(event) || [];

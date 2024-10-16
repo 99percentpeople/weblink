@@ -17,10 +17,15 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener("install", () => {
   self.skipWaiting();
-  // Send notification to user
-  self.registration.showNotification("Weblink", {
-    body: "Weblink is ready to use",
-  });
+
+  if (
+    "Notification" in self &&
+    Notification.permission === "granted"
+  ) {
+    self.registration.showNotification("Weblink", {
+      body: "Weblink 已准备就绪",
+    });
+  }
 });
 
 self.addEventListener("message", (event) => {
