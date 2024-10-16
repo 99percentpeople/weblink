@@ -44,8 +44,11 @@
     "tailwind-merge": "^2.5.2",
     "uuid": "^10.0.0",
     "weblink": "link:",
+    "workbox-cacheable-response": "^7.1.0",
+    "workbox-expiration": "^7.1.0",
     "workbox-precaching": "^7.1.0",
     "workbox-routing": "^7.1.0",
+    "workbox-strategies": "^7.1.0",
     "workbox-window": "^7.1.0"
   },
   "devDependencies": {
