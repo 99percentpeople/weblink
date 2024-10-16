@@ -104,6 +104,9 @@
     },
     "index": {
       "description": "Scan the QR code or share the link to connect to this room"
+    },
+    "message_editor": {
+      "placeholder": "Ctrl + Enter or Shift + Enter to send the message"
     }
   },
   "video": {
@@ -167,6 +170,7 @@
     },
     "action": {
       "copy": "Copy",
+      "copy_image": "Copy Image",
       "paste": "Paste",
       "delete": "Delete",
       "download": "Download",

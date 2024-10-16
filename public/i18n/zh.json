@@ -100,6 +100,9 @@
     },
     "index": {
       "description": "扫描二维码或分享链接以连接到此房间"
+    },
+    "message_editor": {
+      "placeholder": "Ctrl + Enter 或 Shift + Enter 发送消息"
     }
   },
   "video": {
@@ -168,6 +171,7 @@
     },
     "action": {
       "copy": "复制",
+      "copy_image": "复制图片",
       "paste": "粘贴",
       "delete": "删除",
       "download": "下载",

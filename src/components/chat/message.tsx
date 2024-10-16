@@ -5,7 +5,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  lazy,
   Match,
   Show,
   splitProps,
@@ -32,7 +31,6 @@ import {
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { ClientID, ClientInfo } from "@/libs/core/type";
-import { createDrawer } from "../dialogs/drawer";
 import {
   ContextMenuItem,
   ContextMenuShortcut,
@@ -75,9 +73,6 @@ const FileMessageCard: Component<FileMessageCardProps> = (
   props,
 ) => {
   const { requestFile } = useWebRTC();
-  // const clientInfo = createMemo(
-  //   () => clientSessionInfo[props.message.client],
-  // );
   const cache = createMemo<ChunkCache | null>(
     () => cacheManager.caches[props.message.fid] ?? null,
   );
@@ -363,9 +358,6 @@ export const MessageContent: Component<MessageCardProps> = (
             >
               <IconContentCopy class="size-4" />
               {t("common.action.copy")}
-              <ContextMenuShortcut>
-                ⌘ + C
-              </ContextMenuShortcut>
             </ContextMenuItem>
           </Match>
           <Match when={props.message.type === "file"}>
@@ -382,9 +374,6 @@ export const MessageContent: Component<MessageCardProps> = (
             >
               <IconContentCopy class="size-4" />
               {t("common.action.copy")}
-              <ContextMenuShortcut>
-                ⌘ + C
-              </ContextMenuShortcut>
             </ContextMenuItem>
             <Show
               when={(
@@ -413,10 +402,7 @@ export const MessageContent: Component<MessageCardProps> = (
                 }}
               >
                 <IconFileCopy class="size-4" />
-                {t("common.action.copy")}
-                <ContextMenuShortcut>
-                  ⌘ + P
-                </ContextMenuShortcut>
+                {t("common.action.copy_image")}
               </ContextMenuItem>
             </Show>
           </Match>
@@ -524,7 +510,6 @@ export const ChatBar: Component<
         id="send"
         onSubmit={async (ev) => {
           ev.preventDefault();
-          // console.log(text());
           onSend(local.client.clientId);
         }}
       >
@@ -539,14 +524,12 @@ export const ChatBar: Component<
           onKeyDown={async (e) => {
             if (e.key === "Enter") {
               if (e.ctrlKey || e.shiftKey) {
-                // Ctrl + Enter or Shift + Enter to send the message
                 e.preventDefault();
                 await onSend(local.client.clientId);
               }
-              // Else just let Enter do a line break in the textarea
             }
           }}
-          placeholder="Ctrl + Enter or Shift + Enter to send the message"
+          placeholder={t("chat.message_editor.placeholder")}
           value={text()}
           onInput={(ev) => setText(ev.currentTarget.value)}
         />
