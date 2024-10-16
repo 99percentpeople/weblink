@@ -168,6 +168,10 @@
       "offline": "Offline",
       "leave": "Leave"
     },
+    "scan_qrcode_dialog": {
+      "title": "Scan QR Code",
+      "description": "Scan QR Code to connect to this room"
+    },
     "action": {
       "copy": "Copy",
       "copy_image": "Copy Image",

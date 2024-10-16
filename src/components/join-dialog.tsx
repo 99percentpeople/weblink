@@ -9,7 +9,13 @@ import { Button } from "./ui/button";
 import { v4 } from "uuid";
 import { optional } from "@/libs/core/utils/optional";
 import { useWebRTC } from "@/libs/core/rtc-context";
-import { onMount, Show } from "solid-js";
+import {
+  Component,
+  ComponentProps,
+  createMemo,
+  onMount,
+  Show,
+} from "solid-js";
 import {
   Avatar,
   AvatarFallback,
@@ -34,7 +40,7 @@ export const createRoomDialog = () => {
       <>
         <form
           id="join-room"
-          class="grid gap-4 p-1 overflow-y-auto"
+          class="grid gap-4 overflow-y-auto p-1"
           onSubmit={(ev) => {
             ev.preventDefault();
             setClientProfile("firstTime", false);
@@ -179,7 +185,18 @@ export const createRoomDialog = () => {
   return { open, Component };
 };
 
-export default function JoinRoom() {
+export const joinUrl = createMemo(() => {
+  const url = new URL(location.origin);
+  url.searchParams.append("id", clientProfile.roomId);
+  if (clientProfile.password)
+    url.searchParams.append("pwd", clientProfile.password);
+  url.searchParams.append("join", "true");
+  return url.toString();
+});
+
+export default function JoinRoomButton(
+  props: ComponentProps<"button">,
+) {
   const { joinRoom, roomStatus, leaveRoom } = useWebRTC();
   const { open, Component } = createRoomDialog();
 
@@ -210,6 +227,7 @@ export default function JoinRoom() {
             });
           }}
           disabled={!!roomStatus.roomId}
+          {...props}
         >
           <IconLogin class="size-6" />
         </Button>

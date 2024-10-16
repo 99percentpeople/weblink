@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 
-// 定义事件类型
 interface MyEvents {
   data: { message: string };
   error: Error;
@@ -139,10 +138,8 @@ describe("EventEmitter", () => {
 
     const dataHandler = vi.fn();
 
-    // 尝试移除未添加的监听器
     emitter.removeEventListener("data", dataHandler);
 
-    // 添加并移除监听器
     emitter.addEventListener("data", dataHandler);
     emitter.removeEventListener("data", dataHandler);
 

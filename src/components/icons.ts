@@ -32,6 +32,8 @@ import IconCameraFilled from "@material-design-icons/svg/filled/camera.svg?compo
 import IconPhotoFilled from "@material-design-icons/svg/filled/photo.svg?component-solid";
 import IconContentPaste from "@material-symbols/svg-400/outlined/content_paste.svg?component-solid";
 import IconInventory from "@material-symbols/svg-400/outlined/inventory.svg?component-solid";
+import IconQRCode from "@material-symbols/svg-400/outlined/qr_code.svg?component-solid";
+
 export {
   IconDownload,
   IconDelete,
@@ -67,4 +69,5 @@ export {
   IconPhotoFilled,
   IconContentPaste,
   IconInventory,
+  IconQRCode,
 };

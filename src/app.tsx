@@ -19,17 +19,26 @@ import {
   ColorModeProvider,
   ColorModeScript,
   createLocalStorageManager,
+  useColorMode,
 } from "@kobalte/core";
 import {
   clientProfile,
   setClientProfile,
 } from "./libs/core/store";
 import { useWebRTC } from "./libs/core/rtc-context";
-import { createRoomDialog } from "./components/join-dialog";
+import {
+  createRoomDialog,
+  joinUrl,
+} from "./components/join-dialog";
 import { toast } from "solid-sonner";
 import { sessionService } from "./libs/services/session-service";
+import { createDialog } from "./components/dialogs/dialog";
+import { QRCode } from "./components/qrcode";
+import { Button } from "./components/ui/button";
+import { IconQRCode } from "./components/icons";
+import { t } from "./i18n";
 
-const JoinRoom = lazy(
+const JoinRoomButton = lazy(
   () => import("./components/join-dialog"),
 );
 
@@ -49,13 +58,46 @@ const requestWakeLock = async () => {
   }
 };
 
+const createQRCodeDialog = () => {
+  const { colorMode } = useColorMode();
+  const { open, Component: QRCodeDialogComponent } =
+    createDialog({
+      title: () => t("common.scan_qrcode_dialog.title"),
+      content: () => (
+        <div class="flex flex-col items-center">
+          <QRCode
+            value={joinUrl()}
+            dark={
+              colorMode() === "dark" ? "#ffffff" : "#000000"
+            }
+            light="#00000000"
+          />
+          <p>
+            {t("common.scan_qrcode_dialog.description")}
+          </p>
+        </div>
+      ),
+    });
+  return { open, Component: QRCodeDialogComponent };
+};
+
 const InnerApp = (props: ParentProps) => {
   const { joinRoom, roomStatus } = useWebRTC();
   const [search, setSearch] = useSearchParams();
 
+  const {
+    open: openRoomDialog,
+    Component: RoomDialogComponent,
+  } = createRoomDialog();
+
+  const {
+    open: openQRCodeDialog,
+    Component: QRCodeDialogComponent,
+  } = createQRCodeDialog();
+
   const onJoinRoom = async () => {
     if (clientProfile.firstTime) {
-      open();
+      openRoomDialog();
       return;
     }
     await joinRoom().catch((err) => {
@@ -110,24 +152,30 @@ const InnerApp = (props: ParentProps) => {
     );
   });
 
-  const { open, Component } = createRoomDialog();
-
   onCleanup(() => {
     wakeLock?.release();
   });
   return (
     <>
-      <Component />
+      <RoomDialogComponent />
+      <QRCodeDialogComponent />
       <div
         class="sticky top-0 z-50 flex h-12 w-full flex-wrap items-center
           gap-4 border-b border-border bg-background/80 px-2
           backdrop-blur"
       >
-        <h2 class="font-mono text-xl font-bold">Weblink</h2>
+        <h2 class="hidden font-mono text-xl font-bold sm:block">
+          Weblink
+        </h2>
         <Nav />
-        <div class="ml-auto">
-          <JoinRoom />
-        </div>
+        <Button
+          onClick={openQRCodeDialog}
+          size="icon"
+          class="ml-auto"
+        >
+          <IconQRCode class="size-6" />
+        </Button>
+        <JoinRoomButton />
       </div>
       <ReloadPrompt />
 

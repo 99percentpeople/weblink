@@ -42,7 +42,7 @@
       "title": "文件发送设置",
       "num_channels": {
         "title": "通道数",
-        "description": "更改发送者的通道数，适当调整可能可以提高传输速度"
+        "description": "更改发送端的通道数，适当调整可能可以提高传输速度"
       },
       "chunk_size": {
         "title": "区块大小",
@@ -53,8 +53,8 @@
         "description": "每次发送的块大小"
       },
       "max_buffer_amount": {
-        "title": "最大缓冲区数量",
-        "description": "更改发送者的最大缓冲区数量"
+        "title": "最大缓冲区大小",
+        "description": "更改发送端的最大缓冲区大小"
       },
       "ordered": {
         "title": "有序",
@@ -62,7 +62,7 @@
       },
       "compression_level": {
         "title": "压缩级别",
-        "description": "更改发送者的压缩级别，0 表示无压缩，9 表示最大压缩，对于已压缩的文件，启用此选项可能会降低传输速度",
+        "description": "更改发送端的压缩级别，0 表示无压缩，9 表示最大压缩，对于已压缩的文件，启用此选项可能会降低传输速度",
         "no_compression": "0 (无压缩)"
       }
     },
@@ -70,7 +70,7 @@
       "title": "文件接收设置",
       "max_cached_chunks": {
         "title": "最大缓存块数",
-        "description": "更改接收者的最大缓存块数"
+        "description": "更改接收端的最大缓存块数"
       }
     },
     "media": {
@@ -114,6 +114,10 @@
     "no_stream": "没有流"
   },
   "common": {
+    "scan_qrcode_dialog": {
+      "title": "扫描二维码",
+      "scan_qr_code": "扫描二维码以连接到此房间"
+    },
     "theme_toggle": {
       "light": "浅色模式",
       "dark": "深色模式",
