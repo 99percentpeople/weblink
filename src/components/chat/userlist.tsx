@@ -231,7 +231,7 @@ export const ConnectionBadge: Component<{
         fallback={t("common.status.leave")}
       >
         {(status) => (
-          <span>{t(`common.status.${status}`)}</span>
+          <span>{t(`common.status.${status()}`)}</span>
         )}
       </Show>
     </Badge>
