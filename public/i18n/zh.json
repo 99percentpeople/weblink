@@ -116,7 +116,7 @@
   "common": {
     "scan_qrcode_dialog": {
       "title": "扫描二维码",
-      "scan_qr_code": "扫描二维码以连接到此房间"
+      "description": "扫描二维码以连接到此房间"
     },
     "theme_toggle": {
       "light": "浅色模式",
