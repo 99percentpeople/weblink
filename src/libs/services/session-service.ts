@@ -4,10 +4,13 @@ import {
   SetStoreFunction,
 } from "solid-js/store";
 import { PeerSession } from "../core/session";
-import { ClientID, ClientInfo, Client, TransferClient } from "../core/type";
 import {
-  ClientService,
-} from "../core/services/type";
+  ClientID,
+  ClientInfo,
+  Client,
+  TransferClient,
+} from "../core/type";
+import { ClientService } from "../core/services/type";
 
 class SessionService {
   readonly sessions: Record<ClientID, PeerSession>;
@@ -43,7 +46,12 @@ class SessionService {
 
   destorySession(target: ClientID) {
     const session = this.sessions[target];
-    if (!session) return;
+    if (!session) {
+      console.log(
+        `can not destory session, session ${target} not found`,
+      );
+      return;
+    }
     session.destory();
     this.service?.removeSender(target);
     this.setClientInfo(target, undefined!);
@@ -52,6 +60,9 @@ class SessionService {
 
   addClient(client: TransferClient) {
     if (!this.service) {
+      console.warn(
+        `can not add client, client service not found`,
+      );
       return;
     }
     if (this.sessions[client.clientId]) {

@@ -424,6 +424,7 @@ export const WebRTCProvider: Component<
     cs.listenForLeave((client) => {
       console.log(`client ${client.clientId} leave`);
       sessionService.destorySession(client.clientId);
+
       setRemoteStreams(client.clientId, undefined!);
     });
 

@@ -92,17 +92,33 @@ export class PeerSession {
   private async createConnection() {
     if (this.peerConnection) {
       console.warn(
-        `session between ${this.sender.clientId} and ${this.sender.targetClientId} has already been created`,
+        `peer connection for session ${this.sessionId} has already been created`,
       );
       return;
     }
     console.log(
-      `session between ${this.sender.clientId} and ${this.sender.targetClientId} is creating`,
+      `create peer connection for session ${this.sessionId}`,
     );
 
     const pc = new RTCPeerConnection(
       await getConfiguration(),
     );
+
+    this.controller.signal.addEventListener(
+      "abort",
+      () => {
+        if (this.peerConnection) {
+          this.peerConnection.close();
+          this.peerConnection = null;
+
+          this.dispatchEvent("close", undefined);
+        }
+        this.channels.length = 0;
+        this.messageChannel = null;
+      },
+      { once: true },
+    );
+
     this.peerConnection = pc;
     if (pc.getTransceivers().length === 0) {
       pc.addTransceiver("video", {
@@ -266,21 +282,6 @@ export class PeerSession {
         }
       },
       { signal: this.controller.signal },
-    );
-
-    this.controller.signal.addEventListener(
-      "abort",
-      () => {
-        if (this.peerConnection) {
-          this.peerConnection.close();
-          this.peerConnection = null;
-
-          this.dispatchEvent("close", undefined);
-        }
-        this.channels.length = 0;
-        this.messageChannel = null;
-      },
-      { once: true },
     );
 
     return pc;
@@ -454,7 +455,7 @@ export class PeerSession {
                 "connectionstatechange",
                 onConnectionStateChange,
               );
-              resolve(); // 连接成功，解析 Promise
+              resolve();
               break;
             case "failed":
             case "closed":
@@ -472,10 +473,12 @@ export class PeerSession {
                 new Error(
                   `Connection failed with state: ${pc.connectionState}`,
                 ),
-              ); // 连接失败，拒绝 Promise
+              );
               break;
             default:
-              // 其他状态不做处理
+              console.log(
+                `connectionstatechange state: ${pc.connectionState}`,
+              );
               break;
           }
         };
@@ -516,14 +519,6 @@ export class PeerSession {
       );
       return;
     }
-
-    // if (this.polite) {
-    //   console.log(
-    //     "Client have been set to be polite and will not initiate connections",
-    //   );
-
-    //   return;
-    // }
 
     return new Promise<void>(async (resolve, reject) => {
       const onConnectionStateChange = () => {

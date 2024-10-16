@@ -215,7 +215,6 @@ export class WebSocketClientService
       }),
     );
 
-    this.socket?.close();
     this.socket = null;
   }
   private emit(event: string, data: any) {
