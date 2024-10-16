@@ -146,7 +146,6 @@ export class FileTransmitter {
   private ready: PromiseWithResolvers<void> =
     Promise.withResolvers<void>();
 
-  // same as this.cache.id
   get id() {
     return this.cache.id;
   }

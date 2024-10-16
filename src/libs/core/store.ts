@@ -65,6 +65,8 @@ export async function handleOffer(
 ) {
   const offer = await pc.createOffer(options);
 
+  offer.sdp = offer.sdp?.replace("b=AS:30", "b=AS:10000000");
+  
   await pc.setLocalDescription(offer);
   await sender.sendSignal({
     type: offer.type,

@@ -4,16 +4,16 @@ export async function hashPassword(
   iterations: number = 100000,
   hash: string = "SHA-256",
 ): Promise<string> {
-  // 生成随机盐
+  // generate random salt
   const salt = crypto.getRandomValues(
     new Uint8Array(saltLength),
   );
 
-  // 将密码和盐转成 ArrayBuffer
+  // encode password to ArrayBuffer
   const encoder = new TextEncoder();
   const passwordBuffer = encoder.encode(password);
 
-  // 使用 PBKDF2 算法进行密码哈希
+  // derive key from password
   const key = await crypto.subtle.importKey(
     "raw",
     passwordBuffer,
@@ -33,7 +33,7 @@ export async function hashPassword(
     256,
   );
 
-  // 将盐和哈希值组合，编码为 Base64 字符串
+  // combine salt and hash
   const combined = new Uint8Array([
     ...salt,
     ...new Uint8Array(derivedBits),
@@ -41,12 +41,13 @@ export async function hashPassword(
   return btoa(String.fromCharCode(...combined));
 }
 
+// check if the string is a valid base64 string
 function isValidBase64String(str: string) {
-  // 检查字符串是否只包含合法的 Base64 字符，且长度是 4 的倍数
   const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
   return str.length % 4 === 0 && base64Regex.test(str);
 }
 
+// compare password hash
 export async function comparePasswordHash(
   password: string,
   storedHash: string,
@@ -58,19 +59,19 @@ export async function comparePasswordHash(
     throw new Error("Invalid Base64 string");
   }
   try {
-    // 解码 Base64
+    // decode base64
     const combined = Uint8Array.from(
       atob(storedHash),
       (c) => c.charCodeAt(0),
     );
 
-    // 提取盐
+    // extract salt
     const salt = combined.slice(0, saltLength);
 
-    // 提取存储的哈希值
+    // extract stored hash
     const storedPasswordHash = combined.slice(saltLength);
 
-    // 重新哈希输入的密码
+    // rehash the input password
     const encoder = new TextEncoder();
     const passwordBuffer = encoder.encode(password);
 
@@ -93,7 +94,7 @@ export async function comparePasswordHash(
       256,
     );
 
-    // 比较两个哈希值
+    // compare two hash
     const derivedHash = new Uint8Array(derivedBits);
     return derivedHash.every(
       (byte, index) => byte === storedPasswordHash[index],
@@ -108,19 +109,19 @@ export async function encryptData(
   password: string,
   data: string,
 ): Promise<string> {
-  // 创建随机的盐和初始化向量（IV）
+  // create random salt and iv
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
-  // 使用 PBKDF2 算法将密码派生成 AES 密钥
+  // derive key from password
   const keyMaterial = await getKeyMaterial(password);
   const key = await deriveKey(keyMaterial, salt);
 
-  // 将数据转换成 Uint8Array
+  // encode data to Uint8Array
   const encoder = new TextEncoder();
   const encodedData = encoder.encode(data);
 
-  // 使用 AES-GCM 进行加密
+  // encrypt data
   const encryptedData = await crypto.subtle.encrypt(
     {
       name: "AES-GCM",
@@ -130,7 +131,7 @@ export async function encryptData(
     encodedData,
   );
 
-  // 将加密结果、盐和 IV 组合并编码为 Base64
+  // combine encrypted data, salt and iv
   const combinedData = new Uint8Array([
     ...salt,
     ...iv,
@@ -174,22 +175,22 @@ export async function decryptData(
   password: string,
   encryptedData: string,
 ): Promise<string> {
-  // 解码 Base64 数据
+  // decode base64 data
   const combinedData = Uint8Array.from(
     atob(encryptedData),
     (c) => c.charCodeAt(0),
   );
 
-  // 提取盐、IV 和加密数据
+  // extract salt, iv and ciphertext
   const salt = combinedData.slice(0, 16);
   const iv = combinedData.slice(16, 28);
   const ciphertext = combinedData.slice(28);
 
-  // 使用 PBKDF2 派生密钥
+  // derive key from password
   const keyMaterial = await getKeyMaterial(password);
   const key = await deriveKey(keyMaterial, salt);
 
-  // 使用 AES-GCM 进行解密
+  // decrypt data
   const decryptedData = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
@@ -199,7 +200,7 @@ export async function decryptData(
     ciphertext,
   );
 
-  // 将解密后的数据转换回字符串
+  // decode data to string
   const decoder = new TextDecoder();
   return decoder.decode(decryptedData);
 }
