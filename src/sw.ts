@@ -17,7 +17,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener("install", () => {
   self.skipWaiting();
-  // send notification to user
+  // Send notification to user
   self.registration.showNotification("Weblink", {
     body: "Weblink is ready to use",
   });
@@ -28,17 +28,17 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
 });
 
-// clean old assets
+// Clean old assets
 cleanupOutdatedCaches();
 
-// to allow work offline
+// Allow work offline
 registerRoute(
   new NavigationRoute(
     createHandlerBoundToURL("index.html"),
   ),
 );
 
-// 缓存 i18n JSON 文件
+// Cache i18n JSON files
 registerRoute(
   ({ request }) =>
     request.url.includes("/i18n/") &&
@@ -50,8 +50,8 @@ registerRoute(
         statuses: [0, 200],
       }),
       new ExpirationPlugin({
-        maxEntries: 10, // 最多缓存10个文件
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30天后过期
+        maxEntries: 10, // max 10 i18n files
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
       }),
     ],
   }),
