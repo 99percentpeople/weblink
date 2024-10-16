@@ -92,37 +92,62 @@ class SessionService {
     } satisfies ClientInfo);
     this.setSessions(client.clientId, session);
 
-    session.addEventListener("connecting", () => {
-      this.setClientInfo(
-        client.clientId,
-        "onlineStatus",
-        "connecting",
-      );
-    });
+    const controller = new AbortController();
+    session.addEventListener(
+      "connecting",
+      () => {
+        this.setClientInfo(
+          client.clientId,
+          "onlineStatus",
+          "connecting",
+        );
+      },
+      { signal: controller.signal },
+    );
 
-    session.addEventListener("connected", () => {
-      this.setClientInfo(
-        client.clientId,
-        "onlineStatus",
-        "online",
-      );
-    });
+    session.addEventListener(
+      "connected",
+      () => {
+        this.setClientInfo(
+          client.clientId,
+          "onlineStatus",
+          "online",
+        );
+      },
+      { signal: controller.signal },
+    );
 
-    session.addEventListener("close", () => {
-      this.setClientInfo(
-        client.clientId,
-        "onlineStatus",
-        "offline",
-      );
-    });
+    session.addEventListener(
+      "close",
+      () => {
+        this.setClientInfo(
+          client.clientId,
+          "onlineStatus",
+          "offline",
+        );
+        controller.abort();
+      },
+      { signal: controller.signal },
+    );
 
-    session.addEventListener("reconnecting", async () => {
-      await this.clientService?.createClient();
-    });
+    session.addEventListener(
+      "reconnecting",
+      async () => {
+        await this.clientService?.createClient();
+      },
+      { signal: controller.signal },
+    );
 
-    session.addEventListener("error", (ev) => {
-      console.error(ev.detail);
+    session.addEventListener(
+      "error",
+      (ev) => {
+        controller.abort();
+        console.error(ev.detail);
+      },
+      { signal: controller.signal },
+    );
 
+    controller.signal.addEventListener("abort", () => {
       this.destorySession(session.clientId);
     });
 
