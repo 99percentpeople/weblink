@@ -137,8 +137,9 @@ export default function Settings() {
           <h3 id="connection" class="h3">
             {t("setting.connection.title")}
           </h3>
-          <label class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2">
             <Switch
+              disabled={clientProfile.firstTime}
               class="flex items-center justify-between"
               checked={clientProfile.autoJoin}
               onChange={(isChecked) =>
@@ -157,7 +158,7 @@ export default function Settings() {
                 "setting.connection.auto_join.description",
               )}
             </p>
-          </label>
+          </div>
           <label class="flex flex-col gap-2">
             <Label>
               {t("setting.connection.stun_servers.title")}
@@ -415,7 +416,7 @@ export default function Settings() {
             </SliderTrack>
           </Slider>
 
-          <label class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2">
             <Switch
               class="flex items-center justify-between"
               checked={appOptions.ordered}
@@ -433,7 +434,7 @@ export default function Settings() {
             <p class="muted">
               {t("setting.sender.ordered.description")}
             </p>
-          </label>
+          </div>
           <label class="flex flex-col gap-2">
             <Slider
               minValue={0}
