@@ -23,6 +23,13 @@ self.addEventListener("message", (event) => {
 // clean old assets
 cleanupOutdatedCaches();
 
+// Cache i18n jsons
+registerRoute(
+  new NavigationRoute(
+    createHandlerBoundToURL("i18n/*.json"),
+  ),
+);
+
 // to allow work offline
 registerRoute(
   new NavigationRoute(
