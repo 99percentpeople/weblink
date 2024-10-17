@@ -30,6 +30,7 @@ import {
   EventHandler,
   MultiEventEmitter,
 } from "@/libs/utils/event-emitter";
+import { toast } from "solid-sonner";
 
 export interface UpdateClientOptions {
   name?: string;
@@ -128,7 +129,6 @@ export class FirebaseClientService
   }
 
   async createClient() {
-    // 在开始创建客户端时发送 "connecting" 状态
     this.dispatchEvent("status-change", "connecting");
 
     const roomSnapshot = await get(this.roomRef);
@@ -136,6 +136,7 @@ export class FirebaseClientService
 
     if (roomData && roomData.passwordHash) {
       if (!this.password) {
+        this.destroy();
         throw new Error("password required");
       }
 
@@ -148,6 +149,9 @@ export class FirebaseClientService
         this.destroy();
         throw new Error("incorrect password");
       }
+    } else {
+      this.password = null;
+      toast.error("the room is not password protected");
     }
 
     const clientsRef = child(this.roomRef, "/clients");

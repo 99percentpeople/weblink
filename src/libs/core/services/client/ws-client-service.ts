@@ -163,7 +163,7 @@ export class WebSocketClientService
                   new Error("incorrect password"),
                 );
               }
-            } else if (this.password) {
+            } else {
               this.password = null;
               toast.error(
                 "the room is not password protected",
