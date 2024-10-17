@@ -14,6 +14,7 @@ import {
   ClientServiceInitOptions,
 } from "../type";
 import { UpdateClientOptions } from "./firebase-client-service";
+import { toast } from "solid-sonner";
 
 export class WebSocketClientService
   implements ClientService
@@ -162,6 +163,11 @@ export class WebSocketClientService
                   new Error("incorrect password"),
                 );
               }
+            } else if (this.password) {
+              this.password = null;
+              toast.error(
+                "the room is not password protected",
+              );
             }
             socket.send(
               JSON.stringify({
