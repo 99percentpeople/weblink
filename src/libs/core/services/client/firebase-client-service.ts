@@ -151,7 +151,7 @@ export class FirebaseClientService
       }
     } else {
       this.password = null;
-      toast.error("the room is not password protected");
+      toast.info("the room is not password protected");
     }
 
     const clientsRef = child(this.roomRef, "/clients");

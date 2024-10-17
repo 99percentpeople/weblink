@@ -148,6 +148,7 @@ export class WebSocketClientService
             const passwordHash = message.data;
             if (passwordHash) {
               if (!this.password) {
+                this.destroy();
                 return reject(
                   new Error("password required"),
                 );
@@ -159,6 +160,7 @@ export class WebSocketClientService
                   passwordHash,
                 );
               if (!passwordMatch) {
+                this.destroy();
                 return reject(
                   new Error("incorrect password"),
                 );
