@@ -23,7 +23,7 @@ self.addEventListener("install", () => {
     Notification.permission === "granted"
   ) {
     self.registration.showNotification("Weblink", {
-      body: "Weblink 已准备就绪",
+      body: "Weblink is ready",
     });
   }
 });

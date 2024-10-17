@@ -77,19 +77,8 @@ const createQRCodeDialog = () => {
         };
 
         return (
-          <div class="flex flex-col items-center">
+          <div class="flex select-none flex-col items-center">
             <div
-              onTouchStart={(e) => {
-                const timer = setTimeout(
-                  handleLongPress,
-                  500,
-                );
-                e.currentTarget.addEventListener(
-                  "touchend",
-                  () => clearTimeout(timer),
-                  { once: true },
-                );
-              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 handleLongPress();
