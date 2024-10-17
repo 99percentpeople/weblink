@@ -4,6 +4,13 @@ import solidPlugin from "vite-plugin-solid";
 import type { VitePWAOptions } from "vite-plugin-pwa";
 import solidSvg from "vite-plugin-solid-svg";
 import { compression } from "vite-plugin-compression2";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+const packageJson = JSON.parse(
+  readFileSync("./package.json", "utf-8"),
+);
+
 const pwaOptions: Partial<VitePWAOptions> = {
   mode:
     process.env.NODE_ENV === "development"
@@ -84,4 +91,8 @@ export default defineConfig({
     compression(),
   ],
   esbuild: {},
+  define: {
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+    __APP_LICENSE__: JSON.stringify(packageJson.license),
+  },
 });

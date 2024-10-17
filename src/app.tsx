@@ -36,6 +36,8 @@ import { QRCode } from "./components/qrcode";
 import { Button } from "./components/ui/button";
 import { IconQRCode } from "./components/icons";
 import { t } from "./i18n";
+import createAboutDialog from "./components/about_dialog";
+import { appOptions, setAppOptions } from "./options";
 
 let wakeLock: WakeLockSentinel | null = null;
 const requestWakeLock = async () => {
@@ -121,6 +123,11 @@ const InnerApp = (props: ParentProps) => {
     Component: QRCodeDialogComponent,
   } = createQRCodeDialog();
 
+  const {
+    open: openAboutDialog,
+    Component: AboutDialogComponent,
+  } = createAboutDialog();
+
   const onJoinRoom = async () => {
     if (clientProfile.firstTime) {
       const result = await openRoomDialog();
@@ -180,6 +187,12 @@ const InnerApp = (props: ParentProps) => {
     );
   });
 
+  onMount(() => {
+    if (appOptions.showAboutDialog) {
+      openAboutDialog();
+    }
+  });
+
   onCleanup(() => {
     wakeLock?.release();
   });
@@ -187,6 +200,7 @@ const InnerApp = (props: ParentProps) => {
     <>
       <RoomDialogComponent />
       <QRCodeDialogComponent />
+      <AboutDialogComponent />
       <div
         class="sticky top-0 z-50 flex h-12 w-full flex-wrap items-center
           gap-4 border-b border-border bg-background/80 px-2

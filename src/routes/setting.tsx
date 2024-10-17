@@ -54,7 +54,14 @@ import {
   appOptions,
   setAppOptions,
   CompressionLevel,
+  getDefaultAppOptions,
 } from "@/options";
+import createAboutDialog from "@/components/about_dialog";
+import { Button } from "@/components/ui/button";
+import { IconDelete, IconInfo } from "@/components/icons";
+import { Separator } from "@/components/ui/seprartor";
+import { createDialog } from "@/components/dialogs/dialog";
+import { toast } from "solid-sonner";
 
 type MediaDeviceInfoType = Omit<MediaDeviceInfo, "toJSON">;
 
@@ -101,8 +108,16 @@ function parseTurnServers(
 }
 
 export default function Settings() {
+  const { open, Component: AboutDialogComponent } =
+    createAboutDialog();
+  const {
+    open: openResetOptionsDialog,
+    Component: ResetOptionsDialogComponent,
+  } = createResetOptionsDialog();
   return (
     <>
+      <AboutDialogComponent />
+      <ResetOptionsDialogComponent />
       <div class="container">
         <div class="grid gap-4 py-4">
           <h3 id="appearance" class="h3">
@@ -520,11 +535,69 @@ export default function Settings() {
           </label>
 
           <MediaSetting />
+
+          <Separator />
+          <label class="flex flex-col gap-2">
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (
+                  (await openResetOptionsDialog()).result
+                ) {
+                  setAppOptions(getDefaultAppOptions());
+                  toast.success(
+                    t(
+                      "common.notification.reset_options_success",
+                    ),
+                  );
+                }
+              }}
+              class="gap-2"
+            >
+              <IconDelete class="size-4" />
+              {t("setting.about.reset_options")}
+            </Button>
+          </label>
+
+          <label class="flex flex-col gap-2">
+            <Button onClick={() => open()} class="gap-2">
+              <IconInfo class="size-4" />
+              {t("setting.about.title")}
+            </Button>
+          </label>
         </div>
       </div>
     </>
   );
 }
+
+const createResetOptionsDialog = () => {
+  const { open, close, submit, Component } = createDialog({
+    title: () => t("common.reset_options_dialog.title"),
+    description: () =>
+      t("common.reset_options_dialog.description"),
+    content: () => (
+      <p>{t("common.reset_options_dialog.content")}</p>
+    ),
+    cancel: (
+      <Button onClick={() => close()}>
+        {t("common.action.cancel")}
+      </Button>
+    ),
+    confirm: (
+      <Button
+        variant="destructive"
+        onClick={() => submit(true)}
+      >
+        {t("common.action.confirm")}
+      </Button>
+    ),
+  });
+  return {
+    open,
+    Component,
+  };
+};
 
 const MediaSetting: Component = () => {
   const cameras = createCameras();

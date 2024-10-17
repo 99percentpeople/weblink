@@ -83,6 +83,10 @@
         "title": "Audio Codec",
         "description": "Change the audio codec of the media"
       }
+    },
+    "about": {
+      "title": "About",
+      "reset_options": "Reset Options"
     }
   },
   "cache": {
@@ -164,6 +168,11 @@
       "description": "This operation deletes the client and messages",
       "content": "Are you really sure you want to delete this client?"
     },
+    "reset_options_dialog": {
+      "title": "Reset Options",
+      "description": "This operation resets the options to default values",
+      "content": "Are you really sure you want to reset the options?"
+    },
     "status": {
       "online": "Online",
       "connecting": "Connecting",
@@ -189,7 +198,20 @@
     },
     "notification": {
       "copy_success": "Link copied",
-      "copy_failed": "Failed to copy link"
+      "copy_failed": "Failed to copy link",
+      "reset_options_success": "Options reset successfully"
+    },
+    "about_dialog": {
+      "title": "About Weblink",
+      "description1": "Weblink is a WebRTC-based file transfer tool that helps you transfer files quickly and securely.",
+      "description2": "This project provides end-to-end encryption, serverless architecture, and various advanced features to ensure your data security and privacy.",
+      "features": "Key features include real-time text chat, file transfer, video calls, and multi-party communication.",
+      "disclaimer": "Disclaimer: This application is for learning and research purposes only. The server does not store any user data, and users should bear the risks of using it at their own risk, and the developers are not responsible for any data loss or privacy breaches.",
+      "star_repo": "If you like this project, please give me a ⭐ on GitHub!",
+      "version": "Version",
+      "author": "Author",
+      "license": "License",
+      "github": "Click to open"
     }
   }
 }

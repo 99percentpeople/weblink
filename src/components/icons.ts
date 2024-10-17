@@ -33,7 +33,7 @@ import IconPhotoFilled from "@material-design-icons/svg/filled/photo.svg?compone
 import IconContentPaste from "@material-symbols/svg-400/outlined/content_paste.svg?component-solid";
 import IconInventory from "@material-symbols/svg-400/outlined/inventory.svg?component-solid";
 import IconQRCode from "@material-symbols/svg-400/outlined/qr_code.svg?component-solid";
-
+import IconInfo from "@material-symbols/svg-400/outlined/info.svg?component-solid";
 export {
   IconDownload,
   IconDelete,
@@ -70,4 +70,5 @@ export {
   IconContentPaste,
   IconInventory,
   IconQRCode,
+  IconInfo,
 };

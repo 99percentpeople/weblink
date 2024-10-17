@@ -39,6 +39,7 @@ export type AppOption = {
   blockSize: number;
   servers: ConnectionOptions;
   locale: Locale;
+  showAboutDialog: boolean;
 };
 
 export const getDefaultAppOptions = () => {
@@ -58,6 +59,7 @@ export const getDefaultAppOptions = () => {
     locale: navigator.language.startsWith("zh")
       ? "zh"
       : "en",
+    showAboutDialog: true,
   } satisfies AppOption;
 };
 

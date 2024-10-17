@@ -79,6 +79,10 @@
         "title": "视频编解码器",
         "description": "更改媒体的视频编解码器"
       }
+    },
+    "about": {
+      "title": "关于",
+      "reset_options": "重置选项"
     }
   },
   "cache": {
@@ -151,6 +155,11 @@
       "description": "删除后将无法恢复，请谨慎操作",
       "content": "确认删除选中的文件？"
     },
+    "reset_options_dialog": {
+      "title": "重置选项",
+      "description": "重置后将无法恢复，请谨慎操作",
+      "content": "确认重置选项？"
+    },
     "file_table": {
       "name": "名称",
       "size": "大小",
@@ -189,9 +198,22 @@
       "change": "更改",
       "open": "打开"
     },
+    "about_dialog": {
+      "title": "关于 Weblink",
+      "description1": "Weblink 是一款基于 WebRTC 的文件传输工具，它可以帮助你快速、安全地传输文件。",
+      "description2": "此项目提供端到端加密、无服务器架构和多种高级功能，确保您的数据安全和隐私。",
+      "features": "主要功能包括实时文本聊天、文件传输、视频通话和多方通信。",
+      "disclaimer": "免责声明：本项目仅供学习和研究使用。服务器不存储任何用户数据，用户应自行承担使用风险，开发者不对任何数据丢失或隐私泄露负责。",
+      "star_repo": "如果您喜欢这个项目，欢迎在 GitHub 上给我一个 ⭐！",
+      "version": "版本",
+      "author": "作者",
+      "license": "许可证",
+      "github": "点击打开"
+    },
     "notification": {
       "copy_success": "复制成功",
-      "copy_failed": "复制失败"
+      "copy_failed": "复制失败",
+      "reset_options_success": "选项重置成功"
     }
   }
 }
