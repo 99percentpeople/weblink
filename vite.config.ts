@@ -3,6 +3,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import solidPlugin from "vite-plugin-solid";
 import type { VitePWAOptions } from "vite-plugin-pwa";
 import solidSvg from "vite-plugin-solid-svg";
+import { compression } from "vite-plugin-compression2";
 const pwaOptions: Partial<VitePWAOptions> = {
   mode:
     process.env.NODE_ENV === "development"
@@ -62,7 +63,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      treeshake: true, // 确保启用tree-shaking
+      treeshake: true,
     },
   },
   // optimizeDeps: {
@@ -80,6 +81,7 @@ export default defineConfig({
       },
     }),
     VitePWA(pwaOptions),
+    compression(),
   ],
   esbuild: {},
 });

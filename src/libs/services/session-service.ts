@@ -11,6 +11,7 @@ import {
   TransferClient,
 } from "../core/type";
 import { ClientService } from "../core/services/type";
+import { Accessor, createSignal, Setter } from "solid-js";
 
 class SessionService {
   readonly sessions: Record<ClientID, PeerSession>;
@@ -27,6 +28,14 @@ class SessionService {
     return this.service;
   }
 
+  clientServiceStatus: Accessor<
+    "connecting" | "connected" | "disconnected"
+  >;
+
+  private setClientServiceStatus: Setter<
+    "connecting" | "connected" | "disconnected"
+  >;
+
   constructor() {
     const [sessions, setSessions] = createStore<
       Record<ClientID, PeerSession>
@@ -38,10 +47,29 @@ class SessionService {
     >({});
     this.clientInfo = clientInfo;
     this.setClientInfo = setClientInfo;
+    const [clientServiceStatus, setClientServiceStatus] =
+      createSignal<
+        "connecting" | "connected" | "disconnected"
+      >("disconnected");
+    this.clientServiceStatus = clientServiceStatus;
+    this.setClientServiceStatus = setClientServiceStatus;
   }
 
   setClientService(cs: ClientService) {
     this.service = cs;
+    const controller = new AbortController();
+    cs.addEventListener(
+      "status-change",
+      (ev) => {
+        this.setClientServiceStatus(ev.detail);
+
+        if (ev.detail === "disconnected") {
+          this.destoryAllSession();
+          controller?.abort();
+        }
+      },
+      { signal: controller.signal },
+    );
   }
 
   destorySession(target: ClientID) {
@@ -160,6 +188,7 @@ class SessionService {
     );
     this.setSessions(reconcile({}));
     this.setClientInfo(reconcile({}));
+
     this.service?.destroy();
     this.service = undefined;
   }

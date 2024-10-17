@@ -5,9 +5,30 @@ import {
   TransferClient,
 } from "@/libs/core/type";
 import { UpdateClientOptions } from "./client/firebase-client-service";
+import { EventHandler } from "@/libs/utils/event-emitter";
+
+export type ClientServiceEventMap = {
+  "status-change":
+    | "connected"
+    | "connecting"
+    | "disconnected";
+};
 
 export interface ClientService {
   get info(): TransferClient;
+
+  addEventListener<K extends keyof ClientServiceEventMap>(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+  removeEventListener<
+    K extends keyof ClientServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
 
   getSender: (target: ClientID) => SignalingService;
   removeSender: (target: ClientID) => void;

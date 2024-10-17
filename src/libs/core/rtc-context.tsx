@@ -166,9 +166,10 @@ export const WebRTCProvider: Component<
       },
     }) as ClientService;
 
+    sessionService.setClientService(cs);
+    
     await cs.createClient();
 
-    sessionService.setClientService(cs);
 
     cs.listenForJoin(
       async (targetClient: TransferClient) => {
@@ -399,9 +400,7 @@ export const WebRTCProvider: Component<
           pc.addEventListener("track", onTrack);
         });
 
-        // setPeerSessions(targetClient.clientId, session);
         await session.listen();
-
         messageStores.setClient(targetClient);
 
         if (!session.polite) {

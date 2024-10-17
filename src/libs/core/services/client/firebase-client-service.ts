@@ -10,10 +10,12 @@ import {
   ref,
   remove,
   update,
+  onValue,
 } from "firebase/database";
 import { app } from "@/libs/firebase";
 import {
   ClientService,
+  ClientServiceEventMap,
   ClientServiceInitOptions,
   SignalingService,
   Unsubscribe,
@@ -24,6 +26,10 @@ import {
   comparePasswordHash,
   hashPassword,
 } from "../../utils/encrypt";
+import {
+  EventHandler,
+  MultiEventEmitter,
+} from "@/libs/utils/event-emitter";
 
 export interface UpdateClientOptions {
   name?: string;
@@ -32,6 +38,8 @@ export interface UpdateClientOptions {
 export class FirebaseClientService
   implements ClientService
 {
+  private eventEmitter =
+    new MultiEventEmitter<ClientServiceEventMap>();
   private roomId: string;
   private db = getDatabase(app);
   private roomRef: DatabaseReference;
@@ -63,6 +71,39 @@ export class FirebaseClientService
     if (password) this.password = password;
 
     this.setRoomPassword();
+    this.setupDisconnectListener();
+  }
+
+  private dispatchEvent<
+    K extends keyof ClientServiceEventMap,
+  >(event: K, data: ClientServiceEventMap[K]) {
+    return this.eventEmitter.dispatchEvent(event, data);
+  }
+
+  addEventListener<K extends keyof ClientServiceEventMap>(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.addEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  removeEventListener<
+    K extends keyof ClientServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.removeEventListener(
+      event,
+      callback,
+      options,
+    );
   }
 
   private async setRoomPassword() {
@@ -78,8 +119,18 @@ export class FirebaseClientService
     }
   }
 
+  private setupDisconnectListener() {
+    const connectedRef = ref(this.db, ".info/connected");
+
+    onValue(connectedRef, (snap) => {
+      console.log("firebase connection", snap.val());
+    });
+  }
+
   async createClient() {
-    // 获取房间数据
+    // 在开始创建客户端时发送 "connecting" 状态
+    this.dispatchEvent("status-change", "connecting");
+
     const roomSnapshot = await get(this.roomRef);
     const roomData = roomSnapshot.val();
 
@@ -94,10 +145,11 @@ export class FirebaseClientService
       );
 
       if (!passwordMatch) {
+        this.destroy();
         throw new Error("incorrect password");
       }
     }
-    // 创建客户端
+
     const clientsRef = child(this.roomRef, "/clients");
     const snapshot = await get(clientsRef);
     let client: Client | null = null;
@@ -107,11 +159,13 @@ export class FirebaseClientService
         client = data;
       }
     });
+
     if (!client) {
       const clientRef = await push(clientsRef, this.client);
       onDisconnect(clientRef).remove();
       this.clientRef = clientRef;
     }
+    this.dispatchEvent("status-change", "connected");
   }
 
   async updateClient(options: UpdateClientOptions) {
@@ -196,7 +250,7 @@ export class FirebaseClientService
     const unsubscribe = onChildRemoved(
       clientsRef,
       (snapshot) => {
-        const data = snapshot.val() as TransferClient; 
+        const data = snapshot.val() as TransferClient;
         if (!data) return;
         if (data.clientId === this.client.clientId) return;
         console.log(`client ${data.clientId} leave`);
@@ -219,5 +273,7 @@ export class FirebaseClientService
       if (data && data.clientId === this.client.clientId)
         remove(childSnapshot.ref);
     });
+
+    this.dispatchEvent("status-change", "disconnected");
   }
 }

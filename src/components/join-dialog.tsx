@@ -6,7 +6,6 @@ import {
 import { createDialog } from "./dialogs/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { v4 } from "uuid";
 import { optional } from "@/libs/core/utils/optional";
 import { useWebRTC } from "@/libs/core/rtc-context";
 import {
@@ -31,12 +30,13 @@ import {
 import { IconCasino, IconLogin, IconLogout } from "./icons";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
+import { sessionService } from "@/libs/services/session-service";
 
 export const createRoomDialog = () => {
-  const { open, close, Component } = createDialog({
+  const { open, close, submit, Component } = createDialog({
     title: () => t("common.join_form.title"),
     description: () => t("common.join_form.description"),
-    content: (props) => (
+    content: () => (
       <>
         <form
           id="join-room"
@@ -44,7 +44,7 @@ export const createRoomDialog = () => {
           onSubmit={(ev) => {
             ev.preventDefault();
             setClientProfile("firstTime", false);
-            props.submit(clientProfile);
+            submit(clientProfile);
           }}
         >
           <label class="flex flex-col gap-2">
@@ -194,7 +194,7 @@ export const joinUrl = createMemo(() => {
   return url.toString();
 });
 
-export default function JoinRoomButton(
+export  function JoinRoomButton(
   props: ComponentProps<"button">,
 ) {
   const { joinRoom, roomStatus, leaveRoom } = useWebRTC();
@@ -204,9 +204,16 @@ export default function JoinRoomButton(
     <>
       <Component />
       <Show
-        when={!roomStatus.roomId}
+        when={
+          sessionService.clientServiceStatus() ===
+          "disconnected"
+        }
         fallback={
           <Button
+            disabled={
+              sessionService.clientServiceStatus() !==
+              "connected"
+            }
             onClick={() => leaveRoom()}
             variant="destructive"
             size="icon"
@@ -217,6 +224,10 @@ export default function JoinRoomButton(
       >
         <Button
           size="icon"
+          disabled={
+            sessionService.clientServiceStatus() !==
+            "disconnected"
+          }
           onClick={async () => {
             const result = await open();
             if (result.cancel) return;
@@ -226,7 +237,6 @@ export default function JoinRoomButton(
               toast.error(err.message);
             });
           }}
-          disabled={!!roomStatus.roomId}
           {...props}
         >
           <IconLogin class="size-6" />

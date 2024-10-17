@@ -1,10 +1,14 @@
+import {
+  EventHandler,
+  MultiEventEmitter,
+} from "@/libs/utils/event-emitter";
 import { ClientID, TransferClient } from "../../type";
 import {
   comparePasswordHash,
   hashPassword,
 } from "../../utils/encrypt";
 import { WebSocketSignalingService } from "../signaling/ws-signaling-service";
-import { RawSignal } from "../type";
+import { ClientServiceEventMap, RawSignal } from "../type";
 import {
   ClientService,
   ClientServiceInitOptions,
@@ -14,10 +18,14 @@ import { UpdateClientOptions } from "./firebase-client-service";
 export class WebSocketClientService
   implements ClientService
 {
+  private eventEmitter =
+    new MultiEventEmitter<ClientServiceEventMap>();
   private roomId: string;
   private password: string | null;
   private client: TransferClient;
   private socket: WebSocket | null = null;
+  private controller: AbortController =
+    new AbortController();
   private signalingServices: Map<
     string,
     WebSocketSignalingService
@@ -28,7 +36,7 @@ export class WebSocketClientService
 
   private maxReconnectAttempts = 3;
   private reconnectAttempts = 0;
-  private reconnectInterval = 5000; // 5秒
+  private reconnectInterval = 5000;
 
   get info() {
     return this.client;
@@ -42,22 +50,58 @@ export class WebSocketClientService
     this.roomId = roomId;
     this.password = password;
     this.client = { ...client, createdAt: Date.now() };
+
+    window.addEventListener("beforeunload", () => {
+      this.destroy();
+    });
+  }
+
+  private dispatchEvent<
+    K extends keyof ClientServiceEventMap,
+  >(event: K, data: ClientServiceEventMap[K]) {
+    return this.eventEmitter.dispatchEvent(event, data);
+  }
+
+  addEventListener<K extends keyof ClientServiceEventMap>(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.addEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  removeEventListener<
+    K extends keyof ClientServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.removeEventListener(
+      event,
+      callback,
+      options,
+    );
   }
 
   async initialize() {
     const wsUrl = new URL(
       import.meta.env.VITE_WEBSOCKET_URL,
     );
+
     wsUrl.searchParams.append("room", this.roomId);
     if (this.password) {
       const hash = await hashPassword(this.password);
       wsUrl.searchParams.append("pwd", hash);
     }
-    this.socket = new WebSocket(wsUrl);
-
-    this.socket.addEventListener("message", (ev) => {
+    const socket = new WebSocket(wsUrl);
+    this.dispatchEvent("status-change", "connecting");
+    socket.addEventListener("message", (ev) => {
       const signal: RawSignal = JSON.parse(ev.data);
-      console.log("ws message", signal);
       switch (signal.type) {
         case "join":
           this.emit("join", signal.data as TransferClient);
@@ -66,21 +110,36 @@ export class WebSocketClientService
           this.emit("leave", signal.data as TransferClient);
           break;
         case "ping":
-          this.socket?.send(
-            JSON.stringify({ type: "pong" }),
-          );
+          socket.send(JSON.stringify({ type: "pong" }));
         default:
           break;
       }
     });
 
-    this.socket?.addEventListener(
+    socket.addEventListener(
       "close",
       this.handleDisconnect,
+      {
+        signal: this.controller.signal,
+      },
     );
 
+    this.controller.signal.addEventListener("abort", () => {
+      this.dispatchEvent("status-change", "disconnected");
+    });
+
+    this.socket = socket;
+
     return new Promise<WebSocket>((resolve, reject) => {
-      this.socket?.addEventListener(
+      socket.addEventListener(
+        "error",
+        (ev) => {
+          reject(ev);
+          this.destroy();
+        },
+        { once: true },
+      );
+      socket.addEventListener(
         "message",
         async (ev) => {
           const message = JSON.parse(ev.data) as RawSignal;
@@ -104,15 +163,20 @@ export class WebSocketClientService
                 );
               }
             }
-            this.socket?.send(
+            socket.send(
               JSON.stringify({
                 type: "join",
                 data: this.client,
               }),
             );
-            resolve(this.socket!);
+            this.dispatchEvent(
+              "status-change",
+              "connected",
+            );
+            resolve(socket);
           } else if (message.type === "error") {
             reject(message.data);
+            this.destroy();
           }
         },
         { once: true },
@@ -157,6 +221,7 @@ export class WebSocketClientService
           `Reach max reconnect attempts, send leave message`,
         );
         this.destroy();
+        this.dispatchEvent("status-change", "disconnected");
       }
     }
   }
@@ -215,6 +280,7 @@ export class WebSocketClientService
       }),
     );
 
+    this.controller.abort();
     this.socket = null;
   }
   private emit(event: string, data: any) {

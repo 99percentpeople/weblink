@@ -9,10 +9,7 @@ import { isServer } from "solid-js/web";
 export interface ModalProps<T extends any> {
   title?: () => string;
   description?: () => string;
-  content?: Component<{
-    submit: (data: T) => void;
-    close: () => void;
-  }>;
+  content?: Component;
   confirm?: JSX.Element;
   cancel?: JSX.Element;
   component: Component<BaseModalProps>;

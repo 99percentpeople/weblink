@@ -9,12 +9,6 @@ export interface UpdateProfile {
   clientId?: ClientID;
 }
 
-export type ClientServiceEventMap = {
-  join: Client;
-  leave: Client;
-  update: Client;
-};
-
 export interface Client {
   clientId: ClientID;
   name: string;

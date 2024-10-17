@@ -3,11 +3,21 @@ import {
   ClientServiceInitOptions,
   SignalingService,
 } from "@/libs/core/services/type";
-import { TransferClient } from "../../type";
+
+import { ClientServiceEventMap,  } from "../type";
+import {
+  TransferClient,
+} from "../../type";
 import { SseSignalingService } from "../signaling/sse-signaling-service";
 import { UpdateClientOptions } from "./firebase-client-service";
+import {
+  EventHandler,
+  MultiEventEmitter,
+} from "@/libs/utils/event-emitter";
 
 export class SseClientService implements ClientService {
+  private eventEmitter =
+    new MultiEventEmitter<ClientServiceEventMap>();
   private serverUrl: string;
   private roomId: string;
   private client: TransferClient;
@@ -36,6 +46,37 @@ export class SseClientService implements ClientService {
     if (password) {
       this.setRoomPassword(password);
     }
+  }
+
+  private dispatchEvent<K extends keyof ClientServiceEventMap>(
+    event: K,
+    data: ClientServiceEventMap[K],
+  ) {
+    return this.eventEmitter.dispatchEvent(event, data);
+  }
+
+  addEventListener<K extends keyof ClientServiceEventMap>(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.addEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  removeEventListener<K extends keyof ClientServiceEventMap>(
+    event: K,
+    callback: EventHandler<ClientServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.removeEventListener(
+      event,
+      callback,
+      options,
+    );
   }
 
   private async setRoomPassword(password: string) {

@@ -1,12 +1,9 @@
 import {
   RouteSectionProps,
-  useLocation,
   useSearchParams,
 } from "@solidjs/router";
 
 import {
-  createEffect,
-  lazy,
   onCleanup,
   onMount,
   ParentProps,
@@ -27,6 +24,7 @@ import {
 } from "./libs/core/store";
 import { useWebRTC } from "./libs/core/rtc-context";
 import {
+  JoinRoomButton,
   createRoomDialog,
   joinUrl,
 } from "./components/join-dialog";
@@ -37,10 +35,6 @@ import { QRCode } from "./components/qrcode";
 import { Button } from "./components/ui/button";
 import { IconQRCode } from "./components/icons";
 import { t } from "./i18n";
-
-const JoinRoomButton = lazy(
-  () => import("./components/join-dialog"),
-);
 
 let wakeLock: WakeLockSentinel | null = null;
 const requestWakeLock = async () => {
@@ -97,9 +91,12 @@ const InnerApp = (props: ParentProps) => {
 
   const onJoinRoom = async () => {
     if (clientProfile.firstTime) {
-      openRoomDialog();
-      return;
+      const result = await openRoomDialog();
+      if (result.cancel) {
+        return;
+      }
     }
+
     await joinRoom().catch((err) => {
       console.error(err);
       toast.error(err.message);
@@ -107,15 +104,6 @@ const InnerApp = (props: ParentProps) => {
   };
 
   onMount(async () => {
-    if (
-      !sessionService.clientService &&
-      clientProfile.autoJoin
-    ) {
-      await onJoinRoom();
-    }
-  });
-
-  createEffect(async () => {
     let reset = false;
     if (search.id && search.id !== clientProfile.roomId) {
       setClientProfile("roomId", search.id);
@@ -136,6 +124,14 @@ const InnerApp = (props: ParentProps) => {
 
     if (search.join) {
       onJoinRoom();
+      return;
+    }
+
+    if (
+      !sessionService.clientService &&
+      clientProfile.autoJoin
+    ) {
+      await onJoinRoom();
     }
   });
 
