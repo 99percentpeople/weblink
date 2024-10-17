@@ -35,6 +35,7 @@ import { makePersisted } from "@solid-primitives/storage";
 import { IconPerson } from "@/components/icons";
 import { UserItem } from "@/components/chat/userlist";
 import { messageStores } from "@/libs/core/messge";
+import { t } from "@/i18n";
 
 export interface UserItemProps
   extends ComponentProps<"li"> {
@@ -131,10 +132,17 @@ export default function Home(props: RouteSectionProps) {
                   each={clntWithLastMsg()}
                   fallback={
                     <div class="relative h-full w-full overflow-hidden">
-                      <IconPerson
-                        class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                          text-muted/50"
-                      />
+                      <div
+                        class="absolute left-1/2 top-1/2 flex -translate-x-1/2
+                          -translate-y-1/2 flex-col items-center w-1/2"
+                      >
+                        <IconPerson class="text-muted/50" />
+                        <p class="muted sm:hidden">
+                          {t(
+                            "chat.index.guide_description",
+                          )}
+                        </p>
+                      </div>
                     </div>
                   }
                 >

@@ -134,7 +134,7 @@ export class WebSocketClientService
       socket.addEventListener(
         "error",
         (ev) => {
-          reject(ev);
+          reject(new Error(`WebSocket error: ${ev}`));
           this.destroy();
         },
         { once: true },
@@ -175,7 +175,7 @@ export class WebSocketClientService
             );
             resolve(socket);
           } else if (message.type === "error") {
-            reject(message.data);
+            reject(new Error(message.data));
             this.destroy();
           }
         },
@@ -233,7 +233,7 @@ export class WebSocketClientService
       this.signalingServices.get(targetClientId);
     if (!service) {
       if (!this.socket) {
-        throw Error("socket not init yet");
+        throw Error("WebSocket not init yet");
       }
       service = new WebSocketSignalingService(
         this.socket,

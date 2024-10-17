@@ -7,6 +7,7 @@ import {
   onCleanup,
   onMount,
   ParentProps,
+  Show,
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
 import ChatProvider from "./components/chat/chat-provider";
@@ -57,26 +58,68 @@ const createQRCodeDialog = () => {
   const { open, Component: QRCodeDialogComponent } =
     createDialog({
       title: () => t("common.scan_qrcode_dialog.title"),
-      content: () => (
-        <div class="flex flex-col items-center">
-          <QRCode
-            value={joinUrl()}
-            dark={
-              colorMode() === "dark" ? "#ffffff" : "#000000"
-            }
-            light="#00000000"
-          />
-          <p>
-            {t("common.scan_qrcode_dialog.description")}
-          </p>
-        </div>
-      ),
+      content: () => {
+        const url = joinUrl();
+
+        const handleLongPress = () => {
+          navigator.clipboard
+            .writeText(url)
+            .then(() => {
+              toast.success(
+                t("common.notification.copy_success"),
+              );
+            })
+            .catch(() => {
+              toast.error(
+                t("common.notification.copy_failed"),
+              );
+            });
+        };
+
+        return (
+          <div class="flex flex-col items-center">
+            <div
+              onTouchStart={(e) => {
+                const timer = setTimeout(
+                  handleLongPress,
+                  500,
+                );
+                e.currentTarget.addEventListener(
+                  "touchend",
+                  () => clearTimeout(timer),
+                  { once: true },
+                );
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                handleLongPress();
+              }}
+            >
+              <QRCode
+                value={url}
+                dark={
+                  colorMode() === "dark"
+                    ? "#ffffff"
+                    : "#000000"
+                }
+                light="#00000000"
+              />
+            </div>
+            <p>
+              {t("common.scan_qrcode_dialog.description")}
+            </p>
+            <p class="mt-2 text-sm text-muted-foreground">
+              {t("common.scan_qrcode_dialog.tip")}
+            </p>
+          </div>
+        );
+      },
     });
   return { open, Component: QRCodeDialogComponent };
 };
 
 const InnerApp = (props: ParentProps) => {
-  const { joinRoom, roomStatus } = useWebRTC();
+  const { joinRoom } = useWebRTC();
   const [search, setSearch] = useSearchParams();
 
   const {
@@ -164,13 +207,17 @@ const InnerApp = (props: ParentProps) => {
           Weblink
         </h2>
         <Nav />
-        <Button
-          onClick={openQRCodeDialog}
-          size="icon"
-          class="ml-auto"
+        <div class="ml-auto"></div>
+        <Show
+          when={
+            sessionService.clientServiceStatus() ===
+            "connected"
+          }
         >
-          <IconQRCode class="size-6" />
-        </Button>
+          <Button onClick={openQRCodeDialog} size="icon">
+            <IconQRCode class="size-6" />
+          </Button>
+        </Show>
         <JoinRoomButton />
       </div>
       <ReloadPrompt />

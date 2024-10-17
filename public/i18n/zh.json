@@ -99,7 +99,9 @@
       "delete_client": "删除客户端"
     },
     "index": {
-      "description": "扫描二维码或分享链接以连接到此房间"
+      "description": "扫描二维码或分享链接以连接到此房间",
+      "guide_title": "创建或连接到房间",
+      "guide_description": "你可以通过点击右上角按钮，创建一个新房间或连接到一个现有房间"
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter 或 Shift + Enter 发送消息"
@@ -116,7 +118,8 @@
   "common": {
     "scan_qrcode_dialog": {
       "title": "扫描二维码",
-      "description": "扫描二维码以连接到此房间"
+      "description": "扫描二维码以连接到此房间",
+      "tip": "长按复制链接"
     },
     "theme_toggle": {
       "light": "浅色模式",
@@ -185,6 +188,10 @@
       "close": "关闭",
       "change": "更改",
       "open": "打开"
+    },
+    "notification": {
+      "copy_success": "复制成功",
+      "copy_failed": "复制失败"
     }
   }
 }

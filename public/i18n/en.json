@@ -103,7 +103,9 @@
       "delete_client": "Delete Client"
     },
     "index": {
-      "description": "Scan the QR code or share the link to connect to this room"
+      "description": "Scan the QR code or share the link to connect to this room",
+      "guide_title": "Create or connect to a room",
+      "guide_description": "You can create a new room or connect to an existing room by clicking the button on the top right corner"
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter or Shift + Enter to send the message"
@@ -170,7 +172,8 @@
     },
     "scan_qrcode_dialog": {
       "title": "Scan QR Code",
-      "description": "Scan QR Code to connect to this room"
+      "description": "Scan QR Code to connect to this room",
+      "tip": "Long press to copy the link"
     },
     "action": {
       "copy": "Copy",
@@ -183,6 +186,10 @@
       "actions": "Actions",
       "close": "Close",
       "change": "Change"
+    },
+    "notification": {
+      "copy_success": "Link copied",
+      "copy_failed": "Failed to copy link"
     }
   }
 }
