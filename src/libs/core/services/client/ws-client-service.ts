@@ -133,11 +133,11 @@ export class WebSocketClientService
     return new Promise<WebSocket>((resolve, reject) => {
       socket.addEventListener(
         "error",
-        (ev) => {
-          reject(new Error(`WebSocket error: ${ev}`));
+        () => {
+          reject(new Error(`WebSocket error occurred`));
           this.destroy();
         },
-        { once: true },
+        { once: true, signal: this.controller.signal },
       );
       socket.addEventListener(
         "message",
@@ -179,7 +179,7 @@ export class WebSocketClientService
             this.destroy();
           }
         },
-        { once: true },
+        { once: true, signal: this.controller.signal },
       );
     });
   }
@@ -221,7 +221,6 @@ export class WebSocketClientService
           `Reach max reconnect attempts, send leave message`,
         );
         this.destroy();
-        this.dispatchEvent("status-change", "disconnected");
       }
     }
   }
