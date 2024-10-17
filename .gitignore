@@ -30,3 +30,6 @@ gitignore
 Thumbs.db
 
 .vercel
+
+# Vite
+*.timestamp-*.mjs
