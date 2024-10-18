@@ -400,7 +400,7 @@ export default function Settings() {
           </Slider>
           <Slider
             minValue={1024}
-            maxValue={1024 * 1024 * 8}
+            maxValue={1024 * 1024}
             step={1024}
             defaultValue={[
               appOptions.bufferedAmountLowThreshold,
