@@ -35,7 +35,8 @@ const Client: Component = (props) => {
                   : "#000000"
               }
               light="#00000000"
-              onClick={() => {
+              onContextMenu={(e) => {
+                e.preventDefault();
                 downloadQRCode(joinUrl(), "qr-code.svg");
               }}
             />
