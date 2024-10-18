@@ -333,7 +333,7 @@ export default function File() {
           >
             <DropdownMenu>
               <DropdownMenuTrigger>
-                <Button variant="outline">
+                <Button variant="outline" class="text-nowrap">
                   <IconMenu class="mr-2 size-4" />
                   {t("common.action.actions")}
                 </Button>
