@@ -36,6 +36,8 @@ import { IconPerson } from "@/components/icons";
 import { UserItem } from "@/components/chat/userlist";
 import { messageStores } from "@/libs/core/messge";
 import { t } from "@/i18n";
+import { useWebRTC } from "@/libs/core/rtc-context";
+import { sessionService } from "@/libs/services/session-service";
 
 export interface UserItemProps
   extends ComponentProps<"li"> {
@@ -78,13 +80,24 @@ export default function Home(props: RouteSectionProps) {
         return {
           client,
           message: getLastMessage(client.clientId),
+          clientInfo: sessionService.clientInfo[
+            client.clientId
+          ] as ClientInfo | undefined,
         };
       })
-      .toSorted(
-        (c1, c2) =>
+      .toSorted((c1, c2) => {
+        const c1Online =
+          c1.clientInfo?.onlineStatus === "online";
+        const c2Online =
+          c2.clientInfo?.onlineStatus === "online";
+        if (c1Online && !c2Online) return -1;
+        if (!c1Online && c2Online) return 1;
+
+        return (
           (c2.message?.createdAt ?? 0) -
-          (c1.message?.createdAt ?? 0),
-      );
+          (c1.message?.createdAt ?? 0)
+        );
+      });
   });
 
   return (
@@ -133,8 +146,8 @@ export default function Home(props: RouteSectionProps) {
                   fallback={
                     <div class="relative h-full w-full overflow-hidden">
                       <div
-                        class="absolute left-1/2 top-1/2 flex -translate-x-1/2
-                          -translate-y-1/2 flex-col items-center w-1/2"
+                        class="absolute left-1/2 top-1/2 flex w-1/2 -translate-x-1/2
+                          -translate-y-1/2 flex-col items-center"
                       >
                         <IconPerson class="text-muted/50" />
                         <p class="muted sm:hidden">
