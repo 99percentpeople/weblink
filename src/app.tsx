@@ -36,7 +36,7 @@ import { QRCode } from "./components/qrcode";
 import { Button } from "./components/ui/button";
 import { IconQRCode } from "./components/icons";
 import { t } from "./i18n";
-import createAboutDialog from "./components/about_dialog";
+import createAboutDialog from "./components/about-dialog";
 import { appOptions, setAppOptions } from "./options";
 
 let wakeLock: WakeLockSentinel | null = null;

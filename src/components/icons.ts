@@ -34,6 +34,13 @@ import IconContentPaste from "@material-symbols/svg-400/outlined/content_paste.s
 import IconInventory from "@material-symbols/svg-400/outlined/inventory.svg?component-solid";
 import IconQRCode from "@material-symbols/svg-400/outlined/qr_code.svg?component-solid";
 import IconInfo from "@material-symbols/svg-400/outlined/info.svg?component-solid";
+import IconDraft from "@material-symbols/svg-400/outlined/draft.svg?component-solid";
+import IconDraftFilled from "@material-symbols/svg-400/outlined/draft-fill.svg?component-solid";
+import IconCameraVideoFilled from "@material-symbols/svg-400/outlined/camera_video-fill.svg?component-solid";
+import IconVideoFileFilled from "@material-symbols/svg-400/outlined/video_file-fill.svg?component-solid"; 
+import IconMicFilled from "@material-symbols/svg-400/outlined/mic-fill.svg?component-solid";
+import IconAudioFileFilled from "@material-symbols/svg-400/outlined/audio_file-fill.svg?component-solid";
+import IconPreview from "@material-symbols/svg-400/outlined/preview.svg?component-solid";
 export {
   IconDownload,
   IconDelete,
@@ -71,4 +78,11 @@ export {
   IconInventory,
   IconQRCode,
   IconInfo,
+  IconDraft,
+  IconDraftFilled,
+  IconCameraVideoFilled,
+  IconMicFilled,
+  IconVideoFileFilled,
+  IconAudioFileFilled,
+  IconPreview,
 };

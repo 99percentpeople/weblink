@@ -12,7 +12,7 @@ import { Component, createSignal } from "solid-js";
 import {
   BaseModalProps,
   createModal,
-  ModalProps,
+  ModalOptions,
 } from "./base";
 import { cn } from "@/libs/cn";
 import { Button } from "../ui/button";
@@ -64,7 +64,7 @@ const BaseDrawer: Component<BaseModalProps> = (props) => {
 };
 
 interface DrawerProps<T>
-  extends Omit<ModalProps<T>, "component"> {}
+  extends Omit<ModalOptions<T>, "component"> {}
 
 export const createDrawer = <T extends any>(
   options: DrawerProps<T>,

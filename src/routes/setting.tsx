@@ -56,7 +56,7 @@ import {
   CompressionLevel,
   getDefaultAppOptions,
 } from "@/options";
-import createAboutDialog from "@/components/about_dialog";
+import createAboutDialog from "@/components/about-dialog";
 import { Button } from "@/components/ui/button";
 import { IconDelete, IconInfo } from "@/components/icons";
 import { Separator } from "@/components/ui/seprartor";

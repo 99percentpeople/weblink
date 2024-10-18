@@ -24,10 +24,14 @@ import {
 import { PortableContextMenu } from "../portable-contextmenu";
 import { ContextMenuItem } from "../ui/context-menu";
 import {
+  IconAudioFileFilled,
   IconCameraFilled,
+  IconCameraVideoFilled,
   IconDelete,
+  IconDraftFilled,
   IconInsertDriveFile,
   IconPhotoFilled,
+  IconVideoFileFilled,
 } from "../icons";
 
 import { sessionService } from "@/libs/services/session-service";
@@ -103,7 +107,7 @@ export const UserItem: Component<UserItemProps> = (
                 fallback={
                   <>
                     <span>
-                      <IconInsertDriveFile />
+                      <IconDraftFilled />
                     </span>
                     <span>{props.message.fileName}</span>
                   </>
@@ -128,7 +132,19 @@ export const UserItem: Component<UserItemProps> = (
                 >
                   <>
                     <span>
-                      <IconCameraFilled />
+                      <IconVideoFileFilled />
+                    </span>
+                    <span>{props.message.fileName}</span>
+                  </>
+                </Match>
+                <Match
+                  when={props.message.mimeType?.startsWith(
+                    "audio",
+                  )}
+                >
+                  <>
+                    <span>
+                      <IconAudioFileFilled />
                     </span>
                     <span>{props.message.fileName}</span>
                   </>

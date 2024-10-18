@@ -11,7 +11,7 @@ import { cn } from "@/libs/cn";
 import {
   BaseModalProps,
   createModal,
-  ModalProps,
+  ModalOptions,
 } from "./base";
 
 const BaseDialog: Component<BaseModalProps> = (props) => {
@@ -43,7 +43,8 @@ const BaseDialog: Component<BaseModalProps> = (props) => {
 };
 
 interface DialogProps<T>
-  extends Omit<ModalProps<T>, "component"> {}
+  extends Omit<ModalOptions<T>, "component"> {
+}
 
 export const createDialog = <T extends any>(
   options: DialogProps<T>,

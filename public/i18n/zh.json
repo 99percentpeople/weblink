@@ -155,6 +155,10 @@
       "description": "删除后将无法恢复，请谨慎操作",
       "content": "确认删除选中的文件？"
     },
+    "preview_dialog": {
+      "title": "预览",
+      "unsupported_file_type": "不支持的文件类型"
+    },
     "reset_options_dialog": {
       "title": "重置选项",
       "description": "重置后将无法恢复，请谨慎操作",
@@ -196,7 +200,8 @@
       "actions": "操作",
       "close": "关闭",
       "change": "更改",
-      "open": "打开"
+      "open": "打开",
+      "preview": "预览"
     },
     "about_dialog": {
       "title": "关于 Weblink",

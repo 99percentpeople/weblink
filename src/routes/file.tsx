@@ -40,6 +40,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -57,17 +58,19 @@ import {
   IconDownload,
   IconMenu,
   IconMoreHoriz,
+  IconPreview,
   IconSearch700,
 } from "@/components/icons";
 import { createDialog } from "@/components/dialogs/dialog";
 import { t } from "@/i18n";
+import { createPreviewDialog } from "@/components/preview-dialog";
 
 const createComfirmDialog = () => {
   const { open, close, submit, Component } = createDialog({
-    title: () => t("common.confirm_delete_files_dialog.title"),
-    description: () => t(
-      "common.confirm_delete_files_dialog.description",
-    ),
+    title: () =>
+      t("common.confirm_delete_files_dialog.title"),
+    description: () =>
+      t("common.confirm_delete_files_dialog.description"),
     content: () =>
       t("common.confirm_delete_files_dialog.content"),
 
@@ -91,6 +94,11 @@ const createComfirmDialog = () => {
 
 export default function File() {
   const columnHelper = createColumnHelper<FileMetaData>();
+
+  const {
+    open: openPreviewDialog,
+    Component: PreviewDialogComponent,
+  } = createPreviewDialog();
 
   const columns = [
     columnHelper.display({
@@ -179,7 +187,20 @@ export default function File() {
                   </DropdownMenuItem>
                 )}
               </Show>
-
+              <Show when={row.original.file}>
+                {(file) => (
+                  <DropdownMenuItem
+                    class="gap-2"
+                    onSelect={() => {
+                      openPreviewDialog(file());
+                    }}
+                  >
+                    <IconPreview class="size-4" />
+                    {t("common.action.preview")}
+                  </DropdownMenuItem>
+                )}
+              </Show>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 class="gap-2"
                 onSelect={async () => {
@@ -263,6 +284,7 @@ export default function File() {
   return (
     <>
       <DialogComponent />
+      <PreviewDialogComponent class="w-full" />
       <div class="container flex min-h-[calc(100%-3rem)] flex-col gap-4 py-4">
         <h2 class="h2">{t("cache.title")}</h2>
 

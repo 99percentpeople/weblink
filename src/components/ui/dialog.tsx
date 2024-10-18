@@ -73,7 +73,7 @@ const DialogContent = <T extends ValidComponent = "div">(
       <DialogPrimitive.Content
         class={cn(
           `fixed left-1/2 top-1/2 z-50 grid max-h-screen w-full
-          max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4
+          max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-3xl -translate-x-1/2 -translate-y-1/2 gap-4
           overflow-y-auto border bg-background p-6 shadow-lg
           duration-200 data-[expanded]:animate-in
           data-[closed]:animate-out data-[closed]:fade-out-0

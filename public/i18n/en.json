@@ -173,6 +173,10 @@
       "description": "This operation resets the options to default values",
       "content": "Are you really sure you want to reset the options?"
     },
+    "preview_dialog": {
+      "title": "Preview",
+      "unsupported_file_type": "Unsupported file type"
+    },
     "status": {
       "online": "Online",
       "connecting": "Connecting",
@@ -194,7 +198,8 @@
       "confirm": "Confirm",
       "actions": "Actions",
       "close": "Close",
-      "change": "Change"
+      "change": "Change",
+      "preview": "Preview"
     },
     "notification": {
       "copy_success": "Link copied",

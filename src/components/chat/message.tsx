@@ -49,6 +49,9 @@ import { transferManager } from "@/libs/services/transfer-service";
 import { PortableContextMenu } from "../portable-contextmenu";
 import {
   IconAttachFile,
+  IconAudioFileFilled,
+  IconCameraFilled,
+  IconCameraVideoFilled,
   IconContentCopy,
   IconDelete,
   IconDownload,
@@ -56,9 +59,12 @@ import {
   IconFileCopy,
   IconFileUpload,
   IconInsertDriveFile,
+  IconMicFilled,
+  IconPhotoFilled,
   IconRestore,
   IconSchedule,
   IconSend,
+  IconVideoFileFilled,
 } from "../icons";
 import { sessionService } from "@/libs/services/session-service";
 import { t } from "@/i18n";
@@ -164,52 +170,80 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                         >
                           <Match
                             when={info().mimetype?.startsWith(
-                              "image",
+                              "image/",
                             )}
                           >
-                            {(_) => {
-                              const [size, setSize] =
-                                createSignal<{
-                                  w: number;
-                                  h: number;
-                                }>({ w: 0, h: 0 });
+                            <p class="relative">
+                              {" "}
+                              <span
+                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                                  whitespace-nowrap"
+                              >
+                                <IconPhotoFilled class="inline size-4 align-middle" />{" "}
+                                {info().fileName}
+                              </span>
+                            </p>
 
-                              return (
-                                <a
-                                  id="image"
-                                  href={url}
-                                  data-pswp-width={size().w}
-                                  data-pswp-height={
-                                    size().h
-                                  }
-                                  data-download={
-                                    info().fileName
-                                  }
-                                  target="_blank"
-                                >
-                                  <img
-                                    class="flex max-h-48 rounded-sm bg-muted hover:cursor-pointer
-                                      lg:max-h-72 xl:max-h-96"
-                                    src={url}
-                                    onload={(ev) =>
-                                      setSize({
-                                        w: ev.currentTarget
-                                          .naturalWidth,
-                                        h: ev.currentTarget
-                                          .naturalHeight,
-                                      })
-                                    }
-                                  />
-                                </a>
-                              );
-                            }}
+                            <a
+                              id="image"
+                              href={url}
+                              target="_blank"
+                            >
+                              <img
+                                class="flex max-h-48 rounded-sm bg-muted hover:cursor-pointer
+                                  lg:max-h-72 xl:max-h-96"
+                                src={url}
+                                onload={(ev) => {
+                                  const parent =
+                                    ev.currentTarget
+                                      .parentElement!;
+                                  parent.dataset.pswpWidth =
+                                    ev.currentTarget.naturalWidth.toString();
+                                  parent.dataset.pswpHeight =
+                                    ev.currentTarget.naturalHeight.toString();
+                                  parent.dataset.download =
+                                    info().fileName;
+                                }}
+                              />
+                            </a>
                           </Match>
                           <Match
                             when={info().mimetype?.startsWith(
-                              "video",
+                              "video/",
                             )}
                           >
+                            <p class="relative">
+                              {" "}
+                              <span
+                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                                  whitespace-nowrap"
+                              >
+                                <IconVideoFileFilled class="inline size-4 align-middle" />{" "}
+                                {info().fileName}
+                              </span>
+                            </p>
                             <video
+                              class="max-h-60 lg:max-h-72 xl:max-h-96"
+                              controls
+                              src={url}
+                            />
+                          </Match>
+                          <Match
+                            when={info().mimetype?.startsWith(
+                              "audio/",
+                            )}
+                          >
+                            <p class="relative">
+                              {" "}
+                              <span
+                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                                  whitespace-nowrap"
+                              >
+                                <IconAudioFileFilled class="inline size-4 align-middle" />{" "}
+                                {info().fileName}
+                              </span>
+                            </p>
+                            <audio
                               class="max-h-60 lg:max-h-72 xl:max-h-96"
                               controls
                               src={url}

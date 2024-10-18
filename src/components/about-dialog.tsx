@@ -60,7 +60,7 @@ const createAboutDialog = () => {
     openAboutDialog();
   };
 
-  return { open, Component: AboutDialogComponent };
+  return { open, Component: () => <AboutDialogComponent class="w-96" /> };
 };
 
 export default createAboutDialog;

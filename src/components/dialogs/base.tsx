@@ -1,3 +1,4 @@
+import { cn } from "@/libs/cn";
 import {
   Component,
   createSignal,
@@ -6,7 +7,7 @@ import {
 } from "solid-js";
 import { isServer } from "solid-js/web";
 
-export interface ModalProps<T extends any> {
+export interface ModalOptions<T extends any> {
   title?: () => string;
   description?: () => string;
   content?: Component;
@@ -32,7 +33,7 @@ export interface BaseModalProps {
 }
 
 export const createModal = <T extends any>(
-  options: ModalProps<T>,
+  options: ModalOptions<T>,
 ) => {
   const [isOpen, setIsOpen] = createSignal<boolean>(false);
   const [reslovePromise, setResolovePromise] =
@@ -76,7 +77,7 @@ export const createModal = <T extends any>(
   const ModalComponent = (props: { class?: string }) => {
     return (
       <Component
-        class={props.class}
+        class={cn(props.class)}
         isOpen={isOpen()}
         onClose={close}
         title={options?.title?.()}
