@@ -52,9 +52,20 @@ export class WebSocketClientService
     this.password = password;
     this.client = { ...client, createdAt: Date.now() };
 
-    window.addEventListener("beforeunload", () => {
-      this.destroy();
-    });
+    window.addEventListener(
+      "beforeunload",
+      () => {
+        this.destroy();
+      },
+      { signal: this.controller.signal },
+    );
+    window.addEventListener(
+      "unload",
+      () => {
+        this.destroy();
+      },
+      { signal: this.controller.signal },
+    );
   }
 
   private dispatchEvent<
