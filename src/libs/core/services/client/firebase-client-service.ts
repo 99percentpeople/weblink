@@ -71,7 +71,7 @@ export class FirebaseClientService
     this.singlingServices = new Map();
     if (password) this.password = password;
 
-    this.setRoomPassword();
+   
     this.setupDisconnectListener();
   }
 
@@ -130,6 +130,8 @@ export class FirebaseClientService
 
   async createClient() {
     this.dispatchEvent("status-change", "connecting");
+
+    await this.setRoomPassword();
 
     const roomSnapshot = await get(this.roomRef);
     const roomData = roomSnapshot.val();

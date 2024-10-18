@@ -44,7 +44,7 @@ export const createPreviewDialog = () => {
                 if (!file) return;
                 setText(await file.text());
               });
-              return <Textarea class="h-full w-full" readOnly value={text()} />;
+              return <Textarea class="h-full w-full resize-none" readOnly value={text()} />;
             }}
           </Match>
           <Match when={src()?.type.startsWith("image/")}>
