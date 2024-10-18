@@ -100,7 +100,7 @@ export class WebSocketClientService
     );
   }
 
-  async initialize() {
+  async initialize(resume?: boolean) {
     const wsUrl = new URL(
       import.meta.env.VITE_WEBSOCKET_URL,
     );
@@ -185,7 +185,7 @@ export class WebSocketClientService
             socket.send(
               JSON.stringify({
                 type: "join",
-                data: this.client,
+                data: { ...this.client, resume },
               }),
             );
             this.dispatchEvent(
@@ -220,7 +220,7 @@ export class WebSocketClientService
 
   private async reconnect() {
     try {
-      await this.initialize();
+      await this.initialize(true);
       this.reconnectAttempts = 0;
       console.log(`Reconnect success`);
     } catch (error) {
