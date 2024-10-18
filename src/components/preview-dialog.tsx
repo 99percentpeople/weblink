@@ -42,7 +42,7 @@ export const createPreviewDialog = () => {
               onMount(async () => {
                 const file = src();
                 if (!file) return;
-                setText(text);
+                setText(await file.text());
               });
               return <Textarea class="h-full w-full" readOnly value={text()} />;
             }}
