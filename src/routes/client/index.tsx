@@ -23,7 +23,7 @@ const Client: Component = (props) => {
         >
           <div
             class="absolute left-1/2 top-1/2 flex -translate-x-1/2
-              -translate-y-1/2 flex-col items-center gap-2 text-nowrap
+              -translate-y-1/2 flex-col items-center gap-2
               text-muted-foreground"
           >
             <QRCode
@@ -43,7 +43,10 @@ const Client: Component = (props) => {
 
             <p class="flex items-center gap-2">
               <CopyToClipboard>
-                <a class="select-all hover:underline">
+                <a
+                  class="select-all whitespace-pre-wrap break-all text-center text-xs
+                    hover:underline"
+                >
                   {joinUrl()}
                 </a>
               </CopyToClipboard>

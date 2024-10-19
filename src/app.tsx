@@ -157,6 +157,20 @@ const InnerApp = (props: ParentProps) => {
       setSearch({ pwd: null }, { replace: true });
       reset = true;
     }
+    if (search.stun) {
+      setAppOptions(
+        "servers",
+        "stuns",
+        JSON.parse(search.stun),
+      );
+    }
+    if (search.turn) {
+      setAppOptions(
+        "servers",
+        "turns",
+        JSON.parse(search.turn),
+      );
+    }
     if (reset) {
       setClientProfile("firstTime", true);
     }

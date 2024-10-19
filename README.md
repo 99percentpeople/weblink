@@ -10,10 +10,6 @@ For mainland Chinese users, you can use [https://webl.ink](https://webl.ink) whi
 
 [**中文介绍**](README_CN.md)
 
-![Chat Example 1](screenshots/example_dark_cn.png)
-
-![Chat Example 2](screenshots/example_light_cn.png)
-
 ## Usage
 
 ### Run Locally

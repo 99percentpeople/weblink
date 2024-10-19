@@ -149,6 +149,33 @@ export default function Settings() {
             </p>
           </label>
 
+          <div class="flex flex-col gap-2">
+            <Switch
+              class="flex items-center justify-between"
+              checked={appOptions.shareServersWithOthers}
+              onChange={(isChecked) =>
+                setAppOptions(
+                  "shareServersWithOthers",
+                  isChecked,
+                )
+              }
+            >
+              <SwitchLabel>
+                {t(
+                  "setting.appearance.share_servers_with_others.title",
+                )}
+              </SwitchLabel>
+              <SwitchControl>
+                <SwitchThumb />
+              </SwitchControl>
+            </Switch>
+            <p class="muted">
+              {t(
+                "setting.appearance.share_servers_with_others.description",
+              )}
+            </p>
+          </div>
+
           <h3 id="connection" class="h3">
             {t("setting.connection.title")}
           </h3>

@@ -36,20 +36,22 @@ export const CopyToClipboard: Component<
   return (
     <>
       {local.children}
-      <Button
-        class={cn("size-6", local.class)}
-        variant="outline"
-        size="icon"
-        onClick={() => copyTheContent()}
-        {...other}
-      >
-        <Show
-          when={copied()}
-          fallback={<IconContentPaste class="size-4" />}
+      <div>
+        <Button
+          class={cn("size-6", local.class)}
+          variant="outline"
+          size="icon"
+          onClick={() => copyTheContent()}
+          {...other}
         >
-          <IconInventory class="size-4" />
-        </Show>
-      </Button>
+          <Show
+            when={copied()}
+            fallback={<IconContentPaste class="size-4" />}
+          >
+            <IconInventory class="size-4" />
+          </Show>
+        </Button>
+      </div>
     </>
   );
 };

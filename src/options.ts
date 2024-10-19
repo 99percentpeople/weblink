@@ -40,6 +40,7 @@ export type AppOption = {
   servers: ConnectionOptions;
   locale: Locale;
   showAboutDialog: boolean;
+  shareServersWithOthers: boolean;
 };
 
 export const getDefaultAppOptions = () => {
@@ -60,6 +61,7 @@ export const getDefaultAppOptions = () => {
       ? "zh"
       : "en",
     showAboutDialog: true,
+    shareServersWithOthers: false,
   } satisfies AppOption;
 };
 

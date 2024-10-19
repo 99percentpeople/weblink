@@ -10,6 +10,10 @@
       "language": {
         "title": "语言",
         "description": "更改应用程序的语言"
+      },
+      "share_servers_with_others": {
+        "title": "分享服务器给其他人",
+        "description": "在生成加入 URL 时，分享 STUN 和 TURN 服务器给其他人"
       }
     },
     "connection": {
@@ -24,7 +28,7 @@
       },
       "turn_servers": {
         "title": "TURN 服务器",
-        "description": "更改应用程序的 TURN 服务器"
+        "description": "更改应用程序的 TURN 服务器，如果你希望在 NAT 环境下使用此应用程序，你可能需要设置 TURN 服务器"
       }
     },
     "stream": {

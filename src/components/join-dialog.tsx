@@ -31,6 +31,7 @@ import { IconCasino, IconLogin, IconLogout } from "./icons";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { sessionService } from "@/libs/services/session-service";
+import { appOptions } from "@/options";
 
 export const createRoomDialog = () => {
   const { open, close, submit, Component } = createDialog({
@@ -190,11 +191,29 @@ export const joinUrl = createMemo(() => {
   url.searchParams.append("id", clientProfile.roomId);
   if (clientProfile.password)
     url.searchParams.append("pwd", clientProfile.password);
+
+  if (appOptions.shareServersWithOthers) {
+    if (appOptions.servers.stuns.length > 0) {
+      url.searchParams.append(
+        "stun",
+        JSON.stringify(appOptions.servers.stuns),
+      );
+    }
+    if (
+      appOptions.servers.turns &&
+      appOptions.servers.turns.length > 0
+    ) {
+      url.searchParams.append(
+        "turn",
+        JSON.stringify(appOptions.servers.turns),
+      );
+    }
+  }
   url.searchParams.append("join", "true");
   return url.toString();
 });
 
-export  function JoinRoomButton(
+export function JoinRoomButton(
   props: ComponentProps<"button">,
 ) {
   const { joinRoom, roomStatus, leaveRoom } = useWebRTC();

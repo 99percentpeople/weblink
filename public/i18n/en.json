@@ -10,6 +10,10 @@
       "language": {
         "title": "Language",
         "description": "Change the language of the app"
+      },
+      "share_servers_with_others": {
+        "title": "Share Servers with Others",
+        "description": "Share the STUN and TURN servers with others when generating the join URL"
       }
     },
     "connection": {
@@ -24,7 +28,7 @@
       },
       "turn_servers": {
         "title": "TURN Servers",
-        "description": "Change the TURN servers of the app"
+        "description": "Change the TURN servers of the app, if you want to use this app in a NAT environment, you may need to set up TURN servers"
       }
     },
     "stream": {

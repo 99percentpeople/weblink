@@ -10,10 +10,6 @@ Weblink 是一个基于 WebRTC 的纯网页聊天应用程序，无需下载，�
 
 [**Introduction in English**](README.md)
 
-![Chat Example 1](screenshots/example_dark_cn.png)
-
-![Chat Example 2](screenshots/example_light_cn.png)
-
 ## 使用方法
 
 ### 本地运行

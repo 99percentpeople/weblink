@@ -310,7 +310,7 @@ export class FileTransmitter {
           received: this.receivedData.receiveBytes,
         });
       }
-      if (this.triggerComplete()) {
+      if (this.triggerReceiveComplete()) {
         window.clearInterval(this.timer);
       }
       delete this.blockCache[chunkIndex];
@@ -424,7 +424,7 @@ export class FileTransmitter {
           console.log(`send msg`, msg);
         }
       }
-      if (this.triggerComplete()) {
+      if (this.triggerReceiveComplete()) {
         window.clearInterval(this.timer);
       }
     };
@@ -432,7 +432,7 @@ export class FileTransmitter {
     this.timer = window.setInterval(checking, interval);
   }
 
-  private triggerComplete() {
+  private triggerReceiveComplete() {
     if (this.mode === TransferMode.Send) return false;
     if (!this.receivedData) return false;
 
@@ -466,7 +466,7 @@ export class FileTransmitter {
     return complete;
   }
 
-  // 等待所有通道缓冲区发送完成
+  // wait all channels bufferedAmountLowThreshold
   private async waitBufferedAmountLowThreshold(
     bufferedAmountLowThreshold: number = 0,
   ) {
@@ -480,7 +480,7 @@ export class FileTransmitter {
     );
   }
 
-  // 随机选择一个可用的 dataChannel
+  // random select a available dataChannel
   private async getRandomAvailableChannel(
     bufferedAmountLowThreshold: number = this
       .bufferedAmountLowThreshold,
@@ -513,7 +513,7 @@ export class FileTransmitter {
     return channel;
   }
 
-  // 发送文件
+  // send file
   public async sendFile(
     ranges?: ChunkRange[],
   ): Promise<void> {
@@ -644,7 +644,7 @@ export class FileTransmitter {
         console.warn(`can not get chunk ${chunkIndex}`);
       }
     }
-
+    await queue;
     await this.waitBufferedAmountLowThreshold(0);
     const channel = await this.getRandomAvailableChannel();
     channel.send(
@@ -652,9 +652,10 @@ export class FileTransmitter {
         type: "complete",
       } satisfies CompleteMessage),
     );
+    this.setStatus(TransferStatus.Complete);
   }
 
-  // 处理接收的信息
+  // handle receive message
   private handleMessage(
     event: MessageEvent,
     unzipCB: (packet: ArrayBuffer) => void,
@@ -673,7 +674,7 @@ export class FileTransmitter {
             event.data,
           ) as TransferMessage;
           if (message.type === "complete") {
-            if (this.triggerComplete()) {
+            if (this.triggerReceiveComplete()) {
               window.clearInterval(this.timer);
             }
           }
@@ -699,23 +700,27 @@ export class FileTransmitter {
         ) as TransferMessage;
 
         if (message.type === "request-content") {
-          if (this.sendData) {
-            rangesIterator(message.ranges).forEach(
-              (index) =>
-                this.sendData?.indexes.delete(index),
-            );
-            const info = this.cache.info();
-            if (info) {
-              this.dispatchEvent("progress", {
-                total: info.fileSize,
-                received: getRequestContentSize(
-                  info,
-                  this.sendData.indexes.values().toArray(),
-                ),
-              });
+          if (this.status() !== TransferStatus.Process) {
+            if (this.sendData) {
+              rangesIterator(message.ranges).forEach(
+                (index) =>
+                  this.sendData?.indexes.delete(index),
+              );
+              const info = this.cache.info();
+              if (info) {
+                this.dispatchEvent("progress", {
+                  total: info.fileSize,
+                  received: getRequestContentSize(
+                    info,
+                    this.sendData.indexes.values().toArray(),
+                  ),
+                });
+              }
             }
+            this.sendFile(message.ranges);
+          } else {
+            console.log("send not complete, ignore request-content message");
           }
-          this.sendFile(message.ranges);
         } else if (message.type === "complete") {
           this.setStatus(TransferStatus.Complete);
           this.dispatchEvent("complete", undefined);
@@ -750,7 +755,7 @@ function assembleCompressedChunk(
     }
   }
 
-  // 合并所有块数据
+  // merge all blocks
   return concatenateUint8Arrays(orderedBlocks);
 }
 

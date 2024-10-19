@@ -28,7 +28,7 @@ export async function getConfiguration() {
       if (url.trim().length === 0) continue;
       if (authMethod === "hmac") {
         const timestamp =
-          Math.floor(Date.now() / 1000) + 24 * 3600; // 有效期为1天
+          Math.floor(Date.now() / 1000) + 24 * 3600;
         const hmacUsername = `${timestamp}`;
         const credential = await generateHMAC(
           password,
@@ -58,6 +58,7 @@ export async function getConfiguration() {
   } satisfies RTCConfiguration;
 }
 
+// this function is used to modify the offer
 export async function handleOffer(
   pc: RTCPeerConnection,
   sender: SignalingService,
@@ -65,8 +66,6 @@ export async function handleOffer(
 ) {
   const offer = await pc.createOffer(options);
 
-  offer.sdp = offer.sdp?.replace("b=AS:30", "b=AS:10000000");
-  
   await pc.setLocalDescription(offer);
   await sender.sendSignal({
     type: offer.type,

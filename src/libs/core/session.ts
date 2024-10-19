@@ -515,8 +515,9 @@ export class PeerSession {
 
     if (pc.connectionState === "connected") {
       console.warn(
-        `session ${this.sessionId} on client ${this.clientId} has already connected`,
+        `session ${this.sessionId} already connected`,
       );
+
       return;
     }
 
