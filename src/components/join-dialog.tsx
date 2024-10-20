@@ -20,7 +20,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "./ui/avatar";
-import { getInitials } from "./chat/userlist";
+import { getInitials } from "./chat/clientlist";
 import {
   Switch,
   SwitchControl,

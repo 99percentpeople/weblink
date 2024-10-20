@@ -45,28 +45,6 @@ export const getInitials = (name = "") =>
     .join("")
     .toUpperCase();
 
-// export const UserList: Component<
-//   ComponentProps<"ul"> & {}
-// > = (props) => {
-//   const { clientSessionInfo } = useWebRTC();
-
-//   const [local, other] = splitProps(props, ["class"]);
-
-//   return (
-//     <ul
-//       class={cn(
-//         "flex w-full flex-col divide-y divide-muted bg-background p-2",
-//         local.class,
-//       )}
-//       {...other}
-//     >
-//       <For each={Object.values(clientSessionInfo)}>
-//         {(client) => <UserItem client={client} />}
-//       </For>
-//     </ul>
-//   );
-// };
-
 export interface UserItemProps
   extends ComponentProps<"li"> {
   client: Client;

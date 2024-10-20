@@ -20,7 +20,6 @@ import {
   keepBottom,
 } from "@/libs/hooks/keep-bottom";
 import { cn } from "@/libs/cn";
-import { Badge } from "@/components/ui/badge";
 import DropArea from "@/components/drop-area";
 import { A } from "@solidjs/router";
 import {
@@ -63,7 +62,7 @@ import {
 } from "@/components/icons";
 import { createComfirmDeleteClientDialog } from "@/components/ui/confirm-delete-dialog";
 import { t } from "@/i18n";
-import { ConnectionBadge } from "@/components/chat/userlist";
+import { ConnectionBadge } from "@/components/chat/clientlist";
 export default function ClientPage(
   props: RouteSectionProps,
 ) {
@@ -141,9 +140,6 @@ export default function ClientPage(
     return pos.height <= pos.bottom + 1;
   });
 
-  // createEffect(() => {
-  //   console.log(`showScrollToBottom`, isBottom());
-  // });
   const [enable, setEnable] = createSignal(true);
   createEffect(() => {
     setEnable(isBottom());
@@ -326,7 +322,9 @@ export default function ClientPage(
                   </div>
                 );
               }}
-              onDrop={async (files) => {
+              onDrop={async (ev) => {
+                const files = ev.dataTransfer?.files;
+                if (!files) return;
                 for (let i = 0; i < files.length; i++) {
                   const file = files.item(i)!;
                   send(file, {

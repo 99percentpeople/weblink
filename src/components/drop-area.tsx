@@ -19,7 +19,7 @@ interface DropAreaProps
   onDragEnter?: (event: DragEvent) => JSX.Element;
   onDragOver?: (event: DragEvent) => JSX.Element;
   onDragLeave?: (event: DragEvent) => JSX.Element;
-  onDrop?: (files: FileList) => void;
+  onDrop?: (event: DragEvent) => void;
 }
 
 export default function DropArea(props: DropAreaProps) {
@@ -58,12 +58,8 @@ export default function DropArea(props: DropAreaProps) {
 
   const handleDrop = (event: DragEvent) => {
     event.preventDefault();
+    local.onDrop?.(event);
     setDragging(null);
-    setEventInfo(null);
-    const files = event.dataTransfer?.files;
-    if (files && local.onDrop) {
-      local.onDrop(files);
-    }
   };
 
   return (

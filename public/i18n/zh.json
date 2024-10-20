@@ -163,6 +163,11 @@
       "title": "预览",
       "unsupported_file_type": "不支持的文件类型"
     },
+    "send_item_preview_dialog": {
+      "title": "发送文件",
+      "description": "确认发送文件 {{fileName}} 给 {{name}}？",
+      "unsupported_file_type": "不支持的文件类型"
+    },
     "reset_options_dialog": {
       "title": "重置选项",
       "description": "重置后将无法恢复，请谨慎操作",
@@ -205,7 +210,8 @@
       "close": "关闭",
       "change": "更改",
       "open": "打开",
-      "preview": "预览"
+      "preview": "预览",
+      "send": "发送"
     },
     "about_dialog": {
       "title": "关于 Weblink",
@@ -222,7 +228,8 @@
     "notification": {
       "copy_success": "复制成功",
       "copy_failed": "复制失败",
-      "reset_options_success": "选项重置成功"
+      "reset_options_success": "选项重置成功",
+      "unknown_error": "未知错误"
     }
   }
 }

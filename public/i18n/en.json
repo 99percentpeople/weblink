@@ -181,6 +181,11 @@
       "title": "Preview",
       "unsupported_file_type": "Unsupported file type"
     },
+    "send_item_preview_dialog": {
+      "title": "Send Item",
+      "description": "Are you sure you want to send file {{fileName}} to {{name}}?",
+      "unsupported_file_type": "Unsupported file type"
+    },
     "status": {
       "online": "Online",
       "connecting": "Connecting",
@@ -203,12 +208,14 @@
       "actions": "Actions",
       "close": "Close",
       "change": "Change",
-      "preview": "Preview"
+      "preview": "Preview",
+      "send": "Send"
     },
     "notification": {
       "copy_success": "Link copied",
       "copy_failed": "Failed to copy link",
-      "reset_options_success": "Options reset successfully"
+      "reset_options_success": "Options reset successfully",
+      "unknown_error": "Unknown error"
     },
     "about_dialog": {
       "title": "About Weblink",

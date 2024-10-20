@@ -64,7 +64,7 @@ class SessionService {
         this.setClientServiceStatus(ev.detail);
 
         if (ev.detail === "disconnected") {
-          this.destoryAllSession();
+          // this.destoryAllSession();
           controller?.abort();
         }
       },
@@ -183,10 +183,10 @@ class SessionService {
   }
 
   destoryAllSession() {
-    // Object.values(this.sessions).forEach((session) =>
-    //   session.destory(),
-    // );
-    // this.setSessions(reconcile({}));
+    Object.values(this.sessions).forEach((session) =>
+      session.destory(),
+    );
+    this.setSessions(reconcile({}));
     this.setClientInfo(reconcile({}));
 
     this.service?.destroy();

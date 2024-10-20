@@ -68,6 +68,11 @@ import {
 } from "../icons";
 import { sessionService } from "@/libs/services/session-service";
 import { t } from "@/i18n";
+import {
+  createPreviewDialog,
+  createSendItemPreviewDialog,
+} from "../preview-dialog";
+import { toast } from "solid-sonner";
 export interface MessageCardProps {
   message: StoreMessage;
 }
@@ -520,14 +525,26 @@ export const ChatBar: Component<
   const { send } = useWebRTC();
   const [text, setText] = createSignal("");
 
-  const onSend = async (target: ClientID) => {
+  const { open: openPreview, Component: PreviewDialog } =
+    createSendItemPreviewDialog();
+
+  const onSend = async () => {
     if (text().trim().length === 0) return;
-    if (
-      await send(text(), {
-        target: target,
-      })
-    ) {
-      setText("");
+    try {
+      if (
+        await send(text(), {
+          target: props.client.clientId,
+        })
+      ) {
+        setText("");
+      }
+    } catch (error) {
+      console.error(error);
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error(t("common.notification.unknown_error"));
+      }
     }
   };
 
@@ -540,11 +557,12 @@ export const ChatBar: Component<
       )}
       {...other}
     >
+      <PreviewDialog />
       <form
         id="send"
         onSubmit={async (ev) => {
           ev.preventDefault();
-          onSend(local.client.clientId);
+          onSend();
         }}
       >
         <Textarea
@@ -559,13 +577,54 @@ export const ChatBar: Component<
             if (e.key === "Enter") {
               if (e.ctrlKey || e.shiftKey) {
                 e.preventDefault();
-                await onSend(local.client.clientId);
+                await onSend();
               }
             }
           }}
           placeholder={t("chat.message_editor.placeholder")}
           value={text()}
           onInput={(ev) => setText(ev.currentTarget.value)}
+          onPaste={(ev) => {
+            const clipboardData = ev.clipboardData;
+            const items = clipboardData?.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+              console.log(items[i].kind);
+
+              // 任何文件
+              if (items[i].kind === "file") {
+                // 阻止默认粘贴行为
+                ev.preventDefault();
+
+                // 获取图片文件
+                const imageFile = items[i].getAsFile();
+                if (!imageFile) continue;
+
+                openPreview(imageFile, props.client.name)
+                  .then(({ result }) => {
+                    if (result) {
+                      return send(imageFile, {
+                        target: local.client.clientId,
+                      });
+                    }
+                  })
+                  .catch((error) => {
+                    console.error(error);
+                    if (error instanceof Error) {
+                      toast.error(error.message);
+                    } else {
+                      toast.error(
+                        t(
+                          "common.notification.unknown_error",
+                        ),
+                      );
+                    }
+                  });
+                break;
+              }
+            }
+          }}
         />
       </form>
       <div class="flex justify-end gap-1">
