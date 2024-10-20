@@ -183,10 +183,10 @@ class SessionService {
   }
 
   destoryAllSession() {
-    Object.values(this.sessions).forEach((session) =>
-      session.destory(),
-    );
-    this.setSessions(reconcile({}));
+    // Object.values(this.sessions).forEach((session) =>
+    //   session.destory(),
+    // );
+    // this.setSessions(reconcile({}));
     this.setClientInfo(reconcile({}));
 
     this.service?.destroy();

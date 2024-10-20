@@ -12,10 +12,7 @@ import {
   TransferMode,
 } from "./file-transmitter";
 import { ChunkCache } from "../cache/chunk-cache";
-import { makePersisted } from "@solid-primitives/storage";
-import { isServer } from "solid-js/web";
 import { v4 } from "uuid";
-import { batch } from "solid-js";
 
 export type MessageID = string;
 

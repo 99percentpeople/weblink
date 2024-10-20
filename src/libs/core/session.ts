@@ -155,19 +155,21 @@ export class PeerSession {
       "iceconnectionstatechange",
       async () => {
         const state = pc.iceConnectionState;
-        console.log("ICE Connection State:", state);
-
-        if (
-          state === "disconnected" ||
-          state === "failed"
-        ) {
-          console.log(
-            "ICE connection lost, trying to reconnect...",
-          );
-        } else if (
-          state === "connected" ||
-          state === "completed"
-        ) {
+        switch (state) {
+          case "disconnected":
+          case "failed":
+            console.warn(
+              `client ${this.clientId} ICE Connection State: ${state}`,
+            );
+            break;
+          case "connected":
+          case "completed":
+            console.log(
+              `client ${this.clientId} ICE Connection State: ${state}`,
+            );
+            break;
+          default:
+            break;
         }
       },
       {
@@ -277,7 +279,6 @@ export class PeerSession {
             this.destory();
             break;
           default:
-            // 其他状态不做处理
             break;
         }
       },
