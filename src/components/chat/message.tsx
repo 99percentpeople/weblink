@@ -30,11 +30,7 @@ import {
 } from "@/libs/core/file-transmitter";
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
-import { ClientID, ClientInfo } from "@/libs/core/type";
-import {
-  ContextMenuItem,
-  ContextMenuShortcut,
-} from "../ui/context-menu";
+import { ContextMenuItem } from "../ui/context-menu";
 
 import { convertImageToPNG } from "@/libs/utils/conver-to-png";
 
@@ -42,6 +38,8 @@ import "photoswipe/style.css";
 import {
   FileTransferMessage,
   messageStores,
+  SendFileMessage,
+  SendTextMessage,
   StoreMessage,
 } from "@/libs/core/messge";
 import { cacheManager } from "@/libs/services/cache-serivce";
@@ -50,8 +48,8 @@ import { PortableContextMenu } from "../portable-contextmenu";
 import {
   IconAttachFile,
   IconAudioFileFilled,
-  IconCameraFilled,
-  IconCameraVideoFilled,
+  IconCheck,
+  IconClose,
   IconContentCopy,
   IconDelete,
   IconDownload,
@@ -59,7 +57,6 @@ import {
   IconFileCopy,
   IconFileUpload,
   IconInsertDriveFile,
-  IconMicFilled,
   IconPhotoFilled,
   IconRestore,
   IconSchedule,
@@ -68,10 +65,7 @@ import {
 } from "../icons";
 import { sessionService } from "@/libs/services/session-service";
 import { t } from "@/i18n";
-import {
-  createPreviewDialog,
-  createSendItemPreviewDialog,
-} from "../preview-dialog";
+import { createSendItemPreviewDialog } from "../preview-dialog";
 import { toast } from "solid-sonner";
 export interface MessageCardProps {
   message: StoreMessage;
@@ -98,6 +92,10 @@ const FileMessageCard: Component<FileMessageCardProps> = (
     () => sessionService.clientInfo[props.message.client],
   );
 
+  const session = createMemo(
+    () => sessionService.sessions[props.message.client],
+  );
+
   // createEffect(async () => {
   //   const cacheData = cache();
   //   if (cacheData) {
@@ -122,8 +120,8 @@ const FileMessageCard: Component<FileMessageCardProps> = (
       >
         {(info) => (
           <>
-            <Show when={props.message.status}>
-              {(status) => (
+            <Show when={props.message.transferStatus}>
+              {(transferStatus) => (
                 <>
                   <Show
                     when={info().file}
@@ -260,7 +258,11 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                   </Show>
 
                   <Switch>
-                    <Match when={status() === "processing"}>
+                    <Match
+                      when={
+                        transferStatus() === "processing"
+                      }
+                    >
                       <Show when={props.message.progress}>
                         {(progress) => {
                           const speed = createTransferSpeed(
@@ -305,7 +307,9 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                         }}
                       </Show>
                     </Match>
-                    <Match when={status() === "merging"}>
+                    <Match
+                      when={transferStatus() === "merging"}
+                    >
                       <p class="font-mono text-sm text-muted-foreground">
                         merging...
                       </p>
@@ -336,7 +340,7 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                     <Show
                       when={
                         !transferer() &&
-                        status() !== "merging" &&
+                        transferStatus() !== "merging" &&
                         !info().file &&
                         clientInfo()?.onlineStatus ===
                           "online"
@@ -344,6 +348,7 @@ const FileMessageCard: Component<FileMessageCardProps> = (
                     >
                       <Button
                         size="icon"
+                        variant="ghost"
                         onClick={() => {
                           requestFile(
                             props.message.client,
@@ -364,9 +369,7 @@ const FileMessageCard: Component<FileMessageCardProps> = (
 
       <Show when={props.message.error}>
         {(error) => (
-          <p class="text-xs text-destructive">
-            {error().message}
-          </p>
+          <p class="text-xs text-destructive">{error()}</p>
         )}
       </Show>
     </div>
@@ -376,6 +379,10 @@ const FileMessageCard: Component<FileMessageCardProps> = (
 export const MessageContent: Component<MessageCardProps> = (
   props,
 ) => {
+  const session = createMemo(
+    () => sessionService.sessions[props.message.client],
+  );
+
   const Menu = (props: {
     message: StoreMessage;
     close: () => void;
@@ -484,7 +491,11 @@ export const MessageContent: Component<MessageCardProps> = (
                   props.message
                 }
               >
-                {(message) => message().data}
+                {(message) => (
+                  <>
+                    <p>{message().data}</p>
+                  </>
+                )}
               </Match>
               <Match
                 when={
@@ -499,11 +510,74 @@ export const MessageContent: Component<MessageCardProps> = (
             </Switch>
           </article>
 
-          <p class="self-end text-xs text-muted-foreground">
-            {new Date(
-              props.message.createdAt,
-            ).toLocaleTimeString()}
-          </p>
+          <Show when={props.message.error}>
+            {(error) => (
+              <div class="flex items-center gap-1">
+                <p class="text-xs text-destructive">
+                  {error()}
+                </p>
+                <Show when={session()}>
+                  {(session) => (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        const sessionMessage =
+                          props.message.type === "text"
+                            ? ({
+                                ...props.message,
+                                type: "send-text",
+                              } satisfies SendTextMessage)
+                            : ({
+                                ...props.message,
+                                type: "send-file",
+                              } satisfies SendFileMessage);
+                        messageStores.setMessage(
+                          sessionMessage,
+                          session(),
+                        );
+                        session().sendMessage(
+                          sessionMessage,
+                        );
+                      }}
+                    >
+                      <IconRestore class="size-6" />
+                    </Button>
+                  )}
+                </Show>
+              </div>
+            )}
+          </Show>
+
+          <div
+            class="flex justify-end gap-1 self-end text-xs
+              text-muted-foreground"
+          >
+            <p>
+              {new Date(
+                props.message.createdAt,
+              ).toLocaleTimeString()}
+            </p>
+            <p>
+              <Switch>
+                <Match
+                  when={props.message.status === "sending"}
+                >
+                  <IconSchedule class="size-4" />
+                </Match>
+                <Match
+                  when={props.message.status === "received"}
+                >
+                  <IconCheck class="size-4" />
+                </Match>
+                <Match
+                  when={props.message.status === "error"}
+                >
+                  <IconClose class="size-4 text-destructive" />
+                </Match>
+              </Switch>
+            </p>
+          </div>
         </li>
       )}
     />

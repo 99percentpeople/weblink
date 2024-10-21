@@ -13,14 +13,17 @@ import {
 } from "./file-transmitter";
 import { ChunkCache } from "../cache/chunk-cache";
 import { v4 } from "uuid";
+import { PeerSession } from "./session";
 
 export type MessageID = string;
 
 export interface BaseExchangeMessage {
+  id: MessageID;
   type: string;
   createdAt: number;
   client: ClientID;
   target: ClientID;
+  status?: "sending" | "received" | "error";
 }
 
 export interface BaseStorageMessage
@@ -31,6 +34,7 @@ export interface BaseStorageMessage
 export interface TextMessage extends BaseStorageMessage {
   type: "text";
   data: string;
+  error?: string;
 }
 
 export interface FileTransferMessage
@@ -42,13 +46,12 @@ export interface FileTransferMessage
   mimeType?: string;
   lastModified?: number;
   chunkSize: number;
-  error?: Error;
+  error?: string;
   progress?: {
     total: number;
     received: number;
   };
-  status?:
-    | "pause"
+  transferStatus?:
     | "processing"
     | "complete"
     | "merging"
@@ -60,22 +63,28 @@ export type StoreMessage =
   | TextMessage
   | FileTransferMessage;
 
-export interface SendTextMessage
-  extends BaseExchangeMessage {
+export type SendTextMessage = BaseExchangeMessage & {
   type: "send-text";
   data: string;
-}
+};
 
-export interface ReadyMessage {}
+export type CheckMessage = BaseExchangeMessage & {
+  type: "check-message";
+  id: MessageID;
+};
 
-export interface RequestFileMessage
-  extends BaseExchangeMessage {
+export type ReadTextMessage = BaseExchangeMessage & {
+  type: "read-text";
+  id: MessageID;
+};
+
+export type RequestFileMessage = BaseExchangeMessage & {
   type: "request-file";
   fid: FileID;
   ranges: ChunkRange[];
-}
-export interface SendFileMessage
-  extends BaseExchangeMessage {
+};
+
+export type SendFileMessage = BaseExchangeMessage & {
   type: "send-file";
   fid: FileID;
   fileName: string;
@@ -83,10 +92,12 @@ export interface SendFileMessage
   mimeType?: string;
   lastModified?: number;
   chunkSize: number;
-}
+};
 
 export type SessionMessage =
   | SendTextMessage
+  | CheckMessage
+  | ReadTextMessage
   | RequestFileMessage
   | SendFileMessage;
 
@@ -112,6 +123,24 @@ class MessageStores {
     this.db = this.initDB();
   }
 
+  private timeouts: Record<MessageID, number> = {};
+
+  private clearTimeout(id: MessageID) {
+    window.clearTimeout(this.timeouts[id]);
+    delete this.timeouts[id];
+  }
+
+  private setTimeout(
+    id: MessageID,
+    timeout: number,
+    callback: () => void,
+  ) {
+    this.timeouts[id] = window.setTimeout(() => {
+      this.clearTimeout(id);
+      callback();
+    }, timeout);
+  }
+
   private async initDB() {
     return new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("message_store");
@@ -133,12 +162,9 @@ class MessageStores {
           },
         );
 
-        const clientStore = db.createObjectStore(
-          "clients",
-          {
-            keyPath: "clientId",
-          },
-        );
+        db.createObjectStore("clients", {
+          keyPath: "clientId",
+        });
       };
 
       request.onsuccess = async () => {
@@ -169,8 +195,8 @@ class MessageStores {
         reconcile(
           messages.map((message) => {
             if (message.type === "file") {
-              if (message.status !== "complete") {
-                message.status === "pause";
+              if (message.transferStatus !== "complete") {
+                message.status = "sending";
               }
             }
             return message;
@@ -307,54 +333,83 @@ class MessageStores {
     return controller;
   }
 
-  setMessage(sessionMsg: SessionMessage): number | null {
+  async setMessage(
+    sessionMsg: SessionMessage,
+    session: PeerSession,
+  ) {
     let index: number = -1;
+    const isSending =
+      session.clientId === sessionMsg.client;
+    const setStatus = (message: StoreMessage) => {
+      if (!isSending) {
+        session.sendMessage({
+          type: "check-message",
+          id: message.id,
+          createdAt: Date.now(),
+          client: sessionMsg.target,
+          target: sessionMsg.client,
+        } satisfies CheckMessage);
+      } else {
+        this.setTimeout(message.id, 5000, () => {
+          this.setMessages(index, "status", "error");
+          this.setMessages(index, "error", "send timeout");
+          this.setMessageDB(this.messages[index]);
+        });
+      }
+    };
     if (sessionMsg.type === "send-text") {
-      this.setMessages(
-        produce((state) => {
-          const message = {
-            ...sessionMsg,
-            id: v4(),
-            type: "text",
-          } satisfies TextMessage;
-          index = state.push(message);
-
-          this.setMessageDB(message);
-        }),
+      index = this.messages.findIndex(
+        (msg) => msg.id === sessionMsg.id,
       );
-    } else {
+      if (index === -1) {
+        const message = {
+          ...sessionMsg,
+          type: "text",
+          status: isSending ? "sending" : "received",
+        } satisfies TextMessage;
+        this.setMessages(
+          produce((state) => {
+            index = state.push(message) - 1;
+            this.setMessageDB(message);
+          }),
+        );
+      }
+      setStatus(this.messages[index]);
+    } else if (sessionMsg.type === "check-message") {
+      const index = this.messages.findIndex(
+        (msg) => msg.id === sessionMsg.id,
+      );
+      if (index !== -1) {
+        this.clearTimeout(sessionMsg.id);
+        this.setMessages(index, "status", "received");
+        this.setMessageDB(this.messages[index]);
+      }
+    } else if (sessionMsg.type === "send-file") {
       index = this.messages.findIndex(
         (msg) =>
           msg.type === "file" && msg.fid === sessionMsg.fid,
       );
-      if (sessionMsg.type === "send-file") {
-        if (index !== -1) {
-          console.warn(
-            `file message ${sessionMsg.fid} already exist`,
-          );
-          return index;
-        }
+      if (index === -1) {
+        const message = {
+          ...sessionMsg,
+          type: "file",
+          status: isSending ? "sending" : "received",
+        } satisfies FileTransferMessage;
         this.setMessages(
           produce((state) => {
-            const message = {
-              ...sessionMsg,
-              id: v4(),
-              type: "file",
-            } satisfies FileTransferMessage;
-            index = state.push(message);
+            index = state.push(message) - 1;
             this.setMessageDB(message);
           }),
         );
-      } else if (sessionMsg.type === "request-file") {
-        if (index === -1) {
-          console.warn(
-            `can not request file ${sessionMsg.fid}, message not exist`,
-          );
-          return null;
-        }
+      }
+      setStatus(this.messages[index]);
+    } else if (sessionMsg.type === "request-file") {
+      if (index === -1) {
+        console.warn(
+          `can not request file ${sessionMsg.fid}, message not exist`,
+        );
       }
     }
-    return index;
   }
 
   setClient(client: Client) {
@@ -418,7 +473,9 @@ class MessageStores {
     cache.addEventListener(
       "merging",
       () => {
-        setter((state) => (state.status = "merging"));
+        setter(
+          (state) => (state.transferStatus = "merging"),
+        );
       },
       { once: true, signal: controller.signal },
     );
@@ -427,7 +484,7 @@ class MessageStores {
       "merged",
       () => {
         setter((state) => {
-          state.status = "complete";
+          state.transferStatus = "complete";
           controller.abort("complete");
         });
       },
@@ -475,7 +532,7 @@ class MessageStores {
       () => {
         setter((state) => {
           state.error = undefined;
-          state.status = "ready";
+          state.transferStatus = "ready";
         });
       },
       {
@@ -492,7 +549,7 @@ class MessageStores {
             total: total,
             received: received,
           };
-          state.status = "processing";
+          state.transferStatus = "processing";
         });
       },
       {
@@ -505,7 +562,7 @@ class MessageStores {
         if (transferer.mode === TransferMode.Send) {
           controller.abort();
           setter((state) => {
-            state.status = "complete";
+            state.transferStatus = "complete";
           });
         }
       },
@@ -521,8 +578,8 @@ class MessageStores {
         console.error(event.detail);
         controller.abort();
         setter((state) => {
-          state.status = "error";
-          state.error = event.detail;
+          state.transferStatus = "error";
+          state.error = event.detail.message;
         });
       },
       {

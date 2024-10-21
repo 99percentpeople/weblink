@@ -167,9 +167,8 @@ export const WebRTCProvider: Component<
     }) as ClientService;
 
     sessionService.setClientService(cs);
-    
-    await cs.createClient();
 
+    await cs.createClient();
 
     cs.listenForJoin(
       async (targetClient: TransferClient) => {
@@ -239,7 +238,7 @@ export const WebRTCProvider: Component<
 
         session.addEventListener("message", async (ev) => {
           const message = ev.detail;
-          messageStores.setMessage(message);
+          messageStores.setMessage(message, session);
 
           if (message.type === "send-text") {
             return;
@@ -502,6 +501,7 @@ export const WebRTCProvider: Component<
     session: PeerSession,
   ) => {
     const message = {
+      id: v4(),
       type: "send-text",
       client: session.clientId,
       target: session.targetClientId,
@@ -510,7 +510,7 @@ export const WebRTCProvider: Component<
     } as SendTextMessage;
     session.sendMessage(message);
     console.log(`send text message`, message);
-    messageStores.setMessage(message);
+    messageStores.setMessage(message, session);
   };
 
   const sendFile = async (
@@ -521,6 +521,7 @@ export const WebRTCProvider: Component<
     const target = session.targetClientId;
     const client = session.clientId;
     const message = {
+      id: v4(),
       type: "send-file",
       client: client,
       target: target,
@@ -533,7 +534,7 @@ export const WebRTCProvider: Component<
       chunkSize: appOptions.chunkSize,
     } satisfies SendFileMessage;
 
-    messageStores.setMessage(message);
+    messageStores.setMessage(message, session);
     session.sendMessage(message);
     console.log(`send file message`, message);
     const cache = cacheManager.createCache(message.fid);
@@ -640,6 +641,7 @@ export const WebRTCProvider: Component<
     await transferer.initialize();
 
     const message = {
+      id: v4(),
       type: "request-file",
       fid: fileId,
       client: session.clientId,
@@ -648,7 +650,7 @@ export const WebRTCProvider: Component<
       createdAt: Date.now(),
     } satisfies RequestFileMessage;
 
-    messageStores.setMessage(message);
+    messageStores.setMessage(message, session);
     session.sendMessage(message);
 
     await transferer.initialize();

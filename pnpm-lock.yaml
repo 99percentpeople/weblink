@@ -27,8 +27,8 @@ importers:
         specifier: ^5.0.19
         version: 5.1.0
       '@kobalte/core':
-        specifier: ^0.13.4
-        version: 0.13.6(solid-js@1.9.1)
+        specifier: ^0.13.7
+        version: 0.13.7(solid-js@1.9.1)
       '@material-design-icons/svg':
         specifier: ^0.14.13
         version: 0.14.13
@@ -1261,8 +1261,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.15
 
-  '@kobalte/core@0.13.6':
-    resolution: {integrity: sha512-MuO9tBDjfmYISF4weKpcRi0+7FEUhqz8wHbcayfSHR5mulXQbru5PRE5gdfhf84C7UdOHTZBLiPeQD2VppdfIQ==}
+  '@kobalte/core@0.13.7':
+    resolution: {integrity: sha512-COhjWk1KnCkl3qMJDvdrOsvpTlJ9gMLdemkAn5SWfbPn/lxJYabejnNOk+b/ILGg7apzQycgbuo48qb8ppqsAg==}
     peerDependencies:
       solid-js: ^1.8.15
 
@@ -6055,7 +6055,7 @@ snapshots:
       solid-js: 1.9.1
       solid-prevent-scroll: 0.1.10(solid-js@1.9.1)
 
-  '@kobalte/core@0.13.6(solid-js@1.9.1)':
+  '@kobalte/core@0.13.7(solid-js@1.9.1)':
     dependencies:
       '@floating-ui/dom': 1.6.11
       '@internationalized/date': 3.5.6
