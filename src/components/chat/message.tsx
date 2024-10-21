@@ -362,7 +362,7 @@ export const MessageContent: Component<MessageCardProps> = (
   props,
 ) => {
   const session = createMemo(
-    () => sessionService.sessions[props.message.client],
+    () => sessionService.sessions[props.message.target],
   );
 
   const Menu = (props: {
@@ -643,12 +643,9 @@ export const ChatBar: Component<
             for (let i = 0; i < items.length; i++) {
               console.log(items[i].kind);
 
-              // 任何文件
               if (items[i].kind === "file") {
-                // 阻止默认粘贴行为
                 ev.preventDefault();
 
-                // 获取图片文件
                 const imageFile = items[i].getAsFile();
                 if (!imageFile) continue;
 

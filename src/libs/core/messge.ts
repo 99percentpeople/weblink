@@ -366,7 +366,7 @@ class MessageStores {
       } else {
         if (message.status === "received") return;
 
-        this.setTimeout(message.id, 5000, () => {
+        this.setTimeout(message.id, 3000, () => {
           this.setMessages(index, "status", "error");
           this.setMessages(index, "status", "error");
           this.setMessages(index, "error", "send timeout");
