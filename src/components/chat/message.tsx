@@ -40,6 +40,7 @@ import {
   messageStores,
   SendFileMessage,
   SendTextMessage,
+  SessionMessage,
   StoreMessage,
 } from "@/libs/core/messge";
 import { cacheManager } from "@/libs/services/cache-serivce";
@@ -67,6 +68,7 @@ import { sessionService } from "@/libs/services/session-service";
 import { t } from "@/i18n";
 import { createSendItemPreviewDialog } from "../preview-dialog";
 import { toast } from "solid-sonner";
+import { Dynamic } from "solid-js/web";
 export interface MessageCardProps {
   message: StoreMessage;
 }
@@ -364,6 +366,77 @@ export const MessageContent: Component<MessageCardProps> = (
   const session = createMemo(
     () => sessionService.sessions[props.message.target],
   );
+  const contentOptions = {
+    text: (props: {
+      message: StoreMessage;
+      close: () => void;
+    }) => (
+      <ContextMenuItem
+        class="gap-2"
+        onSelect={() => {
+          if (props.message.type === "text")
+            navigator.clipboard.writeText(
+              props.message.data,
+            );
+
+          props.close();
+        }}
+      >
+        <IconContentCopy class="size-4" />
+        {t("common.action.copy")}
+      </ContextMenuItem>
+    ),
+    file: (props: {
+      message: FileTransferMessage;
+      close: () => void;
+    }) => (
+      <>
+        <ContextMenuItem
+          class="gap-2"
+          onSelect={() => {
+            if (props.message.type === "file")
+              navigator.clipboard.writeText(
+                props.message.fileName,
+              );
+
+            props.close();
+          }}
+        >
+          <IconContentCopy class="size-4" />
+          {t("common.action.copy")}
+        </ContextMenuItem>
+        <Show
+          when={(
+            props.message as FileTransferMessage
+          ).mimeType?.startsWith("image")}
+        >
+          <ContextMenuItem
+            class="gap-2"
+            onSelect={async () => {
+              if (props.message.type === "file") {
+                const cache = cacheManager.getCache(
+                  props.message.fid,
+                );
+                if (!cache) return;
+                const file = await cache.getFile();
+                if (!file) return;
+                const blob = await convertImageToPNG(file);
+                const item = new ClipboardItem({
+                  [blob.type]: blob,
+                });
+                navigator.clipboard.write([item]);
+              }
+
+              props.close();
+            }}
+          >
+            <IconFileCopy class="size-4" />
+            {t("common.action.copy_image")}
+          </ContextMenuItem>
+        </Show>
+      </>
+    ),
+  } as const;
 
   const Menu = (props: {
     message: StoreMessage;
@@ -371,70 +444,11 @@ export const MessageContent: Component<MessageCardProps> = (
   }) => {
     return (
       <>
-        <Switch>
-          <Match when={props.message.type === "text"}>
-            <ContextMenuItem
-              class="gap-2"
-              onSelect={() => {
-                if (props.message.type === "text")
-                  navigator.clipboard.writeText(
-                    props.message.data,
-                  );
-
-                props.close();
-              }}
-            >
-              <IconContentCopy class="size-4" />
-              {t("common.action.copy")}
-            </ContextMenuItem>
-          </Match>
-          <Match when={props.message.type === "file"}>
-            <ContextMenuItem
-              class="gap-2"
-              onSelect={() => {
-                if (props.message.type === "file")
-                  navigator.clipboard.writeText(
-                    props.message.fileName,
-                  );
-
-                props.close();
-              }}
-            >
-              <IconContentCopy class="size-4" />
-              {t("common.action.copy")}
-            </ContextMenuItem>
-            <Show
-              when={(
-                props.message as FileTransferMessage
-              ).mimeType?.startsWith("image")}
-            >
-              <ContextMenuItem
-                class="gap-2"
-                onSelect={async () => {
-                  if (props.message.type === "file") {
-                    const cache = cacheManager.getCache(
-                      props.message.fid,
-                    );
-                    if (!cache) return;
-                    const file = await cache.getFile();
-                    if (!file) return;
-                    const blob =
-                      await convertImageToPNG(file);
-                    const item = new ClipboardItem({
-                      [blob.type]: blob,
-                    });
-                    navigator.clipboard.write([item]);
-                  }
-
-                  props.close();
-                }}
-              >
-                <IconFileCopy class="size-4" />
-                {t("common.action.copy_image")}
-              </ContextMenuItem>
-            </Show>
-          </Match>
-        </Switch>
+        <Dynamic
+          component={contentOptions[props.message.type]}
+          message={props.message}
+          close={props.close}
+        />
 
         <ContextMenuItem
           class="gap-2"
@@ -491,7 +505,7 @@ export const MessageContent: Component<MessageCardProps> = (
               </Match>
             </Switch>
           </article>
-          <div class="flex gap-1">
+          <div class="flex items-center justify-end gap-2">
             <p class="text-xs text-destructive">
               {props.message.error}
             </p>
@@ -502,16 +516,35 @@ export const MessageContent: Component<MessageCardProps> = (
                     size="icon"
                     variant="outline"
                     onClick={() => {
-                      const sessionMessage =
-                        props.message.type === "text"
-                          ? ({
-                              ...props.message,
-                              type: "send-text",
-                            } satisfies SendTextMessage)
-                          : ({
-                              ...props.message,
-                              type: "send-file",
-                            } satisfies SendFileMessage);
+                      let sessionMessage: SessionMessage;
+
+                      if (props.message.type === "text") {
+                        sessionMessage = {
+                          id: props.message.id,
+                          type: "send-text",
+                          client: props.message.client,
+                          target: props.message.target,
+                          data: props.message.data,
+                          createdAt:
+                            props.message.createdAt,
+                        } satisfies SendTextMessage;
+                      } else {
+                        sessionMessage = {
+                          id: props.message.id,
+                          type: "send-file",
+                          client: props.message.client,
+                          target: props.message.target,
+                          fid: props.message.fid,
+                          fileName: props.message.fileName,
+                          mimeType: props.message.mimeType,
+                          chunkSize:
+                            props.message.chunkSize,
+                          createdAt:
+                            props.message.createdAt,
+                          fileSize: props.message.fileSize,
+                        } satisfies SendFileMessage;
+                      }
+
                       messageStores.setMessage(
                         sessionMessage,
                         session(),

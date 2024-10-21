@@ -39,6 +39,10 @@ import { WebSocketClientService } from "./services/client/ws-client-service";
 import { SseClientService } from "./services/client/sse-client-service";
 import { appOptions } from "@/options";
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function getServiceConstructor() {
   switch (import.meta.env.VITE_BACKEND) {
     case "FIREBASE":
@@ -303,6 +307,59 @@ export const WebRTCProvider: Component<
             await transferer.initialize();
             transferer.setSendStatus(message);
             await transferer.sendFile(message.ranges);
+          } else if (message.type === "check-message") {
+            const index = messageStores.messages.findIndex(
+              (msg) => msg.id === message.id,
+            );
+            if (index === -1) {
+              console.warn(
+                `check message ${message.id} not found`,
+              );
+              return;
+            }
+            const storeMessage =
+              messageStores.messages[index];
+            if (storeMessage.type === "file") {
+              const cache = cacheManager.getCache(
+                storeMessage.fid,
+              );
+              if (!cache) {
+                console.warn(
+                  `cache ${storeMessage.fid} not found`,
+                );
+                return;
+              }
+              const transferer =
+                transferManager.createTransfer(
+                  cache,
+                  TransferMode.Send,
+                );
+
+              if (!messageStores.addTransfer(transferer)) {
+                console.warn(
+                  `can not add transfer ${transferer.id}, return`,
+                );
+                return;
+              }
+
+              for (
+                let i = 0;
+                i < appOptions.channelsNumber;
+                i++
+              ) {
+                const channel = await session.createChannel(
+                  `${TRANSFER_CHANNEL_PREFIX}${transferer.id}${v4()}`,
+                );
+                if (!channel) break;
+                transferManager.addChannel(
+                  storeMessage.fid,
+                  channel,
+                );
+              }
+
+              await transferer.initialize();
+              await transferer.sendFile();
+            }
           }
         });
 
@@ -509,8 +566,8 @@ export const WebRTCProvider: Component<
       createdAt: Date.now(),
     } as SendTextMessage;
     session.sendMessage(message);
-    console.log(`send text message`, message);
     messageStores.setMessage(message, session);
+    console.log(`send text message`, message);
   };
 
   const sendFile = async (
@@ -536,7 +593,7 @@ export const WebRTCProvider: Component<
 
     messageStores.setMessage(message, session);
     session.sendMessage(message);
-    console.log(`send file message`, message);
+
     const cache = cacheManager.createCache(message.fid);
     cache.setInfo({
       fileName: message.fileName,
@@ -548,25 +605,7 @@ export const WebRTCProvider: Component<
       file: file,
     });
 
-    const transferer = transferManager.createTransfer(
-      cache,
-      TransferMode.Send,
-    );
-
-    if (!messageStores.addTransfer(transferer)) {
-      return;
-    }
-
-    for (let i = 0; i < appOptions.channelsNumber; i++) {
-      const channel = await session.createChannel(
-        `${TRANSFER_CHANNEL_PREFIX}${transferer.id}${v4()}`,
-      );
-      if (!channel) break;
-      transferManager.addChannel(fid, channel);
-    }
-
-    await transferer.initialize();
-    await transferer.sendFile();
+    console.log(`send file message`, message);
   };
 
   const send = async (

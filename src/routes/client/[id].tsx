@@ -9,6 +9,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   onMount,
   Show,
   splitProps,
@@ -397,11 +398,11 @@ export default function ClientPage(
                   });
                 }}
               >
-                <For each={messages()}>
+                <Index each={messages()}>
                   {(message) => (
-                    <MessageContent message={message} />
+                    <MessageContent message={message()} />
                   )}
-                </For>
+                </Index>
               </ul>
             </DropArea>
             <Show
