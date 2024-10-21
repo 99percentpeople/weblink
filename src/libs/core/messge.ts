@@ -355,6 +355,8 @@ class MessageStores {
     const isSending =
       session.clientId === sessionMsg.client;
     const setStatus = (message: StoreMessage) => {
+      this.setMessages(index, "error", undefined);
+      this.setMessageDB(this.messages[index]);
       if (!isSending) {
         session.sendMessage({
           type: "check-message",
@@ -363,8 +365,6 @@ class MessageStores {
           client: sessionMsg.target,
           target: sessionMsg.client,
         } satisfies CheckMessage);
-        this.setMessages(index, "error", undefined);
-        this.setMessageDB(this.messages[index]);
       } else {
         if (message.status === "received") return;
 
