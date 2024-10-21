@@ -285,7 +285,7 @@ export class FileTransmitter {
       ) {
         this.dispatchEvent(
           "error",
-          Error(`channels is empty`),
+          Error(`connection is closed`),
         );
       }
     };
@@ -712,14 +712,18 @@ export class FileTransmitter {
                   total: info.fileSize,
                   received: getRequestContentSize(
                     info,
-                    this.sendData.indexes.values().toArray(),
+                    this.sendData.indexes
+                      .values()
+                      .toArray(),
                   ),
                 });
               }
             }
             this.sendFile(message.ranges);
           } else {
-            console.log("send not complete, ignore request-content message");
+            console.log(
+              "send not complete, ignore request-content message",
+            );
           }
         } else if (message.type === "complete") {
           this.setStatus(TransferStatus.Complete);

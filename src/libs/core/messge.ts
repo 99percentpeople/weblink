@@ -14,6 +14,7 @@ import {
 import { ChunkCache } from "../cache/chunk-cache";
 import { v4 } from "uuid";
 import { PeerSession } from "./session";
+import { Accessor, createSignal, Setter } from "solid-js";
 
 export type MessageID = string;
 
@@ -107,7 +108,8 @@ class MessageStores {
   readonly db: Promise<IDBDatabase> | IDBDatabase;
   private setMessages: SetStoreFunction<StoreMessage[]>;
   private setClients: SetStoreFunction<Client[]>;
-
+  status: Accessor<"initializing" | "ready">;
+  private setStatus: Setter<"initializing" | "ready">;
   private controllers: Record<FileID, AbortController> = {};
   constructor() {
     const [messages, setMessages] = createStore<
@@ -121,6 +123,11 @@ class MessageStores {
     this.setClients = setClients;
 
     this.db = this.initDB();
+    const [status, setStatus] = createSignal<
+      "initializing" | "ready"
+    >("initializing");
+    this.status = status;
+    this.setStatus = setStatus;
   }
 
   private timeouts: Record<MessageID, number> = {};
@@ -186,17 +193,19 @@ class MessageStores {
       .objectStore("messages")
       .index("createdAtIndex");
 
-    new Promise<StoreMessage[]>((resolve, reject) => {
-      const request = index.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    }).then((messages) => {
+    const promise1 = new Promise<StoreMessage[]>(
+      (resolve, reject) => {
+        const request = index.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      },
+    ).then((messages) => {
       this.setMessages(
         reconcile(
           messages.map((message) => {
             if (message.type === "file") {
               if (message.transferStatus !== "complete") {
-                message.status = "sending";
+                message.transferStatus = "ready";
               }
             }
             return message;
@@ -209,12 +218,18 @@ class MessageStores {
       .transaction("clients", "readonly")
       .objectStore("clients");
 
-    new Promise<Client[]>((resolve, reject) => {
-      const request = clientStore.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    }).then((clients) => {
+    const promise2 = new Promise<Client[]>(
+      (resolve, reject) => {
+        const request = clientStore.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      },
+    ).then((clients) => {
       this.setClients(reconcile(clients));
+    });
+
+    return Promise.all([promise1, promise2]).then(() => {
+      this.setStatus("ready");
     });
   }
 
@@ -230,13 +245,12 @@ class MessageStores {
           ...message,
         });
     } else if (message.type === "file") {
+      const { progress, ...storeMessage } = message;
+
       request = db
         .transaction("messages", "readwrite")
         .objectStore("messages")
-        .put({
-          ...message,
-          progress: undefined,
-        });
+        .put(storeMessage);
     }
 
     return new Promise((resolve, reject) => {
@@ -350,7 +364,10 @@ class MessageStores {
           target: sessionMsg.client,
         } satisfies CheckMessage);
       } else {
+        if (message.status === "received") return;
+
         this.setTimeout(message.id, 5000, () => {
+          this.setMessages(index, "status", "error");
           this.setMessages(index, "status", "error");
           this.setMessages(index, "error", "send timeout");
           this.setMessageDB(this.messages[index]);

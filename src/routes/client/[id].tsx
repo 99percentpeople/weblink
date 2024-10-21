@@ -77,7 +77,7 @@ export default function ClientPage(
     () => sessionService.clientInfo[props.params.id],
   );
   createEffect(() => {
-    if (!client()) {
+    if (messageStores.status() === "ready" && !client()) {
       navigate("/", { replace: true });
     }
   });

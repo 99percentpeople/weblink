@@ -42,15 +42,13 @@ const Progress = <T extends ValidComponent = "div">(
 const ProgressLabel: Component<
   ProgressPrimitive.ProgressLabelProps
 > = (props) => {
-  return <ProgressPrimitive.Label as={Label} {...props} />;
+  return <ProgressPrimitive.Label {...props} />;
 };
 
 const ProgressValueLabel: Component<
   ProgressPrimitive.ProgressValueLabelProps
 > = (props) => {
-  return (
-    <ProgressPrimitive.ValueLabel as={Label} {...props} />
-  );
+  return <ProgressPrimitive.ValueLabel {...props} />;
 };
 
 export { Progress, ProgressLabel, ProgressValueLabel };

@@ -120,256 +120,238 @@ const FileMessageCard: Component<FileMessageCardProps> = (
       >
         {(info) => (
           <>
-            <Show when={props.message.transferStatus}>
-              {(transferStatus) => (
-                <>
-                  <Show
-                    when={info().file}
+            <Show
+              when={info().file}
+              fallback={
+                <div class="flex items-center gap-1">
+                  <div>
+                    <Switch
+                      fallback={
+                        <IconSchedule class="size-8" />
+                      }
+                    >
+                      <Match
+                        when={
+                          transferer()?.mode ===
+                          TransferMode.Receive
+                        }
+                      >
+                        <IconDownloading class="size-8" />
+                      </Match>
+                      <Match
+                        when={
+                          transferer()?.mode ===
+                          TransferMode.Send
+                        }
+                      >
+                        <IconFileUpload class="size-8" />
+                      </Match>
+                    </Switch>
+                  </div>
+                  <p>{info().fileName}</p>
+                </div>
+              }
+            >
+              {(file) => {
+                const url = URL.createObjectURL(file());
+
+                return (
+                  <Switch
                     fallback={
                       <div class="flex items-center gap-1">
                         <div>
-                          <Switch
-                            fallback={
-                              <IconSchedule class="size-8" />
-                            }
-                          >
-                            <Match
-                              when={
-                                transferer()?.mode ===
-                                TransferMode.Receive
-                              }
-                            >
-                              <IconDownloading class="size-8" />
-                            </Match>
-                            <Match
-                              when={
-                                transferer()?.mode ===
-                                TransferMode.Send
-                              }
-                            >
-                              <IconFileUpload class="size-8" />
-                            </Match>
-                          </Switch>
+                          <IconInsertDriveFile class="size-8" />
                         </div>
+
                         <p>{info().fileName}</p>
                       </div>
                     }
                   >
-                    {(file) => {
-                      const url =
-                        URL.createObjectURL(file());
-
-                      return (
-                        <Switch
-                          fallback={
-                            <div class="flex items-center gap-1">
-                              <div>
-                                <IconInsertDriveFile class="size-8" />
-                              </div>
-
-                              <p>{info().fileName}</p>
-                            </div>
-                          }
-                        >
-                          <Match
-                            when={info().mimetype?.startsWith(
-                              "image/",
-                            )}
-                          >
-                            <p class="relative">
-                              {" "}
-                              <span
-                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
-                                  whitespace-nowrap"
-                              >
-                                <IconPhotoFilled class="inline size-4 align-middle" />{" "}
-                                {info().fileName}
-                              </span>
-                            </p>
-
-                            <a
-                              id="image"
-                              href={url}
-                              target="_blank"
-                            >
-                              <img
-                                class="flex max-h-48 rounded-sm bg-muted hover:cursor-pointer
-                                  lg:max-h-72 xl:max-h-96"
-                                src={url}
-                                onload={(ev) => {
-                                  const parent =
-                                    ev.currentTarget
-                                      .parentElement!;
-                                  parent.dataset.pswpWidth =
-                                    ev.currentTarget.naturalWidth.toString();
-                                  parent.dataset.pswpHeight =
-                                    ev.currentTarget.naturalHeight.toString();
-                                  parent.dataset.download =
-                                    info().fileName;
-                                }}
-                              />
-                            </a>
-                          </Match>
-                          <Match
-                            when={info().mimetype?.startsWith(
-                              "video/",
-                            )}
-                          >
-                            <p class="relative">
-                              {" "}
-                              <span
-                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
-                                  whitespace-nowrap"
-                              >
-                                <IconVideoFileFilled class="inline size-4 align-middle" />{" "}
-                                {info().fileName}
-                              </span>
-                            </p>
-                            <video
-                              class="max-h-60 lg:max-h-72 xl:max-h-96"
-                              controls
-                              src={url}
-                            />
-                          </Match>
-                          <Match
-                            when={info().mimetype?.startsWith(
-                              "audio/",
-                            )}
-                          >
-                            <p class="relative">
-                              {" "}
-                              <span
-                                class="absolute left-0 right-0 overflow-hidden text-ellipsis
-                                  whitespace-nowrap"
-                              >
-                                <IconAudioFileFilled class="inline size-4 align-middle" />{" "}
-                                {info().fileName}
-                              </span>
-                            </p>
-                            <audio
-                              class="max-h-60 lg:max-h-72 xl:max-h-96"
-                              controls
-                              src={url}
-                            />
-                          </Match>
-                        </Switch>
-                      );
-                    }}
-                  </Show>
-
-                  <Switch>
                     <Match
-                      when={
-                        transferStatus() === "processing"
-                      }
+                      when={info().mimetype?.startsWith(
+                        "image/",
+                      )}
                     >
-                      <Show when={props.message.progress}>
-                        {(progress) => {
-                          const speed = createTransferSpeed(
-                            () => progress().received,
-                          );
+                      <p class="relative">
+                        {" "}
+                        <span
+                          class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                            whitespace-nowrap"
+                        >
+                          <IconPhotoFilled class="inline size-4 align-middle" />{" "}
+                          {info().fileName}
+                        </span>
+                      </p>
 
-                          return (
-                            <Progress
-                              value={progress().received}
-                              maxValue={progress().total}
-                              getValueLabel={({
-                                value,
-                                max,
-                              }) =>
-                                `${(
-                                  (value / max) *
-                                  100
-                                ).toFixed(
-                                  2,
-                                )}% ${formatBtyeSize(value)}/${formatBtyeSize(max)}`
-                              }
-                            >
-                              <div
-                                class="mb-1 flex justify-between gap-2 font-mono text-sm
-                                  text-muted-foreground"
-                              >
-                                <ProgressLabel>
-                                  {progress().received !==
-                                  progress().total
-                                    ? speed()
-                                      ? `${formatBtyeSize(speed()!, 2)}/s`
-                                      : `waiting...`
-                                    : progress()
-                                          .received === 0
-                                      ? `starting...`
-                                      : `loading...`}
-                                </ProgressLabel>
-                                <ProgressValueLabel />
-                              </div>
-                            </Progress>
-                          );
-                        }}
-                      </Show>
+                      <a
+                        id="image"
+                        href={url}
+                        target="_blank"
+                      >
+                        <img
+                          class="flex max-h-48 rounded-sm bg-muted hover:cursor-pointer
+                            lg:max-h-72 xl:max-h-96"
+                          src={url}
+                          onload={(ev) => {
+                            const parent =
+                              ev.currentTarget
+                                .parentElement!;
+                            parent.dataset.pswpWidth =
+                              ev.currentTarget.naturalWidth.toString();
+                            parent.dataset.pswpHeight =
+                              ev.currentTarget.naturalHeight.toString();
+                            parent.dataset.download =
+                              info().fileName;
+                          }}
+                        />
+                      </a>
                     </Match>
                     <Match
-                      when={transferStatus() === "merging"}
+                      when={info().mimetype?.startsWith(
+                        "video/",
+                      )}
                     >
-                      <p class="font-mono text-sm text-muted-foreground">
-                        merging...
+                      <p class="relative">
+                        {" "}
+                        <span
+                          class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                            whitespace-nowrap"
+                        >
+                          <IconVideoFileFilled class="inline size-4 align-middle" />{" "}
+                          {info().fileName}
+                        </span>
                       </p>
+                      <video
+                        class="max-h-60 lg:max-h-72 xl:max-h-96"
+                        controls
+                        src={url}
+                      />
+                    </Match>
+                    <Match
+                      when={info().mimetype?.startsWith(
+                        "audio/",
+                      )}
+                    >
+                      <p class="relative">
+                        {" "}
+                        <span
+                          class="absolute left-0 right-0 overflow-hidden text-ellipsis
+                            whitespace-nowrap"
+                        >
+                          <IconAudioFileFilled class="inline size-4 align-middle" />{" "}
+                          {info().fileName}
+                        </span>
+                      </p>
+                      <audio
+                        class="max-h-60 lg:max-h-72 xl:max-h-96"
+                        controls
+                        src={url}
+                      />
                     </Match>
                   </Switch>
-
-                  <div class="flex items-center justify-end gap-1">
-                    <Show when={info().file}>
-                      {(file) => (
-                        <>
-                          <p class="muted mr-auto">
-                            {formatBtyeSize(file().size, 1)}
-                          </p>
-                          <Button
-                            as="a"
-                            variant="ghost"
-                            size="icon"
-                            href={URL.createObjectURL(
-                              file(),
-                            )}
-                            download={info().fileName}
-                          >
-                            <IconDownload class="size-6" />
-                          </Button>
-                        </>
-                      )}
-                    </Show>
-                    <Show
-                      when={
-                        !transferer() &&
-                        transferStatus() !== "merging" &&
-                        !info().file &&
-                        clientInfo()?.onlineStatus ===
-                          "online"
-                      }
-                    >
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          requestFile(
-                            props.message.client,
-                            info().id,
-                          );
-                        }}
-                      >
-                        <IconRestore class="size-6" />
-                      </Button>
-                    </Show>
-                  </div>
-                </>
-              )}
+                );
+              }}
             </Show>
-          </>
-        )}
-      </Show>
 
-      <Show when={props.message.error}>
-        {(error) => (
-          <p class="text-xs text-destructive">{error()}</p>
+            <Switch fallback={<></>}>
+              <Match
+                when={
+                  props.message.transferStatus ===
+                  "processing"
+                }
+              >
+                <Show when={props.message.progress}>
+                  {(progress) => {
+                    const speed = createTransferSpeed(
+                      () => progress().received,
+                    );
+
+                    return (
+                      <Progress
+                        value={progress().received}
+                        maxValue={progress().total}
+                        getValueLabel={({ value, max }) =>
+                          `${((value / max) * 100).toFixed(
+                            2,
+                          )}% ${formatBtyeSize(value)}/${formatBtyeSize(max)}`
+                        }
+                      >
+                        <div
+                          class="mb-1 flex justify-between gap-2 font-mono text-xs
+                            text-muted-foreground"
+                        >
+                          <ProgressLabel>
+                            {progress().received !==
+                            progress().total
+                              ? speed()
+                                ? `${formatBtyeSize(speed()!, 2)}/s`
+                                : `waiting...`
+                              : progress().received === 0
+                                ? `starting...`
+                                : `loading...`}
+                          </ProgressLabel>
+                          <ProgressValueLabel />
+                        </div>
+                      </Progress>
+                    );
+                  }}
+                </Show>
+              </Match>
+              <Match
+                when={
+                  props.message.transferStatus === "merging"
+                }
+              >
+                <p class="font-mono text-sm text-muted-foreground">
+                  merging...
+                </p>
+              </Match>
+            </Switch>
+
+            <div class="flex items-center justify-end gap-1">
+              <Show when={info().file}>
+                {(file) => (
+                  <>
+                    <p class="muted mr-auto">
+                      {formatBtyeSize(file().size, 1)}
+                    </p>
+                    <Button
+                      as="a"
+                      variant="ghost"
+                      size="icon"
+                      href={URL.createObjectURL(file())}
+                      download={info().fileName}
+                    >
+                      <IconDownload class="size-6" />
+                    </Button>
+                  </>
+                )}
+              </Show>
+              <Show
+                when={
+                  !transferer() &&
+                  !["merging", "complete"].includes(
+                    props.message.transferStatus ?? "",
+                  ) &&
+                  !info().file &&
+                  clientInfo()?.onlineStatus === "online"
+                }
+              >
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => {
+                    requestFile(
+                      props.message.client,
+                      info().id,
+                    );
+                  }}
+                >
+                  <IconRestore class="size-6" />
+                </Button>
+              </Show>
+            </div>
+          </>
         )}
       </Show>
     </div>
@@ -509,45 +491,40 @@ export const MessageContent: Component<MessageCardProps> = (
               </Match>
             </Switch>
           </article>
-
-          <Show when={props.message.error}>
-            {(error) => (
-              <div class="flex items-center gap-1">
-                <p class="text-xs text-destructive">
-                  {error()}
-                </p>
-                <Show when={session()}>
-                  {(session) => (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        const sessionMessage =
-                          props.message.type === "text"
-                            ? ({
-                                ...props.message,
-                                type: "send-text",
-                              } satisfies SendTextMessage)
-                            : ({
-                                ...props.message,
-                                type: "send-file",
-                              } satisfies SendFileMessage);
-                        messageStores.setMessage(
-                          sessionMessage,
-                          session(),
-                        );
-                        session().sendMessage(
-                          sessionMessage,
-                        );
-                      }}
-                    >
-                      <IconRestore class="size-6" />
-                    </Button>
-                  )}
-                </Show>
-              </div>
-            )}
-          </Show>
+          <div class="flex gap-1">
+            <p class="text-xs text-destructive">
+              {props.message.error}
+            </p>
+            <Show when={props.message.status === "error"}>
+              <Show when={session()}>
+                {(session) => (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => {
+                      const sessionMessage =
+                        props.message.type === "text"
+                          ? ({
+                              ...props.message,
+                              type: "send-text",
+                            } satisfies SendTextMessage)
+                          : ({
+                              ...props.message,
+                              type: "send-file",
+                            } satisfies SendFileMessage);
+                      messageStores.setMessage(
+                        sessionMessage,
+                        session(),
+                      );
+                      session().sendMessage(sessionMessage);
+                    }}
+                  >
+                    <IconRestore class="size-6" />
+                  </Button>
+                )}
+              </Show>
+            </Show>
+          </div>
 
           <div
             class="flex justify-end gap-1 self-end text-xs
