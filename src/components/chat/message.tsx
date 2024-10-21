@@ -94,10 +94,6 @@ const FileMessageCard: Component<FileMessageCardProps> = (
     () => sessionService.clientInfo[props.message.client],
   );
 
-  const session = createMemo(
-    () => sessionService.sessions[props.message.client],
-  );
-
   // createEffect(async () => {
   //   const cacheData = cache();
   //   if (cacheData) {
@@ -363,6 +359,9 @@ const FileMessageCard: Component<FileMessageCardProps> = (
 export const MessageContent: Component<MessageCardProps> = (
   props,
 ) => {
+  const targetClientInfo = createMemo(
+    () => sessionService.clientInfo[props.message.target],
+  );
   const session = createMemo(
     () => sessionService.sessions[props.message.target],
   );
@@ -510,51 +509,51 @@ export const MessageContent: Component<MessageCardProps> = (
               {props.message.error}
             </p>
             <Show when={props.message.status === "error"}>
-              <Show when={session()}>
-                {(session) => (
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      let sessionMessage: SessionMessage;
+              <Show
+                when={
+                  targetClientInfo()?.onlineStatus ===
+                  "online"
+                }
+              >
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => {
+                    let sessionMessage: SessionMessage;
 
-                      if (props.message.type === "text") {
-                        sessionMessage = {
-                          id: props.message.id,
-                          type: "send-text",
-                          client: props.message.client,
-                          target: props.message.target,
-                          data: props.message.data,
-                          createdAt:
-                            props.message.createdAt,
-                        } satisfies SendTextMessage;
-                      } else {
-                        sessionMessage = {
-                          id: props.message.id,
-                          type: "send-file",
-                          client: props.message.client,
-                          target: props.message.target,
-                          fid: props.message.fid,
-                          fileName: props.message.fileName,
-                          mimeType: props.message.mimeType,
-                          chunkSize:
-                            props.message.chunkSize,
-                          createdAt:
-                            props.message.createdAt,
-                          fileSize: props.message.fileSize,
-                        } satisfies SendFileMessage;
-                      }
+                    if (props.message.type === "text") {
+                      sessionMessage = {
+                        id: props.message.id,
+                        type: "send-text",
+                        client: props.message.client,
+                        target: props.message.target,
+                        data: props.message.data,
+                        createdAt: props.message.createdAt,
+                      } satisfies SendTextMessage;
+                    } else {
+                      sessionMessage = {
+                        id: props.message.id,
+                        type: "send-file",
+                        client: props.message.client,
+                        target: props.message.target,
+                        fid: props.message.fid,
+                        fileName: props.message.fileName,
+                        mimeType: props.message.mimeType,
+                        chunkSize: props.message.chunkSize,
+                        createdAt: props.message.createdAt,
+                        fileSize: props.message.fileSize,
+                      } satisfies SendFileMessage;
+                    }
 
-                      messageStores.setMessage(
-                        sessionMessage,
-                        session(),
-                      );
-                      session().sendMessage(sessionMessage);
-                    }}
-                  >
-                    <IconRestore class="size-6" />
-                  </Button>
-                )}
+                    messageStores.setMessage(
+                      sessionMessage,
+                      session(),
+                    );
+                    session().sendMessage(sessionMessage);
+                  }}
+                >
+                  <IconRestore class="size-6" />
+                </Button>
               </Show>
             </Show>
           </div>
