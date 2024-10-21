@@ -364,6 +364,7 @@ class MessageStores {
           target: sessionMsg.client,
         } satisfies CheckMessage);
         this.setMessages(index, "error", undefined);
+        this.setMessageDB(this.messages[index]);
       } else {
         if (message.status === "received") return;
 
