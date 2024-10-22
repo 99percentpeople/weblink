@@ -235,6 +235,7 @@ export default function File() {
     }),
     columnHelper.display({
       id: "actions",
+      header: () => <div class="w-9" />,
       cell: ({ row }) => (
         <>
           <DropdownMenu>
