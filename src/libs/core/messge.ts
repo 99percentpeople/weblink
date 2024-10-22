@@ -582,6 +582,7 @@ class MessageStores {
           controller.abort();
           setter((state) => {
             state.transferStatus = "complete";
+            state.error = undefined;
           });
         }
       },

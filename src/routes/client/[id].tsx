@@ -255,8 +255,9 @@ export default function ClientPage(
                       {(session) => (
                         <DropdownMenuItem
                           class="gap-2"
-                          onSelect={() => {
-                            session().connect();
+                          onSelect={async () => {
+                            await session().listen();
+                            await session().connect();
                           }}
                         >
                           <IconConnectWithoutContract class="size-4" />

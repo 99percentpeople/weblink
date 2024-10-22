@@ -499,7 +499,7 @@ export default function File() {
               variant="outline"
               class="ml-auto gap-2"
             >
-              <IconPageInfo class="size-6" />
+              <IconPageInfo class="size-4" />
               <span class="text-nowrap">
                 {t("common.action.view")}
               </span>

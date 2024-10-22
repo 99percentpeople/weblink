@@ -510,7 +510,6 @@ export class PeerSession {
     const pc = this.peerConnection;
     if (!pc) {
       console.warn(`listen failed`);
-
       return;
     }
 
