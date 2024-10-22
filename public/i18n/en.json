@@ -149,10 +149,16 @@
       "auto_join": "Auto Join Next Time"
     },
     "file_table": {
-      "name": "Name",
-      "size": "Size",
-      "last_modified": "Last Modified",
-      "status": "Status"
+      "columns": {
+        "name": "Name",
+        "size": "Size",
+        "last_modified": "Last Modified",
+        "status": "Status",
+        "created_at": "Created At",
+        "mime_type": "MIME Type"
+      },
+      "toggle_columns": "Toggle Columns",
+      "no_data": "No Data"
     },
     "confirm_delete_files_dialog": {
       "title": "Delete Files",
@@ -209,7 +215,12 @@
       "close": "Close",
       "change": "Change",
       "preview": "Preview",
-      "send": "Send"
+      "send": "Send",
+      "view": "View",
+      "reset": "Reset",
+      "asc": "Asc",
+      "desc": "Desc",
+      "hide": "Hide"
     },
     "notification": {
       "copy_success": "Link copied",

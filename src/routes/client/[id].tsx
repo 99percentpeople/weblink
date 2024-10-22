@@ -1,18 +1,15 @@
 import {
   RouteSectionProps,
   useNavigate,
-  useParams,
 } from "@solidjs/router";
 import { useWebRTC } from "@/libs/core/rtc-context";
 import {
   createEffect,
   createMemo,
   createSignal,
-  For,
   Index,
   onMount,
   Show,
-  splitProps,
 } from "solid-js";
 
 import { Button } from "@/components/ui/button";
@@ -32,11 +29,6 @@ import { createDialog } from "@/components/dialogs/dialog";
 
 import { FloatingButton } from "@/components/floating-button";
 import { createElementSize } from "@solid-primitives/resize-observer";
-import IconChevronLeft from "@material-design-icons/svg/outlined/chevron_left.svg?component-solid";
-import IconArrowDownward from "@material-design-icons/svg/outlined/arrow_downward.svg?component-solid";
-import IconPlaceItem from "@material-symbols/svg-700/outlined/place_item.svg?component-solid";
-import IconClose from "@material-symbols/svg-700/outlined/close.svg?component-solid";
-import IconMenu from "@material-design-icons/svg/outlined/menu.svg?component-solid";
 
 import PhotoSwipeLightbox from "photoswipe/lightbox";
 import {
@@ -57,9 +49,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  IconArrowDownward,
+  IconChevronLeft,
+  IconClose,
   IconConnectWithoutContract,
   IconDataInfoAlert,
   IconDelete,
+  IconMenu,
+  IconPlaceItem,
 } from "@/components/icons";
 import { createComfirmDeleteClientDialog } from "@/components/ui/confirm-delete-dialog";
 import { t } from "@/i18n";
@@ -89,7 +86,7 @@ export default function ClientPage(
         t("common.client_info_dialog.title", {
           name: client()?.name,
         }),
-      content: (props) => (
+      content: () => (
         <Show
           when={clientInfo()}
           fallback={t("common.client_info_dialog.leave")}

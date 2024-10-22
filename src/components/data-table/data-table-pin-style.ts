@@ -27,7 +27,7 @@ export function getCommonPinningStyles<TData>(
         : undefined,
 
     position: isPinned ? "sticky" : "relative",
-    width: `${column.getSize()}px`,
+
     "z-index": isPinned ? 1 : 0,
   };
 }

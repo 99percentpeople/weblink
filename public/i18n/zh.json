@@ -174,10 +174,16 @@
       "content": "确认重置选项？"
     },
     "file_table": {
-      "name": "名称",
-      "size": "大小",
-      "last_modified": "最后修改",
-      "status": "状态"
+      "columns": {
+        "name": "名称",
+        "size": "大小",
+        "last_modified": "最后修改",
+        "status": "状态",
+        "created_at": "创建时间",
+        "mime_type": "MIME 类型"
+      },
+      "toggle_columns": "切换列",
+      "no_data": "没有数据"
     },
     "client_info_dialog": {
       "title": "客户端 {{name}} 信息",
@@ -211,7 +217,12 @@
       "change": "更改",
       "open": "打开",
       "preview": "预览",
-      "send": "发送"
+      "send": "发送",
+      "view": "查看",
+      "reset": "重置",
+      "asc": "升序",
+      "desc": "降序",
+      "hide": "隐藏"
     },
     "about_dialog": {
       "title": "关于 Weblink",

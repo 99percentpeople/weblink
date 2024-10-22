@@ -257,6 +257,7 @@ export const WebRTCProvider: Component<
               mimetype: message.mimeType,
               lastModified: message.lastModified,
               chunkSize: message.chunkSize,
+              createdAt: message.createdAt,
               id: message.fid,
             });
             const transferer =
@@ -603,6 +604,7 @@ export const WebRTCProvider: Component<
       lastModified: message.lastModified,
       chunkSize: message.chunkSize,
       id: message.fid,
+      createdAt: message.createdAt,
       file: file,
     });
 

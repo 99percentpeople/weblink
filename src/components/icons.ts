@@ -3,6 +3,7 @@ import IconMoreHoriz from "@material-symbols/svg-400/outlined/more_horiz-fill.sv
 import IconSearch700 from "@material-symbols/svg-700/outlined/search.svg?component-solid";
 import IconClose700 from "@material-symbols/svg-700/outlined/close.svg?component-solid";
 import IconAttachFile from "@material-design-icons/svg/outlined/attach_file.svg?component-solid";
+import IconArrowUpward from "@material-symbols/svg-400/outlined/arrow_upward.svg?component-solid";
 import IconArrowDownward from "@material-design-icons/svg/outlined/arrow_downward.svg?component-solid";
 import IconSend from "@material-design-icons/svg/outlined/send.svg?component-solid";
 import IconMenu from "@material-design-icons/svg/outlined/menu.svg?component-solid";
@@ -44,6 +45,11 @@ import IconPreview from "@material-symbols/svg-400/outlined/preview.svg?componen
 import IconCheck from "@material-symbols/svg-400/outlined/check.svg?component-solid";
 import IconDoneAll from "@material-symbols/svg-400/outlined/done_all.svg?component-solid";
 import IconClose from "@material-symbols/svg-400/outlined/close.svg?component-solid";
+import IconChevronLeft from "@material-design-icons/svg/outlined/chevron_left.svg?component-solid";
+import IconPlaceItem from "@material-symbols/svg-700/outlined/place_item.svg?component-solid";
+import IconPageInfo from "@material-symbols/svg-400/outlined/page_info.svg?component-solid";
+import IconUnfoldMore from "@material-symbols/svg-400/outlined/unfold_more.svg?component-solid";
+import IconVisibilityOff from "@material-symbols/svg-400/outlined/visibility_off.svg?component-solid";
 export {
   IconDownload,
   IconDelete,
@@ -51,6 +57,7 @@ export {
   IconSearch700,
   IconAttachFile,
   IconArrowDownward,
+  IconArrowUpward,
   IconSend,
   IconMenu,
   IconRestore,
@@ -91,4 +98,9 @@ export {
   IconCheck,
   IconDoneAll,
   IconClose,
+  IconChevronLeft,
+  IconPlaceItem,
+  IconPageInfo,
+  IconUnfoldMore,
+  IconVisibilityOff,
 };

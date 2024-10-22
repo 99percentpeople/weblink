@@ -18,6 +18,7 @@ export interface ChunkMetaData {
 
 export interface FileMetaData extends ChunkMetaData {
   file?: File;
+  createdAt?: number;
 }
 
 export type ChunkCacheEventMap = {
