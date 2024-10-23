@@ -48,11 +48,28 @@ export interface ClientService {
 
 export type Unsubscribe = () => void;
 
+export type SignalingServiceEventMap = {
+  signal: ClientSignal;
+};
+
 export interface SignalingService {
   sendSignal: (signal: RawSignal) => Promise<void>;
-  listenForSignal: (
-    callback: (signal: ClientSignal) => void,
-  ) => void;
+  addEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+
+  
+  removeEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | EventListenerOptions,
+  ): void;
 
   sessionId: SessionID;
   clientId: ClientID;

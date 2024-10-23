@@ -1,5 +1,8 @@
 import { getConfiguration, handleOffer } from "./store";
-import { SignalingService } from "./services/type";
+import {
+  ClientSignal,
+  SignalingService,
+} from "./services/type";
 import {
   EventHandler,
   MultiEventEmitter,
@@ -111,15 +114,14 @@ export class PeerSession {
 
     this.controller = new AbortController();
     this.controller.signal.addEventListener("abort", () => {
-      if (this.peerConnection) {
-        this.makingOffer = false;
-        this.peerConnection.close();
-        this.peerConnection = null;
-
-        this.dispatchEvent("disconnect", undefined);
-      }
+      this.makingOffer = false;
       this.channels.length = 0;
       this.messageChannel = null;
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+        this.dispatchEvent("disconnect", undefined);
+      }
     });
 
     this.peerConnection = pc;
@@ -238,6 +240,9 @@ export class PeerSession {
         console.log(
           `${this.clientId} current signalingstatechange state is ${pc.signalingState}`,
         );
+        if (pc.signalingState === "closed") {
+          this.disconnect();
+        }
       },
       {
         signal: this.controller.signal,
@@ -291,63 +296,77 @@ export class PeerSession {
   }
 
   async listen() {
-    const pc = await this.createConnection();
-    if (!pc) {
-      return;
-    }
-    this.sender.listenForSignal(async (signal) => {
-      console.log(
-        `client received signal with type ${signal.type}`,
-      );
+    await this.createConnection();
 
-      try {
-        const data = JSON.parse(signal.data);
-        if (signal.type === "offer") {
-          const offerCollision =
-            this.makingOffer ||
-            pc.signalingState !== "stable";
-          this.ignoreOffer = !this.polite && offerCollision;
-          if (this.ignoreOffer) {
-            console.log("Offer ignored due to collision");
-            return;
-          }
-
-          await pc.setRemoteDescription(
-            new RTCSessionDescription({
-              type: "offer",
-              sdp: data.sdp,
-            }),
+    this.sender.addEventListener(
+      "signal",
+      async (ev) => {
+        const pc = this.peerConnection;
+        if (!pc) {
+          console.warn(
+            `peer connection for session ${this.sessionId} is not created`,
           );
-
-          await pc.setLocalDescription();
-          if (pc.localDescription)
-            this.sender.sendSignal({
-              type: pc.localDescription.type,
-              data: JSON.stringify({
-                sdp: pc.localDescription.sdp,
-              }),
-            });
-        } else if (signal.type === "answer") {
-          await pc.setRemoteDescription(
-            new RTCSessionDescription({
-              type: "answer",
-              sdp: data.sdp,
-            }),
-          );
-        } else if (signal.type === "candidate") {
-          const candidate = new RTCIceCandidate(
-            data.candidate,
-          );
-          await pc
-            .addIceCandidate(candidate)
-            .catch((err) => {
-              if (!this.ignoreOffer) throw err;
-            });
+          return;
         }
-      } catch (err) {
-        console.error(err);
-      }
-    });
+        console.log(
+          `client received signal with type ${ev.detail.type}`,
+        );
+
+        try {
+          const signal = ev.detail;
+          if (signal.type === "offer") {
+            const offerCollision =
+              this.makingOffer ||
+              pc.signalingState !== "stable";
+            this.ignoreOffer =
+              !this.polite && offerCollision;
+            if (this.ignoreOffer) {
+              console.warn(
+                "Offer ignored due to collision",
+              );
+              return;
+            }
+
+            await pc
+              .setRemoteDescription(
+                new RTCSessionDescription({
+                  type: "offer",
+                  sdp: signal.data.sdp,
+                }),
+              )
+              .then(() => pc.setLocalDescription())
+              .then(() => {
+                if (pc.localDescription)
+                  this.sender.sendSignal({
+                    type: pc.localDescription.type,
+                    data: JSON.stringify({
+                      sdp: pc.localDescription.sdp,
+                    }),
+                  });
+              });
+          } else if (signal.type === "answer") {
+            await pc.setRemoteDescription(
+              new RTCSessionDescription({
+                type: "answer",
+                sdp: signal.data.sdp,
+              }),
+            );
+          } else if (signal.type === "candidate") {
+            const candidate = new RTCIceCandidate(
+              signal.data.candidate,
+            );
+            await pc
+              .addIceCandidate(candidate)
+              .catch((err) => {
+                if (!this.ignoreOffer) throw err;
+              });
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      },
+      { signal: this.controller?.signal },
+    );
   }
 
   async createChannel(label: string) {
@@ -567,6 +586,7 @@ export class PeerSession {
       pc.addEventListener(
         "connectionstatechange",
         onConnectionStateChange,
+        { signal: this.controller?.signal },
       );
 
       const onIceStateChange = () => {
@@ -597,6 +617,7 @@ export class PeerSession {
       pc.addEventListener(
         "icestatechange",
         onIceStateChange,
+        { signal: this.controller?.signal },
       );
 
       this.controller?.signal.addEventListener(
@@ -604,6 +625,7 @@ export class PeerSession {
         () => {
           reject(new Error("connect aborted"));
         },
+        { once: true },
       );
 
       if (!this.makingOffer) {

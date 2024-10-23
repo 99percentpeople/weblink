@@ -36,7 +36,6 @@ import {
 } from "./messge";
 import { sessionService } from "../services/session-service";
 import { WebSocketClientService } from "./services/client/ws-client-service";
-import { SseClientService } from "./services/client/sse-client-service";
 import { appOptions } from "@/options";
 import { aw } from "vitest/dist/chunks/reporters.DAfKSDh5.js";
 
@@ -50,8 +49,6 @@ function getServiceConstructor() {
       return FirebaseClientService;
     case "WEBSOCKET":
       return WebSocketClientService;
-    case "SSE":
-      return SseClientService;
     default:
       throw Error("invalid backend type");
   }

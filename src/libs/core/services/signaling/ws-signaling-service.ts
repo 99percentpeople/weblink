@@ -4,6 +4,7 @@ import {
   RawSignal,
   ClientSignal,
   SignalingService,
+  SignalingServiceEventMap,
 } from "../type";
 
 import { SessionID } from "../../type";
@@ -11,17 +12,21 @@ import {
   encryptData,
   decryptData,
 } from "../../utils/encrypt";
+import {
+  EventHandler,
+  MultiEventEmitter,
+} from "@/libs/utils/event-emitter";
 
 export class WebSocketSignalingService
   implements SignalingService
 {
+  private eventEmitter: MultiEventEmitter<SignalingServiceEventMap> =
+    new MultiEventEmitter();
   private socket: WebSocket;
   private _sessionId: SessionID;
   private _clientId: string;
   private _targetClientId: string;
   private password: string | null = null;
-  private listeners: Array<(signal: ClientSignal) => void> =
-    [];
 
   constructor(
     socket: WebSocket,
@@ -37,6 +42,41 @@ export class WebSocketSignalingService
 
     // Handle incoming messages
     this.socket.addEventListener("message", this.onMessage);
+  }
+
+  addEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.addEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  removeEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | EventListenerOptions,
+  ): void {
+    return this.eventEmitter.removeEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  dispatchEvent<K extends keyof SignalingServiceEventMap>(
+    event: K,
+    data: SignalingServiceEventMap[K],
+  ): boolean {
+    return this.eventEmitter.dispatchEvent(event, data);
   }
 
   setSocket(socket: WebSocket) {
@@ -61,6 +101,10 @@ export class WebSocketSignalingService
   }
 
   async sendSignal(signal: RawSignal): Promise<void> {
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      throw new Error("socket is not open");
+    }
+
     if (this.password) {
       signal.data = await encryptData(
         this.password,
@@ -81,42 +125,37 @@ export class WebSocketSignalingService
     );
   }
 
-  listenForSignal(
-    callback: (signal: ClientSignal) => void,
-  ) {
-    this.listeners.push(callback);
-  }
-
   private onMessage = async (event: MessageEvent) => {
     const signal: RawSignal = JSON.parse(event.data);
     if (signal.type !== "message") return;
 
-    const data = signal.data as ClientSignal;
+    const message = signal.data as ClientSignal;
     // Ignore signals sent by this instance
-    if (data.sessionId === this._sessionId) return;
+    if (message.sessionId === this._sessionId) return;
 
     // Check if the signal is intended for this client
     if (
-      data.targetClientId &&
-      data.targetClientId !== this._clientId
+      message.targetClientId &&
+      message.targetClientId !== this._clientId
     )
       return;
 
     // Check if the signal is from the target client
-    if (data.clientId !== this._targetClientId) return;
+    if (message.clientId !== this._targetClientId) return;
 
     if (this.password) {
-      data.data = await decryptData(
+      message.data = await decryptData(
         this.password,
-        data.data,
+        message.data,
       );
+      message.data = JSON.parse(message.data);
     }
 
-    this.listeners.forEach((callback) => callback(data));
+    this.dispatchEvent("signal", message);
   };
 
   destroy() {
-    this.listeners = [];
+    this.eventEmitter.clearListeners();
     this.socket.removeEventListener(
       "message",
       this.onMessage,

@@ -16,23 +16,28 @@ import {
   ClientSignal,
   SignalingService,
   Unsubscribe,
+  SignalingServiceEventMap,
 } from "../type";
 import { SessionID } from "../../type";
 import {
   decryptData,
   encryptData,
 } from "../../utils/encrypt";
+import {
+  EventHandler,
+  MultiEventEmitter,
+} from "@/libs/utils/event-emitter";
 
 export class FirebaseSignalingService
   implements SignalingService
 {
+  private eventEmitter =
+    new MultiEventEmitter<SignalingServiceEventMap>();
   private signalsRef;
   private _sessionId: string;
   private db = getDatabase(app);
   private _clientId: string;
   private _targetClientId: string;
-  private unsubscribeCallbacks: Array<Unsubscribe> =
-    new Array();
   private password: string | null = null;
   constructor(
     roomId: string,
@@ -48,6 +53,9 @@ export class FirebaseSignalingService
       `rooms/${roomId}/signals`,
     );
     this.password = password;
+    this.listenForSignal((signal) => {
+      this.dispatchEvent("signal", signal);
+    });
   }
 
   get sessionId(): SessionID {
@@ -60,6 +68,40 @@ export class FirebaseSignalingService
 
   get targetClientId(): string {
     return this._targetClientId;
+  }
+
+  addEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this.eventEmitter.addEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  removeEventListener<
+    K extends keyof SignalingServiceEventMap,
+  >(
+    event: K,
+    callback: EventHandler<SignalingServiceEventMap[K]>,
+    options?: boolean | EventListenerOptions,
+  ): void {
+    return this.eventEmitter.removeEventListener(
+      event,
+      callback,
+      options,
+    );
+  }
+
+  private dispatchEvent<
+    K extends keyof SignalingServiceEventMap,
+  >(event: K, data: SignalingServiceEventMap[K]): boolean {
+    return this.eventEmitter.dispatchEvent(event, data);
   }
 
   async sendSignal({
@@ -81,7 +123,7 @@ export class FirebaseSignalingService
     onDisconnect(singnalRef).remove();
   }
 
-  listenForSignal(
+  private listenForSignal(
     callback: (signal: ClientSignal) => void,
   ) {
     const unsubscribe = onChildAdded(
@@ -107,7 +149,6 @@ export class FirebaseSignalingService
         callback(data);
       },
     );
-    this.unsubscribeCallbacks.push(unsubscribe);
   }
 
   async getAllSignals(): Promise<ClientSignal[]> {
@@ -145,7 +186,7 @@ export class FirebaseSignalingService
   }
 
   async destroy() {
-    this.unsubscribeCallbacks.forEach((cb) => cb());
+    this.eventEmitter.clearListeners();
     await this.clearSignals();
   }
 }

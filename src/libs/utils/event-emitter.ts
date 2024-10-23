@@ -146,6 +146,10 @@ export class MultiEventEmitter<
     return this.eventTarget.dispatchEvent(event);
   }
 
+  clearListeners(): void {
+    this.listeners.clear();
+  }
+
   // 辅助方法
   private normalizeOptions(
     options?: boolean | AddEventListenerOptions,
