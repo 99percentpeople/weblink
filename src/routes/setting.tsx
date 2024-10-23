@@ -159,22 +159,8 @@ export default function Settings() {
                 "setting.appearance.background_image.title",
               )}
             </Label>
-            <div class="flex items-end justify-end gap-4">
-              <Button
-                variant="destructive"
-                class="text-nowrap"
-                disabled={!backgroundImage()}
-                onClick={() => {
-                  setAppOptions(
-                    "backgroundImage",
-                    undefined!,
-                  );
-                }}
-              >
-                <IconDelete class="mr-2 size-4" />
-                {t("common.action.delete")}
-              </Button>{" "}
-              <label class="hover:cursor-pointer">
+            <div class="flex w-full flex-col items-end gap-4">
+              <label class="w-full hover:cursor-pointer">
                 <Input
                   type="file"
                   accept="image/*"
@@ -204,8 +190,8 @@ export default function Settings() {
                   when={backgroundImage()}
                   fallback={
                     <div
-                      class="size-24 place-content-center rounded-md bg-muted text-center
-                        text-xs text-muted-foreground"
+                      class="h-24 place-content-center rounded-md bg-muted text-center
+                        text-xs text-muted-foreground md:h-32"
                     >
                       {t(
                         "setting.appearance.background_image.click_to_select",
@@ -213,15 +199,23 @@ export default function Settings() {
                     </div>
                   }
                 >
-                  {(image) => (
-                    <img
-                      src={image()}
-                      class="relative size-24 rounded-md object-cover shadow
-                        before:absolute"
-                    />
-                  )}
+                  <div class="bg-image h-24 rounded-md md:h-32" />
                 </Show>
               </label>
+              <Button
+                variant="destructive"
+                class="text-nowrap"
+                disabled={!backgroundImage()}
+                onClick={() => {
+                  setAppOptions(
+                    "backgroundImage",
+                    undefined!,
+                  );
+                }}
+              >
+                <IconDelete class="mr-2 size-4" />
+                {t("common.action.delete")}
+              </Button>
             </div>
             <p class="muted">
               {t(
@@ -235,17 +229,17 @@ export default function Settings() {
             maxValue={1}
             step={0.01}
             defaultValue={[
-              appOptions.backgroundImageOpacity,
+              1 - appOptions.backgroundImageOpacity,
             ]}
             class="gap-2"
             getValueLabel={({ values }) =>
               `${(values[0] * 100).toFixed(0)}%`
             }
-            value={[appOptions.backgroundImageOpacity]}
+            value={[1 - appOptions.backgroundImageOpacity]}
             onChange={(value) => {
               setAppOptions(
                 "backgroundImageOpacity",
-                value[0],
+                1 - value[0],
               );
             }}
           >

@@ -260,6 +260,10 @@ export default function App(props: RouteSectionProps) {
       <MetaProvider>
         <Style>
           {`
+          :root {
+            --background-image: url(${backgroundImage()});
+            --background-image-opacity: ${appOptions.backgroundImageOpacity};
+          }
           body {
             background-image: url(${backgroundImage()});
           }
