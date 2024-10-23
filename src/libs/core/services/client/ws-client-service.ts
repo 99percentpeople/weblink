@@ -66,6 +66,17 @@ export class WebSocketClientService
       },
       { signal: this.controller.signal },
     );
+    document.addEventListener(
+      "visibilitychange",
+      (ev) => {
+        if (document.visibilityState === "visible") {
+          if (this.socket?.readyState !== WebSocket.OPEN) {
+            this.handleDisconnect();
+          }
+        }
+      },
+      { signal: this.controller.signal },
+    );
   }
 
   private dispatchEvent<
@@ -204,6 +215,7 @@ export class WebSocketClientService
   }
 
   private handleDisconnect = () => {
+    if (this.socket?.readyState === WebSocket.OPEN) return;
     if (
       this.reconnectAttempts < this.maxReconnectAttempts
     ) {
@@ -221,6 +233,11 @@ export class WebSocketClientService
   private async reconnect() {
     try {
       await this.initialize(true);
+
+      this.signalingServices.forEach((service) => {
+        service.setSocket(this.socket!);
+      });
+
       this.reconnectAttempts = 0;
       console.log(`Reconnect success`);
     } catch (error) {

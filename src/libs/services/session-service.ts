@@ -80,7 +80,7 @@ class SessionService {
       );
       return;
     }
-    session.destory();
+    session.disconnect();
     this.service?.removeSender(target);
     this.setClientInfo(target, undefined!);
     this.setSessions(target, undefined!);
@@ -159,9 +159,14 @@ class SessionService {
     );
 
     session.addEventListener(
-      "reconnecting",
-      async () => {
-        await this.clientService?.createClient();
+      "disconnect",
+      () => {
+        this.setClientInfo(
+          client.clientId,
+          "onlineStatus",
+          "offline",
+        );
+        session.listen();
       },
       { signal: controller.signal },
     );
@@ -169,8 +174,11 @@ class SessionService {
     session.addEventListener(
       "error",
       (ev) => {
-        controller.abort();
-        console.error(ev.detail);
+        session.disconnect();
+        console.error(
+          `session ${client.clientId} error`,
+          ev.detail,
+        );
       },
       { signal: controller.signal },
     );
@@ -184,7 +192,7 @@ class SessionService {
 
   destoryAllSession() {
     Object.values(this.sessions).forEach((session) =>
-      session.destory(),
+      session.close(),
     );
     this.setSessions(reconcile({}));
     this.setClientInfo(reconcile({}));

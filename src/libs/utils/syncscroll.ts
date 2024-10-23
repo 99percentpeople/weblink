@@ -8,8 +8,7 @@ interface SyncScrollElement extends HTMLElement {
 const names: { [key: string]: SyncScrollElement[] } = {};
 
 function reset(): void {
-  const elems =
-    document.getElementsByClassName("syncscroll");
+  const elems = document.querySelectorAll("[data-sync-scroll]");
 
   // Clearing existing listeners
   for (const name in names) {

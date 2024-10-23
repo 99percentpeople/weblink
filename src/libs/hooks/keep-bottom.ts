@@ -32,14 +32,13 @@ export const keepBottom = (
       });
     };
 
-    // window.clearTimeout(timer);
     window.setTimeout(scroll, delay);
   }
 
   let observer: MutationObserver = new MutationObserver(
     (mutationsList) => {
       if (enable()) {
-        toBottom(10, false);
+        toBottom(0, true);
       }
     },
   );
@@ -48,7 +47,7 @@ export const keepBottom = (
     if (scrollElement instanceof Document) {
       const onResize = () => {
         if (enable()) {
-          toBottom(0, true);
+          toBottom(10, true);
         }
       };
 
@@ -59,12 +58,10 @@ export const keepBottom = (
     }
 
     if (scrollElement) {
-      // await Promise.resolve();
-      toBottom(0, true);
-
       observer.observe(scrollElement, {
         childList: true,
         subtree: true,
+        attributes: true,
       });
 
       onCleanup(() => {
@@ -119,14 +116,11 @@ export const createScrollEnd = (
       }
     };
     onScroll();
-    scrollElement.addEventListener("scrollend", onScroll);
-    // 监听 resize 事件，因为地址栏显示/隐藏会触发 resize
+    scrollElement.addEventListener("scroll", onScroll);
+    // listen resize event, because address bar show/hide will trigger resize
     // window.addEventListener("resize", onScroll);
     onCleanup(() => {
-      scrollElement.removeEventListener(
-        "scrollend",
-        onScroll,
-      );
+      scrollElement.removeEventListener("scroll", onScroll);
       // window.removeEventListener("resize", onScroll);
     });
   });

@@ -39,6 +39,15 @@ export class WebSocketSignalingService
     this.socket.addEventListener("message", this.onMessage);
   }
 
+  setSocket(socket: WebSocket) {
+    this.socket.removeEventListener(
+      "message",
+      this.onMessage,
+    );
+    this.socket = socket;
+    this.socket.addEventListener("message", this.onMessage);
+  }
+
   get sessionId(): SessionID {
     return this._sessionId;
   }

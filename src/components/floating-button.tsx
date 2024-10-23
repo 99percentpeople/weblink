@@ -13,6 +13,7 @@ export interface FloatingButtonProps
   extends ComponentProps<"button"> {
   isVisible: boolean;
   delay: number;
+  duration: number;
 }
 
 export const FloatingButton = (
@@ -20,15 +21,27 @@ export const FloatingButton = (
 ) => {
   const [local, other] = splitProps(props, [
     "class",
-    "delay",
+    "duration",
     "isVisible",
+    "delay",
   ]);
 
   const [isChanging, setIsChanging] =
     createSignal<boolean>(false);
 
   let timeout: number | undefined;
-  const isVisible = createMemo(() => props.isVisible);
+  const [isVisible, setIsVisible] = createSignal(
+    props.isVisible,
+  );
+
+  createEffect(() => {
+    if (isVisible() !== props.isVisible) {
+      setTimeout(() => {
+        setIsVisible(props.isVisible);
+      }, local.delay ?? 0);
+    }
+  });
+
   createEffect(() => {
     setIsChanging(true);
 
@@ -39,16 +52,16 @@ export const FloatingButton = (
     if (isVisible()) {
       timeout = window.setTimeout(() => {
         setIsChanging(false);
-      }, local.delay);
+      }, local.duration);
     } else {
       timeout = window.setTimeout(() => {
         setIsChanging(false);
-      }, local.delay - 50);
+      }, local.duration - 50);
     }
   });
 
   return (
-    <Show when={isChanging() || props.isVisible}>
+    <Show when={isChanging() || isVisible()}>
       <Button
         data-expanded={
           isChanging() && isVisible() ? true : undefined

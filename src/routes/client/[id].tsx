@@ -7,7 +7,9 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  For,
   Index,
+  onCleanup,
   onMount,
   Show,
 } from "solid-js";
@@ -61,6 +63,7 @@ import {
 import { createComfirmDeleteClientDialog } from "@/components/ui/confirm-delete-dialog";
 import { t } from "@/i18n";
 import { ConnectionBadge } from "@/components/chat/clientlist";
+import { toast } from "solid-sonner";
 export default function ClientPage(
   props: RouteSectionProps,
 ) {
@@ -135,12 +138,14 @@ export default function ClientPage(
     const pos = position();
     if (!pos) return true;
 
-    return pos.height <= pos.bottom + 1;
+    return pos.height <= pos.bottom + 10;
   });
 
   const [enable, setEnable] = createSignal(true);
   createEffect(() => {
-    setEnable(isBottom());
+    if (enable() !== isBottom()) {
+      setEnable(isBottom());
+    }
   });
 
   const messages = createMemo<StoreMessage[]>(
@@ -158,9 +163,11 @@ export default function ClientPage(
   onMount(() => {
     toBottom = keepBottom(document, enable);
 
+    toBottom(10, true);
+
     createEffect(() => {
-      if (props.location.pathname) {
-        toBottom(0, true);
+      if (props.location.pathname !== "/") {
+        toBottom(10, true);
       }
     });
   });
@@ -186,6 +193,7 @@ export default function ClientPage(
                 toBottom?.(0, false);
               }}
               delay={150}
+              duration={150}
               isVisible={!enable()}
               class="fixed z-50 size-12 rounded-full shadow-md backdrop-blur
                 data-[expanded]:animate-in data-[closed]:animate-out
@@ -247,23 +255,33 @@ export default function ClientPage(
                     </DropdownMenuItem>
                     <Show
                       when={
-                        sessionService.sessions[
-                          client().clientId
-                        ]
+                        clientInfo()?.onlineStatus ===
+                        "offline"
                       }
                     >
-                      {(session) => (
-                        <DropdownMenuItem
-                          class="gap-2"
-                          onSelect={async () => {
-                            await session().listen();
-                            await session().connect();
-                          }}
-                        >
-                          <IconConnectWithoutContract class="size-4" />
-                          {t("chat.menu.connect")}
-                        </DropdownMenuItem>
-                      )}
+                      <DropdownMenuItem
+                        class="gap-2"
+                        onSelect={async () => {
+                          const session =
+                            sessionService.sessions[
+                              client().clientId
+                            ];
+                          if (session) {
+                            try {
+                              await session.listen();
+                              await session.connect();
+                            } catch (error) {
+                              console.error(error);
+                              if (error instanceof Error) {
+                                toast.error(error.message);
+                              }
+                            }
+                          }
+                        }}
+                      >
+                        <IconConnectWithoutContract class="size-4" />
+                        {t("chat.menu.connect")}
+                      </DropdownMenuItem>
                     </Show>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -333,8 +351,7 @@ export default function ClientPage(
               }}
             >
               <ul
-                class="flex flex-col gap-2 p-2 pb-[15%] pt-[15%] lg:pb-[10%]
-                  lg:pt-[10%] xl:pb-[5%] xl:pt-[5%]"
+                class="flex flex-col gap-2 p-2"
                 ref={(ref) => {
                   onMount(() => {
                     const lightbox = new PhotoSwipeLightbox(
@@ -396,11 +413,18 @@ export default function ClientPage(
                   });
                 }}
               >
-                <Index each={messages()}>
-                  {(message) => (
-                    <MessageContent message={message()} />
+                <For each={messages()}>
+                  {(message, index) => (
+                    <MessageContent
+                      message={message}
+                      class={cn(
+                        "transition-all",
+                        index() === messages().length - 1 &&
+                          "animate-message mb-20",
+                      )}
+                    />
                   )}
-                </Index>
+                </For>
               </ul>
             </DropArea>
             <Show

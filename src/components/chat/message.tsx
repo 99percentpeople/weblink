@@ -69,7 +69,7 @@ import { t } from "@/i18n";
 import { createSendItemPreviewDialog } from "../preview-dialog";
 import { toast } from "solid-sonner";
 import { Dynamic } from "solid-js/web";
-export interface MessageCardProps {
+export interface MessageCardProps extends ComponentProps<"li"> {
   message: StoreMessage;
 }
 
@@ -359,11 +359,12 @@ const FileMessageCard: Component<FileMessageCardProps> = (
 export const MessageContent: Component<MessageCardProps> = (
   props,
 ) => {
+  const [local, other] = splitProps(props, ["class", "message"]);
   const targetClientInfo = createMemo(
-    () => sessionService.clientInfo[props.message.target],
+    () => sessionService.clientInfo[local.message.target],
   );
   const session = createMemo(
-    () => sessionService.sessions[props.message.target],
+    () => sessionService.sessions[local.message.target],
   );
   const contentOptions = {
     text: (props: {
@@ -373,9 +374,9 @@ export const MessageContent: Component<MessageCardProps> = (
       <ContextMenuItem
         class="gap-2"
         onSelect={() => {
-          if (props.message.type === "text")
+          if (local.message.type === "text")
             navigator.clipboard.writeText(
-              props.message.data,
+              local.message.data,
             );
 
           props.close();
@@ -393,9 +394,9 @@ export const MessageContent: Component<MessageCardProps> = (
         <ContextMenuItem
           class="gap-2"
           onSelect={() => {
-            if (props.message.type === "file")
+            if (local.message.type === "file")
               navigator.clipboard.writeText(
-                props.message.fileName,
+                local.message.fileName,
               );
 
             props.close();
@@ -412,9 +413,9 @@ export const MessageContent: Component<MessageCardProps> = (
           <ContextMenuItem
             class="gap-2"
             onSelect={async () => {
-              if (props.message.type === "file") {
+              if (local.message.type === "file") {
                 const cache = cacheManager.getCache(
-                  props.message.fid,
+                  local.message.fid,
                 );
                 if (!cache) return;
                 const file = await cache.getFile();
@@ -475,8 +476,10 @@ export const MessageContent: Component<MessageCardProps> = (
             clientProfile.clientId === props.message.client
               ? "self-end bg-lime-200 dark:bg-indigo-900"
               : "self-start border border-border",
+            local.class,
           )}
           {...p}
+          {...other}
         >
           <article class="w-fit select-text whitespace-pre-wrap break-all text-sm">
             <Switch>

@@ -17,10 +17,10 @@ export type PeerSessionEventMap = {
   connecting: void;
   connected: void;
   close: void;
-  reconnecting: void;
   channel: RTCDataChannel;
   message: SessionMessage;
   error: Error;
+  disconnect: void;
 };
 
 export class PeerSession {
@@ -31,8 +31,7 @@ export class PeerSession {
   private ignoreOffer: boolean = false;
   readonly polite: boolean;
   private sender: SignalingService;
-  private controller: AbortController =
-    new AbortController();
+  private controller: AbortController | null = null;
 
   private channels: RTCDataChannel[] = [];
   private messageChannel: RTCDataChannel | null = null;
@@ -91,10 +90,16 @@ export class PeerSession {
 
   private async createConnection() {
     if (this.peerConnection) {
-      console.warn(
-        `peer connection for session ${this.sessionId} has already been created`,
-      );
-      return;
+      if (
+        this.peerConnection.connectionState === "connected"
+      ) {
+        console.warn(
+          `peer connection for session ${this.sessionId} has already been created`,
+        );
+        return;
+      }
+
+      this.disconnect();
     }
     console.log(
       `create peer connection for session ${this.sessionId}`,
@@ -104,20 +109,18 @@ export class PeerSession {
       await getConfiguration(),
     );
 
-    this.controller.signal.addEventListener(
-      "abort",
-      () => {
-        if (this.peerConnection) {
-          this.peerConnection.close();
-          this.peerConnection = null;
+    this.controller = new AbortController();
+    this.controller.signal.addEventListener("abort", () => {
+      if (this.peerConnection) {
+        this.makingOffer = false;
+        this.peerConnection.close();
+        this.peerConnection = null;
 
-          this.dispatchEvent("close", undefined);
-        }
-        this.channels.length = 0;
-        this.messageChannel = null;
-      },
-      { once: true },
-    );
+        this.dispatchEvent("disconnect", undefined);
+      }
+      this.channels.length = 0;
+      this.messageChannel = null;
+    });
 
     this.peerConnection = pc;
     if (pc.getTransceivers().length === 0) {
@@ -135,9 +138,9 @@ export class PeerSession {
       "icecandidate",
       async (ev: RTCPeerConnectionIceEvent) => {
         if (ev.candidate) {
-          console.log(
-            `client ${this.clientId} onIcecandidate`,
-          );
+          // console.log(
+          //   `client ${this.clientId} onIcecandidate`,
+          // );
           this.sender.sendSignal({
             type: "candidate",
             data: JSON.stringify({
@@ -156,17 +159,18 @@ export class PeerSession {
       async () => {
         const state = pc.iceConnectionState;
         switch (state) {
-          case "disconnected":
-          case "failed":
-            console.warn(
-              `client ${this.clientId} ICE Connection State: ${state}`,
-            );
-            break;
           case "connected":
           case "completed":
             console.log(
               `client ${this.clientId} ICE Connection State: ${state}`,
             );
+            break;
+          case "disconnected":
+          case "failed":
+            console.warn(
+              `client ${this.clientId} ICE Connection State: ${state}`,
+            );
+            this.disconnect();
             break;
           default:
             break;
@@ -215,7 +219,7 @@ export class PeerSession {
               }
               this.dispatchEvent("message", message);
             },
-            { signal: this.controller.signal },
+            { signal: this.controller?.signal },
           );
 
           this.messageChannel = ev.channel;
@@ -266,9 +270,7 @@ export class PeerSession {
               `${this.clientId} connection established`,
             );
             this.dispatchEvent("connected", undefined);
-
             this.createChannel("message");
-
             break;
           case "failed":
           case "closed":
@@ -276,7 +278,7 @@ export class PeerSession {
             console.warn(
               `${this.clientId} connection error state: ${pc.connectionState}`,
             );
-            this.destory();
+            this.disconnect();
             break;
           default:
             break;
@@ -395,7 +397,7 @@ export class PeerSession {
           }
           this.dispatchEvent("message", message);
         },
-        { signal: this.controller.signal },
+        { signal: this.controller?.signal },
       );
 
       this.messageChannel = channel;
@@ -439,11 +441,15 @@ export class PeerSession {
         .finally(() => {
           this.makingOffer = false;
         });
+    } else {
+      console.warn(
+        `session ${this.sessionId} already making offer`,
+      );
     }
   }
 
   async reconnect() {
-    this.dispatchEvent("reconnecting", undefined);
+    this.dispatchEvent("connecting", undefined);
     if (this.peerConnection) {
       const pc = this.peerConnection;
       if (pc.connectionState === "connected") return;
@@ -469,7 +475,7 @@ export class PeerSession {
                 "error",
                 Error("reconnect error"),
               );
-              this.destory();
+              this.disconnect();
               reject(
                 new Error(
                   `Connection failed with state: ${pc.connectionState}`,
@@ -487,19 +493,28 @@ export class PeerSession {
         pc.addEventListener(
           "connectionstatechange",
           onConnectionStateChange,
-          { signal: this.controller.signal },
         );
 
         pc.restartIce();
 
-        this.makingOffer = true;
-        await handleOffer(pc, this.sender)
-          .catch((err) => {
-            console.error("Error during ICE restart:", err);
-          })
-          .finally(() => {
-            this.makingOffer = false;
-          });
+        if (!this.makingOffer) {
+          this.makingOffer = true;
+
+          await handleOffer(pc, this.sender)
+            .catch((err) => {
+              console.error(
+                "Error during ICE restart:",
+                err,
+              );
+            })
+            .finally(() => {
+              this.makingOffer = false;
+            });
+        } else {
+          console.warn(
+            `session ${this.sessionId} already making offer`,
+          );
+        }
       });
     } else {
       return await this.connect();
@@ -538,7 +553,7 @@ export class PeerSession {
               "connectionstatechange",
               onConnectionStateChange,
             );
-            this.destory();
+            this.disconnect();
             reject(
               new Error(
                 `Connection failed with state: ${pc.connectionState}`,
@@ -546,7 +561,6 @@ export class PeerSession {
             );
             break;
           default:
-            // 其他状态不做处理
             break;
         }
       };
@@ -554,25 +568,73 @@ export class PeerSession {
       pc.addEventListener(
         "connectionstatechange",
         onConnectionStateChange,
-        { signal: this.controller.signal },
       );
 
-      this.makingOffer = true;
-      await handleOffer(pc, this.sender)
-        .catch((err) => {
-          reject(
-            new Error(
-              `Failed to create and send offer: ${err.message}`,
-            ),
-          );
-        })
-        .finally(() => {
-          this.makingOffer = false;
-        });
+      const onIceStateChange = () => {
+        switch (pc.iceConnectionState) {
+          case "connected":
+            pc.removeEventListener(
+              "icestatechange",
+              onIceStateChange,
+            );
+            break;
+          case "closed":
+          case "disconnected":
+            pc.removeEventListener(
+              "icestatechange",
+              onIceStateChange,
+            );
+            this.disconnect();
+            reject(
+              new Error(
+                `Connection failed with state: ${pc.iceConnectionState}`,
+              ),
+            );
+            break;
+          default:
+            break;
+        }
+      };
+
+      pc.addEventListener(
+        "icestatechange",
+        onIceStateChange,
+      );
+
+      this.controller?.signal.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("connect aborted"));
+        },
+      );
+
+      if (!this.makingOffer) {
+        this.makingOffer = true;
+        await handleOffer(pc, this.sender)
+          .catch((err) => {
+            reject(
+              new Error(
+                `Failed to create and send offer: ${err.message}`,
+              ),
+            );
+          })
+          .finally(() => {
+            this.makingOffer = false;
+          });
+      } else {
+        console.warn(
+          `session ${this.sessionId} already making offer`,
+        );
+      }
     });
   }
 
-  destory() {
-    this.controller.abort();
+  disconnect() {
+    this.controller?.abort();
+  }
+
+  close() {
+    this.disconnect();
+    this.dispatchEvent("close", undefined);
   }
 }

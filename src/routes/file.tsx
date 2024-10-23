@@ -76,7 +76,7 @@ import {
   createElementSize,
   Size,
 } from "@solid-primitives/resize-observer";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore } from "solid-js/store";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 
 const createComfirmDialog = () => {
@@ -546,17 +546,17 @@ export default function File() {
         <div class="flex flex-1 flex-col-reverse">
           <div
             data-sync-scroll="file-table"
-            class="syncscroll h-full w-full flex-1 overflow-x-auto"
+            class="h-full w-full flex-1 overflow-x-auto scrollbar-none"
           >
             <Table
               class="h-full w-full text-nowrap"
               ref={setTableBody}
             >
-              <TableBody >
+              <TableBody>
                 <For
                   each={table.getRowModel().rows}
                   fallback={
-                    <TableRow >
+                    <TableRow>
                       <TableCell
                         colSpan={columns.length}
                         class="h-24 text-center text-lg font-bold text-muted-foreground/50"
@@ -612,7 +612,7 @@ export default function File() {
           </div>
           <div
             data-sync-scroll="file-table"
-            class="syncscroll sticky top-24 z-10 overflow-x-auto
+            class=" sticky top-24 z-10 overflow-x-auto
               bg-background/80 backdrop-blur-sm"
           >
             <Table

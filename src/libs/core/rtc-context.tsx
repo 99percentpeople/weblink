@@ -132,24 +132,11 @@ export const WebRTCProvider: Component<
     Record<string, MediaStream>
   >({});
 
-  const [dataChannels, setDataChannels] = createStore<
-    Record<string, Record<string, RTCDataChannel>>
-  >({});
-
   const [roomStatus, setRoomStatus] =
     createStore<RoomStatus>({
       roomId: null,
       profile: null,
     });
-
-  function removeAllDataCahnnels() {
-    Object.values(dataChannels).forEach((channels) => {
-      Object.values(channels).forEach((channel) => {
-        channel.close();
-      });
-    });
-    setDataChannels({});
-  }
 
   // targetClientId, connection
 
@@ -300,10 +287,12 @@ export const WebRTCProvider: Component<
               const channel = await session.createChannel(
                 `${TRANSFER_CHANNEL_PREFIX}${transferer.id}${v4()}`,
               );
-              if (!channel) {
-                break;
+              if (channel) {
+                transferManager.addChannel(
+                  cache.id,
+                  channel,
+                );
               }
-              transferManager.addChannel(cache.id, channel);
             }
 
             await transferer.initialize();
@@ -352,11 +341,12 @@ export const WebRTCProvider: Component<
                 const channel = await session.createChannel(
                   `${TRANSFER_CHANNEL_PREFIX}${transferer.id}${v4()}`,
                 );
-                if (!channel) break;
-                transferManager.addChannel(
-                  storeMessage.fid,
-                  channel,
-                );
+                if (channel) {
+                  transferManager.addChannel(
+                    storeMessage.fid,
+                    channel,
+                  );
+                }
               }
 
               await transferer.initialize();
@@ -501,7 +491,6 @@ export const WebRTCProvider: Component<
     setRoomStatus("profile", null);
 
     setRemoteStreams(reconcile({}));
-    removeAllDataCahnnels();
   };
 
   onCleanup(() => {
