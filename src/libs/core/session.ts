@@ -553,7 +553,6 @@ export class PeerSession {
               "connectionstatechange",
               onConnectionStateChange,
             );
-            this.disconnect();
             reject(
               new Error(
                 `Connection failed with state: ${pc.connectionState}`,
@@ -584,7 +583,6 @@ export class PeerSession {
               "icestatechange",
               onIceStateChange,
             );
-            this.disconnect();
             reject(
               new Error(
                 `Connection failed with state: ${pc.iceConnectionState}`,
