@@ -237,6 +237,7 @@ export default function Settings() {
             defaultValue={[
               appOptions.backgroundImageOpacity,
             ]}
+            class="gap-2"
             getValueLabel={({ values }) =>
               `${(values[0] * 100).toFixed(0)}%`
             }
