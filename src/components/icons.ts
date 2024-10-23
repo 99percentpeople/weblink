@@ -50,6 +50,7 @@ import IconPlaceItem from "@material-symbols/svg-700/outlined/place_item.svg?com
 import IconPageInfo from "@material-symbols/svg-400/outlined/page_info.svg?component-solid";
 import IconUnfoldMore from "@material-symbols/svg-400/outlined/unfold_more.svg?component-solid";
 import IconVisibilityOff from "@material-symbols/svg-400/outlined/visibility_off.svg?component-solid";
+import IconWallpaper from "@material-symbols/svg-400/outlined/wallpaper.svg?component-solid";
 export {
   IconDownload,
   IconDelete,
@@ -103,4 +104,5 @@ export {
   IconPageInfo,
   IconUnfoldMore,
   IconVisibilityOff,
+  IconWallpaper,
 };

@@ -36,7 +36,6 @@ import { IconPerson } from "@/components/icons";
 import { UserItem } from "@/components/chat/clientlist";
 import { messageStores } from "@/libs/core/messge";
 import { t } from "@/i18n";
-import { useWebRTC } from "@/libs/core/rtc-context";
 import { sessionService } from "@/libs/services/session-service";
 
 export interface UserItemProps
@@ -135,7 +134,8 @@ export default function Home(props: RouteSectionProps) {
             >
               <ul
                 class={cn(
-                  "flex h-full w-full flex-col bg-background [&>li]:py-1",
+                  `flex h-full w-full flex-col bg-background/80 backdrop-blur
+                  [&>li]:py-1`,
                   props.collapsed
                     ? ""
                     : "divide-y divide-muted",

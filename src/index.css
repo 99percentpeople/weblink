@@ -84,6 +84,10 @@ body {
 
 body {
   @apply overflow-y-auto;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 #root {
@@ -164,12 +168,10 @@ svg {
   from {
     margin-top: 5rem; /* mb-10 */
     margin-bottom: 0rem; /* mb-10 */
-    
   }
   to {
     margin-top: 0rem; /* mb-10 */
     margin-bottom: 5rem; /* mb-20 */
- 
   }
 }
 
@@ -185,5 +187,7 @@ svg {
 }
 
 .animate-message {
-  animation: slideUp 0.3s ease-out, popIn 0.15s ease-in;
+  animation:
+    slideUp 0.3s ease-out,
+    popIn 0.15s ease-in;
 }

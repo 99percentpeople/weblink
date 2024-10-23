@@ -69,7 +69,8 @@ import { t } from "@/i18n";
 import { createSendItemPreviewDialog } from "../preview-dialog";
 import { toast } from "solid-sonner";
 import { Dynamic } from "solid-js/web";
-export interface MessageCardProps extends ComponentProps<"li"> {
+export interface MessageCardProps
+  extends ComponentProps<"li"> {
   message: StoreMessage;
 }
 
@@ -359,7 +360,10 @@ const FileMessageCard: Component<FileMessageCardProps> = (
 export const MessageContent: Component<MessageCardProps> = (
   props,
 ) => {
-  const [local, other] = splitProps(props, ["class", "message"]);
+  const [local, other] = splitProps(props, [
+    "class",
+    "message",
+  ]);
   const targetClientInfo = createMemo(
     () => sessionService.clientInfo[local.message.target],
   );
@@ -472,10 +476,11 @@ export const MessageContent: Component<MessageCardProps> = (
       content={(p) => (
         <li
           class={cn(
-            "flex select-none flex-col gap-1 rounded-md p-2 shadow",
+            `flex select-none flex-col gap-1 rounded-md p-2 shadow
+            backdrop-blur`,
             clientProfile.clientId === props.message.client
-              ? "self-end bg-lime-200 dark:bg-indigo-900"
-              : "self-start border border-border",
+              ? "self-end bg-lime-200/80 dark:bg-indigo-900/80"
+              : "self-start border border-border bg-background/80",
             local.class,
           )}
           {...p}

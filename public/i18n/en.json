@@ -14,6 +14,15 @@
       "share_servers_with_others": {
         "title": "Share Servers with Others",
         "description": "Share the STUN and TURN servers with others when generating the join URL"
+      },
+      "background_image": {
+        "title": "Background Image",
+        "description": "Change the background image of the app, also can be selected in the file cache",
+        "click_to_select": "Click to select"
+      },
+      "background_image_opacity": {
+        "title": "Background Image Opacity",
+        "description": "Change the opacity of the background image"
       }
     },
     "connection": {
@@ -220,7 +229,8 @@
       "reset": "Reset",
       "asc": "Asc",
       "desc": "Desc",
-      "hide": "Hide"
+      "hide": "Hide",
+      "set_as_background": "Set as Background"
     },
     "notification": {
       "copy_success": "Link copied",

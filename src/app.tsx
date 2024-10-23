@@ -4,6 +4,8 @@ import {
 } from "@solidjs/router";
 
 import {
+  createEffect,
+  createSignal,
   onCleanup,
   onMount,
   ParentProps,
@@ -37,8 +39,13 @@ import { Button } from "./components/ui/button";
 import { IconQRCode } from "./components/icons";
 import { t } from "./i18n";
 import createAboutDialog from "./components/about-dialog";
-import { appOptions, setAppOptions } from "./options";
-
+import {
+  appOptions,
+  backgroundImage,
+  setAppOptions,
+} from "./options";
+import { MetaProvider, Style } from "@solidjs/meta";
+import { cacheManager } from "./libs/services/cache-serivce";
 let wakeLock: WakeLockSentinel | null = null;
 const requestWakeLock = async () => {
   if (wakeLock && wakeLock.released === false) {
@@ -250,6 +257,24 @@ export default function App(props: RouteSectionProps) {
 
   return (
     <>
+      <MetaProvider>
+        <Style>
+          {`
+          body {
+            background-image: url(${backgroundImage()});
+          }
+          body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: hsl(var(--background) / ${appOptions.backgroundImageOpacity});
+            z-index: -1;
+          }`}
+        </Style>
+      </MetaProvider>
       <Toaster />
       <ColorModeScript storageType={storageManager.type} />
       <ColorModeProvider storageManager={storageManager}>

@@ -1,5 +1,8 @@
 import { makePersisted } from "@solid-primitives/storage";
 import { createStore } from "solid-js/store";
+import { FileID } from "./libs/core/type";
+import { createEffect, createSignal } from "solid-js";
+import { cacheManager } from "./libs/services/cache-serivce";
 
 export type Locale = "en" | "zh";
 
@@ -27,20 +30,32 @@ export type CompressionLevel =
   | 8
   | 9;
 
+// App options
 export type AppOption = {
+  // Receiver
+  maxMomeryCacheSlices: number;
+
+  // Sender
   channelsNumber: number;
   chunkSize: number;
   ordered: boolean;
   bufferedAmountLowThreshold: number;
-  maxMomeryCacheSlices: number;
-  videoMaxBitrate: number;
-  audioMaxBitrate: number;
   compressionLevel: CompressionLevel;
   blockSize: number;
+
+  // Stream
+  videoMaxBitrate: number;
+  audioMaxBitrate: number;
+
+  // Connection
   servers: ConnectionOptions;
+  shareServersWithOthers: boolean;
+
+  // Appearance
   locale: Locale;
   showAboutDialog: boolean;
-  shareServersWithOthers: boolean;
+  backgroundImage?: FileID;
+  backgroundImageOpacity: number;
 };
 
 export const getDefaultAppOptions = () => {
@@ -62,6 +77,7 @@ export const getDefaultAppOptions = () => {
       : "en",
     showAboutDialog: true,
     shareServersWithOthers: false,
+    backgroundImageOpacity: 0.5,
   } satisfies AppOption;
 };
 
@@ -72,3 +88,23 @@ export const [appOptions, setAppOptions] = makePersisted(
     storage: localStorage,
   },
 );
+
+export const [backgroundImage, setBackgroundImage] =
+  createSignal<string | undefined>(undefined);
+
+createEffect(async () => {
+  if (!appOptions.backgroundImage) {
+    setBackgroundImage(undefined);
+    return;
+  }
+  if (cacheManager.status() === "loading") {
+    return;
+  }
+  const backgroundImage =
+    cacheManager.caches[appOptions.backgroundImage];
+  if (!backgroundImage) return;
+  const file = await backgroundImage.getFile();
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  setBackgroundImage(url);
+});

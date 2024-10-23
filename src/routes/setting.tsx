@@ -55,6 +55,7 @@ import {
   setAppOptions,
   CompressionLevel,
   getDefaultAppOptions,
+  backgroundImage,
 } from "@/options";
 import createAboutDialog from "@/components/about-dialog";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,9 @@ import { IconDelete, IconInfo } from "@/components/icons";
 import { Separator } from "@/components/ui/seprartor";
 import { createDialog } from "@/components/dialogs/dialog";
 import { toast } from "solid-sonner";
+import { Input } from "@/components/ui/input";
+import { cacheManager } from "@/libs/services/cache-serivce";
+import { v4 } from "uuid";
 
 type MediaDeviceInfoType = Omit<MediaDeviceInfo, "toJSON">;
 
@@ -118,7 +122,7 @@ export default function Settings() {
     <>
       <AboutDialogComponent />
       <ResetOptionsDialogComponent />
-      <div class="container">
+      <div class="container bg-background/80 backdrop-blur">
         <div class="grid gap-4 py-4">
           <h3 id="appearance" class="h3">
             {t("setting.appearance.title")}
@@ -148,6 +152,116 @@ export default function Settings() {
               {t("setting.appearance.language.description")}
             </p>
           </label>
+
+          <div class="flex flex-col gap-2">
+            <Label>
+              {t(
+                "setting.appearance.background_image.title",
+              )}
+            </Label>
+            <div class="flex items-end justify-end gap-4">
+              <Button
+                variant="destructive"
+                class="text-nowrap"
+                disabled={!backgroundImage()}
+                onClick={() => {
+                  setAppOptions(
+                    "backgroundImage",
+                    undefined!,
+                  );
+                }}
+              >
+                <IconDelete class="mr-2 size-4" />
+                {t("common.action.delete")}
+              </Button>{" "}
+              <label class="hover:cursor-pointer">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  class="hidden"
+                  onChange={(ev) => {
+                    const file =
+                      ev.currentTarget.files?.[0];
+                    if (file) {
+                      const id = v4();
+                      const cache =
+                        cacheManager.createCache(id);
+                      cache.setInfo({
+                        id,
+                        fileName: file.name,
+                        fileSize: file.size,
+                        mimetype: file.type,
+                        lastModified: file.lastModified,
+                        chunkSize: 1024 * 1024,
+                        file: file,
+                      });
+
+                      setAppOptions("backgroundImage", id);
+                    }
+                  }}
+                />
+                <Show
+                  when={backgroundImage()}
+                  fallback={
+                    <div
+                      class="size-24 place-content-center rounded-md bg-muted text-center
+                        text-xs text-muted-foreground"
+                    >
+                      {t(
+                        "setting.appearance.background_image.click_to_select",
+                      )}
+                    </div>
+                  }
+                >
+                  {(image) => (
+                    <img
+                      src={image()}
+                      class="relative size-24 rounded-md object-cover shadow
+                        before:absolute"
+                    />
+                  )}
+                </Show>
+              </label>
+            </div>
+            <p class="muted">
+              {t(
+                "setting.appearance.background_image.description",
+              )}
+            </p>
+          </div>
+
+          <Slider
+            minValue={0}
+            maxValue={1}
+            step={0.01}
+            defaultValue={[
+              appOptions.backgroundImageOpacity,
+            ]}
+            getValueLabel={({ values }) =>
+              `${(values[0] * 100).toFixed(0)}%`
+            }
+            value={[appOptions.backgroundImageOpacity]}
+            onChange={(value) => {
+              setAppOptions(
+                "backgroundImageOpacity",
+                value[0],
+              );
+            }}
+          >
+            <div class="flex w-full justify-between">
+              <SliderLabel>
+                {t(
+                  "setting.appearance.background_image_opacity.title",
+                )}
+              </SliderLabel>
+              <SliderValueLabel />
+            </div>
+            <SliderTrack>
+              <SliderFill />
+              <SliderThumb />
+              <SliderThumb />
+            </SliderTrack>
+          </Slider>
 
           <div class="flex flex-col gap-2">
             <Switch

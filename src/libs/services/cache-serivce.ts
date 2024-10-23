@@ -12,6 +12,7 @@ import {
   SetStoreFunction,
 } from "solid-js/store";
 import { FileID } from "../core/type";
+import { Accessor, createSignal, Setter } from "solid-js";
 
 type EventMap = {
   update: string;
@@ -19,6 +20,8 @@ type EventMap = {
 };
 
 class FileCacheFactory {
+  status: Accessor<"ready" | "loading">;
+  private setStatus: Setter<"ready" | "loading">;
   private eventEmitter: MultiEventEmitter<EventMap> =
     new MultiEventEmitter();
 
@@ -32,6 +35,11 @@ class FileCacheFactory {
     this.caches = caches;
     this.setCaches = setCaches;
     this.update();
+    const [status, setStatus] = createSignal<
+      "ready" | "loading"
+    >("loading");
+    this.status = status;
+    this.setStatus = setStatus;
   }
 
   addEventListener<K extends keyof EventMap>(
@@ -78,6 +86,7 @@ class FileCacheFactory {
         this.createCache(id);
       }
     }
+    this.setStatus("ready");
   }
 
   getCache(id: FileID): ChunkCache | null {

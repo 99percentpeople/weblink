@@ -68,6 +68,7 @@ import {
   IconPageInfo,
   IconPreview,
   IconSearch700,
+  IconWallpaper,
 } from "@/components/icons";
 import { createDialog } from "@/components/dialogs/dialog";
 import { t } from "@/i18n";
@@ -78,6 +79,7 @@ import {
 } from "@solid-primitives/resize-observer";
 import { createStore } from "solid-js/store";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
+import { setAppOptions } from "@/options";
 
 const createComfirmDialog = () => {
   const { open, close, submit, Component } = createDialog({
@@ -263,17 +265,40 @@ export default function File() {
               </Show>
               <Show when={row.original.file}>
                 {(file) => (
-                  <DropdownMenuItem
-                    class="gap-2"
-                    onSelect={() => {
-                      openPreviewDialog(file());
-                    }}
-                  >
-                    <IconPreview class="size-4" />
-                    {t("common.action.preview")}
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem
+                      class="gap-2"
+                      onSelect={() => {
+                        openPreviewDialog(file());
+                      }}
+                    >
+                      <IconPreview class="size-4" />
+                      {t("common.action.preview")}
+                    </DropdownMenuItem>
+                    <Show
+                      when={file().type.startsWith(
+                        "image/",
+                      )}
+                    >
+                      <DropdownMenuItem
+                        class="gap-2"
+                        onSelect={() => {
+                          setAppOptions({
+                            backgroundImage:
+                              row.original.id,
+                          });
+                        }}
+                      >
+                        <IconWallpaper class="size-4" />
+                        {t(
+                          "common.action.set_as_background",
+                        )}
+                      </DropdownMenuItem>
+                    </Show>
+                  </>
                 )}
               </Show>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 class="gap-2"
@@ -386,7 +411,14 @@ export default function File() {
     <>
       <DialogComponent />
       <PreviewDialogComponent class="w-full" />
-      <div class="container flex min-h-[calc(100%-3rem)] flex-col gap-4 py-4">
+      <div
+        class="container pointer-events-none fixed inset-0 z-[-1]
+          backdrop-blur"
+      />
+      <div
+        class="container z-[10] flex min-h-[calc(100%-3rem)] flex-col gap-4
+          bg-background/80 py-4"
+      >
         <h2 class="h2">{t("cache.title")}</h2>
         <Show when={storage()}>
           {(storage) => (
@@ -408,8 +440,8 @@ export default function File() {
           )}
         </Show>
         <div
-          class="sticky top-12 z-10 flex gap-2 bg-background/80 py-2
-            backdrop-blur-sm"
+          class="sticky top-12 z-10 flex gap-2 bg-background/50 py-2
+            backdrop-blur"
         >
           <Show
             when={Object.keys(rowSelection()).length !== 0}
@@ -477,8 +509,9 @@ export default function File() {
             tabIndex="0"
             class={cn(
               inputClass,
-              `flex w-full max-w-md items-center gap-2 px-2
-              focus-within:ring-1 focus-within:ring-ring`,
+              `flex w-full max-w-md items-center gap-2 bg-background/80
+              px-2 backdrop-blur focus-within:ring-1
+              focus-within:ring-ring`,
             )}
           >
             <IconSearch700 class="size-5 text-muted-foreground" />
@@ -588,7 +621,8 @@ export default function File() {
                             }}
                             class={cn(
                               cell.column.getIsPinned() &&
-                                "bg-background transition-colors [tr:hover_&]:bg-muted",
+                                `bg-background/50 backdrop-blur transition-colors
+                                [tr:hover_&]:bg-muted`,
                             )}
                             style={{
                               ...getCommonPinningStyles(
@@ -612,8 +646,8 @@ export default function File() {
           </div>
           <div
             data-sync-scroll="file-table"
-            class=" sticky top-24 z-10 overflow-x-auto
-              bg-background/80 backdrop-blur-sm"
+            class="sticky top-24 z-10 overflow-x-auto bg-background/50
+              backdrop-blur"
           >
             <Table
               style={{
@@ -629,7 +663,7 @@ export default function File() {
                           <TableHead
                             class={cn(
                               header.column.getIsPinned() &&
-                                "bg-background transition-colors [tr:hover_&]:bg-muted",
+                                "bg-background/50 transition-colors [tr:hover_&]:bg-muted",
                             )}
                             style={{
                               ...getCommonPinningStyles(
