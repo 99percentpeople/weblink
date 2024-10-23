@@ -148,8 +148,8 @@ export class WebSocketSignalingService
         this.password,
         message.data,
       );
-      message.data = JSON.parse(message.data);
     }
+    message.data = JSON.parse(message.data);
 
     this.dispatchEvent("signal", message);
   };

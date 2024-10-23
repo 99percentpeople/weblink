@@ -80,7 +80,7 @@ class SessionService {
       );
       return;
     }
-    session.disconnect();
+    session.close();
     this.service?.removeSender(target);
     this.setClientInfo(target, undefined!);
     this.setSessions(target, undefined!);
@@ -174,7 +174,6 @@ class SessionService {
     session.addEventListener(
       "error",
       (ev) => {
-        session.disconnect();
         console.error(
           `session ${client.clientId} error`,
           ev.detail,

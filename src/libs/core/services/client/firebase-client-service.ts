@@ -71,7 +71,6 @@ export class FirebaseClientService
     this.singlingServices = new Map();
     if (password) this.password = password;
 
-   
     this.setupDisconnectListener();
   }
 
@@ -107,17 +106,23 @@ export class FirebaseClientService
     );
   }
 
-  private async setRoomPassword() {
-    if (!this.password) return;
-    const passwordHash = await hashPassword(this.password);
+  private async setupRoom() {
     const roomSnapshot = await get(this.roomRef);
     const roomData = roomSnapshot.val();
-    if (!roomData) {
+    let passwordHash = null;
+    if (this.password) {
+      passwordHash = await hashPassword(this.password);
+    }
+    if (!roomData && this.password) {
       await update(this.roomRef, { passwordHash });
       await onDisconnect(this.roomRef).update({
         passwordHash: null,
       });
     }
+
+    return {
+      passwordHash: passwordHash,
+    };
   }
 
   private setupDisconnectListener() {
@@ -131,12 +136,9 @@ export class FirebaseClientService
   async createClient() {
     this.dispatchEvent("status-change", "connecting");
 
-    await this.setRoomPassword();
+    const roomData = await this.setupRoom();
 
-    const roomSnapshot = await get(this.roomRef);
-    const roomData = roomSnapshot.val();
-
-    if (roomData && roomData.passwordHash) {
+    if (roomData.passwordHash) {
       if (!this.password) {
         this.destroy();
         throw new Error("password required");
@@ -239,9 +241,8 @@ export class FirebaseClientService
       (snapshot) => {
         const data = snapshot.val() as TransferClient;
         if (!data) return;
-        console.log(`on child added`, data);
-
         if (data.clientId === this.client.clientId) return;
+
         callback(data);
       },
     );

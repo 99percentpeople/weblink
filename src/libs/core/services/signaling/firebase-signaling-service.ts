@@ -31,14 +31,20 @@ import {
 export class FirebaseSignalingService
   implements SignalingService
 {
-  private eventEmitter =
-    new MultiEventEmitter<SignalingServiceEventMap>();
   private signalsRef;
   private _sessionId: string;
   private db = getDatabase(app);
   private _clientId: string;
   private _targetClientId: string;
   private password: string | null = null;
+  private listeners: Record<
+    string,
+    {
+      callback: string;
+      unsubscribe: Unsubscribe;
+    }[]
+  > = {};
+
   constructor(
     roomId: string,
     clientId: string,
@@ -53,9 +59,6 @@ export class FirebaseSignalingService
       `rooms/${roomId}/signals`,
     );
     this.password = password;
-    this.listenForSignal((signal) => {
-      this.dispatchEvent("signal", signal);
-    });
   }
 
   get sessionId(): SessionID {
@@ -77,11 +80,23 @@ export class FirebaseSignalingService
     callback: EventHandler<SignalingServiceEventMap[K]>,
     options?: boolean | AddEventListenerOptions,
   ): void {
-    return this.eventEmitter.addEventListener(
-      event,
-      callback,
-      options,
-    );
+    const unsubscribe = this.listenForSignal((signal) => {
+      if (typeof options !== "boolean") {
+        if (options?.once) {
+          unsubscribe();
+        }
+        if (options?.signal) {
+          options.signal.addEventListener("abort", () => {
+            unsubscribe();
+          });
+        }
+      }
+      callback(new CustomEvent(event, { detail: signal }));
+    });
+    this.listeners[event] = [
+      ...(this.listeners[event] || []),
+      { callback: callback.toString(), unsubscribe },
+    ];
   }
 
   removeEventListener<
@@ -91,17 +106,17 @@ export class FirebaseSignalingService
     callback: EventHandler<SignalingServiceEventMap[K]>,
     options?: boolean | EventListenerOptions,
   ): void {
-    return this.eventEmitter.removeEventListener(
-      event,
-      callback,
-      options,
-    );
-  }
-
-  private dispatchEvent<
-    K extends keyof SignalingServiceEventMap,
-  >(event: K, data: SignalingServiceEventMap[K]): boolean {
-    return this.eventEmitter.dispatchEvent(event, data);
+    const unsubscribe = this.listeners[event].find(
+      (listener) =>
+        listener.callback === callback.toString(),
+    )?.unsubscribe;
+    if (unsubscribe) {
+      unsubscribe();
+      this.listeners[event] = this.listeners[event].filter(
+        (listener) =>
+          listener.callback !== callback.toString(),
+      );
+    }
   }
 
   async sendSignal({
@@ -110,7 +125,7 @@ export class FirebaseSignalingService
   }: RawSignal): Promise<void> {
     let sendData = data;
     if (this.password) {
-      sendData = await encryptData(this.password, data);
+      sendData = await encryptData(this.password, sendData);
     }
 
     const singnalRef = await push(this.signalsRef, {
@@ -126,49 +141,30 @@ export class FirebaseSignalingService
   private listenForSignal(
     callback: (signal: ClientSignal) => void,
   ) {
-    const unsubscribe = onChildAdded(
+    return onChildAdded(
       this.signalsRef,
       async (snapshot) => {
-        const data = snapshot.val() as ClientSignal;
-        if (!data) return;
-        if (data.sessionId === this._sessionId) return;
-        if (data.clientId !== this._targetClientId) return;
+        const message = snapshot.val() as ClientSignal;
+        if (!message) return;
+        if (message.sessionId === this._sessionId) return;
+        if (message.clientId !== this._targetClientId)
+          return;
         if (
-          data.targetClientId &&
-          data.targetClientId !== this._clientId
+          message.targetClientId &&
+          message.targetClientId !== this._clientId
         )
           return;
 
         if (this.password) {
-          data.data = await decryptData(
+          message.data = await decryptData(
             this.password,
-            data.data,
+            message.data,
           );
         }
-
-        callback(data);
+        message.data = JSON.parse(message.data);
+        callback(message);
       },
     );
-  }
-
-  async getAllSignals(): Promise<ClientSignal[]> {
-    const snapshot = await get(this.signalsRef);
-    const signals: ClientSignal[] = [];
-
-    snapshot.forEach((childSnapshot) => {
-      const data = childSnapshot.val() as ClientSignal;
-      if (!data) return;
-      if (data.sessionId === this._sessionId) return;
-      if (data.clientId !== this._targetClientId) return;
-      if (
-        data.targetClientId &&
-        data.targetClientId !== this._clientId
-      )
-        return;
-      signals.push(data);
-    });
-
-    return signals;
   }
 
   async clearSignals() {
@@ -186,7 +182,6 @@ export class FirebaseSignalingService
   }
 
   async destroy() {
-    this.eventEmitter.clearListeners();
     await this.clearSignals();
   }
 }
