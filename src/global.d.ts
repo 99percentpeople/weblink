@@ -20,7 +20,6 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-// 添加这个全局变量声明
 declare const __APP_VERSION__: string;
 declare const __APP_LICENSE__: string;
 

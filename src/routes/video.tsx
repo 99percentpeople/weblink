@@ -14,8 +14,7 @@ import {
   localStream,
   setDisplayStream,
 } from "@/libs/stream";
-import { camera, microphone, speaker } from "./setting";
-import { createCameras } from "@solid-primitives/devices";
+import { devices } from "./setting";
 import { sessionService } from "@/libs/services/session-service";
 import { t } from "@/i18n";
 
@@ -43,7 +42,7 @@ export default function Message() {
           ...constraints.video,
         },
         audio: {
-          deviceId: speaker()?.deviceId,
+          deviceId: devices.speaker?.deviceId,
           ...constraints.audio,
         },
       });
@@ -55,11 +54,11 @@ export default function Message() {
     const local = await navigator.mediaDevices.getUserMedia(
       {
         video: {
-          deviceId: camera()?.deviceId,
+          deviceId: devices.camera?.deviceId,
           ...constraints.video,
         },
         audio: {
-          deviceId: microphone()?.deviceId,
+          deviceId: devices.microphone?.deviceId,
           ...constraints.audio,
         },
       },
@@ -72,7 +71,6 @@ export default function Message() {
     setDisplayStream(null);
   };
 
-  const cameras = createCameras();
 
   return (
     <div class="flex flex-col gap-2">
@@ -129,7 +127,7 @@ export default function Message() {
                   {t("video.device.screen")}
                 </Button>
               </Show>
-              <Show when={cameras().length !== 0}>
+              <Show when={devices.camera}>
                 <Button size="sm" onClick={openCamera}>
                   {localStream()
                     ? t("common.action.change")

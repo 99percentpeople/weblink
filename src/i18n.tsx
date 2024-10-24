@@ -16,6 +16,7 @@ import {
   Locale,
   setAppOptions,
 } from "./options";
+import en from "/public/i18n/en.json?raw";
 
 const localeOptions: Locale[] = ["en", "zh"];
 
@@ -35,18 +36,13 @@ const [dict] = createResource(
   fetchDictionary,
 );
 
-const [defaultDict] = createResource(
-  () => "en" as Locale,
-  fetchDictionary,
-);
-
 const translate = i18n.translator(
   dict,
   i18n.resolveTemplate,
 );
 
 const fallback = i18n.translator(
-  defaultDict,
+  () => i18n.flatten(JSON.parse(en)),
   i18n.resolveTemplate,
 );
 

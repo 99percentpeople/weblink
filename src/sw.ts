@@ -7,7 +7,7 @@ import {
   NavigationRoute,
   registerRoute,
 } from "workbox-routing";
-import { NetworkFirst } from "workbox-strategies";
+import { CacheFirst } from "workbox-strategies";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
 import { ExpirationPlugin } from "workbox-expiration";
 
@@ -48,7 +48,7 @@ registerRoute(
   ({ request }) =>
     request.url.includes("/i18n/") &&
     request.url.endsWith(".json"),
-  new NetworkFirst({
+  new CacheFirst({
     cacheName: "i18n-cache",
     plugins: [
       new CacheableResponsePlugin({

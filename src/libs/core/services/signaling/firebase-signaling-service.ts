@@ -12,7 +12,6 @@ import { app } from "@/libs/firebase";
 import { v4 } from "uuid";
 import {
   RawSignal,
-  SendSignalOptions,
   ClientSignal,
   SignalingService,
   Unsubscribe,
@@ -25,7 +24,6 @@ import {
 } from "../../utils/encrypt";
 import {
   EventHandler,
-  MultiEventEmitter,
 } from "@/libs/utils/event-emitter";
 
 export class FirebaseSignalingService

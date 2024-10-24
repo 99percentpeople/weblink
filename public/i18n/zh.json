@@ -88,9 +88,17 @@
     },
     "media": {
       "title": "媒体设置",
-      "video_codec": {
-        "title": "视频编解码器",
-        "description": "更改媒体的视频编解码器"
+      "camera": {
+        "title": "摄像头",
+        "description": "更改应用程序的摄像头"
+      },
+      "microphone": {
+        "title": "麦克风",
+        "description": "更改应用程序的麦克风"
+      },
+      "speaker": {
+        "title": "扬声器",
+        "description": "更改应用程序的扬声器"
       }
     },
     "about": {
@@ -116,9 +124,10 @@
       "delete_client": "删除客户端"
     },
     "index": {
-      "description": "扫描二维码或分享链接以连接到此房间",
+      "description": "扫描二维码或分享链接以连接到此房间，右键点击复制链接",
       "guide_title": "创建或连接到房间",
-      "guide_description": "你可以通过点击右上角按钮，创建一个新房间或连接到一个现有房间"
+      "guide_description": "你可以通过点击右上角按钮，创建一个新房间或连接到一个现有房间",
+      "copy_success": "链接已复制"
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter 或 Shift + Enter 发送消息"

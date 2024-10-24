@@ -88,13 +88,17 @@
     },
     "media": {
       "title": "Media Settings",
-      "video_codec": {
-        "title": "Video Codec",
-        "description": "Change the video codec of the media"
+      "camera": {
+        "title": "Camera",
+        "description": "Change the camera of the media"
       },
-      "audio_codec": {
-        "title": "Audio Codec",
-        "description": "Change the audio codec of the media"
+      "microphone": {
+        "title": "Microphone",
+        "description": "Change the microphone of the media"
+      },
+      "speaker": {
+        "title": "Speaker",
+        "description": "Change the speaker of the media"
       }
     },
     "about": {
@@ -120,9 +124,10 @@
       "delete_client": "Delete Client"
     },
     "index": {
-      "description": "Scan the QR code or share the link to connect to this room",
+      "description": "Scan the QR code or share the link to connect to this room, right-click to copy the link",
       "guide_title": "Create or connect to a room",
-      "guide_description": "You can create a new room or connect to an existing room by clicking the button on the top right corner"
+      "guide_description": "You can create a new room or connect to an existing room by clicking the button on the top right corner",
+      "copy_success": "Link copied"
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter or Shift + Enter to send the message"

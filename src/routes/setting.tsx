@@ -3,6 +3,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onMount,
   Show,
 } from "solid-js";
 
@@ -47,7 +48,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
-import { reconcile } from "solid-js/store";
+import { createStore, reconcile } from "solid-js/store";
 import { LocaleSelector, t } from "@/i18n";
 import {
   TurnServerOptions,
@@ -66,17 +67,25 @@ import { toast } from "solid-sonner";
 import { Input } from "@/components/ui/input";
 import { cacheManager } from "@/libs/services/cache-serivce";
 import { v4 } from "uuid";
+import { makePersisted } from "@solid-primitives/storage";
 
 type MediaDeviceInfoType = Omit<MediaDeviceInfo, "toJSON">;
 
-export const [camera, setCamera] =
-  createSignal<MediaDeviceInfoType | null>();
-
-export const [microphone, setMicrophone] =
-  createSignal<MediaDeviceInfoType | null>();
-
-export const [speaker, setSpeaker] =
-  createSignal<MediaDeviceInfoType | null>();
+export const [devices, setDevices] = makePersisted(
+  createStore<{
+    camera: MediaDeviceInfoType | null;
+    microphone: MediaDeviceInfoType | null;
+    speaker: MediaDeviceInfoType | null;
+  }>({
+    camera: null,
+    microphone: null,
+    speaker: null,
+  }),
+  {
+    storage: localStorage,
+    name: "devices",
+  },
+);
 
 textareaAutoResize;
 function parseTurnServers(
@@ -758,6 +767,35 @@ const MediaSetting: Component = () => {
     ];
   });
 
+  createEffect(() => {
+    if (
+      !availableCameras().find(
+        (cam) => cam.deviceId === devices.camera?.deviceId,
+      )
+    ) {
+      setDevices("camera", availableCameras()[0] ?? null);
+    }
+    if (
+      !availableMicrophones().find(
+        (mic) =>
+          mic.deviceId === devices.microphone?.deviceId,
+      )
+    ) {
+      setDevices(
+        "microphone",
+        availableMicrophones()[0] ?? null,
+      );
+    }
+    if (
+      !availableSpeakers().find(
+        (speaker) =>
+          speaker.deviceId === devices.speaker?.deviceId,
+      )
+    ) {
+      setDevices("speaker", availableSpeakers()[0] ?? null);
+    }
+  });
+
   return (
     <>
       <Show when={availableDevices().length !== 0}>
@@ -767,12 +805,12 @@ const MediaSetting: Component = () => {
       </Show>
       <Show when={availableCameras().length !== 0}>
         <label class="flex flex-col gap-2">
-          <Label>Camera</Label>
+          <Label>{t("setting.media.camera.title")}</Label>
           <Select
-            defaultValue={camera()}
-            value={camera()}
+            defaultValue={devices.camera}
+            value={devices.camera}
             onChange={(value) => {
-              setCamera(value);
+              setDevices("camera", value);
             }}
             options={cameras()}
             optionTextValue="label"
@@ -788,11 +826,7 @@ const MediaSetting: Component = () => {
           >
             <SelectTrigger>
               <SelectValue<MediaDeviceInfoType>>
-                {(state) =>
-                  state.selectedOption().label.length === 0
-                    ? "Default"
-                    : state.selectedOption().label
-                }
+                {(state) => state.selectedOption().label}
               </SelectValue>
             </SelectTrigger>
             <SelectContent />
@@ -801,11 +835,11 @@ const MediaSetting: Component = () => {
       </Show>
       <Show when={availableMicrophones().length !== 0}>
         <label class="flex flex-col gap-2">
-          <Label>Microphone</Label>
+          <Label>{t("setting.media.microphone.title")}</Label>
           <Select
-            value={microphone()}
+            value={devices.microphone}
             onChange={(value) => {
-              setMicrophone(value);
+              setDevices("microphone", value);
             }}
             options={microphones()}
             optionTextValue="label"
@@ -827,11 +861,11 @@ const MediaSetting: Component = () => {
       </Show>
       <Show when={availableSpeakers().length !== 0}>
         <label class="flex flex-col gap-2">
-          <Label>Speaker</Label>
+          <Label>{t("setting.media.speaker.title")}</Label>
           <Select
-            value={speaker()}
+            value={devices.speaker}
             onChange={(value) => {
-              setSpeaker(value);
+              setDevices("speaker", value);
             }}
             options={speakers()}
             optionTextValue="label"
