@@ -128,14 +128,13 @@ export default function Home(props: RouteSectionProps) {
           });
           return (
             <div
-              class="h-full w-full overflow-x-hidden md:sticky
-                md:top-[calc(3rem)] md:h-[calc(100vh_-_3rem)]
-                md:overflow-y-auto"
+              class="h-full w-full overflow-x-hidden bg-background/80
+                backdrop-blur md:sticky md:top-[calc(3rem)]
+                md:h-[calc(100vh_-_3rem)] md:overflow-y-auto"
             >
               <ul
                 class={cn(
-                  `flex h-full w-full flex-col bg-background/80 backdrop-blur
-                  [&>li]:py-1`,
+                  "flex h-full w-full flex-col [&>li]:py-1",
                   props.collapsed
                     ? ""
                     : "divide-y divide-muted",
