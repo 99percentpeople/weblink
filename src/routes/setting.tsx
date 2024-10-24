@@ -31,7 +31,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { localStream } from "@/libs/stream";
+import {
+  localStream,
+  setDisplayStream,
+} from "@/libs/stream";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Slider,
@@ -68,7 +71,7 @@ import { Input } from "@/components/ui/input";
 import { cacheManager } from "@/libs/services/cache-serivce";
 import { v4 } from "uuid";
 import { makePersisted } from "@solid-primitives/storage";
-
+import { createPermission } from "@solid-primitives/permission";
 type MediaDeviceInfoType = Omit<MediaDeviceInfo, "toJSON">;
 
 export const [devices, setDevices] = makePersisted(
@@ -759,13 +762,13 @@ const MediaSetting: Component = () => {
     speakers().filter((speaker) => speaker.deviceId !== ""),
   );
 
-  const availableDevices = createMemo(() => {
-    return [
-      ...availableCameras(),
-      ...availableMicrophones(),
-      ...availableSpeakers(),
-    ];
-  });
+  // const availableDevices = createMemo(() => {
+  //   return [
+  //     ...availableCameras(),
+  //     ...availableMicrophones(),
+  //     ...availableSpeakers(),
+  //   ];
+  // });
 
   createEffect(() => {
     if (
@@ -795,14 +798,61 @@ const MediaSetting: Component = () => {
       setDevices("speaker", availableSpeakers()[0] ?? null);
     }
   });
+  const cameraPermission = createPermission("camera");
+  const microphonePermission =
+    createPermission("microphone");
 
   return (
     <>
-      <Show when={availableDevices().length !== 0}>
-        <h3 id="media" class="h3">
-          {t("setting.media.title")}
-        </h3>
-      </Show>
+      <h3 id="media" class="h3">
+        {t("setting.media.title")}
+      </h3>
+      <div class="flex flex-col gap-2">
+        <Show
+          when={
+            cameraPermission() === "prompt" ||
+            microphonePermission() === "prompt"
+          }
+          fallback={
+            <Show
+              when={
+                cameraPermission() === "denied" ||
+                microphonePermission() === "denied"
+              }
+            >
+              <p class="text-sm text-destructive">
+                {t(
+                  "setting.media.request_permission.fallback_description",
+                )}
+              </p>
+            </Show>
+          }
+        >
+          <Button
+            onClick={() => {
+              navigator.mediaDevices
+                .getUserMedia({
+                  video: true,
+                  audio: true,
+                })
+                .then((stream) => {
+                  setDisplayStream(stream);
+                })
+                .catch((error) => {
+                  console.error(error);
+                  toast.error(error.message);
+                });
+            }}
+          >
+            {t("setting.media.request_permission.title")}
+          </Button>
+          <p class="muted">
+            {t(
+              "setting.media.request_permission.description",
+            )}
+          </p>
+        </Show>
+      </div>
       <Show when={availableCameras().length !== 0}>
         <label class="flex flex-col gap-2">
           <Label>{t("setting.media.camera.title")}</Label>
@@ -835,7 +885,9 @@ const MediaSetting: Component = () => {
       </Show>
       <Show when={availableMicrophones().length !== 0}>
         <label class="flex flex-col gap-2">
-          <Label>{t("setting.media.microphone.title")}</Label>
+          <Label>
+            {t("setting.media.microphone.title")}
+          </Label>
           <Select
             value={devices.microphone}
             onChange={(value) => {

@@ -88,6 +88,7 @@
     },
     "media": {
       "title": "Media Settings",
+      "description": "Change the media settings of the app",
       "camera": {
         "title": "Camera",
         "description": "Change the camera of the media"
@@ -99,6 +100,11 @@
       "speaker": {
         "title": "Speaker",
         "description": "Change the speaker of the media"
+      },
+      "request_permission": {
+        "title": "Request Media Permission",
+        "description": "Request media permission to use the media settings, if you can't select the media devices after requesting permission, please try to refresh the page",
+        "fallback_description": "Please allow the browser to use the camera and microphone"
       }
     },
     "about": {

@@ -25,6 +25,7 @@
     "@solid-primitives/i18n": "^2.1.1",
     "@solid-primitives/map": "^0.4.13",
     "@solid-primitives/media": "^2.2.9",
+    "@solid-primitives/permission": "^1.2.6",
     "@solid-primitives/resize-observer": "^2.0.26",
     "@solid-primitives/storage": "^4.0.0",
     "@solidjs/meta": "^0.29.4",

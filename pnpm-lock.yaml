@@ -50,6 +50,9 @@ importers:
       '@solid-primitives/media':
         specifier: ^2.2.9
         version: 2.2.9(solid-js@1.9.1)
+      '@solid-primitives/permission':
+        specifier: ^1.2.6
+        version: 1.2.6(solid-js@1.9.1)
       '@solid-primitives/resize-observer':
         specifier: ^2.0.26
         version: 2.0.26(solid-js@1.9.1)
@@ -1506,6 +1509,11 @@ packages:
 
   '@solid-primitives/mutation-observer@1.1.17':
     resolution: {integrity: sha512-01skkiHtNWl2PQ0ugFzZHBMsHk870+bZSNK8Gvjcj3mZwBzAJPaUPzFswfM/V8Io1Cko86vfXl73vl9ddRYb5A==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
+  '@solid-primitives/permission@1.2.6':
+    resolution: {integrity: sha512-tv1vWe4fOb9VuSyDabwO2wYYcUjvW/XHMQHKOYODXyEBBy+blEDLM0NwKxAABeR8qGoAMZTFe1VbXdC5DXa6Tw==}
     peerDependencies:
       solid-js: ^1.6.12
 
@@ -6277,6 +6285,10 @@ snapshots:
   '@solid-primitives/mutation-observer@1.1.17(solid-js@1.9.1)':
     dependencies:
       '@solid-primitives/utils': 6.2.3(solid-js@1.9.1)
+      solid-js: 1.9.1
+
+  '@solid-primitives/permission@1.2.6(solid-js@1.9.1)':
+    dependencies:
       solid-js: 1.9.1
 
   '@solid-primitives/props@3.1.11(solid-js@1.9.1)':

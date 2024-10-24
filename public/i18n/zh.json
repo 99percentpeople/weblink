@@ -88,6 +88,7 @@
     },
     "media": {
       "title": "媒体设置",
+      "description": "更改应用程序的媒体设置",
       "camera": {
         "title": "摄像头",
         "description": "更改应用程序的摄像头"
@@ -99,6 +100,11 @@
       "speaker": {
         "title": "扬声器",
         "description": "更改应用程序的扬声器"
+      },
+      "request_permission": {
+        "title": "请求媒体权限",
+        "description": "请求媒体权限以使用媒体设置，如果请求权限后无法选择媒体设备，请尝试刷新页面",
+        "fallback_description": "请允许浏览器使用摄像头和麦克风"
       }
     },
     "about": {
