@@ -67,9 +67,7 @@ const getSupportedConstraints = () => {
 const isObject = (
   value: unknown,
 ): value is Record<string, unknown> => {
-  return (
-    typeof value === "object" && value !== null
-  );
+  return typeof value === "object" && value !== null;
 };
 
 const createDefaultMediaConstraints =
@@ -102,8 +100,11 @@ const createDefaultMediaConstraints =
             : undefined,
         echoCancellation: false,
         noiseSuppression: false,
-        autoGainControl: true,
-        latency: { ideal: 0, max: 0.01 },
+        autoGainControl: false,
+        latency:
+          "latency" in constraints
+            ? { ideal: 0 }
+            : undefined,
       },
       video: {
         frameRate: { max: 60 },
@@ -184,15 +185,18 @@ const loadLegacyConstraints = <T extends object>(
 const loadLegacyMediaConstraintsFromSession = (
   defaults: MediaConstraintsState,
 ): MediaConstraintsState => {
-  const legacyMicrophone = loadLegacyConstraints<MicrophoneConstraintsState>(
-    legacyMicrophoneConstraintsStorageKey,
-  );
-  const legacySpeaker = loadLegacyConstraints<SpeakerConstraintsState>(
-    legacySpeakerConstraintsStorageKey,
-  );
-  const legacyVideo = loadLegacyConstraints<VideoConstraintsState>(
-    legacyVideoConstraintsStorageKey,
-  );
+  const legacyMicrophone =
+    loadLegacyConstraints<MicrophoneConstraintsState>(
+      legacyMicrophoneConstraintsStorageKey,
+    );
+  const legacySpeaker =
+    loadLegacyConstraints<SpeakerConstraintsState>(
+      legacySpeakerConstraintsStorageKey,
+    );
+  const legacyVideo =
+    loadLegacyConstraints<VideoConstraintsState>(
+      legacyVideoConstraintsStorageKey,
+    );
 
   return {
     microphone: {

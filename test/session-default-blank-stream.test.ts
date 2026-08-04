@@ -1,9 +1,4 @@
-import {
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PeerSession } from "@/libs/core/session";
 import type { SignalingService } from "@/libs/core/services/type";
 
@@ -46,7 +41,7 @@ const makeStream = (id: string) =>
     getTracks: () => [],
   }) as unknown as MediaStream;
 
-describe("PeerSession default blank stream", () => {
+describe("PeerSession stream management", () => {
   it("does not create fallback stream when local stream is null", () => {
     const session = new PeerSession(makeSender("a", "b"), {
       polite: false,
@@ -57,7 +52,9 @@ describe("PeerSession default blank stream", () => {
     session.setStream(null);
 
     expect((session as any).localStream).toBeNull();
-    expect((session as any).lastLocalStreamState).toBeNull();
+    expect(
+      (session as any).lastLocalStreamState,
+    ).toBeNull();
     expect((session as any).outgoingQueue).toHaveLength(0);
   });
 
@@ -78,5 +75,55 @@ describe("PeerSession default blank stream", () => {
 
     expect((session as any).localStream).toBeNull();
     expect(renegotiate).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the sender associated with a removed track", () => {
+    const session = new PeerSession(makeSender("a", "b"), {
+      polite: false,
+    });
+    const track = {
+      id: "track-1",
+      kind: "audio",
+      addEventListener: () => {},
+    } as unknown as MediaStreamTrack;
+    const sender = { track } as RTCRtpSender;
+    const addTrack = vi.fn(() => sender);
+    const removeTrack = vi.fn();
+    const pc = {
+      addTrack,
+      removeTrack,
+    } as unknown as RTCPeerConnection;
+
+    let removeTrackListener:
+      | ((event: { track: MediaStreamTrack }) => void)
+      | undefined;
+    const stream = {
+      id: "media-3",
+      addEventListener: (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+      ) => {
+        if (
+          type === "removetrack" &&
+          typeof listener === "function"
+        ) {
+          removeTrackListener =
+            listener as unknown as (event: {
+              track: MediaStreamTrack;
+            }) => void;
+        }
+      },
+      getTracks: () => [track],
+    } as unknown as MediaStream;
+
+    (session as any).peerConnection = pc;
+    (session as any).renegotiate = vi.fn();
+
+    session.setStream(stream);
+    removeTrackListener?.({ track });
+
+    expect(addTrack).toHaveBeenCalledWith(track, stream);
+    expect(removeTrack).toHaveBeenCalledTimes(1);
+    expect(removeTrack).toHaveBeenCalledWith(sender);
   });
 });

@@ -345,7 +345,9 @@ export default function Video() {
                 class="absolute inset-0"
                 stream={localStream()}
                 name={`${appState.profile.name} (You)`}
-                avatar={appState.profile.avatar ?? undefined}
+                avatar={
+                  appState.profile.avatar ?? undefined
+                }
                 muted={true}
               >
                 <LocalToolbar
@@ -550,13 +552,11 @@ const LocalToolbar = (props: {
     setDisplayStream(null);
   };
 
-  const {
-    open: openMediaSelection,
-  } = createMediaSelectionDialog();
+  const { open: openMediaSelection } =
+    createMediaSelectionDialog();
 
-  const {
-    open: openApplyConstraintsDialog,
-  } = createApplyConstraintsDialog();
+  const { open: openApplyConstraintsDialog } =
+    createApplyConstraintsDialog();
 
   const tracks = createMediaTracks(
     () => localStream() ?? null,
@@ -572,7 +572,7 @@ const LocalToolbar = (props: {
 
   const microphoneAudioTrack = createMemo(() => {
     return (
-      audioTracks()?.find((track) => {
+      audioTracks().find((track) => {
         return track.contentHint === "speech";
       }) ?? null
     );
@@ -580,7 +580,7 @@ const LocalToolbar = (props: {
 
   const speakerAudioTrack = createMemo(() => {
     return (
-      audioTracks()?.find((track) => {
+      audioTracks().find((track) => {
         return track.contentHint === "music";
       }) ?? null
     );
@@ -590,24 +590,24 @@ const LocalToolbar = (props: {
     createSignal();
   createEffect(() => {
     const track = microphoneAudioTrack();
-    if (track) {
-      if (microphoneMuted() === undefined) {
-        setMicrophoneMuted(!track.enabled);
-      } else {
-        track.enabled = !microphoneMuted();
-      }
+    if (!track) return;
+
+    if (microphoneMuted() === undefined) {
+      setMicrophoneMuted(!track.enabled);
+    } else {
+      track.enabled = !microphoneMuted();
     }
   });
 
   const [speakerMuted, setSpeakerMuted] = createSignal();
   createEffect(() => {
     const track = speakerAudioTrack();
-    if (track) {
-      if (speakerMuted() === undefined) {
-        setSpeakerMuted(!track.enabled);
-      } else {
-        track.enabled = !speakerMuted();
-      }
+    if (!track) return;
+
+    if (speakerMuted() === undefined) {
+      setSpeakerMuted(!track.enabled);
+    } else {
+      track.enabled = !speakerMuted();
     }
   });
 

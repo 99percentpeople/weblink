@@ -70,8 +70,9 @@ export class PeerSession {
   private signalCache: Array<ClientSignal> = [];
   readonly polite: boolean;
   private localStream: MediaStream | null = null;
-  private lastLocalStreamState: StreamStateMessage["mode"] | null =
-    null;
+  private lastLocalStreamState:
+    | StreamStateMessage["mode"]
+    | null = null;
   private remoteStream: MediaStream | null = null;
   private status: PeerSessionStatus = "init";
   private listenController: AbortController | null = null;
@@ -344,7 +345,9 @@ export class PeerSession {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
-  private notifyLocalStreamState(stream: MediaStream | null) {
+  private notifyLocalStreamState(
+    stream: MediaStream | null,
+  ) {
     if (!stream) {
       this.lastLocalStreamState = null;
       return;
@@ -1424,9 +1427,9 @@ export class PeerSession {
         (sender) => sender.track?.id === ev.track.id,
       );
       if (index === -1) return;
-      senders.splice(index, 1);
-      if (!this.peerConnection) return;
-      this.peerConnection.removeTrack(senders[index]);
+      const [sender] = senders.splice(index, 1);
+      if (!sender || !this.peerConnection) return;
+      this.peerConnection.removeTrack(sender);
     });
 
     const pc = this.peerConnection;

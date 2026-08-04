@@ -7,6 +7,7 @@ import {
 } from "solid-js";
 import { createDialog } from "@/components/dialogs/dialog";
 import {
+  IconInfo,
   IconMonitor,
   IconSettings,
   IconVideoCam,
@@ -18,10 +19,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { createStore } from "solid-js/store";
 import { Button } from "@/components/ui/button";
 import {
-  createSpeakers,
   createMicrophones,
   createCameras,
 } from "@/libs/utils/devices";
@@ -42,7 +47,12 @@ import {
   SwitchThumb,
 } from "@/components/ui/switch";
 import { t } from "@/i18n";
-import { localStream } from "@/libs/stream";
+import {
+  createLocalMediaStream,
+  localStream,
+  mergeMediaStreamTracks,
+  stopMediaStream,
+} from "@/libs/stream";
 import { cn } from "@/libs/cn";
 import {
   createPresetMicrophoneConstraintsDialog,
@@ -61,11 +71,13 @@ export type MediaDeviceInfoType = {
 const [devices, setDevices] = createStore<{
   camera: MediaDeviceInfoType | null;
   microphone: MediaDeviceInfoType | null;
-  speaker: MediaDeviceInfoType | null;
+  programAudio: MediaDeviceInfoType | null;
+  screenAudio: MediaDeviceInfoType | null;
 }>({
   camera: null,
   microphone: null,
-  speaker: null,
+  programAudio: null,
+  screenAudio: null,
 });
 
 const canGetDisplayMedia =
@@ -97,42 +109,34 @@ const [enableUserCamera, setEnableUserCamera] =
     name: "enableUserCamera",
     storage: sessionStorage,
   });
+const [enableUserProgramAudio, setEnableUserProgramAudio] =
+  makePersisted(createSignal(false), {
+    name: "enableUserProgramAudio",
+    storage: sessionStorage,
+  });
 
 export const createMediaSelectionDialog = () => {
   const cameras = createCameras();
   const microphones = createMicrophones();
-  const speakers = createSpeakers();
 
   const availableCameras = createMemo(() => {
-    const cams = cameras()
-      .filter((cam) => cam.deviceId !== "")
-      .map((cam) => ({
-        label: cam.label,
-        deviceId: cam.deviceId,
+    return cameras()
+      .filter((camera) => camera.deviceId !== "")
+      .map((camera) => ({
+        label: camera.label,
+        deviceId: camera.deviceId,
       }));
-    return cams;
-  });
-
-  const availableSpeakers = createMemo(() => {
-    const spks = speakers()
-      .filter((spk) => spk.deviceId !== "")
-      .map((spk) => ({
-        label: spk.label,
-        deviceId: spk.deviceId,
-      }));
-
-    return spks;
   });
 
   const availableMicrophones = createMemo(() => {
-    const mics = microphones()
-      .filter((mic) => mic.deviceId !== "")
-      .map((mic) => ({
-        label: mic.label,
-        deviceId: mic.deviceId,
+    return microphones()
+      .filter((microphone) => microphone.deviceId !== "")
+      .map((microphone) => ({
+        label: microphone.label,
+        deviceId: microphone.deviceId,
       }));
-    return mics;
   });
+
   const [selectedTab, setSelectedTab] = createSignal(
     canGetDisplayMedia ? "screen" : "user",
   );
@@ -145,10 +149,7 @@ export const createMediaSelectionDialog = () => {
     createPermission("microphone");
 
   const canUseScreenSpeaker = createMemo(() => {
-    return (
-      enableScreenSpeaker() &&
-      availableSpeakers().length !== 0
-    );
+    return enableScreenSpeaker();
   });
   const canUseScreenMicrophone = createMemo(() => {
     return (
@@ -174,32 +175,81 @@ export const createMediaSelectionDialog = () => {
     );
   });
 
+  const canUseUserProgramAudio = createMemo(() => {
+    return (
+      enableUserProgramAudio() &&
+      availableMicrophones().length !== 0 &&
+      microphonePermission() === "granted"
+    );
+  });
+
+  const openAudioInput = async (
+    device: MediaDeviceInfoType | null,
+    constraints: MediaTrackConstraints,
+  ) => {
+    const audioConstraints = { ...constraints };
+
+    if (device?.deviceId) {
+      audioConstraints.deviceId = {
+        exact: device.deviceId,
+      };
+    }
+
+    return catchError(
+      navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: false,
+      }),
+    );
+  };
+
+  const getProgramAudioConstraints =
+    (): MediaTrackConstraints => ({
+      autoGainControl:
+        appState.media.constraints.speaker.autoGainControl,
+      echoCancellation:
+        appState.media.constraints.speaker.echoCancellation,
+      noiseSuppression:
+        appState.media.constraints.speaker.noiseSuppression,
+    });
+
   const closeStream = () => {
-    stream()
-      ?.getTracks()
-      .forEach((track) => {
-        stream()?.removeTrack(track);
-        track.stop();
-      });
+    stopMediaStream(stream());
     setStream(null);
   };
+
   const openScreen = async (
     enableSpeaker: boolean = true,
     enableMicrophone: boolean = false,
   ) => {
-    const [err, local] = await catchError(
+    const screenAudioInput =
+      enableSpeaker && devices.screenAudio
+        ? devices.screenAudio
+        : null;
+
+    if (
+      enableMicrophone &&
+      screenAudioInput &&
+      screenAudioInput.deviceId ===
+        devices.microphone?.deviceId
+    ) {
+      toast.error(
+        t(
+          "common.media_selection_dialog.distinct_audio_inputs_required",
+        ),
+      );
+      return;
+    }
+
+    const [err, displayMedia] = await catchError(
       navigator.mediaDevices.getDisplayMedia({
         video: {
-          deviceId: devices.camera?.deviceId,
           displaySurface: "monitor",
           ...appState.media.constraints.video,
         },
         audio:
-          enableSpeaker && speakers().length !== 0
-            ? {
-                deviceId: devices.speaker?.deviceId,
-                ...appState.media.constraints.speaker,
-              }
+          enableSpeaker && !screenAudioInput
+            ? { ...appState.media.constraints.speaker }
             : false,
       }),
     );
@@ -208,97 +258,192 @@ export const createMediaSelectionDialog = () => {
       return;
     }
 
-    local.getAudioTracks().forEach((track) => {
-      track.contentHint = "music";
-    });
+    const local = createLocalMediaStream([
+      {
+        stream: displayMedia,
+        kind: "audio",
+        contentHint: "music",
+      },
+      {
+        stream: displayMedia,
+        kind: "video",
+        contentHint: "motion",
+      },
+    ]);
 
-    local.getVideoTracks().forEach((track) => {
-      track.contentHint = "motion";
-    });
-
-    if (enableMicrophone) {
-      const [err, microphoneMedia] = await catchError(
-        navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: devices.microphone?.deviceId,
-            ...appState.media.constraints.microphone,
-          },
-        }),
-      );
-      if (err) {
-        toast.error(err.message);
+    if (screenAudioInput) {
+      const [screenAudioErr, screenAudioMedia] =
+        await openAudioInput(
+          screenAudioInput,
+          getProgramAudioConstraints(),
+        );
+      if (screenAudioErr) {
+        toast.error(screenAudioErr.message);
       } else {
-        const microphoneTrack =
-          microphoneMedia.getAudioTracks()[0];
-        microphoneTrack.contentHint = "speech";
-        local.addTrack(microphoneTrack);
+        mergeMediaStreamTracks(local, screenAudioMedia, {
+          kind: "audio",
+          contentHint: "music",
+        });
       }
     }
+
+    if (enableMicrophone) {
+      const [microphoneErr, microphoneMedia] =
+        await openAudioInput(
+          devices.microphone,
+          appState.media.constraints.microphone,
+        );
+      if (microphoneErr) {
+        toast.error(microphoneErr.message);
+      } else {
+        mergeMediaStreamTracks(local, microphoneMedia, {
+          kind: "audio",
+          contentHint: "speech",
+        });
+      }
+    }
+
     setStream(local);
   };
+
   const openCamera = async (
     enableCamera: boolean = true,
     enableMicrophone: boolean = true,
+    enableProgramAudio: boolean = false,
   ) => {
-    const [err, local] = await catchError(
-      navigator.mediaDevices.getUserMedia({
-        video:
-          enableCamera && availableCameras().length !== 0
-            ? {
-                deviceId: devices.camera?.deviceId,
-                ...appState.media.constraints.video,
-              }
-            : undefined,
-        audio:
-          enableMicrophone &&
-          availableMicrophones().length !== 0
-            ? {
-                deviceId: devices.microphone?.deviceId,
-                ...appState.media.constraints.microphone,
-              }
-            : undefined,
-      }),
-    );
-    if (err) {
-      toast.error(err.message);
+    if (
+      !enableCamera &&
+      !enableMicrophone &&
+      !enableProgramAudio
+    ) {
+      toast.error(
+        t(
+          "common.media_selection_dialog.enable_source_required",
+        ),
+      );
       return;
     }
 
-    local.getAudioTracks().forEach((track) => {
-      track.contentHint = "speech";
-    });
+    if (
+      enableMicrophone &&
+      enableProgramAudio &&
+      devices.microphone &&
+      devices.programAudio &&
+      devices.microphone.deviceId ===
+        devices.programAudio.deviceId
+    ) {
+      toast.error(
+        t(
+          "common.media_selection_dialog.distinct_audio_inputs_required",
+        ),
+      );
+      return;
+    }
 
-    local.getVideoTracks().forEach((track) => {
-      track.contentHint = "motion";
-    });
+    const local = new MediaStream();
+
+    if (enableCamera && availableCameras().length !== 0) {
+      const videoConstraints: MediaTrackConstraints = {
+        ...appState.media.constraints.video,
+      };
+
+      if (devices.camera?.deviceId) {
+        videoConstraints.deviceId = {
+          exact: devices.camera.deviceId,
+        };
+      }
+
+      const [cameraErr, cameraMedia] = await catchError(
+        navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: videoConstraints,
+        }),
+      );
+      if (cameraErr) {
+        toast.error(cameraErr.message);
+      } else {
+        mergeMediaStreamTracks(local, cameraMedia, {
+          kind: "video",
+          contentHint: "motion",
+        });
+      }
+    }
+
+    if (
+      enableMicrophone &&
+      availableMicrophones().length !== 0
+    ) {
+      const [microphoneErr, microphoneMedia] =
+        await openAudioInput(
+          devices.microphone,
+          appState.media.constraints.microphone,
+        );
+      if (microphoneErr) {
+        toast.error(microphoneErr.message);
+      } else {
+        mergeMediaStreamTracks(local, microphoneMedia, {
+          kind: "audio",
+          contentHint: "speech",
+        });
+      }
+    }
+
+    if (
+      enableProgramAudio &&
+      availableMicrophones().length !== 0
+    ) {
+      const [programAudioErr, programAudioMedia] =
+        await openAudioInput(
+          devices.programAudio,
+          getProgramAudioConstraints(),
+        );
+      if (programAudioErr) {
+        toast.error(programAudioErr.message);
+      } else {
+        mergeMediaStreamTracks(local, programAudioMedia, {
+          kind: "audio",
+          contentHint: "music",
+        });
+      }
+    }
+
+    if (local.getTracks().length === 0) return;
+
     setStream(local);
   };
 
-  createEffect(() => {
-    stream()
-      ?.getTracks()
-      .forEach((track) => {
-        track.addEventListener("ended", () => {
+  createEffect<AbortController | undefined>((prev) => {
+    prev?.abort();
+
+    const currentStream = stream();
+    if (!currentStream) return;
+
+    const controller = new AbortController();
+    currentStream.getTracks().forEach((track) => {
+      track.addEventListener(
+        "ended",
+        () => {
           track.stop();
-          stream()?.removeTrack(track);
-          if (stream()?.getTracks().length === 0) {
+          currentStream.removeTrack(track);
+          if (currentStream.getTracks().length === 0) {
             setStream(null);
           }
-        });
-      });
+        },
+        { signal: controller.signal },
+      );
+    });
+
+    return controller;
   });
 
-  const {
-    open: openMicrophoneConstraintsDialog,
-  } = createPresetMicrophoneConstraintsDialog();
+  const { open: openMicrophoneConstraintsDialog } =
+    createPresetMicrophoneConstraintsDialog();
 
-  const {
-    open: openSpeakerConstraintsDialog,
-  } = createPresetSpeakerTrackConstraintsDialog();
+  const { open: openSpeakerConstraintsDialog } =
+    createPresetSpeakerTrackConstraintsDialog();
 
-  const {
-    open: openVideoConstraintsDialog,
-  } = createPresetVideoConstraintsDialog();
+  const { open: openVideoConstraintsDialog } =
+    createPresetVideoConstraintsDialog();
 
   const requestMicrophonePermission = async () => {
     if (!("mediaDevices" in navigator)) {
@@ -344,8 +489,8 @@ export const createMediaSelectionDialog = () => {
     });
   };
 
-  const { open, close, submit } =
-    createDialog<MediaStream>({
+  const { open, close, submit } = createDialog<MediaStream>(
+    {
       title: () => t("common.media_selection_dialog.title"),
       content: () => (
         <Tabs
@@ -379,7 +524,9 @@ export const createMediaSelectionDialog = () => {
                 name={t(
                   "common.media_selection_dialog.current",
                 )}
-                avatar={appState.profile.avatar ?? undefined}
+                avatar={
+                  appState.profile.avatar ?? undefined
+                }
               />
             }
           >
@@ -406,7 +553,7 @@ export const createMediaSelectionDialog = () => {
               >
                 <Button
                   size="sm"
-                  class="w-full"
+                  class="flex-1"
                   onClick={requestMicrophonePermission}
                 >
                   {t(
@@ -447,7 +594,7 @@ export const createMediaSelectionDialog = () => {
               >
                 <SwitchLabel>
                   {t(
-                    "common.media_selection_dialog.enable_speaker",
+                    "common.media_selection_dialog.enable_system_audio",
                   )}
                 </SwitchLabel>
                 <SwitchControl>
@@ -465,16 +612,16 @@ export const createMediaSelectionDialog = () => {
                   </Button>
                   <Select<MediaDeviceInfoType>
                     class="flex-1"
-                    value={devices.speaker}
+                    value={devices.screenAudio}
                     placeholder={t(
-                      "common.media_selection_dialog.select_speaker",
+                      "common.media_selection_dialog.select_system_audio_source",
                     )}
-                    onChange={(value) =>
-                      setDevices("speaker", value)
-                    }
+                    onChange={(value) => {
+                      setDevices("screenAudio", value);
+                    }}
                     optionTextValue="label"
                     optionValue="deviceId"
-                    options={availableSpeakers()}
+                    options={availableMicrophones()}
                     itemComponent={(props) => (
                       <SelectItem item={props.item}>
                         {props.item.rawValue.label}
@@ -482,7 +629,7 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select speaker"
+                      aria-label="Select system audio source"
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -553,7 +700,7 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select speaker"
+                      aria-label="Select microphone"
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -638,7 +785,7 @@ export const createMediaSelectionDialog = () => {
               >
                 <Button
                   size="sm"
-                  class="w-full"
+                  class="flex-1"
                   onClick={requestCameraPermission}
                 >
                   {t(
@@ -654,7 +801,7 @@ export const createMediaSelectionDialog = () => {
               >
                 <Button
                   size="sm"
-                  class="w-full"
+                  class="flex-1"
                   onClick={requestMicrophonePermission}
                 >
                   {t(
@@ -805,6 +952,98 @@ export const createMediaSelectionDialog = () => {
                 </div>
               </Show>
             </div>
+            <div
+              class={cn(
+                "flex flex-col gap-2 rounded-lg px-2",
+                canUseUserProgramAudio() &&
+                  "border-border border py-2",
+              )}
+            >
+              <Switch
+                disabled={
+                  availableMicrophones().length === 0 ||
+                  microphonePermission() !== "granted"
+                }
+                class="flex items-center justify-between gap-2"
+                checked={enableUserProgramAudio()}
+                onChange={(value) =>
+                  setEnableUserProgramAudio(value)
+                }
+              >
+                <div class="flex items-center gap-1">
+                  <SwitchLabel>
+                    {t(
+                      "common.media_selection_dialog.enable_program_audio",
+                    )}
+                  </SwitchLabel>
+                  <Tooltip placement="top">
+                    <TooltipTrigger
+                      as="button"
+                      type="button"
+                      class="text-muted-foreground hover:text-foreground
+                        focus-visible:ring-ring inline-flex size-5 items-center
+                        justify-center rounded-full transition-colors
+                        focus-visible:ring-2 focus-visible:outline-none"
+                      aria-label={t(
+                        "common.media_selection_dialog.obs_audio_setup_tip",
+                      )}
+                    >
+                      <IconInfo class="size-4" />
+                    </TooltipTrigger>
+                    <TooltipContent class="leading-relaxed whitespace-pre-line">
+                      {t(
+                        "common.media_selection_dialog.obs_audio_setup_tip",
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <SwitchControl>
+                  <SwitchThumb />
+                </SwitchControl>
+              </Switch>
+
+              <Show when={canUseUserProgramAudio()}>
+                <div class="flex w-full gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={openSpeakerConstraintsDialog}
+                  >
+                    <IconSettings class="size-6" />
+                  </Button>
+                  <Select<MediaDeviceInfoType>
+                    class="flex-1"
+                    value={devices.programAudio}
+                    placeholder={t(
+                      "common.media_selection_dialog.select_program_audio",
+                    )}
+                    onChange={(value) => {
+                      setDevices("programAudio", value);
+                    }}
+                    optionTextValue="label"
+                    optionValue="deviceId"
+                    options={availableMicrophones()}
+                    itemComponent={(props) => (
+                      <SelectItem item={props.item}>
+                        {props.item.rawValue.label}
+                      </SelectItem>
+                    )}
+                  >
+                    <SelectTrigger
+                      aria-label="Select program audio"
+                      class="hover:bg-muted/80 border-none transition-colors"
+                    >
+                      <SelectValue<MediaDeviceInfoType>>
+                        {(state) =>
+                          state.selectedOption().label
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                </div>
+              </Show>
+            </div>
             <div class="flex gap-2">
               <Show
                 when={
@@ -834,6 +1073,7 @@ export const createMediaSelectionDialog = () => {
                           openCamera(
                             enableUserCamera(),
                             enableUserMicrophone(),
+                            enableUserProgramAudio(),
                           )
                         }
                       >
@@ -877,7 +1117,8 @@ export const createMediaSelectionDialog = () => {
       onSubmit: () => {
         setStream(null);
       },
-    });
+    },
+  );
 
   return { open, close };
 };
