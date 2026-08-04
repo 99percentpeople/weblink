@@ -1,5 +1,7 @@
 # Weblink
 
+[![CI](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg)](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml)
+
 **English Introduction** | [**中文介绍**](README_CN.md)
 
 ## Introduction
