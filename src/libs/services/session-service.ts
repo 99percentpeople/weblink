@@ -1,7 +1,4 @@
-import {
-  produce,
-  reconcile,
-} from "solid-js/store";
+import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../core/session";
 import { ClientID, ClientInfo } from "../core/type";
 import {
@@ -15,7 +12,14 @@ import {
 } from "@/libs/services/rtc-protocol";
 import { getIceServers } from "@/libs/core/store";
 import { catchError, catchErrorSync } from "../catch";
-import { appState, setAppState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
+
+export interface SessionServiceOptions {
+  loadIceServers?: () => Promise<RTCIceServer[]>;
+}
 
 export class SessionService {
   readonly sessions: Record<ClientID, PeerSession> =
@@ -33,13 +37,18 @@ export class SessionService {
   > = () => appState.session.clientServiceStatus;
 
   iceServers: Promise<RTCIceServer[]>;
+  private readonly loadIceServers: () => Promise<
+    RTCIceServer[]
+  >;
 
-  constructor() {
-    this.iceServers = getIceServers();
+  constructor(options: SessionServiceOptions = {}) {
+    this.loadIceServers =
+      options.loadIceServers ?? getIceServers;
+    this.iceServers = this.loadIceServers();
   }
 
   updateIceServers() {
-    this.iceServers = getIceServers();
+    this.iceServers = this.loadIceServers();
   }
 
   setClipboard(message: SendClipboardMessage) {
@@ -77,7 +86,11 @@ export class SessionService {
     this.service = cs;
 
     cs.addEventListener("statuschange", (ev) => {
-      setAppState("session", "clientServiceStatus", ev.detail);
+      setAppState(
+        "session",
+        "clientServiceStatus",
+        ev.detail,
+      );
     });
   }
 
@@ -91,6 +104,22 @@ export class SessionService {
     );
   }
 
+  private detachSession(
+    target: ClientID,
+    session: PeerSession,
+  ) {
+    if (this.sessions[target] !== session) return;
+
+    this.service?.removeSender(target);
+    setAppState(
+      "session",
+      "clientViewData",
+      target,
+      undefined!,
+    );
+    setAppState("session", "sessions", target, undefined!);
+  }
+
   removeSession(target: ClientID) {
     const session = this.sessions[target];
     if (!session) {
@@ -99,20 +128,9 @@ export class SessionService {
       );
       return;
     }
+
     session.close();
-    this.service?.removeSender(target);
-    setAppState(
-      "session",
-      "clientViewData",
-      target,
-      undefined!,
-    );
-    setAppState(
-      "session",
-      "sessions",
-      target,
-      undefined!,
-    );
+    this.detachSession(target, session);
   }
 
   async addClient(client: TransferClient) {
@@ -144,52 +162,66 @@ export class SessionService {
         appState.options.relayOnly,
     });
 
-    setAppState("session", "clientViewData", client.clientId, {
-      ...client,
-      onlineStatus: "offline",
-      messageChannel: false,
-    } satisfies ClientInfo);
-    setAppState("session", "sessions", client.clientId, session);
+    setAppState(
+      "session",
+      "clientViewData",
+      client.clientId,
+      {
+        ...client,
+        onlineStatus: "offline",
+        messageChannel: false,
+      } satisfies ClientInfo,
+    );
+    setAppState(
+      "session",
+      "sessions",
+      client.clientId,
+      session,
+    );
 
     const controller = new AbortController();
 
-    session.addEventListener("peerconnectioninit", (ev) => {
-      const pc = ev.detail;
-      pc.getSenders().forEach((sender) => {
-        switch (sender.track?.kind) {
-          case "audio": {
-            const audioParameters = changeAudioEncoding(
-              sender.getParameters(),
-            );
-            if (audioParameters) {
-              sender
-                .setParameters(audioParameters)
-                .catch((e) => {
-                  console.error(
-                    `set audio parameters error: ${e}`,
-                  );
-                });
+    session.addEventListener(
+      "peerconnectioninit",
+      (ev) => {
+        const pc = ev.detail;
+        pc.getSenders().forEach((sender) => {
+          switch (sender.track?.kind) {
+            case "audio": {
+              const audioParameters = changeAudioEncoding(
+                sender.getParameters(),
+              );
+              if (audioParameters) {
+                sender
+                  .setParameters(audioParameters)
+                  .catch((e) => {
+                    console.error(
+                      `set audio parameters error: ${e}`,
+                    );
+                  });
+              }
+              break;
             }
-            break;
-          }
-          case "video": {
-            const videoParameters = changeVideoEncoding(
-              sender.getParameters(),
-            );
-            if (videoParameters) {
-              sender
-                .setParameters(videoParameters)
-                .catch((e) => {
-                  console.error(
-                    `set video parameters error: ${e}`,
-                  );
-                });
+            case "video": {
+              const videoParameters = changeVideoEncoding(
+                sender.getParameters(),
+              );
+              if (videoParameters) {
+                sender
+                  .setParameters(videoParameters)
+                  .catch((e) => {
+                    console.error(
+                      `set video parameters error: ${e}`,
+                    );
+                  });
+              }
+              break;
             }
-            break;
           }
-        }
-      });
-    });
+        });
+      },
+      { signal: controller.signal },
+    );
 
     session.addEventListener(
       "statuschange",
@@ -246,7 +278,7 @@ export class SessionService {
               "offline",
             );
             controller.abort();
-            this.removeSession(session.clientId);
+            this.detachSession(client.clientId, session);
             break;
         }
       },

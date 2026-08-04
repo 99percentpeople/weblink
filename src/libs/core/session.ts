@@ -1683,23 +1683,26 @@ export class PeerSession {
       );
       return;
     }
-    if (!this.makingOffer) {
-      this.makingOffer = true;
+    if (this.makingOffer) {
+      console.warn(
+        `[PeerSession] session ${this.clientId} already making offer`,
+      );
+      return;
+    }
+
+    this.makingOffer = true;
+    try {
       const [err] = await catchError(
         handleOffer(this.peerConnection, this.sender),
       );
       if (err) {
         console.error(
-          `[PeerSession] Error during ICE restart:`,
+          `[PeerSession] Error during renegotiation:`,
           err,
         );
-        return;
       }
+    } finally {
       this.makingOffer = false;
-    } else {
-      console.warn(
-        `[PeerSession] session ${this.clientId} already making offer`,
-      );
     }
   }
 
@@ -1716,11 +1719,12 @@ export class PeerSession {
       `[PeerSession] peer connection ${this.targetClientId} is null, new connection`,
     );
     this.resetSession();
-    let err: Error | undefined;
     this.listenController?.abort();
-    [err] = catchErrorSync(() => this.listen());
-    if (err) throw err;
+    const [listenError] = await catchError(this.listen());
+    if (listenError) throw listenError;
+
     this.setStatus("reconnecting");
+    let err: Error | undefined;
     const pc = this.peerConnection;
     if (!pc) {
       throw new Error(
@@ -1776,115 +1780,130 @@ export class PeerSession {
       return;
     }
 
+    if (this.makingOffer) {
+      throw new Error(
+        `[PeerSession] session ${this.clientId} already making offer`,
+      );
+    }
+
+    this.makingOffer = true;
     const connectAbortController = new AbortController();
 
-    return new Promise<void>(async (resolve, reject) => {
-      this.createChannel("message", "message").catch(
-        (err) => {
-          reject(err);
-        },
-      );
-
-      const timer = window.setTimeout(() => {
-        reject(
-          new Error(
-            `[PeerSession] connect timeout: after ${PEER_SESSION_CONNECTION_TIMEOUT_MS}ms`,
-          ),
-        );
-      }, PEER_SESSION_CONNECTION_TIMEOUT_MS);
-
-      this.controller?.signal.addEventListener(
-        "abort",
-        () => {
-          reject(
-            new Error(`[PeerSession] connect aborted`),
-          );
-        },
-        { once: true },
-      );
-
-      connectAbortController.signal.addEventListener(
-        "abort",
-        () => {
-          window.clearTimeout(timer);
-        },
-        { once: true },
-      );
-
-      this.sender.addEventListener(
-        "statuschange",
-        (ev) => {
-          if (
-            ["closed", "disconnected"].includes(ev.detail)
-          ) {
+    try {
+      const connectionPromise = new Promise<void>(
+        (resolve, reject) => {
+          const timer = window.setTimeout(() => {
             reject(
               new Error(
-                `[PeerSession] connection failed, signaling service is ${ev.detail}`,
+                `[PeerSession] connect timeout: after ${PEER_SESSION_CONNECTION_TIMEOUT_MS}ms`,
               ),
             );
+          }, PEER_SESSION_CONNECTION_TIMEOUT_MS);
+
+          connectAbortController.signal.addEventListener(
+            "abort",
+            () => {
+              window.clearTimeout(timer);
+            },
+            { once: true },
+          );
+
+          const sessionSignal = this.controller?.signal;
+          if (sessionSignal?.aborted) {
+            reject(
+              new Error(`[PeerSession] connect aborted`),
+            );
+            return;
           }
+          sessionSignal?.addEventListener(
+            "abort",
+            () => {
+              reject(
+                new Error(`[PeerSession] connect aborted`),
+              );
+            },
+            {
+              once: true,
+              signal: connectAbortController.signal,
+            },
+          );
+
+          this.sender.addEventListener(
+            "statuschange",
+            (ev) => {
+              if (
+                ["closed", "disconnected"].includes(
+                  ev.detail,
+                )
+              ) {
+                reject(
+                  new Error(
+                    `[PeerSession] connection failed, signaling service is ${ev.detail}`,
+                  ),
+                );
+              }
+            },
+            { signal: connectAbortController.signal },
+          );
+
+          pc.addEventListener(
+            "connectionstatechange",
+            () => {
+              switch (pc.connectionState) {
+                case "connected":
+                  console.log(
+                    `connection established, session ${this.clientId}, connectable: ${this.connectable}`,
+                  );
+                  this.connectable = true;
+                  resolve();
+                  break;
+                case "failed":
+                case "closed":
+                case "disconnected":
+                  reject(
+                    new Error(
+                      `[PeerSession] Connection failed with state: ${pc.connectionState}`,
+                    ),
+                  );
+                  break;
+                default:
+                  break;
+              }
+            },
+            { signal: connectAbortController.signal },
+          );
         },
-        { signal: connectAbortController.signal },
       );
 
-      pc.addEventListener(
-        "connectionstatechange",
-        () => {
-          switch (pc.connectionState) {
-            case "connected":
-              console.log(
-                `connection established, session ${this.clientId}, connectable: ${this.connectable}`,
-              );
-              this.connectable = true;
-              resolve();
-              break;
-            case "failed":
-            case "closed":
-            case "disconnected":
-              reject(
-                new Error(
-                  `[PeerSession] Connection failed with state: ${pc.connectionState}`,
-                ),
-              );
-              break;
-            default:
-              break;
-          }
-        },
-        { signal: connectAbortController.signal },
-      );
-      if (!this.makingOffer) {
-        this.makingOffer = true;
-        const [err] = await catchError(
-          handleOffer(pc, this.sender),
+      const channelGuard = this.createChannel(
+        "message",
+        "message",
+      ).then(() => connectionPromise);
+      const offerPromise = handleOffer(
+        pc,
+        this.sender,
+      ).catch((err: unknown) => {
+        const message =
+          err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `[PeerSession] Failed to create and send offer: ${message}`,
         );
-        if (err) {
-          reject(
-            new Error(
-              `[PeerSession] Failed to create and send offer: ${err.message}`,
-            ),
-          );
-        }
-        this.makingOffer = false;
-      } else {
-        reject(
-          new Error(
-            `[PeerSession] session ${this.clientId} already making offer`,
-          ),
-        );
-      }
-    })
-      .then(() => {
-        this.setupAfterConnectedListeners();
-        this.setStatus("connected");
-      })
-      .catch((err) => {
-        this.disconnect();
-        throw err;
-      })
-      .finally(() => {
-        connectAbortController.abort();
       });
+
+      await Promise.all([
+        offerPromise,
+        Promise.race([connectionPromise, channelGuard]),
+      ]);
+
+      this.setupAfterConnectedListeners();
+      this.setStatus("connected");
+    } catch (err) {
+      this.disconnect();
+      throw err;
+    } finally {
+      this.makingOffer = false;
+      connectAbortController.abort();
+    }
   }
 
   private resetSession() {

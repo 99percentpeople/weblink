@@ -22,9 +22,6 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*": [
-      "bun run lint"
-    ],
     "**/*.{js,jsx,ts,tsx,css,html,json,md}": [
       "prettier --write"
     ]

@@ -4,7 +4,7 @@ Weblink refactors are incremental and behavior-preserving. Each
 slice should keep protocol compatibility, move one responsibility
 at a time, and add focused tests before the next slice begins.
 
-## Current slice: local media streams
+## Completed slice: local media streams
 
 Goal: separate low-level `MediaStream` operations from app-level
 ownership and lifecycle management.
@@ -20,6 +20,25 @@ ownership and lifecycle management.
 - [x] Add focused utility and lifecycle tests.
 - [x] Run formatting, unit tests, strict type checking, and the
       production build.
+
+## Current slice: session lifecycle hardening
+
+Goal: make connection failures and session teardown deterministic
+before splitting the large `PeerSession` implementation.
+
+- [x] Remove closed sessions by their remote client key through an
+      idempotent detach path.
+- [x] Release `makingOffer` after failed renegotiation.
+- [x] Await asynchronous signaling setup during reconnect.
+- [x] Replace the async `Promise` executor in `connect` with explicit
+      offer, channel, connection, timeout, and cleanup flows.
+- [x] Add dependency injection for ICE server loading in service
+      tests.
+- [x] Add focused success and failure regression tests.
+- [x] Move project-wide type checking out of `lint-staged` so file
+      arguments are not passed to `tsc -p`.
+- [x] Run both test runners, strict type checking, formatting, and
+      the production build.
 
 ## Next candidates
 
