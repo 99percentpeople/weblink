@@ -7,10 +7,10 @@ import {
   vi,
 } from "vitest";
 import {
-  createLocalMediaStream,
+  composeMediaStream,
   mergeMediaStreamTracks,
   stopMediaStream,
-} from "@/libs/stream";
+} from "@/libs/core/media-stream";
 
 class FakeMediaStream {
   private tracks: MediaStreamTrack[];
@@ -73,7 +73,7 @@ describe("media stream helpers", () => {
       "audio",
     );
 
-    const stream = createLocalMediaStream([
+    const stream = composeMediaStream([
       {
         stream: new FakeMediaStream([
           video,

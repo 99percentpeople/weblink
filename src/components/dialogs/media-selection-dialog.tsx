@@ -48,11 +48,11 @@ import {
 } from "@/components/ui/switch";
 import { t } from "@/i18n";
 import {
-  createLocalMediaStream,
-  localStream,
+  composeMediaStream,
   mergeMediaStreamTracks,
   stopMediaStream,
-} from "@/libs/stream";
+} from "@/libs/core/media-stream";
+import { localStream } from "@/libs/services/local-stream-service";
 import { cn } from "@/libs/cn";
 import {
   createPresetMicrophoneConstraintsDialog,
@@ -258,7 +258,7 @@ export const createMediaSelectionDialog = () => {
       return;
     }
 
-    const local = createLocalMediaStream([
+    const local = composeMediaStream([
       {
         stream: displayMedia,
         kind: "audio",

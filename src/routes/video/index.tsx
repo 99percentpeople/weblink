@@ -10,9 +10,10 @@ import {
 } from "solid-js";
 import { Button } from "@/components/ui/button";
 import {
+  clearLocalStream,
   localStream,
-  setDisplayStream,
-} from "@/libs/stream";
+  replaceLocalStream,
+} from "@/libs/services/local-stream-service";
 import { t } from "@/i18n";
 import {
   IconDelete,
@@ -548,8 +549,8 @@ const LocalToolbar = (props: {
   client?: ClientInfo;
   class?: string;
 }) => {
-  const closeStream = async () => {
-    setDisplayStream(null);
+  const closeStream = () => {
+    clearLocalStream();
   };
 
   const { open: openMediaSelection } =
@@ -635,7 +636,7 @@ const LocalToolbar = (props: {
         onClick={async () => {
           const { result } = await openMediaSelection();
           if (result) {
-            setDisplayStream(result);
+            replaceLocalStream(result);
           }
         }}
         icon={<IconScreenShare class="size-4" />}

@@ -65,7 +65,12 @@ Most non-trivial logic lives in `src/libs/`:
     channels (request/response style).
   - `rtc-service.ts`, `transfer-service.ts`, etc: service
     helpers that bridge UI state ↔ core primitives.
+  - `local-stream-service.ts`: Owns the active local media
+    stream, replaces/stops streams, and tracks dynamic or
+    ended media tracks.
 - `src/libs/core/`: Low-level primitives.
+  - `media-stream.ts`: Pure helpers for composing, merging,
+    and stopping browser `MediaStream`s.
   - `session.ts`: `PeerSession` (RTCPeerConnection lifecycle,
     negotiation/reconnect, channels).
   - `message.ts`: Message shapes + message store (chat + file

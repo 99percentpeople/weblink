@@ -74,7 +74,7 @@ import { AudioPlayerProvider } from "./routes/video/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
 import { createInitialization } from "@/libs/initialization";
 import { appState } from "@/libs/state/app-state";
-import { localStream } from "@/libs/stream";
+import { localStream } from "@/libs/services/local-stream-service";
 import { ModalProvider } from "@/components/dialogs/base";
 
 const InnerApp = (props: ParentProps) => {
@@ -103,7 +103,10 @@ const InnerApp = (props: ParentProps) => {
 
   const parseSearchParams = async () => {
     let reset = false;
-    if (search.id && search.id !== appState.profile.roomId) {
+    if (
+      search.id &&
+      search.id !== appState.profile.roomId
+    ) {
       setClientProfile("roomId", search.id as string);
       setSearch({ id: null }, { replace: true });
       reset = true;
@@ -328,7 +331,9 @@ const InnerApp = (props: ParentProps) => {
                         </p>
                       )}
                     </Show>
-                    <Show when={appState.roomStatus.profile}>
+                    <Show
+                      when={appState.roomStatus.profile}
+                    >
                       {(profile) => (
                         <p class="text-muted-foreground flex items-center gap-1 text-xs">
                           <IconPermContactCalendar class="size-4" />
