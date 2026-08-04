@@ -7,7 +7,7 @@ const createAboutDialog = () => {
     title: () => t("common.about_dialog.title"),
     content: () => {
       return (
-        <div class="flex flex-col gap-4 overflow-y-auto">
+        <div class="flex flex-col gap-4">
           <p>{t("common.about_dialog.description1")}</p>
           <p>{t("common.about_dialog.description2")}</p>
           <p>{t("common.about_dialog.description3")}</p>

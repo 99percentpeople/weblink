@@ -111,7 +111,7 @@ const clientInfoDialog = () => {
         name: client()?.name,
       }),
     content: () => (
-      <div class="grid grid-cols-3 gap-2 overflow-y-auto p-1 text-nowrap">
+      <div class="grid grid-cols-3 gap-2 p-1 text-nowrap">
         <div class="col-span-3 flex items-center justify-between gap-2">
           <Label>
             {t("common.client_info_dialog.client_id")}

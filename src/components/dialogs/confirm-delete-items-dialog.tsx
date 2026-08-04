@@ -18,8 +18,8 @@ export const createComfirmDeleteItemsDialog = () => {
         count: names().length,
       }),
     content: () => (
-      <div class="overflow-y-auto">
-        <ul class="text-ellipsis text-nowrap">
+      <div>
+        <ul class="text-nowrap text-ellipsis">
           <For each={names()}>
             {(name) => <li class="text-sm">{name}</li>}
           </For>

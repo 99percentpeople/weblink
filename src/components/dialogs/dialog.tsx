@@ -1,6 +1,7 @@
 import { Component } from "solid-js";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,7 +15,7 @@ import {
   ModalOptions,
 } from "./base";
 
-const BaseDialog: Component<BaseModalProps<any>> = (
+export const BaseDialog: Component<BaseModalProps<any>> = (
   props,
 ) => {
   return (
@@ -23,10 +24,7 @@ const BaseDialog: Component<BaseModalProps<any>> = (
       onOpenChange={() => props.onCancel?.()}
     >
       <DialogContent
-        class={cn(
-          "flex flex-col overflow-hidden",
-          props.class,
-        )}
+        class={cn("flex flex-col", props.class)}
       >
         <DialogHeader>
           <DialogTitle>{props.title}</DialogTitle>
@@ -34,7 +32,7 @@ const BaseDialog: Component<BaseModalProps<any>> = (
             {props.description}
           </DialogDescription>
         </DialogHeader>
-        {props.content}
+        <DialogBody>{props.content}</DialogBody>
         <DialogFooter>
           {props.cancel}
           {props.confirm}
@@ -44,8 +42,10 @@ const BaseDialog: Component<BaseModalProps<any>> = (
   );
 };
 
-interface DialogProps<T>
-  extends Omit<ModalOptions<T>, "component"> {}
+interface DialogProps<T> extends Omit<
+  ModalOptions<T>,
+  "component"
+> {}
 
 export const createDialog = <T extends any>(
   options: DialogProps<T>,

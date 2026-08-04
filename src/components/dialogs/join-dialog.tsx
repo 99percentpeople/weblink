@@ -21,12 +21,14 @@ import {
   SwitchLabel,
   SwitchThumb,
 } from "@/components/ui/switch";
-import { IconCasino, IconLogin, IconLogout } from "@/components/icons";
+import {
+  IconCasino,
+  IconLogin,
+  IconLogout,
+} from "@/components/icons";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
-import {
-  getDefaultAppOptions,
-} from "@/options";
+import { getDefaultAppOptions } from "@/options";
 import { getInitials } from "@/libs/utils/name";
 import { generateStrongPassword } from "@/libs/core/utils/encrypt/strong-password";
 import {
@@ -45,7 +47,7 @@ export const createRoomDialog = () => {
       <>
         <form
           id="join-room"
-          class="grid gap-4 overflow-y-auto p-1"
+          class="grid gap-4 p-1"
           onSubmit={(ev) => {
             ev.preventDefault();
             setClientProfile("initalJoin", false);
@@ -209,7 +211,10 @@ export const joinUrl = createMemo(() => {
   const url = new URL(location.origin);
   url.searchParams.append("id", appState.profile.roomId);
   if (appState.profile.password)
-    url.searchParams.append("pwd", appState.profile.password);
+    url.searchParams.append(
+      "pwd",
+      appState.profile.password,
+    );
 
   if (appState.options.shareServersWithOthers) {
     // compare if user's appOptions is different from defaultAppOptions

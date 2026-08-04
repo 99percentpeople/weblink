@@ -21,7 +21,7 @@ ownership and lifecycle management.
 - [x] Run formatting, unit tests, strict type checking, and the
       production build.
 
-## Current slice: session lifecycle hardening
+## Completed slice: session lifecycle hardening
 
 Goal: make connection failures and session teardown deterministic
 before splitting the large `PeerSession` implementation.
@@ -37,6 +37,22 @@ before splitting the large `PeerSession` implementation.
 - [x] Add focused success and failure regression tests.
 - [x] Move project-wide type checking out of `lint-staged` so file
       arguments are not passed to `tsc -p`.
+- [x] Run both test runners, strict type checking, formatting, and
+      the production build.
+
+## Current slice: mobile dialog scrolling
+
+Goal: keep dialog navigation and actions visible while long content
+scrolls within the available mobile viewport.
+
+- [x] Constrain dialog height with the dynamic viewport unit.
+- [x] Add a dedicated body container with vertical scrolling and
+      overscroll containment.
+- [x] Keep the title, description, footer, and close button outside
+      the scroll container.
+- [x] Remove legacy per-dialog scrolling classes that could create
+      nested scroll regions.
+- [x] Add class-level and rendered-layout regression tests.
 - [x] Run both test runners, strict type checking, formatting, and
       the production build.
 

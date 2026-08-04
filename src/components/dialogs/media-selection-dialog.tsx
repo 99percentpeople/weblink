@@ -496,7 +496,7 @@ export const createMediaSelectionDialog = () => {
         <Tabs
           value={selectedTab()}
           onChange={(value) => setSelectedTab(value)}
-          class="flex flex-col gap-2 overflow-y-auto"
+          class="flex flex-col gap-2"
         >
           <TabsList>
             <TabsTrigger value="screen" class="gap-1">

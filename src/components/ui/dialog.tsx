@@ -10,6 +10,10 @@ import * as DialogPrimitive from "@kobalte/core/dialog";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 
 import { cn } from "@/libs/cn";
+import {
+  getDialogBodyClassName,
+  getDialogContentClassName,
+} from "./dialog-styles";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -71,16 +75,7 @@ const DialogContent = <T extends ValidComponent = "div">(
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
-        class={cn(
-          `bg-background data-[expanded]:animate-in
-          data-[closed]:animate-out data-[closed]:fade-out-0
-          data-[expanded]:fade-in-0 data-[closed]:zoom-out-95
-          data-[expanded]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid
-          w-full max-w-[calc(100%-2rem)] -translate-x-1/2
-          -translate-y-1/2 gap-4 rounded-lg border p-6 shadow-lg
-          duration-200 sm:max-w-lg`,
-          props.class,
-        )}
+        class={getDialogContentClassName(props.class)}
         {...rest}
       >
         {props.children}
@@ -113,6 +108,19 @@ const DialogContent = <T extends ValidComponent = "div">(
   );
 };
 
+const DialogBody: Component<ComponentProps<"div">> = (
+  props,
+) => {
+  const [, rest] = splitProps(props, ["class"]);
+  return (
+    <div
+      data-slot="dialog-body"
+      class={getDialogBodyClassName(props.class)}
+      {...rest}
+    />
+  );
+};
+
 const DialogHeader: Component<ComponentProps<"div">> = (
   props,
 ) => {
@@ -120,7 +128,7 @@ const DialogHeader: Component<ComponentProps<"div">> = (
   return (
     <div
       class={cn(
-        "flex flex-col space-y-1.5 text-center sm:text-left",
+        "flex shrink-0 flex-col space-y-1.5 text-center sm:text-left",
         props.class,
       )}
       {...rest}
@@ -135,7 +143,8 @@ const DialogFooter: Component<ComponentProps<"div">> = (
   return (
     <div
       class={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        `flex shrink-0 flex-col-reverse gap-2 sm:flex-row
+        sm:justify-end`,
         props.class,
       )}
       {...rest}
@@ -193,6 +202,7 @@ export {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogBody,
   DialogHeader,
   DialogFooter,
   DialogTitle,
