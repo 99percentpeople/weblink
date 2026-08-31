@@ -11,13 +11,17 @@ import {
   ClientServiceEventMap,
   RawSignal,
   TransferClient,
+  type ClientPresence,
   type UpdateClientOptions,
 } from "../type";
 import {
   ClientService,
   ClientServiceInitOptions,
 } from "../type";
-import { createClientPresence } from "./client-presence";
+import {
+  createClientPresence,
+  hydrateClientPresence,
+} from "./client-presence";
 import { toast } from "solid-sonner";
 import { catchError, catchErrorSync } from "@/libs/catch";
 
@@ -180,13 +184,17 @@ export class WebSocketClientService implements ClientService {
             case "join":
               this.emit(
                 "join",
-                signal.data as TransferClient,
+                hydrateClientPresence(
+                  signal.data as ClientPresence,
+                ),
               );
               break;
             case "leave":
               this.emit(
                 "leave",
-                signal.data as TransferClient,
+                hydrateClientPresence(
+                  signal.data as ClientPresence,
+                ),
               );
               break;
             case "ping":

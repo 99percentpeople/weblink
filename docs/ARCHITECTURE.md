@@ -14,8 +14,16 @@ the low-level `core` layer.
   the Docker image.
 - `test/`: Vitest unit tests.
 - `scripts/`: Repo scripts (clean/build helpers).
-- `weblink-ws-server/`: Optional Bun WebSocket signaling
-  server (separate project).
+
+## Related signaling repositories
+
+- [`weblink-ws-worker`](https://github.com/99percentpeople/weblink-ws-worker):
+  Cloudflare Workers + Durable Objects implementation. This is the
+  recommended serverless WebSocket deployment.
+- [`weblink-ws-server`](https://github.com/99percentpeople/weblink-ws-server):
+  Bun implementation for self-hosting and rollback.
+- See [`docs/SIGNALING.md`](SIGNALING.md) for endpoint configuration,
+  protocol ownership, deployment validation, and rollback.
 
 ## `src/` layout
 
@@ -103,14 +111,15 @@ Most non-trivial logic lives in `src/libs/`:
 The signaling backend is a rendezvous layer, not an application
 message transport:
 
-- New clients publish only `clientId`, `createdAt`, an anonymous
-  display placeholder, and the supported RTC profile version.
-- The real display name and avatar are sent in the versioned
+- Clients publish only `clientId`, `createdAt`, the supported RTC
+  profile version, and reconnect metadata. Signaling presence has no
+  `name` or `avatar` field.
+- The display name and avatar are sent in the versioned
   `client-profile` message after the WebRTC message DataChannel is
   ready. They are sent again when that channel reconnects.
-- WebSocket and Firebase presence records therefore do not contain
-  the real profile for current clients. Legacy presence records
-  with a name/avatar are still accepted as a compatibility fallback.
+- WebSocket and Firebase clients ignore profile fields from legacy
+  presence records and create an anonymous placeholder locally until
+  the WebRTC profile arrives.
 - SDP offers/answers and ICE candidates must still use signaling
   until a peer connection exists. Room membership and client IDs
   also remain visible to the signaling backend.

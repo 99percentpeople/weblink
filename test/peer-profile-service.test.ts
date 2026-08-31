@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PeerSession } from "@/libs/core/session";
 import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/core/profile";
-import { createClientPresence } from "@/libs/core/services/client/client-presence";
+import {
+  createClientPresence,
+  hydrateClientPresence,
+} from "@/libs/core/services/client/client-presence";
 import type { TransferClient } from "@/libs/core/services/type";
 import {
   RtcProtocol,
@@ -86,7 +89,7 @@ const flush = async () => {
 };
 
 describe("client signaling presence", () => {
-  it("replaces real profile data with an anonymous placeholder", () => {
+  it("omits profile data and hydrates an anonymous local view", () => {
     const client: TransferClient = {
       clientId: "12345678-abcd-efgh",
       name: "Private name",
@@ -98,11 +101,16 @@ describe("client signaling presence", () => {
 
     expect(presence).toEqual({
       clientId: client.clientId,
-      name: "Peer-12345678",
-      avatar: null,
       createdAt: 42,
       rtcProfileVersion: RTC_PROFILE_PROTOCOL_VERSION,
       resume: true,
+    });
+    expect(presence).not.toHaveProperty("name");
+    expect(presence).not.toHaveProperty("avatar");
+    expect(hydrateClientPresence(presence)).toEqual({
+      ...presence,
+      name: "Peer-12345678",
+      avatar: null,
     });
     expect(createClientPresence(client)).not.toHaveProperty(
       "resume",

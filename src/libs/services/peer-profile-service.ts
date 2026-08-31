@@ -23,7 +23,7 @@ type SessionBinding = {
 
 /**
  * Exchanges display metadata only after the WebRTC message
- * channel is ready. Signaling carries an anonymous placeholder.
+ * channel is ready. Signaling carries no profile fields.
  */
 export class PeerProfileService {
   private readonly bindings = new Map<

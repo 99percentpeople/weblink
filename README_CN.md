@@ -98,9 +98,11 @@ VITE_FIREBASE_APP_ID
 VITE_FIREBASE_DATABASE_URL
 ```
 
-### WEBSOCKET 配置
+### WebSocket 信令配置
 
-本应用可以自行部署 WEBSOCKET 服务器，已经提供了一个 WEBSOCKET 服务器，可以自行选择是否使用。详情请参考 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server)。
+无服务器部署推荐使用 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)：它运行于 Cloudflare Workers，并将每个房间映射到一个 Durable Object。基于 Bun 的 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 继续用于自建部署和回滚。
+
+WebSocket 地址通过构建环境变量 `VITE_WEBSOCKET_URL` 固定，用户不能在设置界面中覆盖。协议边界、隐私模型、部署验证和回滚流程请参阅[信令服务文档](docs/SIGNALING.md)。
 
 ### Vercel 环境变量配置
 
@@ -131,7 +133,7 @@ VITE_FIREBASE_DATABASE_URL=your-database-url
 
 # WEBSOCKET 配置
 VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=your-websocket-url
+VITE_WEBSOCKET_URL=wss://ws.webl.ink
 ```
 
 ## 注意事项

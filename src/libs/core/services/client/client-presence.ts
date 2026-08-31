@@ -2,7 +2,10 @@ import {
   createAnonymousPeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
 } from "@/libs/core/profile";
-import type { TransferClient } from "../type";
+import type {
+  ClientPresence,
+  TransferClient,
+} from "../type";
 
 /**
  * Build the presence record published through signaling.
@@ -11,10 +14,9 @@ import type { TransferClient } from "../type";
 export function createClientPresence(
   client: TransferClient,
   resume?: boolean,
-): TransferClient {
-  const presence: TransferClient = {
+): ClientPresence {
+  const presence: ClientPresence = {
     clientId: client.clientId,
-    ...createAnonymousPeerProfile(client.clientId),
     createdAt: client.createdAt,
     rtcProfileVersion: RTC_PROFILE_PROTOCOL_VERSION,
   };
@@ -22,4 +24,16 @@ export function createClientPresence(
     presence.resume = resume;
   }
   return presence;
+}
+
+export function hydrateClientPresence(
+  presence: ClientPresence,
+): TransferClient {
+  return {
+    clientId: presence.clientId,
+    createdAt: presence.createdAt,
+    rtcProfileVersion: presence.rtcProfileVersion,
+    resume: presence.resume,
+    ...createAnonymousPeerProfile(presence.clientId),
+  };
 }

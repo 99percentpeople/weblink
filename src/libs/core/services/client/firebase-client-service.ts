@@ -20,10 +20,14 @@ import {
   SignalingService,
   TransferClient,
   Unsubscribe,
+  type ClientPresence,
   type UpdateClientOptions,
 } from "../type";
 import { FirebaseSignalingService } from "../signaling/firebase-signaling-service";
-import { createClientPresence } from "./client-presence";
+import {
+  createClientPresence,
+  hydrateClientPresence,
+} from "./client-presence";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
   comparePasswordHash,
@@ -169,9 +173,9 @@ export class FirebaseClientService implements ClientService {
 
     const clientsRef = child(this.roomRef, "/clients");
     const snapshot = await get(clientsRef);
-    let client: TransferClient | null = null;
+    let client: ClientPresence | null = null;
     snapshot.forEach((child) => {
-      const data = child.val() as TransferClient;
+      const data = child.val() as ClientPresence;
       if (data.clientId === this.client.clientId) {
         client = data;
       }
@@ -234,14 +238,14 @@ export class FirebaseClientService implements ClientService {
     const clientsRef = child(this.roomRef, "/clients");
     const snapshot = await get(clientsRef);
     snapshot.forEach((childSnapshot) => {
-      const data = childSnapshot.val() as TransferClient;
+      const data = childSnapshot.val() as ClientPresence;
       if (!data) return;
       if (data.clientId === this.client.clientId) return;
       console.log(
         `getJoinedClients ${data.clientId}`,
         data,
       );
-      clients.push(data);
+      clients.push(hydrateClientPresence(data));
     });
     return clients;
   }
@@ -253,11 +257,11 @@ export class FirebaseClientService implements ClientService {
     const unsubscribe = onChildAdded(
       clientsRef,
       (snapshot) => {
-        const data = snapshot.val() as TransferClient;
+        const data = snapshot.val() as ClientPresence;
         if (!data) return;
         if (data.clientId === this.client.clientId) return;
 
-        callback(data);
+        callback(hydrateClientPresence(data));
       },
     );
 
@@ -271,11 +275,11 @@ export class FirebaseClientService implements ClientService {
     const unsubscribe = onChildRemoved(
       clientsRef,
       (snapshot) => {
-        const data = snapshot.val() as TransferClient;
+        const data = snapshot.val() as ClientPresence;
         if (!data) return;
         if (data.clientId === this.client.clientId) return;
         console.log(`client ${data.clientId} leave`);
-        callback(data);
+        callback(hydrateClientPresence(data));
       },
     );
     this.unsubscribeCallbacks.push(unsubscribe);

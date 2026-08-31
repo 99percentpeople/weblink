@@ -103,8 +103,10 @@ export interface ClientServiceInitOptions {
   websocketUrl?: string;
 }
 
-export type TransferClient = Client & {
+export type ClientPresence = Pick<Client, "clientId"> & {
   createdAt: number;
   rtcProfileVersion?: number;
   resume?: boolean;
 };
+
+export type TransferClient = Client & ClientPresence;

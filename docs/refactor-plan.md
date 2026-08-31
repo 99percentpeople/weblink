@@ -59,19 +59,19 @@ scrolls within the available mobile viewport.
 ## Completed slice: peer profiles over WebRTC
 
 Goal: keep personal display metadata off the signaling backend while
-retaining rendezvous and legacy-client compatibility.
+retaining room rendezvous and connection signaling.
 
 - [x] Add a versioned `client-profile` RTC protocol message.
-- [x] Publish only an anonymous placeholder and capability version
-      through WebSocket/Firebase presence.
+- [x] Publish only client/connection metadata and the capability
+      version through WebSocket/Firebase presence.
 - [x] Send and refresh real names/avatars when the message
       DataChannel becomes ready.
 - [x] Update live client views and persisted message contacts from
       received RTC profiles.
-- [x] Keep legacy signaling profiles as a read-only compatibility
-      fallback.
-- [x] Make the WebSocket server normalize current-client presence
-      and stop logging display names.
+- [x] Ignore profile fields from legacy signaling records and create
+      anonymous placeholders locally until RTC profiles arrive.
+- [x] Make both WebSocket backends discard profile fields before
+      storing or forwarding presence.
 - [x] Run both test runners, strict type checking, formatting, and
       both production builds.
 
@@ -85,6 +85,21 @@ signaling backend so persisted user settings cannot diverge.
 - [x] Leave legacy custom URL fields inert in persisted options.
 - [x] Add regression tests and run both test runners, strict type
       checking, formatting, and the production build.
+
+## Completed slice: Durable Object signaling
+
+Goal: provide a serverless WebSocket signaling deployment without
+changing the frontend protocol or mixing profile data into signaling.
+
+- [x] Implement each room as a Cloudflare Durable Object.
+- [x] Use hibernatable WebSockets, reconnect retention, alarms, and
+      durable message caching.
+- [x] Preserve the Bun server's room and signaling protocol while
+      rejecting profile fields at the service boundary.
+- [x] Deploy and validate `wss://ws.webl.ink` without changing the
+      current frontend deployment or removing the Bun rollback path.
+- [x] Document development, deployment, validation, and rollback in
+      [`docs/SIGNALING.md`](SIGNALING.md).
 
 ## Next candidates
 

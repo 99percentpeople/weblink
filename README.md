@@ -109,9 +109,11 @@ For Vercel deployment, set the environment variables by following these steps:
 
 3. Add the Firebase configuration items above and input the corresponding values.
 
-### WEBSOCKET Configuration
+### WebSocket Signaling
 
-This application can deploy its own WEBSOCKET server, and a WEBSOCKET server is provided. You can choose to use it or not. For details, please refer to [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server).
+For a serverless deployment, use [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker), which runs on Cloudflare Workers and maps each room to a Durable Object. The Bun-based [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) remains available for self-hosting and rollback.
+
+The WebSocket endpoint is fixed at build time with `VITE_WEBSOCKET_URL`; users cannot override it in the settings UI. See [Signaling Services](docs/SIGNALING.md) for the protocol boundary, privacy model, deployment, validation, and rollback procedure.
 
 ### Local Environment Variables (.env.local)
 
@@ -132,7 +134,7 @@ VITE_FIREBASE_DATABASE_URL=your-database-url
 
 # WEBSOCKET
 VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=your-websocket-url
+VITE_WEBSOCKET_URL=wss://ws.webl.ink
 ```
 
 ## Notes
