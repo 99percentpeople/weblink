@@ -34,6 +34,7 @@ import {
   saveMediaConstraintsToSession,
   setAppState,
 } from "@/libs/state/app-state";
+import { signalingWebSocketUrl } from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/services/rtc-service";
 import {
   createRtcProtocol,
@@ -65,9 +66,7 @@ async function getClientService(
         (m) => new m.FirebaseClientService(options),
       );
     case "WEBSOCKET":
-      options.websocketUrl =
-        appState.options.websocketUrl ??
-        import.meta.env.VITE_WEBSOCKET_URL;
+      options.websocketUrl = signalingWebSocketUrl;
       return import("@/libs/core/services/client/ws-client-service").then(
         (m) => new m.WebSocketClientService(options),
       );

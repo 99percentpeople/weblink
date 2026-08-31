@@ -39,7 +39,6 @@ import {
   CompressionLevel,
   getDefaultAppOptions,
   backgroundImage,
-  defaultWebsocketUrl,
   parseTurnServers,
   stringifyTurnServers,
 } from "@/options";
@@ -157,36 +156,6 @@ export default function Settings() {
       appState.options.servers.turns,
     );
   });
-
-  const [websocketChecking, setWebsocketChecking] =
-    createSignal(false);
-
-  const handleCheckWebsocketUrl = async () => {
-    setWebsocketChecking(true);
-    // change ws:// or wss:// to http:// or https://
-    let message = "";
-    try {
-      const ws = new WebSocket(appState.options.websocketUrl!);
-      message = await new Promise((resolve, reject) => {
-        ws.onopen = () =>
-          resolve(
-            `${appState.options.websocketUrl} is available`,
-          );
-        ws.onerror = () => reject(new Error("failed"));
-      });
-      ws.close();
-    } catch (error) {
-      if (error instanceof Error) {
-        message = error.message;
-      } else {
-        message = "unknown error";
-      }
-    } finally {
-      setWebsocketChecking(false);
-    }
-    toast.info(message);
-    return message;
-  };
 
   return (
     <>
@@ -385,7 +354,9 @@ export default function Settings() {
             getValueLabel={({ values }) =>
               `${(values[0] * 100).toFixed(0)}%`
             }
-            value={[1 - appState.options.backgroundImageOpacity]}
+            value={[
+              1 - appState.options.backgroundImageOpacity,
+            ]}
             onChange={(value) => {
               setAppOptions(
                 "backgroundImageOpacity",
@@ -510,8 +481,8 @@ export default function Settings() {
               </Show>
               <Show
                 when={
-                  appState.options.servers.stuns.length > 0 &&
-                  appState.options.servers.stuns
+                  appState.options.servers.stuns.length >
+                    0 && appState.options.servers.stuns
                 }
               >
                 {(stuns) => {
@@ -665,8 +636,8 @@ export default function Settings() {
               </Show>
               <Show
                 when={
-                  appState.options.servers.turns.length > 0 &&
-                  appState.options.servers.turns
+                  appState.options.servers.turns.length >
+                    0 && appState.options.servers.turns
                 }
               >
                 {(turns) => {
@@ -770,7 +741,9 @@ export default function Settings() {
           <div class="flex flex-col gap-2">
             <Switch
               class="flex items-center justify-between"
-              checked={appState.options.shareServersWithOthers}
+              checked={
+                appState.options.shareServersWithOthers
+              }
               onChange={(isChecked) =>
                 setAppOptions(
                   "shareServersWithOthers",
@@ -793,63 +766,6 @@ export default function Settings() {
               )}
             </p>
           </div>
-          <Show
-            when={
-              import.meta.env.VITE_BACKEND === "WEBSOCKET"
-            }
-          >
-            <label class="flex flex-col gap-2">
-              <Label>
-                {t(
-                  "setting.connection.websocket_url.title",
-                )}
-              </Label>
-              <Input
-                value={appState.options.websocketUrl ?? ""}
-                onInput={(ev) => {
-                  setAppOptions(
-                    "websocketUrl",
-                    ev.currentTarget.value,
-                  );
-                }}
-              />
-              <p class="muted">
-                {t(
-                  "setting.connection.websocket_url.description",
-                )}
-              </p>
-
-              <div class="flex gap-2 self-end">
-                <Show
-                  when={
-                    appState.options.websocketUrl !==
-                    defaultWebsocketUrl
-                  }
-                >
-                  <Button
-                    variant="destructive"
-                    disabled={websocketChecking()}
-                    onClick={() => {
-                      setAppOptions(
-                        "websocketUrl",
-                        defaultWebsocketUrl,
-                      );
-                    }}
-                  >
-                    {t("common.action.reset")}
-                  </Button>
-                </Show>
-                <Button
-                  variant="outline"
-                  disabled={websocketChecking()}
-                  onClick={() => handleCheckWebsocketUrl()}
-                >
-                  {t("common.action.test")}
-                </Button>
-              </div>
-            </label>
-          </Show>
-
           <h3 id="sender" class="h3">
             {t("setting.sender.title")}
           </h3>
@@ -885,7 +801,9 @@ export default function Settings() {
           <div class="flex flex-col gap-2">
             <Switch
               class="flex items-center justify-between"
-              checked={appState.options.automaticCacheDeletion}
+              checked={
+                appState.options.automaticCacheDeletion
+              }
               onChange={(isChecked) =>
                 setAppOptions(
                   "automaticCacheDeletion",
@@ -913,7 +831,9 @@ export default function Settings() {
               minValue={0}
               maxValue={9}
               step={1}
-              defaultValue={[appState.options.compressionLevel]}
+              defaultValue={[
+                appState.options.compressionLevel,
+              ]}
               getValueLabel={({ values }) =>
                 values[0] === 0
                   ? t(
@@ -1008,7 +928,8 @@ export default function Settings() {
                   class="flex items-center justify-between"
                   checked={appState.options.relayOnly}
                   disabled={
-                    appState.options.servers.turns.length === 0
+                    appState.options.servers.turns
+                      .length === 0
                   }
                   onChange={(isChecked) =>
                     setAppOptions("relayOnly", isChecked)
@@ -1038,7 +959,9 @@ export default function Settings() {
                 <Slider
                   minValue={1}
                   maxValue={8}
-                  defaultValue={[appState.options.channelsNumber]}
+                  defaultValue={[
+                    appState.options.channelsNumber,
+                  ]}
                   class="gap-2"
                   onChange={(value) => {
                     setAppOptions(
@@ -1126,7 +1049,8 @@ export default function Settings() {
                 maxValue={1024 * 1024}
                 step={1024}
                 defaultValue={[
-                  appState.options.bufferedAmountLowThreshold,
+                  appState.options
+                    .bufferedAmountLowThreshold,
                 ]}
                 getValueLabel={({ values }) =>
                   formatBtyeSize(values[0], 2)
@@ -1268,7 +1192,9 @@ export default function Settings() {
                   )}
                 </Label>
                 <Select
-                  value={appState.options.degradationPreference}
+                  value={
+                    appState.options.degradationPreference
+                  }
                   onChange={(value) => {
                     setAppOptions(
                       "degradationPreference",
@@ -1307,7 +1233,8 @@ export default function Settings() {
                 </Label>
                 <Select
                   value={
-                    appState.options.preferredVideoCodec ?? "auto"
+                    appState.options.preferredVideoCodec ??
+                    "auto"
                   }
                   disabled={!canGetRtpCapabilities()}
                   onChange={(value) => {
@@ -1354,7 +1281,8 @@ export default function Settings() {
                 </Label>
                 <Select
                   value={
-                    appState.options.preferredAudioCodec ?? "auto"
+                    appState.options.preferredAudioCodec ??
+                    "auto"
                   }
                   disabled={!canGetRtpCapabilities()}
                   onChange={(value) => {

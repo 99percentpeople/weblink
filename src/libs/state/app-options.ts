@@ -46,7 +46,6 @@ export type AppOption = {
   // Connection
   servers: ConnectionOptions;
   shareServersWithOthers: boolean;
-  websocketUrl?: string;
   relayOnly: boolean;
 
   // Appearance
@@ -113,7 +112,7 @@ export function stringifyTurnServers(
     .join("\n");
 }
 
-export const defaultWebsocketUrl =
+export const signalingWebSocketUrl =
   import.meta.env.VITE_WEBSOCKET_URL ??
   (typeof window !== "undefined"
     ? (window as any).env?.VITE_WEBSOCKET_URL
@@ -165,7 +164,6 @@ export const getDefaultAppOptions = () => {
     shareServersWithOthers: true,
     backgroundImageOpacity: 0.5,
     automaticDownload: false,
-    websocketUrl: defaultWebsocketUrl,
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

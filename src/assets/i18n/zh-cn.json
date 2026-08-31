@@ -42,10 +42,6 @@
       "share_servers_with_others": {
         "title": "分享服务器给其他人",
         "description": "在生成加入 URL 时，分享 STUN 和 TURN 服务器给其他人"
-      },
-      "websocket_url": {
-        "title": "Websocket URL",
-        "description": "更改应用程序的 Websocket URL，此选项仅在后端为 WebSocket 时可用"
       }
     },
     "sender": {

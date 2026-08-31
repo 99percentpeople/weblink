@@ -75,6 +75,17 @@ retaining rendezvous and legacy-client compatibility.
 - [x] Run both test runners, strict type checking, formatting, and
       both production builds.
 
+## Completed slice: fixed signaling endpoint
+
+Goal: keep all WebSocket clients on the deployment-configured
+signaling backend so persisted user settings cannot diverge.
+
+- [x] Remove the WebSocket URL from app options and the settings UI.
+- [x] Resolve the signaling URL only from deployment configuration.
+- [x] Leave legacy custom URL fields inert in persisted options.
+- [x] Add regression tests and run both test runners, strict type
+      checking, formatting, and the production build.
+
 ## Next candidates
 
 1. Inject the local stream service through the app context instead

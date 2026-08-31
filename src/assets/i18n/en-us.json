@@ -42,10 +42,6 @@
       "share_servers_with_others": {
         "title": "Share Servers with Others",
         "description": "Share the STUN and TURN servers with others when generating the join URL"
-      },
-      "websocket_url": {
-        "title": "Websocket URL",
-        "description": "Change the Websocket URL of the app, this option is only available when the backend is WebSocket"
       }
     },
     "sender": {

@@ -1,8 +1,15 @@
 import { makePersisted } from "@solid-primitives/storage";
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { SetStoreFunction } from "solid-js/store";
-import { appState, setAppState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
 import type { AppOption } from "@/libs/state/app-options";
 import {
@@ -17,7 +24,6 @@ export type {
   TurnServerOptions,
 } from "@/libs/state/app-options";
 export {
-  defaultWebsocketUrl,
   getDefaultAppOptions,
   localFromLanguage,
   localeOptionsMap,
@@ -87,9 +93,9 @@ export function initializeAppOptions() {
 
 export const appOptions = appState.options;
 
-export const setAppOptions: SetStoreFunction<AppOption> =
-  ((...args: any[]) =>
-    (setAppState as any)("options", ...args)) as any;
+export const setAppOptions: SetStoreFunction<AppOption> = ((
+  ...args: any[]
+) => (setAppState as any)("options", ...args)) as any;
 
 export const [backgroundImage, setBackgroundImage] =
   createSignal<string | undefined>(undefined);
