@@ -1,6 +1,6 @@
 import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../core/session";
-import { ClientID, ClientInfo } from "../core/type";
+import { Client, ClientID, ClientInfo } from "../core/type";
 import {
   ClientService,
   TransferClient,
@@ -74,6 +74,22 @@ export class SessionService {
         state.storage = [...(message.data ?? [])];
       }),
     );
+  }
+
+  updateClientProfile(client: Client) {
+    const view = this.clientViewData[client.clientId];
+    if (!view) return false;
+
+    setAppState(
+      "session",
+      "clientViewData",
+      client.clientId,
+      produce((state) => {
+        state.name = client.name;
+        state.avatar = client.avatar;
+      }),
+    );
+    return true;
   }
 
   setClientService(cs: ClientService) {

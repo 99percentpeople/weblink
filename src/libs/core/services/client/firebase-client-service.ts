@@ -20,9 +20,10 @@ import {
   SignalingService,
   TransferClient,
   Unsubscribe,
+  type UpdateClientOptions,
 } from "../type";
-import { Client } from "../../type";
 import { FirebaseSignalingService } from "../signaling/firebase-signaling-service";
+import { createClientPresence } from "./client-presence";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
   comparePasswordHash,
@@ -34,13 +35,7 @@ import {
 } from "@/libs/utils/event-emitter";
 import { toast } from "solid-sonner";
 
-export interface UpdateClientOptions {
-  name?: string;
-}
-
-export class FirebaseClientService
-  implements ClientService
-{
+export class FirebaseClientService implements ClientService {
   private eventEmitter =
     new MultiEventEmitter<ClientServiceEventMap>();
   private roomId: string;
@@ -174,16 +169,19 @@ export class FirebaseClientService
 
     const clientsRef = child(this.roomRef, "/clients");
     const snapshot = await get(clientsRef);
-    let client: Client | null = null;
+    let client: TransferClient | null = null;
     snapshot.forEach((child) => {
-      const data = child.val() as Client;
+      const data = child.val() as TransferClient;
       if (data.clientId === this.client.clientId) {
         client = data;
       }
     });
 
     if (!client) {
-      const clientRef = await push(clientsRef, this.client);
+      const clientRef = await push(
+        clientsRef,
+        createClientPresence(this.client),
+      );
       onDisconnect(clientRef).remove();
       this.clientRef = clientRef;
     }
@@ -191,16 +189,11 @@ export class FirebaseClientService
   }
 
   async updateClient(options: UpdateClientOptions) {
-    if (!this.clientRef) {
-      console.warn(
-        `client ${this.client.clientId} not publish in database`,
-      );
-      return;
-    }
-
     this.client.name = options.name ?? this.client.name;
-
-    await update(this.clientRef, this.client);
+    this.client.avatar =
+      options.avatar === undefined
+        ? this.client.avatar
+        : options.avatar;
   }
 
   createSender(
@@ -237,11 +230,11 @@ export class FirebaseClientService
   }
 
   async getJoinedClients() {
-    const clients: Client[] = [];
+    const clients: TransferClient[] = [];
     const clientsRef = child(this.roomRef, "/clients");
     const snapshot = await get(clientsRef);
     snapshot.forEach((childSnapshot) => {
-      const data = childSnapshot.val() as Client;
+      const data = childSnapshot.val() as TransferClient;
       if (!data) return;
       if (data.clientId === this.client.clientId) return;
       console.log(

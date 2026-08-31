@@ -11,21 +11,17 @@ import {
   ClientServiceEventMap,
   RawSignal,
   TransferClient,
+  type UpdateClientOptions,
 } from "../type";
 import {
   ClientService,
   ClientServiceInitOptions,
 } from "../type";
-import type { UpdateClientOptions } from "./firebase-client-service";
+import { createClientPresence } from "./client-presence";
 import { toast } from "solid-sonner";
-import {
-  catchError,
-  catchErrorSync,
-} from "@/libs/catch";
+import { catchError, catchErrorSync } from "@/libs/catch";
 
-export class WebSocketClientService
-  implements ClientService
-{
+export class WebSocketClientService implements ClientService {
   private eventEmitter =
     new MultiEventEmitter<ClientServiceEventMap>();
   private roomId: string;
@@ -296,7 +292,10 @@ export class WebSocketClientService
             socket.send(
               JSON.stringify({
                 type: "join",
-                data: { ...this.client, resume },
+                data: createClientPresence(
+                  this.client,
+                  resume,
+                ),
               }),
             );
             resolve(socket);
@@ -412,7 +411,7 @@ export class WebSocketClientService
         this.socket.send(
           JSON.stringify({
             type: "leave",
-            data: this.client,
+            data: createClientPresence(this.client),
           }),
         );
       }
@@ -447,5 +446,9 @@ export class WebSocketClientService
 
   async updateClient(options: UpdateClientOptions) {
     this.client.name = options.name ?? this.client.name;
+    this.client.avatar =
+      options.avatar === undefined
+        ? this.client.avatar
+        : options.avatar;
   }
 }

@@ -7,9 +7,16 @@ import {
   ParentProps,
   useContext,
 } from "solid-js";
-import type { ChunkMetaData, FileMetaData } from "@/libs/cache";
+import type {
+  ChunkMetaData,
+  FileMetaData,
+} from "@/libs/cache";
 import type { PeerSession } from "@/libs/core/session";
-import type { ClientID, FileID, RoomStatus } from "@/libs/core/type";
+import type {
+  ClientID,
+  FileID,
+  RoomStatus,
+} from "@/libs/core/type";
 import type {
   ClientService,
   ClientServiceInitOptions,
@@ -40,6 +47,7 @@ import {
   type SessionMessage,
 } from "@/libs/services/rtc-protocol";
 import { sessionService } from "@/libs/services/session-service";
+import { PeerProfileService } from "@/libs/services/peer-profile-service";
 import { toast } from "solid-sonner";
 import {
   FileTransferMessage,
@@ -53,16 +61,16 @@ async function getClientService(
 ): Promise<ClientService> {
   switch (import.meta.env.VITE_BACKEND) {
     case "FIREBASE":
-      return import(
-        "@/libs/core/services/client/firebase-client-service"
-      ).then((m) => new m.FirebaseClientService(options));
+      return import("@/libs/core/services/client/firebase-client-service").then(
+        (m) => new m.FirebaseClientService(options),
+      );
     case "WEBSOCKET":
       options.websocketUrl =
         appState.options.websocketUrl ??
         import.meta.env.VITE_WEBSOCKET_URL;
-      return import(
-        "@/libs/core/services/client/ws-client-service"
-      ).then((m) => new m.WebSocketClientService(options));
+      return import("@/libs/core/services/client/ws-client-service").then(
+        (m) => new m.WebSocketClientService(options),
+      );
     default:
       throw Error("invalid backend type");
   }
@@ -121,6 +129,17 @@ export const AppStateProvider: Component<
 > = (props) => {
   const rtc = createRtcService();
   const protocol = createRtcProtocol();
+  const peerProfiles = new PeerProfileService(protocol, {
+    getLocalClient: () => ({
+      clientId: appState.profile.clientId,
+      name: appState.profile.name,
+      avatar: appState.profile.avatar,
+    }),
+    onRemoteClient: (client) => {
+      sessionService.updateClientProfile(client);
+      messageStores.setClient(client);
+    },
+  });
   let clipboardCacheData: SendClipboardMessage[] = [];
   let clientServiceListenersBound = false;
 
@@ -153,8 +172,7 @@ export const AppStateProvider: Component<
         autoGainControl:
           appState.media.constraints.speaker
             .autoGainControl,
-        latency:
-          appState.media.constraints.speaker.latency,
+        latency: appState.media.constraints.speaker.latency,
       },
       video: {
         frameRate:
@@ -327,7 +345,9 @@ export const AppStateProvider: Component<
     const offStreamState = protocol.on(
       "stream-state",
       ({ message }) => {
-        if (!sessionService.clientViewData[message.client]) {
+        if (
+          !sessionService.clientViewData[message.client]
+        ) {
           return;
         }
         setAppState(
@@ -343,15 +363,17 @@ export const AppStateProvider: Component<
     const offRequestStorage = protocol.onRequest(
       "request-storage",
       async ({ session, message }) => {
-        const replyMessage = protocolMessageFactory.storage({
-          data:
-            (await cacheManager.getStorages({
-              includeIncomplete: false,
-            })) ?? [],
-          client: message.target,
-          target: message.client,
-          id: message.id,
-        });
+        const replyMessage = protocolMessageFactory.storage(
+          {
+            data:
+              (await cacheManager.getStorages({
+                includeIncomplete: false,
+              })) ?? [],
+            client: message.target,
+            target: message.client,
+            id: message.id,
+          },
+        );
 
         const result = await protocol.requestWithResult(
           session,
@@ -405,14 +427,47 @@ export const AppStateProvider: Component<
   });
 
   createEffect(() => {
-    setAppState("session", "localStream", props.localStream);
-    for (const session of Object.values(sessionService.sessions)) {
+    setAppState(
+      "session",
+      "localStream",
+      props.localStream,
+    );
+    for (const session of Object.values(
+      sessionService.sessions,
+    )) {
       session.setStream(props.localStream);
+    }
+  });
+
+  createEffect(() => {
+    const name = appState.profile.name;
+    const avatar = appState.profile.avatar;
+    if (!appState.roomStatus.roomId) return;
+
+    sessionService.clientService
+      ?.updateClient({ name, avatar })
+      .catch((error) => {
+        console.error(
+          "failed to update local client profile",
+          error,
+        );
+      });
+    peerProfiles.broadcast();
+
+    if (appState.roomStatus.profile) {
+      setAppState("roomStatus", "profile", "name", name);
+      setAppState(
+        "roomStatus",
+        "profile",
+        "avatar",
+        avatar,
+      );
     }
   });
 
   onCleanup(() => {
     leaveRoom();
+    peerProfiles.dispose();
     rtc.unbindAllSessions();
     clipboardCacheData = [];
     clientServiceListenersBound = false;
@@ -457,19 +512,18 @@ export const AppStateProvider: Component<
 
         session.setStream(props.localStream);
         rtc.bindSession(session);
+        peerProfiles.bindSession(session);
 
         await session.listen();
         messageStores.setClient(targetClient);
 
         if (!session.polite) {
-          const [err] = await catchError(
-            session.connect(),
-          );
+          const [err] = await catchError(session.connect());
           if (err) {
             console.error(err);
             if (
-              Object.values(sessionService.sessions).length ===
-              0
+              Object.values(sessionService.sessions)
+                .length === 0
             ) {
               leaveRoom();
               throw err;
@@ -480,6 +534,7 @@ export const AppStateProvider: Component<
 
       cs.listenForLeave((client) => {
         console.log(`client ${client.clientId} leave`);
+        peerProfiles.unbindSession(client.clientId);
         sessionService.removeSession(client.clientId);
         rtc.unbindSession(client.clientId);
       });
@@ -492,7 +547,11 @@ export const AppStateProvider: Component<
     });
 
     setAppState("roomStatus", "profile", cs.info);
-    setAppState("roomStatus", "roomId", appState.profile.roomId);
+    setAppState(
+      "roomStatus",
+      "roomId",
+      appState.profile.roomId,
+    );
   }
 
   function leaveRoom() {
@@ -501,6 +560,7 @@ export const AppStateProvider: Component<
       console.log(`on leave room ${room}`);
     }
 
+    peerProfiles.unbindAllSessions();
     rtc.unbindAllSessions();
     sessionService.destoryAllSession();
     setAppState("roomStatus", "roomId", null);
@@ -577,9 +637,16 @@ export const AppStateProvider: Component<
     transferId: FileID,
     fileId: FileID,
   ) => {
-    for (let i = 0; i < appState.options.channelsNumber; i++) {
+    for (
+      let i = 0;
+      i < appState.options.channelsNumber;
+      i++
+    ) {
       const [err, channel] = await catchError(
-        session.createChannel(`${transferId}-${i}`, "transfer"),
+        session.createChannel(
+          `${transferId}-${i}`,
+          "transfer",
+        ),
       );
       if (err) throw err;
       if (!channel) continue;
@@ -605,7 +672,9 @@ export const AppStateProvider: Component<
       );
       messageStores.addTransfer(transferer);
       transferer.addEventListener("ready", async () => {
-        const [error] = await catchError(transferer.sendFile());
+        const [error] = await catchError(
+          transferer.sendFile(),
+        );
         if (error) {
           console.error(error);
           toast.error(error.message);
@@ -627,7 +696,11 @@ export const AppStateProvider: Component<
     );
     messageStores.addTransfer(transferer);
     await transferer.initialize();
-    await addTransferChannels(session, transferer.id, message.fid);
+    await addTransferChannels(
+      session,
+      transferer.id,
+      message.fid,
+    );
   };
 
   const setupTransferAfterAckSafe = async (
@@ -691,7 +764,9 @@ export const AppStateProvider: Component<
         chunkSize: appState.options.chunkSize,
       });
 
-      const cache = await cacheManager.createCache(message.fid);
+      const cache = await cacheManager.createCache(
+        message.fid,
+      );
       await cache.setInfo({
         fileName: message.fileName,
         fileSize: message.fileSize,
@@ -749,10 +824,12 @@ export const AppStateProvider: Component<
     if (sessions.length === 0) return;
 
     for (const session of sessions) {
-      const message = protocolMessageFactory.requestStorage({
-        client: session.clientId,
-        target: session.targetClientId,
-      });
+      const message = protocolMessageFactory.requestStorage(
+        {
+          client: session.clientId,
+          target: session.targetClientId,
+        },
+      );
 
       const result = await protocol.requestWithResult(
         session,
@@ -765,18 +842,21 @@ export const AppStateProvider: Component<
   async function retryMessage(message: StoreMessage) {
     const self = appState.profile.clientId;
     const sessionId =
-      message.client === self ? message.target : message.client;
+      message.client === self
+        ? message.target
+        : message.client;
     const session = sessionService.sessions[sessionId];
     if (!session) return;
 
     if (message.type === "text") {
-      const sessionMessage = protocolMessageFactory.sendText({
-        client: session.clientId,
-        target: session.targetClientId,
-        data: message.data,
-        id: message.id,
-        createdAt: message.createdAt,
-      });
+      const sessionMessage =
+        protocolMessageFactory.sendText({
+          client: session.clientId,
+          target: session.targetClientId,
+          data: message.data,
+          id: message.id,
+          createdAt: message.createdAt,
+        });
 
       messageStores.retrySendMessage(sessionMessage, {
         timeoutMs: null,
@@ -822,18 +902,19 @@ export const AppStateProvider: Component<
         return;
       }
 
-      const sessionMessage = protocolMessageFactory.sendFile({
-        client: session.clientId,
-        target: session.targetClientId,
-        fid: message.fid,
-        fileName: message.fileName,
-        fileSize: message.fileSize,
-        mimeType: message.mimeType,
-        lastModified: message.lastModified,
-        chunkSize: message.chunkSize,
-        createdAt: message.createdAt,
-        id: message.id,
-      });
+      const sessionMessage =
+        protocolMessageFactory.sendFile({
+          client: session.clientId,
+          target: session.targetClientId,
+          fid: message.fid,
+          fileName: message.fileName,
+          fileSize: message.fileSize,
+          mimeType: message.mimeType,
+          lastModified: message.lastModified,
+          chunkSize: message.chunkSize,
+          createdAt: message.createdAt,
+          id: message.id,
+        });
 
       messageStores.retrySendMessage(sessionMessage, {
         timeoutMs: null,
@@ -855,7 +936,10 @@ export const AppStateProvider: Component<
     }
   }
 
-  async function shareFile(fileId: FileID, target: ClientID) {
+  async function shareFile(
+    fileId: FileID,
+    target: ClientID,
+  ) {
     const cache = cacheManager.getCache(fileId);
     if (!cache) {
       console.warn(`cache ${fileId} not exist`);
@@ -956,7 +1040,9 @@ export const AppStateProvider: Component<
     }
 
     const existing =
-      resume && index !== -1 ? messageStores.messages[index] : undefined;
+      resume && index !== -1
+        ? messageStores.messages[index]
+        : undefined;
     const createdAt =
       existing && existing.status === "error"
         ? existing.createdAt
@@ -971,7 +1057,8 @@ export const AppStateProvider: Component<
       fileSize: info.fileSize,
       mimeType: info.mimetype,
       lastModified: info.lastModified,
-      chunkSize: info.chunkSize ?? appState.options.chunkSize,
+      chunkSize:
+        info.chunkSize ?? appState.options.chunkSize,
       resume,
       id,
       createdAt,
@@ -1006,7 +1093,10 @@ export const AppStateProvider: Component<
     );
   }
 
-  async function resumeFile(fileId: FileID, target: ClientID) {
+  async function resumeFile(
+    fileId: FileID,
+    target: ClientID,
+  ) {
     const session = sessionService.sessions[target];
     if (!session) return;
     const cache = cacheManager.getCache(fileId);
@@ -1019,7 +1109,8 @@ export const AppStateProvider: Component<
       (msg) => msg.type === "file" && msg.fid === fileId,
     ) as FileTransferMessage | undefined;
     if (!transferMessage) return;
-    if (transferMessage.transferStatus === "complete") return;
+    if (transferMessage.transferStatus === "complete")
+      return;
 
     const message = protocolMessageFactory.resumeFile({
       fid: fileId,
@@ -1035,10 +1126,14 @@ export const AppStateProvider: Component<
     resolveSilentResult(message, result);
   }
 
-  async function pauseFile(fileId: FileID, target: ClientID) {
+  async function pauseFile(
+    fileId: FileID,
+    target: ClientID,
+  ) {
     const session = sessionService.sessions[target];
     if (!session) return;
-    const transferer = transferManager.getTransferer(fileId);
+    const transferer =
+      transferManager.getTransferer(fileId);
     if (!transferer) return;
     await transferer.pause(true);
   }

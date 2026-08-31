@@ -262,6 +262,18 @@ describe("SessionService lifecycle", () => {
 
     expect(service.sessions.remote).toBe(session);
 
+    expect(
+      service.updateClientProfile({
+        clientId: "remote",
+        name: "Updated remote",
+        avatar: "data:image/png;base64,avatar",
+      }),
+    ).toBe(true);
+    expect(service.clientViewData.remote).toMatchObject({
+      name: "Updated remote",
+      avatar: "data:image/png;base64,avatar",
+    });
+
     session.close();
 
     expect(service.sessions.remote).toBeUndefined();

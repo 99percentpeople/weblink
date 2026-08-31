@@ -65,6 +65,9 @@ Most non-trivial logic lives in `src/libs/`:
     channels (request/response style).
   - `rtc-service.ts`, `transfer-service.ts`, etc: service
     helpers that bridge UI state ↔ core primitives.
+  - `peer-profile-service.ts`: exchanges display names and
+    avatars over the WebRTC message channel and updates the
+    app-level client views.
   - `local-stream-service.ts`: Owns the active local media
     stream, replaces/stops streams, and tracks dynamic or
     ended media tracks.
@@ -94,6 +97,23 @@ Most non-trivial logic lives in `src/libs/`:
 3. Services create/manage core primitives (`src/libs/core/*`),
    attach listeners, and translate low-level events into
    app-level state updates.
+
+## Signaling and profile privacy
+
+The signaling backend is a rendezvous layer, not an application
+message transport:
+
+- New clients publish only `clientId`, `createdAt`, an anonymous
+  display placeholder, and the supported RTC profile version.
+- The real display name and avatar are sent in the versioned
+  `client-profile` message after the WebRTC message DataChannel is
+  ready. They are sent again when that channel reconnects.
+- WebSocket and Firebase presence records therefore do not contain
+  the real profile for current clients. Legacy presence records
+  with a name/avatar are still accepted as a compatibility fallback.
+- SDP offers/answers and ICE candidates must still use signaling
+  until a peer connection exists. Room membership and client IDs
+  also remain visible to the signaling backend.
 
 ## Design conventions
 

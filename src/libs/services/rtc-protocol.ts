@@ -1,6 +1,10 @@
 import type { ChunkMetaData } from "@/libs/cache";
 import type { PeerSession } from "@/libs/core/session";
 import type { ClientID, FileID } from "@/libs/core/type";
+import {
+  RTC_PROFILE_PROTOCOL_VERSION,
+  type PeerProfile,
+} from "@/libs/core/profile";
 import type { ChunkRange } from "@/libs/utils/range";
 import {
   createRtcService,
@@ -94,6 +98,12 @@ export type StreamStateMessage = BaseExchangeMessage & {
   mode: "placeholder" | "media";
 };
 
+export type ClientProfileMessage = BaseExchangeMessage & {
+  type: "client-profile";
+  version: typeof RTC_PROFILE_PROTOCOL_VERSION;
+  profile: PeerProfile;
+};
+
 export type SessionMessage =
   | SendTextMessage
   | AckMessage
@@ -105,7 +115,8 @@ export type SessionMessage =
   | StorageMessage
   | RequestStorageMessage
   | ResumeFileMessage
-  | StreamStateMessage;
+  | StreamStateMessage
+  | ClientProfileMessage;
 
 type MessageFactoryBaseInput = {
   id?: MessageID;
@@ -262,6 +273,16 @@ export const protocolMessageFactory = {
     type: "stream-state",
     mode: input.mode,
   }),
+  clientProfile: (
+    input: MessageFactoryBaseInput & {
+      profile: PeerProfile;
+    },
+  ): ClientProfileMessage => ({
+    ...createMessageBase(input),
+    type: "client-profile",
+    version: RTC_PROFILE_PROTOCOL_VERSION,
+    profile: input.profile,
+  }),
 } as const;
 
 export type RtcProtocolMessageContext<
@@ -283,7 +304,8 @@ export type RtcProtocolTransport = RtcServiceTransport;
 export type RtcProtocolRequestErrorCode =
   RtcServiceRequestErrorCode;
 
-export type RtcProtocolRequestError = RtcServiceRequestError;
+export type RtcProtocolRequestError =
+  RtcServiceRequestError;
 
 export type RtcProtocolRequestResult =
   RtcServiceRequestResult;

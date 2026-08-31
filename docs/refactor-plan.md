@@ -40,7 +40,7 @@ before splitting the large `PeerSession` implementation.
 - [x] Run both test runners, strict type checking, formatting, and
       the production build.
 
-## Current slice: mobile dialog scrolling
+## Completed slice: mobile dialog scrolling
 
 Goal: keep dialog navigation and actions visible while long content
 scrolls within the available mobile viewport.
@@ -55,6 +55,25 @@ scrolls within the available mobile viewport.
 - [x] Add class-level and rendered-layout regression tests.
 - [x] Run both test runners, strict type checking, formatting, and
       the production build.
+
+## Completed slice: peer profiles over WebRTC
+
+Goal: keep personal display metadata off the signaling backend while
+retaining rendezvous and legacy-client compatibility.
+
+- [x] Add a versioned `client-profile` RTC protocol message.
+- [x] Publish only an anonymous placeholder and capability version
+      through WebSocket/Firebase presence.
+- [x] Send and refresh real names/avatars when the message
+      DataChannel becomes ready.
+- [x] Update live client views and persisted message contacts from
+      received RTC profiles.
+- [x] Keep legacy signaling profiles as a read-only compatibility
+      fallback.
+- [x] Make the WebSocket server normalize current-client presence
+      and stop logging display names.
+- [x] Run both test runners, strict type checking, formatting, and
+      both production builds.
 
 ## Next candidates
 

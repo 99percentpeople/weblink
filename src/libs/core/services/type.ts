@@ -1,9 +1,10 @@
-import {
-  Client,
-  ClientID,
-} from "@/libs/core/type";
-import type { UpdateClientOptions } from "./client/firebase-client-service";
+import { Client, ClientID } from "@/libs/core/type";
 import { EventHandler } from "@/libs/utils/event-emitter";
+
+export interface UpdateClientOptions {
+  name?: string;
+  avatar?: string | null;
+}
 
 export type ClientServiceEventMap = {
   statuschange: "connected" | "connecting" | "disconnected";
@@ -102,4 +103,8 @@ export interface ClientServiceInitOptions {
   websocketUrl?: string;
 }
 
-export type TransferClient = Client & { createdAt: number };
+export type TransferClient = Client & {
+  createdAt: number;
+  rtcProfileVersion?: number;
+  resume?: boolean;
+};
