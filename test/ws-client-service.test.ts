@@ -198,6 +198,21 @@ afterEach(() => {
 });
 
 describe("WebSocketClientService reconnect lifecycle", () => {
+  it("does not register the deprecated unload event", () => {
+    const addEventListener = vi.spyOn(
+      browserWindow,
+      "addEventListener",
+    );
+
+    createService();
+
+    const registeredEvents =
+      addEventListener.mock.calls.map(([event]) => event);
+    expect(registeredEvents).toContain("beforeunload");
+    expect(registeredEvents).toContain("online");
+    expect(registeredEvents).not.toContain("unload");
+  });
+
   it("resumes on one replacement socket and rebinds senders", async () => {
     const service = createService();
     const first = await connectService(service);

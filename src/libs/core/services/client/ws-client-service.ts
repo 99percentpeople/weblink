@@ -138,13 +138,6 @@ export class WebSocketClientService implements ClientService {
         { signal },
       );
       window.addEventListener(
-        "unload",
-        () => this.close(),
-        {
-          signal,
-        },
-      );
-      window.addEventListener(
         "online",
         () => {
           if (
