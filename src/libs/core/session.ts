@@ -11,6 +11,8 @@ import {
   type StreamStateMessage,
 } from "@/libs/services/rtc-protocol";
 import { waitChannel } from "./utils/channel";
+import { PeerNegotiationController } from "./peer-negotiation";
+export { handleOffer } from "./peer-negotiation";
 import { catchError, catchErrorSync } from "../catch";
 import { appState } from "@/libs/state/app-state";
 import {
@@ -50,8 +52,7 @@ export class PeerSession {
   private eventEmitter: MultiEventEmitter<PeerSessionEventMap> =
     new MultiEventEmitter();
   peerConnection: RTCPeerConnection | null = null;
-  private makingOffer: boolean = false;
-  private ignoreOffer: boolean = false;
+  private negotiation: PeerNegotiationController;
   private connectable: boolean = false;
   private sender: SignalingService;
   private controller: AbortController | null = null;
@@ -79,6 +80,7 @@ export class PeerSession {
   private autoReconnectController: AbortController | null =
     null;
   private disconnectionTimer: number | null = null;
+  private suspended = false;
 
   private applyPreferredCodecPreferences(
     pc: RTCPeerConnection,
@@ -180,6 +182,11 @@ export class PeerSession {
     this.polite = polite;
     this.iceServers = iceServers ?? [];
     this.relayOnly = relayOnly;
+    this.negotiation = new PeerNegotiationController({
+      sender,
+      polite,
+      getPeerConnection: () => this.peerConnection,
+    });
 
     this.lifecycleController = new AbortController();
     const { signal } = this.lifecycleController;
@@ -236,6 +243,8 @@ export class PeerSession {
     document.addEventListener(
       "freeze",
       () => {
+        if (this.status === "closed") return;
+        this.suspended = true;
         this.stopAutoReconnect();
         this.disconnect();
       },
@@ -257,10 +266,16 @@ export class PeerSession {
 
   private onLifecycleResume(reason: string) {
     if (this.status === "closed") return;
+    this.suspended = false;
     if (!this.connectable) return;
 
     const pc = this.peerConnection;
-    if (!pc) return;
+    if (!pc) {
+      void this.handleDisconnection(
+        `resume:${reason}:missing-peerconnection`,
+      );
+      return;
+    }
 
     this.updateMessageChannelOpenState();
 
@@ -401,6 +416,7 @@ export class PeerSession {
       iceTransportPolicy: this.relayOnly ? "relay" : "all",
     });
     this.peerConnection = pc;
+    this.negotiation.startConnection(pc);
 
     pc.addEventListener(
       "icecandidate",
@@ -408,12 +424,10 @@ export class PeerSession {
         if (!ev.candidate) return;
 
         const [err] = await catchError(
-          this.sender.sendSignal({
-            type: "candidate",
-            data: JSON.stringify({
-              candidate: ev.candidate.toJSON(),
-            }),
-          }),
+          this.negotiation.sendCandidate(
+            pc,
+            ev.candidate.toJSON(),
+          ),
         );
         if (err) {
           console.error(err);
@@ -606,14 +620,10 @@ export class PeerSession {
   }
 
   private popSignalCache() {
-    let queue = Promise.resolve();
-    function enqueueTask(task: () => Promise<void>) {
-      queue = queue.then(() => task());
-    }
-    for (const signal of this.signalCache) {
-      enqueueTask(() => this.handleSignal(signal));
-    }
-    this.signalCache.length = 0;
+    const cached = this.signalCache.splice(0);
+    cached.forEach((signal) => {
+      void this.negotiation.enqueueSignal(signal);
+    });
   }
 
   private setupAfterConnectedListeners() {
@@ -1000,8 +1010,11 @@ export class PeerSession {
   }
 
   private stopAutoReconnect() {
-    this.autoReconnectController?.abort();
-    this.autoReconnectController = null;
+    const controller = this.autoReconnectController;
+    controller?.abort();
+    if (this.autoReconnectController === controller) {
+      this.autoReconnectController = null;
+    }
   }
 
   private async handleDisconnection(
@@ -1010,6 +1023,12 @@ export class PeerSession {
     if (this.status === "closed") {
       console.warn(
         `[PeerSession] session ${this.clientId} is closed, skip handle disconnection`,
+      );
+      return;
+    }
+    if (this.suspended) {
+      console.log(
+        `[PeerSession] session ${this.clientId} is suspended, defer reconnect: ${reason}`,
       );
       return;
     }
@@ -1094,7 +1113,14 @@ export class PeerSession {
       );
     }
 
-    this.autoReconnectController = null;
+    const ownsReconnect =
+      this.autoReconnectController === controller;
+    if (ownsReconnect) {
+      this.autoReconnectController = null;
+    }
+    if (controller.signal.aborted || !ownsReconnect) {
+      return;
+    }
 
     if (
       this.peerConnection?.connectionState !== "connected"
@@ -1106,167 +1132,8 @@ export class PeerSession {
     }
   }
 
-  private pendingRemoteCandidates: RTCIceCandidateInit[] =
-    [];
-
-  private async flushPendingRemoteCandidates(
-    pc: RTCPeerConnection,
-  ) {
-    if (!pc.remoteDescription) return;
-    if (this.pendingRemoteCandidates.length === 0) return;
-
-    const pending = this.pendingRemoteCandidates;
-    this.pendingRemoteCandidates = [];
-
-    for (const candidateInit of pending) {
-      const candidate = new RTCIceCandidate(candidateInit);
-      const [err] = await catchError(
-        pc.addIceCandidate(candidate),
-      );
-      if (err && !this.ignoreOffer) {
-        console.error(
-          `[PeerSession] addIceCandidate error: `,
-          err,
-        );
-      }
-    }
-  }
-
-  private async handleSignal(signal: ClientSignal) {
-    const pc = this.peerConnection;
-    if (!pc) {
-      console.log(
-        `[PeerSession] peer connection is null, skip handle signal`,
-      );
-      return;
-    }
-    let err: Error | undefined;
-    if (signal.type === "offer") {
-      const offerCollision =
-        this.makingOffer || pc.signalingState !== "stable";
-      this.ignoreOffer = !this.polite && offerCollision;
-      if (this.ignoreOffer) {
-        console.warn(
-          `[PeerSession] Offer ignored due to collision, signalingState: ${pc.signalingState}`,
-        );
-        return;
-      }
-      if (offerCollision) {
-        const [rollbackError] = await catchError(
-          pc.setLocalDescription({ type: "rollback" }),
-        );
-        if (rollbackError) {
-          console.warn(
-            `[PeerSession] rollback failed, signalingState: ${pc.signalingState}`,
-            rollbackError,
-          );
-        }
-      }
-
-      [err] = await catchError(
-        pc.setRemoteDescription(
-          new RTCSessionDescription({
-            type: "offer",
-            sdp: signal.data.sdp,
-          }),
-        ),
-      );
-
-      if (err) {
-        console.error(
-          `[PeerSession] setRemoteDescription error: `,
-          err,
-        );
-        return;
-      }
-
-      await this.flushPendingRemoteCandidates(pc);
-
-      [err] = await catchError(pc.setLocalDescription());
-
-      if (err) {
-        console.error(
-          `[PeerSession] setLocalDescription error: `,
-          err,
-        );
-        return;
-      }
-
-      if (!pc.localDescription) {
-        console.warn(
-          `[PeerSession] localDescription is null, signalingState: ${pc.signalingState}`,
-        );
-        return;
-      }
-
-      [err] = await catchError(
-        this.sender.sendSignal({
-          type: pc.localDescription.type,
-          data: JSON.stringify({
-            sdp: pc.localDescription.sdp,
-          }),
-        }),
-      );
-
-      if (err) {
-        console.error(
-          `[PeerSession] sendSignal error: `,
-          err,
-        );
-        return;
-      }
-    } else if (signal.type === "answer") {
-      if (pc.signalingState !== "have-local-offer") {
-        console.warn(
-          `[PeerSession] answer ignored due to signalingState is ${pc.signalingState}`,
-        );
-        return;
-      }
-
-      [err] = await catchError(
-        pc.setRemoteDescription(
-          new RTCSessionDescription({
-            type: "answer",
-            sdp: signal.data.sdp,
-          }),
-        ),
-      );
-
-      if (err) {
-        console.error(
-          `[PeerSession] setRemoteDescription error: `,
-          err,
-        );
-        return;
-      }
-
-      await this.flushPendingRemoteCandidates(pc);
-    } else if (signal.type === "candidate") {
-      // Candidates may arrive before remote description,
-      // buffer and replay after setRemoteDescription.
-      if (!pc.remoteDescription) {
-        this.pendingRemoteCandidates.push(
-          signal.data.candidate as RTCIceCandidateInit,
-        );
-        return;
-      }
-
-      const candidate = new RTCIceCandidate(
-        signal.data.candidate as RTCIceCandidateInit,
-      );
-      [err] = await catchError(
-        pc.addIceCandidate(candidate),
-      );
-
-      if (err) {
-        if (!this.ignoreOffer) {
-          console.error(
-            `[PeerSession] addIceCandidate error: `,
-            err,
-          );
-        }
-      }
-    }
+  private handleSignal(signal: ClientSignal) {
+    return this.negotiation.handleSignal(signal);
   }
 
   async listen() {
@@ -1323,7 +1190,7 @@ export class PeerSession {
             );
           }
         } else {
-          await this.handleSignal(ev.detail);
+          await this.negotiation.enqueueSignal(ev.detail);
         }
       },
       { signal: listenController.signal },
@@ -1683,26 +1550,21 @@ export class PeerSession {
       );
       return;
     }
-    if (this.makingOffer) {
+    if (this.negotiation.isMakingOffer) {
       console.warn(
         `[PeerSession] session ${this.clientId} already making offer`,
       );
       return;
     }
 
-    this.makingOffer = true;
-    try {
-      const [err] = await catchError(
-        handleOffer(this.peerConnection, this.sender),
+    const [err] = await catchError(
+      this.negotiation.sendOffer(this.peerConnection),
+    );
+    if (err) {
+      console.error(
+        `[PeerSession] Error during renegotiation:`,
+        err,
       );
-      if (err) {
-        console.error(
-          `[PeerSession] Error during renegotiation:`,
-          err,
-        );
-      }
-    } finally {
-      this.makingOffer = false;
     }
   }
 
@@ -1780,13 +1642,12 @@ export class PeerSession {
       return;
     }
 
-    if (this.makingOffer) {
+    if (this.negotiation.isMakingOffer) {
       throw new Error(
         `[PeerSession] session ${this.clientId} already making offer`,
       );
     }
 
-    this.makingOffer = true;
     const connectAbortController = new AbortController();
 
     try {
@@ -1879,16 +1740,17 @@ export class PeerSession {
         "message",
         "message",
       ).then(() => connectionPromise);
-      const offerPromise = handleOffer(
-        pc,
-        this.sender,
-      ).catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `[PeerSession] Failed to create and send offer: ${message}`,
-        );
-      });
+      const offerPromise = this.negotiation
+        .sendOffer(pc)
+        .catch((err: unknown) => {
+          const message =
+            err instanceof Error
+              ? err.message
+              : String(err);
+          throw new Error(
+            `[PeerSession] Failed to create and send offer: ${message}`,
+          );
+        });
 
       await Promise.all([
         offerPromise,
@@ -1901,13 +1763,12 @@ export class PeerSession {
       this.disconnect();
       throw err;
     } finally {
-      this.makingOffer = false;
       connectAbortController.abort();
     }
   }
 
   private resetSession() {
-    this.makingOffer = false;
+    this.negotiation.reset();
     this.lastLocalStreamState = null;
     if (this.disconnectionTimer !== null) {
       window.clearTimeout(this.disconnectionTimer);
@@ -1950,21 +1811,4 @@ export class PeerSession {
     this.outgoingQueueKeys.clear();
     this.setStatus("closed");
   }
-}
-
-// this function is used to modify the offer
-export async function handleOffer(
-  pc: RTCPeerConnection,
-  sender: SignalingService,
-  options?: RTCOfferOptions,
-) {
-  const offer = await pc.createOffer(options);
-
-  await pc.setLocalDescription(offer);
-  await sender.sendSignal({
-    type: offer.type,
-    data: JSON.stringify({
-      sdp: offer.sdp,
-    }),
-  });
 }

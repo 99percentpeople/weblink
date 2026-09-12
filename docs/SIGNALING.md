@@ -28,10 +28,57 @@ API so idle rooms do not require a continuously active Worker instance.
 The Worker supports the existing Weblink WebSocket protocol:
 
 - `connected`
-- `join` / `leave`
+- `join`, followed by a versioned `joined` acknowledgment
+- `leave`
 - `message` for SDP offers/answers and ICE candidates
 - `ping` / `pong`
 - reconnect with a 90-second message cache
+
+### Room join acknowledgment
+
+After password validation, the client sends `join`. Protocol version 2 servers
+reply only after room membership has been installed:
+
+```json
+{
+  "type": "joined",
+  "data": {
+    "protocolVersion": 2,
+    "resumed": true
+  }
+}
+```
+
+`resumed` is `true` only when the server recovered the retained session. The
+server sends this acknowledgment before existing-client presence or cached
+SDP/ICE signals. The frontend buffers room and peer signals until the
+acknowledgment arrives, then rebinds every peer signaling channel and replays
+the buffer in order. For compatibility with older self-hosted servers, the
+frontend falls back to the legacy behavior after a short acknowledgment
+timeout.
+
+### WebRTC connection generations
+
+Each new `RTCPeerConnection` creates a random connection `generation`. The
+frontend includes it inside the encrypted JSON payload for SDP offers, answers,
+and ICE candidates:
+
+```json
+{
+  "sdp": "...",
+  "generation": "b86d7dca-..."
+}
+```
+
+The peer that accepts an offer adopts its generation and echoes it in the
+answer and local ICE candidates. Candidates received before the matching offer
+are queued by generation. When a peer connection is replaced, its generation
+is retired so delayed answers and candidates from the old connection cannot
+pollute the replacement. Payloads without `generation` remain accepted for
+compatibility with older clients.
+
+The signaling backends treat this encrypted payload as opaque data; no backend
+protocol change is required for connection generations.
 
 ## Privacy boundary
 

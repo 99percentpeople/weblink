@@ -101,13 +101,96 @@ changing the frontend protocol or mixing profile data into signaling.
 - [x] Document development, deployment, validation, and rollback in
       [`docs/SIGNALING.md`](SIGNALING.md).
 
+## Completed slice: WebSocket reconnect lifecycle
+
+Goal: keep signaling recovery alive through realistic network outages
+and make socket ownership deterministic.
+
+- [x] Replace fixed three-attempt reconnects with capped exponential
+      backoff and equal jitter.
+- [x] Pause retries while offline and retry immediately when the
+      browser reports connectivity.
+- [x] Make connect and reconnect operations single-flight and bind
+      every socket to a connection generation.
+- [x] Close timed-out and superseded sockets and ignore late
+      handshake events.
+- [x] Cancel pending connection attempts and delayed retries when
+      the user leaves the room.
+- [x] Rebind peer signaling listeners in the same event turn as a
+      resumed room join.
+- [x] Make signaling socket replacement and teardown idempotent and
+      contain malformed-message failures.
+- [x] Add focused timeout, retry, cancellation, offline, and sender
+      rebinding tests.
+- [x] Run frontend and backend tests, strict type checking,
+      formatting, and all production builds.
+
+## Completed slice: acknowledged room resume
+
+Goal: remove the ambiguity between an open WebSocket and an installed
+room session before replaying reconnect traffic.
+
+- [x] Add a versioned `joined` acknowledgment with an explicit
+      `resumed` result to both WebSocket backends.
+- [x] Emit the acknowledgment only after membership is installed and
+      before presence or cached signaling is replayed.
+- [x] Keep the existing `connected` password challenge compatible
+      with older clients and retain a timed fallback for older
+      self-hosted servers.
+- [x] Buffer presence and peer signaling until the room handshake is
+      acknowledged.
+- [x] Route incoming WebSocket signaling through the owning client
+      service instead of attaching one message listener per peer.
+- [x] Preserve ordered peer signals that arrive before sender and
+      session listeners are ready.
+- [x] Add frontend handshake/replay/fallback tests and backend
+      protocol/order assertions.
+
+## Completed slice: suspend recovery and negotiation generations
+
+Goal: rebuild mobile sessions after page suspension without allowing
+signals from retired peer connections to contaminate the replacement.
+
+- [x] Track page suspension separately from ordinary network
+      disconnection and defer reconnect work while frozen.
+- [x] Restart recovery when lifecycle resume events find a previously
+      connectable session without a peer connection.
+- [x] Prevent an aborted reconnect loop from clearing or disconnecting
+      a newer reconnect owner.
+- [x] Assign every `RTCPeerConnection` a random generation and include
+      it in offer, answer, and ICE payloads.
+- [x] Adopt the accepted offer generation, queue early candidates by
+      generation, and retire replaced or ignored generations.
+- [x] Serialize signal processing and stop asynchronous work from
+      continuing against a replaced peer connection.
+- [x] Continue accepting generation-less payloads from older clients.
+- [x] Add focused freeze/resume, outgoing generation, stale answer,
+      candidate replay, and legacy compatibility tests.
+
+## Completed slice: negotiation controller extraction
+
+Goal: reduce `PeerSession` ownership without changing its public API or
+moving WebRTC behavior into UI code.
+
+- [x] Move perfect-negotiation state, SDP/ICE handling, generation
+      retirement, and candidate queues into `PeerNegotiationController`.
+- [x] Keep offer creation cancellation-safe when a peer connection is
+      replaced during an asynchronous browser operation.
+- [x] Bind the serialized signal queue to a connection epoch so queued
+      legacy signals cannot cross a peer-connection replacement.
+- [x] Keep the existing `handleOffer` export available from
+      `session.ts` for compatibility.
+- [x] Add direct controller tests alongside the `PeerSession`
+      integration coverage.
+
 ## Next candidates
 
-1. Inject the local stream service through the app context instead
+1. Continue splitting `PeerSession` by extracting reconnect/lifecycle
+   coordination and media sender management behind its existing API.
+2. Harden stale-session handling and cache limits in the Bun
+   signaling server, then share protocol contract tests with the
+   Worker.
+3. Inject the local stream service through the app context instead
    of importing the singleton directly from UI modules.
-2. Split `PeerSession` connection, media sender, and reconnect
-   responsibilities while retaining its existing public API.
-3. Break large route components into state/controller and view
+4. Break large route components into state/controller and view
    modules without moving WebRTC details into UI code.
-4. Increase tests around media device acquisition failures and
-   partial camera/microphone/program-audio success.
