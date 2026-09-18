@@ -13,10 +13,7 @@ import {
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
 import Nav from "@/components/app/nav";
-import {
-  getRandomAvatar,
-  setClientProfile,
-} from "./libs/core/store";
+import { setClientProfile } from "./libs/core/store";
 import {
   AppStateProvider,
   useAppState,
@@ -187,7 +184,7 @@ const InnerApp = (props: ParentProps) => {
     messageStores.setClient({
       clientId: instructorClientId,
       name: instructorName,
-      avatar: getRandomAvatar(instructorName),
+      avatar: null,
     });
 
     await messageStores.addMessage({
@@ -318,7 +315,9 @@ const InnerApp = (props: ParentProps) => {
                 <AvatarImage
                   src={appState.profile.avatar ?? undefined}
                 />
-                <AvatarFallback>
+                <AvatarFallback
+                  seed={appState.profile.name}
+                >
                   {getInitials(appState.profile.name)}
                 </AvatarFallback>
               </HoverCardTrigger>
@@ -330,7 +329,9 @@ const InnerApp = (props: ParentProps) => {
                         appState.profile.avatar ?? undefined
                       }
                     />
-                    <AvatarFallback>
+                    <AvatarFallback
+                      seed={appState.profile.name}
+                    >
                       {getInitials(appState.profile.name)}
                     </AvatarFallback>
                   </Avatar>

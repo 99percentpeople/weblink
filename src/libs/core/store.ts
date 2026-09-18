@@ -4,7 +4,10 @@ import { generateHMAC } from "./utils/encrypt/hmac";
 import type { TurnServerOptions } from "@/options";
 import { STORAGE_KEYS } from "@/constants";
 import { catchError } from "../catch";
-import { appState, setAppState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 import type { SetStoreFunction } from "solid-js/store";
 import { createEffect } from "solid-js";
 import type { ClientProfile } from "./profile";
@@ -100,9 +103,21 @@ export async function getIceServers() {
   return servers;
 }
 
-export const getRandomAvatar = (seed: string) => {
-  return `https://api.dicebear.com/9.x/initials/svg?seed=${seed}`;
-};
+const LEGACY_DICEBEAR_INITIALS_PREFIX =
+  "https://api.dicebear.com/9.x/initials/svg";
+
+export const normalizeStoredProfile = (
+  profile: ClientProfile,
+): ClientProfile => ({
+  ...profile,
+  avatar:
+    typeof profile.avatar === "string" &&
+    profile.avatar.startsWith(
+      LEGACY_DICEBEAR_INITIALS_PREFIX,
+    )
+      ? null
+      : profile.avatar,
+});
 
 export const getDefaultProfile = () => {
   const name = faker.person.lastName();
@@ -111,7 +126,7 @@ export const getDefaultProfile = () => {
     name: name,
     clientId: v4(),
     password: null,
-    avatar: getRandomAvatar(name),
+    avatar: null,
     autoJoin: false,
     initalJoin: true,
   };
@@ -128,7 +143,10 @@ export function initializeProfile() {
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as ClientProfile;
-        setAppState("profile", parsed);
+        setAppState(
+          "profile",
+          normalizeStoredProfile(parsed),
+        );
       } catch (err) {
         console.warn(
           "[initializeProfile] invalid profile in localStorage",

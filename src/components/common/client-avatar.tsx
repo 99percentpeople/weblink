@@ -31,7 +31,7 @@ export const ClientAvatar = <
   return (
     <Avatar class={cn(local.class)} {...rest}>
       <AvatarImage src={local.avatar ?? undefined} />
-      <AvatarFallback>
+      <AvatarFallback seed={local.name}>
         {getInitials(local.name)}
       </AvatarFallback>
     </Avatar>

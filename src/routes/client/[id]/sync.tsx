@@ -49,7 +49,11 @@ import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { getInitials } from "@/libs/utils/name";
 import { ConnectionBadge } from "@/components/common/connection-badge";
 import { makePersisted } from "@solid-primitives/storage";
-import { A, RouteSectionProps, useParams } from "@solidjs/router";
+import {
+  A,
+  RouteSectionProps,
+  useParams,
+} from "@solidjs/router";
 import {
   createColumnHelper,
   createSolidTable,
@@ -577,7 +581,7 @@ const Sync = (props: RouteSectionProps) => {
             <AvatarImage
               src={client()?.avatar ?? undefined}
             />
-            <AvatarFallback>
+            <AvatarFallback seed={client()?.name ?? ""}>
               {getInitials(client()?.name ?? "")}
             </AvatarFallback>
           </Avatar>

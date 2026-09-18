@@ -5,6 +5,7 @@ import * as ImagePrimitive from "@kobalte/core/image";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 
 import { cn } from "@/libs/cn";
+import { getAvatarFallbackStyle } from "@/libs/utils/avatar";
 
 type AvatarRootProps<T extends ValidComponent = "span"> =
   ImagePrimitive.ImageRootProps<T> & {
@@ -53,6 +54,7 @@ type AvatarFallbackProps<
   T extends ValidComponent = "span",
 > = ImagePrimitive.ImageFallbackProps<T> & {
   class?: string | undefined;
+  seed?: string | undefined;
 };
 
 const AvatarFallback = <T extends ValidComponent = "span">(
@@ -60,15 +62,20 @@ const AvatarFallback = <T extends ValidComponent = "span">(
 ) => {
   const [local, others] = splitProps(
     props as AvatarFallbackProps,
-    ["class"],
+    ["class", "seed"],
   );
   return (
     <ImagePrimitive.Fallback
       class={cn(
-        `flex size-full items-center justify-center rounded-full
-        bg-muted`,
+        `bg-muted flex size-full items-center justify-center
+        rounded-full select-none`,
         local.class,
       )}
+      style={
+        local.seed
+          ? getAvatarFallbackStyle(local.seed)
+          : undefined
+      }
       {...others}
     />
   );

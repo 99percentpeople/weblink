@@ -16,7 +16,7 @@ const ShareClientItem = (props: { client: ClientInfo }) => {
         <AvatarImage
           src={props.client.avatar ?? undefined}
         />
-        <AvatarFallback>
+        <AvatarFallback seed={props.client.name}>
           {getInitials(props.client.name)}
         </AvatarFallback>
       </Avatar>

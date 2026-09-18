@@ -53,7 +53,7 @@ const ForwardClientItem = (props: {
         <AvatarImage
           src={props.client.avatar ?? undefined}
         />
-        <AvatarFallback>
+        <AvatarFallback seed={props.client.name}>
           {getInitials(props.client.name)}
         </AvatarFallback>
       </Avatar>
@@ -128,9 +128,7 @@ export const createForwardDialog = () => {
   const Dialog = () => (
     <CommandDialog open={open()} onOpenChange={setOpen}>
       <CommandInput
-        placeholder={t(
-          "common.forward_dialog.placeholder",
-        )}
+        placeholder={t("common.forward_dialog.placeholder")}
       />
 
       <CommandList>
@@ -215,10 +213,7 @@ export const createForwardDialog = () => {
               for (const item of data ?? []) {
                 try {
                   if (item.type === "text") {
-                    sendText(
-                      item.data as string,
-                      clientId,
-                    );
+                    sendText(item.data as string, clientId);
                   } else if (item.type === "file") {
                     sendFile(item.data as File, clientId);
                   } else if (item.type === "cache") {

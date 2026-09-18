@@ -170,7 +170,9 @@ export const createRoomDialog = () => {
                 <AvatarImage
                   src={appState.profile.avatar ?? undefined}
                 />
-                <AvatarFallback>
+                <AvatarFallback
+                  seed={appState.profile.name}
+                >
                   {getInitials(appState.profile.name)}
                 </AvatarFallback>
               </Avatar>

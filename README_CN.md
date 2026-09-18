@@ -1,47 +1,68 @@
-<h1>
+<div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
     <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="280" height="89" />
   </picture>
-</h1>
 
-[![CI](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg)](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml)
+  <p>
+    基于 WebRTC 的浏览器端 P2P 聊天、文件传输与文件同步应用。
+  </p>
 
-[**English Introduction**](README.md) | **中文介绍**
+  <p>
+    <a href="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml">
+      <img src="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+  </p>
+
+  <p>
+    <a href="README.md">English</a> · <strong>中文</strong>
+  </p>
+</div>
 
 ## 简介
 
-Weblink 是一款基于 WebRTC 的纯网页**文件传输**和**文字/语音/视频聊天**应用，无需下载或安装，直接在浏览器中即可使用。它采用了无服务器的 P2P 架构，支持多种后端，包括 Firebase、WebSocket 通过端到端加密，保障信令消息的隐私和安全。
+Weblink 是一款基于 WebRTC 的纯网页应用，支持**文件传输**、**文件同步**以及**文字/语音/视频通信**，无需安装原生客户端，直接在现代浏览器中即可使用。
 
-该项目已通过 Cloudflare Pages + Firebase 部署，请访问 [https://v.webl.ink](https://v.webl.ink)。
+WebRTC 连接建立后，应用数据通过客户端之间的 P2P 通道直接传输。信令服务仅用于发现客户端和建立 WebRTC 连接；配置房间密码后，信令数据会使用该密码加密。
 
-或者使用自建的 WebSocket 后端部署在阿里云上的 [https://webl.ink](https://webl.ink) 。
+### 在线版本
 
-## ✨功能
+| 版本          | 信令后端                             | 地址                                     |
+| ------------- | ------------------------------------ | ---------------------------------------- |
+| 主要版本      | Cloudflare Workers + Durable Objects | [https://webl.ink](https://webl.ink)     |
+| Firebase 版本 | Firebase Realtime Database           | [https://v.webl.ink](https://v.webl.ink) |
 
-Weblink 目前支持以下功能：
+主要版本使用 `wss://ws.webl.ink` 提供 WebSocket 信令服务，后端为运行在 Cloudflare Workers 上的 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)。
 
-| **功能**          | **描述**                                                           |
-| ----------------- | ------------------------------------------------------------------ |
-| 🔄 **文件同步**   | 无缝检索对方缓存的文件。                                           |
-| ⏯️ **续传功能**   | 如果连接中断，可轻松恢复文件传输。                                 |
-| 📂 **文件缓存**   | 传输的文件会安全地缓存到 IndexedDB 中。                            |
-| 🖥️ **屏幕共享**   | 支持多个客户端互相共享屏幕、摄像头和音频（包括扬声器和麦克风）。   |
-| 🔍 **文件搜索**   | 快速搜索您和对方缓存的文件。                                       |
-| 📋 **剪贴板传输** | 使用 `Ctrl + V` 或移动设备粘贴操作直接将剪贴板内容发送到聊天窗口。 |
-| 📁 **文件夹传输** | 轻松发送文件夹，支持自动压缩。                                     |
-| 📦 **压缩传输**   | 在传输文件时选择压缩功能，实现高效数据处理。                       |
-| ⚡ **多通道传输** | 通过多数据通道并行传输，提高传输性能。                             |
-| 🔗 **分享与转发** | 安装为 PWA 后，可通过系统分享功能发送文本或文件。                  |
-| 💬 **文字聊天**   | 发送文字消息，实现流畅沟通。                                       |
+## 功能
 
-更多信息请查看 [CHANGELOG](CHANGELOG.md) 了解最新更新。
+| 功能               | 描述                                       |
+| ------------------ | ------------------------------------------ |
+| 🔄 **文件同步**    | 浏览并获取其他客户端缓存的文件。           |
+| ⏯️ **断点续传**    | 连接中断后继续未完成的文件传输。           |
+| 📂 **文件缓存**    | 使用 IndexedDB 在本地缓存传输文件。        |
+| 📁 **文件夹传输**  | 自动打包、压缩并发送文件夹。               |
+| 📦 **压缩传输**    | 可选择在传输前压缩文件。                   |
+| ⚡ **多通道传输**  | 使用多个 WebRTC DataChannel 并行传输数据。 |
+| 🔍 **文件搜索**    | 搜索本地及对端缓存的文件。                 |
+| 📋 **剪贴板传输**  | 将剪贴板内容直接粘贴到聊天窗口发送。       |
+| 💬 **文字聊天**    | 通过 WebRTC 交换文字消息。                 |
+| 🎙️ **语音 / 视频** | 与连接的客户端共享麦克风和摄像头。         |
+| 🖥️ **屏幕共享**    | 共享屏幕、系统音频及麦克风音频。           |
+| 🔗 **分享与转发**  | 安装为 PWA 后使用系统分享能力发送内容。    |
 
-如果遇到使用上的问题，欢迎加入QQ群进行提问或者反馈：[762463759 ](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)
+更多更新请查看 [CHANGELOG.md](CHANGELOG.md)。
 
-## 使用方法
+使用过程中如有问题，也可以加入 QQ 群反馈：[762463759](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)。
 
-### 本地运行（开发）
+## 快速开始
+
+### 环境要求
+
+- [Bun](https://bun.sh/)
+- 支持 WebRTC 的现代浏览器
+
+### 安装
 
 ```bash
 git clone https://github.com/99percentpeople/weblink.git
@@ -49,84 +70,57 @@ cd weblink
 bun install
 ```
 
-确保你已经在项目中配置了 Firebase 的密钥（如下所示），然后运行以下命令：
+创建 `.env.local` 并选择信令后端。
+
+使用公网 WebSocket 信令服务：
+
+```env
+VITE_BACKEND=WEBSOCKET
+VITE_WEBSOCKET_URL=wss://ws.webl.ink
+```
+
+使用本地 Bun 信令服务器：
+
+```env
+VITE_BACKEND=WEBSOCKET
+VITE_WEBSOCKET_URL=ws://127.0.0.1:9000
+```
+
+启动开发服务器：
 
 ```bash
-# 进行开发
 bun dev
-# 构建
-bun build
 ```
 
-### 部署到 Docker
-
-你可以使用 `docker-compose.yaml` 将项目部署到 Docker，并且会自动构建 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 作为后端。
-
-修改 `docker-compose.yaml` 文件以设置正确的环境变量，然后运行以下命令：
+构建生产版本：
 
 ```bash
-docker compose up -d
+bun run build
 ```
 
-启用 SSL 时，需要提供 SSL 证书 `server.crt` 和密钥 `server.pem` 文件在 `docker/ssl` 目录下，然后运行以下命令：
+## 信令后端
 
-```bash
-ENABLE_SSL=true && docker compose up -d
+Weblink 支持多种信令实现。WebRTC 连接建立后，应用消息、文件、媒体、显示名称和头像都不会通过信令服务传输。
+
+### Cloudflare Workers
+
+公开部署的 [webl.ink](https://webl.ink) 使用：
+
+```text
+wss://ws.webl.ink
 ```
 
-```pwsh
-$env:ENABLE_SSL='true' && docker compose up -d
-```
+信令服务由 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker) 提供，运行在 Cloudflare Workers 上，并使用 Durable Objects；每个房间对应一个 Durable Object。
 
-你也可以使用 Dockerfile 部署到 Docker。
+### 自建 WebSocket 服务
 
-### 部署到 Vercel
+[weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 是基于 Bun 的 WebSocket 信令实现，适合自建部署、本地环境和局域网环境。
 
-你可以通过以下步骤将项目部署到 Vercel：
+### Firebase
 
-1. 前往 Vercel 网站 并登录（或创建一个账号）。
-2. 连接你的 GitHub 仓库，选择你克隆的仓库。
-3. 在 Vercel 项目设置中，找到 Environment Variables（环境变量），添加你的 Firebase API 密钥等环境变量（如下所示）。
-4. 单击 "Deploy" 按钮，Vercel 将自动构建并部署你的项目。
-
-### 环境变量配置 (Firebase)
-
-在本地开发和部署到 Vercel 时，你需要配置 Firebase 的密钥。以下是需要添加的 Firebase 环境变量：
+Firebase Realtime Database 仍可作为另一种信令后端。需要配置：
 
 ```env
-VITE_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID
-VITE_FIREBASE_STORAGE_BUCKET
-VITE_FIREBASE_MESSAGING_SENDER_ID
-VITE_FIREBASE_APP_ID
-VITE_FIREBASE_DATABASE_URL
-```
-
-### WebSocket 信令配置
-
-无服务器部署推荐使用 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)：它运行于 Cloudflare Workers，并将每个房间映射到一个 Durable Object。基于 Bun 的 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 继续用于自建部署和回滚。
-
-WebSocket 地址通过构建环境变量 `VITE_WEBSOCKET_URL` 固定，用户不能在设置界面中覆盖。协议边界、隐私模型、部署验证和回滚流程请参阅[信令服务文档](docs/SIGNALING.md)。
-
-### Vercel 环境变量配置
-
-部署到 Vercel 时，请按照以下步骤设置环境变量：
-
-1. 打开你的 Vercel 项目，进入 "Settings"。
-
-2. 找到 Environment Variables。
-
-3. 分别添加上述 Firebase 配置项，将对应的值填入字段中。
-
-### 本地环境变量 (.env.local)
-
-在本地开发时，创建一个 .env.local 文件，将 后端选择 FIREBASE、WEBSOCKET
-
-```env
-# 后端选择 FIREBASE、WEBSOCKET
-
-# FIREBASE 配置
 VITE_BACKEND=FIREBASE
 VITE_FIREBASE_API_KEY=your-firebase-api-key
 VITE_FIREBASE_AUTH_DOMAIN=your-firebase-auth-domain
@@ -135,61 +129,94 @@ VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-firebase-app-id
 VITE_FIREBASE_DATABASE_URL=your-database-url
+```
 
-# WEBSOCKET 配置
+协议、隐私边界及部署说明请查看 [docs/SIGNALING.md](docs/SIGNALING.md)。
+
+## 部署
+
+### Docker
+
+仓库中的 `docker-compose.yaml` 会同时构建 Weblink 前端和 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server)。
+
+先修改 `docker-compose.yaml` 中的 WebSocket 地址及其他构建参数，然后运行：
+
+```bash
+docker compose up -d
+```
+
+如需启用 HTTPS，将 `server.crt` 和 `server.pem` 放入 `docker/ssl`，然后运行：
+
+```bash
+ENABLE_SSL=true docker compose up -d
+```
+
+PowerShell：
+
+```powershell
+$env:ENABLE_SSL='true'
+docker compose up -d
+```
+
+也可以直接使用仓库中的 `Dockerfile` 构建和部署前端。
+
+### Vercel 或其他静态托管平台
+
+在托管平台中配置所需的 `VITE_*` 环境变量，并使用以下命令构建：
+
+```bash
+bun run build
+```
+
+使用公网 WebSocket 信令服务时，最小信令配置为：
+
+```env
 VITE_BACKEND=WEBSOCKET
 VITE_WEBSOCKET_URL=wss://ws.webl.ink
 ```
 
-## 注意事项
+WebSocket 地址属于部署配置，无法在应用设置界面中由用户修改。
 
-### STUN 和 TURN 服务器配置
+## STUN 和 TURN
 
-你可以给应用配置多个默认的 STUN 和 TURN 服务器，用户使用时不需要手动配置，在.env.local 文件中配置方式如下：
+可以通过构建环境变量配置默认 STUN 和 TURN 服务器：
 
 ```env
-#  多个 STUN 和 TURN 服务器，用逗号分隔
 VITE_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
 VITE_TURN_SERVERS=turn:turn1.example.com:3478|user1|pass1|longterm,turn:turn2.example.com:5349|user2|pass2|hmac
 ```
 
-如果你在非局域网（NAT 环境）下使用 P2P 连接，可能需要配置 TURN 服务器以确保能够建立连接。在设置页面中，你可以根据以下格式配置 TURN 服务器，支持 coturn 和 Cloudflare 提供的 TURN 服务，配置项之间用换行符分隔：
+当 NAT 或防火墙阻止客户端直接建立 P2P 连接时，可能需要 TURN 中继服务器。
 
-**TURN 配置格式**：
+支持的 TURN 配置格式：
 
-```plaintext
-# coturn 使用账号密码进行验证
+```text
+# coturn：用户名/密码认证
 turn:turn1.example.com:3478|user1|pass1|longterm
-# coturn 使用时间戳进行验证
+
+# coturn：时间戳/HMAC 认证
 turns:turn2.example.com:5349|user2|pass2|hmac
-# 使用 Cloudflare 提供的 TURN 服务器
+
+# Cloudflare TURN
 name|TURN_TOKEN_ID|API_TOKEN|cloudflare
 ```
 
-以下为一些公共 STUN 和 TURN 服务器的获取方法：
+相关资源：
 
-#### 公共 STUN 服务器
+- 公共 STUN 服务器列表：[mondain/public-stun-list](https://gist.github.com/mondain/b0ec1cf5f60ae726202e)
+- Cloudflare TURN：[Cloudflare Calls TURN](https://developers.cloudflare.com/calls/turn/)
+- 自建 TURN：[coturn](https://github.com/coturn/coturn)
 
-此应用默认使用 Google 的 STUN 服务器，如果无法连接，请自行配置 STUN 服务器。可以参考 [https://gist.github.com/mondain/b0ec1cf5f60ae726202e](https://gist.github.com/mondain/b0ec1cf5f60ae726202e) 获取公共 STUN 服务器列表。然后在设置页面中添加 STUN 服务器，格式为 `stun:xxxx:xxxx`。例如： `stun:stun.l.google.com:19302`。
+## 局域网使用
 
-#### Cloudflare Calls TURN 服务器
+Weblink 支持在局域网内使用。请确保设备之间网络可达，并且本地防火墙没有阻止 WebRTC 流量。
 
-可以使用 Cloudflare Calls 提供的 TURN 服务器，请访问 [https://developers.cloudflare.com/calls/turn](https://developers.cloudflare.com/calls/turn)。然后在设置页面中添加 TURN 服务器，格式为 `name|TURN_TOKEN_ID|API_TOKEN|cloudflare`。
-
-#### 自建 TURN 服务器
-
-可以参考 [https://github.com/coturn/coturn](https://github.com/coturn/coturn) 自建 TURN 服务器。
-
-### 局域网内使用
-
-应用目前支持在非安全环境下局域网内使用，局域网内使用时，请确保你的设备在同一个局域网内，并且防火墙没有阻止 P2P 连接。
-
-并同时运行 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 以支持 WEBSOCKET 连接。
+如果需要完全本地化部署，可以运行 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server)，并在构建前将 `VITE_WEBSOCKET_URL` 指向本地信令服务器。
 
 ## 贡献
 
-欢迎贡献代码！请随时提交问题或拉取请求。
+欢迎提交 Issue 或 Pull Request。
 
 ## 许可证
 
-该项目基于 [MIT License](LICENSE) 开源。
+Weblink 基于 [MIT License](LICENSE) 开源。

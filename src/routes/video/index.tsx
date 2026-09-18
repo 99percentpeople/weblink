@@ -248,7 +248,9 @@ export default function Video() {
                                       undefined
                                     }
                                   />
-                                  <AvatarFallback>
+                                  <AvatarFallback
+                                    seed={client().name}
+                                  >
                                     {getInitials(
                                       client().name,
                                     )}

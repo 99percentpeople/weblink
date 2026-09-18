@@ -44,8 +44,7 @@ import { ConnectionBadge } from "../../../components/common/connection-badge";
 import { IconFile } from "@/components/icon-file";
 import { appState } from "@/libs/state/app-state";
 
-export interface UserItemProps
-  extends ComponentProps<"li"> {
+export interface UserItemProps extends ComponentProps<"li"> {
   client: Client;
   collapsed: boolean;
   message?: StoreMessage;
@@ -87,110 +86,109 @@ export const UserItem: Component<UserItemProps> = (
 
   const clientInfo = createMemo<ClientInfo | undefined>(
     () =>
-      appState.session.clientViewData[local.client.clientId],
+      appState.session.clientViewData[
+        local.client.clientId
+      ],
   );
 
-  const {
-    open: openConfirmDeleteClientDialog,
-  } = createComfirmDeleteClientDialog();
+  const { open: openConfirmDeleteClientDialog } =
+    createComfirmDeleteClientDialog();
 
   return (
     <PortableContextMenu
-        menu={(close) => (
-          <ContextMenuGroup>
-            <ContextMenuGroupLabel>
-              {local.client.name}
-            </ContextMenuGroupLabel>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              as={A}
-              href={`/client/${local.client.clientId}/chat`}
-              class="gap-2"
-              onSelect={() => {
-                close();
-              }}
-            >
-              <IconChatBubble class="size-4" />
-              {t("client.client_list.context_menu.chat")}
-            </ContextMenuItem>
-            <ContextMenuItem
-              as={A}
-              href={`/client/${local.client.clientId}/sync`}
-              class="gap-2"
-              onSelect={() => {
-                close();
-              }}
-            >
-              <IconFolderMatch class="size-4" />
-              {t("client.client_list.context_menu.sync")}
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              variant="destructive"
-              class="gap-2"
-              onSelect={async () => {
-                close();
-                const result = (
-                  await openConfirmDeleteClientDialog(
-                    local.client.name,
-                  )
-                ).result;
-                if (!result) return;
-                messageStores.deleteClient(
-                  local.client.clientId,
-                );
-              }}
-            >
-              <IconDelete class="size-4" />
-              {t("common.action.delete")}
-            </ContextMenuItem>
-          </ContextMenuGroup>
-        )}
-      >
-        {(p) => (
-          <li
-            class={cn(
-              "hover:bg-muted/50 flex w-full flex-col transition-colors",
-            )}
-            {...p}
+      menu={(close) => (
+        <ContextMenuGroup>
+          <ContextMenuGroupLabel>
+            {local.client.name}
+          </ContextMenuGroupLabel>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            as={A}
+            href={`/client/${local.client.clientId}/chat`}
+            class="gap-2"
+            onSelect={() => {
+              close();
+            }}
           >
-            <A
-              class="flex gap-2 px-2 transition-colors hover:cursor-pointer
-                sm:px-1"
-              href={`/client/${local.client.clientId}/chat`}
-            >
-              <Avatar class="size-10 self-center">
-                <AvatarImage
-                  src={local.client.avatar ?? undefined}
-                  alt={local.client.name}
-                />
-                <AvatarFallback>
-                  {getInitials(local.client.name)}
-                </AvatarFallback>
-              </Avatar>
-              <Show when={!local.collapsed}>
-                <div class="w-full flex-1 space-y-1">
-                  <p class="flex w-full flex-wrap items-center justify-between gap-2">
-                    <span class="line-clamp-1 font-bold text-ellipsis">
-                      {props.client.name}
+            <IconChatBubble class="size-4" />
+            {t("client.client_list.context_menu.chat")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            as={A}
+            href={`/client/${local.client.clientId}/sync`}
+            class="gap-2"
+            onSelect={() => {
+              close();
+            }}
+          >
+            <IconFolderMatch class="size-4" />
+            {t("client.client_list.context_menu.sync")}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            class="gap-2"
+            onSelect={async () => {
+              close();
+              const result = (
+                await openConfirmDeleteClientDialog(
+                  local.client.name,
+                )
+              ).result;
+              if (!result) return;
+              messageStores.deleteClient(
+                local.client.clientId,
+              );
+            }}
+          >
+            <IconDelete class="size-4" />
+            {t("common.action.delete")}
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      )}
+    >
+      {(p) => (
+        <li
+          class={cn(
+            "hover:bg-muted/50 flex w-full flex-col transition-colors",
+          )}
+          {...p}
+        >
+          <A
+            class="flex gap-2 px-2 transition-colors hover:cursor-pointer
+              sm:px-1"
+            href={`/client/${local.client.clientId}/chat`}
+          >
+            <Avatar class="size-10 self-center">
+              <AvatarImage
+                src={local.client.avatar ?? undefined}
+                alt={local.client.name}
+              />
+              <AvatarFallback seed={local.client.name}>
+                {getInitials(local.client.name)}
+              </AvatarFallback>
+            </Avatar>
+            <Show when={!local.collapsed}>
+              <div class="w-full flex-1 space-y-1">
+                <p class="flex w-full flex-wrap items-center justify-between gap-2">
+                  <span class="line-clamp-1 font-bold text-ellipsis">
+                    {props.client.name}
+                  </span>
+                  <ConnectionBadge client={clientInfo()} />
+                </p>
+                <MessageData message={props.message} />
+                <Show when={props.message?.createdAt}>
+                  {(createdAt) => (
+                    <span class="muted float-end text-xs text-nowrap">
+                      {createTimeAgo(createdAt())}
                     </span>
-                    <ConnectionBadge
-                      client={clientInfo()}
-                    />
-                  </p>
-                  <MessageData message={props.message} />
-                  <Show when={props.message?.createdAt}>
-                    {(createdAt) => (
-                      <span class="muted float-end text-xs text-nowrap">
-                        {createTimeAgo(createdAt())}
-                      </span>
-                    )}
-                  </Show>
-                </div>
-              </Show>
-            </A>
-          </li>
-        )}
-      </PortableContextMenu>
+                  )}
+                </Show>
+              </div>
+            </Show>
+          </A>
+        </li>
+      )}
+    </PortableContextMenu>
   );
 };
