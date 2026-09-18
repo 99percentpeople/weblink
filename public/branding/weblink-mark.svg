@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="352" height="264" viewBox="80 124 352 264" fill="none" role="img" aria-labelledby="wl-mark-title">
+  <title id="wl-mark-title">Weblink</title>
+  <defs>
+    <linearGradient id="wl-mark-bg" x1="96" y1="64" x2="416" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132A46"/>
+      <stop offset="1" stop-color="#0A1627"/>
+    </linearGradient>
+    <linearGradient id="wl-mark-accent" x1="214" y1="165" x2="388" y2="334" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8DF1E5"/>
+      <stop offset="1" stop-color="#2CCAD8"/>
+    </linearGradient>
+    <mask id="wl-mark-cross" x="0" y="0" width="512" height="512" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="512" height="512" fill="white"/>
+      <path d="M224 170 269 316Q276 340 293 319L388 170" fill="none" stroke="black" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g transform="translate(-6 8)" fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M136 170 178 316Q185 340 202 319L296 170" stroke="currentColor" mask="url(#wl-mark-cross)"/>
+    <path d="M224 170 269 316Q276 340 293 319L388 170" stroke="#0996A3"/>
+  </g>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="452" height="144" viewBox="0 0 452 144" fill="none" role="img" aria-labelledby="wl-logo-dark-title" color="#FAFAFA">
+  <title id="wl-logo-dark-title">Weblink</title>
+  <defs>
+    <linearGradient id="wl-logo-dark-bg" x1="96" y1="64" x2="416" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132A46"/>
+      <stop offset="1" stop-color="#0A1627"/>
+    </linearGradient>
+    <linearGradient id="wl-logo-dark-accent" x1="214" y1="165" x2="388" y2="334" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8DF1E5"/>
+      <stop offset="1" stop-color="#2CCAD8"/>
+    </linearGradient>
+    <mask id="wl-logo-dark-cross" x="0" y="0" width="512" height="512" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="512" height="512" fill="white"/>
+      <path d="M224 170 269 316Q276 340 293 319L388 170" fill="none" stroke="black" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g transform="translate(-30 -38) scale(.44)"><g transform="translate(-6 8)" fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M136 170 178 316Q185 340 202 319L296 170" stroke="currentColor" mask="url(#wl-logo-dark-cross)"/>
+    <path d="M224 170 269 316Q276 340 293 319L388 170" stroke="url(#wl-logo-dark-accent)"/>
+  </g></g>
+  <text x="184" y="95" fill="currentColor" font-family="&apos;Inter Variable&apos;, Inter, &apos;Avenir Next&apos;, &apos;Segoe UI&apos;, sans-serif" font-size="64" font-weight="700" letter-spacing="-2.2">Weblink</text>
+</svg>

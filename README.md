@@ -1,4 +1,9 @@
-# Weblink
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
+    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="280" height="89" />
+  </picture>
+</h1>
 
 [![CI](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg)](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml)
 

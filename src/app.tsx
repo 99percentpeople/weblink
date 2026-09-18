@@ -1,4 +1,5 @@
 import {
+  A,
   RouteSectionProps,
   useSearchParams,
 } from "@solidjs/router";
@@ -76,6 +77,8 @@ import { createInitialization } from "@/libs/initialization";
 import { appState } from "@/libs/state/app-state";
 import { localStream } from "@/libs/services/local-stream-service";
 import { ModalProvider } from "@/components/dialogs/base";
+import { Brand } from "@/components/common/brand";
+import { BRAND } from "@/branding/brand";
 
 const InnerApp = (props: ParentProps) => {
   const { joinRoom } = useAppState();
@@ -283,6 +286,18 @@ const InnerApp = (props: ParentProps) => {
             class="sticky top-0 flex h-full max-h-[100vh] items-center gap-2
               px-2 py-0 md:flex-col md:px-0 md:py-2"
           >
+            <A
+              href="/"
+              aria-label={BRAND.name}
+              class="hidden rounded-full focus-visible:outline-2
+                focus-visible:outline-offset-2 md:block"
+            >
+              <Brand
+                variant="icon"
+                class="size-10"
+                decorative
+              />
+            </A>
             <Nav class="items-center gap-2 p-2 md:flex-col md:gap-4" />
             <div class="flex-1"></div>
             <HoverCard

@@ -6,6 +6,12 @@ import solidSvg from "vite-plugin-solid-svg";
 import { compression } from "vite-plugin-compression2";
 import { readFileSync } from "fs";
 import tailwindcss from "@tailwindcss/vite";
+import { webLinkBranding } from "./scripts/brand-plugin";
+import {
+  BRAND_ASSETS,
+  BRAND_MANIFEST_ICONS,
+  BRAND_REVISION,
+} from "./src/branding/brand";
 const packageJson = JSON.parse(
   readFileSync("./package.json", "utf-8"),
 );
@@ -26,29 +32,7 @@ const pwaOptions: Partial<VitePWAOptions> = {
     theme_color: "#ffffff",
     start_url: "/",
     display: "standalone",
-    icons: [
-      {
-        src: "pwa-64x64.png",
-        sizes: "64x64",
-        type: "image/png",
-      },
-      {
-        src: "pwa-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        src: "pwa-512x512.png",
-        sizes: "512x512",
-        type: "image/png",
-      },
-      {
-        src: "maskable-icon-512x512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
-    ],
+    icons: BRAND_MANIFEST_ICONS,
     share_target: {
       action: "/share",
       method: "POST",
@@ -67,7 +51,16 @@ const pwaOptions: Partial<VitePWAOptions> = {
     },
   },
   base: "/",
-  injectManifest: { swSrc: "src/sw.ts" },
+  injectManifest: {
+    swSrc: "src/sw.ts",
+    // Cache the exact versioned URLs used in the HTML and manifest.
+    additionalManifestEntries: Object.values(
+      BRAND_ASSETS,
+    ).map((url) => ({
+      url,
+      revision: BRAND_REVISION,
+    })),
+  },
   devOptions: {
     enabled: false,
     /* when using generateSW the PWA plugin will switch to classic */
@@ -90,6 +83,7 @@ export default defineConfig({
     minify: true,
   },
   plugins: [
+    webLinkBranding(),
     solidPlugin(),
     solidSvg({
       svgo: {

@@ -1,6 +1,7 @@
 import { t } from "@/i18n";
 import { createDialog } from "./dialog";
 import IconGitHub from "@/assets/icons/github-mark.svg?component-solid";
+import { Brand } from "@/components/common/brand";
 
 const createAboutDialog = () => {
   const { open: openAboutDialog } = createDialog({
@@ -8,6 +9,7 @@ const createAboutDialog = () => {
     content: () => {
       return (
         <div class="flex flex-col gap-4">
+          <Brand class="h-16 max-w-full self-center" />
           <p>{t("common.about_dialog.description1")}</p>
           <p>{t("common.about_dialog.description2")}</p>
           <p>{t("common.about_dialog.description3")}</p>
