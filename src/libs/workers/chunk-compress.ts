@@ -17,10 +17,15 @@ self.onmessage = (
       level: option.level,
     });
 
-    self.postMessage({
-      data: compressed,
-      context,
-    });
+    self.postMessage(
+      {
+        data: compressed,
+        context,
+      },
+      {
+        transfer: [compressed.buffer as ArrayBuffer],
+      },
+    );
   } catch (error) {
     self.postMessage({
       error: (error as Error).message,

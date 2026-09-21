@@ -17,8 +17,9 @@ export abstract class FileTransferBase {
   private eventEmitter: MultiEventEmitter<FileTransfererEventMap> =
     new MultiEventEmitter();
 
-  channels: Array<RTCDataChannel> = [];
-  protected bufferedAmountLowThreshold = 1024 * 1024; // 1MB
+  channel: RTCDataChannel | null = null;
+  protected bufferedAmountLowThreshold = 64 * 1024; // 64KB
+  protected bufferedAmountHighWaterMark = 256 * 1024; // 256KB
 
   readonly cache: ChunkCache;
   protected info: FileMetaData | null = null;
@@ -26,6 +27,7 @@ export abstract class FileTransferBase {
   protected controller: AbortController =
     new AbortController();
   protected closed = false;
+  protected paused = false;
   protected isComplete = false;
   protected timer?: number;
   protected unzipWorker?: Worker;
@@ -42,6 +44,11 @@ export abstract class FileTransferBase {
     this.bufferedAmountLowThreshold =
       options.bufferedAmountLowThreshold ??
       this.bufferedAmountLowThreshold;
+    this.bufferedAmountHighWaterMark = Math.max(
+      options.bufferedAmountHighWaterMark ??
+        this.bufferedAmountHighWaterMark,
+      this.bufferedAmountLowThreshold * 4,
+    );
     this.info = options.info ?? null;
   }
 
@@ -83,16 +90,23 @@ export abstract class FileTransferBase {
     data: string | ArrayBuffer | Blob,
   ): void;
 
-  public addChannel(channel: RTCDataChannel) {
+  public setChannel(channel: RTCDataChannel) {
+    if (
+      this.channel &&
+      this.channel !== channel &&
+      this.channel.readyState !== "closed"
+    ) {
+      throw new Error("transfer channel is already set");
+    }
+
+    this.channel = channel;
+
     const onClose = () => {
       channel.onmessage = null;
-      const index = this.channels.findIndex(
-        (c) => c.label === channel.label,
-      );
-      if (index !== -1) {
-        this.channels.splice(index, 1);
+      if (this.channel === channel) {
+        this.channel = null;
       }
-      if (!this.isComplete && this.channels.length === 0) {
+      if (!this.isComplete && !this.paused) {
         this.dispatchEvent(
           "error",
           Error(`connection is closed`),
@@ -115,97 +129,100 @@ export abstract class FileTransferBase {
     channel.bufferedAmountLowThreshold =
       this.bufferedAmountLowThreshold;
 
-    if (this.channels.length === 0) {
-      if (channel.readyState === "open") {
-        this.dispatchEvent("ready", undefined);
-      } else {
-        const controller = new AbortController();
-        channel.addEventListener(
-          "open",
-          () => {
-            controller.abort();
-            this.dispatchEvent("ready", undefined);
-          },
-          {
-            signal: controller.signal,
-            once: true,
-          },
-        );
-        channel.addEventListener(
-          "close",
-          () => {
-            controller.abort();
-            this.dispatchEvent(
-              "error",
-              new Error("connection is closed"),
-            );
-          },
-          {
-            signal: controller.signal,
-            once: true,
-          },
-        );
-      }
+    if (channel.readyState === "open") {
+      this.dispatchEvent("ready", undefined);
+      return;
     }
-    this.channels.push(channel);
+
+    const controller = new AbortController();
+    channel.addEventListener(
+      "open",
+      () => {
+        controller.abort();
+        this.dispatchEvent("ready", undefined);
+      },
+      {
+        signal: controller.signal,
+        once: true,
+      },
+    );
+    channel.addEventListener(
+      "close",
+      () => {
+        controller.abort();
+      },
+      {
+        signal: controller.signal,
+        once: true,
+      },
+    );
   }
 
   protected async waitBufferedAmountLowThreshold(
     bufferedAmountLowThreshold: number = 0,
   ) {
-    return Promise.all(
-      this.channels.map((channel) =>
-        waitBufferedAmountLowThreshold(
-          channel,
-          bufferedAmountLowThreshold,
-        ),
-      ),
+    const channel = this.channel;
+    if (!channel) {
+      throw new Error("transfer channel is not set");
+    }
+    return waitBufferedAmountLowThreshold(
+      channel,
+      bufferedAmountLowThreshold,
     );
   }
 
-  protected async getAnyAvailableChannel(
-    bufferedAmountLowThreshold: number = this
-      .bufferedAmountLowThreshold,
+  protected async getAvailableChannel(
+    bufferedAmountHighWaterMark: number = this
+      .bufferedAmountHighWaterMark,
   ): Promise<RTCDataChannel> {
-    if (this.channels.length === 0) {
-      throw new Error("no channel");
+    const channel = this.channel;
+    if (!channel || channel.readyState !== "open") {
+      throw new Error("transfer channel is not open");
     }
-    const [error, channel] = await catchError(
-      Promise.any(
-        this.channels.map((channel) =>
-          waitBufferedAmountLowThreshold(
-            channel,
-            bufferedAmountLowThreshold,
-          ),
-        ),
-      ).catch(() => {
-        throw new Error(
-          "Can not get any available channel",
-        );
-      }),
+
+    if (
+      channel.bufferedAmount <= bufferedAmountHighWaterMark
+    ) {
+      return channel;
+    }
+
+    const [error, availableChannel] = await catchError(
+      waitBufferedAmountLowThreshold(
+        channel,
+        this.bufferedAmountLowThreshold,
+      ),
     );
     if (error) {
       this.dispatchEvent("error", error);
       throw error;
     }
-    return channel;
+    return availableChannel;
   }
 
   public async pause(notify: boolean = false) {
     if (this.closed) return;
+
+    // Mark the transfer as intentionally paused before notifying the
+    // peer. Both sides can pause at nearly the same time, so the data
+    // channel may close while either side is still flushing the pause
+    // message. That is an expected race, not a transfer error.
+    this.paused = true;
+
     if (notify) {
-      const [error, channel] = await catchError(
-        this.getAnyAvailableChannel(),
-      );
-      if (error) {
-        return this.close();
+      const channel = this.channel;
+      if (channel?.readyState === "open") {
+        try {
+          channel.send(
+            JSON.stringify({
+              type: "pause",
+            } satisfies PauseMessage),
+          );
+          await waitBufferedAmountLowThreshold(channel, 0);
+        } catch {
+          // The peer may have processed its own pause first and closed
+          // the channel while this side was flushing the notification.
+        }
       }
-      channel.send(
-        JSON.stringify({
-          type: "pause",
-        } satisfies PauseMessage),
-      );
-      await waitBufferedAmountLowThreshold(channel, 0);
     }
     this.close();
   }
@@ -225,4 +242,3 @@ export abstract class FileTransferBase {
     this.controller.abort();
   }
 }
-

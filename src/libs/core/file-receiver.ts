@@ -8,7 +8,10 @@ import {
   type TransferMessage,
 } from "./file-transferer";
 import { getTotalChunkCount } from "../cache/chunk-cache";
-import { blobToArrayBuffer, readPacket } from "./utils/packet";
+import {
+  blobToArrayBuffer,
+  readPacket,
+} from "./utils/packet";
 
 import UncompressWorker from "@/libs/workers/chunk-uncompress?worker";
 import { catchError } from "../catch";
@@ -22,6 +25,7 @@ export class FileReceiver extends FileTransferBase {
   readonly mode: TransferMode = TransferMode.Receive;
   private receivedData?: ReceiveData;
   private initialized: boolean = false;
+  private lastReceiveActivityAt = Date.now();
 
   private blockCache: {
     [chunkIndex: number]: {
@@ -89,7 +93,14 @@ export class FileReceiver extends FileTransferBase {
         );
         return;
       }
-      this.storeChunk(chunkIndex, data.buffer);
+      this.storeChunk(chunkIndex, data.buffer).catch(
+        (storeError) => {
+          console.error(storeError);
+          if (storeError instanceof Error) {
+            this.dispatchEvent("error", storeError);
+          }
+        },
+      );
     };
 
     this.unzipWorker = uncompressWorker;
@@ -106,7 +117,7 @@ export class FileReceiver extends FileTransferBase {
       (await this.cache.calcCachedBytes()) ?? 0;
 
     this.updateProgress();
-    if (this.channels.length > 0) {
+    if (this.channel?.readyState === "open") {
       this.dispatchEvent("ready", undefined);
     }
   }
@@ -146,8 +157,12 @@ export class FileReceiver extends FileTransferBase {
     if (!this.unzipWorker) {
       throw new Error("unzip worker is not initialized");
     }
-    const { chunkIndex, blockIndex, blockData, isLastBlock } =
-      readPacket(packet);
+    const {
+      chunkIndex,
+      blockIndex,
+      blockData,
+      isLastBlock,
+    } = readPacket(packet);
 
     if (!this.blockCache[chunkIndex]) {
       this.blockCache[chunkIndex] = {
@@ -173,21 +188,28 @@ export class FileReceiver extends FileTransferBase {
         chunkInfo.totalBlockNumber,
       );
 
-      this.unzipWorker.postMessage({
-        data: compressedData,
-        context: {
-          chunkIndex,
+      this.unzipWorker.postMessage(
+        {
+          data: compressedData,
+          context: {
+            chunkIndex,
+          },
         },
-      });
+        [compressedData.buffer as ArrayBuffer],
+      );
     }
   }
 
-  private async startChecking(delay: number = 5000) {
+  private startChecking(delay: number = 5000) {
+    if (this.timer !== undefined) return;
+
     const checking = async () => {
-      if (this.closed) return;
-      if (!this.receivedData) {
+      if (this.closed || !this.receivedData) return;
+      if (Date.now() - this.lastReceiveActivityAt < delay) {
         return;
       }
+
+      this.lastReceiveActivityAt = Date.now();
       const done = await this.cache.isTransferComplete();
 
       if (!done) {
@@ -200,7 +222,7 @@ export class FileReceiver extends FileTransferBase {
             ranges: ranges,
           } satisfies RequestContentMessage;
           const [error, channel] = await catchError(
-            this.getAnyAvailableChannel(),
+            this.getAvailableChannel(),
           );
           if (error) {
             if (this.closed) return;
@@ -212,10 +234,19 @@ export class FileReceiver extends FileTransferBase {
       }
       if (this.triggerReceiveComplete()) {
         window.clearInterval(this.timer);
+        this.timer = undefined;
       }
     };
-    window.clearInterval(this.timer);
-    this.timer = window.setInterval(checking, delay);
+
+    const pollInterval = Math.min(delay, 1000);
+    this.timer = window.setInterval(() => {
+      checking().catch((error) => {
+        console.error(error);
+        if (error instanceof Error) {
+          this.dispatchEvent("error", error);
+        }
+      });
+    }, pollInterval);
   }
 
   private triggerReceiveComplete() {
@@ -226,13 +257,14 @@ export class FileReceiver extends FileTransferBase {
 
     const chunkslength = getTotalChunkCount(info);
 
-    const complete = this.receivedData.indexes.size === chunkslength;
+    const complete =
+      this.receivedData.indexes.size === chunkslength;
     if (complete) {
       if (this.isComplete) return false;
       console.log(`trigger receive complete`);
       this.isComplete = true;
 
-      this.getAnyAvailableChannel()
+      this.getAvailableChannel()
         .then((channel) => {
           channel.send(
             JSON.stringify({
@@ -252,8 +284,11 @@ export class FileReceiver extends FileTransferBase {
     return complete;
   }
 
-  protected handleReceiveMessage(data: string | ArrayBuffer | Blob) {
+  protected handleReceiveMessage(
+    data: string | ArrayBuffer | Blob,
+  ) {
     try {
+      this.lastReceiveActivityAt = Date.now();
       if (typeof data === "string") {
         console.log(`receiver get message`, data);
         const message = JSON.parse(data) as TransferMessage;
@@ -319,4 +354,3 @@ function concatenateUint8Arrays(
 
   return result;
 }
-

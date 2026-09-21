@@ -33,10 +33,12 @@ import {
   IconDraftFilled,
   IconFolderMatch,
   IconPhotoFilled,
+  IconSettings,
   IconVideoFileFilled,
 } from "@/components/icons";
 
 import { createComfirmDeleteClientDialog } from "@/components/dialogs/confirm-delete-client-dialog";
+import clientInfoDialog from "@/components/dialogs/client-info-dialog";
 import { t } from "@/i18n";
 import { createTimeAgo } from "@/libs/utils/timeago";
 import { getInitials } from "@/libs/utils/name";
@@ -93,6 +95,7 @@ export const UserItem: Component<UserItemProps> = (
 
   const { open: openConfirmDeleteClientDialog } =
     createComfirmDeleteClientDialog();
+  const { open: openClientInfoDialog } = clientInfoDialog();
 
   return (
     <PortableContextMenu
@@ -123,6 +126,18 @@ export const UserItem: Component<UserItemProps> = (
           >
             <IconFolderMatch class="size-4" />
             {t("client.client_list.context_menu.sync")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            class="gap-2"
+            onSelect={() => {
+              close();
+              void openClientInfoDialog(
+                local.client.clientId,
+              );
+            }}
+          >
+            <IconSettings class="size-4" />
+            {t("client.config.open")}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem

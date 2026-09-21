@@ -2,6 +2,8 @@ import {
   Component,
   createContext,
   createEffect,
+  createSignal,
+  type Accessor,
   onCleanup,
   onMount,
   ParentProps,
@@ -34,7 +36,10 @@ import {
   saveMediaConstraintsToSession,
   setAppState,
 } from "@/libs/state/app-state";
-import { signalingWebSocketUrl } from "@/libs/state/app-options";
+import {
+  resolveClientConfig,
+  signalingWebSocketUrl,
+} from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/services/rtc-service";
 import {
   createRtcProtocol,
@@ -56,6 +61,15 @@ import {
   type StoreMessage,
 } from "@/libs/core/message";
 import { catchError } from "@/libs/catch";
+import {
+  SpeedTestService,
+  type SpeedTestState,
+} from "@/libs/services/speed-test-service";
+import { createSpeedTestApproval } from "@/components/speed-test-approval";
+import {
+  createTaskService,
+  type TaskService,
+} from "@/libs/services/task-service";
 
 async function getClientService(
   options: ClientServiceInitOptions,
@@ -100,8 +114,23 @@ export interface AppStateContextProps {
   ) => Promise<void>;
   retryMessage: (message: StoreMessage) => Promise<void>;
   shareFile: (fileId: FileID, target: ClientID) => void;
-  resumeFile: (fileId: FileID, target: ClientID) => void;
-  pauseFile: (fileId: FileID, target: ClientID) => void;
+  resumeFile: (
+    fileId: FileID,
+    target: ClientID,
+  ) => Promise<void>;
+  pauseFile: (
+    fileId: FileID,
+    target: ClientID,
+  ) => Promise<void>;
+  tasks: TaskService;
+  getSpeedTestState: (
+    target: ClientID | null,
+  ) => SpeedTestState | undefined;
+  speedTestState: Accessor<SpeedTestState>;
+  startSpeedTest: (target: ClientID) => Promise<void>;
+  cancelSpeedTest: (target?: ClientID) => void;
+  approveSpeedTest: (target: ClientID) => void;
+  declineSpeedTest: (target: ClientID) => void;
   roomStatus: RoomStatus;
 }
 
@@ -141,6 +170,39 @@ export const AppStateProvider: Component<
   });
   let clipboardCacheData: SendClipboardMessage[] = [];
   let clientServiceListenersBound = false;
+  const tasks = createTaskService({
+    clientId: () => appState.profile.clientId,
+    messages: () => appState.message.messages,
+    caches: () => appState.cache.cacheInfo,
+    transfers: () => appState.transfer.transferers,
+  });
+  const [speedTestState, setSpeedTestState] =
+    createSignal<SpeedTestState>({
+      status: "idle",
+      peerId: null,
+    });
+  const speedTestApproval = createSpeedTestApproval();
+  const speedTests = new SpeedTestService({
+    getConnection: (peerId) =>
+      appState.session.sessions[peerId]?.peerConnection,
+    isBusy: () =>
+      Object.values(appState.transfer.transferers).some(
+        Boolean,
+      ),
+    onState: (state) => {
+      setSpeedTestState(state);
+      tasks.recordSpeedTest(state);
+    },
+    approve: (peerId, signal) =>
+      speedTestApproval.request(
+        peerId,
+        appState.message.clients.find(
+          (client) => client.clientId === peerId,
+        )?.name ?? peerId,
+        signal,
+      ),
+  });
+  onCleanup(() => speedTests.dispose());
 
   createEffect(() => {
     saveMediaConstraintsToSession({
@@ -362,12 +424,17 @@ export const AppStateProvider: Component<
     const offRequestStorage = protocol.onRequest(
       "request-storage",
       async ({ session, message }) => {
+        const provideFileList = resolveClientConfig(
+          appState.options,
+          message.client,
+        ).provideFileList;
         const replyMessage = protocolMessageFactory.storage(
           {
-            data:
-              (await cacheManager.getStorages({
-                includeIncomplete: false,
-              })) ?? [],
+            data: provideFileList
+              ? ((await cacheManager.getStorages({
+                  includeIncomplete: false,
+                })) ?? [])
+              : [],
             client: message.target,
             target: message.client,
             id: message.id,
@@ -391,6 +458,16 @@ export const AppStateProvider: Component<
       { ackMode: "receive" },
     );
 
+    const offSpeedTestChannel = rtc.onChannel(
+      ({ session, channel }) => {
+        speedTests.handleChannel(
+          session.targetClientId,
+          session.peerConnection,
+          channel,
+        );
+      },
+    );
+
     const offChannel = rtc.onChannel(({ channel }) => {
       if (channel.protocol !== "transfer") return;
       console.log(`datachannel event`, channel);
@@ -408,7 +485,7 @@ export const AppStateProvider: Component<
 
       console.log(`receive channel for file ${fileId}`);
 
-      transferManager.addChannel(fileId, channel);
+      transferManager.setChannel(fileId, channel);
     });
 
     onCleanup(() => {
@@ -422,6 +499,7 @@ export const AppStateProvider: Component<
       offStreamState();
       offRequestStorage();
       offChannel();
+      offSpeedTestChannel();
     });
   });
 
@@ -554,6 +632,7 @@ export const AppStateProvider: Component<
   }
 
   function leaveRoom() {
+    speedTests.cancel();
     const room = appState.roomStatus.roomId;
     if (room) {
       console.log(`on leave room ${room}`);
@@ -631,26 +710,22 @@ export const AppStateProvider: Component<
     return false;
   };
 
-  const addTransferChannels = async (
+  const addTransferChannel = async (
     session: PeerSession,
     transferId: FileID,
     fileId: FileID,
   ) => {
-    for (
-      let i = 0;
-      i < appState.options.channelsNumber;
-      i++
-    ) {
-      const [err, channel] = await catchError(
-        session.createChannel(
-          `${transferId}-${i}`,
-          "transfer",
-        ),
-      );
-      if (err) throw err;
-      if (!channel) continue;
-      transferManager.addChannel(fileId, channel);
-    }
+    const [err, channel] = await catchError(
+      session.createChannel(
+        // Keep the legacy "-0" suffix so older clients can
+        // still associate the channel with the file.
+        `${transferId}-0`,
+        "transfer",
+      ),
+    );
+    if (err) throw err;
+    if (!channel) return;
+    transferManager.setChannel(fileId, channel);
   };
 
   const setupTransferAfterAck = async (
@@ -680,7 +755,7 @@ export const AppStateProvider: Component<
         }
       });
       await transferer.initialize();
-      await addTransferChannels(
+      await addTransferChannel(
         session,
         transferer.id,
         message.fid,
@@ -695,7 +770,7 @@ export const AppStateProvider: Component<
     );
     messageStores.addTransfer(transferer);
     await transferer.initialize();
-    await addTransferChannels(
+    await addTransferChannel(
       session,
       transferer.id,
       message.fid,
@@ -1151,11 +1226,20 @@ export const AppStateProvider: Component<
         requestStorage,
         retryMessage,
         requestFile,
-        resumeFile: (fileId, target) => {
-          void resumeFile(fileId, target);
+        resumeFile,
+        pauseFile,
+        tasks,
+        getSpeedTestState: tasks.latestSpeedTest,
+        speedTestState,
+        startSpeedTest: (target) =>
+          speedTests.start(target),
+        cancelSpeedTest: (target) =>
+          speedTests.cancel(target),
+        approveSpeedTest: (target) => {
+          speedTestApproval.accept(target);
         },
-        pauseFile: (fileId, target) => {
-          void pauseFile(fileId, target);
+        declineSpeedTest: (target) => {
+          speedTestApproval.decline(target);
         },
         roomStatus: appState.roomStatus,
       }}

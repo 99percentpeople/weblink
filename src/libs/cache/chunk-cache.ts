@@ -373,6 +373,22 @@ export class IDBChunkCache implements ChunkCache {
     chunkIndex: number,
   ): Promise<ArrayBuffer | null> {
     await this.flush();
+
+    // A locally selected File is immutable for the lifetime of this
+    // cache and can be read without hitting IndexedDB for every chunk.
+    // Received/cached chunks still refresh metadata from IndexedDB.
+    const cachedInfo = this.info;
+    if (cachedInfo?.file && cachedInfo.chunkSize) {
+      const start = chunkIndex * cachedInfo.chunkSize;
+      const end = Math.min(
+        start + cachedInfo.chunkSize,
+        cachedInfo.file.size,
+      );
+      return await cachedInfo.file
+        .slice(start, end)
+        .arrayBuffer();
+    }
+
     const info = await this.getInfo();
     if (!info) {
       throw new Error("info is not found");

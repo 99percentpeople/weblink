@@ -11,23 +11,31 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
-import type { AppOption } from "@/libs/state/app-options";
+import type {
+  AppOption,
+  ClientConfig,
+} from "@/libs/state/app-options";
 import {
+  defaultClientConfig,
   getDefaultAppOptions,
   parseTurnServers,
+  resolveClientConfig,
 } from "@/libs/state/app-options";
 
 export type {
   AppOption,
+  ClientConfig,
   CompressionLevel,
   Locale,
   TurnServerOptions,
 } from "@/libs/state/app-options";
 export {
+  defaultClientConfig,
   getDefaultAppOptions,
   localFromLanguage,
   localeOptionsMap,
   parseTurnServers,
+  resolveClientConfig,
   stringifyTurnServers,
 } from "@/libs/state/app-options";
 
@@ -62,10 +70,36 @@ export function initializeAppOptions() {
     if (!raw) return defaults;
 
     try {
-      const parsed = JSON.parse(raw) as Partial<AppOption>;
+      const parsedValue = JSON.parse(
+        raw,
+      ) as Partial<AppOption> & {
+        channelsNumber?: unknown;
+      };
+      const {
+        channelsNumber: _legacyChannelsNumber,
+        ...parsed
+      } = parsedValue;
+      const legacyBufferedAmount =
+        parsed.bufferedAmountHighWaterMark === undefined
+          ? parsed.bufferedAmountLowThreshold
+          : undefined;
+
       return {
         ...defaults,
         ...parsed,
+        bufferedAmountLowThreshold:
+          legacyBufferedAmount !== undefined
+            ? defaults.bufferedAmountLowThreshold
+            : (parsed.bufferedAmountLowThreshold ??
+              defaults.bufferedAmountLowThreshold),
+        bufferedAmountHighWaterMark:
+          legacyBufferedAmount !== undefined
+            ? Math.max(
+                defaults.bufferedAmountHighWaterMark,
+                legacyBufferedAmount,
+              )
+            : (parsed.bufferedAmountHighWaterMark ??
+              defaults.bufferedAmountHighWaterMark),
         servers: {
           ...defaults.servers,
           ...(parsed.servers ?? {}),
@@ -96,6 +130,21 @@ export const appOptions = appState.options;
 export const setAppOptions: SetStoreFunction<AppOption> = ((
   ...args: any[]
 ) => (setAppState as any)("options", ...args)) as any;
+
+export const getClientConfig = (
+  clientId: string,
+): ClientConfig =>
+  resolveClientConfig(appState.options, clientId);
+
+export const setClientConfig = (
+  clientId: string,
+  patch: Partial<ClientConfig>,
+) => {
+  setAppOptions("clientConfigs", clientId, {
+    ...getClientConfig(clientId),
+    ...patch,
+  });
+};
 
 export const [backgroundImage, setBackgroundImage] =
   createSignal<string | undefined>(undefined);

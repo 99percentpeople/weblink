@@ -3,7 +3,7 @@ export function buildPacket(
   chunkIndex: number,
   blockIndex: number,
   isLastBlock: boolean,
-  blockData: ArrayBufferLike,
+  blockData: Uint8Array,
 ): ArrayBuffer {
   const headerSize = 4 + 2 + 1; // chunk index (4 bytes) + block index (2 bytes) + is last block (1 byte)
 
@@ -22,7 +22,7 @@ export function buildPacket(
 
   // write data content
   const uint8Packet = new Uint8Array(buffer);
-  uint8Packet.set(new Uint8Array(blockData), headerSize);
+  uint8Packet.set(blockData, headerSize);
 
   return buffer;
 }

@@ -955,42 +955,6 @@ export default function Settings() {
                   "setting.advanced_settings.advanced_sender.title",
                 )}
               </h4>
-              <label class="flex flex-col gap-2">
-                <Slider
-                  minValue={1}
-                  maxValue={8}
-                  defaultValue={[
-                    appState.options.channelsNumber,
-                  ]}
-                  class="gap-2"
-                  onChange={(value) => {
-                    setAppOptions(
-                      "channelsNumber",
-                      value[0],
-                    );
-                  }}
-                >
-                  <div class="flex w-full justify-between">
-                    <SliderLabel>
-                      {t(
-                        "setting.sender.num_channels.title",
-                      )}
-                    </SliderLabel>
-                    <SliderValueLabel />
-                  </div>
-                  <SliderTrack>
-                    <SliderFill />
-                    <SliderThumb />
-                    <SliderThumb />
-                  </SliderTrack>
-                </Slider>
-                <p class="muted">
-                  {t(
-                    "setting.sender.num_channels.description",
-                  )}
-                </p>
-              </label>
-
               <Slider
                 minValue={Math.max(
                   appState.options.blockSize,
@@ -1045,12 +1009,12 @@ export default function Settings() {
                 </SliderTrack>
               </Slider>
               <Slider
-                minValue={1024}
-                maxValue={1024 * 1024}
-                step={1024}
+                minValue={256 * 1024}
+                maxValue={16 * 1024 * 1024}
+                step={256 * 1024}
                 defaultValue={[
                   appState.options
-                    .bufferedAmountLowThreshold,
+                    .bufferedAmountHighWaterMark,
                 ]}
                 getValueLabel={({ values }) =>
                   formatBtyeSize(values[0], 2)
@@ -1058,7 +1022,7 @@ export default function Settings() {
                 class="gap-2"
                 onChange={(value) => {
                   setAppOptions(
-                    "bufferedAmountLowThreshold",
+                    "bufferedAmountHighWaterMark",
                     value[0],
                   );
                 }}

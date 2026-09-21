@@ -86,7 +86,7 @@ export class FileSender extends FileTransferBase {
     };
 
     this.updateProgress();
-    if (this.channels.length > 0) {
+    if (this.channel?.readyState === "open") {
       this.dispatchEvent("ready", undefined);
     }
   }
@@ -117,7 +117,9 @@ export class FileSender extends FileTransferBase {
     this.updateProgress();
   }
 
-  public async sendFile(ranges?: ChunkRange[]): Promise<void> {
+  public async sendFile(
+    ranges?: ChunkRange[],
+  ): Promise<void> {
     if (this.closed) {
       throw new Error("transferer is closed");
     }
@@ -151,7 +153,7 @@ export class FileSender extends FileTransferBase {
       transferRange,
     );
 
-    const spliteToBlock = async (
+    const splitToBlocks = async (
       chunkIndex: number,
       compressedChunk: Uint8Array,
     ) => {
@@ -164,82 +166,198 @@ export class FileSender extends FileTransferBase {
         blockIndex < totalBlocks;
         blockIndex++
       ) {
+        if (this.paused) return;
+
         const offset = blockIndex * this.blockSize;
         const isLastBlock = blockIndex === totalBlocks - 1;
         const end = Math.min(
           offset + this.blockSize,
           compressedChunk.byteLength,
         );
-        const blockData = compressedChunk.slice(offset, end);
+        const blockData = compressedChunk.subarray(
+          offset,
+          end,
+        );
 
         const packet = buildPacket(
           chunkIndex,
           blockIndex,
           isLastBlock,
-          blockData.buffer,
+          blockData,
         );
 
         const [error, channel] = await catchError(
-          this.getAnyAvailableChannel(),
+          this.getAvailableChannel(),
         );
         if (error) {
-          return this.close();
-        }
-
-        const [err] = catchErrorSync(() => channel.send(packet));
-        if (err) {
-          if (this.closed) return;
-          console.error(err);
           this.close();
+          throw error;
+        }
+        if (this.paused) return;
+
+        const [sendError] = catchErrorSync(() =>
+          channel.send(packet),
+        );
+        if (sendError) {
+          if (!this.closed) {
+            console.error(sendError);
+            this.close();
+          }
+          throw sendError;
         }
       }
 
       this.sendData?.indexes.add(chunkIndex);
-
       this.updateProgress();
     };
-    let queue = Promise.resolve();
-    function enqueueTask(task: () => Promise<void>) {
-      queue = queue.then(() => task());
-    }
 
     const compressWorker = new CompressWorker();
+    this.compressWorker = compressWorker;
+
+    type CompressedChunk = {
+      data: Uint8Array;
+      sourceSize: number;
+    };
+    type PendingCompression = {
+      sourceSize: number;
+      resolve: (chunk: CompressedChunk) => void;
+      reject: (error: Error) => void;
+    };
+    const pendingCompressions = new Map<
+      number,
+      PendingCompression
+    >();
+
+    const rejectPendingCompressions = (error: Error) => {
+      for (const pending of pendingCompressions.values()) {
+        pending.reject(error);
+      }
+      pendingCompressions.clear();
+    };
 
     compressWorker.onmessage = (ev) => {
       const { data, error, context } = ev.data;
-      if (error) {
-        console.error(error);
-        return;
-      }
       const chunkIndex = context?.chunkIndex;
       if (chunkIndex === undefined) {
-        console.error(
-          `can not store chunk, chunkIndex is null`,
+        rejectPendingCompressions(
+          new Error(
+            "can not compress chunk, chunkIndex is null",
+          ),
         );
         return;
       }
-      enqueueTask(() => spliteToBlock(chunkIndex, data));
+
+      const pending = pendingCompressions.get(chunkIndex);
+      if (!pending) return;
+      pendingCompressions.delete(chunkIndex);
+
+      if (error) {
+        pending.reject(new Error(error));
+        return;
+      }
+      pending.resolve({
+        data,
+        sourceSize: pending.sourceSize,
+      });
+    };
+    compressWorker.onerror = () => {
+      rejectPendingCompressions(
+        new Error("compression worker failed"),
+      );
+    };
+    const handleTransferAbort = () => {
+      rejectPendingCompressions(
+        new Error("file transfer closed"),
+      );
+    };
+    this.controller.signal.addEventListener(
+      "abort",
+      handleTransferAbort,
+      { once: true },
+    );
+
+    let activeCompressionLevel = this.compressionLevel;
+    const compressChunk = async (
+      chunkIndex: number,
+    ): Promise<CompressedChunk | null> => {
+      const chunk = await this.cache.getChunk(chunkIndex);
+      if (!chunk) {
+        console.warn(`can not get chunk ${chunkIndex}`);
+        return null;
+      }
+
+      return new Promise<CompressedChunk>(
+        (resolve, reject) => {
+          const data = new Uint8Array(chunk);
+          pendingCompressions.set(chunkIndex, {
+            sourceSize: data.byteLength,
+            resolve,
+            reject,
+          });
+          compressWorker.postMessage(
+            {
+              data,
+              option: {
+                level: activeCompressionLevel,
+              },
+              context: {
+                chunkIndex,
+              },
+            },
+            [data.buffer as ArrayBuffer],
+          );
+        },
+      );
     };
 
-    this.compressWorker = compressWorker;
+    const chunkIndexes = Array.from(
+      rangesIterator(transferRange),
+    );
+    let nextCompression =
+      chunkIndexes.length > 0
+        ? compressChunk(chunkIndexes[0])
+        : null;
 
-    for (const chunkIndex of rangesIterator(transferRange)) {
-      const chunk = await this.cache.getChunk(chunkIndex);
-      if (chunk) {
-        compressWorker.postMessage({
-          data: new Uint8Array(chunk),
-          option: {
-            level: this.compressionLevel,
-          },
-          context: {
-            chunkIndex,
-          },
-        });
-      } else {
-        console.warn(`can not get chunk ${chunkIndex}`);
+    try {
+      for (let i = 0; i < chunkIndexes.length; i++) {
+        const compressedChunk = await nextCompression;
+        if (this.paused) return;
+
+        if (
+          compressedChunk &&
+          activeCompressionLevel !== 0 &&
+          compressedChunk.data.byteLength >=
+            compressedChunk.sourceSize * 0.95
+        ) {
+          activeCompressionLevel = 0;
+        }
+
+        nextCompression =
+          i + 1 < chunkIndexes.length
+            ? compressChunk(chunkIndexes[i + 1])
+            : null;
+
+        if (compressedChunk) {
+          await splitToBlocks(
+            chunkIndexes[i],
+            compressedChunk.data,
+          );
+        }
+      }
+    } catch (error) {
+      if (this.paused) return;
+      if (!this.closed) this.close();
+      throw error;
+    } finally {
+      this.controller.signal.removeEventListener(
+        "abort",
+        handleTransferAbort,
+      );
+      compressWorker.terminate();
+      if (this.compressWorker === compressWorker) {
+        this.compressWorker = undefined;
       }
     }
-    await queue;
 
     const [waitError] = await catchError(
       this.waitBufferedAmountLowThreshold(0),
@@ -248,7 +366,7 @@ export class FileSender extends FileTransferBase {
       return this.close();
     }
     const [error, channel] = await catchError(
-      this.getAnyAvailableChannel(),
+      this.getAvailableChannel(),
     );
     if (error) {
       return this.close();
@@ -260,7 +378,9 @@ export class FileSender extends FileTransferBase {
     );
   }
 
-  protected handleReceiveMessage(data: string | ArrayBuffer | Blob) {
+  protected handleReceiveMessage(
+    data: string | ArrayBuffer | Blob,
+  ) {
     try {
       console.log(`sender get message`, data);
       if (typeof data !== "string") return;
@@ -268,7 +388,9 @@ export class FileSender extends FileTransferBase {
 
       if (message.type === "request-content") {
         if (this.sendData) {
-          for (const index of rangesIterator(message.ranges)) {
+          for (const index of rangesIterator(
+            message.ranges,
+          )) {
             this.sendData.indexes.delete(index);
           }
 
@@ -296,7 +418,8 @@ function getRequestContentSize(
   if (!info.chunkSize) {
     throw new Error("chunkSize is not found");
   }
-  let requestBytes = getRangesLength(ranges) * info.chunkSize;
+  let requestBytes =
+    getRangesLength(ranges) * info.chunkSize;
   const lastRangeIndex = getLastIndex(ranges);
   const lastChunkIndex = getTotalChunkCount(info) - 1;
   if (lastRangeIndex === lastChunkIndex) {

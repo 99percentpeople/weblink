@@ -20,6 +20,7 @@ import {
   IconFullscreen,
   IconMeetingRoom,
   IconMic,
+  IconMoreHoriz,
   IconMicOff,
   IconPip,
   IconPipExit,
@@ -45,10 +46,15 @@ import {
   VideoDisplay,
 } from "./components/video-display";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { createMediaTracks } from "@/libs/hooks/tracks";
 import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
 import { createFullscreen } from "@/libs/hooks/fullscreen";
@@ -70,16 +76,6 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { getInitials } from "@/libs/utils/name";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Switch,
-  SwitchControl,
-  SwitchThumb,
-} from "@/components/ui/switch";
 import { makePersisted } from "@solid-primitives/storage";
 import { appState } from "@/libs/state/app-state";
 
@@ -186,41 +182,65 @@ export default function Video() {
             )}
           </h4>
           <div class="flex-1"></div>
+          <Show when={hasAudio()}>
+            <Button
+              onClick={() => setPlay(!playState())}
+              size="icon"
+              class="size-8"
+              variant={
+                playState() ? "secondary" : "default"
+              }
+              aria-label={
+                playState()
+                  ? t("video.global_mute")
+                  : t("video.global_unmute")
+              }
+            >
+              <Dynamic
+                component={
+                  playState() ? IconVolumeUp : IconVolumeOff
+                }
+                class="size-4"
+              />
+            </Button>
+          </Show>
           <Show when={gridRef()}>
             {(gridRef) => (
-              <>
-                <Tooltip>
-                  <TooltipTrigger
-                    as={Switch}
-                    class="flex items-center justify-between"
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  as={Button}
+                  size="icon"
+                  class="size-8"
+                  variant="secondary"
+                  aria-label={t("common.action.settings")}
+                >
+                  <IconMoreHoriz class="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent class="min-w-48">
+                  <DropdownMenuCheckboxItem
                     checked={float()}
-                    onChange={(isChecked: boolean) =>
-                      setFloat(isChecked)
+                    onChange={(isChecked) =>
+                      setFloat(!!isChecked)
                     }
                   >
-                    <SwitchControl>
-                      <SwitchThumb />
-                    </SwitchControl>
-                  </TooltipTrigger>
-                  <TooltipContent>
                     {t("video.float")}
-                  </TooltipContent>
-                </Tooltip>
-                <Show when={removedClientIds().length > 0}>
-                  <Popover>
-                    <PopoverTrigger
-                      as={Button}
-                      size="icon"
-                      class="size-8"
-                      variant="secondary"
-                    >
-                      <IconDelete class="size-4" />
-                    </PopoverTrigger>
-                    <PopoverContent class="flex flex-col gap-2">
-                      <h4 class="h4">
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuItem
+                    onSelect={() => gridRef().compact()}
+                  >
+                    <IconViewCompactAlt class="size-4" />
+                    {t("video.compact_layout")}
+                  </DropdownMenuItem>
+
+                  <Show
+                    when={removedClientIds().length > 0}
+                  >
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconDelete class="size-4" />
                         {t("common.action.restore")}
-                      </h4>
-                      <div class="grid grid-cols-4 gap-2">
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="min-w-48">
                         <For each={removedClientIds()}>
                           {(clientId) => (
                             <Show
@@ -230,9 +250,8 @@ export default function Video() {
                               }
                             >
                               {(client) => (
-                                <Avatar
-                                  class="size-10 cursor-pointer self-center"
-                                  onClick={() => {
+                                <DropdownMenuItem
+                                  onSelect={() => {
                                     setRemovedClientIds(
                                       (prev) =>
                                         prev.filter(
@@ -242,71 +261,35 @@ export default function Video() {
                                     );
                                   }}
                                 >
-                                  <AvatarImage
-                                    src={
-                                      client().avatar ??
-                                      undefined
-                                    }
-                                  />
-                                  <AvatarFallback
-                                    seed={client().name}
-                                  >
-                                    {getInitials(
-                                      client().name,
-                                    )}
-                                  </AvatarFallback>
-                                </Avatar>
+                                  <Avatar class="size-6">
+                                    <AvatarImage
+                                      src={
+                                        client().avatar ??
+                                        undefined
+                                      }
+                                    />
+                                    <AvatarFallback
+                                      seed={client().name}
+                                    >
+                                      {getInitials(
+                                        client().name,
+                                      )}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span class="truncate">
+                                    {client().name}
+                                  </span>
+                                </DropdownMenuItem>
                               )}
                             </Show>
                           )}
                         </For>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </Show>
-                <Tooltip>
-                  <TooltipTrigger
-                    as={Button}
-                    size="icon"
-                    class="size-8"
-                    variant="secondary"
-                    onClick={() => gridRef().compact()}
-                  >
-                    <IconViewCompactAlt class="size-4" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t("video.compact_layout")}
-                  </TooltipContent>
-                </Tooltip>
-              </>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </Show>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-          </Show>
-          <Show when={hasAudio()}>
-            <Tooltip>
-              <TooltipTrigger
-                as={Button}
-                onClick={() => setPlay(!playState())}
-                size="icon"
-                class="size-8"
-                variant={
-                  playState() ? "secondary" : "default"
-                }
-              >
-                <Dynamic
-                  component={
-                    playState()
-                      ? IconVolumeUp
-                      : IconVolumeOff
-                  }
-                  class="size-4"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                {playState()
-                  ? t("video.global_mute")
-                  : t("video.global_unmute")}
-              </TooltipContent>
-            </Tooltip>
           </Show>
         </div>
 

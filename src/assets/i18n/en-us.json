@@ -1,4 +1,86 @@
 {
+  "tasks": {
+    "title": "Tasks",
+    "description": "File transfers and peer speed tests in one place. Closing this list or changing pages does not stop a running task.",
+    "retention_note": "Speed-test history keeps the latest 50 runs while this page is open. Refreshing or closing the browser page ends live connections. Clearing history does not delete files or chat messages.",
+    "count": "{{active}} active · {{total}} total",
+    "active_count": "{{count}} active tasks",
+    "filters_label": "Filter tasks",
+    "filters": {
+      "all": "All",
+      "active": "Active",
+      "file": "Files",
+      "speed": "Speed tests",
+      "finished": "Finished",
+      "status": "Status",
+      "type": "Type",
+      "no_results": "No matching options"
+    },
+    "columns": {
+      "task": "Task",
+      "status": "Status",
+      "detail": "Progress / result",
+      "time": "Time",
+      "actions": "Actions"
+    },
+    "kinds": {
+      "file-send": "Send file",
+      "file-receive": "Receive file",
+      "speed-test": "Peer speed test"
+    },
+    "status": {
+      "waiting": "Waiting",
+      "running": "Running",
+      "finalizing": "Saving / merging",
+      "paused": "Paused",
+      "completed": "Completed",
+      "cancelled": "Stopped",
+      "failed": "Failed"
+    },
+    "empty": "No tasks in this view.",
+    "progress": "File transfer progress",
+    "pause": "Pause",
+    "resume": "Resume / retry",
+    "inspect": "Peer details",
+    "clear_finished": "Clear finished",
+    "show_more": "Show more",
+    "action_failed": "The action failed. Check the connection and try again."
+  },
+  "speed_test": {
+    "background_notice": "You may close this dialog or change tabs. The test continues in Tasks, where you can stop it or view the result.",
+    "title": "Peer speed test",
+    "description": "Test this peer connection in both directions without selecting a file. Data is generated and discarded in memory; nothing is saved to the file cache.",
+    "traffic_notice": "Each direction sends for up to 10 seconds or 64 MiB, whichever comes first (128 MiB total payload, plus protocol overhead). The other peer must approve. Pause file transfers and calls for a cleaner measurement.",
+    "start": "Start speed test",
+    "cancel": "Stop test",
+    "accept": "Allow test",
+    "decline": "Decline",
+    "request": "{{name}} requests a speed test",
+    "remote_running": "Speed test with {{name}}",
+    "upload": "This device → peer",
+    "download": "Peer → this device",
+    "measured_at": "Measured at {{time}}",
+    "result_note": "Average received payload throughput, excluding file reading, compression and disk writes. This measures the selected direct/TURN route, not your ISP's maximum bandwidth.",
+    "short_sample": "The byte cap was reached quickly. A sample under 1 second may be less stable; repeat to compare.",
+    "phases": {
+      "connecting": "Opening the test channel…",
+      "approval": "Waiting for approval…",
+      "approval_incoming": "Speed test request",
+      "upload": "Testing this device → peer…",
+      "download": "Testing peer → this device…"
+    },
+    "errors": {
+      "busy": "A speed test or file transfer is already active. Finish or stop it first.",
+      "offline": "Connect to this peer before starting a speed test.",
+      "unsupported": "The peer did not acknowledge the speed-test protocol. Update both clients and try again.",
+      "declined": "The peer declined or the approval request expired.",
+      "cancelled": "Speed test stopped.",
+      "timeout": "The test timed out. No complete speed result is available.",
+      "closed": "The peer stopped the test or the connection was interrupted.",
+      "protocol": "Invalid test response or mismatched byte counts. The result was discarded.",
+      "failed": "The speed test failed. Check the connection and try again."
+    }
+  },
   "setting": {
     "title": "Setting",
     "appearance": {
@@ -50,10 +132,6 @@
         "title": "Enable Clipboard",
         "description": "Enable the clipboard sending function of the sender, after enabling, you can send the clipboard content by pressing Ctrl + V on the chat window, and on mobile devices, you can send it by pasting into the information input box",
         "unsupported": "Clipboard is not supported, please use in a secure context"
-      },
-      "num_channels": {
-        "title": "NO. of Channels",
-        "description": "The number of channels of the sender, appropriate adjustment may improve the transfer speed"
       },
       "chunk_size": {
         "title": "Chunk Size",
@@ -188,6 +266,23 @@
       "options": "Options",
       "redirect": "Redirect after connection"
     },
+    "config": {
+      "open": "Client settings",
+      "title": "Client settings for {{name}}",
+      "description": "Manage connection behavior, sharing permissions, and common actions for this client.",
+      "preferences": "Client settings",
+      "preferences_description": "These settings apply only to this client.",
+      "redirect": {
+        "title": "Redirect after connection",
+        "description": "Open this client's chat automatically after it connects. Only one client can be the redirect target at a time."
+      },
+      "provide_file_list": {
+        "title": "Provide file list",
+        "description": "Allow this client to enumerate completed files in the local cache. When disabled, file-list requests return an empty list; chat, direct file sends, and existing transfers are unaffected."
+      },
+      "actions": "Client actions",
+      "actions_description": "Inspect the connection or perform actions for this client."
+    },
     "index": {
       "edit_profile": "Edit Profile",
       "join_room": "Join Room",
@@ -318,12 +413,30 @@
       "delete_cache": "Also delete local cache"
     },
     "client_info_dialog": {
-      "title": "Client {{name}} Info",
+      "tabs": {
+        "session": "Session",
+        "speed": "Speed test",
+        "raw": "Raw data",
+        "settings": "Settings"
+      },
+      "sections": "Client information sections",
+      "session_subtitle": "Connection, diagnostics, and client settings",
+      "sent_bytes": "Total bytes sent",
+      "received_bytes": "Total bytes received",
+      "summary_note": "Values describe the current connection. Browser bandwidth estimates are not measured DataChannel throughput; use the Speed test tab for that.",
+      "raw_note": "Live WebRTC statistics for debugging. Reports may include network addresses; review them before sharing.",
+      "stats_error": "Statistics are unavailable for this connection. Reconnect to refresh them.",
+      "copied": "Copied.",
+      "error": "Copy failed. Select and copy the report manually.",
+      "title": "Client {{name}}",
       "status": "Status",
       "client_id": "Client ID",
       "created_at": "Created At",
       "stats_reports": "Stats Reports",
-      "candidate_type": "Candidate Type",
+      "candidate_type": "Candidate Route",
+      "round_trip_time": "Round Trip Time",
+      "available_outgoing_bitrate": "Browser bitrate estimate",
+      "transport_bytes": "Transport Bytes",
       "leave": "Leave"
     },
     "confirm_delete_client_dialog": {

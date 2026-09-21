@@ -27,6 +27,28 @@ export type CompressionLevel =
   | 8
   | 9;
 
+export type ClientConfig = {
+  /** Whether this peer may enumerate completed local cache entries. */
+  provideFileList: boolean;
+};
+
+export const defaultClientConfig: ClientConfig = {
+  provideFileList: true,
+};
+
+export const resolveClientConfig = (
+  options: {
+    clientConfigs: Record<
+      ClientID,
+      ClientConfig | undefined
+    >;
+  },
+  clientId: ClientID,
+): ClientConfig => ({
+  ...defaultClientConfig,
+  ...(options.clientConfigs[clientId] ?? {}),
+});
+
 export type AppOption = {
   // Receiver
   maxMomeryCacheSlices: number;
@@ -35,10 +57,10 @@ export type AppOption = {
   // Sender
   enableClipboard: boolean;
   automaticCacheDeletion: boolean;
-  channelsNumber: number;
   chunkSize: number;
   ordered: boolean;
   bufferedAmountLowThreshold: number;
+  bufferedAmountHighWaterMark: number;
   compressionLevel: CompressionLevel;
   blockSize: number;
   maxFileSize: number;
@@ -54,6 +76,9 @@ export type AppOption = {
   backgroundImage?: FileID;
   backgroundImageOpacity: number;
   redirectToClient?: ClientID;
+
+  // Per-client privacy / behavior
+  clientConfigs: Record<ClientID, ClientConfig | undefined>;
 
   // Stream
   videoMaxBitrate: number;
@@ -135,17 +160,17 @@ export function localFromLanguage(
   );
 }
 
-export const getDefaultAppOptions = () => {
+export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
-    channelsNumber: 1,
     chunkSize: 512 * 1024,
     blockSize: 32 * 1024,
     ordered: false,
     enableClipboard:
       hasNavigator && navigator.clipboard !== undefined,
     automaticCacheDeletion: false,
-    bufferedAmountLowThreshold: 32 * 1024,
+    bufferedAmountLowThreshold: 64 * 1024,
+    bufferedAmountHighWaterMark: 256 * 1024,
     maxMomeryCacheSlices: 12,
     videoMaxBitrate: 25 * 1024 * 1024,
     servers: {
@@ -157,13 +182,14 @@ export const getDefaultAppOptions = () => {
     },
     relayOnly: false,
     wakeLock: true,
-    compressionLevel: 6,
+    compressionLevel: 0,
     locale: hasNavigator
       ? localFromLanguage(navigator.language)
       : "en-us",
     shareServersWithOthers: true,
     backgroundImageOpacity: 0.5,
     automaticDownload: false,
+    clientConfigs: {},
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

@@ -10,6 +10,7 @@ import {
 } from "solid-js";
 
 export interface ModalOptions<T extends any> {
+  class?: string;
   title?: () => JSX.Element;
   description?: () => JSX.Element;
   content?: Component;
@@ -133,7 +134,7 @@ export const createModal = <T extends any>(
   const ModalComponent = (props: { class?: string }) => {
     return (
       <Component
-        class={cn(props.class)}
+        class={cn(options.class, props.class)}
         isOpen={isOpen()}
         title={options?.title?.()}
         content={renderContent()}

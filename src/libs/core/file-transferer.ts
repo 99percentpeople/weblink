@@ -15,22 +15,18 @@ export interface BaseTransferMessage {
 }
 
 export interface HeadMessage
-  extends BaseTransferMessage,
-    ChunkMetaData {
+  extends BaseTransferMessage, ChunkMetaData {
   type: "head";
 }
-export interface RequestContentMessage
-  extends BaseTransferMessage {
+export interface RequestContentMessage extends BaseTransferMessage {
   type: "request-content";
   ranges: ChunkRange[];
 }
-export interface RequestHeadMessage
-  extends BaseTransferMessage {
+export interface RequestHeadMessage extends BaseTransferMessage {
   type: "request-head";
 }
 
-export interface CompleteMessage
-  extends BaseTransferMessage {
+export interface CompleteMessage extends BaseTransferMessage {
   type: "complete";
 }
 
@@ -52,6 +48,7 @@ export interface FileTransfererOptions {
   info?: FileMetaData;
   blockSize?: number;
   bufferedAmountLowThreshold?: number;
+  bufferedAmountHighWaterMark?: number;
   compressionLevel?: CompressionLevel;
 }
 
@@ -72,8 +69,8 @@ export interface FileTransferer {
   readonly cache: ChunkCache;
   readonly mode: TransferMode;
   readonly id: FileID;
-  channels: Array<RTCDataChannel>;
-  addChannel(channel: RTCDataChannel): void;
+  channel: RTCDataChannel | null;
+  setChannel(channel: RTCDataChannel): void;
   initialize(): Promise<void>;
   pause(notify?: boolean): Promise<void>;
   close(): void;
@@ -82,7 +79,9 @@ export interface FileTransferer {
     handler: EventHandler<FileTransfererEventMap[K]>,
     options?: boolean | AddEventListenerOptions,
   ): void;
-  removeEventListener<K extends keyof FileTransfererEventMap>(
+  removeEventListener<
+    K extends keyof FileTransfererEventMap,
+  >(
     eventName: K,
     handler: EventHandler<FileTransfererEventMap[K]>,
     options?: boolean | EventListenerOptions,

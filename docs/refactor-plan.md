@@ -183,6 +183,42 @@ moving WebRTC behavior into UI code.
 - [x] Add direct controller tests alongside the `PeerSession`
       integration coverage.
 
+## Completed slice: consent-based peer speed test
+
+Goal: diagnose the current peer connection without sending or caching test files.
+
+- [x] Add a versioned, bounded diagnostic protocol on one temporary DataChannel,
+      independent of the single-channel file-transfer implementation.
+- [x] Measure each direction from receiver byte counts and monotonic elapsed
+      time, with matching receipts rather than enqueue-speed estimates.
+- [x] Require remote consent, cap traffic/time, and cancel on stop, teardown or
+      connection loss without closing chat/file channels.
+- [x] Inject the diagnostic service through the app context and add a localized
+      client-info panel with progress, results, traffic notice and failure states.
+- [x] Cover protocol/state/UI edge cases and keep a reproducible real-Chromium
+      smoke test (`bun run test:speed`); document measurement limits in
+      `docs/PEER_SPEED_TEST.md`.
+
+## Completed slice: application task list and tabbed client diagnostics
+
+Goal: separate operation lifetimes from dialogs/routes and make file transfers
+and speed tests visible through one task list.
+
+- [x] Keep speed-test ownership in `AppStateProvider`; remove dialog-close,
+      target-change and view-unmount cancellation.
+- [x] Give each diagnostic a stable run ID and retain recent per-peer results.
+- [x] Add a task-service view of existing file/message/cache state plus bounded
+      diagnostic history; avoid a duplicate file-transfer state machine.
+- [x] Add a global navigation entry with active count, task filters, progress,
+      file pause/resume and diagnostic Stop controls.
+- [x] Separate client information into Session / Speed test / Raw data tabs.
+- [x] Poll statistics only while the information window is visible, with
+      non-overlapping requests, stale-result guards and handled errors.
+- [x] Cover task history/actions and modal/tab lifetimes with unit/UI tests.
+- [x] Exercise the production UI and speed-test service over real loopback
+      RTC channels, including close/unmount, reopening results, task-list Stop
+      and an unaffected chat channel; check desktop and narrow viewports.
+
 ## Next candidates
 
 1. Continue splitting `PeerSession` by extracting reconnect/lifecycle

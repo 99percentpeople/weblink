@@ -7,12 +7,18 @@ import { FileSender } from "../core/file-sender";
 import { FileID } from "../core/type";
 import { ChunkCache } from "../cache/chunk-cache";
 import { FileMetaData } from "../cache";
-import { appState, setAppState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 
 class TransfererFactory {
   readonly transferers: Record<FileID, FileTransferer> =
     appState.transfer.transferers;
-  private channels: Record<FileID, RTCDataChannel[]> = {};
+  private pendingChannels: Record<
+    FileID,
+    RTCDataChannel | undefined
+  > = {};
 
   getTransferer(id: FileID) {
     if (this.transferers[id]) {
@@ -22,24 +28,56 @@ class TransfererFactory {
     return null;
   }
 
-  addChannel(fileId: FileID, channel: RTCDataChannel) {
+  setChannel(fileId: FileID, channel: RTCDataChannel) {
     const transfer = this.transferers[fileId];
     if (transfer) {
-      transfer.addChannel(channel);
-    } else {
-      this.channels[fileId] ??= [];
-      this.channels[fileId].push(channel);
+      if (
+        transfer.channel &&
+        transfer.channel !== channel &&
+        transfer.channel.readyState !== "closed"
+      ) {
+        channel.close();
+        return;
+      }
+      transfer.setChannel(channel);
+      return;
     }
+
+    const pendingChannel = this.pendingChannels[fileId];
+    if (
+      pendingChannel &&
+      pendingChannel !== channel &&
+      pendingChannel.readyState !== "closed"
+    ) {
+      channel.close();
+      return;
+    }
+
+    this.pendingChannels[fileId] = channel;
+    channel.addEventListener(
+      "close",
+      () => {
+        if (this.pendingChannels[fileId] === channel) {
+          delete this.pendingChannels[fileId];
+        }
+      },
+      { once: true },
+    );
   }
 
   destroyTransfer(id: FileID) {
     const transferer = this.transferers[id];
     if (!transferer) {
+      this.pendingChannels[id]?.close();
+      delete this.pendingChannels[id];
       console.log(`transferer ${id} not exist`);
       return;
     }
 
+    const channel = transferer.channel;
     transferer.close();
+    channel?.close();
+    delete this.pendingChannels[id];
     setAppState("transfer", "transferers", id, undefined!);
   }
 
@@ -72,14 +110,19 @@ class TransfererFactory {
             info,
             bufferedAmountLowThreshold:
               appState.options.bufferedAmountLowThreshold,
+            bufferedAmountHighWaterMark:
+              appState.options.bufferedAmountHighWaterMark,
             blockSize: appState.options.blockSize,
-            compressionLevel: appState.options.compressionLevel,
+            compressionLevel:
+              appState.options.compressionLevel,
           })
         : new FileReceiver({
             cache,
             info,
             bufferedAmountLowThreshold:
               appState.options.bufferedAmountLowThreshold,
+            bufferedAmountHighWaterMark:
+              appState.options.bufferedAmountHighWaterMark,
           });
 
     const flushInterval = setInterval(() => {
@@ -127,27 +170,7 @@ class TransfererFactory {
       () => {
         controller.abort();
         clearInterval(flushInterval);
-        for (const channel of transferer.channels) {
-          channel.close();
-        }
         this.destroyTransfer(transferer.id);
-      },
-      {
-        once: true,
-        signal: controller.signal,
-      },
-    );
-
-    transferer.addEventListener(
-      "ready",
-      () => {
-        const channels = this.channels[fileId];
-        if (channels) {
-          for (const channel of channels) {
-            transferer.addChannel(channel);
-          }
-          this.channels[fileId] = [];
-        }
       },
       {
         once: true,
@@ -161,6 +184,15 @@ class TransfererFactory {
       fileId,
       transferer,
     );
+
+    const pendingChannel = this.pendingChannels[fileId];
+    if (pendingChannel) {
+      delete this.pendingChannels[fileId];
+      if (pendingChannel.readyState !== "closed") {
+        transferer.setChannel(pendingChannel);
+      }
+    }
+
     return transferer;
   }
 }

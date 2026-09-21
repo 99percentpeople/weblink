@@ -1,4 +1,86 @@
 {
+  "tasks": {
+    "title": "任务列表",
+    "description": "统一查看文件发送、接收和客户端测速。关闭任务列表或切换页面不会中断正在执行的任务。",
+    "retention_note": "本次打开页面期间保留最近 50 次测速记录。刷新或关闭浏览器页面会结束实时连接；清除记录不会删除文件或聊天消息。",
+    "count": "{{active}} 项进行中 · 共 {{total}} 项",
+    "active_count": "{{count}} 项进行中的任务",
+    "filters_label": "筛选任务",
+    "filters": {
+      "all": "全部",
+      "active": "进行中",
+      "file": "文件",
+      "speed": "测速",
+      "finished": "已结束",
+      "status": "状态",
+      "type": "类型",
+      "no_results": "没有匹配项"
+    },
+    "columns": {
+      "task": "任务",
+      "status": "状态",
+      "detail": "进度 / 结果",
+      "time": "时间",
+      "actions": "操作"
+    },
+    "kinds": {
+      "file-send": "发送文件",
+      "file-receive": "接收文件",
+      "speed-test": "客户端测速"
+    },
+    "status": {
+      "waiting": "等待中",
+      "running": "进行中",
+      "finalizing": "保存 / 合并中",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "cancelled": "已停止",
+      "failed": "失败"
+    },
+    "empty": "当前分类下暂无任务。",
+    "progress": "文件传输进度",
+    "pause": "暂停",
+    "resume": "继续 / 重试",
+    "inspect": "查看对端",
+    "clear_finished": "清除已结束记录",
+    "show_more": "显示更多",
+    "action_failed": "操作失败，请检查连接后重试。"
+  },
+  "speed_test": {
+    "background_notice": "可以关闭此信息框或切换标签页。测速会继续执行，可在全局任务列表中停止任务或查看结果。",
+    "title": "对端传输测速",
+    "description": "无需选择文件，直接测试当前连接的双向传输速度。测试数据只在内存中生成和丢弃，不写入文件缓存。",
+    "traffic_notice": "每个方向最多发送 10 秒或 64 MiB，达到任一条件即停止发送（双向最多 128 MiB 有效数据，另有协议开销）。对端确认后才开始；请暂停文件传输和音视频，以减少干扰。",
+    "start": "开始测速",
+    "cancel": "停止测速",
+    "accept": "同意测速",
+    "decline": "拒绝",
+    "request": "{{name}} 请求与你测速",
+    "remote_running": "正在与 {{name}} 测速",
+    "upload": "本机 → 对端",
+    "download": "对端 → 本机",
+    "measured_at": "测速时间：{{time}}",
+    "result_note": "结果为接收端确认的平均有效数据吞吐，不包含文件读取、压缩和磁盘写入。测量的是当前直连或 TURN 路径，不代表运营商宽带上限。",
+    "short_sample": "已很快达到流量上限。少于 1 秒的样本可能不够稳定，可重复测速比较。",
+    "phases": {
+      "connecting": "正在建立测速通道…",
+      "approval": "等待测速确认…",
+      "approval_incoming": "对端请求测速",
+      "upload": "正在测试本机 → 对端…",
+      "download": "正在测试对端 → 本机…"
+    },
+    "errors": {
+      "busy": "已有测速或文件传输正在进行，请先完成或停止。",
+      "offline": "请先与对端建立连接，再开始测速。",
+      "unsupported": "对端没有确认测速协议，请更新双方客户端后重试。",
+      "declined": "对端拒绝了测速，或确认请求已超时。",
+      "cancelled": "测速已停止。",
+      "timeout": "测速超时，未获得完整测速结果。",
+      "closed": "对端停止了测速，或连接已中断。",
+      "protocol": "测速响应无效或字节数不一致，已丢弃结果。",
+      "failed": "测速失败，请检查连接后重试。"
+    }
+  },
   "setting": {
     "title": "设置",
     "appearance": {
@@ -50,10 +132,6 @@
         "title": "启用剪贴板",
         "description": "启用发送端的剪贴板传送功能，启用后，可以通过对聊天窗口按 Ctrl + V 发送剪贴板内容，移动端可以通过粘贴到信息输入框发送",
         "unsupported": "剪贴板功能不受支持，请在安全的上下文中使用"
-      },
-      "num_channels": {
-        "title": "通道数",
-        "description": "更改发送端的通道数，适当调整可能可以提高传输速度"
       },
       "chunk_size": {
         "title": "区块大小",
@@ -187,6 +265,23 @@
       "clipboard": "剪贴板",
       "options": "选项",
       "redirect": "连接后自动跳转"
+    },
+    "config": {
+      "open": "客户端配置",
+      "title": "{{name}} 的客户端配置",
+      "description": "管理这个客户端的连接行为、共享权限和常用操作。",
+      "preferences": "客户端配置",
+      "preferences_description": "这些设置只针对当前客户端。",
+      "redirect": {
+        "title": "连接后自动跳转",
+        "description": "该客户端连接成功后，自动打开它的聊天窗口。一次只能选择一个自动跳转目标。"
+      },
+      "provide_file_list": {
+        "title": "提供文件列表",
+        "description": "允许这个客户端查看本机已完成缓存文件的列表。关闭后，文件列表请求将返回空列表；聊天、直接发送文件和已有传输不受影响。"
+      },
+      "actions": "客户端操作",
+      "actions_description": "查看连接信息或执行与当前客户端相关的操作。"
     },
     "index": {
       "edit_profile": "编辑资料",
@@ -344,12 +439,30 @@
       "no_data": "没有数据"
     },
     "client_info_dialog": {
-      "title": "客户端 {{name}} 信息",
+      "tabs": {
+        "session": "会话信息",
+        "speed": "测速",
+        "raw": "原始数据",
+        "settings": "设置"
+      },
+      "sections": "客户端信息分类",
+      "session_subtitle": "连接、诊断与客户端设置",
+      "sent_bytes": "累计发送",
+      "received_bytes": "累计接收",
+      "summary_note": "这里展示当前连接状态。浏览器带宽估计不等于 DataChannel 实测吞吐，请在“测速”标签页进行测量。",
+      "raw_note": "用于调试的实时 WebRTC 统计。报告可能包含网络地址，分享前请检查内容。",
+      "stats_error": "暂时无法获取此连接的统计数据，请重新连接后查看。",
+      "copied": "已复制。",
+      "error": "复制失败，请手动选中并复制报告。",
+      "title": "客户端 {{name}}",
       "status": "状态",
       "client_id": "客户端 ID",
       "created_at": "创建时间",
       "stats_reports": "统计报告",
-      "candidate_type": "候选类型",
+      "candidate_type": "候选路径",
+      "round_trip_time": "往返时延",
+      "available_outgoing_bitrate": "浏览器带宽估计",
+      "transport_bytes": "传输字节",
       "leave": "离开"
     },
     "confirm_delete_client_dialog": {

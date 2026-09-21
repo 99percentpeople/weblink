@@ -1,6 +1,10 @@
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { useColorMode } from "@kobalte/core";
-import type { Component, ComponentProps, JSX } from "solid-js";
+import type {
+  Component,
+  ComponentProps,
+  JSX,
+} from "solid-js";
 
 import { Toaster as Sonner } from "solid-sonner";
 
@@ -12,7 +16,7 @@ const Toaster: Component<ToasterProps> = (props) => {
   return (
     <Sonner
       theme={colorMode()}
-      class="toaster group [&_*[data-content]]:flex-1"
+      className="toaster group [&_*[data-content]]:flex-1"
       position={isMobile() ? "top-center" : "bottom-right"}
       style={
         {
@@ -24,7 +28,7 @@ const Toaster: Component<ToasterProps> = (props) => {
       toastOptions={{
         cancelButtonStyle: {
           "background-color": "var(--destructive)",
-          "color": "var(--destructive-foreground)",
+          color: "var(--destructive-foreground)",
         } as JSX.CSSProperties,
       }}
       {...props}

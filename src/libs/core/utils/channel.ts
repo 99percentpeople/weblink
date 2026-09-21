@@ -30,36 +30,49 @@ export async function waitBufferedAmountLowThreshold(
 ) {
   channel.bufferedAmountLowThreshold =
     bufferedAmountLowThreshold;
-  return new Promise<RTCDataChannel>((reslove, reject) => {
+
+  return new Promise<RTCDataChannel>((resolve, reject) => {
     if (channel.readyState !== "open") {
       reject(new Error("channel is not open"));
+      return;
     }
     if (
-      channel.bufferedAmount <=
-      channel.bufferedAmountLowThreshold
+      channel.bufferedAmount <= bufferedAmountLowThreshold
     ) {
-      return reslove(channel);
+      resolve(channel);
+      return;
     }
+
+    const controller = new AbortController();
+    const finish = (callback: () => void) => {
+      controller.abort();
+      callback();
+    };
+
     channel.addEventListener(
       "error",
-      () => reject(new Error("channel error")),
+      () =>
+        finish(() => reject(new Error("channel error"))),
       {
         once: true,
+        signal: controller.signal,
       },
     );
     channel.addEventListener(
       "close",
-      () => reject(new Error("channel closed")),
+      () =>
+        finish(() => reject(new Error("channel closed"))),
       {
         once: true,
+        signal: controller.signal,
       },
     );
-
     channel.addEventListener(
       "bufferedamountlow",
-      () => reslove(channel),
+      () => finish(() => resolve(channel)),
       {
         once: true,
+        signal: controller.signal,
       },
     );
   });

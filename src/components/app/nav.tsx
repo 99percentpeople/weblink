@@ -1,4 +1,5 @@
 import { cn } from "@/libs/cn";
+import { TaskCenter } from "./task-center";
 import { A, useLocation } from "@solidjs/router";
 import {
   ComponentProps,
@@ -76,6 +77,7 @@ export default function Nav(props: ComponentProps<"nav">) {
           {t("common.nav.file_cache")}
         </TooltipContent>
       </Tooltip>
+      <TaskCenter placement={placement()} />
       <Tooltip placement={placement()}>
         <TooltipTrigger
           as={A}
