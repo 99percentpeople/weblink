@@ -1,6 +1,6 @@
 import type { ChunkMetaData } from "../cache";
 import type { TransferClient } from "./services/type";
-import type { SendClipboardMessage } from "@/libs/services/rtc-protocol";
+import type { SendClipboardMessage } from "@/libs/core/protocol/messages";
 
 export type RoomStatus = {
   roomId: RoomID | null;

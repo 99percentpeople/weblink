@@ -20,11 +20,13 @@ import type {
   SendFileMessage,
   SendTextMessage,
   SessionMessage,
-} from "@/libs/services/rtc-protocol";
-import { appState, setAppState } from "@/libs/state/app-state";
+} from "@/libs/core/protocol/messages";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 
-export interface BaseStorageMessage
-  extends BaseExchangeMessage {
+export interface BaseStorageMessage extends BaseExchangeMessage {
   id: string;
 }
 
@@ -34,8 +36,7 @@ export interface TextMessage extends BaseStorageMessage {
   error?: string;
 }
 
-export interface FileTransferMessage
-  extends BaseStorageMessage {
+export interface FileTransferMessage extends BaseStorageMessage {
   type: "file";
   fid?: FileID;
   fileName: string;
@@ -281,7 +282,11 @@ class MessageStores {
   }
 
   private static handleReceiveSendTextMessage(
-    { pushIfMissing, setStatus, getIndex }: ReceiveDispatchContext,
+    {
+      pushIfMissing,
+      setStatus,
+      getIndex,
+    }: ReceiveDispatchContext,
     message: ReceiveSendTextHandledMessage,
   ) {
     pushIfMissing(
@@ -291,7 +296,11 @@ class MessageStores {
   }
 
   private static handleReceiveSendFileMessage(
-    { pushIfMissing, setStatus, getIndex }: ReceiveDispatchContext,
+    {
+      pushIfMissing,
+      setStatus,
+      getIndex,
+    }: ReceiveDispatchContext,
     message: ReceiveSendFileHandledMessage,
   ) {
     pushIfMissing(
@@ -492,23 +501,26 @@ class MessageStores {
     ],
   ]);
 
-  readonly messages: StoreMessage[] = appState.message.messages;
+  readonly messages: StoreMessage[] =
+    appState.message.messages;
   readonly clients: Client[] = appState.message.clients;
   readonly db: Promise<IDBDatabase> | IDBDatabase;
-  private setMessages: SetStoreFunction<StoreMessage[]> =
-    ((...args: any[]) =>
-      (setAppState as any)(
-        "message",
-        "messages",
-        ...args,
-      )) as any;
-  private setClients: SetStoreFunction<Client[]> =
-    ((...args: any[]) =>
-      (setAppState as any)(
-        "message",
-        "clients",
-        ...args,
-      )) as any;
+  private setMessages: SetStoreFunction<StoreMessage[]> = ((
+    ...args: any[]
+  ) =>
+    (setAppState as any)(
+      "message",
+      "messages",
+      ...args,
+    )) as any;
+  private setClients: SetStoreFunction<Client[]> = ((
+    ...args: any[]
+  ) =>
+    (setAppState as any)(
+      "message",
+      "clients",
+      ...args,
+    )) as any;
   status: Accessor<"initializing" | "ready"> = () =>
     appState.message.status;
   private controllers: Record<FileID, AbortController> = {};
@@ -623,9 +635,10 @@ class MessageStores {
     const db = await this.db;
     return new Promise((resolve, reject) => {
       const requestFactory =
-        MessageStores.dbRequestFactoryByType.get(message.type);
-      const request =
-        requestFactory?.(db, message);
+        MessageStores.dbRequestFactoryByType.get(
+          message.type,
+        );
+      const request = requestFactory?.(db, message);
       if (!request) {
         reject(
           new Error(
@@ -732,7 +745,9 @@ class MessageStores {
     options: SendMessageOptions = {},
   ) {
     const timeoutMs =
-      options.timeoutMs === undefined ? 5000 : options.timeoutMs;
+      options.timeoutMs === undefined
+        ? 5000
+        : options.timeoutMs;
     let index: number = this.messages.findLastIndex(
       (msg) => msg.id === sessionMsg.id,
     );
@@ -760,9 +775,10 @@ class MessageStores {
       );
     };
 
-    const sendHandler = MessageStores.sendMessageHandlers.get(
-      sessionMsg.type as SendHandledMessage["type"],
-    );
+    const sendHandler =
+      MessageStores.sendMessageHandlers.get(
+        sessionMsg.type as SendHandledMessage["type"],
+      );
     if (!sendHandler) return;
     sendHandler(
       {
@@ -778,7 +794,9 @@ class MessageStores {
     options: SendMessageOptions = {},
   ) {
     const timeoutMs =
-      options.timeoutMs === undefined ? 5000 : options.timeoutMs;
+      options.timeoutMs === undefined
+        ? 5000
+        : options.timeoutMs;
     const index = this.messages.findLastIndex(
       (msg) => msg.id === sessionMsg.id,
     );
@@ -798,14 +816,19 @@ class MessageStores {
         if (nextIndex === -1) return;
 
         this.setMessages(nextIndex, "status", "error");
-        this.setMessages(nextIndex, "error", "send timeout");
+        this.setMessages(
+          nextIndex,
+          "error",
+          "send timeout",
+        );
         this.setMessageDB(this.messages[nextIndex]);
       });
     };
 
-    const retryHandler = MessageStores.retrySendHandlers.get(
-      sessionMsg.type as SendHandledMessage["type"],
-    );
+    const retryHandler =
+      MessageStores.retrySendHandlers.get(
+        sessionMsg.type as SendHandledMessage["type"],
+      );
     if (!retryHandler) return;
     retryHandler(
       {
@@ -837,9 +860,10 @@ class MessageStores {
       );
     };
 
-    const receiveHandler = MessageStores.receiveHandlers.get(
-      sessionMsg.type as ReceiveHandledMessage["type"],
-    );
+    const receiveHandler =
+      MessageStores.receiveHandlers.get(
+        sessionMsg.type as ReceiveHandledMessage["type"],
+      );
     if (!receiveHandler) return;
     receiveHandler(
       {

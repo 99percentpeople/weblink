@@ -17,9 +17,12 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const taskUi = process.argv.includes("--tasks");
+const protocolTest = process.argv.includes("--protocol");
 const entry = taskUi
   ? "test/browser/task-center.html"
-  : "test/browser/speed-test.html";
+  : protocolTest
+    ? "test/browser/rtc-protocol.html"
+    : "test/browser/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 

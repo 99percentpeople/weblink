@@ -15,7 +15,7 @@ import {
   mergeRanges,
   rangesIterator,
 } from "../utils/range";
-import type { RequestFileMessage } from "@/libs/services/rtc-protocol";
+import type { RequestFileMessage } from "@/libs/core/protocol/messages";
 import { buildPacket } from "./utils/packet";
 
 import CompressWorker from "@/libs/workers/chunk-compress?worker";

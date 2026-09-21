@@ -7,9 +7,16 @@ import {
   MultiEventEmitter,
 } from "../utils/event-emitter";
 import {
+  createSessionMessage,
   type SessionMessage,
   type StreamStateMessage,
-} from "@/libs/services/rtc-protocol";
+} from "@/libs/core/protocol/messages";
+import { MessageSendQueue } from "./protocol/send-queue";
+import {
+  type MessageSendOptions,
+  RtcProtocolError,
+} from "./protocol/errors";
+import { parseSessionMessage } from "./protocol/validation";
 import { waitChannel } from "./utils/channel";
 import { PeerNegotiationController } from "./peer-negotiation";
 export { handleOffer } from "./peer-negotiation";
@@ -62,8 +69,9 @@ export class PeerSession {
   private messageChannelOpen = false;
   private messageChannelSetups =
     new WeakSet<RTCDataChannel>();
-  private outgoingQueue: SessionMessage[] = [];
-  private outgoingQueueKeys = new Set<string>();
+  private readonly messageSendQueue = new MessageSendQueue(
+    () => this.getOpenMessageChannel(),
+  );
   private ensureMessageChannelPromise: Promise<void> | null =
     null;
   private iceServers: RTCIceServer[] = [];
@@ -350,16 +358,6 @@ export class PeerSession {
     }
   }
 
-  private createMessageId() {
-    if (
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
-    ) {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-
   private notifyLocalStreamState(
     stream: MediaStream | null,
   ) {
@@ -371,16 +369,17 @@ export class PeerSession {
     if (this.lastLocalStreamState === mode) return;
     this.lastLocalStreamState = mode;
 
-    const message = {
-      type: "stream-state",
-      mode,
-      id: this.createMessageId(),
-      createdAt: Date.now(),
-      client: this.clientId,
-      target: this.targetClientId,
-    } satisfies StreamStateMessage;
-
-    this.sendMessage(message);
+    const message = createSessionMessage(
+      this,
+      "stream-state",
+      { mode },
+    );
+    void this.sendMessage(message).catch((error) => {
+      console.warn(
+        "[PeerSession] stream notification failed",
+        error,
+      );
+    });
   }
 
   private initializeConnection() {
@@ -720,37 +719,8 @@ export class PeerSession {
     );
   }
 
-  private makeOutgoingKey(message: SessionMessage) {
-    return `${message.type}:${message.id}`;
-  }
-
-  private queueOutgoingMessage(message: SessionMessage) {
-    const key = this.makeOutgoingKey(message);
-    if (this.outgoingQueueKeys.has(key)) return;
-    this.outgoingQueueKeys.add(key);
-    this.outgoingQueue.push(message);
-  }
-
   private flushOutgoingQueue() {
-    const channel = this.getOpenMessageChannel();
-    if (!channel) return;
-    while (this.outgoingQueue.length > 0) {
-      const message = this.outgoingQueue[0];
-      if (!message) break;
-
-      const key = this.makeOutgoingKey(message);
-      try {
-        channel.send(JSON.stringify(message));
-        this.outgoingQueue.shift();
-        this.outgoingQueueKeys.delete(key);
-      } catch (err) {
-        console.error(
-          `[PeerSession] failed to flush outgoing queue`,
-          err,
-        );
-        break;
-      }
-    }
+    this.messageSendQueue.flush();
   }
 
   private waitForMessageChannelReady(
@@ -1450,8 +1420,8 @@ export class PeerSession {
     channel.addEventListener(
       "message",
       (ev) => {
-        const [error, message] = catchErrorSync(
-          () => JSON.parse(ev.data) as SessionMessage,
+        const [error, message] = catchErrorSync(() =>
+          parseSessionMessage(ev.data),
         );
         if (error) {
           console.error(error);
@@ -1504,31 +1474,27 @@ export class PeerSession {
     }
   }
 
-  sendMessage(message: SessionMessage) {
-    if (this.status === "closed") {
-      throw new Error(
-        `[PeerSession] session ${this.clientId} is closed, can not send message`,
-      );
-    }
-    if (!this.getOpenMessageChannel()) {
-      this.queueOutgoingMessage(message);
+  sendMessage(
+    message: SessionMessage,
+    options: MessageSendOptions = {},
+  ): Promise<void> {
+    if (this.status === "closed")
+      return Promise.reject(new RtcProtocolError("closed"));
+    const pending = this.messageSendQueue.send(
+      message,
+      options,
+    );
+    if (this.messageSendQueue.size > 0) {
       void this.ensureMessageChannelReady(
         `sendMessage:${message.type}`,
-      );
-      return;
+      ).catch((error) => {
+        console.warn(
+          "[PeerSession] message channel recovery failed",
+          error,
+        );
+      });
     }
-
-    try {
-      this.getOpenMessageChannel()?.send(
-        JSON.stringify(message),
-      );
-    } catch (err) {
-      console.error(err);
-      this.queueOutgoingMessage(message);
-      void this.ensureMessageChannelReady(
-        `sendMessage:${message.type}:error`,
-      );
-    }
+    return pending;
   }
 
   async renegotiate() {
@@ -1807,8 +1773,7 @@ export class PeerSession {
     this.lifecycleController.abort();
     this.stopAutoReconnect();
     this.resetSession();
-    this.outgoingQueue.length = 0;
-    this.outgoingQueueKeys.clear();
+    this.messageSendQueue.close();
     this.setStatus("closed");
   }
 }

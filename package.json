@@ -21,7 +21,8 @@
     "generate-pwa-assets": "pwa-assets-generator",
     "lint": "tsc -p tsconfig.json --noEmit --skipLibCheck",
     "appwrite:setup": "appwrite --force push settings && appwrite --force --all push tables",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:protocol": "bun scripts/test-peer-speed.mjs --protocol"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,css,html,json,md}": [

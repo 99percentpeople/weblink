@@ -1,3 +1,4 @@
+import { FakeRtcTransport } from "./helpers/rtc-transport";
 import { describe, expect, it, vi } from "vitest";
 import type { PeerSession } from "@/libs/core/session";
 import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/core/profile";
@@ -9,44 +10,8 @@ import type { TransferClient } from "@/libs/core/services/type";
 import {
   RtcProtocol,
   type ClientProfileMessage,
-  type RtcProtocolTransport,
-  type SessionMessage,
 } from "@/libs/services/rtc-protocol";
 import { PeerProfileService } from "@/libs/services/peer-profile-service";
-
-class FakeTransport implements RtcProtocolTransport {
-  readonly sendCalls: Array<{
-    session: PeerSession;
-    message: SessionMessage;
-  }> = [];
-
-  private readonly handlers = new Set<
-    (context: {
-      session: PeerSession;
-      message: SessionMessage;
-    }) => unknown
-  >();
-
-  send(session: PeerSession, message: SessionMessage) {
-    this.sendCalls.push({ session, message });
-  }
-
-  onAny(
-    handler: (context: {
-      session: PeerSession;
-      message: SessionMessage;
-    }) => unknown,
-  ) {
-    this.handlers.add(handler);
-    return () => this.handlers.delete(handler);
-  }
-
-  emit(session: PeerSession, message: SessionMessage) {
-    for (const handler of this.handlers) {
-      handler({ session, message });
-    }
-  }
-}
 
 class FakeSession {
   readonly clientId = "local";
@@ -125,7 +90,7 @@ describe("PeerProfileService", () => {
     const dateNow = vi
       .spyOn(Date, "now")
       .mockReturnValue(100);
-    const transport = new FakeTransport();
+    const transport = new FakeRtcTransport();
     const protocol = new RtcProtocol(transport);
     const session = new FakeSession();
     const service = new PeerProfileService(protocol, {
@@ -160,7 +125,7 @@ describe("PeerProfileService", () => {
   });
 
   it("accepts only profiles matching the bound RTC peers", async () => {
-    const transport = new FakeTransport();
+    const transport = new FakeRtcTransport();
     const protocol = new RtcProtocol(transport);
     const session = new FakeSession();
     const onRemoteClient = vi.fn();

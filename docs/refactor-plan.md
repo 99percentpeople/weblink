@@ -219,6 +219,24 @@ and speed tests visible through one task list.
       RTC channels, including close/unmount, reopening results, task-list Stop
       and an unaffected chat channel; check desktop and narrow viewports.
 
+## Completed slice: typed asynchronous P2P control calls
+
+Goal: give control messages a typed asynchronous API with deterministic send,
+reply and session lifetimes, without changing file or speed-test data protocols.
+
+- [x] Move wire types, request policy, parsing and immutable snapshots into core.
+- [x] Add `call`, `notify`, `handle` and `on`; remove raw request/ACK plumbing
+      from application callers and centralize tracked message-state updates.
+- [x] Return typed file-list data while retaining the existing storage exchange.
+- [x] Resolve transport sends only after actual DataChannel writes; remove
+      cancelled/expired queued messages and separate send/reply timeouts.
+- [x] Scope requests and deduplication to session instances, check peer identity
+      and ACK mode, and cancel pending calls/listeners on session teardown.
+- [x] Cover retries, fast replies, duplicate response receipts, reverse resume
+      requests, invalid messages, tracked state and session replacement.
+- [x] Add real-Chromium protocol coverage (`bun run test:protocol`) and document
+      API semantics and limits in `docs/P2P_PROTOCOL.md`.
+
 ## Next candidates
 
 1. Continue splitting `PeerSession` by extracting reconnect/lifecycle

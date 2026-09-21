@@ -4,17 +4,14 @@ import {
 } from "@/libs/core/profile";
 import type { PeerSession } from "@/libs/core/session";
 import type { Client, ClientID } from "@/libs/core/type";
-import {
-  protocolMessageFactory,
-  type RtcProtocol,
-} from "@/libs/services/rtc-protocol";
+import type { RtcProtocol } from "@/libs/services/rtc-protocol";
 
 export interface PeerProfileServiceOptions {
   getLocalClient: () => Client;
   onRemoteClient: (client: Client) => void;
 }
 
-type ProfileProtocol = Pick<RtcProtocol, "on" | "send">;
+type ProfileProtocol = Pick<RtcProtocol, "on" | "notify">;
 
 type SessionBinding = {
   session: PeerSession;
@@ -145,21 +142,18 @@ export class PeerProfileService {
     );
     this.lastSentAt = createdAt;
 
-    try {
-      this.protocol.send(
+    void this.protocol
+      .notify(
         session,
-        protocolMessageFactory.clientProfile({
-          client: session.clientId,
-          target: session.targetClientId,
-          createdAt,
-          profile,
-        }),
-      );
-    } catch (error) {
-      console.warn(
-        "[PeerProfileService] failed to send profile",
-        error,
-      );
-    }
+        "client-profile",
+        { profile },
+        { createdAt },
+      )
+      .catch((error) => {
+        console.warn(
+          "[PeerProfileService] failed to send profile",
+          error,
+        );
+      });
   }
 }

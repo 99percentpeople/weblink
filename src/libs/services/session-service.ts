@@ -1,3 +1,4 @@
+import type { ChunkMetaData } from "@/libs/cache";
 import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../core/session";
 import { Client, ClientID, ClientInfo } from "../core/type";
@@ -6,10 +7,7 @@ import {
   TransferClient,
 } from "../core/services/type";
 import { Accessor, createEffect } from "solid-js";
-import {
-  type SendClipboardMessage,
-  type StorageMessage,
-} from "@/libs/services/rtc-protocol";
+import { type SendClipboardMessage } from "@/libs/core/protocol/messages";
 import { getIceServers } from "@/libs/core/store";
 import { catchError, catchErrorSync } from "../catch";
 import {
@@ -65,13 +63,14 @@ export class SessionService {
     );
   }
 
-  setStorage(message: StorageMessage) {
+  setStorage(clientId: ClientID, storage: ChunkMetaData[]) {
+    if (!this.clientViewData[clientId]) return;
     setAppState(
       "session",
       "clientViewData",
-      message.client,
+      clientId,
       produce((state) => {
-        state.storage = [...(message.data ?? [])];
+        state.storage = [...storage];
       }),
     );
   }

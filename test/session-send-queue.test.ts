@@ -36,7 +36,7 @@ const makeSender = (
   }) as SignalingService;
 
 describe("PeerSession send queue", () => {
-  it("queues messages until the channel is open", () => {
+  it("queues messages until the channel is open", async () => {
     const sender = makeSender("a", "b");
     const session = new PeerSession(sender, {
       polite: false,
@@ -62,21 +62,23 @@ describe("PeerSession send queue", () => {
       data: "hello",
     } satisfies SendTextMessage;
 
-    session.sendMessage(msg);
-    session.sendMessage(msg);
+    const first = session.sendMessage(msg);
+    const duplicate = session.sendMessage(msg);
 
     expect(sendCalls).toHaveLength(0);
-    expect((session as any).outgoingQueue).toHaveLength(1);
+    expect((session as any).messageSendQueue.size).toBe(1);
 
     (channel as any).readyState = "open";
     (session as any).flushOutgoingQueue();
 
     expect(sendCalls).toHaveLength(1);
     expect(JSON.parse(sendCalls[0]!)).toMatchObject(msg);
-    expect((session as any).outgoingQueue).toHaveLength(0);
+    await Promise.all([first, duplicate]);
+    session.close();
+    expect((session as any).messageSendQueue.size).toBe(0);
   });
 
-  it("sends immediately when the channel is open", () => {
+  it("sends immediately when the channel is open", async () => {
     const sender = makeSender("a", "b");
     const session = new PeerSession(sender, {
       polite: false,
@@ -102,9 +104,10 @@ describe("PeerSession send queue", () => {
       data: "hi",
     } satisfies SendTextMessage;
 
-    session.sendMessage(msg);
+    await session.sendMessage(msg);
 
     expect(sendCalls).toHaveLength(1);
-    expect((session as any).outgoingQueue).toHaveLength(0);
+    expect((session as any).messageSendQueue.size).toBe(0);
+    session.close();
   });
 });

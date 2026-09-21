@@ -55,7 +55,8 @@ describe("PeerSession stream management", () => {
     expect(
       (session as any).lastLocalStreamState,
     ).toBeNull();
-    expect((session as any).outgoingQueue).toHaveLength(0);
+    expect((session as any).messageSendQueue.size).toBe(0);
+    session.close();
   });
 
   it("syncs null stream to transceivers when pc exists", () => {
@@ -64,6 +65,7 @@ describe("PeerSession stream management", () => {
     });
     const pc = {
       getSenders: () => [],
+      close: () => {},
     } as unknown as RTCPeerConnection;
     (session as any).peerConnection = pc;
     (session as any).localStream = makeStream("media-2");
@@ -75,6 +77,7 @@ describe("PeerSession stream management", () => {
 
     expect((session as any).localStream).toBeNull();
     expect(renegotiate).toHaveBeenCalledTimes(1);
+    session.close();
   });
 
   it("removes the sender associated with a removed track", () => {
@@ -92,6 +95,7 @@ describe("PeerSession stream management", () => {
     const pc = {
       addTrack,
       removeTrack,
+      close: () => {},
     } as unknown as RTCPeerConnection;
 
     let removeTrackListener:
@@ -125,5 +129,6 @@ describe("PeerSession stream management", () => {
     expect(addTrack).toHaveBeenCalledWith(track, stream);
     expect(removeTrack).toHaveBeenCalledTimes(1);
     expect(removeTrack).toHaveBeenCalledWith(sender);
+    session.close();
   });
 });
