@@ -45,6 +45,7 @@ import IconChevronLeft from "@material-symbols/svg-400/outlined/chevron_left.svg
 import IconPlaceItem from "@material-symbols/svg-700/outlined/place_item.svg?component-solid";
 import IconPageInfo from "@material-symbols/svg-400/outlined/page_info.svg?component-solid";
 import IconUnfoldMore from "@material-symbols/svg-400/outlined/unfold_more.svg?component-solid";
+import IconVisibility from "@material-symbols/svg-400/outlined/visibility.svg?component-solid";
 import IconVisibilityOff from "@material-symbols/svg-400/outlined/visibility_off.svg?component-solid";
 import IconWallpaper from "@material-symbols/svg-400/outlined/wallpaper.svg?component-solid";
 import IconExpandAll from "@material-symbols/svg-400/outlined/expand_all.svg?component-solid";
@@ -144,6 +145,7 @@ export {
   IconPlaceItem,
   IconPageInfo,
   IconUnfoldMore,
+  IconVisibility,
   IconVisibilityOff,
   IconWallpaper,
   IconExpandAll,

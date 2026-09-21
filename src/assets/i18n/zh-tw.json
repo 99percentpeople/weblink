@@ -284,7 +284,8 @@
       "actions_description": "查看連線資訊或執行與目前客戶端相關的操作。"
     },
     "index": {
-      "edit_profile": "編輯資料",
+      "setup_room": "建立或加入房間",
+      "edit_room": "編輯房間資訊",
       "join_room": "加入房間",
       "share_room": "分享房間",
       "leave_room": "離開房間",
@@ -364,22 +365,34 @@
       "system": "跟隨系統"
     },
     "join_form": {
-      "title": "編輯房間資訊",
-      "description": "在這裡編輯房間資訊，點擊確定即可創建或加入房間。",
+      "title": "連線設定",
+      "description": "設定使用者資訊和房間資訊。",
+      "profile_description": "設定你在房間中顯示的使用者資訊。",
+      "room_description": "設定要建立或加入的房間資訊。",
+      "steps": {
+        "profile": "使用者資訊",
+        "room": "房間資訊"
+      },
       "client_id": {
-        "title": "客戶端 ID (唯讀)",
-        "description": "房間的客戶端 ID，代表你的身份"
+        "title": "客戶端 ID",
+        "description": "自動產生，用於識別目前客戶端"
       },
       "room_id": {
         "title": "房間 ID",
         "description": "房間的 ID"
       },
       "name": "名稱",
-      "avatar_url": "頭像 URL",
+      "avatar": "頭像",
+      "avatar_placeholder": "輸入圖片連結",
+      "upload_avatar": "上傳圖片",
+      "avatar_description": "輸入圖片連結或從本機選擇圖片，點擊頭像也可以上傳。",
       "password": {
         "title": "房間密碼",
         "placeholder": "輸入或生成一個密碼",
-        "description": "可選，房間的密碼，用於加密客戶端之間的信令訊息，防止其他人加入，你可以點擊按鈕生成個強密碼"
+        "description": "可選。用於加密客戶端之間的信令訊息，並防止其他人加入房間。",
+        "show": "顯示密碼",
+        "hide": "隱藏密碼",
+        "generate": "生成"
       },
       "auto_join": "下次自動加入"
     },

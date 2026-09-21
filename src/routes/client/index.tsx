@@ -24,114 +24,118 @@ const Client: Component = (props) => {
         -translate-y-1/2 flex-col items-stretch gap-2
         overflow-hidden rounded-lg border p-4 backdrop-blur"
     >
-        <Switch>
-          <Match
-            when={
-              appState.session.clientServiceStatus ===
-              "connected"
-            }
-          >
-            <div class="flex flex-col items-center gap-2">
-              <p class="text-xl font-bold">
-                {t("client.index.after_join.title", {
-                  room: appState.roomStatus.roomId,
-                })}
-              </p>
-              <p class="text-muted-foreground text-sm">
-                {t("client.index.after_join.description")}
-              </p>
-            </div>
-            <Button
-              class="gap-2"
-              onClick={() => {
-                openQRCodeDialog();
-              }}
-            >
-              <IconShare class="size-6" />
-              <span class="w-full text-center">
-                {t("client.index.share_room")}
-              </span>
-            </Button>
-            <Button
-              variant="outline"
-              class="gap-2"
-              onClick={() => leaveRoom()}
-            >
-              <IconLogout class="size-6" />
-              <span class="w-full text-center">
-                {t("client.index.leave_room")}
-              </span>
-            </Button>
-            <p class="text-muted-foreground text-xs">
-              {t("client.index.after_join.tip")}
+      <Switch>
+        <Match
+          when={
+            appState.session.clientServiceStatus ===
+            "connected"
+          }
+        >
+          <div class="flex flex-col items-center gap-2">
+            <p class="text-xl font-bold">
+              {t("client.index.after_join.title", {
+                room: appState.roomStatus.roomId,
+              })}
             </p>
-          </Match>
-          <Match
-            when={
-              appState.session.clientServiceStatus ===
-              "connecting"
-            }
+            <p class="text-muted-foreground text-sm">
+              {t("client.index.after_join.description")}
+            </p>
+          </div>
+          <Button
+            class="gap-2"
+            onClick={() => {
+              openQRCodeDialog();
+            }}
           >
-            <div class="flex flex-col items-center gap-2">
-              <p class="text-xl font-bold">
-                {t("client.index.connecting.title")}
-              </p>
-              <p class="text-muted-foreground text-sm">
-                {t("client.index.connecting.description")}
-              </p>
-              <Spinner size="lg" />
-            </div>
-          </Match>
-          <Match
-            when={
-              appState.session.clientServiceStatus ===
-              "disconnected"
-            }
+            <IconShare class="size-6" />
+            <span class="w-full text-center">
+              {t("client.index.share_room")}
+            </span>
+          </Button>
+          <Button
+            variant="outline"
+            class="gap-2"
+            onClick={() => leaveRoom()}
           >
-            <div class="flex flex-col items-center gap-2">
-              <p class="text-xl font-bold">
-                {t("client.index.before_join.title")}
-              </p>
-              <p class="text-muted-foreground text-sm">
-                {t("client.index.before_join.description")}
-              </p>
-            </div>
+            <IconLogout class="size-6" />
+            <span class="w-full text-center">
+              {t("client.index.leave_room")}
+            </span>
+          </Button>
+          <p class="text-muted-foreground text-xs">
+            {t("client.index.after_join.tip")}
+          </p>
+        </Match>
+        <Match
+          when={
+            appState.session.clientServiceStatus ===
+            "connecting"
+          }
+        >
+          <div class="flex flex-col items-center gap-2">
+            <p class="text-xl font-bold">
+              {t("client.index.connecting.title")}
+            </p>
+            <p class="text-muted-foreground text-sm">
+              {t("client.index.connecting.description")}
+            </p>
+            <Spinner size="lg" />
+          </div>
+        </Match>
+        <Match
+          when={
+            appState.session.clientServiceStatus ===
+            "disconnected"
+          }
+        >
+          <div class="flex flex-col items-center gap-2">
+            <p class="text-xl font-bold">
+              {t("client.index.before_join.title")}
+            </p>
+            <p class="text-muted-foreground text-sm">
+              {t("client.index.before_join.description")}
+            </p>
+          </div>
+          <Button
+            class="gap-2"
+            variant="outline"
+            onClick={async () => {
+              const { result } = await openRoomDialog();
+              if (result) {
+                joinRoom().catch((e) => {
+                  console.error(e);
+                  toast.error(e.message);
+                });
+              }
+            }}
+          >
+            <IconEditSquare class="size-6" />
+            <span class="w-full text-center">
+              {t(
+                appState.profile.initalJoin
+                  ? "client.index.setup_room"
+                  : "client.index.edit_room",
+              )}
+            </span>
+          </Button>
+          <Show when={!appState.profile.initalJoin}>
             <Button
               class="gap-2"
-              variant="outline"
-              onClick={async () => {
-                const { result } = await openRoomDialog();
-                if (result) {
-                  joinRoom().catch((e) => {
-                    console.error(e);
-                    toast.error(e.message);
-                  });
-                }
-              }}
+              onClick={() =>
+                joinRoom().catch((e) => {
+                  console.error(e);
+                  toast.error(e.message);
+                })
+              }
             >
-              <IconEditSquare class="size-6" />
+              <IconLogin class="size-6" />
               <span class="w-full text-center">
-                {t("client.index.edit_profile")}
+                {t("client.index.join_room")}
               </span>
             </Button>
-            <Show when={!appState.profile.initalJoin}>
-              <Button
-                class="gap-2"
-                onClick={() =>
-                  joinRoom().catch((e) => {
-                    console.error(e);
-                    toast.error(e.message);
-                  })
-                }
-              >
-                <IconLogin class="size-6" />
-                <span class="w-full text-center">
-                  {t("client.index.join_room")}
-                </span>
-              </Button>
-            </Show>
-          </Match>
-        </Switch>
+          </Show>
+        </Match>
+      </Switch>
     </div>
   );
 };

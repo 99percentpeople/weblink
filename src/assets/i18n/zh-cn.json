@@ -284,7 +284,8 @@
       "actions_description": "查看连接信息或执行与当前客户端相关的操作。"
     },
     "index": {
-      "edit_profile": "编辑资料",
+      "setup_room": "创建或加入房间",
+      "edit_room": "编辑房间信息",
       "join_room": "加入房间",
       "share_room": "分享房间",
       "leave_room": "离开房间",
@@ -364,22 +365,34 @@
       "system": "跟随系统"
     },
     "join_form": {
-      "title": "编辑房间信息",
-      "description": "在这里编辑房间信息，点击确定即可创建或加入房间。",
+      "title": "连接设置",
+      "description": "设置用户信息和房间信息。",
+      "profile_description": "设置你在房间中显示的用户信息。",
+      "room_description": "设置要创建或加入的房间信息。",
+      "steps": {
+        "profile": "用户信息",
+        "room": "房间信息"
+      },
       "client_id": {
-        "title": "客户端 ID (只读)",
-        "description": "房间的客户端 ID，代表你的身份"
+        "title": "客户端 ID",
+        "description": "自动生成，用于标识当前客户端"
       },
       "room_id": {
         "title": "房间 ID",
         "description": "房间的 ID"
       },
       "name": "名称",
-      "avatar_url": "头像 URL",
+      "avatar": "头像",
+      "avatar_placeholder": "输入图片链接",
+      "upload_avatar": "上传图片",
+      "avatar_description": "输入图片链接或从本机选择图片，点击头像也可以上传。",
       "password": {
         "title": "房间密码",
         "placeholder": "输入或生成一个密码",
-        "description": "可选，房间的密码，用于加密客户端之间的信令消息，防止其他人加入，你可以点击按钮生成一个墙密码"
+        "description": "可选。用于加密客户端之间的信令消息，并防止其他人加入房间。",
+        "show": "显示密码",
+        "hide": "隐藏密码",
+        "generate": "生成"
       },
       "auto_join": "下次自动加入"
     },

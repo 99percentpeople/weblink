@@ -13,6 +13,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import Nav from "@/components/app/nav";
 import { setClientProfile } from "./libs/core/store";
+import { optional } from "./libs/core/utils/optional";
 import {
   AppStateProvider,
   useAppState,
@@ -99,23 +100,35 @@ const InnerApp = (props: ParentProps) => {
   };
 
   const parseSearchParams = async () => {
-    let reset = false;
+    const hasRoomIdParam = search.id !== undefined;
+    const hasPasswordParam = search.pwd !== undefined;
+
     if (
-      search.id &&
+      hasRoomIdParam &&
       search.id !== appState.profile.roomId
     ) {
       setClientProfile("roomId", search.id as string);
-      setSearch({ id: null }, { replace: true });
-      reset = true;
     }
     if (
-      search.pwd &&
+      hasPasswordParam &&
       search.pwd !== appState.profile.password
     ) {
-      setClientProfile("password", search.pwd as string);
-      setSearch({ pwd: null }, { replace: true });
-      reset = true;
+      setClientProfile(
+        "password",
+        optional(search.pwd as string),
+      );
     }
+
+    if (hasRoomIdParam || hasPasswordParam) {
+      setSearch(
+        {
+          id: null,
+          pwd: null,
+        },
+        { replace: true },
+      );
+    }
+
     if (search.stun) {
       const stunServers = JSON.parse(
         search.stun as string,
@@ -157,15 +170,6 @@ const InnerApp = (props: ParentProps) => {
         }),
       );
     }
-    if (reset) {
-      setClientProfile("initalJoin", true);
-    }
-
-    if (search.join) {
-      onJoinRoom();
-      return;
-    }
-
     if (
       appState.session.clientServiceStatus ===
         "disconnected" &&

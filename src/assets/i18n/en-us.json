@@ -284,7 +284,8 @@
       "actions_description": "Inspect the connection or perform actions for this client."
     },
     "index": {
-      "edit_profile": "Edit Profile",
+      "setup_room": "Create or Join Room",
+      "edit_room": "Edit Room Info",
       "join_room": "Join Room",
       "share_room": "Share Room",
       "leave_room": "Leave Room",
@@ -358,22 +359,34 @@
       "system": "System"
     },
     "join_form": {
-      "title": "Edit Room Info",
-      "description": "Edit the room info here, click confirm to create or join the room.",
+      "title": "Connection Setup",
+      "description": "Set your profile and room information.",
+      "profile_description": "Set the profile shown to other people in the room.",
+      "room_description": "Set the room you want to create or join.",
+      "steps": {
+        "profile": "Profile",
+        "room": "Room"
+      },
       "client_id": {
-        "title": "Client ID (Read Only)",
-        "description": "The client ID of the room, representing your identity"
+        "title": "Client ID",
+        "description": "Generated automatically to identify this client"
       },
       "room_id": {
         "title": "Room ID",
         "description": "The room ID of the room"
       },
       "name": "Name",
-      "avatar_url": "Avatar URL",
+      "avatar": "Avatar",
+      "avatar_placeholder": "Enter an image URL",
+      "upload_avatar": "Upload",
+      "avatar_description": "Enter an image URL or choose an image from this device. You can also click the avatar to upload.",
       "password": {
         "title": "Room Password",
-        "placeholder": "Input or generate a password",
-        "description": "Optional, the password of the room, used to encrypt the signaling messages sent between clients, preventing others from joining, you can click the button to generate a strong password"
+        "placeholder": "Enter or generate a password",
+        "description": "Optional. Used to encrypt signaling messages between clients and prevent others from joining the room.",
+        "show": "Show password",
+        "hide": "Hide password",
+        "generate": "Generate"
       },
       "auto_join": "Auto Join Next Time"
     },
