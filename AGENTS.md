@@ -5,10 +5,11 @@ This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
 ## Quick commands
 
 - Dev: `bun dev`
-- Tests: `bun run test --run` (Vitest, non-watch mode)
+- Unit tests: `bun run test:unit`
+- Integration tests: `bun run test:integration`
+- All Vitest correctness tests: `bun run test`
 - Type-check: `bun run lint`
-- Browser checks: `bun run test:protocol`, `bun run test:transfer`,
-  `bun run test:cache`, `bun run test:tasks`, `bun run test:speed`
+- Browser E2E smoke: `bun run test:e2e` or a focused `test:e2e:*` script
 - Build: `bun run build`
 - Preview: `bun preview`
 
@@ -44,4 +45,8 @@ This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
 
 ## Docs
 
-- The refactor roadmap lives at `docs/refactor-plan.md`. Keep it updated as work progresses.
+- Architecture and ownership: `docs/ARCHITECTURE.md`
+- Deployment and environment configuration: `docs/DEPLOYMENT.md`
+- Test boundaries and commands: `docs/TESTING.md`
+- Keep feature docs focused on durable protocol/behavior constraints; do not add
+  temporary validation logs or refactor checklists as long-lived documentation.

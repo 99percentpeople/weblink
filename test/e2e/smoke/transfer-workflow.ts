@@ -1,28 +1,28 @@
 import type {
   ChunkCache,
   FileMetaData,
-} from "../../src/libs/domain/file";
-import { IDBChunkCache } from "../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
-import { FileSender } from "../../src/libs/domain/transfer/file-sender";
-import { FileReceiver } from "../../src/libs/domain/transfer/file-receiver";
-import { TransferMode } from "../../src/libs/domain/transfer/file-transferer";
-import type { PeerSession } from "../../src/libs/domain/session";
-import type { FileTransferMessage } from "../../src/libs/domain/message";
-import type { SessionMessage } from "../../src/libs/domain/protocol/messages";
+} from "../../../src/libs/domain/file";
+import { IDBChunkCache } from "../../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import { FileSender } from "../../../src/libs/domain/transfer/file-sender";
+import { FileReceiver } from "../../../src/libs/domain/transfer/file-receiver";
+import { TransferMode } from "../../../src/libs/domain/transfer/file-transferer";
+import type { PeerSession } from "../../../src/libs/domain/session";
+import type { FileTransferMessage } from "../../../src/libs/domain/message";
+import type { SessionMessage } from "../../../src/libs/domain/protocol/messages";
 import type {
   RtcAnyMessageHandler,
   RtcSessionClosedHandler,
-} from "../../src/libs/domain/protocol/transport";
-import type { RtcChannelHandler } from "../../src/libs/application/rtc/rtc-service";
-import { RtcProtocol } from "../../src/libs/application/rtc/rtc-protocol";
-import { PeerMessagingService } from "../../src/libs/application/messaging/peer-messaging-service";
-import { FileTransferService } from "../../src/libs/application/transfer/file-transfer-service";
-import { TransferRegistry } from "../../src/libs/application/transfer/transfer-registry";
+} from "../../../src/libs/domain/protocol/transport";
+import type { RtcChannelHandler } from "../../../src/libs/application/rtc/rtc-service";
+import { RtcProtocol } from "../../../src/libs/application/rtc/rtc-protocol";
+import { PeerMessagingService } from "../../../src/libs/application/messaging/peer-messaging-service";
+import { FileTransferService } from "../../../src/libs/application/transfer/file-transfer-service";
+import { TransferRegistry } from "../../../src/libs/application/transfer/transfer-registry";
 import {
   bindTransferMessage,
   finishReceivedFile,
-} from "../../src/libs/application/transfer/transfer-message-binding";
-import type { FileTransferStates } from "../../src/libs/application/transfer/file-transfer-state";
+} from "../../../src/libs/application/transfer/transfer-message-binding";
+import type { FileTransferStates } from "../../../src/libs/application/transfer/file-transfer-state";
 
 const assert: (
   value: unknown,

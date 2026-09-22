@@ -16,7 +16,7 @@ import {
   FakeRtcTransport,
   makeSession,
   flushRtc,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 
 const queues: MessageSendQueue[] = [];
 const protocols: WebRtcProtocol[] = [];

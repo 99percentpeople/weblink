@@ -6,7 +6,7 @@ import {
   parseSessionMessage,
   validateSessionMessage,
 } from "@/libs/domain/protocol/validation";
-import { makeSession } from "./helpers/rtc-transport";
+import { makeSession } from "../support/rtc-transport";
 
 const peer = makeSession();
 const base = createSessionMessage(

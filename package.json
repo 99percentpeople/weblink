@@ -14,18 +14,21 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:speed": "bun scripts/test-peer-speed.mjs",
-    "test:tasks": "bun scripts/test-peer-speed.mjs --tasks",
+    "test": "vitest run",
     "clean": "node scripts/clean.js",
     "generate-pwa-assets": "pwa-assets-generator",
     "lint": "tsc -p tsconfig.json --noEmit --skipLibCheck",
     "appwrite:setup": "appwrite --force push settings && appwrite --force --all push tables",
     "prepare": "husky",
-    "test:protocol": "bun scripts/test-peer-speed.mjs --protocol",
-    "test:transfer": "bun scripts/test-peer-speed.mjs --transfer",
-    "test:cache": "bun scripts/test-peer-speed.mjs --cache",
-    "bench:cache": "bun scripts/test-peer-speed.mjs --cache-benchmark"
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:e2e:protocol": "bun scripts/run-browser-check.mjs --protocol",
+    "test:e2e:transfer": "bun scripts/run-browser-check.mjs --transfer",
+    "test:e2e:cache": "bun scripts/run-browser-check.mjs --cache",
+    "test:e2e:tasks": "bun scripts/run-browser-check.mjs --tasks",
+    "test:e2e:speed": "bun scripts/run-browser-check.mjs",
+    "test:e2e": "bun run test:e2e:protocol && bun run test:e2e:transfer && bun run test:e2e:cache && bun run test:e2e:tasks && bun run test:e2e:speed",
+    "bench:browser:cache": "bun scripts/run-browser-check.mjs --cache-benchmark"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,css,html,json,md}": [

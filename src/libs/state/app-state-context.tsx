@@ -45,6 +45,7 @@ import {
 } from "@/libs/application/task-service";
 import { createClientService } from "@/libs/application/client-service-factory";
 import { RoomService } from "@/libs/application/room-service";
+import type { LocalStreamService } from "@/libs/application/local-stream-service";
 
 export interface AppStateContextProps {
   joinRoom: () => Promise<void>;
@@ -88,6 +89,9 @@ export interface AppStateContextProps {
   cancelSpeedTest: (target?: ClientID) => void;
   approveSpeedTest: (target: ClientID) => void;
   declineSpeedTest: (target: ClientID) => void;
+  localStream: Accessor<MediaStream | null>;
+  replaceLocalStream: (stream: MediaStream | null) => void;
+  clearLocalStream: () => void;
   roomStatus: RoomStatus;
 }
 
@@ -106,12 +110,13 @@ export const useAppState = (): AppStateContextProps => {
 };
 
 export interface AppStateProviderProps extends ParentProps {
-  localStream: MediaStream | null;
+  localStreamService: LocalStreamService;
 }
 
 export const AppStateProvider: Component<
   AppStateProviderProps
 > = (props) => {
+  const localStream = props.localStreamService.stream;
   const rtc = createRtcService();
   const protocol = createRtcProtocol();
   const messaging = new PeerMessagingService(
@@ -181,7 +186,7 @@ export const AppStateProvider: Component<
     profiles: peerProfiles,
     messages: messageStores,
     createClientService,
-    getLocalStream: () => props.localStream,
+    getLocalStream: () => localStream(),
     onLeaving: () => {
       files.cancelAll();
       speedTests.cancel();
@@ -336,15 +341,11 @@ export const AppStateProvider: Component<
   });
 
   createEffect(() => {
-    setAppState(
-      "session",
-      "localStream",
-      props.localStream,
-    );
+    setAppState("session", "localStream", localStream());
     for (const session of Object.values(
       sessionService.sessions,
     )) {
-      session.setStream(props.localStream);
+      session.setStream(localStream());
     }
   });
 
@@ -564,6 +565,11 @@ export const AppStateProvider: Component<
         declineSpeedTest: (target) => {
           speedTestApproval.decline(target);
         },
+        localStream,
+        replaceLocalStream: (stream) =>
+          props.localStreamService.replace(stream),
+        clearLocalStream: () =>
+          props.localStreamService.clear(),
         roomStatus: appState.roomStatus,
       }}
     >

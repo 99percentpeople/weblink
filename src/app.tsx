@@ -72,7 +72,7 @@ import { AudioPlayerProvider } from "./routes/video/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
 import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
-import { localStream } from "@/libs/application/local-stream-service";
+import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import { ModalProvider } from "@/components/dialogs/base";
 
 const InnerApp = (props: ParentProps) => {
@@ -465,6 +465,8 @@ const ErrorComponent = (props: {
 };
 
 export default function App(props: RouteSectionProps) {
+  const localStreamService = createLocalStreamService();
+  onCleanup(() => localStreamService.dispose());
   if (window.location.pathname === "/close-window") {
     try {
       window.close();
@@ -491,7 +493,9 @@ export default function App(props: RouteSectionProps) {
           }`}
         </Style>
         <Toaster />
-        <AppStateProvider localStream={localStream()}>
+        <AppStateProvider
+          localStreamService={localStreamService}
+        >
           <ModalProvider>
             <AudioPlayerProvider>
               <InnerApp>{props.children}</InnerApp>

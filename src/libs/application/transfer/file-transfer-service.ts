@@ -21,6 +21,7 @@ import {
   type ChunkRange,
 } from "@/libs/utils/range";
 import type { WebRtcProtocol } from "../rtc/rtc-protocol";
+import { FILE_TRANSFER_CHANNEL_PROTOCOL } from "@/libs/domain/transfer/protocol";
 import type { RtcService } from "../rtc/rtc-service";
 import type { FileCacheFactory } from "../cache-service";
 import type { PeerMessagingService } from "../messaging/peer-messaging-service";
@@ -95,7 +96,11 @@ export class FileTransferService {
         },
       ),
       deps.rtc.onChannel(({ session, channel }) => {
-        if (channel.protocol !== "transfer") return;
+        if (
+          channel.protocol !==
+          FILE_TRANSFER_CHANNEL_PROTOCOL
+        )
+          return;
         if (
           this.disposed ||
           deps.getSession(session.targetClientId) !==
@@ -357,7 +362,10 @@ export class FileTransferService {
       );
       // createChannel itself is not abortable: close a late result instead of attaching it to a replacement.
       const channelPromise = op.session
-        .createChannel(`${cache.id}-0`, "transfer")
+        .createChannel(
+          `${cache.id}-0`,
+          FILE_TRANSFER_CHANNEL_PROTOCOL,
+        )
         .then((channel) => {
           if (
             !this.valid(op) ||

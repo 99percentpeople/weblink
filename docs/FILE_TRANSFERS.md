@@ -53,6 +53,97 @@ by itself identify two different historical attempts within that exact
 session/file pair; introducing that distinction would require a separate
 wire-protocol change.
 
+## Portable file-transfer wire contract
+
+The current file-data protocol is intentionally separated from the reusable
+control protocol. A non-Web client does not need IndexedDB, `FileSender`,
+`FileReceiver` or Web Workers, but it must implement the following channel and
+byte contract exactly.
+
+Canonical definitions live in:
+
+- `domain/transfer/protocol.ts`: JSON control frames and validation.
+- `domain/transfer/packet.ts`: binary block header codec.
+- `domain/protocol/messages.ts`: the higher-level `send-file`,
+  `request-file` and `resume-file` setup messages.
+
+### Channel identity
+
+The file payload channel uses:
+
+- DataChannel protocol: `transfer`
+- label: `<fileId>-0`
+
+The protocol string is currently **unversioned legacy wire format**. An
+incompatible future transfer format must use a new protocol identifier rather
+than silently changing the meaning of `transfer`.
+
+### JSON control frames
+
+The active transfer channel exchanges these JSON frames:
+
+```json
+{ "type": "request-content", "ranges": [0, [2, 5], 9] }
+{ "type": "complete" }
+{ "type": "pause" }
+```
+
+A range item is either one non-negative chunk index or an inclusive
+`[start, end]` pair.
+
+`request-head` and `head` remain accepted by the protocol parser for legacy
+compatibility, although the current application workflow already exchanges file
+metadata through the higher-level control protocol and does not actively use
+those frames.
+
+### Binary block packet
+
+File bytes are sent as binary packets with a fixed **7-byte header**:
+
+| Byte range | Encoding           | Meaning                                         |
+| ---------- | ------------------ | ----------------------------------------------- |
+| 0..3       | uint32, big-endian | chunk index                                     |
+| 4..5       | uint16, big-endian | block index inside the compressed chunk         |
+| 6          | uint8              | `0` or `1`; last block of this compressed chunk |
+| 7..        | bytes              | compressed block payload                        |
+
+The sender first compresses each logical chunk with the raw DEFLATE format used
+by `fflate.deflateSync`, then splits that compressed byte sequence into blocks.
+The receiver collects blocks by `chunkIndex` / `blockIndex`, concatenates
+through the block marked `isLastBlock`, and inflates the complete compressed
+chunk with raw DEFLATE semantics before writing the original chunk bytes.
+
+Compression level is a local sender choice and is not encoded on the wire. Level
+0 is still a valid DEFLATE stream. Therefore another client must decode raw
+DEFLATE regardless of which compression level produced it.
+
+The current block index is uint16, so one compressed chunk can contain at most
+65,536 addressable block positions. The current Web sender's default block size
+is much larger than required for normal configured chunk sizes, but alternative
+clients must preserve the uint16 bound.
+
+### Cross-client implementation rules
+
+A compatible non-Web sender/receiver should:
+
+1. Complete the higher-level `send-file` / `request-file` control exchange
+   before attaching payload semantics to the transfer channel.
+2. Use the exact `transfer` protocol name and `<fileId>-0` label for this
+   legacy format.
+3. Treat chunk ranges as inclusive and preserve logical chunk indexes when
+   resuming.
+4. Encode packet integers big-endian with the 7-byte header above.
+5. Raw-DEFLATE each complete logical chunk before splitting it into blocks.
+6. Reassemble every compressed chunk before inflating it.
+7. Treat `complete` as transfer-channel completion signaling, not as durable
+   cache/file finalization on the receiving client.
+8. Treat `pause` as intentional channel teardown with resumable cached chunks.
+9. Reject malformed JSON control frames and invalid binary headers rather than
+   interpreting them as payload data.
+
+Unit coverage in `test/unit/file-transfer-protocol.test.ts` locks the JSON shapes,
+range validation and exact byte-level header encoding.
+
 ## Cancellation and finalization
 
 `sendFile`, `shareFile` and `requestFile` resolve after their control exchange
@@ -84,33 +175,9 @@ which peer completes first; a successful retry/resume of the same delivery
 releases that requirement. Explicit user cache deletion remains distinct
 from automatic deletion and stops affected active runs.
 
-## Validation
+## Testing
 
-Run the regular suite and type checks:
-
-```sh
-bunx vitest run
-bun run lint
-```
-
-Focused tests cover the registry, service and workflow lifetimes, including
-same-file multi-peer sends, writer exclusion, early / wrong-session / late
-channels, session replacement, message deletion, paused-cache retention,
-flush failure and finalization.
-
-A real browser smoke test exercises the full service / registry / protocol
-path with real RTCDataChannels, IndexedDB and compression/decompression
-workers:
-
-```sh
-bun run test:transfer
-```
-
-It shares one 1 MiB + 17 byte file with two receivers, verifies both SHA-256
-hashes, pauses an 8 MiB + 31 byte transfer after partial reception, resumes
-from cached ranges and verifies the final hash. It also checks that the
-control/chat channel remains open. Logical peers use isolated physical
-IndexedDB names in the disposable browser profile, so they do not share
-receiver data accidentally or touch the user's application caches.
-
-This is a loopback correctness test, not a cross-device throughput benchmark.
+File-transfer unit/integration coverage and the real-Chromium transfer smoke
+path are documented in [TESTING.md](TESTING.md). The browser smoke test uses
+real RTCDataChannels, IndexedDB and compression workers, but remains a local
+loopback correctness check rather than a cross-device throughput benchmark.

@@ -1,10 +1,13 @@
 import { FileTransferBase } from "./file-transfer-base";
 import {
   TransferMode,
-  type CompleteMessage,
   type FileTransfererOptions,
-  type TransferMessage,
 } from "./file-transferer";
+import {
+  encodeTransferMessage,
+  parseTransferMessage,
+  type CompleteMessage,
+} from "./protocol";
 import type { FileMetaData } from "@/libs/domain/file";
 import { getTotalChunkCount } from "@/libs/domain/file";
 import {
@@ -16,7 +19,7 @@ import {
   rangesIterator,
 } from "@/libs/utils/range";
 import type { RequestFileMessage } from "@/libs/domain/protocol/messages";
-import { buildPacket } from "../utils/packet";
+import { buildTransferPacket } from "./packet";
 
 import CompressWorker from "./compress-worker?worker";
 import type { CompressionLevel } from "./options";
@@ -181,7 +184,7 @@ export class FileSender extends FileTransferBase {
           end,
         );
 
-        const packet = buildPacket(
+        const packet = buildTransferPacket(
           chunkIndex,
           blockIndex,
           isLastBlock,
@@ -374,7 +377,7 @@ export class FileSender extends FileTransferBase {
       return this.close();
     }
     channel.send(
-      JSON.stringify({
+      encodeTransferMessage({
         type: "complete",
       } satisfies CompleteMessage),
     );
@@ -386,7 +389,7 @@ export class FileSender extends FileTransferBase {
     try {
       console.log(`sender get message`, data);
       if (typeof data !== "string") return;
-      const message = JSON.parse(data) as TransferMessage;
+      const message = parseTransferMessage(data);
 
       if (message.type === "request-content") {
         if (this.sendData) {

@@ -12,14 +12,14 @@ import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-s
 import {
   deferred,
   flushRtc,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 import {
   fakeCache,
   fakeChannel,
   fileMessage,
   fileSession,
   registryFixture,
-} from "./helpers/file-transfer";
+} from "../support/file-transfer";
 
 let fixture: ReturnType<typeof registryFixture>;
 beforeEach(() => {

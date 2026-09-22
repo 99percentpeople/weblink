@@ -9,11 +9,7 @@ import {
   untrack,
 } from "solid-js";
 import { Button } from "@/components/ui/button";
-import {
-  clearLocalStream,
-  localStream,
-  replaceLocalStream,
-} from "@/libs/application/local-stream-service";
+import { useAppState } from "@/libs/state/app-state-context";
 import { t } from "@/i18n";
 import {
   IconDelete,
@@ -83,6 +79,7 @@ const [removedClientIds, setRemovedClientIds] =
   createSignal<string[]>([]);
 
 export default function Video() {
+  const { localStream } = useAppState();
   const isMobile = createIsMobile();
 
   const { setPlay, playState, hasAudio } = useAudioPlayer();
@@ -534,6 +531,12 @@ const LocalToolbar = (props: {
   client?: ClientInfo;
   class?: string;
 }) => {
+  const {
+    localStream,
+    replaceLocalStream,
+    clearLocalStream,
+  } = useAppState();
+
   const closeStream = () => {
     clearLocalStream();
   };

@@ -90,10 +90,18 @@ may select concrete infrastructure implementations.
   - `client.ts`, `ids.ts`, `file.ts`, `message.ts`: shared domain models
     and contracts without application-state ownership.
   - `session.ts`, `peer-negotiation.ts`, `signaling.ts`: WebRTC session and
-    signaling contracts.
+    signaling service contracts.
+  - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
+    presence, routed-peer messages, join acknowledgment, deployed version and
+    limits for cross-client implementations.
   - `protocol/`: transport-agnostic P2P control wire contract, runtime
     validation, request/reply state machine and minimal transport/session ports.
     It has no PeerSession, WebRTC, Solid, IndexedDB or AppState dependency.
+  - `transfer/protocol.ts` and `transfer/packet.ts`: portable file-channel
+    JSON frames and exact binary block header; sender/receiver algorithms remain
+    WebRTC/browser domain code around that contract.
+  - `speed-test-protocol.ts`: the versioned `weblink-speedtest-v1` control
+    DTO/parser/limits; `speed-test.ts` owns the WebRTC diagnostic state machine.
   - `transfer/`: chunked file sender/receiver and transfer-owned workers.
 - `src/libs/infrastructure/`: concrete browser/backend adapters.
   - `signaling/`: WebSocket and Firebase client/transport implementations.
@@ -117,8 +125,9 @@ may select concrete infrastructure implementations.
 Application orchestration still uses the shared Solid stores; it is not yet a
 framework-independent layer. The strict portability boundary currently applies
 specifically to `domain/protocol`, not the entire application or WebRTC domain.
-Local media stream injection and further route/controller separation remain
-incremental follow-up work.
+The local media stream is now application-composed and injected through
+`AppStateProvider`; route/controller separation remains incremental follow-up
+work.
 
 ## Signaling and profile privacy
 
@@ -142,7 +151,7 @@ message transport:
 
 - Keep WebRTC details in `src/libs/domain`. Prefer exposing
   app-level methods from `AppStateContext` over constructing
-  protocol/message objects inside UI.
+  protocol/message objects or importing application singletons inside UI.
 - Keep feature-local constants close to the code. Promote
   constants into `src/constants.ts` only when they are used
   across multiple modules/layers or need consistent tuning.

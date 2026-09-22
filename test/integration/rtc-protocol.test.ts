@@ -19,7 +19,7 @@ import {
   makeSession,
   flushRtc,
   deferred,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 
 const protocols: WebRtcProtocol[] = [];
 const create = (transport = new FakeRtcTransport()) => {

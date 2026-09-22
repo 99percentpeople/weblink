@@ -14,6 +14,7 @@ import {
   EventHandler,
   MultiEventEmitter,
 } from "@/libs/utils/event-emitter";
+import { encodeSignalingEnvelope } from "@/libs/domain/signaling-protocol";
 
 export class WebSocketSignalingService implements SignalingService {
   private eventEmitter: MultiEventEmitter<SignalingServiceEventMap> =
@@ -158,7 +159,7 @@ export class WebSocketSignalingService implements SignalingService {
       } as ClientSignal,
     };
 
-    this.socket.send(JSON.stringify(message));
+    this.socket.send(encodeSignalingEnvelope(message));
   }
 
   handleIncomingSignal(signal: RawSignal): Promise<void> {

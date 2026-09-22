@@ -34,6 +34,90 @@ The Worker supports the existing Weblink WebSocket protocol:
 - `ping` / `pong`
 - reconnect with a 90-second message cache
 
+## Portable signaling contract
+
+The frontend's transport-neutral signaling DTOs, parser and deployed limits live
+in `src/libs/domain/signaling-protocol.ts`. Browser reconnect timers and
+WebSocket lifecycle state remain infrastructure concerns and are intentionally
+not part of this contract.
+
+The deployed WebSocket signaling contract currently uses protocol version **2**
+and these limits:
+
+| Limit                               |            Value |
+| ----------------------------------- | ---------------: |
+| client ID length                    |   128 characters |
+| room ID length                      |   256 characters |
+| password-hash length                | 1,024 characters |
+| one encoded signaling message       |            1 MiB |
+| cached reconnect signals per client |              256 |
+
+Every WebSocket signaling frame is a JSON envelope:
+
+```json
+{
+  "type": "message",
+  "data": {}
+}
+```
+
+The public presence shape is:
+
+```json
+{
+  "clientId": "peer-id",
+  "createdAt": 1760000000000,
+  "rtcProfileVersion": 1,
+  "resume": true
+}
+```
+
+Only `clientId` and `createdAt` are required. Profile display data is not part
+of presence.
+
+A routed peer signaling frame has:
+
+```json
+{
+  "type": "message",
+  "data": {
+    "type": "offer",
+    "clientId": "sender-id",
+    "targetClientId": "receiver-id",
+    "sessionId": "optional-session-id",
+    "data": "opaque-or-encrypted-payload"
+  }
+}
+```
+
+The signaling backend validates ownership of `clientId` and routes only by
+sender/target identity. It treats the nested `data` payload as opaque. Weblink's
+browser client may encrypt that payload with the room password before sending
+SDP/ICE objects.
+
+For future native clients the required lifecycle is:
+
+1. Open the WebSocket with `room` and optional `pwd` query parameters.
+2. Wait for `connected` and validate the returned room password hash locally.
+3. Send `join` with public presence.
+4. On protocol-v2 servers, wait for `joined` before treating membership as
+   installed or replaying peer work.
+5. Handle `join` / `leave` presence frames and routed `message` frames.
+6. Reply to `ping` with `pong`.
+7. Reconnect with the same client ID and `resume: true` when attempting to
+   recover the retained session.
+8. Never reuse an old socket after a replacement connection owns that client ID.
+
+Both WebSocket backends maintain an internal per-connection ownership token.
+That token is not part of the public wire format. It prevents late
+message/leave/close events from an old socket from mutating the replacement
+session; the Worker also persists the token through Durable Object hibernation.
+
+The Bun server and Worker still live in independent Git repositories, so their
+contract tests currently execute in each repository. A future shared fixture
+must be distributed through a CI-consumable package/spec source rather than a
+local sibling-repository path.
+
 ### Room join acknowledgment
 
 After password validation, the client sends `join`. Protocol version 2 servers
@@ -100,54 +184,11 @@ timing of connection setup. SDP offers/answers and ICE candidates must pass
 through signaling before WebRTC exists, but Weblink encrypts signaling payloads
 with the room password.
 
-## Frontend configuration
+## Deployment
 
-The WebSocket endpoint is a build-time deployment setting:
+Frontend environment variables, static hosting, Docker, Cloudflare Worker
+deployment, Bun server deployment, ICE configuration, LAN setup and rollout
+checks are centralized in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=wss://ws.webl.ink
-```
-
-Users cannot override the signaling URL in the settings UI. Legacy
-`localStorage` values named `websocketUrl` are ignored. Changing the endpoint
-requires updating the deployment environment and rebuilding the frontend.
-
-## Worker development and deployment
-
-```bash
-git clone https://github.com/99percentpeople/weblink-ws-worker.git
-cd weblink-ws-worker
-bun install
-bun run typegen
-bun run format:check
-bun run typecheck
-bun run test
-bunx wrangler deploy --dry-run
-```
-
-Authenticate and deploy only after the checks pass:
-
-```bash
-# Device flow works in remote SSH environments.
-bunx wrangler login --device
-bun run deploy
-```
-
-The custom domain is declared in the Worker repository's `wrangler.jsonc`.
-Wrangler provisions the Cloudflare route, DNS record, and TLS certificate.
-Verify both HTTP and WebSocket behavior after deployment:
-
-```bash
-curl https://ws.webl.ink/healthcheck
-```
-
-## Migration and rollback
-
-Keep the Bun deployment available while validating Cloudflare connectivity.
-Before changing `VITE_WEBSOCKET_URL`, test room joins, reconnects, and WebRTC
-negotiation from the target networks, including mainland carrier networks.
-
-Switching signaling providers requires only a frontend rebuild. If the
-Cloudflare endpoint is unstable, restore the previous Bun WebSocket URL and
-redeploy the frontend; no user-side signaling setting needs to be migrated.
+This document intentionally keeps only signaling architecture, wire behavior,
+privacy boundaries and reconnect/session ownership semantics.

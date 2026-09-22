@@ -2,16 +2,17 @@ import { waitBufferedAmountLowThreshold } from "../utils/channel";
 import { FileTransferBase } from "./file-transfer-base";
 import {
   TransferMode,
-  type CompleteMessage,
   type FileTransfererOptions,
-  type RequestContentMessage,
-  type TransferMessage,
 } from "./file-transferer";
-import { getTotalChunkCount } from "@/libs/domain/file";
 import {
-  blobToArrayBuffer,
-  readPacket,
-} from "../utils/packet";
+  encodeTransferMessage,
+  parseTransferMessage,
+  type CompleteMessage,
+  type RequestContentMessage,
+} from "./protocol";
+import { getTotalChunkCount } from "@/libs/domain/file";
+import { blobToArrayBuffer } from "../utils/packet";
+import { readTransferPacket } from "./packet";
 
 import UncompressWorker from "./uncompress-worker?worker";
 import { catchError } from "@/libs/catch";
@@ -166,7 +167,7 @@ export class FileReceiver extends FileTransferBase {
       blockIndex,
       blockData,
       isLastBlock,
-    } = readPacket(packet);
+    } = readTransferPacket(packet);
 
     if (!this.blockCache[chunkIndex]) {
       this.blockCache[chunkIndex] = {
@@ -232,7 +233,7 @@ export class FileReceiver extends FileTransferBase {
             if (this.closed) return;
             throw error;
           }
-          channel.send(JSON.stringify(msg));
+          channel.send(encodeTransferMessage(msg));
           console.log(`send msg`, msg);
         }
       }
@@ -271,7 +272,7 @@ export class FileReceiver extends FileTransferBase {
       this.getAvailableChannel()
         .then((channel) => {
           channel.send(
-            JSON.stringify({
+            encodeTransferMessage({
               type: "complete",
             } satisfies CompleteMessage),
           );
@@ -295,7 +296,7 @@ export class FileReceiver extends FileTransferBase {
       this.lastReceiveActivityAt = Date.now();
       if (typeof data === "string") {
         console.log(`receiver get message`, data);
-        const message = JSON.parse(data) as TransferMessage;
+        const message = parseTransferMessage(data);
         if (message.type === "pause") {
           this.pause(false);
         } else if (message.type === "complete") {

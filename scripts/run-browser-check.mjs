@@ -24,16 +24,16 @@ const cacheBenchmark = process.argv.includes(
 );
 const cacheTest = process.argv.includes("--cache");
 const entry = cacheBenchmark
-  ? "test/browser/cache-merge-benchmark.html"
+  ? "test/e2e/benchmark/cache-merge.html"
   : cacheTest
-    ? "test/browser/cache-merge.html"
+    ? "test/e2e/smoke/cache-merge.html"
     : taskUi
-      ? "test/browser/task-center.html"
+      ? "test/e2e/smoke/task-center.html"
       : protocolTest
-        ? "test/browser/rtc-protocol.html"
+        ? "test/e2e/smoke/rtc-protocol.html"
         : transferTest
-          ? "test/browser/transfer-workflow.html"
-          : "test/browser/speed-test.html";
+          ? "test/e2e/smoke/transfer-workflow.html"
+          : "test/e2e/smoke/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -95,7 +95,7 @@ async function connect(url) {
 
 async function main() {
   const profile = await mkdtemp(
-    join(tmpdir(), "weblink-speed-test-"),
+    join(tmpdir(), "weblink-browser-check-"),
   );
   let vite;
   let browser;
@@ -120,7 +120,7 @@ async function main() {
                   find: "@/libs/state/app-state-context",
                   replacement: join(
                     root,
-                    "test/browser/task-context.ts",
+                    "test/e2e/smoke/task-context.ts",
                   ),
                 },
               ]
@@ -229,7 +229,7 @@ async function main() {
       if (value?.error) throw new Error(value.error);
       if (value?.report) {
         if (!value.report.ok)
-          throw new Error("Browser smoke test failed");
+          throw new Error("Browser check failed");
         const json = JSON.stringify(value.report, null, 2);
         if (process.env.SPEED_TEST_REPORT)
           await writeFile(
@@ -270,7 +270,7 @@ async function main() {
       await sleep(200);
     }
     throw new Error(
-      `Browser smoke test timed out. ${browserLog}`,
+      `Browser check timed out. ${browserLog}`,
     );
   } catch (error) {
     if (browserLog) console.error(browserLog);

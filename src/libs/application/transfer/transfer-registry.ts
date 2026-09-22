@@ -5,6 +5,7 @@ import {
   TransferMode,
   type FileTransferer,
 } from "@/libs/domain/transfer/file-transferer";
+import { FILE_TRANSFER_CHANNEL_PROTOCOL } from "@/libs/domain/transfer/protocol";
 import type { ActiveFileTransfer } from "./file-transfer-state";
 
 export interface TransferRegistration {
@@ -256,7 +257,7 @@ export class TransferRegistry {
       !entry ||
       run.signal.aborted ||
       entry.finishing ||
-      channel.protocol !== "transfer" ||
+      channel.protocol !== FILE_TRANSFER_CHANNEL_PROTOCOL ||
       ["closing", "closed"].includes(channel.readyState)
     ) {
       channel.close();

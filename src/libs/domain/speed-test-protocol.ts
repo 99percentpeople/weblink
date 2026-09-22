@@ -71,6 +71,12 @@ export type SpeedTestMessage =
       durationMs: number;
     };
 
+export function encodeSpeedTestMessage(
+  message: SpeedTestMessage,
+): string {
+  return JSON.stringify(message);
+}
+
 export function parseSpeedTestMessage(
   raw: string,
 ): SpeedTestMessage {

@@ -325,11 +325,9 @@ A non-Web client should:
 9. Keep local message/UI/persistence fields out of the wire envelope.
 10. Treat signaling as a separate rendezvous protocol.
 
-## Verification
+## Testing
 
-- `bun run lint`: strict TypeScript checking.
-- `bunx vitest run`: unit/integration suite.
-- `bun run test:protocol`: real Chromium DataChannel control-protocol harness.
-- `test/protocol-portability.test.ts`: runs `P2PProtocol` with a plain session
-  object and custom non-PeerSession transport.
-- `bun run build`: production bundle validation.
+Protocol unit/integration coverage and the real-Chromium DataChannel smoke test
+are documented in [TESTING.md](TESTING.md). Keep portable contract behavior in
+unit/integration tests; use the browser E2E smoke only for behavior that depends
+on a real RTCDataChannel.

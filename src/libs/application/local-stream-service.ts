@@ -88,18 +88,3 @@ export const createLocalStreamService =
       dispose,
     };
   };
-
-export const localStreamService =
-  createLocalStreamService();
-
-export const localStream = localStreamService.stream;
-
-export const replaceLocalStream = (
-  stream: MediaStream | null,
-): void => {
-  localStreamService.replace(stream);
-};
-
-export const clearLocalStream = (): void => {
-  localStreamService.clear();
-};

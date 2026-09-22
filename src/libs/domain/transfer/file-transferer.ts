@@ -1,10 +1,8 @@
 import type {
-  ChunkMetaData,
+  ChunkCache,
   FileMetaData,
 } from "@/libs/domain/file";
-import type { ChunkCache } from "@/libs/domain/file";
 import type { EventHandler } from "@/libs/utils/event-emitter";
-import type { ChunkRange } from "@/libs/utils/range";
 import type { CompressionLevel } from "./options";
 import type { FileID } from "../ids";
 
@@ -13,36 +11,17 @@ export enum TransferMode {
   Receive = 2,
 }
 
-export interface BaseTransferMessage {
-  type: string;
-}
-
-export interface HeadMessage
-  extends BaseTransferMessage, ChunkMetaData {
-  type: "head";
-}
-export interface RequestContentMessage extends BaseTransferMessage {
-  type: "request-content";
-  ranges: ChunkRange[];
-}
-export interface RequestHeadMessage extends BaseTransferMessage {
-  type: "request-head";
-}
-
-export interface CompleteMessage extends BaseTransferMessage {
-  type: "complete";
-}
-
-export interface PauseMessage extends BaseTransferMessage {
-  type: "pause";
-}
-
-export type TransferMessage =
-  | RequestContentMessage
-  | RequestHeadMessage
-  | HeadMessage
-  | CompleteMessage
-  | PauseMessage;
+export type {
+  BaseTransferMessage,
+  CompleteMessage,
+  HeadMessage,
+  PauseMessage,
+  RequestContentMessage,
+  RequestHeadMessage,
+  TransferChunkRange,
+  TransferHeadMetadata,
+  TransferMessage,
+} from "./protocol";
 
 export { TRANSFER_CHANNEL_PREFIX } from "@/constants";
 

@@ -1,5 +1,6 @@
 import {
   SPEED_TEST_PROTOCOL,
+  encodeSpeedTestMessage,
   SPEED_TEST_DURATION_MS,
   SPEED_TEST_MAX_BYTES,
   SPEED_TEST_BLOCK_BYTES,
@@ -252,7 +253,7 @@ export async function runSpeedTest(
     if (signal.aborted) throw abortError(signal);
     if (channel.readyState !== "open")
       throw new SpeedTestError("closed");
-    channel.send(JSON.stringify(message));
+    channel.send(encodeSpeedTestMessage(message));
   };
 
   const onMessage = (event: MessageEvent<unknown>) => {
@@ -448,7 +449,7 @@ export async function runSpeedTest(
       throw new SpeedTestError("protocol");
     // Validate local reduced limits through the same bounded wire parser.
     parseSpeedTestMessage(
-      JSON.stringify({
+      encodeSpeedTestMessage({
         type: "hello",
         durationMs,
         maxBytes,

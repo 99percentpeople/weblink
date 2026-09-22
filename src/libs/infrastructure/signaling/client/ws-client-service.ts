@@ -28,8 +28,13 @@ import {
   waitForReconnect,
   WEBSOCKET_CONNECTION_TIMEOUT_MS,
   WEBSOCKET_JOIN_ACK_TIMEOUT_MS,
-  WEBSOCKET_SIGNALING_PROTOCOL_VERSION,
 } from "./reconnect-policy";
+import {
+  encodeSignalingEnvelope,
+  isSignalingJoinAcknowledgement,
+  parseSignalingEnvelope,
+  SIGNALING_MAX_CACHED_SIGNALS,
+} from "@/libs/domain/signaling-protocol";
 import { toast } from "solid-sonner";
 import { catchErrorSync } from "@/libs/catch";
 
@@ -38,27 +43,7 @@ type PublicConnectionStatus =
   | "connected"
   | "disconnected";
 
-type JoinAcknowledgement = {
-  protocolVersion: number;
-  resumed: boolean;
-};
-
-const MAX_BUFFERED_SIGNALS = 256;
-
-function isJoinAcknowledgement(
-  value: unknown,
-): value is JoinAcknowledgement {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const acknowledgement = value as Record<string, unknown>;
-  return (
-    typeof acknowledgement.protocolVersion === "number" &&
-    acknowledgement.protocolVersion >=
-      WEBSOCKET_SIGNALING_PROTOCOL_VERSION &&
-    typeof acknowledgement.resumed === "boolean"
-  );
-}
+const MAX_BUFFERED_SIGNALS = SIGNALING_MAX_CACHED_SIGNALS;
 
 function abortError(message: string): Error {
   const error = new Error(message);
@@ -318,8 +303,8 @@ export class WebSocketClientService implements ClientService {
   ): void {
     if (socket !== this.activeSocket) return;
 
-    const [error, signal] = catchErrorSync(
-      () => JSON.parse(String(event.data)) as RawSignal,
+    const [error, signal] = catchErrorSync(() =>
+      parseSignalingEnvelope(String(event.data)),
     );
     if (error) {
       console.error(
@@ -409,7 +394,12 @@ export class WebSocketClientService implements ClientService {
       case "ping":
         if (socket.readyState === WebSocket.OPEN) {
           try {
-            socket.send(JSON.stringify({ type: "pong" }));
+            socket.send(
+              encodeSignalingEnvelope({
+                type: "pong",
+                data: undefined,
+              }),
+            );
           } catch (error) {
             console.warn(
               "[WebSocketClientService] failed to send pong:",
@@ -484,7 +474,7 @@ export class WebSocketClientService implements ClientService {
     if (sendLeave && socket.readyState === WebSocket.OPEN) {
       try {
         socket.send(
-          JSON.stringify({
+          encodeSignalingEnvelope({
             type: "leave",
             data: createClientPresence(this.client),
           }),
@@ -610,9 +600,8 @@ export class WebSocketClientService implements ClientService {
         async (event) => {
           if (settled) return;
 
-          const [parseError, message] = catchErrorSync(
-            () =>
-              JSON.parse(String(event.data)) as RawSignal,
+          const [parseError, message] = catchErrorSync(() =>
+            parseSignalingEnvelope(String(event.data)),
           );
           if (parseError) {
             fail(parseError);
@@ -631,7 +620,9 @@ export class WebSocketClientService implements ClientService {
               );
               return;
             }
-            if (!isJoinAcknowledgement(message.data)) {
+            if (
+              !isSignalingJoinAcknowledgement(message.data)
+            ) {
               fail(
                 new Error(
                   "[WebSocketClientService] invalid join acknowledgement",
@@ -675,7 +666,7 @@ export class WebSocketClientService implements ClientService {
               succeed();
             }, WEBSOCKET_JOIN_ACK_TIMEOUT_MS);
             socket.send(
-              JSON.stringify({
+              encodeSignalingEnvelope({
                 type: "join",
                 data: createClientPresence(
                   this.client,

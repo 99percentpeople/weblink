@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChunkCache } from "@/libs/domain/file";
-import { FileTransferBase } from "./file-transfer-base";
-import { TransferMode } from "./file-transferer";
+import { FileTransferBase } from "@/libs/domain/transfer/file-transfer-base";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 
 class TestTransfer extends FileTransferBase {
   readonly mode = TransferMode.Send;

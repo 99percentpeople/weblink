@@ -6,7 +6,7 @@ import type { PeerSession } from "@/libs/domain/session";
 import {
   flushRtc,
   makeSession,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 
 class SessionEvents extends EventTarget {
   readonly clientId = "a";

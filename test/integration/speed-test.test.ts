@@ -12,6 +12,7 @@ import {
   SPEED_TEST_PROTOCOL,
   SPEED_TEST_MAX_BYTES,
   SPEED_TEST_HIGH_WATER,
+  encodeSpeedTestMessage,
   parseSpeedTestMessage,
   type SpeedTestProgress,
 } from "@/libs/domain/speed-test-protocol";
@@ -134,6 +135,36 @@ beforeEach(() =>
 afterEach(() => vi.useRealTimers());
 
 describe("speed-test protocol validation", () => {
+  it("round-trips the versioned portable control frames", () => {
+    const messages = [
+      {
+        type: "hello",
+        durationMs: 1000,
+        maxBytes: 4096,
+      },
+      { type: "offer" },
+      { type: "ready" },
+      { type: "start", direction: "upload" },
+      { type: "go", direction: "upload" },
+      { type: "begin", direction: "upload" },
+      { type: "end", direction: "upload", bytes: 4096 },
+      {
+        type: "receipt",
+        direction: "upload",
+        bytes: 4096,
+        durationMs: 250,
+      },
+    ] as const;
+
+    for (const message of messages) {
+      expect(
+        parseSpeedTestMessage(
+          encodeSpeedTestMessage(message),
+        ),
+      ).toEqual(message);
+    }
+  });
+
   it.each([
     "null",
     "[]",

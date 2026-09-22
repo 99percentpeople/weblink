@@ -1,222 +1,136 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
-    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="280" height="89" />
+    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
   </picture>
 
+  <h3>分享更多，安装更少。</h3>
+
   <p>
-    基于 WebRTC 的浏览器端 P2P 聊天、文件传输与文件同步应用。
+    一个基于 WebRTC 的浏览器端 P2P 工作空间，用于文件传输、文件同步、
+    聊天、剪贴板分享、屏幕共享、语音和视频。
+  </p>
+
+  <p>
+    <a href="https://webl.ink"><strong>打开 Weblink</strong></a>
+    ·
+    <a href="docs/README.md">文档</a>
+    ·
+    <a href="README.md">English</a>
   </p>
 
   <p>
     <a href="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml">
       <img src="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg" alt="CI" />
     </a>
-  </p>
-
-  <p>
-    <a href="README.md">English</a> · <strong>中文</strong>
+    <img src="https://img.shields.io/badge/WebRTC-P2P-5b5bd6" alt="WebRTC P2P" />
+    <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" />
   </p>
 </div>
 
-## 简介
+---
 
-Weblink 是一款基于 WebRTC 的纯网页应用，支持**文件传输**、**文件同步**以及**文字/语音/视频通信**，无需安装原生客户端，直接在现代浏览器中即可使用。
+## 浏览器也可以成为点对点工作空间
 
-WebRTC 连接建立后，应用数据通过客户端之间的 P2P 通道直接传输。信令服务仅用于发现客户端和建立 WebRTC 连接；配置房间密码后，信令数据会使用该密码加密。
+Weblink 将文件分享与实时通信整合进一个浏览器应用。
 
-### 在线版本
+在两台设备上打开 Weblink、加入同一个房间并建立 WebRTC 连接后，
+聊天、文件、剪贴板内容和媒体数据都会通过对端之间的 WebRTC 通道传输，
+而不是通过信令服务中转应用数据。
 
-| 版本          | 信令后端                             | 地址                                     |
-| ------------- | ------------------------------------ | ---------------------------------------- |
-| 主要版本      | Cloudflare Workers + Durable Objects | [https://webl.ink](https://webl.ink)     |
-| Firebase 版本 | Firebase Realtime Database           | [https://v.webl.ink](https://v.webl.ink) |
+无需安装原生客户端。
 
-主要版本使用 `wss://ws.webl.ink` 提供 WebSocket 信令服务，后端为运行在 Cloudflare Workers 上的 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)。
+## 为什么选择 Weblink？
 
-## 功能
+|                                                                          |                                                                                                            |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **⚡ WebRTC 点对点传输**<br>通过 WebRTC DataChannel 发送文件和应用数据。 | **⏯ 断点续传**<br>利用已缓存的文件分片继续未完成的传输。                                                  |
+| **🔄 文件同步**<br>浏览并获取对端允许公开的缓存文件。                    | **💬 实时通信**<br>分享文字、剪贴板、语音、视频、屏幕和音频。                                              |
+| **📦 浏览器本地存储**<br>使用 IndexedDB 在本地缓存已传输文件。           | **🧭 连接诊断**<br>查看 WebRTC 连接详情并进行点对点吞吐测速。                                              |
+| **📱 PWA 集成**<br>安装 Weblink 后接入系统分享流程。                     | **🧩 可移植协议**<br>信令、控制、文件传输和诊断协议都具有独立的 wire contract，方便未来接入非 Web 客户端。 |
 
-| 功能               | 描述                                       |
-| ------------------ | ------------------------------------------ |
-| 🔄 **文件同步**    | 浏览并获取其他客户端缓存的文件。           |
-| ⏯️ **断点续传**    | 连接中断后继续未完成的文件传输。           |
-| 📂 **文件缓存**    | 使用 IndexedDB 在本地缓存传输文件。        |
-| 📁 **文件夹传输**  | 自动打包、压缩并发送文件夹。               |
-| 📦 **压缩传输**    | 可选择在传输前压缩文件。                   |
-| ⚡ **多通道传输**  | 使用多个 WebRTC DataChannel 并行传输数据。 |
-| 🔍 **文件搜索**    | 搜索本地及对端缓存的文件。                 |
-| 📋 **剪贴板传输**  | 将剪贴板内容直接粘贴到聊天窗口发送。       |
-| 💬 **文字聊天**    | 通过 WebRTC 交换文字消息。                 |
-| 🎙️ **语音 / 视频** | 与连接的客户端共享麦克风和摄像头。         |
-| 🖥️ **屏幕共享**    | 共享屏幕、系统音频及麦克风音频。           |
-| 🔗 **分享与转发**  | 安装为 PWA 后使用系统分享能力发送内容。    |
+## 一个房间，多种工作流
 
-更多更新请查看 [CHANGELOG.md](CHANGELOG.md)。
+### 文件
 
-使用过程中如有问题，也可以加入 QQ 群反馈：[762463759](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)。
+- 在对端之间发送文件和文件夹；
+- 可选地在发送前压缩文件分片；
+- 中断后继续未完成的文件传输；
+- 将完成的文件保存在浏览器本地缓存；
+- 搜索本地和对端公开的缓存文件；
+- 在同一房间内转发或请求文件。
 
-## 快速开始
+### 通信
 
-### 环境要求
+- 通过 P2P 控制通道发送文字消息；
+- 在已连接设备之间分享剪贴板内容；
+- 共享摄像头和麦克风；
+- 共享屏幕，并可附带系统音频和麦克风音频；
+- 在实时会话中使用画中画和媒体控制。
 
-- [Bun](https://bun.sh/)
-- 支持 WebRTC 的现代浏览器
+### 诊断
 
-### 安装
+- 查看 ICE 与连接状态；
+- 查看当前 WebRTC 路由；
+- 运行带版本约束的点对点吞吐测速；
+- 通过统一任务视图查看传输和诊断任务状态。
 
-```bash
-git clone https://github.com/99percentpeople/weblink.git
-cd weblink
-bun install
+## 工作原理
+
+```mermaid
+flowchart LR
+    A[浏览器 A] -->|加入房间 / SDP / ICE| S[信令服务]
+    B[浏览器 B] -->|加入房间 / SDP / ICE| S
+
+    A <-->|WebRTC 数据 / 媒体| B
 ```
 
-创建 `.env.local` 并选择信令后端。
+信令层负责发现客户端、管理房间成员以及完成 WebRTC 协商。
+PeerConnection 建立后，应用流量通过 WebRTC 的点对点通道传输。
 
-使用公网 WebSocket 信令服务：
+配置房间密码后，Weblink 可以在连接建立阶段保护信令 payload。
 
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=wss://ws.webl.ink
-```
+显示名称和头像也通过 P2P 控制协议交换，而不是作为信令 presence 公开。
 
-使用本地 Bun 信令服务器：
+## 为协议互操作而设计
 
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=ws://127.0.0.1:9000
-```
+Weblink 将 P2P 协议定义与浏览器 UI 实现分开维护。
 
-启动开发服务器：
+目前已经明确的协议包括：
 
-```bash
-bun dev
-```
+- 信令 envelope 与重连语义；
+- 类型化的 P2P request/reply 控制协议；
+- 文件传输 DataChannel 控制帧和二进制 packet 格式；
+- 带版本号的点对点测速协议。
 
-构建生产版本：
+这样浏览器实现本身不会成为唯一的“协议规范”，也为未来的桌面端、
+移动端、CLI 或原生客户端留下更清晰的接入路径。
 
-```bash
-bun run build
-```
+## 在线体验
 
-## 信令后端
+| 版本              | 信令后端                             | 地址                             |
+| ----------------- | ------------------------------------ | -------------------------------- |
+| **主要版本**      | Cloudflare Workers + Durable Objects | [webl.ink](https://webl.ink)     |
+| **Firebase 版本** | Firebase Realtime Database           | [v.webl.ink](https://v.webl.ink) |
 
-Weblink 支持多种信令实现。WebRTC 连接建立后，应用消息、文件、媒体、显示名称和头像都不会通过信令服务传输。
+主要版本使用开源的
+[weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)
+作为信令后端。
 
-### Cloudflare Workers
+使用过程中如有问题，也可以加入 QQ 群反馈：
+[762463759](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)。
 
-公开部署的 [webl.ink](https://webl.ink) 使用：
+## 了解更多
 
-```text
-wss://ws.webl.ink
-```
+- [文档索引](docs/README.md)
+- [架构说明](docs/ARCHITECTURE.md)
+- [P2P 协议](docs/P2P_PROTOCOL.md)
+- [部署说明](docs/DEPLOYMENT.md)
+- [更新日志](CHANGELOG.md)
 
-信令服务由 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker) 提供，运行在 Cloudflare Workers 上，并使用 Durable Objects；每个房间对应一个 Durable Object。
+---
 
-### 自建 WebSocket 服务
-
-[weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) 是基于 Bun 的 WebSocket 信令实现，适合自建部署、本地环境和局域网环境。
-
-### Firebase
-
-Firebase Realtime Database 仍可作为另一种信令后端。需要配置：
-
-```env
-VITE_BACKEND=FIREBASE
-VITE_FIREBASE_API_KEY=your-firebase-api-key
-VITE_FIREBASE_AUTH_DOMAIN=your-firebase-auth-domain
-VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
-VITE_FIREBASE_APP_ID=your-firebase-app-id
-VITE_FIREBASE_DATABASE_URL=your-database-url
-```
-
-协议、隐私边界及部署说明请查看 [docs/SIGNALING.md](docs/SIGNALING.md)。
-
-## 部署
-
-### Docker
-
-仓库中的 `docker-compose.yaml` 会同时构建 Weblink 前端和 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server)。
-
-先修改 `docker-compose.yaml` 中的 WebSocket 地址及其他构建参数，然后运行：
-
-```bash
-docker compose up -d
-```
-
-如需启用 HTTPS，将 `server.crt` 和 `server.pem` 放入 `docker/ssl`，然后运行：
-
-```bash
-ENABLE_SSL=true docker compose up -d
-```
-
-PowerShell：
-
-```powershell
-$env:ENABLE_SSL='true'
-docker compose up -d
-```
-
-也可以直接使用仓库中的 `Dockerfile` 构建和部署前端。
-
-### Vercel 或其他静态托管平台
-
-在托管平台中配置所需的 `VITE_*` 环境变量，并使用以下命令构建：
-
-```bash
-bun run build
-```
-
-使用公网 WebSocket 信令服务时，最小信令配置为：
-
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=wss://ws.webl.ink
-```
-
-WebSocket 地址属于部署配置，无法在应用设置界面中由用户修改。
-
-## STUN 和 TURN
-
-可以通过构建环境变量配置默认 STUN 和 TURN 服务器：
-
-```env
-VITE_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
-VITE_TURN_SERVERS=turn:turn1.example.com:3478|user1|pass1|longterm,turn:turn2.example.com:5349|user2|pass2|hmac
-```
-
-当 NAT 或防火墙阻止客户端直接建立 P2P 连接时，可能需要 TURN 中继服务器。
-
-支持的 TURN 配置格式：
-
-```text
-# coturn：用户名/密码认证
-turn:turn1.example.com:3478|user1|pass1|longterm
-
-# coturn：时间戳/HMAC 认证
-turns:turn2.example.com:5349|user2|pass2|hmac
-
-# Cloudflare TURN
-name|TURN_TOKEN_ID|API_TOKEN|cloudflare
-```
-
-相关资源：
-
-- 公共 STUN 服务器列表：[mondain/public-stun-list](https://gist.github.com/mondain/b0ec1cf5f60ae726202e)
-- Cloudflare TURN：[Cloudflare Calls TURN](https://developers.cloudflare.com/calls/turn/)
-- 自建 TURN：[coturn](https://github.com/coturn/coturn)
-
-## 局域网使用
-
-Weblink 支持在局域网内使用。请确保设备之间网络可达，并且本地防火墙没有阻止 WebRTC 流量。
-
-如果需要完全本地化部署，可以运行 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server)，并在构建前将 `VITE_WEBSOCKET_URL` 指向本地信令服务器。
-
-## 贡献
-
-欢迎提交 Issue 或 Pull Request。
-
-## 许可证
-
-Weblink 基于 [MIT License](LICENSE) 开源。
+<div align="center">
+  <strong>Weblink</strong><br />
+  点对点工具，直接运行在浏览器中。
+</div>

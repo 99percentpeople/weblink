@@ -16,7 +16,7 @@ import {
   FakeRtcTransport,
   makeSession,
   flushRtc,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 
 const protocols: WebRtcProtocol[] = [];
 const local = makeSession();

@@ -1,4 +1,4 @@
-import { IDBChunkCache } from "../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import { IDBChunkCache } from "../../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
 
 const MiB = 1024 * 1024;
 const repetitive = new URLSearchParams(location.search).has(

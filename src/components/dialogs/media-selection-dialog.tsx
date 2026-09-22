@@ -52,7 +52,7 @@ import {
   mergeMediaStreamTracks,
   stopMediaStream,
 } from "@/libs/domain/media-stream";
-import { localStream } from "@/libs/application/local-stream-service";
+import { useAppState } from "@/libs/state/app-state-context";
 import { cn } from "@/libs/cn";
 import {
   createPresetMicrophoneConstraintsDialog,
@@ -116,6 +116,7 @@ const [enableUserProgramAudio, setEnableUserProgramAudio] =
   });
 
 export const createMediaSelectionDialog = () => {
+  const { localStream } = useAppState();
   const cameras = createCameras();
   const microphones = createMicrophones();
 

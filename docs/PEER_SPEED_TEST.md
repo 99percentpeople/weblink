@@ -42,6 +42,71 @@ at most **128 MiB for both directions together**, excluding control messages and
 network/protocol overhead. These defaults are defined in the protocol module, not
 in the UI. Non-supporting peers time out without falling back to file transfers.
 
+## Portable wire sequence
+
+The DataChannel protocol string is versioned as `weblink-speedtest-v1`. The
+channel must be reliable and ordered: `ordered === true`,
+`maxRetransmits === null` and `maxPacketLifeTime === null`. A future
+incompatible diagnostic format must use a different protocol string.
+
+Control frames are JSON strings and are encoded/parsed by
+`encodeSpeedTestMessage()` / `parseSpeedTestMessage()` in
+`domain/speed-test-protocol.ts`. Binary DataChannel messages are raw test
+payload bytes; they do not contain a packet header.
+
+Initial consent handshake:
+
+```text
+initiator -> receiver  { type: "hello", durationMs, maxBytes }
+receiver  -> initiator { type: "offer" }
+receiver performs local user approval
+receiver  -> initiator { type: "ready" }
+```
+
+The receiver may instead send:
+
+```json
+{ "type": "reject", "reason": "busy" }
+{ "type": "reject", "reason": "declined" }
+```
+
+Each measured direction then uses this ordered sequence:
+
+```text
+sender   -> receiver { type: "start", direction }
+receiver -> sender   { type: "go", direction }
+sender   -> receiver { type: "begin", direction }
+sender   -> receiver binary payload messages...
+sender   -> receiver { type: "end", direction, bytes }
+receiver -> sender   { type: "receipt", direction, bytes, durationMs }
+```
+
+Directions are always named relative to the original initiator:
+
+- `upload`: initiator sends payload, receiver measures.
+- `download`: receiver sends payload, initiator measures.
+
+The receiver starts its monotonic timer only after the matching `begin`, counts
+only binary messages received before `end`, and requires the accumulated byte
+count to exactly match `end.bytes`. The sender accepts a result only when the
+matching receipt carries the same byte count.
+
+A compatible non-Web client should therefore:
+
+1. Open one temporary reliable ordered channel with protocol
+   `weblink-speedtest-v1`.
+2. Enforce the limits advertised by `hello` within the protocol maximums.
+3. Require local approval before sending `ready`.
+4. Keep JSON control frames and binary payload messages distinct.
+5. Preserve message ordering; the protocol relies on `end` arriving after all
+   preceding payload messages.
+6. Measure with a local monotonic clock; synchronized peer clocks are not needed.
+7. Validate direction, byte counts and receipt timing before accepting a result.
+8. Close only the temporary diagnostic channel on completion/cancellation.
+
+Unlike file transfer, speed-test payload bytes are intentionally random and are
+not compressed, persisted or resumable.
+
 ## What is measured
 
 The receiver counts binary payload bytes and measures the interval between the
@@ -59,27 +124,12 @@ not file compression, disk writes or IndexedDB finalization. Small or short runs
 background tabs, device throttling and other traffic can distort results. A
 loopback smoke-test result is not a public-network bandwidth benchmark.
 
-## Verification
+## Testing
 
-Run from the frontend repository with dependencies installed:
+Speed-test unit/integration coverage, task UI integration and the real-Chromium
+diagnostic smoke path are documented in [TESTING.md](TESTING.md).
 
-```sh
-bun run test --run test/speed-test.test.ts test/speed-test-service.test.ts test/peer-speed-test.test.tsx
-bun run test:speed
-bun run test:tasks
-TASK_TEST_WIDTH=390 bun run test:tasks
-```
-
-The browser runner requires Chromium on `PATH`, or `CHROMIUM_PATH` pointing to its
-executable. It uses local loopback peer connections, an isolated temporary browser
-profile and a local Vite server, then cleans them up. It does not contact the
-application signaling backend or alter a real browser profile.
-
-- `test:speed` checks both directions, partial blocks, matching receiver receipts,
-  consent refusal, cancellation, unsupported peers and an unaffected chat channel.
-- `test:tasks` checks service ownership across dialog close/unmount, result reopening,
-  task-list Stop and the diagnostic UI. `TASK_TEST_WIDTH` sets the viewport width.
-- `SPEED_TEST_REPORT=/absolute/path/report.json` optionally saves the JSON report.
-
-Real-device, real-network and background/suspension checks remain necessary before
-making claims about cross-browser behavior or user-network throughput.
+The browser smoke uses loopback peer connections and an isolated Chromium
+profile. Real-device, real-network and background/suspension checks remain
+necessary before making claims about cross-browser behavior or user-network
+throughput.

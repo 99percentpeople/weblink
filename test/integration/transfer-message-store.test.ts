@@ -14,7 +14,7 @@ import {
   fakeCache,
   fileMessage,
   fileSession,
-} from "./helpers/file-transfer";
+} from "../support/file-transfer";
 
 afterEach(() => vi.unstubAllGlobals());
 it("the production store resolves message identity after deletion and never resurrects a removed message", () => {

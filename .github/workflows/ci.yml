@@ -37,8 +37,11 @@ jobs:
       - name: Type-check
         run: bun run lint
 
-      - name: Run tests
-        run: bunx vitest run
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Run integration tests
+        run: bun run test:integration
 
       - name: Build production bundle
         run: bun run build

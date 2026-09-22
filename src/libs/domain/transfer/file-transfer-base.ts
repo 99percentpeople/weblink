@@ -9,9 +9,12 @@ import type { FileMetaData } from "@/libs/domain/file";
 import type {
   FileTransfererEventMap,
   FileTransfererOptions,
-  PauseMessage,
   TransferMode,
 } from "./file-transferer";
+import {
+  encodeTransferMessage,
+  type PauseMessage,
+} from "./protocol";
 
 export abstract class FileTransferBase {
   private eventEmitter: MultiEventEmitter<FileTransfererEventMap> =
@@ -224,7 +227,7 @@ export abstract class FileTransferBase {
       if (channel?.readyState === "open") {
         try {
           channel.send(
-            JSON.stringify({
+            encodeTransferMessage({
               type: "pause",
             } satisfies PauseMessage),
           );

@@ -71,23 +71,11 @@ In the local real-Chromium benchmark, the remaining finalization time is mostly
 File commit, not `new File(parts)`. Removing that final whole-file persistence
 step would require a separate storage design, such as OPFS offset writes.
 
-## Reproducible checks
+## Testing and benchmarks
 
-```sh
-bun run test:cache
-bunx vitest run test/chunk-assembly.test.ts
-bun run test:transfer
-bun run bench:cache
-bun run bench:cache --repeating
-```
-
-The cache browser suite uses real IndexedDB and a real module Worker. It checks
-Blob and legacy records, reopening a cache, out-of-order receipt, duplicates,
-concurrent callers/instances, missing/corrupt records, empty files, batch
-boundaries, failed/overlapping flushes, rollback after a successful File put,
-clear failure, worker startup failure and cancellation. The transfer smoke test
-checks byte-exact multi-peer sharing and pause/resume with real compression
-workers. No new test dependency is required.
+Correctness tests, real-Chromium cache/transfer smoke checks and the browser
+benchmark are documented separately in [TESTING.md](TESTING.md). Benchmarks are
+not correctness gates and do not run in the normal test suite.
 
 ### Local before/after measurements
 

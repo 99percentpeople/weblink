@@ -1,10 +1,8 @@
 import type { EventHandler } from "@/libs/utils/event-emitter";
 import type { ClientID } from "./ids";
+import type { SignalingEnvelope } from "./signaling-protocol";
 
-export interface RawSignal {
-  type: string;
-  data: any;
-}
+export type RawSignal = SignalingEnvelope<any>;
 
 export interface ClientSignal extends RawSignal {
   clientId: ClientID;

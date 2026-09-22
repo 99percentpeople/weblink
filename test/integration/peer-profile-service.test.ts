@@ -1,4 +1,4 @@
-import { FakeRtcTransport } from "./helpers/rtc-transport";
+import { FakeRtcTransport } from "../support/rtc-transport";
 import { describe, expect, it, vi } from "vitest";
 import type { PeerSession } from "@/libs/domain/session";
 import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/domain/profile";

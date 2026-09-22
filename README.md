@@ -1,220 +1,137 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
-    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="280" height="89" />
+    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
   </picture>
 
+  <h3>Share more. Install less.</h3>
+
   <p>
-    A browser-based P2P chat, file transfer, and file synchronization application powered by WebRTC.
+    A browser-native P2P workspace for file transfer, synchronization, chat,
+    clipboard sharing, screen sharing, voice, and video — powered by WebRTC.
+  </p>
+
+  <p>
+    <a href="https://webl.ink"><strong>Open Weblink</strong></a>
+    ·
+    <a href="docs/README.md">Documentation</a>
+    ·
+    <a href="README_CN.md">中文</a>
   </p>
 
   <p>
     <a href="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml">
       <img src="https://github.com/99percentpeople/weblink/actions/workflows/ci.yml/badge.svg" alt="CI" />
     </a>
-  </p>
-
-  <p>
-    <strong>English</strong> · <a href="README_CN.md">中文</a>
+    <img src="https://img.shields.io/badge/WebRTC-P2P-5b5bd6" alt="WebRTC P2P" />
+    <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" />
   </p>
 </div>
 
-## Introduction
+---
 
-Weblink is a WebRTC-based web application for **file transfer**, **file synchronization**, and **text/voice/video communication**. It runs directly in modern browsers without requiring a native client.
+## A browser can be a peer-to-peer workspace
 
-Application data is transferred peer-to-peer after a WebRTC connection is established. A signaling service is used only for peer discovery and WebRTC connection setup. When a room password is configured, signaling payloads are encrypted with that password.
+Weblink brings file sharing and real-time communication into one browser app.
 
-### Public deployments
+Open the site on two devices, join the same room, and establish a WebRTC
+connection. Once connected, chat, files, clipboard content, and media travel
+through peer-to-peer channels rather than through the signaling service.
 
-| Deployment | Signaling backend                    | Address                                  |
-| ---------- | ------------------------------------ | ---------------------------------------- |
-| Primary    | Cloudflare Workers + Durable Objects | [https://webl.ink](https://webl.ink)     |
-| Firebase   | Firebase Realtime Database           | [https://v.webl.ink](https://v.webl.ink) |
+No native client is required.
 
-The primary deployment uses `wss://ws.webl.ink` for WebSocket signaling. The service is provided by [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker) running on Cloudflare Workers.
+## Why Weblink?
 
-## Features
+|                                                                                          |                                                                                                                                          |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **⚡ WebRTC peer transfer**<br>Send files and application data over WebRTC DataChannels. | **⏯ Resumable transfers**<br>Continue interrupted file transfers from already cached chunks.                                            |
+| **🔄 File synchronization**<br>Browse and retrieve files exposed by connected peers.     | **💬 Real-time communication**<br>Share text, clipboard content, voice, video, screens, and audio.                                       |
+| **📦 Browser-native storage**<br>Cache transferred files locally with IndexedDB.         | **🧭 Connection diagnostics**<br>Inspect WebRTC connection details and run peer-to-peer throughput tests.                                |
+| **📱 PWA integration**<br>Install Weblink and use system sharing workflows.              | **🧩 Portable protocols**<br>Signaling, control, file-transfer, and diagnostic wire contracts are documented for future non-Web clients. |
 
-| Feature                       | Description                                                   |
-| ----------------------------- | ------------------------------------------------------------- |
-| 🔄 **File Synchronization**   | Browse and retrieve files cached by another client.           |
-| ⏯️ **Resume Transfer**        | Resume interrupted file transfers.                            |
-| 📂 **File Caching**           | Cache transferred files locally in IndexedDB.                 |
-| 📁 **Folder Transfer**        | Send folders with automatic packaging and compression.        |
-| 📦 **Compressed Transfer**    | Optionally compress files before transfer.                    |
-| ⚡ **Multi-Channel Transfer** | Transfer data over multiple WebRTC data channels in parallel. |
-| 🔍 **File Search**            | Search files cached locally and by connected peers.           |
-| 📋 **Clipboard Transfer**     | Paste clipboard content directly into a chat.                 |
-| 💬 **Text Chat**              | Exchange text messages over WebRTC.                           |
-| 🎙️ **Voice / Video**          | Share microphones and cameras with connected clients.         |
-| 🖥️ **Screen Sharing**         | Share a screen together with system and microphone audio.     |
-| 🔗 **Share and Forward**      | Use system sharing after installing Weblink as a PWA.         |
+## One room, multiple workflows
 
-See [CHANGELOG.md](CHANGELOG.md) for recent changes.
+### Files
 
-## Quick Start
+- send files and folders directly between peers;
+- optionally compress file chunks before transfer;
+- resume interrupted transfers;
+- keep completed files in a local browser cache;
+- search local and peer-exposed cached files;
+- forward or request files without leaving the room.
 
-### Requirements
+### Communication
 
-- [Bun](https://bun.sh/)
-- A modern browser with WebRTC support
+- text chat over the P2P control channel;
+- clipboard sharing between connected devices;
+- camera and microphone sharing;
+- screen sharing with optional system and microphone audio;
+- picture-in-picture and media controls for live sessions.
 
-### Install
+### Diagnostics
 
-```bash
-git clone https://github.com/99percentpeople/weblink.git
-cd weblink
-bun install
+- inspect ICE and connection state;
+- see the active WebRTC route;
+- run a versioned peer-to-peer throughput test;
+- keep transfer and diagnostic activity visible through the unified task view.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Browser A] -->|Join room / SDP / ICE| S[Signaling]
+    B[Browser B] -->|Join room / SDP / ICE| S
+
+    A <-->|WebRTC Data / Media| B
 ```
 
-Create `.env.local` and select a signaling backend.
+The signaling layer is used for peer discovery, room membership, and WebRTC
+negotiation. After the peer connection is established, application traffic uses
+WebRTC peer-to-peer channels.
 
-For the public WebSocket signaling service:
+When a room password is configured, Weblink can protect signaling payloads during
+connection setup.
 
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=wss://ws.webl.ink
-```
+Display names and avatars are exchanged through the P2P control protocol rather
+than published as signaling presence.
 
-For a locally hosted Bun signaling server:
+## Built with interoperability in mind
 
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=ws://127.0.0.1:9000
-```
+Weblink's P2P protocols are documented independently from the browser UI.
 
-Then start development:
+That includes:
 
-```bash
-bun dev
-```
+- the signaling envelope and reconnect semantics;
+- the typed P2P request/reply control protocol;
+- the file-transfer DataChannel control frames and binary packet format;
+- the versioned peer speed-test protocol.
 
-Build the production frontend with:
+This keeps the browser implementation from becoming the protocol specification
+itself and leaves a clearer path for future desktop, mobile, CLI, or native
+clients.
 
-```bash
-bun run build
-```
+## Try Weblink
 
-## Signaling Backends
+| Deployment   | Signaling backend                    | Open                             |
+| ------------ | ------------------------------------ | -------------------------------- |
+| **Primary**  | Cloudflare Workers + Durable Objects | [webl.ink](https://webl.ink)     |
+| **Firebase** | Firebase Realtime Database           | [v.webl.ink](https://v.webl.ink) |
 
-Weblink supports multiple signaling implementations. The signaling service does not carry application messages, files, media, display names, or avatars after the WebRTC connection is ready.
+The primary deployment uses the open-source
+[weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)
+signaling backend.
 
-### Cloudflare Workers
+## Learn more
 
-The public [webl.ink](https://webl.ink) deployment uses:
+- [Documentation](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [P2P protocol](docs/P2P_PROTOCOL.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Changelog](CHANGELOG.md)
 
-```text
-wss://ws.webl.ink
-```
+---
 
-It is powered by [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker), using Cloudflare Workers and Durable Objects. Each room is mapped to a Durable Object.
-
-### Self-hosted WebSocket server
-
-[weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) is the Bun-based WebSocket implementation for self-hosted deployments and local/LAN environments.
-
-### Firebase
-
-Firebase Realtime Database remains available as an alternative signaling backend. Configure:
-
-```env
-VITE_BACKEND=FIREBASE
-VITE_FIREBASE_API_KEY=your-firebase-api-key
-VITE_FIREBASE_AUTH_DOMAIN=your-firebase-auth-domain
-VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-firebase-storage-bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your-firebase-messaging-sender-id
-VITE_FIREBASE_APP_ID=your-firebase-app-id
-VITE_FIREBASE_DATABASE_URL=your-database-url
-```
-
-For protocol details, privacy boundaries, and deployment notes, see [docs/SIGNALING.md](docs/SIGNALING.md).
-
-## Deployment
-
-### Docker
-
-The included `docker-compose.yaml` builds the Weblink frontend together with [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server).
-
-Update the WebSocket URL and other build arguments in `docker-compose.yaml`, then run:
-
-```bash
-docker compose up -d
-```
-
-For HTTPS, place `server.crt` and `server.pem` in `docker/ssl`, then enable SSL:
-
-```bash
-ENABLE_SSL=true docker compose up -d
-```
-
-PowerShell:
-
-```powershell
-$env:ENABLE_SSL='true'
-docker compose up -d
-```
-
-You can also build and deploy the included `Dockerfile` directly.
-
-### Vercel or other static hosting
-
-Configure the required `VITE_*` environment variables in the hosting provider and build the project with:
-
-```bash
-bun run build
-```
-
-For the public WebSocket service, the minimum signaling configuration is:
-
-```env
-VITE_BACKEND=WEBSOCKET
-VITE_WEBSOCKET_URL=wss://ws.webl.ink
-```
-
-The WebSocket endpoint is a deployment setting and cannot be changed from the application settings UI.
-
-## STUN and TURN
-
-Default STUN and TURN servers can be configured at build time:
-
-```env
-VITE_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
-VITE_TURN_SERVERS=turn:turn1.example.com:3478|user1|pass1|longterm,turn:turn2.example.com:5349|user2|pass2|hmac
-```
-
-A TURN server may be required when direct P2P connectivity is blocked by NAT or firewall rules.
-
-Supported TURN configuration formats:
-
-```text
-# coturn with username/password
-turn:turn1.example.com:3478|user1|pass1|longterm
-
-# coturn with timestamp/HMAC authentication
-turns:turn2.example.com:5349|user2|pass2|hmac
-
-# Cloudflare TURN
-name|TURN_TOKEN_ID|API_TOKEN|cloudflare
-```
-
-Useful references:
-
-- Public STUN server list: [mondain/public-stun-list](https://gist.github.com/mondain/b0ec1cf5f60ae726202e)
-- Cloudflare TURN: [Cloudflare Calls TURN](https://developers.cloudflare.com/calls/turn/)
-- Self-hosted TURN: [coturn](https://github.com/coturn/coturn)
-
-## LAN Usage
-
-Weblink can be used inside a LAN. Ensure the devices can reach each other and that local firewall rules do not block WebRTC traffic.
-
-For a fully local setup, run [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) and point `VITE_WEBSOCKET_URL` to the local signaling server before building the frontend.
-
-## Contributing
-
-Contributions are welcome. Feel free to open an issue or submit a pull request.
-
-## License
-
-Weblink is released under the [MIT License](LICENSE).
+<div align="center">
+  <strong>Weblink</strong><br />
+  Peer-to-peer tools, directly in the browser.
+</div>

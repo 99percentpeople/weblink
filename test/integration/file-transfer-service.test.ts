@@ -19,14 +19,14 @@ import {
   FakeRtcTransport,
   deferred,
   flushRtc,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 import {
   fakeCache,
   fakeChannel,
   fileMessage,
   fileSession,
   registryFixture,
-} from "./helpers/file-transfer";
+} from "../support/file-transfer";
 
 function setup() {
   const f = registryFixture();

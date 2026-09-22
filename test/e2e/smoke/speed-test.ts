@@ -1,11 +1,11 @@
 import {
   createSpeedTestChannel,
   runSpeedTest,
-} from "../../src/libs/domain/speed-test";
+} from "../../../src/libs/domain/speed-test";
 import {
   SPEED_TEST_PROTOCOL,
   type SpeedTestResult,
-} from "../../src/libs/domain/speed-test-protocol";
+} from "../../../src/libs/domain/speed-test-protocol";
 
 declare global {
   interface Window {

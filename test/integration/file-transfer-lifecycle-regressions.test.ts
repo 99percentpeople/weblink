@@ -32,7 +32,7 @@ import {
   deferred,
   flushRtc,
   makeSession,
-} from "./helpers/rtc-transport";
+} from "../support/rtc-transport";
 
 class TestChannel extends EventTarget {
   readyState: RTCDataChannelState = "open";
