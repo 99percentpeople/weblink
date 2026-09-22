@@ -314,6 +314,14 @@
       "menu": {
         "refresh": "重新整理",
         "chat": "聊天"
+      },
+      "search_input": "搜尋對方檔案名稱…",
+      "loading": "正在載入目錄…",
+      "load_failed": "目錄重新整理失敗",
+      "sharing_disabled": "對方已關閉檔案清單分享。",
+      "disconnected": {
+        "title": "用戶端尚未連線",
+        "description": "連線建立後，將自動載入對方分享的檔案清單。"
       }
     },
     "message_error": "發生錯誤"
@@ -638,6 +646,13 @@
       "title": "發生錯誤",
       "description": "請嘗試刷新頁面或聯繫開發者，錯誤信息如下：",
       "reset": "重置"
+    },
+    "pagination": {
+      "total": "共 {{count}} 個檔案",
+      "page_size": "每頁筆數",
+      "page": "{{page}} / {{count}}",
+      "previous": "上一頁",
+      "next": "下一頁"
     }
   }
 }

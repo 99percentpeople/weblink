@@ -85,13 +85,49 @@ export type ErrorMessage = BaseExchangeMessage & {
   data?: unknown;
 };
 
+/** Breaking directory protocol: queries and responses are paginated. */
+export const P2P_STORAGE_PROTOCOL_VERSION = 2 as const;
+export const STORAGE_MAX_PAGE_SIZE = 100;
+export const STORAGE_MAX_SEARCH_LENGTH = 256;
+export const STORAGE_SORT_FIELDS = [
+  "fileName",
+  "fileSize",
+  "createdAt",
+  "lastModified",
+  "mimetype",
+] as const;
+export type StorageSortField =
+  (typeof STORAGE_SORT_FIELDS)[number];
+export type StorageQuery = {
+  /** Zero-based page index; an out-of-range page is clamped by the provider. */
+  pageIndex: number;
+  pageSize: number;
+  /** Case-insensitive filename substring, normalized with NFKC and trimmed. */
+  search?: string;
+  sort?: { field: StorageSortField; desc: boolean }[];
+};
+export type StoragePage = {
+  items: ProtocolFileMetadata[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  sharingEnabled: boolean;
+};
 export type StorageMessage = BaseExchangeMessage & {
   type: "storage";
-  data: ProtocolFileMetadata[];
+  version: typeof P2P_STORAGE_PROTOCOL_VERSION;
+  data: StoragePage;
 };
 
-export type RequestStorageMessage = BaseExchangeMessage & {
-  type: "request-storage";
+export type RequestStorageMessage = BaseExchangeMessage &
+  StorageQuery & {
+    type: "request-storage";
+    version: typeof P2P_STORAGE_PROTOCOL_VERSION;
+  };
+
+/** Invalidation only: deliberately carries no file data or change details. */
+export type StorageChangedMessage = BaseExchangeMessage & {
+  type: "storage-changed";
 };
 
 export type StreamStateMessage = BaseExchangeMessage & {
@@ -115,6 +151,7 @@ export type SessionMessage =
   | ErrorMessage
   | StorageMessage
   | RequestStorageMessage
+  | StorageChangedMessage
   | ResumeFileMessage
   | StreamStateMessage
   | ClientProfileMessage;
@@ -164,7 +201,8 @@ export type RequestType = keyof typeof requestSpec;
 export type NotificationType =
   | "client-profile"
   | "stream-state"
-  | "read-text";
+  | "read-text"
+  | "storage-changed";
 
 export type MessageOf<T extends SessionMessage["type"]> =
   Extract<SessionMessage, { type: T }>;
@@ -182,14 +220,10 @@ export type MessageMetadata = {
 };
 
 export type RequestResult<T extends RequestType> =
-  T extends "request-storage"
-    ? ProtocolFileMetadata[]
-    : AckMessage;
+  T extends "request-storage" ? StoragePage : AckMessage;
 
 export type HandlerResult<T extends RequestType> =
-  T extends "request-storage"
-    ? ProtocolFileMetadata[]
-    : void;
+  T extends "request-storage" ? StoragePage : void;
 
 export type ProtocolPeer = {
   clientId: ProtocolPeerID;
@@ -214,7 +248,9 @@ export function createSessionMessage<
     type,
     ...(type === "client-profile"
       ? { version: P2P_PROFILE_PROTOCOL_VERSION }
-      : {}),
+      : type === "request-storage" || type === "storage"
+        ? { version: P2P_STORAGE_PROTOCOL_VERSION }
+        : {}),
   } as MessageOf<T>;
 }
 

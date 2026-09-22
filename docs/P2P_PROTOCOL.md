@@ -129,23 +129,125 @@ const receipt = await protocol.call(session, "send-text", {
   data: "Hello",
 });
 
-const files = await protocol.call(
+const page = await protocol.call(
   session,
   "request-storage",
-  {},
+  {
+    pageIndex: 0,
+    pageSize: 25,
+    search: "report",
+    sort: [{ field: "fileName", desc: false }],
+  },
 );
 
 const stopHandling = protocol.handle(
   "request-storage",
-  async ({ session, signal }) => {
+  async ({ session, message, signal }) => {
     // Apply local authorization/policy here.
-    return [];
+    return {
+      items: [],
+      totalCount: 0,
+      pageIndex: 0,
+      pageSize: message.pageSize,
+      sharingEnabled: false,
+    };
   },
 );
 ```
 
-`request-storage` returns portable file metadata DTOs. It never exposes a
+`request-storage` returns a `StoragePage`, not a metadata array. It never exposes a
 browser `File`, IndexedDB record or cache implementation.
+
+### Paginated directory contract (version 2)
+
+`request-storage` and `storage` require `version: 2` (the message factory supplies
+it). This is a breaking replacement; version 1/unversioned full-list requests and
+array responses are not accepted. It does not change the file-data protocol or signaling.
+
+Query payload:
+
+```ts
+type StorageQuery = {
+  pageIndex: number; // zero-based non-negative safe integer
+  pageSize: number; // integer in [1, 100]
+  search?: string; // at most 256 UTF-16 code units
+  sort?: {
+    field:
+      | "fileName"
+      | "fileSize"
+      | "createdAt"
+      | "lastModified"
+      | "mimetype";
+    desc: boolean;
+  }[];
+};
+```
+
+Providers filter the **entire visible directory** before sorting and slicing.
+Search is a filename substring after NFKC normalization, trimming and lowercasing
+on both sides of the comparison. Sorting uses the requested field order; absent
+sorting defaults to filename ascending. Text sort keys use the same normalization;
+numeric fields use numeric comparison. Missing optional values sort as zero/empty
+string. File ID ascending is the final deterministic tie-breaker, using code-unit
+comparison rather than locale collation. Duplicate/unknown sort fields are rejected.
+
+The `storage.data` response is:
+
+```ts
+type StoragePage = {
+  items: ProtocolFileMetadata[];
+  totalCount: number; // matches after search, before slicing
+  pageIndex: number; // actual page, clamped to the last valid page
+  pageSize: number;
+  sharingEnabled: boolean;
+};
+```
+
+An empty or denied directory has zero items/count and page index zero. A denied
+response has `sharingEnabled: false` and reveals no underlying count. A request
+re-checks per-peer `provideFileList` every time. This flag controls enumeration,
+not authorization for independently known file IDs or existing transfers.
+
+Only complete, assembled cache files enter the metadata index. Explicit DTO
+projection excludes `file`, `chunkCount`, `isComplete`, and `isMerging`.
+The browser index is updated by committed cache events; page queries do not flush
+or scan every IndexedDB file database. Query-time CPU still filters/sorts the
+in-memory metadata index; this is not a persistent database pagination index.
+
+### Directory invalidation
+
+`storage-changed` is an envelope-only notification. It carries **no payload**:
+no file IDs, metadata, deltas, counts, revisions or sharing state. Receivers
+invalidate their active query and request its current page again with the same
+page size, search and sort. Do not send unsolicited `storage` responses.
+
+The provider coalesces visible directory changes over 100 ms, and does not publish
+chunk progress. It notifies only ready peers permitted to list files. A sharing
+policy change also sends one empty invalidation, including when access is disabled;
+subsequent hidden directory changes do not notify that peer.
+
+`FileCatalogService` owns provider/notification lifetime. `RemoteFileCatalog`
+coordinates one active page: concurrent invalidations coalesce, changes during a
+request force a follow-up query, superseded query responses are discarded, and
+query changes/disposal cancel pending work. Requests retain the standard protocol
+send/reply deadlines. Failures leave an explicit stale/error state; user refresh,
+a later notification, or reconnect can retry. Notifications themselves have no
+receipt or durable delivery guarantee.
+
+A browser directory view fetches pages only while the current route is exactly
+`/client/:id/sync` for its peer (a trailing slash is allowed), the peer is online,
+and its message channel is ready. Leaving that route or losing the connection
+removes the view's subscription and cancels pending work, even if the component
+remains mounted. Notifications elsewhere do not trigger directory queries.
+Reopening the view or recovering the connection always requests a fresh page.
+Disconnected peers show an empty state instead of a stale table; the header's
+client-settings entry remains available. Refresh is beside the table's View control.
+TanStack Table controls pagination,
+search and sorting with `manualPagination`, `manualFiltering`, `manualSorting` and
+remote `rowCount`; it does not re-slice or re-sort each returned page. Search input
+is debounced 250 ms, and search/sort/page-size changes reset to page zero. Provider
+clamping is applied to controlled pagination without issuing a duplicate query.
+Local download state remains a display column, not a remote query filter.
 
 ## Notifications
 
@@ -154,6 +256,7 @@ Notifications do not wait for a remote ACK:
 - `client-profile`
 - `stream-state`
 - `read-text`
+- `storage-changed` (envelope-only directory invalidation)
 
 ```ts
 await protocol.notify(session, "client-profile", {
@@ -194,8 +297,7 @@ file-transfer protocol.
 - optional chunk ranges, where each item is either one numeric index or an
   inclusive `[start, end]` pair
 
-`storage` replies use portable metadata with `mimetype`, matching the
-existing wire format. Browser-only fields such as `File`, cache handles and
+`storage.data.items` uses portable metadata with `mimetype`. Browser-only fields such as `File`, cache handles and
 transfer progress are never part of the control protocol.
 
 ## Timeouts, cancellation and retries

@@ -371,6 +371,29 @@ export class P2PRequestManager<
         !state.receivedStorage.has(message.id)
       )
         return;
+      if (expected) {
+        const query = pending!
+          .request as MessageOf<"request-storage">;
+        const lastPage = Math.max(
+          0,
+          Math.ceil(
+            message.data.totalCount / query.pageSize,
+          ) - 1,
+        );
+        if (
+          message.data.pageSize !== query.pageSize ||
+          message.data.pageIndex !==
+            Math.min(query.pageIndex, lastPage)
+        ) {
+          pending!.fail(
+            new P2PProtocolError(
+              "invalid-message",
+              "Storage response does not match the requested page",
+            ),
+          );
+          return;
+        }
+      }
       state.receivedStorage.set(message.id, Date.now());
       // Re-ACK a repeated response too; never lose a receipt through dedup.
       await this.send(

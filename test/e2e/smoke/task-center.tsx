@@ -196,7 +196,13 @@ async function main() {
       sendText: unexpected,
       sendFile: unexpected,
       sendClipboard: unexpected,
-      requestStorage: unexpected,
+      catalog: {
+        watch: () => {
+          throw new Error(
+            "Unexpected catalog query in diagnostic test",
+          );
+        },
+      },
       retryMessage: unexpected,
       shareFile: unexpected,
       resumeFile: unexpected,

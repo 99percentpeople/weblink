@@ -1,7 +1,6 @@
 import { DBNAME_PREFIX } from "@/constants";
 import type {
   ChunkCache,
-  ChunkCacheInfo,
   FileMetaData,
 } from "@/libs/domain/file";
 import type { FileID } from "@/libs/domain/ids";
@@ -13,7 +12,10 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 
+import { FileCatalogIndex } from "./file-catalog-index";
+
 export class FileCacheFactory {
+  readonly catalog = new FileCatalogIndex();
   status: Accessor<"ready" | "loading"> = () =>
     appState.cache.status;
   readonly cacheInfo: Record<FileID, FileMetaData> =
@@ -73,12 +75,14 @@ export class FileCacheFactory {
     });
 
     cache.addEventListener("update", (ev) => {
+      this.catalog.update(id, ev.detail);
       if (ev.detail) {
         setAppState("cache", "cacheInfo", id, ev.detail);
       }
     });
 
     cache.addEventListener("cleanup", () => {
+      this.catalog.update(id, null);
       setAppState("cache", "cacheInfo", id, undefined!);
       setAppState("cache", "caches", id, undefined!);
     });
@@ -99,32 +103,6 @@ export class FileCacheFactory {
 
   private async addCache(id: FileID, cache: ChunkCache) {
     setAppState("cache", "caches", id, cache);
-  }
-
-  async getStorages(
-    options: {
-      includeIncomplete?: boolean;
-    } = {},
-  ): Promise<ChunkCacheInfo[] | null> {
-    const includeIncomplete =
-      options.includeIncomplete ?? false;
-
-    return Promise.all(
-      Object.values(this.caches).map((cache) =>
-        cache.getInfo(),
-      ),
-    ).then((infos) => {
-      return infos
-        .filter((info): info is FileMetaData => {
-          if (!info) return false;
-          if (includeIncomplete) return true;
-          return Boolean(info.isComplete);
-        })
-        .map((info) => {
-          const { file, ...rest } = info;
-          return rest;
-        }) as ChunkCacheInfo[];
-    });
   }
 
   async createCache(id?: FileID): Promise<ChunkCache> {

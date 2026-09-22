@@ -3,6 +3,12 @@ import type {
   SessionMessage,
 } from "./messages";
 import { P2PProtocolError } from "./errors";
+import {
+  P2P_STORAGE_PROTOCOL_VERSION,
+  STORAGE_MAX_PAGE_SIZE,
+  STORAGE_MAX_SEARCH_LENGTH,
+  STORAGE_SORT_FIELDS,
+} from "./messages";
 
 const record = (
   value: unknown,
@@ -60,6 +66,98 @@ function ranges(value: unknown, total: number): boolean {
   );
 }
 
+function pagination(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    integer(value.pageIndex) &&
+    integer(value.pageSize) &&
+    value.pageSize > 0 &&
+    value.pageSize <= STORAGE_MAX_PAGE_SIZE &&
+    Number.isSafeInteger(value.pageIndex * value.pageSize)
+  );
+}
+
+function storageQuery(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    pagination(value) &&
+    optional(
+      value.search,
+      (search) =>
+        text(search) &&
+        search.length <= STORAGE_MAX_SEARCH_LENGTH,
+    ) &&
+    optional(
+      value.sort,
+      (sort) =>
+        Array.isArray(sort) &&
+        sort.length <= STORAGE_SORT_FIELDS.length &&
+        sort.every(
+          (item) =>
+            record(item) &&
+            STORAGE_SORT_FIELDS.some(
+              (field) => field === item.field,
+            ) &&
+            typeof item.desc === "boolean",
+        ) &&
+        new Set(sort.map((item) => item.field)).size ===
+          sort.length,
+    )
+  );
+}
+
+function storagePage(value: unknown): boolean {
+  if (
+    !record(value) ||
+    !pagination(value) ||
+    !integer(value.totalCount) ||
+    typeof value.sharingEnabled !== "boolean" ||
+    !Array.isArray(value.items)
+  )
+    return false;
+  const pageIndex = value.pageIndex as number;
+  const pageSize = value.pageSize as number;
+  const lastPage = Math.max(
+    0,
+    Math.ceil(value.totalCount / pageSize) - 1,
+  );
+  return (
+    pageIndex <= lastPage &&
+    (value.sharingEnabled || value.totalCount === 0) &&
+    value.items.length ===
+      Math.min(
+        pageSize,
+        Math.max(
+          0,
+          value.totalCount - pageIndex * pageSize,
+        ),
+      ) &&
+    value.items.every(
+      (item) =>
+        record(item) &&
+        fileMetadata(item, true) &&
+        optional(item.createdAt, timestamp) &&
+        optional(item.from, id) &&
+        Object.keys(item).every((key) =>
+          [
+            "id",
+            "fileName",
+            "fileSize",
+            "lastModified",
+            "mimetype",
+            "chunkSize",
+            "from",
+            "createdAt",
+          ].includes(key),
+        ),
+    ) &&
+    new Set(value.items.map((item) => item.id)).size ===
+      value.items.length
+  );
+}
+
 /** Validate network input before trusting TypeScript's discriminated union. */
 export function validateSessionMessage(
   value: unknown,
@@ -92,8 +190,23 @@ export function validateSessionMessage(
       valid = text(value.error);
       break;
     case "read-text":
-    case "request-storage":
       valid = true;
+      break;
+    case "storage-changed":
+      valid = Object.keys(value).every((key) =>
+        [
+          "id",
+          "type",
+          "createdAt",
+          "client",
+          "target",
+        ].includes(key),
+      );
+      break;
+    case "request-storage":
+      valid =
+        value.version === P2P_STORAGE_PROTOCOL_VERSION &&
+        storageQuery(value);
       break;
     case "resume-file":
       valid = id(value.fid);
@@ -117,14 +230,8 @@ export function validateSessionMessage(
       break;
     case "storage":
       valid =
-        Array.isArray(value.data) &&
-        value.data.every(
-          (item) =>
-            record(item) &&
-            fileMetadata(item, true) &&
-            optional(item.createdAt, timestamp) &&
-            optional(item.from, id),
-        );
+        value.version === P2P_STORAGE_PROTOCOL_VERSION &&
+        storagePage(value.data);
       break;
     case "stream-state":
       valid =

@@ -314,6 +314,14 @@
       "menu": {
         "refresh": "刷新",
         "chat": "聊天"
+      },
+      "search_input": "搜索对方文件名…",
+      "loading": "正在加载目录…",
+      "load_failed": "目录刷新失败",
+      "sharing_disabled": "对方已关闭文件列表共享。",
+      "disconnected": {
+        "title": "客户端尚未连接",
+        "description": "连接建立后，将自动加载对方共享的文件列表。"
       }
     },
     "message_error": "发生错误"
@@ -638,6 +646,13 @@
       "title": "发生错误",
       "description": "请尝试刷新页面或联系开发者，错误信息如下：",
       "reset": "重置"
+    },
+    "pagination": {
+      "total": "共 {{count}} 个文件",
+      "page_size": "每页条数",
+      "page": "{{page}} / {{count}}",
+      "previous": "上一页",
+      "next": "下一页"
     }
   }
 }

@@ -45,7 +45,7 @@ import type { ClientInfo } from "@/libs/state/app-state";
 import { catchError } from "@/libs/catch";
 import { ChatMoreMessageButton } from "./components/chat-more-message-button";
 import { MessageContent } from "./components/message";
-import { ChatHeader } from "./components/chat-header";
+import { ClientHeader } from "./components/client-header";
 import { appState } from "@/libs/state/app-state";
 import { transferManager } from "@/libs/application/transfer/transfer-service";
 import { cacheManager } from "@/libs/application/cache-service";
@@ -312,12 +312,11 @@ export default function ClientPage(
             >
               <IconArrowDownward class="size-6 sm:size-8" />
             </FloatingButton>
-            <ChatHeader
-              info={clientInfo()}
+            <ClientHeader
+              clientId={client().clientId}
               client={client()}
-              class="border-border bg-background/80 sticky
-                top-[var(--mobile-header-height)] z-10 flex items-center
-                justify-between gap-1 border-b backdrop-blur md:top-0"
+              info={clientInfo()}
+              view="chat"
             />
             <DropArea
               class="relative flex-1"

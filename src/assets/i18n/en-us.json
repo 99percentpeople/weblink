@@ -315,6 +315,14 @@
       "menu": {
         "refresh": "Refresh",
         "chat": "Chat"
+      },
+      "search_input": "Search remote filenames…",
+      "loading": "Loading directory…",
+      "load_failed": "Could not refresh the directory",
+      "sharing_disabled": "This client is not providing its file list.",
+      "disconnected": {
+        "title": "Client not connected",
+        "description": "Shared files will load automatically once this client connects."
       }
     }
   },
@@ -635,6 +643,13 @@
       "title": "Error Occurred",
       "description": "Please try to refresh the page or contact the developer, the error message is:",
       "reset": "Reset"
+    },
+    "pagination": {
+      "total": "{{count}} files",
+      "page_size": "Rows per page",
+      "page": "{{page}} / {{count}}",
+      "previous": "Previous page",
+      "next": "Next page"
     }
   }
 }

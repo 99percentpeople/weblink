@@ -45,6 +45,7 @@ import {
 } from "@/libs/application/task-service";
 import { createClientService } from "@/libs/application/client-service-factory";
 import { RoomService } from "@/libs/application/room-service";
+import { FileCatalogService } from "@/libs/application/file-catalog-service";
 import type { LocalStreamService } from "@/libs/application/local-stream-service";
 
 export interface AppStateContextProps {
@@ -67,9 +68,7 @@ export interface AppStateContextProps {
     text: string,
     target: ClientID | ClientID[],
   ) => Promise<void>;
-  requestStorage: (
-    target: ClientID | ClientID[],
-  ) => Promise<void>;
+  catalog: Pick<FileCatalogService<PeerSession>, "watch">;
   retryMessage: (message: StoreMessage) => Promise<void>;
   shareFile: (fileId: FileID, target: ClientID) => void;
   resumeFile: (
@@ -134,6 +133,22 @@ export const AppStateProvider: Component<
     getChunkSize: () => appState.options.chunkSize,
   });
   onCleanup(() => files.dispose());
+  const catalog = new FileCatalogService({
+    protocol,
+    index: cacheManager.catalog,
+    getSessions: () =>
+      Object.values(sessionService.sessions),
+    isReady: (session) => session.isMessageChannelReady,
+    canList: (session) =>
+      resolveClientConfig(
+        appState.options,
+        session.targetClientId,
+      ).provideFileList,
+    onSessionClosed: (handler) =>
+      rtc.onSessionClosed(handler),
+  });
+  createEffect(() => catalog.syncSharing());
+  onCleanup(() => catalog.dispose());
   const peerProfiles = new PeerProfileService(protocol, {
     getLocalClient: () => ({
       clientId: appState.profile.clientId,
@@ -305,21 +320,6 @@ export const AppStateProvider: Component<
       },
     );
 
-    const offRequestStorage = protocol.handle(
-      "request-storage",
-      async ({ session }) => {
-        const provideFileList = resolveClientConfig(
-          appState.options,
-          session.targetClientId,
-        ).provideFileList;
-        return provideFileList
-          ? ((await cacheManager.getStorages({
-              includeIncomplete: false,
-            })) ?? [])
-          : [];
-      },
-    );
-
     const offSpeedTestChannel = rtc.onChannel(
       ({ session, channel }) => {
         speedTests.handleChannel(
@@ -335,7 +335,6 @@ export const AppStateProvider: Component<
       offSendText();
       offClipboard();
       offStreamState();
-      offRequestStorage();
       offSpeedTestChannel();
     });
   });
@@ -462,32 +461,6 @@ export const AppStateProvider: Component<
     }
   }
 
-  async function requestStorage(
-    target: ClientID | ClientID[],
-  ) {
-    for (const session of getTargetSessions(target)) {
-      const [error, storage] = await catchError(
-        protocol.call(session, "request-storage", {}),
-      );
-      if (error) {
-        console.warn(
-          "[AppState] request-storage failed",
-          error,
-        );
-        continue;
-      }
-      if (
-        sessionService.sessions[session.targetClientId] ===
-        session
-      ) {
-        sessionService.setStorage(
-          session.targetClientId,
-          storage,
-        );
-      }
-    }
-  }
-
   async function retryMessage(message: StoreMessage) {
     const self = appState.profile.clientId;
     const sessionId =
@@ -547,7 +520,7 @@ export const AppStateProvider: Component<
         sendText,
         sendFile,
         sendClipboard,
-        requestStorage,
+        catalog,
         retryMessage,
         requestFile,
         resumeFile,

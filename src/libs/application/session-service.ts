@@ -1,4 +1,3 @@
-import type { ChunkMetaData } from "@/libs/domain/file";
 import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../domain/session";
 import type { Client } from "@/libs/domain/client";
@@ -62,18 +61,6 @@ export class SessionService {
           ...(state.clipboard ?? []),
           message,
         ];
-      }),
-    );
-  }
-
-  setStorage(clientId: ClientID, storage: ChunkMetaData[]) {
-    if (!this.clientViewData[clientId]) return;
-    setAppState(
-      "session",
-      "clientViewData",
-      clientId,
-      produce((state) => {
-        state.storage = [...storage];
       }),
     );
   }

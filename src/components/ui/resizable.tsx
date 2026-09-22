@@ -2,13 +2,35 @@ import { cn } from "@/libs/cn";
 import type {
   DynamicProps,
   HandleProps,
+  PanelProps,
   RootProps,
 } from "@corvu/resizable";
 import ResizablePrimitive from "@corvu/resizable";
 import type { ValidComponent, VoidProps } from "solid-js";
 import { Show, splitProps } from "solid-js";
 
-export const ResizablePanel = ResizablePrimitive.Panel;
+type resizablePanelProps<T extends ValidComponent = "div"> =
+  PanelProps<T> & {
+    class?: string;
+  };
+
+export const ResizablePanel = <
+  T extends ValidComponent = "div",
+>(
+  props: DynamicProps<T, resizablePanelProps<T>>,
+) => {
+  const [local, rest] = splitProps(
+    props as resizablePanelProps,
+    ["class"],
+  );
+
+  return (
+    <ResizablePrimitive.Panel
+      class={cn("min-h-0 min-w-0", local.class)}
+      {...rest}
+    />
+  );
+};
 
 type resizableProps<T extends ValidComponent = "div"> =
   RootProps<T> & {
@@ -25,7 +47,11 @@ export const Resizable = <T extends ValidComponent = "div">(
 
   return (
     <ResizablePrimitive
-      class={cn("size-full", local.class)}
+      class={cn(
+        `flex h-full min-h-0 w-full min-w-0
+        data-[orientation=vertical]:flex-col`,
+        local.class,
+      )}
       {...rest}
     />
   );
@@ -53,19 +79,18 @@ export const ResizableHandle = <
   return (
     <ResizablePrimitive.Handle
       class={cn(
-        `relative flex w-px items-center justify-center
-        overflow-visible transition-shadow
-        data-[orientation=vertical]:h-px
-        data-[orientation=vertical]:w-full
-        focus-visible:outline-none focus-visible:ring-[1.5px]
-        focus-visible:ring-ring focus-visible:ring-offset-1
-        [&:not([data-active])]:bg-border
+        `focus-visible:ring-ring [&:not([data-active])]:bg-border
         [&[data-active]_#resizable-handle]:bg-muted-foreground/50
         [&[data-dragging]_#resizable-handle]:bg-muted-foreground/80
-        [&[data-orientation=horizontal][data-active]_#resizable-handle]:w-2
+        relative flex w-px items-center justify-center
+        overflow-visible transition-shadow
+        focus-visible:ring-[1.5px] focus-visible:ring-offset-1
+        focus-visible:outline-none data-[orientation=vertical]:h-px
+        data-[orientation=vertical]:w-full
         [&[data-orientation=horizontal]_#resizable-handle]:h-full
-        [&[data-orientation=vertical][data-active]_#resizable-handle]:h-2
-        [&[data-orientation=vertical]_#resizable-handle]:w-full`,
+        [&[data-orientation=horizontal][data-active]_#resizable-handle]:w-2
+        [&[data-orientation=vertical]_#resizable-handle]:w-full
+        [&[data-orientation=vertical][data-active]_#resizable-handle]:h-2`,
         local.class,
       )}
       {...rest}
@@ -76,8 +101,8 @@ export const ResizableHandle = <
       ></div>
       <Show when={local.withHandle}>
         <div
-          class="fixed top-1/2 z-50 flex h-4 w-3 items-center justify-center
-            rounded-sm border bg-border"
+          class="bg-border fixed top-1/2 z-50 flex h-4 w-3 items-center
+            justify-center rounded-sm border"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

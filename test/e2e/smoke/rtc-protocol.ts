@@ -1,3 +1,5 @@
+import { FileCatalogIndex } from "../../../src/libs/application/file-catalog-index";
+import { RemoteFileCatalog } from "../../../src/libs/application/remote-file-catalog";
 import { RtcProtocol } from "../../../src/libs/application/rtc/rtc-protocol";
 import { MessageSendQueue } from "../../../src/libs/domain/session-send-queue";
 import { parseSessionMessage } from "../../../src/libs/domain/protocol/validation";
@@ -117,7 +119,12 @@ async function main() {
   b.protocol.handle("send-text", ({ message }) => {
     received.push(message.data);
   });
-  b.protocol.handle("request-storage", () => files);
+  const catalog = new FileCatalogIndex();
+  for (const file of files)
+    catalog.update(file.id, { ...file, isComplete: true });
+  b.protocol.handle("request-storage", ({ message }) =>
+    catalog.query(message),
+  );
   b.protocol.handle("request-file", () => {});
   b.protocol.on("stream-state", ({ message }) => {
     notifications.push(message.mode);
@@ -196,12 +203,84 @@ async function main() {
     const storage = await a.protocol.call(
       a.session,
       "request-storage",
-      {},
+      { pageIndex: 0, pageSize: 25 },
     );
     assert(
-      JSON.stringify(storage) === JSON.stringify(files),
+      storage.totalCount === 1 &&
+        storage.items[0]?.id === files[0].id,
       "typed storage result mismatch",
     );
+    // Real DataChannel pagination/search and empty invalidation -> current-page refetch.
+    for (let i = 0; i < 61; i++) {
+      const id = `report-${String(i).padStart(2, "0")}`;
+      catalog.update(id, {
+        id,
+        fileName: `${id}.txt`,
+        fileSize: i + 1,
+        isComplete: true,
+      });
+    }
+    const view = new RemoteFileCatalog(
+      {
+        pageIndex: 1,
+        pageSize: 10,
+        search: "report",
+        sort: [{ field: "fileName", desc: false }],
+      },
+      (query, signal) =>
+        a.protocol.call(
+          a.session,
+          "request-storage",
+          query,
+          { signal },
+        ),
+      () => {},
+      () => {},
+    );
+    const offChanged = a.protocol.on(
+      "storage-changed",
+      () => view.refresh(),
+    );
+    try {
+      view.refresh();
+      await waitUntil(
+        () => view.state.page?.totalCount === 61,
+      );
+      assert(
+        view.state.page?.items[0]?.id === "report-10",
+        "wrong directory page",
+      );
+      catalog.update("report-10", null);
+      await b.protocol.notify(
+        b.session,
+        "storage-changed",
+        {},
+      );
+      await waitUntil(
+        () => view.state.page?.totalCount === 60,
+      );
+      assert(
+        view.state.page?.pageIndex === 1 &&
+          view.state.page.items[0]?.id === "report-11",
+        "invalidation did not refresh the current page",
+      );
+      view.setQuery({
+        pageIndex: 0,
+        pageSize: 10,
+        search: "REPORT-60",
+      });
+      await waitUntil(
+        () => view.state.page?.totalCount === 1,
+      );
+      assert(
+        view.state.page?.items[0]?.id === "report-60",
+        "search only scanned the previous page",
+      );
+    } finally {
+      offChanged();
+      view.dispose();
+    }
+
     const receipt = await a.protocol.call(
       a.session,
       "request-file",

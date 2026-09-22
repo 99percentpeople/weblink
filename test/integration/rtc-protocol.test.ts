@@ -552,21 +552,28 @@ describe("typed RTC calls", () => {
 });
 
 describe("typed file-list responses", () => {
-  const storage = [
-    {
-      id: "f",
-      fileName: "a.txt",
-      fileSize: 10,
-      chunkSize: 4,
-    },
-  ];
+  const query = { pageIndex: 0, pageSize: 25 };
+  const storage = {
+    pageIndex: 0,
+    pageSize: 25,
+    totalCount: 1,
+    sharingEnabled: true,
+    items: [
+      {
+        id: "f",
+        fileName: "a.txt",
+        fileSize: 10,
+        chunkSize: 4,
+      },
+    ],
+  };
 
   it("returns data, not an early ACK, and re-ACKs repeated storage responses", async () => {
     const { protocol, transport } = create();
     const pending = protocol.call(
       local,
       "request-storage",
-      {},
+      query,
       { id: "m1" },
     );
     let done = false;
@@ -599,7 +606,7 @@ describe("typed file-list responses", () => {
     const request = createSessionMessage(
       remote,
       "request-storage",
-      {},
+      query,
       { id: "m1" },
     );
     const receiving = transport.emit(local, request);
@@ -637,7 +644,7 @@ describe("typed file-list responses", () => {
     };
     b.protocol.handle("request-storage", () => storage);
     await expect(
-      a.protocol.call(local, "request-storage", {}),
+      a.protocol.call(local, "request-storage", query),
     ).resolves.toEqual(storage);
     await flushRtc();
     expect(

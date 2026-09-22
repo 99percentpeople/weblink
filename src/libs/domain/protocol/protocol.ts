@@ -86,6 +86,7 @@ export class P2PProtocol<
         "client-profile",
         "stream-state",
         "read-text",
+        "storage-changed",
       ].includes(type)
     ) {
       throw new P2PProtocolError(

@@ -1,0 +1,123 @@
+import {
+  Show,
+  type Component,
+  type ComponentProps,
+} from "solid-js";
+import { A } from "@solidjs/router";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  IconChatBubble,
+  IconChevronLeft,
+  IconFolderMatch,
+  IconSettings,
+} from "@/components/icons";
+import { ConnectionBadge } from "@/components/common/connection-badge";
+import clientInfoDialog from "@/components/dialogs/client-info-dialog";
+import { t } from "@/i18n";
+import type { Client } from "@/libs/domain/client";
+import type { ClientID } from "@/libs/domain/ids";
+import type { ClientInfo } from "@/libs/state/app-state";
+import { getInitials } from "@/libs/utils/name";
+
+const HeaderLink: Component<ComponentProps<typeof A>> = (
+  props,
+) => (
+  <Button as={A} variant="ghost" size="icon" {...props} />
+);
+
+export const ClientHeader: Component<{
+  clientId: ClientID;
+  client?: Client;
+  info?: ClientInfo;
+  view: "chat" | "sync";
+}> = (props) => {
+  const { open: openClientInfoDialog } = clientInfoDialog();
+  const client = () => props.client ?? props.info;
+  const name = () => client()?.name ?? props.clientId;
+  const isChat = () => props.view === "chat";
+  const destination = () =>
+    `/client/${encodeURIComponent(props.clientId)}/${isChat() ? "sync" : "chat"}`;
+  const destinationLabel = () =>
+    isChat()
+      ? t("client.sync.title")
+      : t("client.sync.menu.chat");
+
+  return (
+    <header
+      data-slot="client-header"
+      class="border-border bg-background/80 sticky
+        top-[var(--mobile-header-height)] z-10 flex w-full shrink-0
+        items-center gap-2 border-b p-2 backdrop-blur md:top-0"
+    >
+      <Button
+        as={A}
+        href="/"
+        size="icon"
+        variant="ghost"
+        aria-label={t("404.home")}
+      >
+        <IconChevronLeft class="size-8" />
+      </Button>
+      <Avatar>
+        <AvatarImage src={client()?.avatar ?? undefined} />
+        <AvatarFallback seed={name()}>
+          {getInitials(name())}
+        </AvatarFallback>
+      </Avatar>
+      <div class="flex min-w-0 items-center gap-2">
+        <h4 class="h4 min-w-0 truncate" title={name()}>
+          {name()}
+        </h4>
+        <div class="shrink-0">
+          <ConnectionBadge client={props.info} />
+        </div>
+      </div>
+      <div class="ml-auto flex shrink-0 items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger
+            as={HeaderLink}
+            href={destination()}
+            aria-label={destinationLabel()}
+          >
+            <Show
+              when={isChat()}
+              fallback={<IconChatBubble class="size-6" />}
+            >
+              <IconFolderMatch class="size-6" />
+            </Show>
+          </TooltipTrigger>
+          <TooltipContent>
+            {destinationLabel()}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            as={Button}
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={t("client.config.open")}
+            onClick={() =>
+              void openClientInfoDialog(props.clientId)
+            }
+          >
+            <IconSettings class="size-6" />
+          </TooltipTrigger>
+          <TooltipContent>
+            {t("client.config.open")}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </header>
+  );
+};

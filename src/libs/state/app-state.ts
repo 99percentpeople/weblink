@@ -1,8 +1,5 @@
 import { createStore } from "solid-js/store";
-import type {
-  ChunkMetaData,
-  FileMetaData,
-} from "@/libs/domain/file";
+import type { FileMetaData } from "@/libs/domain/file";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import type {
   Client,
@@ -40,7 +37,6 @@ export interface ClientInfo extends TransferClient {
     | "reconnecting";
   streamState?: "placeholder" | "media";
   clipboard?: SendClipboardMessage[];
-  storage?: ChunkMetaData[];
   messageChannel: boolean;
   stream?: MediaStream;
 }

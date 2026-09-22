@@ -83,6 +83,13 @@ may select concrete infrastructure implementations.
   - `rtc/`: Weblink's PeerSession transport adapter and protocol composition.
     The reusable P2P protocol itself lives in `domain/protocol/`.
   - `transfer/`: file-transfer workflows, registry and message binding.
+  - `file-catalog-index.ts`: completed-file metadata projection and in-memory
+    search/sort/page queries, without File contents or storage reads during paging.
+  - `file-catalog-service.ts`: version-2 directory provider, privacy policy and
+    payloadless P2P invalidation routing.
+  - `remote-file-catalog.ts`: active-page refresh coalescing, cancellation and
+    stale-response isolation. The Solid hook in `hooks/file-catalog.ts` binds it
+    to a view; TanStack Table owns UI query state, not the wire protocol.
   - `cache-service.ts`, `speed-test-service.ts`, `task-service.ts`, etc:
     application-scoped coordinators.
 - `src/libs/domain/`: low-level models and P2P behavior. Domain must not

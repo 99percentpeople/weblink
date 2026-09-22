@@ -5,6 +5,7 @@ import {
   Show,
   createSignal,
   ComponentProps,
+  onCleanup,
 } from "solid-js";
 import {
   RouteSectionProps,
@@ -31,29 +32,130 @@ export interface UserItemProps extends ComponentProps<"li"> {
   collapsed: boolean;
 }
 
+const DEFAULT_SIDEBAR_WIDTH = 280;
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 480;
+const MIN_CONTENT_WIDTH = 320;
+
+const clamp = (
+  value: number,
+  minimum: number,
+  maximum: number,
+) => Math.max(minimum, Math.min(value, maximum));
+
 export default function Home(props: RouteSectionProps) {
   const isMobile = createIsMobile();
   const navigate = useNavigate();
   const matches = useCurrentMatches();
-  const [size, setSize] = makePersisted(
-    createSignal<number[]>(),
+  const [sidebarWidth, setSidebarWidth] = makePersisted(
+    createSignal(DEFAULT_SIDEBAR_WIDTH),
     {
       storage: sessionStorage,
-      name: "resizable-sizes",
+      name: "sidebar-width",
     },
   );
+  const [resizableWidth, setResizableWidth] =
+    createSignal(0);
+  let resizeObserver: ResizeObserver | undefined;
+  let resizingSidebar = false;
+  let lastExpandedSidebarWidth =
+    sidebarWidth() > 0
+      ? sidebarWidth()
+      : DEFAULT_SIDEBAR_WIDTH;
+
   const path = createMemo<string | undefined>(() => {
     return matches()[matches().length - 1]?.path;
   });
-  createEffect(() => {
-    if (isMobile()) {
-      if (path() === "/") {
-        setSize([1, 0]);
-      } else {
-        setSize([1]);
-      }
-    }
+
+  const maximumSidebarWidth = () =>
+    Math.max(
+      0,
+      Math.min(
+        MAX_SIDEBAR_WIDTH,
+        resizableWidth() - MIN_CONTENT_WIDTH,
+      ),
+    );
+
+  const currentSidebarWidth = () => {
+    const width = sidebarWidth();
+    if (width <= 0) return 0;
+
+    const maximum = maximumSidebarWidth();
+    const minimum = Math.min(MIN_SIDEBAR_WIDTH, maximum);
+    return clamp(width, minimum, maximum);
+  };
+
+  const sizes = createMemo<number[] | undefined>(() => {
+    if (isMobile()) return [1];
+
+    const width = resizableWidth();
+    if (width <= 0) return undefined;
+
+    const panelWidth = currentSidebarWidth();
+    const ratio = clamp(panelWidth / width, 0, 1);
+    return [ratio, 1 - ratio];
   });
+
+  const setResizableRef = (element: HTMLDivElement) => {
+    resizeObserver?.disconnect();
+
+    const updateWidth = (width: number) => {
+      if (Number.isFinite(width) && width > 0) {
+        setResizableWidth(width);
+      }
+    };
+
+    updateWidth(element.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+
+    resizeObserver = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) updateWidth(rect.width);
+    });
+    resizeObserver.observe(element);
+  };
+
+  const resizeSidebar = (nextSizes: number[]) => {
+    if (
+      isMobile() ||
+      !resizingSidebar ||
+      nextSizes.length !== 2
+    ) {
+      return;
+    }
+
+    const width = resizableWidth();
+    if (width <= 0) return;
+
+    const nextWidth = nextSizes[0]! * width;
+    if (nextWidth <= 1) {
+      setSidebarWidth(0);
+      return;
+    }
+
+    if (nextWidth < MIN_SIDEBAR_WIDTH - 1) return;
+
+    const maximum = maximumSidebarWidth();
+    const minimum = Math.min(MIN_SIDEBAR_WIDTH, maximum);
+    const clampedWidth = clamp(nextWidth, minimum, maximum);
+
+    lastExpandedSidebarWidth = clampedWidth;
+    setSidebarWidth(clampedWidth);
+  };
+
+  const expandSidebar = () => {
+    const maximum = maximumSidebarWidth();
+    const minimum = Math.min(MIN_SIDEBAR_WIDTH, maximum);
+    const width = clamp(
+      lastExpandedSidebarWidth || DEFAULT_SIDEBAR_WIDTH,
+      minimum,
+      maximum,
+    );
+    lastExpandedSidebarWidth = width;
+    setSidebarWidth(width);
+  };
+
+  onCleanup(() => resizeObserver?.disconnect());
 
   createEffect(() => {
     const clientId = appState.options.redirectToClient;
@@ -70,8 +172,10 @@ export default function Home(props: RouteSectionProps) {
 
   return (
     <Resizable
-      sizes={size()}
-      onSizesChange={(sizes) => setSize(sizes)}
+      ref={setResizableRef}
+      sizes={sizes()}
+      onSizesChange={resizeSidebar}
+      keyboardDelta="16px"
     >
       <Show when={!isMobile() || path() === "/"}>
         <ResizablePanel
@@ -79,39 +183,60 @@ export default function Home(props: RouteSectionProps) {
             `bg-background/80 backdrop-blur
             data-[collapsed]:transition-all data-[collapsed]:ease-in-out`,
           )}
-          collapsible
-          initialSize={0.2}
-          maxSize={0.3}
-          minSize={0.15}
+          collapsible={!isMobile()}
+          initialSize={
+            isMobile() ? 1 : `${DEFAULT_SIDEBAR_WIDTH}px`
+          }
+          maxSize={
+            isMobile() ? 1 : `${MAX_SIDEBAR_WIDTH}px`
+          }
+          minSize={
+            isMobile() ? 1 : `${MIN_SIDEBAR_WIDTH}px`
+          }
         >
           {(props) => (
             <ClientList
               collapsed={props.collapsed}
-              expand={props.expand}
+              expand={() => {
+                if (isMobile()) {
+                  props.expand();
+                  return;
+                }
+                expandSidebar();
+              }}
               path={path() ?? ""}
             />
           )}
         </ResizablePanel>
       </Show>
       <Show when={!isMobile()}>
-        <ResizableHandle />
+        <ResizableHandle
+          onHandleDragStart={() => {
+            resizingSidebar = true;
+          }}
+          onHandleDragEnd={() => {
+            resizingSidebar = false;
+          }}
+          onKeyDown={() => {
+            resizingSidebar = true;
+          }}
+          onKeyUp={() => {
+            resizingSidebar = false;
+          }}
+          onBlur={() => {
+            resizingSidebar = false;
+          }}
+        />
       </Show>
 
       <Show when={!isMobile() || path() !== "/"}>
         <ResizablePanel
           class="relative"
-          minSize={0.7}
-          initialSize={0.8}
+          minSize={
+            isMobile() ? 1 : `${MIN_CONTENT_WIDTH}px`
+          }
         >
-          {(resizeProps) => {
-            createEffect(() => {
-              if (!isMobile() && (size()?.[1] ?? 0) < 0.7) {
-                resizeProps.resize(0.7);
-              }
-            });
-
-            return <>{props.children}</>;
-          }}
+          {props.children}
         </ResizablePanel>
       </Show>
     </Resizable>
