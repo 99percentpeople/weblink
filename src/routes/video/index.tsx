@@ -379,7 +379,6 @@ export default function Video() {
                       isPlaceholderStream={
                         client.streamState === "placeholder"
                       }
-                      hidePlaceholderVideo
                       muted={true}
                     >
                       <RemoteToolbar

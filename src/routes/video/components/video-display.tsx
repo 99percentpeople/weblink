@@ -15,12 +15,14 @@ import {
   createContext,
   useContext,
   createSignal,
+  onCleanup,
 } from "solid-js";
 import { ClientAvatar } from "../../../components/common/client-avatar";
 import { createMediaTracks } from "@/libs/hooks/tracks";
 import { Spinner } from "../../../components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import { getVisibleVideoDisplayTracks } from "./video-display-tracks";
 
 const VideoContext = createContext<{
   videoRef: Accessor<HTMLVideoElement | null>;
@@ -45,7 +47,6 @@ export const VideoDisplay = (
     name: string;
     muted?: boolean;
     avatar?: string;
-    hidePlaceholderVideo?: boolean;
     isPlaceholderStream?: boolean;
     onLoadingStateChange?: (
       state:
@@ -63,52 +64,12 @@ export const VideoDisplay = (
 
   const tracks = createMediaTracks(stream);
 
-  const isPlaceholderVideoTrack = (
-    track: MediaStreamTrack,
-  ) => {
-    if (track.kind !== "video") return false;
-    const label = track.label.trim().toLowerCase();
-    if (
-      label.includes("canvas") ||
-      label.includes("offscreen")
-    ) {
-      return true;
-    }
-
-    const settings = track.getSettings?.() ?? {};
-    const width = settings.width;
-    const height = settings.height;
-    const frameRate = settings.frameRate;
-
-    if (
-      typeof width === "number" &&
-      typeof height === "number"
-    ) {
-      const tinyResolution = width <= 16 && height <= 16;
-      const lowFrameRate =
-        typeof frameRate !== "number" || frameRate <= 1.5;
-      return tinyResolution && lowFrameRate;
-    }
-
-    if (
-      typeof frameRate === "number" &&
-      frameRate > 0 &&
-      frameRate <= 1.5
-    ) {
-      return true;
-    }
-    return false;
-  };
-
-  const visibleTracks = createMemo(() => {
-    if (props.isPlaceholderStream) {
-      return tracks().filter((track) => track.kind !== "video");
-    }
-    if (!props.hidePlaceholderVideo) return tracks();
-    return tracks().filter((track) => {
-      return !isPlaceholderVideoTrack(track);
-    });
-  });
+  const visibleTracks = createMemo(() =>
+    getVisibleVideoDisplayTracks(
+      tracks(),
+      props.isPlaceholderStream === true,
+    ),
+  );
 
   const [isLoaded, setIsLoaded] = createSignal(false);
   const [loadingState, setLoadingState] = createSignal<
@@ -163,9 +124,33 @@ export const VideoDisplay = (
 
   createEffect(() => {
     const video = videoRef();
-    if (video) {
-      video.srcObject = videoStream() ?? null;
-    }
+    const currentStream = videoStream();
+    const track = videoTrack();
+    if (!video) return;
+
+    video.srcObject = currentStream;
+    if (!currentStream || !track) return;
+
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
+
+    const play = () => {
+      void video.play().catch((error) => {
+        if (
+          error instanceof DOMException &&
+          error.name === "NotAllowedError"
+        ) {
+          return;
+        }
+        console.warn("Video playback failed:", error);
+      });
+    };
+
+    track.addEventListener("unmute", play, {
+      once: true,
+      signal: controller.signal,
+    });
+    play();
   });
 
   createEffect(() => {
