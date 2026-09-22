@@ -4,476 +4,56 @@ import {
   SetStoreFunction,
 } from "solid-js/store";
 import type { Accessor } from "solid-js";
-import type { Client } from "@/libs/core/client";
-import type { ClientID } from "@/libs/core/ids";
+import type { Client } from "@/libs/domain/client";
+import type { ClientID } from "@/libs/domain/ids";
 import type {
   FileTransferMessage,
   StoreMessage,
-  TextMessage,
-} from "@/libs/core/message";
+} from "@/libs/domain/message";
 export type {
   FileTransferMessage,
   StoreMessage,
   TextMessage,
-} from "@/libs/core/message";
+} from "@/libs/domain/message";
 import type {
-  AckMessage,
-  ErrorMessage,
   MessageID,
-  RequestFileMessage,
-  SendFileMessage,
-  SendTextMessage,
   SessionMessage,
-} from "@/libs/core/protocol/messages";
+} from "@/libs/domain/protocol/messages";
 import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
+import type { MessageRepository } from "./message-repository";
+import {
+  applyTrackedResponse,
+  projectIncomingMessage,
+  projectOutgoingMessage,
+  projectRetry,
+} from "./message-projection";
 
-export type SendMessageOptions = {
-  timeoutMs?: number | null;
-};
-
-type SendHandledMessage = Extract<
-  SessionMessage,
-  {
-    type: "send-text" | "send-file" | "request-file";
+function snapshotStoreMessage(
+  message: StoreMessage,
+): StoreMessage {
+  if (message.type === "text") {
+    return { ...message };
   }
->;
+  return {
+    ...message,
+    progress: message.progress
+      ? { ...message.progress }
+      : undefined,
+  };
+}
 
-type ReceiveHandledMessage = Extract<
-  SessionMessage,
-  {
-    type:
-      | "send-text"
-      | "send-file"
-      | "request-file"
-      | "error"
-      | "ack";
-  }
->;
+function snapshotClient(client: Client): Client {
+  return { ...client };
+}
 
-type SendTextHandledMessage = Extract<
-  SendHandledMessage,
-  { type: "send-text" }
->;
-
-type SendFileHandledMessage = Extract<
-  SendHandledMessage,
-  { type: "send-file" }
->;
-
-type RequestFileHandledMessage = Extract<
-  SendHandledMessage,
-  { type: "request-file" }
->;
-
-type ReceiveSendTextHandledMessage = Extract<
-  ReceiveHandledMessage,
-  { type: "send-text" }
->;
-
-type ReceiveSendFileHandledMessage = Extract<
-  ReceiveHandledMessage,
-  { type: "send-file" }
->;
-
-type ReceiveRequestFileHandledMessage = Extract<
-  ReceiveHandledMessage,
-  { type: "request-file" }
->;
-
-type ReceiveErrorHandledMessage = Extract<
-  ReceiveHandledMessage,
-  { type: "error" }
->;
-
-type ReceiveAckHandledMessage = Extract<
-  ReceiveHandledMessage,
-  { type: "ack" }
->;
-
-type SendDispatchContext = {
-  self: MessageStores;
-  pushIfMissing: (message: StoreMessage) => void;
-};
-
-type RetryDispatchContext = {
-  self: MessageStores;
-  index: number;
-  resetTimeout: (messageId: MessageID) => void;
-};
-
-type ReceiveDispatchContext = {
-  self: MessageStores;
-  getIndex: () => number;
-  pushIfMissing: (message: StoreMessage) => void;
-  setStatus: (index: number) => void;
-};
-
-class MessageStores {
-  private static createTextMessage(
-    message: SendTextHandledMessage,
-    status: "sending" | "received",
-  ) {
-    return {
-      ...message,
-      type: "text",
-      status,
-    } satisfies TextMessage;
-  }
-
-  private static createFileMessageFromSendFile(
-    message: SendFileHandledMessage,
-    status: "sending" | "received",
-  ) {
-    return {
-      ...message,
-      type: "file",
-      status,
-    } satisfies FileTransferMessage;
-  }
-
-  private static createFileMessageFromRequestFile(
-    message: RequestFileHandledMessage,
-    status: "sending" | "received",
-  ) {
-    return {
-      id: message.id,
-      type: "file",
-      status,
-      fid: message.fid,
-      fileName: message.fileName,
-      fileSize: message.fileSize,
-      mimeType: message.mimeType,
-      lastModified: message.lastModified,
-      chunkSize: message.chunkSize,
-      createdAt: message.createdAt,
-      client: message.target,
-      target: message.client,
-      transferStatus: "init",
-    } satisfies FileTransferMessage;
-  }
-
-  private static handleSendTextMessage(
-    { pushIfMissing }: SendDispatchContext,
-    message: SendTextHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createTextMessage(message, "sending"),
-    );
-  }
-
-  private static handleSendFileMessage(
-    { pushIfMissing }: SendDispatchContext,
-    message: SendFileHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createFileMessageFromSendFile(
-        message,
-        "sending",
-      ),
-    );
-  }
-
-  private static handleSendRequestFileMessage(
-    { pushIfMissing }: SendDispatchContext,
-    message: RequestFileHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createFileMessageFromRequestFile(
-        message,
-        "sending",
-      ),
-    );
-  }
-
-  private static handleRetrySendTextMessage(
-    { self, index, resetTimeout }: RetryDispatchContext,
-    message: SendTextHandledMessage,
-  ) {
-    self.setMessages(
-      index,
-      produce((state) => {
-        if (state.type !== "text") return;
-        state.status = "sending";
-        state.error = undefined;
-        state.data = message.data;
-        self.setMessageDB(state);
-      }),
-    );
-    resetTimeout(message.id);
-  }
-
-  private static handleRetrySendFileMessage(
-    { self, index, resetTimeout }: RetryDispatchContext,
-    message: SendFileHandledMessage,
-  ) {
-    self.setMessages(
-      index,
-      produce((state) => {
-        if (state.type !== "file") return;
-        state.status = "sending";
-        state.error = undefined;
-        state.fid = message.fid;
-        state.fileName = message.fileName;
-        state.fileSize = message.fileSize;
-        state.mimeType = message.mimeType;
-        state.lastModified = message.lastModified;
-        state.chunkSize = message.chunkSize;
-        self.setMessageDB(state);
-      }),
-    );
-    resetTimeout(message.id);
-  }
-
-  private static handleRetryRequestFileMessage(
-    { self, index, resetTimeout }: RetryDispatchContext,
-    message: RequestFileHandledMessage,
-  ) {
-    self.setMessages(
-      index,
-      produce((state) => {
-        if (state.type !== "file") return;
-        state.status = "sending";
-        state.error = undefined;
-        state.fid = message.fid;
-        state.fileName = message.fileName;
-        state.fileSize = message.fileSize;
-        state.mimeType = message.mimeType;
-        state.lastModified = message.lastModified;
-        state.chunkSize = message.chunkSize;
-        state.transferStatus = "init";
-        self.setMessageDB(state);
-      }),
-    );
-    resetTimeout(message.id);
-  }
-
-  private static handleReceiveSendTextMessage(
-    {
-      pushIfMissing,
-      setStatus,
-      getIndex,
-    }: ReceiveDispatchContext,
-    message: ReceiveSendTextHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createTextMessage(message, "received"),
-    );
-    setStatus(getIndex());
-  }
-
-  private static handleReceiveSendFileMessage(
-    {
-      pushIfMissing,
-      setStatus,
-      getIndex,
-    }: ReceiveDispatchContext,
-    message: ReceiveSendFileHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createFileMessageFromSendFile(
-        message,
-        "received",
-      ),
-    );
-    setStatus(getIndex());
-  }
-
-  private static handleReceiveRequestFileMessage(
-    { pushIfMissing }: ReceiveDispatchContext,
-    message: ReceiveRequestFileHandledMessage,
-  ) {
-    pushIfMissing(
-      MessageStores.createFileMessageFromRequestFile(
-        message,
-        "received",
-      ),
-    );
-  }
-
-  private static handleReceiveErrorMessage(
-    { self, getIndex }: ReceiveDispatchContext,
-    message: ReceiveErrorHandledMessage,
-  ) {
-    self.clearTimeout(message.id);
-    self.setMessages(
-      getIndex(),
-      produce((state) => {
-        state.status = "error";
-        state.error = message.error;
-        self.setMessageDB(state);
-      }),
-    );
-  }
-
-  private static handleReceiveAckMessage(
-    { self, getIndex }: ReceiveDispatchContext,
-    message: ReceiveAckHandledMessage,
-  ) {
-    const index = getIndex();
-    if (index === -1) return;
-    self.clearTimeout(message.id);
-    self.setMessages(
-      index,
-      produce((state) => {
-        state.status = "received";
-        state.error = undefined;
-        self.setMessageDB(state);
-      }),
-    );
-  }
-
-  private static readonly dbRequestFactoryByType = new Map<
-    StoreMessage["type"],
-    (
-      db: IDBDatabase,
-      message: StoreMessage,
-    ) => IDBRequest<IDBValidKey>
-  >([
-    [
-      "text",
-      (db, message) =>
-        db
-          .transaction("messages", "readwrite")
-          .objectStore("messages")
-          .put({
-            ...message,
-          }),
-    ],
-    [
-      "file",
-      (db, message) => {
-        const { progress, ...storeMessage } =
-          message as FileTransferMessage;
-        return db
-          .transaction("messages", "readwrite")
-          .objectStore("messages")
-          .put(storeMessage);
-      },
-    ],
-  ]);
-
-  private static readonly sendMessageHandlers = new Map<
-    SendHandledMessage["type"],
-    (
-      ctx: SendDispatchContext,
-      message: SendHandledMessage,
-    ) => void
-  >([
-    [
-      "send-text",
-      (ctx, message) =>
-        MessageStores.handleSendTextMessage(
-          ctx,
-          message as SendTextHandledMessage,
-        ),
-    ],
-    [
-      "send-file",
-      (ctx, message) =>
-        MessageStores.handleSendFileMessage(
-          ctx,
-          message as SendFileHandledMessage,
-        ),
-    ],
-    [
-      "request-file",
-      (ctx, message) =>
-        MessageStores.handleSendRequestFileMessage(
-          ctx,
-          message as RequestFileHandledMessage,
-        ),
-    ],
-  ]);
-
-  private static readonly retrySendHandlers = new Map<
-    SendHandledMessage["type"],
-    (
-      ctx: RetryDispatchContext,
-      message: SendHandledMessage,
-    ) => void
-  >([
-    [
-      "send-text",
-      (ctx, message) =>
-        MessageStores.handleRetrySendTextMessage(
-          ctx,
-          message as SendTextHandledMessage,
-        ),
-    ],
-    [
-      "send-file",
-      (ctx, message) =>
-        MessageStores.handleRetrySendFileMessage(
-          ctx,
-          message as SendFileHandledMessage,
-        ),
-    ],
-    [
-      "request-file",
-      (ctx, message) =>
-        MessageStores.handleRetryRequestFileMessage(
-          ctx,
-          message as RequestFileHandledMessage,
-        ),
-    ],
-  ]);
-
-  private static readonly receiveHandlers = new Map<
-    ReceiveHandledMessage["type"],
-    (
-      ctx: ReceiveDispatchContext,
-      message: ReceiveHandledMessage,
-    ) => void
-  >([
-    [
-      "send-text",
-      (ctx, message) =>
-        MessageStores.handleReceiveSendTextMessage(
-          ctx,
-          message as ReceiveSendTextHandledMessage,
-        ),
-    ],
-    [
-      "send-file",
-      (ctx, message) =>
-        MessageStores.handleReceiveSendFileMessage(
-          ctx,
-          message as ReceiveSendFileHandledMessage,
-        ),
-    ],
-    [
-      "request-file",
-      (ctx, message) =>
-        MessageStores.handleReceiveRequestFileMessage(
-          ctx,
-          message as ReceiveRequestFileHandledMessage,
-        ),
-    ],
-    [
-      "error",
-      (ctx, message) =>
-        MessageStores.handleReceiveErrorMessage(
-          ctx,
-          message as ReceiveErrorHandledMessage,
-        ),
-    ],
-    [
-      "ack",
-      (ctx, message) =>
-        MessageStores.handleReceiveAckMessage(
-          ctx,
-          message as ReceiveAckHandledMessage,
-        ),
-    ],
-  ]);
-
+export class MessageStores {
   readonly messages: StoreMessage[] =
     appState.message.messages;
   readonly clients: Client[] = appState.message.clients;
-  readonly db: Promise<IDBDatabase> | IDBDatabase;
+
   private setMessages: SetStoreFunction<StoreMessage[]> = ((
     ...args: any[]
   ) =>
@@ -482,6 +62,7 @@ class MessageStores {
       "messages",
       ...args,
     )) as any;
+
   private setClients: SetStoreFunction<Client[]> = ((
     ...args: any[]
   ) =>
@@ -490,346 +71,208 @@ class MessageStores {
       "clients",
       ...args,
     )) as any;
+
   status: Accessor<"initializing" | "ready"> = () =>
     appState.message.status;
-  constructor() {
-    this.db = this.initDB();
-  }
 
-  private timeouts: Record<MessageID, number> = {};
+  private initialization: Promise<void> | null = null;
 
-  private clearTimeout(id: MessageID) {
-    window.clearTimeout(this.timeouts[id]);
-    delete this.timeouts[id];
-  }
+  constructor(
+    private readonly repository: MessageRepository,
+  ) {}
 
-  private setTimeout(
-    id: MessageID,
-    timeout: number,
-    callback: () => void,
-  ) {
-    this.timeouts[id] = window.setTimeout(() => {
-      this.clearTimeout(id);
-      callback();
-    }, timeout);
-  }
+  initialize(): Promise<void> {
+    if (this.initialization) return this.initialization;
 
-  private async initDB() {
-    return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("message_store");
-
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        const messageStore = db.createObjectStore(
-          "messages",
-          {
-            keyPath: "id",
-          },
-        );
-
-        messageStore.createIndex(
-          "createdAtIndex",
-          "createdAt",
-          {
-            unique: false,
-          },
-        );
-
-        db.createObjectStore("clients", {
-          keyPath: "clientId",
-        });
-      };
-
-      request.onsuccess = async () => {
-        const db = request.result;
-        resolve(db);
-        this.loadDB();
-      };
-
-      request.onerror = () => {
-        reject(request.error);
-      };
-    });
-  }
-
-  private async loadDB() {
-    const db = await this.db;
-    const index = db
-      .transaction("messages", "readonly")
-      .objectStore("messages")
-      .index("createdAtIndex");
-
-    const promise1 = new Promise<StoreMessage[]>(
-      (resolve, reject) => {
-        const request = index.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      },
-    ).then((messages) => {
-      this.setMessages(
-        reconcile(
-          messages.map((message) => {
-            if (message.type === "file") {
-              if (message.transferStatus !== "complete") {
-                message.transferStatus = "paused";
+    this.initialization = this.repository
+      .load()
+      .then(({ messages, clients }) => {
+        this.setMessages(
+          reconcile(
+            messages.map((message) => {
+              if (
+                message.type === "file" &&
+                message.transferStatus !== "complete"
+              ) {
+                return {
+                  ...message,
+                  transferStatus: "paused",
+                } satisfies FileTransferMessage;
               }
-            }
-            return message;
-          }),
-        ),
-      );
-    });
-
-    const clientStore = db
-      .transaction("clients", "readonly")
-      .objectStore("clients");
-
-    const promise2 = new Promise<Client[]>(
-      (resolve, reject) => {
-        const request = clientStore.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      },
-    ).then((clients) => {
-      this.setClients(reconcile(clients));
-    });
-
-    return Promise.all([promise1, promise2]).then(() => {
-      setAppState("message", "status", "ready");
-    });
-  }
-
-  private async setMessageDB(message: StoreMessage) {
-    const db = await this.db;
-    return new Promise((resolve, reject) => {
-      const requestFactory =
-        MessageStores.dbRequestFactoryByType.get(
-          message.type,
-        );
-      const request = requestFactory?.(db, message);
-      if (!request) {
-        reject(
-          new Error(
-            `unsupported message type: ${message.type}`,
+              return message;
+            }),
           ),
         );
-        return;
-      }
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  private async removeMessageDB(messageId: MessageID) {
-    const db = await this.db;
-    const request = db
-      .transaction("messages", "readwrite")
-      .objectStore("messages")
-      .delete(messageId);
-
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  private async removeMessagesDB(messageIds: MessageID[]) {
-    const db = await this.db;
-    const transaction = db.transaction(
-      "messages",
-      "readwrite",
-    );
-
-    const store = transaction.objectStore("messages");
-
-    for (const id of messageIds) {
-      store.delete(id);
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
-  }
-
-  private async setClientDB(client: Client) {
-    const db = await this.db;
-    const request = db
-      .transaction("clients", "readwrite")
-      .objectStore("clients")
-      .put(client);
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  private async removeClientDB(clientId: ClientID) {
-    const db = await this.db;
-    const request = db
-      .transaction("clients", "readwrite")
-      .objectStore("clients")
-      .delete(clientId);
-
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  setSendMessage(
-    sessionMsg: SessionMessage,
-    options: SendMessageOptions = {},
-  ) {
-    const timeoutMs =
-      options.timeoutMs === undefined
-        ? 5000
-        : options.timeoutMs;
-    let index: number = this.messages.findLastIndex(
-      (msg) => msg.id === sessionMsg.id,
-    );
-    const setStatus = (message: StoreMessage) => {
-      this.setMessages(index, "error", undefined);
-      this.setMessageDB(this.messages[index]);
-
-      if (timeoutMs === null) return;
-
-      this.setTimeout(message.id, timeoutMs, () => {
-        this.setMessages(index, "status", "error");
-        this.setMessages(index, "error", "send timeout");
-        this.setMessageDB(this.messages[index]);
+        this.setClients(reconcile(clients));
+        setAppState("message", "status", "ready");
       });
-    };
 
-    const pushIfMissing = (message: StoreMessage) => {
-      if (index !== -1) return;
-      this.setMessages(
-        produce((state) => {
-          index = state.push(message) - 1;
-          this.setMessageDB(message);
-          setStatus(message);
-        }),
-      );
-    };
-
-    const sendHandler =
-      MessageStores.sendMessageHandlers.get(
-        sessionMsg.type as SendHandledMessage["type"],
-      );
-    if (!sendHandler) return;
-    sendHandler(
-      {
-        self: this,
-        pushIfMissing,
-      },
-      sessionMsg as SendHandledMessage,
-    );
+    return this.initialization;
   }
 
-  retrySendMessage(
-    sessionMsg: SessionMessage,
-    options: SendMessageOptions = {},
-  ) {
-    const timeoutMs =
-      options.timeoutMs === undefined
-        ? 5000
-        : options.timeoutMs;
-    const index = this.messages.findLastIndex(
-      (msg) => msg.id === sessionMsg.id,
-    );
+  private persistMessage(message: StoreMessage): void {
+    const snapshot = snapshotStoreMessage(message);
+    void this.repository
+      .putMessage(snapshot)
+      .catch((error) => {
+        console.error(
+          "[MessageStore] could not persist message",
+          error,
+        );
+      });
+  }
 
-    if (index === -1) {
-      this.setSendMessage(sessionMsg, options);
+  private persistClient(client: Client): void {
+    const snapshot = snapshotClient(client);
+    void this.repository
+      .putClient(snapshot)
+      .catch((error) => {
+        console.error(
+          "[MessageStore] could not persist client",
+          error,
+        );
+      });
+  }
+
+  private removePersistedMessage(
+    messageId: MessageID,
+  ): void {
+    void this.repository
+      .removeMessage(messageId)
+      .catch((error) => {
+        console.error(
+          "[MessageStore] could not delete message",
+          error,
+        );
+      });
+  }
+
+  private removePersistedMessages(
+    messageIds: MessageID[],
+  ): void {
+    void this.repository
+      .removeMessages(messageIds)
+      .catch((error) => {
+        console.error(
+          "[MessageStore] could not delete messages",
+          error,
+        );
+      });
+  }
+
+  private removePersistedClient(clientId: ClientID): void {
+    void this.repository
+      .removeClient(clientId)
+      .catch((error) => {
+        console.error(
+          "[MessageStore] could not delete client",
+          error,
+        );
+      });
+  }
+
+  setSendMessage(sessionMsg: SessionMessage): void {
+    if (
+      this.messages.some(
+        (message) => message.id === sessionMsg.id,
+      )
+    ) {
       return;
     }
 
-    const resetTimeout = (messageId: MessageID) => {
-      this.clearTimeout(messageId);
-      if (timeoutMs === null) return;
-      this.setTimeout(messageId, timeoutMs, () => {
-        const nextIndex = this.messages.findLastIndex(
-          (msg) => msg.id === messageId,
-        );
-        if (nextIndex === -1) return;
+    const message = projectOutgoingMessage(sessionMsg);
+    if (!message) return;
 
-        this.setMessages(nextIndex, "status", "error");
-        this.setMessages(
-          nextIndex,
-          "error",
-          "send timeout",
-        );
-        this.setMessageDB(this.messages[nextIndex]);
-      });
-    };
+    this.setMessages(
+      produce((state) => {
+        state.push(message);
+      }),
+    );
+    this.persistMessage(message);
+  }
 
-    const retryHandler =
-      MessageStores.retrySendHandlers.get(
-        sessionMsg.type as SendHandledMessage["type"],
+  retrySendMessage(sessionMsg: SessionMessage): void {
+    const index = this.messages.findLastIndex(
+      (message) => message.id === sessionMsg.id,
+    );
+
+    if (index === -1) {
+      this.setSendMessage(sessionMsg);
+      return;
+    }
+
+    const message = projectRetry(
+      this.messages[index],
+      sessionMsg,
+    );
+    if (!message) return;
+
+    this.setMessages(index, reconcile(message));
+    this.persistMessage(message);
+  }
+
+  setReceiveMessage(sessionMsg: SessionMessage): void {
+    const index = this.messages.findIndex(
+      (message) => message.id === sessionMsg.id,
+    );
+
+    if (
+      sessionMsg.type === "ack" ||
+      sessionMsg.type === "error"
+    ) {
+      if (index === -1) return;
+      const message = applyTrackedResponse(
+        this.messages[index],
+        sessionMsg,
       );
-    if (!retryHandler) return;
-    retryHandler(
-      {
-        self: this,
-        index,
-        resetTimeout,
-      },
-      sessionMsg as SendHandledMessage,
+      if (!message) return;
+      this.setMessages(index, reconcile(message));
+      this.persistMessage(message);
+      return;
+    }
+
+    if (index !== -1) {
+      // Preserve historical duplicate semantics: repeated text/file setup clears
+      // a stale local error, while repeated request-file does not mutate history.
+      if (
+        sessionMsg.type === "send-text" ||
+        sessionMsg.type === "send-file"
+      ) {
+        const message = {
+          ...this.messages[index],
+          error: undefined,
+        } as StoreMessage;
+        this.setMessages(index, reconcile(message));
+        this.persistMessage(message);
+      }
+      return;
+    }
+
+    const message = projectIncomingMessage(sessionMsg);
+    if (!message) return;
+
+    this.setMessages(
+      produce((state) => {
+        state.push(message);
+      }),
+    );
+    this.persistMessage(message);
+  }
+
+  async addMessage(message: StoreMessage): Promise<void> {
+    this.setMessages(
+      produce((state) => {
+        state.push(message);
+      }),
+    );
+    await this.repository.putMessage(
+      snapshotStoreMessage(message),
     );
   }
 
-  setReceiveMessage(sessionMsg: SessionMessage) {
-    let index: number = this.messages.findIndex(
-      (msg) => msg.id === sessionMsg.id,
-    );
-
-    const setStatus = (index: number) => {
-      this.setMessages(index, "error", undefined);
-      this.setMessageDB(this.messages[index]);
-    };
-
-    const pushIfMissing = (message: StoreMessage) => {
-      if (index !== -1) return;
-      this.setMessages(
-        produce((state) => {
-          index = state.push(message) - 1;
-          this.setMessageDB(message);
-        }),
-      );
-    };
-
-    const receiveHandler =
-      MessageStores.receiveHandlers.get(
-        sessionMsg.type as ReceiveHandledMessage["type"],
-      );
-    if (!receiveHandler) return;
-    receiveHandler(
-      {
-        self: this,
-        getIndex: () => index,
-        pushIfMissing,
-        setStatus,
-      },
-      sessionMsg as ReceiveHandledMessage,
-    );
-  }
-
-  async addMessage(message: StoreMessage) {
-    new Promise((resolve, reject) => {
-      this.setMessages(
-        produce((state) => {
-          state.push(message);
-        }),
-      );
-
-      this.setMessageDB(message)
-        .then(resolve)
-        .catch(reject);
-    });
-  }
-
-  setClient(client: Client) {
+  setClient(client: Client): void {
     const index = this.clients.findIndex(
-      (c) => c.clientId === client.clientId,
+      (candidate) => candidate.clientId === client.clientId,
     );
     if (index !== -1) {
       this.setClients(index, client);
@@ -838,33 +281,30 @@ class MessageStores {
         produce((state) => state.push(client)),
       );
     }
-    this.setClientDB(client);
+    this.persistClient(client);
   }
 
-  deleteClient(clientId: ClientID) {
+  deleteClient(clientId: ClientID): void {
     const index = this.clients.findIndex(
       (client) => client.clientId === clientId,
     );
-    if (index !== -1) {
-      this.setClients(
-        produce((state) => state.splice(index, 1)),
-      );
-      this.removeClientDB(clientId);
-      this.deleteMessagesByClient(clientId);
-    }
+    if (index === -1) return;
+
+    this.setClients(
+      produce((state) => state.splice(index, 1)),
+    );
+    this.removePersistedClient(clientId);
+    this.deleteMessagesByClient(clientId);
   }
 
-  deleteMessagesByClient(clientId: ClientID) {
+  deleteMessagesByClient(clientId: ClientID): void {
     const messageDeletes = this.messages.filter(
-      (message) => {
-        return (
-          message.client === clientId ||
-          message.target === clientId
-        );
-      },
+      (message) =>
+        message.client === clientId ||
+        message.target === clientId,
     );
 
-    this.removeMessagesDB(
+    this.removePersistedMessages(
       messageDeletes.map((message) => message.id),
     );
     this.setMessages((state) =>
@@ -885,6 +325,7 @@ class MessageStores {
         message.id === messageId && message.type === "file",
     );
     if (index === -1) return;
+
     this.setMessages(
       index,
       produce((message) => {
@@ -892,36 +333,35 @@ class MessageStores {
         update(message);
       }),
     );
-    void this.setMessageDB(this.messages[index]).catch(
-      (error) => {
-        console.error(
-          "[MessageStore] could not persist transfer state",
-          error,
-        );
-      },
-    );
+    this.persistMessage(this.messages[index]);
   }
 
-  deleteMessage(message: MessageID) {
+  deleteMessage(messageId: MessageID): boolean {
     const index = this.messages.findIndex(
-      (msg) => msg.id === message,
+      (message) => message.id === messageId,
     );
-    if (index !== -1) {
-      this.setMessages(
-        produce((state) => state.splice(index, 1)),
-      );
-      this.removeMessageDB(message);
-      return true;
-    }
-    return false;
+    if (index === -1) return false;
+
+    this.setMessages(
+      produce((state) => state.splice(index, 1)),
+    );
+    this.removePersistedMessage(messageId);
+    return true;
   }
 }
 
 export let messageStores: MessageStores;
 
-export function createMessageStores() {
+export function createMessageStores(
+  repository?: MessageRepository,
+) {
   if (!messageStores) {
-    messageStores = new MessageStores();
+    if (!repository) {
+      throw new Error(
+        "MessageStores requires a MessageRepository on first initialization",
+      );
+    }
+    messageStores = new MessageStores(repository);
   }
   return messageStores;
 }

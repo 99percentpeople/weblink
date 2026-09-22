@@ -7,7 +7,7 @@ import {
   vi,
 } from "vitest";
 
-vi.mock("@/libs/core/utils/encrypt/e2e", () => ({
+vi.mock("@/libs/domain/utils/encrypt/e2e", () => ({
   hashPassword: vi.fn(async () => "client-password-hash"),
   comparePasswordHash: vi.fn(async () => true),
   encryptData: vi.fn(

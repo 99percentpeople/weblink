@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { PeerSession } from "@/libs/core/session";
-import type { SignalingService } from "@/libs/core/signaling";
+import { PeerSession } from "@/libs/domain/session";
+import type { SignalingService } from "@/libs/domain/signaling";
 
 if (typeof window === "undefined") {
   (globalThis as any).window = {
@@ -46,16 +46,17 @@ describe("PeerSession stream management", () => {
     const session = new PeerSession(makeSender("a", "b"), {
       polite: false,
     });
-    (session as any).localStream = makeStream("media-1");
-    (session as any).lastLocalStreamState = "media";
+    const media = (session as any).media;
+    media.localStream = makeStream("media-1");
+    media.streamStateNotified = true;
 
     session.setStream(null);
 
-    expect((session as any).localStream).toBeNull();
+    expect(media.localStream).toBeNull();
+    expect(media.streamStateNotified).toBe(false);
     expect(
-      (session as any).lastLocalStreamState,
-    ).toBeNull();
-    expect((session as any).messageSendQueue.size).toBe(0);
+      (session as any).dataChannels.pendingMessageCount,
+    ).toBe(0);
     session.close();
   });
 
@@ -68,14 +69,15 @@ describe("PeerSession stream management", () => {
       close: () => {},
     } as unknown as RTCPeerConnection;
     (session as any).peerConnection = pc;
-    (session as any).localStream = makeStream("media-2");
+    const media = (session as any).media;
+    media.localStream = makeStream("media-2");
 
     const renegotiate = vi.fn();
     (session as any).renegotiate = renegotiate;
 
     session.setStream(null);
 
-    expect((session as any).localStream).toBeNull();
+    expect(media.localStream).toBeNull();
     expect(renegotiate).toHaveBeenCalledTimes(1);
     session.close();
   });

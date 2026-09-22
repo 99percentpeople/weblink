@@ -1,18 +1,21 @@
 import {
   normalizePeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
-} from "@/libs/core/profile";
-import type { PeerSession } from "@/libs/core/session";
-import type { Client } from "@/libs/core/client";
-import type { ClientID } from "@/libs/core/ids";
-import type { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+} from "@/libs/domain/profile";
+import type { PeerSession } from "@/libs/domain/session";
+import type { Client } from "@/libs/domain/client";
+import type { ClientID } from "@/libs/domain/ids";
+import type { WebRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 
 export interface PeerProfileServiceOptions {
   getLocalClient: () => Client;
   onRemoteClient: (client: Client) => void;
 }
 
-type ProfileProtocol = Pick<RtcProtocol, "on" | "notify">;
+type ProfileProtocol = Pick<
+  WebRtcProtocol,
+  "on" | "notify"
+>;
 
 type SessionBinding = {
   session: PeerSession;

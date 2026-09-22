@@ -6,7 +6,7 @@ import {
   Switch,
 } from "solid-js";
 import { Button } from "@/components/ui/button";
-import type { ClientID } from "@/libs/core/ids";
+import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import {
   Avatar,
@@ -29,7 +29,7 @@ import {
 import { IconForward, IconDraft } from "@/components/icons";
 import { useAppState } from "@/libs/state/app-state-context";
 import { toast } from "solid-sonner";
-import { FileMetaData } from "@/libs/cache";
+import { FileMetaData } from "@/libs/domain/file";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { mountModalRenderer } from "./base";

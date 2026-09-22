@@ -16,7 +16,7 @@ import {
   ResizableHandle,
   ResizablePanel,
 } from "@/components/ui/resizable";
-import type { ClientID } from "@/libs/core/ids";
+import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { makePersisted } from "@solid-primitives/storage";

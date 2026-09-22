@@ -5,7 +5,7 @@ import {
 import {
   comparePasswordHash,
   hashPassword,
-} from "@/libs/core/utils/encrypt/e2e";
+} from "@/libs/domain/utils/encrypt/e2e";
 import { WebSocketSignalingService } from "../transport/ws-signaling-service";
 import type {
   ClientPresence,
@@ -14,11 +14,11 @@ import type {
   ClientServiceInitOptions,
   TransferClient,
   UpdateClientOptions,
-} from "@/libs/core/client";
+} from "@/libs/domain/client";
 import type {
   ClientSignal,
   RawSignal,
-} from "@/libs/core/signaling";
+} from "@/libs/domain/signaling";
 import {
   createClientPresence,
   hydrateClientPresence,

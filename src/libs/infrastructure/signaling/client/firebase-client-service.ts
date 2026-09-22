@@ -12,7 +12,7 @@ import {
   update,
   onValue,
 } from "firebase/database";
-import { app } from "@/libs/firebase";
+import { app } from "@/libs/infrastructure/firebase";
 import type {
   ClientPresence,
   ClientService,
@@ -20,8 +20,8 @@ import type {
   ClientServiceInitOptions,
   TransferClient,
   UpdateClientOptions,
-} from "@/libs/core/client";
-import type { SignalingService } from "@/libs/core/signaling";
+} from "@/libs/domain/client";
+import type { SignalingService } from "@/libs/domain/signaling";
 
 type Unsubscribe = () => void;
 import { FirebaseSignalingService } from "../transport/firebase-signaling-service";
@@ -33,7 +33,7 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 import {
   comparePasswordHash,
   hashPassword,
-} from "@/libs/core/utils/encrypt/e2e";
+} from "@/libs/domain/utils/encrypt/e2e";
 import {
   EventHandler,
   MultiEventEmitter,

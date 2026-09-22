@@ -2,11 +2,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import { createMessageStores } from "@/libs/application/messaging/message-store";
+import type { MessageRepository } from "@/libs/application/messaging/message-repository";
 import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
-import { TransferMode } from "@/libs/core/transfer/file-transferer";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import { bindTransferMessage } from "@/libs/application/transfer/transfer-message-binding";
 import {
   FakeTransfer,
@@ -17,8 +18,15 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 it("the production store resolves message identity after deletion and never resurrects a removed message", () => {
-  // Keep persistence pending; this test exercises the real reactive store and event binding, not IndexedDB.
-  vi.stubGlobal("indexedDB", { open: () => ({}) });
+  // This test exercises the real reactive store and event binding with persistence isolated behind its port.
+  const repository: MessageRepository = {
+    load: async () => ({ messages: [], clients: [] }),
+    putMessage: async () => {},
+    removeMessage: async () => {},
+    removeMessages: async () => {},
+    putClient: async () => {},
+    removeClient: async () => {},
+  };
   setAppState(
     "message",
     "messages",
@@ -28,7 +36,7 @@ it("the production store resolves message identity after deletion and never resu
       fileMessage("later"),
     ]),
   );
-  const store = createMessageStores();
+  const store = createMessageStores(repository);
   const controller = new AbortController();
   const transferer = new FakeTransfer(
     fakeCache(),

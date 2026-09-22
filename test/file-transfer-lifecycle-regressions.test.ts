@@ -7,17 +7,17 @@ import {
   it,
   vi,
 } from "vitest";
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
-import type { FileMetaData } from "@/libs/cache";
-import type { FileTransferMessage } from "@/libs/core/message";
-import type { PeerSession } from "@/libs/core/session";
-import { FileTransferBase } from "@/libs/core/transfer/file-transfer-base";
+import type { ChunkCache } from "@/libs/domain/file";
+import type { FileMetaData } from "@/libs/domain/file";
+import type { FileTransferMessage } from "@/libs/domain/message";
+import type { PeerSession } from "@/libs/domain/session";
+import { FileTransferBase } from "@/libs/domain/transfer/file-transfer-base";
 import {
   TransferMode,
   type ProgressValue,
-} from "@/libs/core/transfer/file-transferer";
+} from "@/libs/domain/transfer/file-transferer";
 import type { RtcChannelHandler } from "@/libs/application/rtc/rtc-service";
-import type { SessionMessage } from "@/libs/core/protocol/messages";
+import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";

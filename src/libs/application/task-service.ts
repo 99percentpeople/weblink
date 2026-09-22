@@ -4,11 +4,11 @@ import {
   createSignal,
   type Accessor,
 } from "solid-js";
-import type { FileMetaData } from "../cache";
+import type { FileMetaData } from "@/libs/domain/file";
 import type {
   FileTransferMessage,
   StoreMessage,
-} from "../core/message";
+} from "../domain/message";
 import {
   findMessageTransfer,
   type FileTransferStates,

@@ -8,20 +8,20 @@ import {
   remove,
 } from "firebase/database";
 
-import { app } from "@/libs/firebase";
+import { app } from "@/libs/infrastructure/firebase";
 import type {
   RawSignal,
   ClientSignal,
   SignalingService,
   SignalingServiceEventMap,
   SignalingServiceStatus,
-} from "@/libs/core/signaling";
+} from "@/libs/domain/signaling";
 
 type Unsubscribe = () => void;
 import {
   decryptData,
   encryptData,
-} from "@/libs/core/utils/encrypt/e2e";
+} from "@/libs/domain/utils/encrypt/e2e";
 import {
   EventHandler,
   MultiEventEmitter,

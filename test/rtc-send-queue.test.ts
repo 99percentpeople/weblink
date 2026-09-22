@@ -6,9 +6,12 @@ import {
   it,
   vi,
 } from "vitest";
-import { MessageSendQueue } from "@/libs/core/protocol/send-queue";
-import { createSessionMessage } from "@/libs/core/protocol/messages";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { MessageSendQueue } from "@/libs/domain/session-send-queue";
+import { createSessionMessage } from "@/libs/domain/protocol/messages";
+import {
+  RtcProtocol,
+  type WebRtcProtocol,
+} from "@/libs/application/rtc/rtc-protocol";
 import {
   FakeRtcTransport,
   makeSession,
@@ -16,7 +19,7 @@ import {
 } from "./helpers/rtc-transport";
 
 const queues: MessageSendQueue[] = [];
-const protocols: RtcProtocol[] = [];
+const protocols: WebRtcProtocol[] = [];
 const watch = <T>(promise: Promise<T>) => {
   void promise.catch(() => {});
   return promise;

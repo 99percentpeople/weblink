@@ -12,8 +12,8 @@ import {
   SpeedTestError,
   type SpeedTestErrorCode,
   type SpeedTestProgress,
-} from "@/libs/core/speed-test-protocol";
-import type { ClientID } from "@/libs/core/ids";
+} from "@/libs/domain/speed-test-protocol";
+import type { ClientID } from "@/libs/domain/ids";
 
 const GAUGE_ARC = 66.667;
 const GAUGE_SWEEP = 240;

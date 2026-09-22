@@ -1,9 +1,9 @@
 import type {
   IceServerOptions,
   TurnServerOptions,
-} from "@/libs/core/ice-server";
-import type { CompressionLevel } from "@/libs/core/transfer/options";
-import type { ClientID, FileID } from "@/libs/core/ids";
+} from "@/libs/domain/ice-server";
+import type { CompressionLevel } from "@/libs/domain/transfer/options";
+import type { ClientID, FileID } from "@/libs/domain/ids";
 import languages from "@/assets/i18n/languages.json";
 
 export type Locale = string;

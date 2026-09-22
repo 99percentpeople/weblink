@@ -1,6 +1,6 @@
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
-import type { FileTransferMessage } from "@/libs/core/message";
-import { TransferMode } from "@/libs/core/transfer/file-transferer";
+import type { ChunkCache } from "@/libs/domain/file";
+import type { FileTransferMessage } from "@/libs/domain/message";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import type { ActiveFileTransfer } from "./file-transfer-state";
 
 export interface TransferMessageStore {

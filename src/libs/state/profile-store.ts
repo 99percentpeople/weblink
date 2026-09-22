@@ -3,7 +3,7 @@ import { createEffect } from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
 import { v4 } from "uuid";
 import { STORAGE_KEYS } from "@/constants";
-import type { ClientProfile } from "@/libs/core/profile";
+import type { ClientProfile } from "@/libs/domain/profile";
 import { appState, setAppState } from "./app-state";
 
 const LEGACY_DICEBEAR_INITIALS_PREFIX =

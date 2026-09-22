@@ -1,0 +1,2 @@
+export const PROTOCOL_DEDUP_TTL_MS = 10 * 60 * 1000;
+export const PROTOCOL_DEDUP_MAX_ENTRIES = 512;

@@ -7,7 +7,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { TransferMode } from "@/libs/core/transfer/file-transferer";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
 import {
   deferred,

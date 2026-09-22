@@ -41,10 +41,10 @@ import { t } from "@/i18n";
 import {
   ChunkCacheInfo,
   ChunkMetaData,
-} from "@/libs/cache";
+} from "@/libs/domain/file";
 import { cn } from "@/libs/cn";
 import { useAppState } from "@/libs/state/app-state-context";
-import type { Client } from "@/libs/core/client";
+import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { downloadFile } from "@/libs/utils/download-file";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
@@ -82,7 +82,7 @@ import {
   Show,
 } from "solid-js";
 import { createComfirmDeleteItemsDialog } from "@/components/dialogs/confirm-delete-items-dialog";
-import { FileTransferer } from "@/libs/core/transfer/file-transferer";
+import { FileTransferer } from "@/libs/domain/transfer/file-transferer";
 import {
   Tooltip,
   TooltipContent,
@@ -91,7 +91,7 @@ import {
 import { catchError } from "@/libs/catch";
 import { canShareFile } from "@/libs/utils/can-share";
 import { IconFile } from "@/components/icon-file";
-import { getTotalChunkCount } from "@/libs/cache/chunk-cache";
+import { getTotalChunkCount } from "@/libs/domain/file";
 import { appState } from "@/libs/state/app-state";
 
 type ChunkStatus =

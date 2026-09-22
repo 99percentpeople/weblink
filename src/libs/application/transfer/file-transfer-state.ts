@@ -1,6 +1,6 @@
-import type { PeerSession } from "@/libs/core/session";
-import type { FileTransferer } from "@/libs/core/transfer/file-transferer";
-import type { FileTransferMessage } from "@/libs/core/message";
+import type { PeerSession } from "@/libs/domain/session";
+import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
+import type { FileTransferMessage } from "@/libs/domain/message";
 
 /** A cache file is not a transfer. Every run has an owner and a message. */
 export interface ActiveFileTransfer {

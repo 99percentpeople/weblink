@@ -1,15 +1,15 @@
-import {
-  IDBChunkCache,
-  type IDBChunkCacheOptions,
-} from "../../src/libs/cache/chunk-cache";
+import type { ChunkMetaData } from "../../src/libs/domain/file";
 import {
   assembleCachedFile,
   requestResult,
   transactionDone,
   type StoredChunk,
-} from "../../src/libs/cache/chunk-assembly";
-import MergeWorker from "../../src/libs/workers/merge-chunk?worker";
-import type { ChunkMetaData } from "../../src/libs/cache";
+} from "../../src/libs/infrastructure/storage/chunk-assembly";
+import {
+  IDBChunkCache,
+  type IDBChunkCacheOptions,
+} from "../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import MergeWorker from "../../src/libs/infrastructure/storage/merge-worker?worker";
 
 const assert: (
   value: unknown,

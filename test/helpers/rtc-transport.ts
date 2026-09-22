@@ -1,24 +1,27 @@
-import type { PeerSession } from "@/libs/core/session";
-import type { SessionMessage } from "@/libs/core/protocol/messages";
+import type { PeerSession } from "@/libs/domain/session";
+import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import type {
   RtcAnyMessageHandler,
   RtcProtocolTransport,
   RtcSessionClosedHandler,
-} from "@/libs/core/protocol/transport";
+} from "@/libs/domain/protocol/transport";
 import {
   type MessageSendOptions,
   RtcProtocolError,
-} from "@/libs/core/protocol/errors";
+} from "@/libs/domain/protocol/errors";
 
-export class FakeRtcTransport implements RtcProtocolTransport {
+export class FakeRtcTransport implements RtcProtocolTransport<PeerSession> {
   readonly sendCalls: {
     session: PeerSession;
     message: SessionMessage;
     options?: MessageSendOptions;
   }[] = [];
-  readonly handlers = new Set<RtcAnyMessageHandler>();
-  readonly closedHandlers =
-    new Set<RtcSessionClosedHandler>();
+  readonly handlers = new Set<
+    RtcAnyMessageHandler<PeerSession>
+  >();
+  readonly closedHandlers = new Set<
+    RtcSessionClosedHandler<PeerSession>
+  >();
   sendImpl?: (
     session: PeerSession,
     message: SessionMessage,
@@ -36,7 +39,9 @@ export class FakeRtcTransport implements RtcProtocolTransport {
     await this.sendImpl?.(session, message, options);
   }
 
-  onAny(handler: RtcAnyMessageHandler): () => void {
+  onAny(
+    handler: RtcAnyMessageHandler<PeerSession>,
+  ): () => void {
     this.handlers.add(handler);
     return () => {
       this.handlers.delete(handler);
@@ -44,7 +49,7 @@ export class FakeRtcTransport implements RtcProtocolTransport {
   }
 
   onSessionClosed(
-    handler: RtcSessionClosedHandler,
+    handler: RtcSessionClosedHandler<PeerSession>,
   ): () => void {
     this.closedHandlers.add(handler);
     return () => {

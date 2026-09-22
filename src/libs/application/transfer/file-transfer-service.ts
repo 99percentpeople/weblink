@@ -1,26 +1,26 @@
 import type {
   ChunkMetaData,
   FileMetaData,
-} from "@/libs/cache";
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
-import type { PeerSession } from "@/libs/core/session";
-import type { FileTransferMessage } from "@/libs/core/message";
+} from "@/libs/domain/file";
+import type { ChunkCache } from "@/libs/domain/file";
+import type { PeerSession } from "@/libs/domain/session";
+import type { FileTransferMessage } from "@/libs/domain/message";
 import type { messageStores } from "../messaging/message-store";
 import {
   TransferMode,
   TRANSFER_CHANNEL_PREFIX,
-} from "@/libs/core/transfer/file-transferer";
-import type { FileSender } from "@/libs/core/transfer/file-sender";
+} from "@/libs/domain/transfer/file-transferer";
+import type { FileSender } from "@/libs/domain/transfer/file-sender";
 import type {
   MessageMetadata,
   MessagePayload,
-} from "@/libs/core/protocol/messages";
-import type { RequestContext } from "@/libs/core/protocol/request-manager";
+} from "@/libs/domain/protocol/messages";
+import type { RequestContext } from "@/libs/domain/protocol/request-manager";
 import {
   getRangesLength,
   type ChunkRange,
 } from "@/libs/utils/range";
-import type { RtcProtocol } from "../rtc/rtc-protocol";
+import type { WebRtcProtocol } from "../rtc/rtc-protocol";
 import type { RtcService } from "../rtc/rtc-service";
 import type { FileCacheFactory } from "../cache-service";
 import type { PeerMessagingService } from "../messaging/peer-messaging-service";
@@ -31,7 +31,7 @@ import {
 import { finishReceivedFile } from "./transfer-message-binding";
 
 export interface FileTransferServiceOptions {
-  protocol: Pick<RtcProtocol, "call" | "handle">;
+  protocol: Pick<WebRtcProtocol, "call" | "handle">;
   rtc: Pick<RtcService, "onChannel" | "onSessionClosed">;
   registry: TransferRegistry;
   caches: Pick<
@@ -657,7 +657,10 @@ export class FileTransferService {
     session,
     message,
     signal,
-  }: RequestContext<"send-file">): Promise<void> {
+  }: RequestContext<
+    "send-file",
+    PeerSession
+  >): Promise<void> {
     return this.operation(
       session,
       message.fid,
@@ -702,7 +705,10 @@ export class FileTransferService {
     session,
     message,
     signal,
-  }: RequestContext<"request-file">): Promise<void> {
+  }: RequestContext<
+    "request-file",
+    PeerSession
+  >): Promise<void> {
     return this.operation(
       session,
       message.fid,

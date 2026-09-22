@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createSessionMessage } from "@/libs/core/protocol/messages";
+import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import {
   assertMessagePeer,
   snapshotSessionMessage,
   parseSessionMessage,
   validateSessionMessage,
-} from "@/libs/core/protocol/validation";
+} from "@/libs/domain/protocol/validation";
 import { makeSession } from "./helpers/rtc-transport";
 
 const peer = makeSession();
@@ -108,7 +108,7 @@ describe("session message validation", () => {
     ],
   ])("rejects %s", (_name, input) => {
     expect(() => validateSessionMessage(input)).toThrow(
-      /Invalid RTC protocol message/,
+      /Invalid P2P protocol message/,
     );
   });
 

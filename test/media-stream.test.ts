@@ -10,7 +10,7 @@ import {
   composeMediaStream,
   mergeMediaStreamTracks,
   stopMediaStream,
-} from "@/libs/core/media-stream";
+} from "@/libs/domain/media-stream";
 
 class FakeMediaStream {
   private tracks: MediaStreamTrack[];

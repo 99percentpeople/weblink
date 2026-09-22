@@ -1,12 +1,12 @@
 import { FakeRtcTransport } from "./helpers/rtc-transport";
 import { describe, expect, it, vi } from "vitest";
-import type { PeerSession } from "@/libs/core/session";
-import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/core/profile";
+import type { PeerSession } from "@/libs/domain/session";
+import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/domain/profile";
 import {
   createClientPresence,
   hydrateClientPresence,
 } from "@/libs/infrastructure/signaling/client/client-presence";
-import type { TransferClient } from "@/libs/core/client";
+import type { TransferClient } from "@/libs/domain/client";
 import {
   RtcProtocol,
   type ClientProfileMessage,

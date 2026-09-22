@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { RtcService } from "@/libs/application/rtc/rtc-service";
 import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
-import { createSessionMessage } from "@/libs/core/protocol/messages";
-import type { PeerSession } from "@/libs/core/session";
+import { createSessionMessage } from "@/libs/domain/protocol/messages";
+import type { PeerSession } from "@/libs/domain/session";
 import {
   flushRtc,
   makeSession,

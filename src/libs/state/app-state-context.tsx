@@ -9,14 +9,10 @@ import {
   ParentProps,
   useContext,
 } from "solid-js";
-import type { ChunkMetaData } from "@/libs/cache";
-import type { PeerSession } from "@/libs/core/session";
-import type { ClientID, FileID } from "@/libs/core/ids";
+import type { ChunkMetaData } from "@/libs/domain/file";
+import type { PeerSession } from "@/libs/domain/session";
+import type { ClientID, FileID } from "@/libs/domain/ids";
 import type { RoomStatus } from "@/libs/state/app-state";
-import type {
-  ClientService,
-  ClientServiceInitOptions,
-} from "@/libs/core/client";
 import { cacheManager } from "@/libs/application/cache-service";
 import { transferManager } from "@/libs/application/transfer/transfer-service";
 import {
@@ -24,10 +20,7 @@ import {
   saveMediaConstraintsToSession,
   setAppState,
 } from "@/libs/state/app-state";
-import {
-  resolveClientConfig,
-  signalingWebSocketUrl,
-} from "@/libs/state/app-options";
+import { resolveClientConfig } from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/application/rtc/rtc-service";
 import {
   createRtcProtocol,
@@ -38,7 +31,7 @@ import { PeerProfileService } from "@/libs/application/peer-profile-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { toast } from "solid-sonner";
-import type { StoreMessage } from "@/libs/core/message";
+import type { StoreMessage } from "@/libs/domain/message";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { catchError } from "@/libs/catch";
 import {
@@ -50,24 +43,8 @@ import {
   createTaskService,
   type TaskService,
 } from "@/libs/application/task-service";
-
-async function getClientService(
-  options: ClientServiceInitOptions,
-): Promise<ClientService> {
-  switch (import.meta.env.VITE_BACKEND) {
-    case "FIREBASE":
-      return import("@/libs/infrastructure/signaling/client/firebase-client-service").then(
-        (m) => new m.FirebaseClientService(options),
-      );
-    case "WEBSOCKET":
-      options.websocketUrl = signalingWebSocketUrl;
-      return import("@/libs/infrastructure/signaling/client/ws-client-service").then(
-        (m) => new m.WebSocketClientService(options),
-      );
-    default:
-      throw Error("invalid backend type");
-  }
-}
+import { createClientService } from "@/libs/application/client-service-factory";
+import { RoomService } from "@/libs/application/room-service";
 
 export interface AppStateContextProps {
   joinRoom: () => Promise<void>;
@@ -164,7 +141,6 @@ export const AppStateProvider: Component<
     },
   });
   let clipboardCacheData: SendClipboardMessage[] = [];
-  let clientServiceListenersBound = false;
   const tasks = createTaskService({
     clientId: () => appState.profile.clientId,
     messages: () => appState.message.messages,
@@ -198,6 +174,21 @@ export const AppStateProvider: Component<
       ),
   });
   onCleanup(() => speedTests.dispose());
+
+  const room = new RoomService({
+    sessions: sessionService,
+    rtc,
+    profiles: peerProfiles,
+    messages: messageStores,
+    createClientService,
+    getLocalStream: () => props.localStream,
+    onLeaving: () => {
+      files.cancelAll();
+      speedTests.cancel();
+    },
+  });
+  const joinRoom = () => room.join();
+  const leaveRoom = () => room.leave();
 
   createEffect(() => {
     saveMediaConstraintsToSession({
@@ -384,109 +375,10 @@ export const AppStateProvider: Component<
   });
 
   onCleanup(() => {
-    leaveRoom();
+    room.dispose();
     peerProfiles.dispose();
-    rtc.unbindAllSessions();
     clipboardCacheData = [];
-    clientServiceListenersBound = false;
   });
-
-  async function joinRoom(): Promise<void> {
-    console.log(
-      `join ${appState.profile.roomId} with profile`,
-      appState.profile,
-    );
-
-    let cs: ClientService;
-    if (sessionService.clientService) {
-      cs = sessionService.clientService;
-    } else {
-      cs = await getClientService({
-        roomId: appState.profile.roomId,
-        password: appState.profile.password,
-        client: {
-          clientId: appState.profile.clientId,
-          name: appState.profile.name,
-          avatar: appState.profile.avatar,
-        },
-      });
-
-      sessionService.setClientService(cs);
-      clientServiceListenersBound = false;
-    }
-
-    if (!clientServiceListenersBound) {
-      clientServiceListenersBound = true;
-      cs.listenForJoin(async (targetClient) => {
-        console.log(`new client join in `, targetClient);
-
-        const [err, session] = await catchError(
-          sessionService.addClient(targetClient),
-        );
-        if (err) {
-          console.error(err);
-          return;
-        }
-
-        session.setStream(props.localStream);
-        rtc.bindSession(session);
-        peerProfiles.bindSession(session);
-
-        await session.listen();
-        messageStores.setClient(targetClient);
-
-        if (!session.polite) {
-          const [err] = await catchError(session.connect());
-          if (err) {
-            console.error(err);
-            if (
-              Object.values(sessionService.sessions)
-                .length === 0
-            ) {
-              leaveRoom();
-              throw err;
-            }
-          }
-        }
-      });
-
-      cs.listenForLeave((client) => {
-        console.log(`client ${client.clientId} leave`);
-        peerProfiles.unbindSession(client.clientId);
-        sessionService.removeSession(client.clientId);
-        rtc.unbindSession(client.clientId);
-      });
-    }
-
-    await cs.createClient().catch((err) => {
-      sessionService.removeService();
-      clientServiceListenersBound = false;
-      throw err;
-    });
-
-    setAppState("roomStatus", "profile", cs.info);
-    setAppState(
-      "roomStatus",
-      "roomId",
-      appState.profile.roomId,
-    );
-  }
-
-  function leaveRoom() {
-    files.cancelAll();
-    speedTests.cancel();
-    const room = appState.roomStatus.roomId;
-    if (room) {
-      console.log(`on leave room ${room}`);
-    }
-
-    peerProfiles.unbindAllSessions();
-    rtc.unbindAllSessions();
-    sessionService.destoryAllSession();
-    setAppState("roomStatus", "roomId", null);
-    setAppState("roomStatus", "profile", null);
-    clientServiceListenersBound = false;
-  }
 
   function getTargetSessions(
     target: ClientID | ClientID[],

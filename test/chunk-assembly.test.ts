@@ -7,8 +7,8 @@ import {
   transactionDone,
   MERGE_BATCH_BYTES,
   MERGE_BATCH_RECORDS,
-} from "@/libs/cache/chunk-assembly";
-import type { ChunkMetaData } from "@/libs/cache";
+} from "@/libs/infrastructure/storage/chunk-assembly";
+import type { ChunkMetaData } from "@/libs/domain/file";
 
 const info: ChunkMetaData = {
   id: "test",

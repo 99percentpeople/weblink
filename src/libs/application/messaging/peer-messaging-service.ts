@@ -1,4 +1,4 @@
-import type { PeerSession } from "@/libs/core/session";
+import type { PeerSession } from "@/libs/domain/session";
 import type { messageStores } from "./message-store";
 import {
   createSessionMessage,
@@ -6,12 +6,12 @@ import {
   type MessageMetadata,
   type MessageOf,
   type MessagePayload,
-} from "@/libs/core/protocol/messages";
+} from "@/libs/domain/protocol/messages";
 import {
   type RequestOptions,
   RtcProtocolError,
-} from "@/libs/core/protocol/errors";
-import type { RtcProtocol } from "../rtc/rtc-protocol";
+} from "@/libs/domain/protocol/errors";
+import type { WebRtcProtocol } from "../rtc/rtc-protocol";
 
 type TrackedType =
   | "send-text"
@@ -33,7 +33,7 @@ export type TrackedSendOptions = RequestOptions &
 /** The only bridge between control-request lifecycle and persisted chat state. */
 export class PeerMessagingService {
   constructor(
-    private readonly protocol: RtcProtocol,
+    private readonly protocol: WebRtcProtocol,
     private readonly store: MessageStore,
   ) {}
 
@@ -57,13 +57,8 @@ export class PeerMessagingService {
           onPrepared: (message) => {
             prepared = message;
             if (options.retry)
-              this.store.retrySendMessage(message, {
-                timeoutMs: null,
-              });
-            else
-              this.store.setSendMessage(message, {
-                timeoutMs: null,
-              });
+              this.store.retrySendMessage(message);
+            else this.store.setSendMessage(message);
           },
         },
       );

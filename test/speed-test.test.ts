@@ -7,14 +7,14 @@ import {
   it,
   vi,
 } from "vitest";
-import { runSpeedTest } from "@/libs/core/speed-test";
+import { runSpeedTest } from "@/libs/domain/speed-test";
 import {
   SPEED_TEST_PROTOCOL,
   SPEED_TEST_MAX_BYTES,
   SPEED_TEST_HIGH_WATER,
   parseSpeedTestMessage,
   type SpeedTestProgress,
-} from "@/libs/core/speed-test-protocol";
+} from "@/libs/domain/speed-test-protocol";
 
 class Channel extends EventTarget {
   protocol = SPEED_TEST_PROTOCOL;

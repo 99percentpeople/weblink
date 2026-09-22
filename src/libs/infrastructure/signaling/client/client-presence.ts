@@ -1,11 +1,11 @@
 import {
   createAnonymousPeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
-} from "@/libs/core/profile";
+} from "@/libs/domain/profile";
 import type {
   ClientPresence,
   TransferClient,
-} from "@/libs/core/client";
+} from "@/libs/domain/client";
 
 /**
  * Build the presence record published through signaling.

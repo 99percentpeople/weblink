@@ -18,11 +18,11 @@ import { createRoot, createSignal } from "solid-js";
 import { TaskList } from "@/components/task-list";
 import { createTaskService } from "@/libs/application/task-service";
 import { useAppState } from "@/libs/state/app-state-context";
-import type { FileTransferMessage } from "@/libs/core/message";
+import type { FileTransferMessage } from "@/libs/domain/message";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
-import type { FileTransferer } from "@/libs/core/transfer/file-transferer";
+import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
-import type { PeerSession } from "@/libs/core/session";
+import type { PeerSession } from "@/libs/domain/session";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: vi.fn(),

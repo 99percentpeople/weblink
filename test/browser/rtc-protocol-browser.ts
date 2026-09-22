@@ -1,12 +1,12 @@
 import { RtcProtocol } from "../../src/libs/application/rtc/rtc-protocol";
-import { MessageSendQueue } from "../../src/libs/core/protocol/send-queue";
-import { parseSessionMessage } from "../../src/libs/core/protocol/validation";
-import type { PeerSession } from "../../src/libs/core/session";
+import { MessageSendQueue } from "../../src/libs/domain/session-send-queue";
+import { parseSessionMessage } from "../../src/libs/domain/protocol/validation";
+import type { PeerSession } from "../../src/libs/domain/session";
 import type {
   RtcAnyMessageHandler,
   RtcProtocolTransport,
   RtcSessionClosedHandler,
-} from "../../src/libs/core/protocol/transport";
+} from "../../src/libs/domain/protocol/transport";
 
 declare global {
   interface Window {

@@ -51,7 +51,7 @@ import {
   composeMediaStream,
   mergeMediaStreamTracks,
   stopMediaStream,
-} from "@/libs/core/media-stream";
+} from "@/libs/domain/media-stream";
 import { localStream } from "@/libs/application/local-stream-service";
 import { cn } from "@/libs/cn";
 import {

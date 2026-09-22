@@ -7,15 +7,18 @@ import {
   vi,
 } from "vitest";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
-import { createSessionMessage } from "@/libs/core/protocol/messages";
+import {
+  RtcProtocol,
+  type WebRtcProtocol,
+} from "@/libs/application/rtc/rtc-protocol";
+import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import {
   FakeRtcTransport,
   makeSession,
   flushRtc,
 } from "./helpers/rtc-transport";
 
-const protocols: RtcProtocol[] = [];
+const protocols: WebRtcProtocol[] = [];
 const local = makeSession();
 const remote = makeSession("b", "a");
 const watch = <T>(promise: Promise<T>) => {
@@ -54,7 +57,6 @@ describe("peer messaging state bridge", () => {
     const message = transport.sendCalls[0]!.message;
     expect(store.setSendMessage).toHaveBeenCalledWith(
       message,
-      { timeoutMs: null },
     );
     await transport.emit(
       local,
@@ -86,7 +88,6 @@ describe("peer messaging state bridge", () => {
     expect(store.setSendMessage).not.toHaveBeenCalled();
     expect(store.retrySendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: "m1", createdAt: 42 }),
-      { timeoutMs: null },
     );
     await transport.emit(
       local,

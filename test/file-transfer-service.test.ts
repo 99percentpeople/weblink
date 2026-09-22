@@ -11,10 +11,10 @@ import { FileTransferService } from "@/libs/application/transfer/file-transfer-s
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
 import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 import type { RtcChannelHandler } from "@/libs/application/rtc/rtc-service";
-import type { PeerSession } from "@/libs/core/session";
-import { createSessionMessage } from "@/libs/core/protocol/messages";
-import { TransferMode } from "@/libs/core/transfer/file-transferer";
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
+import type { PeerSession } from "@/libs/domain/session";
+import { createSessionMessage } from "@/libs/domain/protocol/messages";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
+import type { ChunkCache } from "@/libs/domain/file";
 import {
   FakeRtcTransport,
   deferred,

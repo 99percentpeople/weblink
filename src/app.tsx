@@ -13,7 +13,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import Nav from "@/components/app/nav";
 import { setClientProfile } from "./libs/state/profile-store";
-import { optional } from "./libs/core/utils/optional";
+import { optional } from "./libs/domain/utils/optional";
 import {
   AppStateProvider,
   useAppState,
@@ -70,7 +70,7 @@ import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 import { AudioPlayerProvider } from "./routes/video/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
-import { createInitialization } from "@/libs/initialization";
+import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
 import { localStream } from "@/libs/application/local-stream-service";
 import { ModalProvider } from "@/components/dialogs/base";

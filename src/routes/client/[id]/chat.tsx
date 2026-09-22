@@ -38,9 +38,9 @@ import {
 } from "@/components/icons";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
-import { PeerSession } from "@/libs/core/session";
+import { PeerSession } from "@/libs/domain/session";
 import { handleDropItems } from "@/libs/utils/process-file";
-import type { Client } from "@/libs/core/client";
+import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { catchError } from "@/libs/catch";
 import { ChatMoreMessageButton } from "./components/chat-more-message-button";

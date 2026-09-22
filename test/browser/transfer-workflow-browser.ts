@@ -1,18 +1,18 @@
-import {
-  IDBChunkCache,
-  type ChunkCache,
-} from "../../src/libs/cache/chunk-cache";
-import type { FileMetaData } from "../../src/libs/cache";
-import { FileSender } from "../../src/libs/core/transfer/file-sender";
-import { FileReceiver } from "../../src/libs/core/transfer/file-receiver";
-import { TransferMode } from "../../src/libs/core/transfer/file-transferer";
-import type { PeerSession } from "../../src/libs/core/session";
-import type { FileTransferMessage } from "../../src/libs/core/message";
-import type { SessionMessage } from "../../src/libs/core/protocol/messages";
+import type {
+  ChunkCache,
+  FileMetaData,
+} from "../../src/libs/domain/file";
+import { IDBChunkCache } from "../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import { FileSender } from "../../src/libs/domain/transfer/file-sender";
+import { FileReceiver } from "../../src/libs/domain/transfer/file-receiver";
+import { TransferMode } from "../../src/libs/domain/transfer/file-transferer";
+import type { PeerSession } from "../../src/libs/domain/session";
+import type { FileTransferMessage } from "../../src/libs/domain/message";
+import type { SessionMessage } from "../../src/libs/domain/protocol/messages";
 import type {
   RtcAnyMessageHandler,
   RtcSessionClosedHandler,
-} from "../../src/libs/core/protocol/transport";
+} from "../../src/libs/domain/protocol/transport";
 import type { RtcChannelHandler } from "../../src/libs/application/rtc/rtc-service";
 import { RtcProtocol } from "../../src/libs/application/rtc/rtc-protocol";
 import { PeerMessagingService } from "../../src/libs/application/messaging/peer-messaging-service";
@@ -50,8 +50,12 @@ class BrowserTransport {
     PeerSession,
     RTCDataChannel
   >();
-  readonly incoming = new Set<RtcAnyMessageHandler>();
-  readonly closed = new Set<RtcSessionClosedHandler>();
+  readonly incoming = new Set<
+    RtcAnyMessageHandler<PeerSession>
+  >();
+  readonly closed = new Set<
+    RtcSessionClosedHandler<PeerSession>
+  >();
   readonly files = new Set<RtcChannelHandler>();
   async send(
     session: PeerSession,
@@ -64,13 +68,15 @@ class BrowserTransport {
     );
     channel.send(JSON.stringify(message));
   }
-  onAny(handler: RtcAnyMessageHandler) {
+  onAny(handler: RtcAnyMessageHandler<PeerSession>) {
     this.incoming.add(handler);
     return () => {
       this.incoming.delete(handler);
     };
   }
-  onSessionClosed(handler: RtcSessionClosedHandler) {
+  onSessionClosed(
+    handler: RtcSessionClosedHandler<PeerSession>,
+  ) {
     this.closed.add(handler);
     return () => {
       this.closed.delete(handler);

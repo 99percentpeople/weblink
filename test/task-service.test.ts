@@ -9,14 +9,14 @@ import {
 import type {
   StoreMessage,
   FileTransferMessage,
-} from "@/libs/core/message";
-import type { FileTransferer } from "@/libs/core/transfer/file-transferer";
+} from "@/libs/domain/message";
+import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
 import type {
   ActiveFileTransfer,
   FileTransferStates,
 } from "@/libs/application/transfer/file-transfer-state";
-import type { PeerSession } from "@/libs/core/session";
-import type { FileMetaData } from "@/libs/cache";
+import type { PeerSession } from "@/libs/domain/session";
+import type { FileMetaData } from "@/libs/domain/file";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
 
 const disposers: Array<() => void> = [];

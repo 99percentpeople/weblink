@@ -1,14 +1,12 @@
-import {
+import { DBNAME_PREFIX } from "@/constants";
+import type {
   ChunkCache,
-  IDBChunkCache,
-} from "@/libs/cache/chunk-cache";
-import type { FileID } from "@/libs/core/ids";
-import type { Accessor } from "solid-js";
-import {
   ChunkCacheInfo,
-  DBNAME_PREFIX,
   FileMetaData,
-} from "@/libs/cache";
+} from "@/libs/domain/file";
+import type { FileID } from "@/libs/domain/ids";
+import { IDBChunkCache } from "@/libs/infrastructure/storage/indexeddb-chunk-cache";
+import type { Accessor } from "solid-js";
 import { v4 } from "uuid";
 import {
   appState,

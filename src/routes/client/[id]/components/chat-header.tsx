@@ -17,7 +17,7 @@ import {
 import { t } from "@/i18n";
 import { ConnectionBadge } from "@/components/common/connection-badge";
 import clientInfoDialog from "@/components/dialogs/client-info-dialog";
-import type { Client } from "@/libs/core/client";
+import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import {
   Tooltip,

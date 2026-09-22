@@ -1,4 +1,4 @@
-import type { ClientID } from "@/libs/core/ids";
+import type { ClientID } from "@/libs/domain/ids";
 
 export type ClientInfoDialogTab =
   | "session"

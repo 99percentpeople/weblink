@@ -85,7 +85,7 @@ import { createStore } from "solid-js/store";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { setAppOptions } from "@/options";
 import { createForwardDialog } from "@/components/dialogs/forward-dialog";
-import { FileMetaData } from "@/libs/cache";
+import { FileMetaData } from "@/libs/domain/file";
 import { downloadFile } from "@/libs/utils/download-file";
 import DataTableColumnVisibility from "@/components/data-table/data-table-column-visibility";
 import { makePersisted } from "@solid-primitives/storage";
@@ -103,7 +103,7 @@ import { toast } from "solid-sonner";
 import { catchError } from "@/libs/catch";
 import { canShareFile } from "@/libs/utils/can-share";
 import { IconFile } from "../components/icon-file";
-import { getTotalChunkCount } from "@/libs/cache/chunk-cache";
+import { getTotalChunkCount } from "@/libs/domain/file";
 
 const columnHelper = createColumnHelper<FileMetaData>();
 

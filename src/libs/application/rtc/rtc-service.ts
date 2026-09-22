@@ -1,12 +1,12 @@
-import type { PeerSession } from "@/libs/core/session";
-import type { ClientID } from "@/libs/core/ids";
-import type { SessionMessage } from "@/libs/core/protocol/messages";
-import type { MessageSendOptions } from "@/libs/core/protocol/errors";
+import type { PeerSession } from "@/libs/domain/session";
+import type { ClientID } from "@/libs/domain/ids";
+import type { SessionMessage } from "@/libs/domain/protocol/messages";
+import type { MessageSendOptions } from "@/libs/domain/protocol/errors";
 import type {
   RtcAnyMessageHandler,
   RtcProtocolTransport,
   RtcSessionClosedHandler,
-} from "@/libs/core/protocol/transport";
+} from "@/libs/domain/protocol/transport";
 
 export type RtcChannelHandler = (context: {
   session: PeerSession;
@@ -14,17 +14,19 @@ export type RtcChannelHandler = (context: {
 }) => void | Promise<void>;
 
 /** Session event routing only. Protocol state belongs to RtcProtocol. */
-export class RtcService implements RtcProtocolTransport {
+export class RtcService implements RtcProtocolTransport<PeerSession> {
   private readonly bindings = new Map<
     ClientID,
     { session: PeerSession; controller: AbortController }
   >();
-  private readonly messageHandlers =
-    new Set<RtcAnyMessageHandler>();
+  private readonly messageHandlers = new Set<
+    RtcAnyMessageHandler<PeerSession>
+  >();
   private readonly channelHandlers =
     new Set<RtcChannelHandler>();
-  private readonly closedHandlers =
-    new Set<RtcSessionClosedHandler>();
+  private readonly closedHandlers = new Set<
+    RtcSessionClosedHandler<PeerSession>
+  >();
 
   bindSession(session: PeerSession): void {
     const key = session.targetClientId;
@@ -88,7 +90,9 @@ export class RtcService implements RtcProtocolTransport {
     return session.sendMessage(message, options);
   }
 
-  onAny(handler: RtcAnyMessageHandler): () => void {
+  onAny(
+    handler: RtcAnyMessageHandler<PeerSession>,
+  ): () => void {
     this.messageHandlers.add(handler);
     return () => {
       this.messageHandlers.delete(handler);
@@ -96,7 +100,7 @@ export class RtcService implements RtcProtocolTransport {
   }
 
   onSessionClosed(
-    handler: RtcSessionClosedHandler,
+    handler: RtcSessionClosedHandler<PeerSession>,
   ): () => void {
     this.closedHandlers.add(handler);
     return () => {

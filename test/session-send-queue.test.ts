@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PeerSession } from "@/libs/core/session";
-import type { SignalingService } from "@/libs/core/signaling";
+import { PeerSession } from "@/libs/domain/session";
+import type { SignalingService } from "@/libs/domain/signaling";
 import type { SendTextMessage } from "@/libs/application/rtc/rtc-protocol";
 
 if (typeof window === "undefined") {
@@ -51,7 +51,8 @@ describe("PeerSession send queue", () => {
       close: () => {},
     } as unknown as RTCDataChannel;
 
-    (session as any).messageChannel = channel;
+    const channels = (session as any).dataChannels;
+    channels.messageChannel = channel;
 
     const msg = {
       id: "m1",
@@ -66,16 +67,16 @@ describe("PeerSession send queue", () => {
     const duplicate = session.sendMessage(msg);
 
     expect(sendCalls).toHaveLength(0);
-    expect((session as any).messageSendQueue.size).toBe(1);
+    expect(channels.pendingMessageCount).toBe(1);
 
     (channel as any).readyState = "open";
-    (session as any).flushOutgoingQueue();
+    channels.flushOutgoingQueue();
 
     expect(sendCalls).toHaveLength(1);
     expect(JSON.parse(sendCalls[0]!)).toMatchObject(msg);
     await Promise.all([first, duplicate]);
     session.close();
-    expect((session as any).messageSendQueue.size).toBe(0);
+    expect(channels.pendingMessageCount).toBe(0);
   });
 
   it("sends immediately when the channel is open", async () => {
@@ -93,7 +94,8 @@ describe("PeerSession send queue", () => {
       close: () => {},
     } as unknown as RTCDataChannel;
 
-    (session as any).messageChannel = channel;
+    const channels = (session as any).dataChannels;
+    channels.messageChannel = channel;
 
     const msg = {
       id: "m2",
@@ -107,7 +109,7 @@ describe("PeerSession send queue", () => {
     await session.sendMessage(msg);
 
     expect(sendCalls).toHaveLength(1);
-    expect((session as any).messageSendQueue.size).toBe(0);
+    expect(channels.pendingMessageCount).toBe(0);
     session.close();
   });
 });

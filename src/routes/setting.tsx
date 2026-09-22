@@ -11,7 +11,7 @@ import {
   SwitchLabel,
   SwitchThumb,
 } from "@/components/ui/switch";
-import { parseTurnServer } from "@/libs/core/ice-server";
+import { parseTurnServer } from "@/libs/domain/ice-server";
 import { setClientProfile } from "@/libs/state/profile-store";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import {
@@ -60,7 +60,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ComponentProps } from "solid-js";
-import { checkIceServerAvailability } from "@/libs/core/utils/turn";
+import { checkIceServerAvailability } from "@/libs/domain/utils/turn";
 import { createElementSize } from "@solid-primitives/resize-observer";
 import DropArea from "@/components/drop-area";
 import { catchError } from "@/libs/catch";

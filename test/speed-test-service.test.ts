@@ -14,14 +14,14 @@ import {
   SpeedTestError,
   SPEED_TEST_PROTOCOL,
   type SpeedTestResult,
-} from "@/libs/core/speed-test-protocol";
-import type { SpeedTestOptions } from "@/libs/core/speed-test";
+} from "@/libs/domain/speed-test-protocol";
+import type { SpeedTestOptions } from "@/libs/domain/speed-test";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   run: vi.fn(),
 }));
-vi.mock("@/libs/core/speed-test", () => ({
+vi.mock("@/libs/domain/speed-test", () => ({
   createSpeedTestChannel: mocks.create,
   runSpeedTest: mocks.run,
 }));

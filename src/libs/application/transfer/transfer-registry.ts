@@ -1,10 +1,10 @@
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
-import type { FileMetaData } from "@/libs/cache";
-import type { PeerSession } from "@/libs/core/session";
+import type { ChunkCache } from "@/libs/domain/file";
+import type { FileMetaData } from "@/libs/domain/file";
+import type { PeerSession } from "@/libs/domain/session";
 import {
   TransferMode,
   type FileTransferer,
-} from "@/libs/core/transfer/file-transferer";
+} from "@/libs/domain/transfer/file-transferer";
 import type { ActiveFileTransfer } from "./file-transfer-state";
 
 export interface TransferRegistration {

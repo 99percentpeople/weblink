@@ -2,22 +2,22 @@ import { createStore } from "solid-js/store";
 import type {
   ChunkMetaData,
   FileMetaData,
-} from "@/libs/cache";
+} from "@/libs/domain/file";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import type {
   Client,
   TransferClient,
-} from "@/libs/core/client";
+} from "@/libs/domain/client";
 import type {
   ClientID,
   FileID,
   RoomID,
-} from "@/libs/core/ids";
-import type { PeerSession } from "@/libs/core/session";
-import type { ClientProfile } from "@/libs/core/profile";
-import type { StoreMessage } from "@/libs/core/message";
-import type { SendClipboardMessage } from "@/libs/core/protocol/messages";
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
+} from "@/libs/domain/ids";
+import type { PeerSession } from "@/libs/domain/session";
+import type { ClientProfile } from "@/libs/domain/profile";
+import type { StoreMessage } from "@/libs/domain/message";
+import type { SendClipboardMessage } from "@/libs/domain/protocol/messages";
+import type { ChunkCache } from "@/libs/domain/file";
 import type { AppOption } from "@/libs/state/app-options";
 import { getDefaultAppOptions } from "@/libs/state/app-options";
 

@@ -40,7 +40,7 @@ import {
 import { t } from "@/i18n";
 import { catchError } from "@/libs/catch";
 import { messageStores } from "@/libs/application/messaging/message-store";
-import type { ClientID } from "@/libs/core/ids";
+import type { ClientID } from "@/libs/domain/ids";
 import {
   notifyClientInfoDialogTabVisible,
   type ClientInfoDialogTab,

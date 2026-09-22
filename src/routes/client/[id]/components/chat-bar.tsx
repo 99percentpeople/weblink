@@ -10,7 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Client } from "@/libs/core/client";
+import type { Client } from "@/libs/domain/client";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import { cn } from "@/libs/cn";
 

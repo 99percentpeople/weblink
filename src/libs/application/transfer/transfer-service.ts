@@ -1,6 +1,6 @@
-import { TransferMode } from "@/libs/core/transfer/file-transferer";
-import { FileReceiver } from "@/libs/core/transfer/file-receiver";
-import { FileSender } from "@/libs/core/transfer/file-sender";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
+import { FileReceiver } from "@/libs/domain/transfer/file-receiver";
+import { FileSender } from "@/libs/domain/transfer/file-sender";
 import {
   appState,
   setAppState,

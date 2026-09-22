@@ -24,7 +24,7 @@ import { appState } from "@/libs/state/app-state";
 import {
   FileTransferer,
   TransferMode,
-} from "@/libs/core/transfer/file-transferer";
+} from "@/libs/domain/transfer/file-transferer";
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import {
@@ -36,7 +36,7 @@ import {
   FileTransferMessage,
   StoreMessage,
   TextMessage,
-} from "@/libs/core/message";
+} from "@/libs/domain/message";
 import { PortableContextMenu } from "@/components/portable-contextmenu";
 import {
   IconCheck,
@@ -59,7 +59,7 @@ import {
 import { t } from "@/i18n";
 import { Dynamic } from "solid-js/web";
 import { createTimeAgo } from "@/libs/utils/timeago";
-import { FileMetaData } from "@/libs/cache";
+import { FileMetaData } from "@/libs/domain/file";
 import {
   Tooltip,
   TooltipContent,
@@ -70,7 +70,7 @@ import { toast } from "solid-sonner";
 import { Spinner } from "@/components/common/spinner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { downloadFile } from "@/libs/utils/download-file";
-import type { FileID } from "@/libs/core/ids";
+import type { FileID } from "@/libs/domain/ids";
 import { canShareFile } from "@/libs/utils/can-share";
 import { IconFile } from "@/components/icon-file";
 

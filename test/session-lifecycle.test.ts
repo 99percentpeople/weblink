@@ -7,12 +7,12 @@ import {
   vi,
 } from "vitest";
 import { reconcile } from "solid-js/store";
-import { PeerSession } from "@/libs/core/session";
+import { PeerSession } from "@/libs/domain/session";
 import type {
   ClientService,
   TransferClient,
-} from "@/libs/core/client";
-import type { SignalingService } from "@/libs/core/signaling";
+} from "@/libs/domain/client";
+import type { SignalingService } from "@/libs/domain/signaling";
 import { SessionService } from "@/libs/application/session-service";
 import { setAppState } from "@/libs/state/app-state";
 
@@ -224,21 +224,22 @@ describe("PeerSession lifecycle", () => {
       close,
     } as unknown as RTCPeerConnection;
     (session as any).controller = new AbortController();
-    (session as any).connectable = true;
+    const lifecycle = (session as any).lifecycle;
+    lifecycle.markConnectable();
     (session as any).status = "connected";
     const handleDisconnection = vi
-      .spyOn(session as any, "handleDisconnection")
+      .spyOn(lifecycle, "handleDisconnection")
       .mockResolvedValue(undefined);
 
     document.dispatchEvent(new Event("freeze"));
 
     expect(close).toHaveBeenCalledTimes(1);
     expect((session as any).peerConnection).toBeNull();
-    expect((session as any).suspended).toBe(true);
+    expect(lifecycle.isSuspended).toBe(true);
 
     document.dispatchEvent(new Event("resume"));
 
-    expect((session as any).suspended).toBe(false);
+    expect(lifecycle.isSuspended).toBe(false);
     expect(handleDisconnection).toHaveBeenCalledWith(
       "resume:resume:missing-peerconnection",
     );
@@ -486,5 +487,58 @@ describe("SessionService lifecycle", () => {
     expect(removeSender).toHaveBeenCalledWith("remote");
     expect(removeSender).not.toHaveBeenCalledWith("local");
     service.removeService();
+  });
+
+  it("rejects a session created after its client service was replaced", async () => {
+    let resolveIceServers!: (
+      servers: RTCIceServer[],
+    ) => void;
+    const iceServers = new Promise<RTCIceServer[]>(
+      (resolve) => {
+        resolveIceServers = resolve;
+      },
+    );
+    const sender = makeSender("local", "remote");
+    const closeSender = vi
+      .spyOn(sender, "close")
+      .mockImplementation(() => {});
+    const clientService = {
+      info: {
+        clientId: "local",
+        name: "Local",
+        avatar: null,
+        createdAt: 1,
+      },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createSender: vi.fn(() => sender),
+      removeSender: vi.fn(),
+      listenForJoin: vi.fn(),
+      listenForLeave: vi.fn(),
+      createClient: async () => {},
+      updateClient: async () => {},
+      close: vi.fn(),
+    } satisfies ClientService;
+    const service = new SessionService({
+      loadIceServers: () => iceServers,
+    });
+    service.setClientService(clientService);
+
+    const pending = service.addClient({
+      clientId: "remote",
+      name: "Remote",
+      avatar: null,
+      createdAt: 2,
+    });
+
+    service.removeService();
+    resolveIceServers([]);
+
+    await expect(pending).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(closeSender).toHaveBeenCalledTimes(1);
+    expect(service.sessions.remote).toBeUndefined();
+    expect(service.clientViewData.remote).toBeUndefined();
   });
 });

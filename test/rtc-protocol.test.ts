@@ -6,11 +6,14 @@ import {
   it,
   vi,
 } from "vitest";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import {
+  RtcProtocol,
+  type WebRtcProtocol,
+} from "@/libs/application/rtc/rtc-protocol";
 import {
   createSessionMessage,
   type SessionMessage,
-} from "@/libs/core/protocol/messages";
+} from "@/libs/domain/protocol/messages";
 import {
   FakeRtcTransport,
   makeSession,
@@ -18,7 +21,7 @@ import {
   deferred,
 } from "./helpers/rtc-transport";
 
-const protocols: RtcProtocol[] = [];
+const protocols: WebRtcProtocol[] = [];
 const create = (transport = new FakeRtcTransport()) => {
   const protocol = new RtcProtocol(transport);
   protocols.push(protocol);

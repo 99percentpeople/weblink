@@ -14,7 +14,7 @@ import {
 } from "solid-js";
 import { cn } from "@/libs/cn";
 import { A } from "@solidjs/router";
-import type { Client } from "@/libs/core/client";
+import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import {
   messageStores,

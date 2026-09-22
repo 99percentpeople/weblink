@@ -1,6 +1,6 @@
 import type { Accessor } from "solid-js";
 import { createSignal } from "solid-js";
-import { stopMediaStream } from "@/libs/core/media-stream";
+import { stopMediaStream } from "@/libs/domain/media-stream";
 
 export interface LocalStreamService {
   readonly stream: Accessor<MediaStream | null>;

@@ -5,11 +5,11 @@ import type {
   SignalingService,
   SignalingServiceEventMap,
   SignalingServiceStatus,
-} from "@/libs/core/signaling";
+} from "@/libs/domain/signaling";
 import {
   encryptData,
   decryptData,
-} from "@/libs/core/utils/encrypt/e2e";
+} from "@/libs/domain/utils/encrypt/e2e";
 import {
   EventHandler,
   MultiEventEmitter,

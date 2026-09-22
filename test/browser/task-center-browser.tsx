@@ -12,7 +12,7 @@ import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
-import type { PeerSession } from "@/libs/core/session";
+import type { PeerSession } from "@/libs/domain/session";
 import { setTaskTestContext } from "./task-context";
 import { t } from "@/i18n";
 import "@/global.css";

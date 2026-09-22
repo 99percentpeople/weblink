@@ -1,17 +1,17 @@
 import { vi } from "vitest";
-import type { ChunkCache } from "@/libs/cache/chunk-cache";
+import type { ChunkCache } from "@/libs/domain/file";
 import type {
   ChunkCacheEventMap,
   FileMetaData,
-} from "@/libs/cache";
+} from "@/libs/domain/file";
 import {
   TransferMode,
   type FileTransferer,
   type FileTransfererEventMap,
-} from "@/libs/core/transfer/file-transferer";
-import type { FileTransferMessage } from "@/libs/core/message";
-import type { SessionMessage } from "@/libs/core/protocol/messages";
-import type { PeerSession } from "@/libs/core/session";
+} from "@/libs/domain/transfer/file-transferer";
+import type { FileTransferMessage } from "@/libs/domain/message";
+import type { SessionMessage } from "@/libs/domain/protocol/messages";
+import type { PeerSession } from "@/libs/domain/session";
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import { TransferRegistry } from "@/libs/application/transfer/transfer-registry";

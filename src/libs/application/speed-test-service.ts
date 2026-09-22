@@ -1,7 +1,7 @@
 import {
   createSpeedTestChannel,
   runSpeedTest,
-} from "../core/speed-test";
+} from "../domain/speed-test";
 import {
   SPEED_TEST_PROTOCOL,
   SpeedTestError,
@@ -9,8 +9,8 @@ import {
   type SpeedMeasurement,
   type SpeedTestProgress,
   type SpeedTestResult,
-} from "../core/speed-test-protocol";
-import type { ClientID } from "@/libs/core/ids";
+} from "../domain/speed-test-protocol";
+import type { ClientID } from "@/libs/domain/ids";
 
 export interface SpeedTestState {
   /** Stable identity across progress updates and view remounts. */

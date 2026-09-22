@@ -1,17 +1,17 @@
-import type { ChunkMetaData } from "@/libs/cache";
+import type { ChunkMetaData } from "@/libs/domain/file";
 import { produce, reconcile } from "solid-js/store";
-import { PeerSession } from "../core/session";
-import type { Client } from "@/libs/core/client";
-import type { ClientID } from "@/libs/core/ids";
+import { PeerSession } from "../domain/session";
+import type { Client } from "@/libs/domain/client";
+import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import type {
   ClientService,
   TransferClient,
-} from "../core/client";
+} from "../domain/client";
 import { Accessor, createEffect } from "solid-js";
-import { type SendClipboardMessage } from "@/libs/core/protocol/messages";
-import { getIceServers } from "@/libs/core/ice-server";
-import { catchError, catchErrorSync } from "../catch";
+import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
+import { getIceServers } from "@/libs/domain/ice-server";
+import { catchError, catchErrorSync } from "@/libs/catch";
 import {
   appState,
   setAppState,
@@ -152,7 +152,8 @@ export class SessionService {
   }
 
   async addClient(client: TransferClient) {
-    if (!this.service) {
+    const service = this.service;
+    if (!service) {
       throw new Error(
         `can not add client: ${client.clientId}, client service not found`,
       );
@@ -163,18 +164,29 @@ export class SessionService {
       );
     }
     const polite =
-      this.service.info.createdAt < client.createdAt;
-    const sender = this.service.createSender(
-      client.clientId,
-    );
+      service.info.createdAt < client.createdAt;
+    const sender = service.createSender(client.clientId);
     if (!sender) {
       throw new Error(
         `can not create sender for client: ${client.clientId}`,
       );
     }
+
+    const iceServers = await this.iceServers;
+    if (
+      this.service !== service ||
+      this.sessions[client.clientId]
+    ) {
+      sender.close();
+      throw new DOMException(
+        "Client service changed while creating the session",
+        "AbortError",
+      );
+    }
+
     const session = new PeerSession(sender, {
       polite,
-      iceServers: await this.iceServers,
+      iceServers,
       relayOnly:
         appState.options.servers.turns.length > 0 &&
         appState.options.relayOnly,

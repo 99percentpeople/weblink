@@ -7,7 +7,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
-import { optional } from "@/libs/core/utils/optional";
+import { optional } from "@/libs/domain/utils/optional";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   ComponentProps,
@@ -41,7 +41,7 @@ import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { getDefaultAppOptions } from "@/options";
 import { getInitials } from "@/libs/utils/name";
-import { generateStrongPassword } from "@/libs/core/utils/encrypt/strong-password";
+import { generateStrongPassword } from "@/libs/domain/utils/encrypt/strong-password";
 import {
   Tooltip,
   TooltipContent,
