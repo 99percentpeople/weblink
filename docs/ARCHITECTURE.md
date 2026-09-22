@@ -4,7 +4,7 @@ Weblink is a SolidJS + TypeScript (strict) WebRTC chat /
 file-transfer app. The UI is intentionally kept thin:
 components should talk to app state/services via stable
 interfaces, while WebRTC/session/transfer details live in
-the low-level `core` layer.
+the low-level `domain` layer.
 
 ## Top-level layout
 
@@ -32,7 +32,7 @@ the low-level `core` layer.
 - `src/app.tsx`: Application shell (providers, global UI,
   dialogs).
 - `src/constants.ts`: Project-wide constants shared across
-  UI/services/core (storage keys, timeouts, prefixes).
+  UI/application/domain (storage keys, timeouts, prefixes).
 - `src/routes/`: Route-level pages (Solid Router).
   - `src/routes/client/[id]/...`: Main client session pages
     (chat/sync, etc).
@@ -58,53 +58,61 @@ the low-level `core` layer.
 
 ### Application logic
 
-Most non-trivial logic lives in `src/libs/`:
+Most non-trivial logic lives in `src/libs/` and follows an explicit
+dependency direction: state/UI → application → domain, while application
+may select concrete infrastructure implementations.
 
-- `src/libs/state/`: App state store and context provider.
-  - `app-state.ts`: Shared store shape + setters.
-    - Includes media constraint state
-      (`media.constraints.*`) used by video dialogs/pages.
-  - `app-state-context.tsx`: The main UI-facing API surface
-    (functions that UI calls).
-- `src/libs/services/`: App-level orchestration.
-  - `session-service.ts`: Creates/destroys `PeerSession`s,
-    tracks client view data, wires event listeners.
-  - `rtc-protocol.ts`: Higher-level protocol over data
-    channels (request/response style).
-  - `rtc-service.ts`, `transfer-service.ts`, etc: service
-    helpers that bridge UI state ↔ core primitives.
-  - `peer-profile-service.ts`: exchanges display names and
-    avatars over the WebRTC message channel and updates the
-    app-level client views.
-  - `local-stream-service.ts`: Owns the active local media
-    stream, replaces/stops streams, and tracks dynamic or
-    ended media tracks.
-- `src/libs/core/`: Low-level primitives.
-  - `media-stream.ts`: Pure helpers for composing, merging,
-    and stopping browser `MediaStream`s.
-  - `session.ts`: `PeerSession` (RTCPeerConnection lifecycle,
-    negotiation/reconnect, channels).
-  - `message.ts`: Message shapes + message store (chat + file
-    transfer message state).
-  - `file-sender.ts`, `file-receiver.ts`, `file-transfer-*`:
-    Chunked transfer implementation.
-  - `core/services/`: Signaling client implementations
-    (e.g. Firebase/WebSocket).
-- `src/libs/cache/`: IndexedDB/chunk cache utilities.
+- `src/libs/state/`: reactive application state and UI-facing context.
+  - `app-state.ts`: shared store shape, including room/client view state.
+  - `app-state-context.tsx`: thin composition/API surface consumed by UI.
+  - `app-options.ts` and `profile-store.ts`: persisted user configuration.
+- `src/libs/application/`: application lifetime and workflow orchestration.
+  - `room-service.ts`: owns room join/leave, signaling-client lifetime and
+    stale asynchronous join/session rejection. It reserves room/password/client
+    identity before client creation, shares concurrent same-identity joins through
+    the handshake, and retires old work on identity changes, leave or disposal.
+  - `session-service.ts`: owns live `PeerSession` instances and client views.
+  - `messaging/`: reactive message history, persistence port and tracked
+    message workflows. IndexedDB does not live in this layer.
+  - `rtc/`: Weblink's PeerSession transport adapter and protocol composition.
+    The reusable P2P protocol itself lives in `domain/protocol/`.
+  - `transfer/`: file-transfer workflows, registry and message binding.
+  - `cache-service.ts`, `speed-test-service.ts`, `task-service.ts`, etc:
+    application-scoped coordinators.
+- `src/libs/domain/`: low-level models and P2P behavior. Domain must not
+  import `application`, `state` or `infrastructure`.
+  - `client.ts`, `ids.ts`, `file.ts`, `message.ts`: shared domain models
+    and contracts without application-state ownership.
+  - `session.ts`, `peer-negotiation.ts`, `signaling.ts`: WebRTC session and
+    signaling contracts.
+  - `protocol/`: transport-agnostic P2P control wire contract, runtime
+    validation, request/reply state machine and minimal transport/session ports.
+    It has no PeerSession, WebRTC, Solid, IndexedDB or AppState dependency.
+  - `transfer/`: chunked file sender/receiver and transfer-owned workers.
+- `src/libs/infrastructure/`: concrete browser/backend adapters.
+  - `signaling/`: WebSocket and Firebase client/transport implementations.
+  - `storage/`: IndexedDB chunk cache, transactional assembly, merge worker
+    and the IndexedDB message-history repository adapter.
 - `src/libs/hooks/`: Solid hooks used by UI.
-- `src/libs/workers/`: Web Workers (e.g. compression).
-- `src/libs/utils/`: Generic utilities.
+- `src/libs/utils/`: generic utilities; worker modules live beside their owner
+  instead of in a global worker bucket.
 
 ## Data flow (high level)
 
 1. UI components call functions from `AppStateContext`
    (`src/libs/state/app-state-context.tsx`).
-2. Those functions delegate to app services
-   (`src/libs/services/*`) and update `appState`
+2. The context delegates workflows to `src/libs/application/*`.
+3. Application services create/manage `src/libs/domain/*` primitives and select
+   `src/libs/infrastructure/*` adapters where browser/backend implementation is
+   required.
+4. Application services translate low-level events back into `appState`
    (`src/libs/state/app-state.ts`).
-3. Services create/manage core primitives (`src/libs/core/*`),
-   attach listeners, and translate low-level events into
-   app-level state updates.
+
+Application orchestration still uses the shared Solid stores; it is not yet a
+framework-independent layer. The strict portability boundary currently applies
+specifically to `domain/protocol`, not the entire application or WebRTC domain.
+Local media stream injection and further route/controller separation remain
+incremental follow-up work.
 
 ## Signaling and profile privacy
 
@@ -126,7 +134,7 @@ message transport:
 
 ## Design conventions
 
-- Keep WebRTC details in `src/libs/core`. Prefer exposing
+- Keep WebRTC details in `src/libs/domain`. Prefer exposing
   app-level methods from `AppStateContext` over constructing
   protocol/message objects inside UI.
 - Keep feature-local constants close to the code. Promote

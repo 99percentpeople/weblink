@@ -10,9 +10,9 @@ Goal: separate low-level `MediaStream` operations from app-level
 ownership and lifecycle management.
 
 - [x] Move compose/merge/stop helpers to
-      `src/libs/core/media-stream.ts`.
+      `src/libs/domain/media-stream.ts`.
 - [x] Add a testable local stream manager in
-      `src/libs/services/local-stream-service.ts`.
+      `src/libs/application/local-stream-service.ts`.
 - [x] Replace the dual-signal reactive bridge with explicit
       `replace`, `clear`, and `dispose` operations.
 - [x] Handle tracks added after activation and remove ended tracks.
@@ -224,7 +224,8 @@ and speed tests visible through one task list.
 Goal: give control messages a typed asynchronous API with deterministic send,
 reply and session lifetimes, without changing file or speed-test data protocols.
 
-- [x] Move wire types, request policy, parsing and immutable snapshots into core.
+- [x] Move wire types, request policy, parsing and immutable snapshots into
+      the transport-agnostic `domain/protocol` package.
 - [x] Add `call`, `notify`, `handle` and `on`; remove raw request/ACK plumbing
       from application callers and centralize tracked message-state updates.
 - [x] Return typed file-list data while retaining the existing storage exchange.
@@ -275,18 +276,100 @@ preserving resumable caches and transaction-safe completion.
 - [x] Add `test:cache` and `bench:cache`, measure both finalization and total cache
       processing, and record the content-dependent tradeoffs in `docs/CACHE_ASSEMBLY.md`.
 
+## Completed slice: explicit module boundaries and room ownership
+
+Goal: make directory structure reflect ownership, remove type/service buckets and
+keep stale room work from reattaching retired sessions.
+
+- [x] Replace the generic `libs/services` bucket with an `application` layer
+      grouped only where multiple related modules justify a subdirectory.
+- [x] Move WebSocket/Firebase implementations to `infrastructure/signaling`
+      and keep domain limited to the signaling/client contracts it actually uses.
+- [x] Remove the old `core/services/type.ts`, `core/type.ts` and `core/store.ts`;
+      colocate IDs, client models, ICE logic, profile persistence and message
+      persistence with their real owners.
+- [x] Group file-transfer primitives and compression workers under
+      `domain/transfer`.
+- [x] Move the IndexedDB cache, transactional chunk assembly and merge worker to
+      `infrastructure/storage`, leaving only the file/cache contract in domain.
+- [x] Extract `RoomService` from the Solid context and centralize room
+      join/leave plus signaling-client listener ownership.
+- [x] Reject late `SessionService.addClient` completion after the owning client
+      service has changed, and discard signaling clients that resolve after leave.
+- [x] Rename the retained low-level `core` directory to `domain` so the code
+      matches the intended domain/application/infrastructure architecture.
+- [x] Extract browser lifecycle/reconnect coordination into
+      `PeerSessionLifecycleController`, media/codec/track ownership into
+      `PeerSessionMediaController`, and DataChannel/message queue ownership into
+      `PeerSessionChannelController`, leaving `PeerSession` focused on connection
+      setup, signaling listen/connect/reconnect and controller orchestration.
+- [x] Cover room/session races with focused regression tests and keep typecheck,
+      unit tests and production builds green.
+
+## Completed slice: portable control protocol and message persistence boundary
+
+Goal: keep the P2P control contract reusable by future non-Web clients while
+removing browser persistence and duplicate timeout ownership from message state.
+
+- [x] Make `domain/protocol` self-contained: no PeerSession, WebRTC,
+      application state, IndexedDB, Solid or cross-directory imports.
+- [x] Define portable wire DTOs for peers, file metadata, chunk ranges and
+      client profiles inside the protocol package.
+- [x] Move the generic `P2PProtocol` request/reply/notification state machine
+      into `domain/protocol` and parameterize it by a minimal
+      `ProtocolSession` + `ProtocolTransport`.
+- [x] Keep WebRTC-specific DataChannel queueing outside the portable protocol
+      package and adapt PeerSession through `application/rtc/rtc-service.ts`.
+- [x] Remove local message `status` from the wire DTO and keep it only in the
+      local stored-message model.
+- [x] Extract `MessageRepository` from reactive `MessageStores` and move the
+      IndexedDB implementation to `infrastructure/storage`.
+- [x] Make message-history initialization explicitly await repository loading
+      before publishing `message.status = ready`.
+- [x] Remove the obsolete message-store send timeout so request lifetime has a
+      single owner in the P2P protocol.
+- [x] Snapshot reactive store values before asynchronous persistence and wait
+      for IndexedDB transaction commit in repository write operations.
+- [x] Add portability and repository-boundary regression tests and document the
+      cross-client implementation contract in `docs/P2P_PROTOCOL.md`.
+
+## Completed slice: concurrent room join ownership
+
+Goal: prevent pending room creation or a retired handshake from publishing state
+for a different room or identity.
+
+- [x] Reserve the room, password and client ID before asynchronous client creation.
+- [x] Share the complete factory/handshake operation for concurrent joins with
+      the same identity, not just the client factory promise.
+- [x] Retire prior work when room credentials or client identity change, and close
+      late clients without installing them or mutating the new room.
+- [x] Keep old completion/failure handlers from clearing a newer pending join.
+- [x] Permit retry after factory/handshake failure and reject joins after disposal.
+- [x] Cover both room-creation completion orders, handshake success/failure after
+      replacement, identity changes, leave/rejoin, disposal and retries.
+- [x] Run strict type checking, all Vitest tests, the production build and real
+      Chromium protocol/transfer/cache/task/speed checks, including narrow task UI.
+
+## In progress: signaling backend contract parity
+
+- [x] Add Bun server input validation, socket/client identity checks, binary and
+      oversized-message rejection, and a bounded 256-message reconnect cache.
+- [x] Exercise those limits with Bun protocol and real WebSocket integration tests.
+- [ ] Extend stale-socket ownership checks and focused reconnect race coverage.
+- [ ] Share protocol contract fixtures/tests between the Bun server and Worker
+      rather than maintaining independent assertions of the same limits.
+
 ## Next candidates
 
-1. Separate message persistence and initialization from reactive message state;
-   make database completion observable and remove obsolete store timeouts.
-2. Centralize room join/leave ownership and reject stale asynchronous session
-   creation results when the room or client service has been replaced.
-3. Continue splitting `PeerSession` by extracting reconnect/lifecycle
-   coordination and media sender management behind its existing API.
-4. Harden stale-session handling and cache limits in the Bun
-   signaling server, then share protocol contract tests with the
-   Worker.
-5. Inject the local stream service through the app context instead
-   of importing the singleton directly from UI modules.
-6. Break large route components into state/controller and view
-   modules without moving WebRTC details into UI code.
+1. Finish stale-session handling in the Bun signaling server and share protocol
+   contract tests with the Worker; input validation and cache limits already exist.
+2. Inject the local stream service through the app context instead of importing
+   the singleton directly from UI modules.
+3. Break large route components into state/controller and view modules without
+   moving WebRTC details into UI code.
+4. Revisit the remaining PeerSession connection-establishment code only if it
+   still blocks testing or changes; lifecycle, media and channel ownership are
+   now separate controllers.
+5. Consider extracting `domain/protocol` into its own package once a second
+   client implementation exists, keeping the current source directory as the
+   canonical contract until then.
