@@ -17,7 +17,7 @@ import {
 import { createSignal } from "solid-js";
 import { PeerSpeedTest } from "@/components/peer-speed-test";
 import { useAppState } from "@/libs/state/app-state-context";
-import type { SpeedTestState } from "@/libs/services/speed-test-service";
+import type { SpeedTestState } from "@/libs/application/speed-test-service";
 import { SpeedTestError } from "@/libs/core/speed-test-protocol";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));

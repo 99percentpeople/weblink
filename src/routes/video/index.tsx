@@ -13,7 +13,7 @@ import {
   clearLocalStream,
   localStream,
   replaceLocalStream,
-} from "@/libs/services/local-stream-service";
+} from "@/libs/application/local-stream-service";
 import { t } from "@/i18n";
 import {
   IconDelete,
@@ -35,7 +35,7 @@ import {
 } from "@/components/icons";
 import { GripIcon } from "lucide-solid";
 import { cn } from "@/libs/cn";
-import { ClientInfo } from "@/libs/core/type";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { Dynamic } from "solid-js/web";
 import { createMediaSelectionDialog } from "@/components/dialogs/media-selection-dialog";

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLocalStreamService } from "@/libs/services/local-stream-service";
+import { createLocalStreamService } from "@/libs/application/local-stream-service";
 
 class FakeMediaStreamTrack extends EventTarget {
   readonly id: string;

@@ -52,7 +52,7 @@ import {
   mergeMediaStreamTracks,
   stopMediaStream,
 } from "@/libs/core/media-stream";
-import { localStream } from "@/libs/services/local-stream-service";
+import { localStream } from "@/libs/application/local-stream-service";
 import { cn } from "@/libs/cn";
 import {
   createPresetMicrophoneConstraintsDialog,

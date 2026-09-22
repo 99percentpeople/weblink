@@ -237,14 +237,56 @@ reply and session lifetimes, without changing file or speed-test data protocols.
 - [x] Add real-Chromium protocol coverage (`bun run test:protocol`) and document
       API semantics and limits in `docs/P2P_PROTOCOL.md`.
 
+## Completed slice: session-owned file workflows
+
+Goal: separate file operations from the application provider and distinguish
+cache, transfer-run and message identities without changing the wire protocol.
+
+- [x] Introduce an injected `FileTransferService` for file control handlers,
+      sending, sharing, downloading, retrying, resuming and pausing.
+- [x] Own live runs in `TransferRegistry` by session instance and file ID;
+      allow same-cache sends to multiple peers without replacing their runs.
+- [x] Reserve cache-writing operations before asynchronous preparation, reject
+      unexpected channels and bound channel initialization waits.
+- [x] Bind message updates by stable message ID and migrate task/chat/sync
+      selectors away from global file-ID-only transfer lookups.
+- [x] Cancel preparation on session teardown, close late channels and prevent
+      late initialization/finalization from reactivating disposed runs.
+- [x] Retain shared caches for preparing, paused and failed deliveries; wait
+      for receiver flush/assembly before recording completion.
+- [x] Cover service/registry/lifecycle regressions and add a real Chromium,
+      IndexedDB and Worker test (`bun run test:transfer`) with byte-exact
+      multi-peer sharing and pause/resume verification.
+- [x] Document ownership, cancellation and limits in `docs/FILE_TRANSFERS.md`.
+
+## Completed slice: Blob-backed chunk finalization
+
+Goal: move byte-to-Blob conversion into receipt and shorten final assembly while
+preserving resumable caches and transaction-safe completion.
+
+- [x] Persist Blob chunk snapshots and read existing ArrayBuffer chunks without
+      a schema migration; serialize flushes and restore failed batches.
+- [x] Read bounded ordered batches in an isolated merge worker, validate chunk
+      coverage and sizes, and atomically write the File and clear chunk records.
+- [x] Share concurrent getFile/mergeFile calls, propagate worker failures, cancel
+      on cleanup and emit completion only after the final transaction commits.
+- [x] Cover real IndexedDB rollback, mixed-format reopening, duplicate receipt,
+      concurrent finalization, worker failures and byte-exact transfer/resume.
+- [x] Add `test:cache` and `bench:cache`, measure both finalization and total cache
+      processing, and record the content-dependent tradeoffs in `docs/CACHE_ASSEMBLY.md`.
+
 ## Next candidates
 
-1. Continue splitting `PeerSession` by extracting reconnect/lifecycle
+1. Separate message persistence and initialization from reactive message state;
+   make database completion observable and remove obsolete store timeouts.
+2. Centralize room join/leave ownership and reject stale asynchronous session
+   creation results when the room or client service has been replaced.
+3. Continue splitting `PeerSession` by extracting reconnect/lifecycle
    coordination and media sender management behind its existing API.
-2. Harden stale-session handling and cache limits in the Bun
+4. Harden stale-session handling and cache limits in the Bun
    signaling server, then share protocol contract tests with the
    Worker.
-3. Inject the local stream service through the app context instead
+5. Inject the local stream service through the app context instead
    of importing the singleton directly from UI modules.
-4. Break large route components into state/controller and view
+6. Break large route components into state/controller and view
    modules without moving WebRTC details into UI code.

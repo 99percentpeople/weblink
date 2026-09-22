@@ -6,7 +6,8 @@ import {
   Switch,
 } from "solid-js";
 import { Button } from "@/components/ui/button";
-import { ClientID, ClientInfo } from "@/libs/core/type";
+import type { ClientID } from "@/libs/core/ids";
+import type { ClientInfo } from "@/libs/state/app-state";
 import {
   Avatar,
   AvatarFallback,

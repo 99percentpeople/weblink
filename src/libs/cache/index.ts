@@ -1,4 +1,4 @@
-import { ClientID, FileID } from "@/libs/core/type";
+import type { ClientID, FileID } from "@/libs/core/ids";
 
 export interface ChunkMetaData {
   id: FileID;

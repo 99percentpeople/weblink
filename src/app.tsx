@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
 import Nav from "@/components/app/nav";
-import { setClientProfile } from "./libs/core/store";
+import { setClientProfile } from "./libs/state/profile-store";
 import { optional } from "./libs/core/utils/optional";
 import {
   AppStateProvider,
@@ -64,7 +64,7 @@ import { Button } from "./components/ui/button";
 import { t, isDictLoaded } from "./i18n";
 import { v4 } from "uuid";
 import { createIsMobile } from "./libs/hooks/create-mobile";
-import { messageStores } from "./libs/core/message";
+import { messageStores } from "./libs/application/messaging/message-store";
 import { sleep } from "./libs/utils/sleep";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
@@ -72,7 +72,7 @@ import { AudioPlayerProvider } from "./routes/video/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
 import { createInitialization } from "@/libs/initialization";
 import { appState } from "@/libs/state/app-state";
-import { localStream } from "@/libs/services/local-stream-service";
+import { localStream } from "@/libs/application/local-stream-service";
 import { ModalProvider } from "@/components/dialogs/base";
 
 const InnerApp = (props: ParentProps) => {

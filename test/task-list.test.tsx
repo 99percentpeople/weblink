@@ -16,11 +16,13 @@ import {
 } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { TaskList } from "@/components/task-list";
-import { createTaskService } from "@/libs/services/task-service";
+import { createTaskService } from "@/libs/application/task-service";
 import { useAppState } from "@/libs/state/app-state-context";
 import type { FileTransferMessage } from "@/libs/core/message";
-import type { SpeedTestState } from "@/libs/services/speed-test-service";
-import type { FileTransferer } from "@/libs/core/file-transferer";
+import type { SpeedTestState } from "@/libs/application/speed-test-service";
+import type { FileTransferer } from "@/libs/core/transfer/file-transferer";
+import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
+import type { PeerSession } from "@/libs/core/session";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: vi.fn(),
@@ -51,9 +53,7 @@ let dispose: () => void;
 let tasks: ReturnType<typeof createTaskService>;
 let current: SpeedTestState;
 let setMessages: (messages: FileTransferMessage[]) => void;
-let setTransfers: (
-  transfers: Record<string, FileTransferer | undefined>,
-) => void;
+let setTransfers: (transfers: FileTransferStates) => void;
 const message = (
   props: Partial<FileTransferMessage> = {},
 ): FileTransferMessage => ({
@@ -104,9 +104,8 @@ beforeEach(() => {
     const [messages, writeMessages] = createSignal<
       FileTransferMessage[]
     >([message()]);
-    const [transfers, writeTransfers] = createSignal<
-      Record<string, FileTransferer | undefined>
-    >({});
+    const [transfers, writeTransfers] =
+      createSignal<FileTransferStates>({});
     setMessages = writeMessages;
     setTransfers = writeTransfers;
     tasks = createTaskService({
@@ -191,7 +190,18 @@ describe("unified task list controls", () => {
   });
 
   it("pauses exactly the selected file", async () => {
-    setTransfers({ file: {} as FileTransferer });
+    setTransfers({
+      run: {
+        id: "run",
+        fileId: "file",
+        messageId: "filemsg",
+        session: {
+          clientId: "self",
+          targetClientId: "peer",
+        } as PeerSession,
+        transferer: {} as FileTransferer,
+      },
+    });
     render(() => <TaskList onInspect={inspect} />);
     fireEvent.click(
       screen.getByRole("button", { name: "tasks.pause" }),

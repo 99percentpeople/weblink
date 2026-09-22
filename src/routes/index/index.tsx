@@ -16,7 +16,8 @@ import {
   ResizableHandle,
   ResizablePanel,
 } from "@/components/ui/resizable";
-import { ClientID, ClientInfo } from "@/libs/core/type";
+import type { ClientID } from "@/libs/core/ids";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { makePersisted } from "@solid-primitives/storage";
 import { IconPerson } from "@/components/icons";
@@ -25,8 +26,7 @@ import { cn } from "@/libs/cn";
 import { UserItem } from "./components/client-list-item";
 import { appState } from "@/libs/state/app-state";
 
-export interface UserItemProps
-  extends ComponentProps<"li"> {
+export interface UserItemProps extends ComponentProps<"li"> {
   client: ClientInfo;
   collapsed: boolean;
 }

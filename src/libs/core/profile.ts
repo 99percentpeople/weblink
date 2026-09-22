@@ -1,4 +1,4 @@
-import type { Client } from "./type";
+import type { Client } from "./client";
 
 export const RTC_PROFILE_PROTOCOL_VERSION = 1 as const;
 export const MAX_PEER_PROFILE_NAME_LENGTH = 128;

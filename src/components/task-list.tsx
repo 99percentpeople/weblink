@@ -44,7 +44,7 @@ import {
   type FileTask,
   isFinishedTask,
   type TaskStatus,
-} from "@/libs/services/task-service";
+} from "@/libs/application/task-service";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 
 type InspectTask = (peerId: string, speed: boolean) => void;

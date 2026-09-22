@@ -5,13 +5,13 @@ import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/core/profile";
 import {
   createClientPresence,
   hydrateClientPresence,
-} from "@/libs/core/services/client/client-presence";
-import type { TransferClient } from "@/libs/core/services/type";
+} from "@/libs/infrastructure/signaling/client/client-presence";
+import type { TransferClient } from "@/libs/core/client";
 import {
   RtcProtocol,
   type ClientProfileMessage,
-} from "@/libs/services/rtc-protocol";
-import { PeerProfileService } from "@/libs/services/peer-profile-service";
+} from "@/libs/application/rtc/rtc-protocol";
+import { PeerProfileService } from "@/libs/application/peer-profile-service";
 
 class FakeSession {
   readonly clientId = "local";

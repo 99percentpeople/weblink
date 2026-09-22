@@ -3,23 +3,17 @@ import {
   createInitialAppState,
   setAppState,
 } from "@/libs/state/app-state";
-import { initializeProfile } from "@/libs/core/store";
+import { initializeProfile } from "@/libs/state/profile-store";
 import { initializeAppOptions } from "@/options";
 import {
   createCacheManager,
   cacheManager,
-} from "@/libs/services/cache-serivce";
-import {
-  createSessionService,
-} from "@/libs/services/session-service";
-import {
-  createTransferManager,
-} from "@/libs/services/transfer-service";
-import { createRtcService } from "@/libs/services/rtc-service";
-import { createRtcProtocol } from "@/libs/services/rtc-protocol";
-import {
-  createMessageStores,
-} from "@/libs/core/message";
+} from "@/libs/application/cache-service";
+import { createSessionService } from "@/libs/application/session-service";
+import { createTransferManager } from "@/libs/application/transfer/transfer-service";
+import { createRtcService } from "@/libs/application/rtc/rtc-service";
+import { createRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { createMessageStores } from "@/libs/application/messaging/message-store";
 
 let initPromise: Promise<void> | null = null;
 

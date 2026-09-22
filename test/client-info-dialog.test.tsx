@@ -23,7 +23,7 @@ import {
 import { createDialog } from "@/components/dialogs/dialog";
 import { useAppState } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
-import type { SpeedTestState } from "@/libs/services/speed-test-service";
+import type { SpeedTestState } from "@/libs/application/speed-test-service";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
@@ -41,9 +41,12 @@ vi.mock("@/components/icons", () => ({
   IconDelete: () => <span />,
   IconInfo: () => <span />,
 }));
-vi.mock("@/libs/core/message", () => ({
-  messageStores: { deleteClient: vi.fn() },
-}));
+vi.mock(
+  "@/libs/application/messaging/message-store",
+  () => ({
+    messageStores: { deleteClient: vi.fn() },
+  }),
+);
 vi.mock("@/options", () => ({
   getClientConfig: vi.fn(() => ({
     provideFileList: true,

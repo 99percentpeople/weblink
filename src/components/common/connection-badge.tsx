@@ -1,5 +1,5 @@
 import { Component, Show } from "solid-js";
-import { ClientInfo } from "@/libs/core/type";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { Badge } from "@/components/ui/badge";
 import { t } from "@/i18n";
 

@@ -8,7 +8,7 @@ import {
 } from "vitest";
 import { MessageSendQueue } from "@/libs/core/protocol/send-queue";
 import { createSessionMessage } from "@/libs/core/protocol/messages";
-import { RtcProtocol } from "@/libs/services/rtc-protocol";
+import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 import {
   FakeRtcTransport,
   makeSession,

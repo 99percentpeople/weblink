@@ -3,7 +3,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { ClientInfo } from "@/libs/core/type";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { getInitials } from "@/libs/utils/name";
 import { RouteSectionProps } from "@solidjs/router";
 import { createMemo, For } from "solid-js";

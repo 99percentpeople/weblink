@@ -25,12 +25,12 @@ vi.mock("solid-sonner", () => ({
   },
 }));
 
-import { WebSocketClientService } from "@/libs/core/services/client/ws-client-service";
+import { WebSocketClientService } from "@/libs/infrastructure/signaling/client/ws-client-service";
 import {
   getReconnectDelayMs,
   WEBSOCKET_CONNECTION_TIMEOUT_MS,
   WEBSOCKET_JOIN_ACK_TIMEOUT_MS,
-} from "@/libs/core/services/client/reconnect-policy";
+} from "@/libs/infrastructure/signaling/client/reconnect-policy";
 
 function closeEvent(code: number, reason: string): Event {
   const event = new Event("close");

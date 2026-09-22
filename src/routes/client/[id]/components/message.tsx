@@ -1,3 +1,4 @@
+import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
 import "photoswipe/style.css";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
@@ -23,7 +24,7 @@ import { appState } from "@/libs/state/app-state";
 import {
   FileTransferer,
   TransferMode,
-} from "@/libs/core/file-transferer";
+} from "@/libs/core/transfer/file-transferer";
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import {
@@ -69,12 +70,11 @@ import { toast } from "solid-sonner";
 import { Spinner } from "@/components/common/spinner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { downloadFile } from "@/libs/utils/download-file";
-import { FileID } from "@/libs/core/type";
+import type { FileID } from "@/libs/core/ids";
 import { canShareFile } from "@/libs/utils/can-share";
 import { IconFile } from "@/components/icon-file";
 
-export interface MessageCardProps
-  extends ComponentProps<"li"> {
+export interface MessageCardProps extends ComponentProps<"li"> {
   message: StoreMessage;
   onLoad?: () => void;
   onDelete?: () => void;
@@ -120,8 +120,10 @@ const FileMessageCard: Component<FileMessageCardProps> = (
     () => {
       if (!props.message.fid) return null;
       return (
-        appState.transfer.transferers[props.message.fid] ??
-        null
+        findMessageTransfer(
+          appState.transfer.transfers,
+          props.message,
+        )?.transferer ?? null
       );
     },
   );
@@ -705,12 +707,11 @@ export const MessageContent: Component<MessageCardProps> = (
                           const item = new ClipboardItem({
                             [f().type]: f(),
                           });
-                          const [err] =
-                            await catchError(
-                              navigator.clipboard.write([
-                                item,
-                              ]),
-                            );
+                          const [err] = await catchError(
+                            navigator.clipboard.write([
+                              item,
+                            ]),
+                          );
 
                           if (err) {
                             toast.error(
@@ -827,7 +828,8 @@ export const MessageContent: Component<MessageCardProps> = (
           class={cn(
             `flex flex-col gap-1 rounded-md p-2 shadow backdrop-blur
             select-none sm:select-text`,
-            appState.profile.clientId === props.message.client
+            appState.profile.clientId ===
+              props.message.client
               ? "self-end bg-lime-200/80 dark:bg-indigo-900/80"
               : "border-border bg-background/80 self-start border",
             local.class,
@@ -918,8 +920,7 @@ export const MessageContent: Component<MessageCardProps> = (
   );
 };
 
-export interface MessageChatProps
-  extends ComponentProps<"div"> {
+export interface MessageChatProps extends ComponentProps<"div"> {
   target: string;
 }
 

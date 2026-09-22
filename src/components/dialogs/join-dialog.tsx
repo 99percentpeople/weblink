@@ -1,4 +1,4 @@
-import { setClientProfile } from "@/libs/core/store";
+import { setClientProfile } from "@/libs/state/profile-store";
 import { createDialog } from "./dialog";
 import { Input } from "@/components/ui/input";
 import {

@@ -5,14 +5,19 @@ import {
   createTaskService,
   isActiveTask,
   type TaskSources,
-} from "@/libs/services/task-service";
+} from "@/libs/application/task-service";
 import type {
   StoreMessage,
   FileTransferMessage,
 } from "@/libs/core/message";
-import type { FileTransferer } from "@/libs/core/file-transferer";
+import type { FileTransferer } from "@/libs/core/transfer/file-transferer";
+import type {
+  ActiveFileTransfer,
+  FileTransferStates,
+} from "@/libs/application/transfer/file-transfer-state";
+import type { PeerSession } from "@/libs/core/session";
 import type { FileMetaData } from "@/libs/cache";
-import type { SpeedTestState } from "@/libs/services/speed-test-service";
+import type { SpeedTestState } from "@/libs/application/speed-test-service";
 
 const disposers: Array<() => void> = [];
 afterEach(() =>
@@ -45,7 +50,19 @@ const run = (
   progress: { phase: "upload", bytes: 512 },
   ...overrides,
 });
-const live = {} as FileTransferer;
+const live = (
+  messageId = "message-1",
+  peerId = "peer",
+): ActiveFileTransfer => ({
+  id: `run:${messageId}`,
+  messageId,
+  fileId: "file-1",
+  session: {
+    clientId: "self",
+    targetClientId: peerId,
+  } as PeerSession,
+  transferer: {} as FileTransferer,
+});
 function setup(initial: StoreMessage[] = []) {
   return createRoot((dispose) => {
     disposers.push(dispose);
@@ -54,9 +71,8 @@ function setup(initial: StoreMessage[] = []) {
     const [caches, setCaches] = createSignal<
       Record<string, FileMetaData | undefined>
     >({});
-    const [transfers, setTransfers] = createSignal<
-      Record<string, FileTransferer | undefined>
-    >({});
+    const [transfers, setTransfers] =
+      createSignal<FileTransferStates>({});
     const sources: TaskSources = {
       clientId: () => "self",
       messages,
@@ -85,7 +101,7 @@ describe("application task list", () => {
         createdAt: 90,
       }),
     ]);
-    setTransfers({ "file-1": live });
+    setTransfers({ active: live() });
     service.recordSpeedTest(run());
     expect(
       service.tasks().map((task) => task.kind),
@@ -187,7 +203,7 @@ describe("application task list", () => {
       }),
       file({ id: "new", createdAt: 20 }),
     ]);
-    setTransfers({ "file-1": live });
+    setTransfers({ active: live("new") });
     expect(
       service.tasks().filter(isActiveTask),
     ).toHaveLength(1);
@@ -303,7 +319,7 @@ describe("application task list", () => {
         transferStatus: "transfering",
       }),
     ]);
-    setTransfers({ "file-1": live });
+    setTransfers({ active: live() });
     expect(service.tasks()).toHaveLength(1);
     expect(service.activeCount()).toBe(1);
     await Promise.resolve();
@@ -325,4 +341,39 @@ describe("application task list", () => {
     expect(service.tasks()[0].id).toBe("speed:active");
     expect(service.latestSpeedTest("peer")?.id).toBe("60");
   });
+});
+
+it("tracks the same cache independently for different recipients", () => {
+  const { service, setTransfers } = setup([
+    file({ id: "a", target: "a" }),
+    file({ id: "b", target: "b" }),
+  ]);
+  setTransfers({ a: live("a", "a"), b: live("b", "b") });
+  expect(service.activeCount()).toBe(2);
+  setTransfers({ b: live("b", "b") });
+  expect(service.activeCount()).toBe(1);
+  expect(
+    service.tasks().find((task) => task.id === "file:a")
+      ?.status,
+  ).toBe("paused");
+  expect(
+    service.tasks().find((task) => task.id === "file:b")
+      ?.status,
+  ).toBe("waiting");
+});
+
+it("uses the registered message identity even when newer history has the same file", () => {
+  const { service, setTransfers } = setup([
+    file({ id: "older", createdAt: 1 }),
+    file({ id: "newer", createdAt: 2 }),
+  ]);
+  setTransfers({ active: live("older") });
+  expect(
+    service.tasks().find((task) => task.id === "file:older")
+      ?.status,
+  ).toBe("waiting");
+  expect(
+    service.tasks().find((task) => task.id === "file:newer")
+      ?.status,
+  ).toBe("paused");
 });

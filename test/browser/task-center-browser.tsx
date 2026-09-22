@@ -6,8 +6,8 @@ import { TaskCenter } from "@/components/app/task-center";
 import {
   SpeedTestService,
   type SpeedTestState,
-} from "@/libs/services/speed-test-service";
-import { createTaskService } from "@/libs/services/task-service";
+} from "@/libs/application/speed-test-service";
+import { createTaskService } from "@/libs/application/task-service";
 import {
   appState,
   setAppState,
@@ -252,7 +252,8 @@ async function main() {
     click("tasks.title");
     await sleep(100);
     assert(
-      document.querySelectorAll("li").length >= 3,
+      document.querySelectorAll("table tbody tr").length >=
+        3,
       "unified task list missing file/speed tasks",
     );
     assert(

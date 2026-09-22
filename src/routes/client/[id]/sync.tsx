@@ -1,3 +1,4 @@
+import { findFileTransfer } from "@/libs/application/transfer/file-transfer-state";
 import {
   IconChatBubble,
   IconChevronLeft,
@@ -43,7 +44,8 @@ import {
 } from "@/libs/cache";
 import { cn } from "@/libs/cn";
 import { useAppState } from "@/libs/state/app-state-context";
-import { ClientInfo, Client } from "@/libs/core/type";
+import type { Client } from "@/libs/core/client";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { downloadFile } from "@/libs/utils/download-file";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { getInitials } from "@/libs/utils/name";
@@ -80,7 +82,7 @@ import {
   Show,
 } from "solid-js";
 import { createComfirmDeleteItemsDialog } from "@/components/dialogs/confirm-delete-items-dialog";
-import { FileTransferer } from "@/libs/core/file-transferer";
+import { FileTransferer } from "@/libs/core/transfer/file-transferer";
 import {
   Tooltip,
   TooltipContent,
@@ -528,7 +530,13 @@ const Sync = (props: RouteSectionProps) => {
       () => appState.cache.cacheInfo[chunk.id],
     );
     const transfer = createMemo<FileTransferer | undefined>(
-      () => appState.transfer.transferers[chunk.id],
+      () =>
+        findFileTransfer(
+          appState.transfer.transfers,
+          appState.profile.clientId,
+          params.id,
+          chunk.id,
+        )?.transferer,
     );
 
     const [status, setStatus] =

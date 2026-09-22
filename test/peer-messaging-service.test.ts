@@ -6,8 +6,8 @@ import {
   it,
   vi,
 } from "vitest";
-import { PeerMessagingService } from "@/libs/services/peer-messaging-service";
-import { RtcProtocol } from "@/libs/services/rtc-protocol";
+import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
+import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 import { createSessionMessage } from "@/libs/core/protocol/messages";
 import {
   FakeRtcTransport,

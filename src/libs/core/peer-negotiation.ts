@@ -1,8 +1,8 @@
 import { catchError } from "@/libs/catch";
-import {
+import type {
   ClientSignal,
   SignalingService,
-} from "@/libs/core/services/type";
+} from "@/libs/core/signaling";
 
 const MAX_RETIRED_CONNECTION_GENERATIONS = 8;
 const MAX_PENDING_CANDIDATE_GENERATIONS = 8;

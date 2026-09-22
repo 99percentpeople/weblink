@@ -34,7 +34,7 @@
         "photoswipe-video-plugin": "^1.0.2",
         "qrcode": "^1.5.4",
         "solid-js": "^1.9.9",
-        "solid-sonner": "^0.3.2",
+        "solid-sonner": "0.3.1",
         "tailwind-merge": "^2.6.0",
         "uuid": "^11.1.0",
         "workbox-precaching": "^7.3.0",
@@ -1410,7 +1410,7 @@
 
     "solid-refresh": ["solid-refresh@0.6.3", "", { "dependencies": { "@babel/generator": "^7.23.6", "@babel/helper-module-imports": "^7.22.15", "@babel/types": "^7.23.6" }, "peerDependencies": { "solid-js": "^1.3" } }, "sha512-F3aPsX6hVw9ttm5LYlth8Q15x6MlI/J3Dn+o3EQyRTtTxidepSTwAYdozt01/YA+7ObcciagGEyXIopGZzQtbA=="],
 
-    "solid-sonner": ["solid-sonner@0.3.2", "", { "peerDependencies": { "solid-js": "^1.6.0" } }, "sha512-rkCiFz6m247+9TwDgMNEjq+S+pDVfHJFtDUjaaqosXrhf7W6h7m7J+Meerc196SDYlUGTqQCQdGvG8Ul+pdpmw=="],
+    "solid-sonner": ["solid-sonner@0.3.1", "", { "peerDependencies": { "solid-js": "^1.6.0" } }, "sha512-F/+zi9yKJTHh5hX1UGJfkDvyC+F34Vi3jgy44NJwOKCgic1QtAon0b1iT9OsDO77RTgR+PCil+3Y5B8T2Owy1Q=="],
 
     "solid-transition-size": ["solid-transition-size@0.1.4", "", { "dependencies": { "@corvu/utils": "~0.3.2" }, "peerDependencies": { "solid-js": "^1.8" } }, "sha512-ocHVnbfy23CgfaH4cEUR/AFg0Y3CEL8Oh3n9Qv8OHFJgPh+zkmERKZQfi/xH5XvxDCizg8VjPrVUhiHB1Gza8g=="],
 

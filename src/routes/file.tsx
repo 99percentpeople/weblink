@@ -52,7 +52,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/input";
 import { cn } from "@/libs/cn";
-import { cacheManager } from "@/libs/services/cache-serivce";
+import { cacheManager } from "@/libs/application/cache-service";
 import { appState } from "@/libs/state/app-state";
 import {
   Checkbox,
@@ -147,8 +147,7 @@ const StorageStatus = (props: { class?: string }) => {
 };
 
 export default function File() {
-  const { open: openPreviewDialog } =
-    createPreviewDialog();
+  const { open: openPreviewDialog } = createPreviewDialog();
 
   onMount(() => {
     reset();
@@ -623,13 +622,12 @@ export default function File() {
                         },
                       },
                     );
-                    const [error, file] =
-                      await catchError(
-                        handleSelectFolder(
-                          ev.currentTarget.files,
-                          abortController.signal,
-                        ),
-                      );
+                    const [error, file] = await catchError(
+                      handleSelectFolder(
+                        ev.currentTarget.files,
+                        abortController.signal,
+                      ),
+                    );
 
                     toast.dismiss(toastId);
 

@@ -10,7 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Client } from "@/libs/core/type";
+import type { Client } from "@/libs/core/client";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import { cn } from "@/libs/cn";
 
@@ -156,7 +156,11 @@ export const ChatBar: Component<
               multiple
               class="hidden"
               type="file"
-              accept={isMobile() ? "application/octet-stream" : "*/*"}
+              accept={
+                isMobile()
+                  ? "application/octet-stream"
+                  : "*/*"
+              }
               onChange={(ev) => {
                 ev.currentTarget.files &&
                   handleSendFiles(ev.currentTarget.files);
@@ -208,8 +212,8 @@ export const ChatBar: Component<
             placeholder={
               isMobile()
                 ? t(
-                  "client.message_editor.mobile_placeholder",
-                )
+                    "client.message_editor.mobile_placeholder",
+                  )
                 : t("client.message_editor.placeholder")
             }
             value={text()}

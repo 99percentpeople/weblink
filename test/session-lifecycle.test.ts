@@ -10,10 +10,10 @@ import { reconcile } from "solid-js/store";
 import { PeerSession } from "@/libs/core/session";
 import type {
   ClientService,
-  SignalingService,
   TransferClient,
-} from "@/libs/core/services/type";
-import { SessionService } from "@/libs/services/session-service";
+} from "@/libs/core/client";
+import type { SignalingService } from "@/libs/core/signaling";
+import { SessionService } from "@/libs/application/session-service";
 import { setAppState } from "@/libs/state/app-state";
 
 if (typeof window === "undefined") {

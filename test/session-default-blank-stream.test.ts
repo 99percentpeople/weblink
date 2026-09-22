@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PeerSession } from "@/libs/core/session";
-import type { SignalingService } from "@/libs/core/services/type";
+import type { SignalingService } from "@/libs/core/signaling";
 
 if (typeof window === "undefined") {
   (globalThis as any).window = {

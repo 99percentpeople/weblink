@@ -39,8 +39,8 @@ import {
 } from "@/components/icons";
 import { t } from "@/i18n";
 import { catchError } from "@/libs/catch";
-import { messageStores } from "@/libs/core/message";
-import type { ClientID } from "@/libs/core/type";
+import { messageStores } from "@/libs/application/messaging/message-store";
+import type { ClientID } from "@/libs/core/ids";
 import {
   notifyClientInfoDialogTabVisible,
   type ClientInfoDialogTab,

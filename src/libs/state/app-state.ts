@@ -1,16 +1,22 @@
 import { createStore } from "solid-js/store";
-import type { FileMetaData } from "@/libs/cache";
-import type { FileTransferer } from "@/libs/core/file-transferer";
+import type {
+  ChunkMetaData,
+  FileMetaData,
+} from "@/libs/cache";
+import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
+import type {
+  Client,
+  TransferClient,
+} from "@/libs/core/client";
 import type {
   ClientID,
-  ClientInfo,
   FileID,
-  RoomStatus,
-} from "@/libs/core/type";
+  RoomID,
+} from "@/libs/core/ids";
 import type { PeerSession } from "@/libs/core/session";
 import type { ClientProfile } from "@/libs/core/profile";
 import type { StoreMessage } from "@/libs/core/message";
-import type { Client } from "@/libs/core/type";
+import type { SendClipboardMessage } from "@/libs/core/protocol/messages";
 import type { ChunkCache } from "@/libs/cache/chunk-cache";
 import type { AppOption } from "@/libs/state/app-options";
 import { getDefaultAppOptions } from "@/libs/state/app-options";
@@ -19,6 +25,25 @@ export type ClientServiceStatus =
   | "connecting"
   | "connected"
   | "disconnected";
+
+export type RoomStatus = {
+  roomId: RoomID | null;
+  profile: ClientInfo | null;
+};
+
+export interface ClientInfo extends TransferClient {
+  candidateType?: string;
+  onlineStatus:
+    | "offline"
+    | "online"
+    | "connecting"
+    | "reconnecting";
+  streamState?: "placeholder" | "media";
+  clipboard?: SendClipboardMessage[];
+  storage?: ChunkMetaData[];
+  messageChannel: boolean;
+  stream?: MediaStream;
+}
 
 export type CacheStatus = "ready" | "loading";
 
@@ -253,7 +278,7 @@ export type AppState = {
     cacheInfo: Record<FileID, FileMetaData>;
   };
   transfer: {
-    transferers: Record<FileID, FileTransferer>;
+    transfers: FileTransferStates;
   };
   message: {
     status: "initializing" | "ready";
@@ -294,7 +319,7 @@ export const createInitialAppState = (): AppState => ({
     cacheInfo: {},
   },
   transfer: {
-    transferers: {},
+    transfers: {},
   },
   message: {
     status: "initializing",

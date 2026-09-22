@@ -6,7 +6,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { RtcProtocol } from "@/libs/services/rtc-protocol";
+import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
 import {
   createSessionMessage,
   type SessionMessage,

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDefaultProfile,
   normalizeStoredProfile,
-} from "@/libs/core/store";
+} from "@/libs/state/profile-store";
 import { getAvatarFallbackStyle } from "@/libs/utils/avatar";
 import { getInitials } from "@/libs/utils/name";
 

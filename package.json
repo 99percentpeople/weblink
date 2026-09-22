@@ -22,7 +22,10 @@
     "lint": "tsc -p tsconfig.json --noEmit --skipLibCheck",
     "appwrite:setup": "appwrite --force push settings && appwrite --force --all push tables",
     "prepare": "husky",
-    "test:protocol": "bun scripts/test-peer-speed.mjs --protocol"
+    "test:protocol": "bun scripts/test-peer-speed.mjs --protocol",
+    "test:transfer": "bun scripts/test-peer-speed.mjs --transfer",
+    "test:cache": "bun scripts/test-peer-speed.mjs --cache",
+    "bench:cache": "bun scripts/test-peer-speed.mjs --cache-benchmark"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,css,html,json,md}": [
@@ -59,7 +62,7 @@
     "photoswipe-video-plugin": "^1.0.2",
     "qrcode": "^1.5.4",
     "solid-js": "^1.9.9",
-    "solid-sonner": "^0.3.2",
+    "solid-sonner": "0.3.1",
     "tailwind-merge": "^2.6.0",
     "uuid": "^11.1.0",
     "workbox-precaching": "^7.3.0",

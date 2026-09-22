@@ -2,8 +2,19 @@ import {
   EventHandler,
   MultiEventEmitter,
 } from "../utils/event-emitter";
-import { ChunkRange, getSubRanges } from "../utils/range";
+import {
+  ChunkRange,
+  getSubRanges,
+} from "@/libs/utils/range";
 import MergeChunkWorker from "@/libs/workers/merge-chunk?worker";
+import {
+  expectedChunkSize,
+  requestResult,
+  transactionDone,
+  type MergeMetrics,
+  type MergeResult,
+  type StoredChunk,
+} from "./chunk-assembly";
 import {
   ChunkCacheEventMap,
   ChunkMetaData,
@@ -46,6 +57,7 @@ export interface ChunkCache {
 export interface IDBChunkCacheOptions {
   id: string;
   maxMomeryCacheSize: number;
+  createMergeWorker?: () => Worker;
 }
 
 export class IDBChunkCache implements ChunkCache {
@@ -55,14 +67,29 @@ export class IDBChunkCache implements ChunkCache {
     new MultiEventEmitter<ChunkCacheEventMap>();
   public readonly id: string;
   private info: FileMetaData | null = null;
-  // memory cache
-  private memoryCache: Array<[number, ArrayBufferLike]> =
-    [];
+  // Snapshot at receipt, not at finalization. Duplicate buffered chunks replace
+  // their previous value without inflating the persisted chunk count.
+  private memoryCache = new Map<number, Blob>();
+  private flushPromise: Promise<void> | null = null;
+  private flushTransaction: IDBTransaction | null = null;
+  private mergePromise: Promise<File | null> | null = null;
+  private cancelMerge?: (error: Error) => void;
+  private cleanupPromise: Promise<void> | null = null;
+  private generation = 0;
+  private metrics: MergeMetrics | null = null;
+  private readonly createMergeWorker: () => Worker;
+
+  get mergeMetrics(): MergeMetrics | null {
+    return this.metrics;
+  }
 
   private maxMomeryCacheSize: number;
   constructor(options: IDBChunkCacheOptions) {
     this.id = options.id;
     this.maxMomeryCacheSize = options.maxMomeryCacheSize;
+    this.createMergeWorker =
+      options.createMergeWorker ??
+      (() => new MergeChunkWorker());
   }
 
   async initialize() {
@@ -121,6 +148,8 @@ export class IDBChunkCache implements ChunkCache {
     if (!info.chunkSize) {
       return null;
     }
+    if (info.file) return info.fileSize;
+    if (info.fileSize === 0) return 0;
     const totalLength = getTotalChunkCount(info);
 
     const hasLast = async () => {
@@ -140,13 +169,15 @@ export class IDBChunkCache implements ChunkCache {
     let bytes = count * info.chunkSize;
 
     if (await hasLast()) {
-      const remainSize = info.fileSize % info.chunkSize;
+      const remainSize =
+        info.fileSize % info.chunkSize || info.chunkSize;
       bytes = bytes - info.chunkSize + remainSize;
     }
     return bytes;
   }
 
   async getCachedKeys() {
+    await this.flush();
     const store = await this.getChunkStore();
     const request = store.getAllKeys();
     const keys = await new Promise<Array<number>>(
@@ -169,6 +200,7 @@ export class IDBChunkCache implements ChunkCache {
       return null;
     }
 
+    if (info.file) return [];
     const totalLength = Math.ceil(
       info.fileSize / info.chunkSize,
     );
@@ -201,6 +233,18 @@ export class IDBChunkCache implements ChunkCache {
         request.onsuccess = () => {
           const db = request.result;
           db.onversionchange = () => {
+            if (this.db === db) {
+              this.generation++;
+              this.cancelMerge?.(
+                new DOMException(
+                  "Cache connection closed",
+                  "AbortError",
+                ),
+              );
+              this.db = null;
+              this.info = null;
+              this.memoryCache.clear();
+            }
             db.close();
           };
           resolve(db);
@@ -262,111 +306,177 @@ export class IDBChunkCache implements ChunkCache {
     return store;
   }
 
-  private async getInfoStore(mode?: IDBTransactionMode) {
-    const db = this.db;
-    if (!db) {
-      throw new Error("db is not initialized");
-    }
-    const transaction = db.transaction("info", mode);
-    const store = transaction.objectStore("info");
-    return store;
+  private database(): IDBDatabase {
+    if (!this.db) throw new Error("db is not initialized");
+    return this.db;
+  }
+
+  private assertGeneration(generation: number): void {
+    if (generation !== this.generation || !this.db)
+      throw new DOMException(
+        "Cache operation cancelled",
+        "AbortError",
+      );
   }
 
   public async setInfo(data: ChunkMetaData): Promise<void> {
-    const setData = {
-      ...data,
-      id: this.id,
-    };
-    const store = await this.getInfoStore("readwrite");
-    const request = store.put(setData);
-    return new Promise((resolve, reject) => {
-      request.onsuccess = async () => {
-        resolve();
-        this.info = {
-          ...setData,
-          isComplete: await isComplete(setData),
-          chunkCount: await this.getChunkCount(),
-          isMerging: this.isMerging,
-        };
-        this.dispatchEvent("update", this.info);
+    if (this.mergePromise)
+      throw new Error(
+        "Cannot change file metadata during assembly",
+      );
+    const generation = this.generation;
+    await this.flush();
+    this.assertGeneration(generation);
+    const setData = { ...data, id: this.id };
+    const transaction = this.database().transaction(
+      ["info", "chunks"],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    try {
+      transaction.objectStore("info").put(setData);
+      const [chunkCount] = await Promise.all([
+        requestResult(
+          transaction.objectStore("chunks").count(),
+        ),
+        done,
+      ]);
+      this.assertGeneration(generation);
+      this.info = {
+        ...setData,
+        isComplete: !!setData.file,
+        chunkCount,
+        isMerging: false,
       };
-      request.onerror = () => reject(request.error);
-    });
+      this.dispatchEvent("update", this.info);
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        /* Already committed/aborted. */
+      }
+      await done.catch(() => {});
+      throw error;
+    }
   }
 
   public async getInfo(): Promise<FileMetaData | null> {
-    const store = await this.getInfoStore("readonly");
-    const request = store.get(this.id);
-    const dbinfo = await new Promise<ChunkMetaData | null>(
-      (resolve, reject) => {
-        request.onsuccess = async () => {
-          const info = request.result ?? null;
-          resolve(info);
-        };
-        request.onerror = () => reject(request.error);
-      },
+    const generation = this.generation;
+    await this.flush();
+    this.assertGeneration(generation);
+    const transaction = this.database().transaction(
+      ["info", "chunks"],
+      "readonly",
     );
-
-    if (!dbinfo) {
-      console.warn(`info is not found for ${this.id}`);
-      return null;
-    }
-
-    this.info = {
-      ...dbinfo,
-      isComplete: await isComplete(dbinfo),
-      chunkCount: await this.getChunkCount(),
-      isMerging: this.isMerging,
-    };
-
+    const [data, chunkCount] = await Promise.all([
+      requestResult<ChunkMetaData | undefined>(
+        transaction.objectStore("info").get(this.id),
+      ),
+      requestResult(
+        transaction.objectStore("chunks").count(),
+      ),
+      transactionDone(transaction),
+    ]);
+    this.assertGeneration(generation);
+    this.info = data
+      ? {
+          ...data,
+          isComplete: !!data.file,
+          chunkCount,
+          isMerging: this.isMerging,
+        }
+      : null;
     return this.info;
   }
 
-  // flush memory cache to db
-  async flush() {
-    if (this.memoryCache.length === 0) return;
-
-    const store = await this.getChunkStore("readwrite");
-    const transaction = store.transaction;
-
-    const memoryCount = this.memoryCache.length;
-    for (
-      let value = this.memoryCache.pop();
-      value;
-      value = this.memoryCache.pop()
-    ) {
-      const [chunkIndex, data] = value;
-      store.put({ chunkIndex, data });
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => {
-        resolve();
-        if (this.info) {
-          if (!this.info.chunkCount) {
-            this.info.chunkCount = 0;
-          }
-          this.info.chunkCount += memoryCount;
-          this.dispatchEvent("update", this.info);
-        }
-      };
-      transaction.onerror = () => {
-        reject(transaction.error);
-      };
+  // Every caller waits for the current commit and for any chunks arriving during
+  // it. A failed transaction restores its batch; retries never lose buffered data.
+  flush(): Promise<void> {
+    if (this.flushPromise)
+      return this.flushPromise.then(() => this.flush());
+    if (!this.memoryCache.size) return Promise.resolve();
+    const batch = this.memoryCache;
+    this.memoryCache = new Map();
+    const pending = this.writeBatch(batch).finally(() => {
+      if (this.flushPromise === pending)
+        this.flushPromise = null;
     });
+    this.flushPromise = pending;
+    return pending.then(() => this.flush());
+  }
+
+  private async writeBatch(
+    batch: Map<number, Blob>,
+  ): Promise<void> {
+    const generation = this.generation;
+    let transaction: IDBTransaction | undefined;
+    let done: Promise<void> | undefined;
+    try {
+      transaction = this.database().transaction(
+        "chunks",
+        "readwrite",
+      );
+      this.flushTransaction = transaction;
+      done = transactionDone(transaction);
+      const store = transaction.objectStore("chunks");
+      for (const [chunkIndex, data] of batch)
+        store.put({ chunkIndex, data });
+      const [chunkCount] = await Promise.all([
+        requestResult(store.count()),
+        done,
+      ]);
+      this.assertGeneration(generation);
+      if (this.info) {
+        this.info = { ...this.info, chunkCount };
+        this.dispatchEvent("update", this.info);
+      }
+    } catch (error) {
+      try {
+        transaction?.abort();
+      } catch {
+        /* Already settled. */
+      }
+      await done?.catch(() => {});
+      if (generation === this.generation && this.db) {
+        for (const [index, data] of batch)
+          if (!this.memoryCache.has(index))
+            this.memoryCache.set(index, data);
+      }
+      throw error;
+    } finally {
+      if (this.flushTransaction === transaction)
+        this.flushTransaction = null;
+    }
   }
 
   public async storeChunk(
     chunkIndex: number,
     data: ArrayBufferLike,
   ): Promise<void> {
-    this.memoryCache.push([chunkIndex, data]);
-
+    this.database();
+    if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0)
+      throw new Error("Invalid chunk index");
+    // Late duplicate frames must not repopulate chunks after the final clear.
+    // If an early getFile() fails because chunks are missing, receipt can resume.
+    if (this.mergePromise)
+      await this.mergePromise.catch(() => {});
+    this.database();
+    if (this.info?.file) return;
     if (
-      this.memoryCache.length >= this.maxMomeryCacheSize
-    ) {
+      this.info?.chunkSize &&
+      data.byteLength !==
+        expectedChunkSize(this.info, chunkIndex)
+    )
+      throw new Error(
+        `Invalid byte length for chunk ${chunkIndex}`,
+      );
+    const buffer =
+      data instanceof ArrayBuffer
+        ? data
+        : new Uint8Array(data).slice().buffer;
+    this.memoryCache.set(chunkIndex, new Blob([buffer]));
+    if (this.memoryCache.size >= this.maxMomeryCacheSize)
       await this.flush();
-    }
   }
 
   public async getChunk(
@@ -409,14 +519,13 @@ export class IDBChunkCache implements ChunkCache {
     } else {
       const store = await this.getChunkStore("readonly");
       const request = store.get(chunkIndex);
-      return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
-          resolve(
-            request.result ? request.result.data : null,
-          );
-        };
-        request.onerror = () => reject(request.error);
-      });
+      const record = await requestResult<
+        StoredChunk | undefined
+      >(request);
+      if (!record) return null;
+      return record.data instanceof Blob
+        ? record.data.arrayBuffer()
+        : record.data;
     }
   }
 
@@ -434,145 +543,168 @@ export class IDBChunkCache implements ChunkCache {
     });
   }
 
-  public async cleanup(): Promise<void> {
-    const db = this.db;
-    if (!db) {
-      throw new Error("db is not initialized");
+  cleanup(): Promise<void> {
+    if (this.cleanupPromise) return this.cleanupPromise;
+    this.generation++;
+    this.cancelMerge?.(
+      new DOMException(
+        "Cache deleted during assembly",
+        "AbortError",
+      ),
+    );
+    try {
+      this.flushTransaction?.abort();
+    } catch {
+      /* Already settled. */
     }
-    const dbName = db.name;
-    db.close();
-    const request = indexedDB.deleteDatabase(dbName);
-    await new Promise<void>((resolve, reject) => {
+    this.memoryCache.clear();
+    this.info = null;
+    this.db?.close();
+    this.db = null;
+    const pending = new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(
+        `${DBNAME_PREFIX}${this.id}`,
+      );
       request.onsuccess = () => {
-        console.log(
-          `Database ${dbName} deleted successfully.`,
-        );
         this.dispatchEvent("cleanup", undefined);
         resolve();
       };
-      request.onerror = (event) => {
-        console.error(
-          `Failed to delete database ${dbName}.`,
-          event,
+      request.onerror = () => reject(request.error);
+      // A blocked delete has NOT succeeded. Existing connections receive
+      // versionchange and close; only onsuccess reports cleanup complete.
+      request.onblocked = () =>
+        console.warn(
+          `Cache ${this.id} deletion blocked by another connection`,
         );
-        reject(event);
-      };
-      request.onblocked = () => {
-        console.warn(`Database deletion blocked.`);
-        this.dispatchEvent("cleanup", undefined);
-        resolve();
-      };
+    }).finally(() => {
+      if (this.cleanupPromise === pending)
+        this.cleanupPromise = null;
     });
+    this.cleanupPromise = pending;
+    return pending;
   }
 
-  async getFile(): Promise<File | null> {
-    await this.flush();
+  getFile(): Promise<File | null> {
+    return this.mergeFile();
+  }
 
+  mergeFile(): Promise<File | null> {
+    if (this.mergePromise) return this.mergePromise;
+    const generation = this.generation;
+    const pending = this.performMerge(generation).finally(
+      () => {
+        if (this.mergePromise !== pending) return;
+        this.mergePromise = null;
+        this.isMerging = false;
+        if (this.info && generation === this.generation) {
+          this.info = { ...this.info, isMerging: false };
+          this.dispatchEvent("update", this.info);
+        }
+      },
+    );
+    this.mergePromise = pending;
+    return pending;
+  }
+
+  private async performMerge(
+    generation: number,
+  ): Promise<File | null> {
+    await this.flush();
+    this.assertGeneration(generation);
     const info = await this.getInfo();
-    if (!info) {
-      console.warn("info is not found");
-      return null;
-    }
-    if (info.file) {
-      return info.file;
-    }
-    return await this.mergeFile();
-  }
-
-  async mergeFile() {
-    await this.flush();
-
-    if (this.isMerging) {
-      console.warn(`cache is merging already`);
-      return null;
-    }
+    this.assertGeneration(generation);
+    if (!info || info.file) return info?.file ?? null;
     this.isMerging = true;
-    const info = await this.getInfo();
-
-    if (!info) {
-      console.warn("info is not found");
-      return null;
-    }
-
+    this.metrics = null;
+    this.info = { ...info, isMerging: true };
     this.dispatchEvent("merging", undefined);
     this.dispatchEvent("update", this.info);
-
-    const isWorker =
-      typeof WorkerGlobalScope !== "undefined" &&
-      self instanceof WorkerGlobalScope;
-    if (!isWorker) {
-      // use worker to merge chunks
-      const worker = new MergeChunkWorker();
-
-      return await new Promise<File | null>(
-        (resolve, reject) => {
-          this.isMerging = true;
-          worker.onmessage = (event) => {
-            const { data, error } = event.data;
-            if (error) {
-              console.error(error);
-              reject(error);
-              return;
-            }
-            info.file = data as File;
-            this.setInfo(info);
-            resolve(data as File);
-
-            this.dispatchEvent("complete", data);
-          };
-          worker.postMessage({ fileId: this.id });
-        },
-      ).finally(() => {
-        this.isMerging = false;
-        worker.terminate();
-      });
-    }
-
-    // current scope is worker
-    const store = await this.getChunkStore("readwrite");
-    const blobParts: BlobPart[] = [];
-    const request = store.openCursor();
-
-    const logString = `merge file ${info.fileName} ${info.fileSize} bytes`;
-    console.time(logString);
-    return await new Promise<File>((reslove, reject) => {
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          blobParts.push(
-            new Blob([cursor.value.data as ArrayBuffer]),
+    this.assertGeneration(generation);
+    const result = await new Promise<MergeResult>(
+      (resolve, reject) => {
+        const worker = this.createMergeWorker();
+        let settled = false;
+        const finish = (
+          error?: Error,
+          value?: MergeResult,
+        ) => {
+          if (settled) return;
+          settled = true;
+          worker.onmessage = null;
+          worker.onerror = null;
+          worker.onmessageerror = null;
+          worker.terminate();
+          if (this.cancelMerge === cancel)
+            this.cancelMerge = undefined;
+          if (error) reject(error);
+          else resolve(value!);
+        };
+        const cancel = (error: Error) => finish(error);
+        this.cancelMerge = cancel;
+        worker.onmessage = (
+          event: MessageEvent<{
+            result?: MergeResult;
+            error?: { name?: string; message: string };
+          }>,
+        ) => {
+          if (event.data.error) {
+            const error = new Error(
+              event.data.error.message,
+            );
+            error.name = event.data.error.name ?? "Error";
+            finish(error);
+          } else if (event.data.result)
+            finish(undefined, event.data.result);
+          else
+            finish(
+              new Error("Invalid merge worker response"),
+            );
+        };
+        worker.onerror = (event) => {
+          event.preventDefault();
+          finish(
+            new Error(
+              event.message || "Merge worker failed",
+            ),
           );
-          cursor.continue();
-        } else {
-          const file = new File(blobParts, info.fileName, {
-            type: info.mimetype,
-            lastModified: info.lastModified,
-          });
-          info.file = file;
-
-          this.setInfo(info);
-          store.clear();
-          reslove(file);
-          this.dispatchEvent("complete", file);
-          this.dispatchEvent("update", info);
+        };
+        worker.onmessageerror = () =>
+          finish(
+            new Error(
+              "Cannot decode merge worker response",
+            ),
+          );
+        try {
+          worker.postMessage({ fileId: this.id });
+        } catch (error) {
+          finish(
+            error instanceof Error
+              ? error
+              : new Error(String(error)),
+          );
         }
-      };
-
-      request.onerror = (err) => reject(err);
-    }).finally(() => {
-      this.isMerging = false;
-      console.timeEnd(logString);
-    });
+      },
+    );
+    this.assertGeneration(generation);
+    this.metrics = result.metrics;
+    this.isMerging = false;
+    this.info = result.info
+      ? {
+          ...result.info,
+          isComplete: !!result.info.file,
+          isMerging: false,
+          chunkCount: result.info.file
+            ? 0
+            : info.chunkCount,
+        }
+      : null;
+    this.dispatchEvent("update", this.info);
+    const file = result.info?.file ?? null;
+    // Worker already committed info.put(file) + chunks.clear(). No second write.
+    if (file && result.assembled)
+      this.dispatchEvent("complete", file);
+    return file;
   }
-}
-
-async function isComplete(info: FileMetaData) {
-  let done = false;
-
-  if (info) {
-    done = !!info.file;
-  }
-  return done;
 }
 
 export function getTotalChunkCount(info: FileMetaData) {

@@ -1,7 +1,7 @@
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { SPEED_TEST_APPROVAL_MS } from "@/libs/core/speed-test-protocol";
-import type { ClientID } from "@/libs/core/type";
+import type { ClientID } from "@/libs/core/ids";
 import {
   CLIENT_INFO_DIALOG_TAB_VISIBLE_EVENT,
   requestClientInfoDialog,

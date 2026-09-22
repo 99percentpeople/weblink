@@ -11,10 +11,8 @@ import {
   SwitchLabel,
   SwitchThumb,
 } from "@/components/ui/switch";
-import {
-  parseTurnServer,
-  setClientProfile,
-} from "@/libs/core/store";
+import { parseTurnServer } from "@/libs/core/ice-server";
+import { setClientProfile } from "@/libs/state/profile-store";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import {
   Slider,
@@ -54,7 +52,7 @@ import {
 import { Separator } from "@/components/ui/seprartor";
 import { toast } from "solid-sonner";
 import { Input } from "@/components/ui/input";
-import { cacheManager } from "@/libs/services/cache-serivce";
+import { cacheManager } from "@/libs/application/cache-service";
 import { v4 } from "uuid";
 import {
   Collapsible,

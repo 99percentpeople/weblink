@@ -1,3 +1,4 @@
+import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
 import {
   RouteSectionProps,
   useNavigate,
@@ -25,7 +26,10 @@ import { createElementSize } from "@solid-primitives/resize-observer";
 import PhotoSwipeLightbox from "photoswipe/lightbox";
 // @ts-ignore
 import PhotoSwipeVideoPlugin from "photoswipe-video-plugin";
-import { messageStores, StoreMessage } from "@/libs/core/message";
+import {
+  messageStores,
+  StoreMessage,
+} from "@/libs/application/messaging/message-store";
 import { ChatBar } from "@/routes/client/[id]/components/chat-bar";
 import {
   IconArrowDownward,
@@ -36,14 +40,15 @@ import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import { PeerSession } from "@/libs/core/session";
 import { handleDropItems } from "@/libs/utils/process-file";
-import { ClientInfo, Client } from "@/libs/core/type";
+import type { Client } from "@/libs/core/client";
+import type { ClientInfo } from "@/libs/state/app-state";
 import { catchError } from "@/libs/catch";
 import { ChatMoreMessageButton } from "./components/chat-more-message-button";
 import { MessageContent } from "./components/message";
 import { ChatHeader } from "./components/chat-header";
 import { appState } from "@/libs/state/app-state";
-import { transferManager } from "@/libs/services/transfer-service";
-import { cacheManager } from "@/libs/services/cache-serivce";
+import { transferManager } from "@/libs/application/transfer/transfer-service";
+import { cacheManager } from "@/libs/application/cache-service";
 import { createDeleteFileMessageDialog } from "@/components/dialogs/delete-file-message-dialog";
 
 export default function ClientPage(
@@ -193,7 +198,9 @@ export default function ClientPage(
   const session = createMemo<PeerSession | null>(
     () =>
       (clientInfo() &&
-        appState.session.sessions[clientInfo()!.clientId]) ??
+        appState.session.sessions[
+          clientInfo()!.clientId
+        ]) ??
       null,
   );
 
@@ -230,9 +237,10 @@ export default function ClientPage(
   const deleteMessage = async (message: StoreMessage) => {
     if (message.type === "file") {
       const fid = message.fid;
-      const hasTransfer =
-        fid !== undefined &&
-        appState.transfer.transferers[fid] !== undefined;
+      const hasTransfer = !!findMessageTransfer(
+        appState.transfer.transfers,
+        message,
+      );
       const hasCache =
         fid !== undefined &&
         appState.cache.caches[fid] !== undefined;
@@ -247,10 +255,22 @@ export default function ClientPage(
       if (cancel) return;
 
       if (fid !== undefined && result?.deleteTransfer) {
-        transferManager.destroyTransfer(fid);
+        const active = findMessageTransfer(
+          appState.transfer.transfers,
+          message,
+        );
+        if (active) {
+          const run = transferManager.get(
+            active.session,
+            fid,
+          );
+          if (run?.id === active.id)
+            transferManager.destroy(run);
+        }
       }
 
       if (fid !== undefined && result?.deleteCache) {
+        transferManager.destroyFile(fid);
         const [error] = await catchError(
           cacheManager.remove(fid),
         );
@@ -356,13 +376,12 @@ export default function ClientPage(
                   },
                 );
 
-                const [error, files] =
-                  await catchError(
-                    handleDropItems(
-                      ev.dataTransfer.items,
-                      abortController.signal,
-                    ),
-                  );
+                const [error, files] = await catchError(
+                  handleDropItems(
+                    ev.dataTransfer.items,
+                    abortController.signal,
+                  ),
+                );
                 toast.dismiss(toastId);
                 if (error) {
                   console.warn(error);

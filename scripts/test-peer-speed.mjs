@@ -18,11 +18,22 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const taskUi = process.argv.includes("--tasks");
 const protocolTest = process.argv.includes("--protocol");
-const entry = taskUi
-  ? "test/browser/task-center.html"
-  : protocolTest
-    ? "test/browser/rtc-protocol.html"
-    : "test/browser/speed-test.html";
+const transferTest = process.argv.includes("--transfer");
+const cacheBenchmark = process.argv.includes(
+  "--cache-benchmark",
+);
+const cacheTest = process.argv.includes("--cache");
+const entry = cacheBenchmark
+  ? "test/browser/cache-merge-benchmark.html"
+  : cacheTest
+    ? "test/browser/cache-merge.html"
+    : taskUi
+      ? "test/browser/task-center.html"
+      : protocolTest
+        ? "test/browser/rtc-protocol.html"
+        : transferTest
+          ? "test/browser/transfer-workflow.html"
+          : "test/browser/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -127,7 +138,11 @@ async function main() {
     });
     await vite.listen();
     const address = vite.httpServer.address();
-    const url = `http://127.0.0.1:${address.port}/${entry}`;
+    const query =
+      cacheBenchmark && process.argv.includes("--repeating")
+        ? "?repeating=1"
+        : "";
+    const url = `http://127.0.0.1:${address.port}/${entry}${query}`;
     const probe = await fetch(url);
     if (!probe.ok)
       throw new Error(`Test page HTTP ${probe.status}`);

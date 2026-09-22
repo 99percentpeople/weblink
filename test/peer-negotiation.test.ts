@@ -6,7 +6,7 @@ import {
   vi,
 } from "vitest";
 import { PeerNegotiationController } from "@/libs/core/peer-negotiation";
-import type { SignalingService } from "@/libs/core/services/type";
+import type { SignalingService } from "@/libs/core/signaling";
 
 const makeSender = () =>
   ({

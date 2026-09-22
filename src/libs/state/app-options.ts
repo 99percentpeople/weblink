@@ -1,31 +1,14 @@
-import type { ClientID, FileID } from "@/libs/core/type";
+import type {
+  IceServerOptions,
+  TurnServerOptions,
+} from "@/libs/core/ice-server";
+import type { CompressionLevel } from "@/libs/core/transfer/options";
+import type { ClientID, FileID } from "@/libs/core/ids";
 import languages from "@/assets/i18n/languages.json";
 
 export type Locale = string;
-
-export type TurnServerOptions = {
-  url: string;
-  username: string;
-  password: string;
-  authMethod: string;
-};
-
-type ConnectionOptions = {
-  stuns: string[];
-  turns: TurnServerOptions[];
-};
-
-export type CompressionLevel =
-  | 0
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5
-  | 6
-  | 7
-  | 8
-  | 9;
+export type ConnectionOptions = IceServerOptions;
+export type { TurnServerOptions, CompressionLevel };
 
 export type ClientConfig = {
   /** Whether this peer may enumerate completed local cache entries. */

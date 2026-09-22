@@ -14,11 +14,12 @@ import {
 } from "solid-js";
 import { cn } from "@/libs/cn";
 import { A } from "@solidjs/router";
-import { Client, ClientInfo } from "@/libs/core/type";
+import type { Client } from "@/libs/core/client";
+import type { ClientInfo } from "@/libs/state/app-state";
 import {
   messageStores,
   StoreMessage,
-} from "@/libs/core/message";
+} from "@/libs/application/messaging/message-store";
 import { PortableContextMenu } from "@/components/portable-contextmenu";
 import {
   ContextMenuGroup,

@@ -9,7 +9,7 @@ import {
 import {
   SpeedTestService,
   type SpeedTestState,
-} from "@/libs/services/speed-test-service";
+} from "@/libs/application/speed-test-service";
 import {
   SpeedTestError,
   SPEED_TEST_PROTOCOL,

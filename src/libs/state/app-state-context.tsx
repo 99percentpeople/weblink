@@ -9,28 +9,16 @@ import {
   ParentProps,
   useContext,
 } from "solid-js";
-import type {
-  ChunkMetaData,
-  FileMetaData,
-} from "@/libs/cache";
+import type { ChunkMetaData } from "@/libs/cache";
 import type { PeerSession } from "@/libs/core/session";
-import type {
-  ClientID,
-  FileID,
-  RoomStatus,
-} from "@/libs/core/type";
+import type { ClientID, FileID } from "@/libs/core/ids";
+import type { RoomStatus } from "@/libs/state/app-state";
 import type {
   ClientService,
   ClientServiceInitOptions,
-} from "@/libs/core/services/type";
-import {
-  TRANSFER_CHANNEL_PREFIX,
-  TransferMode,
-} from "@/libs/core/file-transferer";
-import { v4 } from "uuid";
-import { cacheManager } from "@/libs/services/cache-serivce";
-import { transferManager } from "@/libs/services/transfer-service";
-import { getRangesLength } from "@/libs/utils/range";
+} from "@/libs/core/client";
+import { cacheManager } from "@/libs/application/cache-service";
+import { transferManager } from "@/libs/application/transfer/transfer-service";
 import {
   appState,
   saveMediaConstraintsToSession,
@@ -40,48 +28,40 @@ import {
   resolveClientConfig,
   signalingWebSocketUrl,
 } from "@/libs/state/app-options";
-import { createRtcService } from "@/libs/services/rtc-service";
+import { createRtcService } from "@/libs/application/rtc/rtc-service";
 import {
   createRtcProtocol,
-  type AckMessage,
-  type RequestFileMessage,
   type SendClipboardMessage,
-  type SendFileMessage,
-} from "@/libs/services/rtc-protocol";
-import { sessionService } from "@/libs/services/session-service";
-import { PeerProfileService } from "@/libs/services/peer-profile-service";
-import {
-  PeerMessagingService,
-  type TrackedSendOptions,
-} from "@/libs/services/peer-messaging-service";
+} from "@/libs/application/rtc/rtc-protocol";
+import { sessionService } from "@/libs/application/session-service";
+import { PeerProfileService } from "@/libs/application/peer-profile-service";
+import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
+import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { toast } from "solid-sonner";
-import {
-  FileTransferMessage,
-  messageStores,
-  type StoreMessage,
-} from "@/libs/core/message";
+import type { StoreMessage } from "@/libs/core/message";
+import { messageStores } from "@/libs/application/messaging/message-store";
 import { catchError } from "@/libs/catch";
 import {
   SpeedTestService,
   type SpeedTestState,
-} from "@/libs/services/speed-test-service";
+} from "@/libs/application/speed-test-service";
 import { createSpeedTestApproval } from "@/components/speed-test-approval";
 import {
   createTaskService,
   type TaskService,
-} from "@/libs/services/task-service";
+} from "@/libs/application/task-service";
 
 async function getClientService(
   options: ClientServiceInitOptions,
 ): Promise<ClientService> {
   switch (import.meta.env.VITE_BACKEND) {
     case "FIREBASE":
-      return import("@/libs/core/services/client/firebase-client-service").then(
+      return import("@/libs/infrastructure/signaling/client/firebase-client-service").then(
         (m) => new m.FirebaseClientService(options),
       );
     case "WEBSOCKET":
       options.websocketUrl = signalingWebSocketUrl;
-      return import("@/libs/core/services/client/ws-client-service").then(
+      return import("@/libs/infrastructure/signaling/client/ws-client-service").then(
         (m) => new m.WebSocketClientService(options),
       );
     default:
@@ -161,6 +141,17 @@ export const AppStateProvider: Component<
     protocol,
     messageStores,
   );
+  const files = new FileTransferService({
+    protocol,
+    rtc,
+    registry: transferManager,
+    caches: cacheManager,
+    messages: messageStores,
+    messaging,
+    getSession: (peerId) => sessionService.sessions[peerId],
+    getChunkSize: () => appState.options.chunkSize,
+  });
+  onCleanup(() => files.dispose());
   const peerProfiles = new PeerProfileService(protocol, {
     getLocalClient: () => ({
       clientId: appState.profile.clientId,
@@ -178,7 +169,7 @@ export const AppStateProvider: Component<
     clientId: () => appState.profile.clientId,
     messages: () => appState.message.messages,
     caches: () => appState.cache.cacheInfo,
-    transfers: () => appState.transfer.transferers,
+    transfers: () => appState.transfer.transfers,
   });
   const [speedTestState, setSpeedTestState] =
     createSignal<SpeedTestState>({
@@ -190,7 +181,7 @@ export const AppStateProvider: Component<
     getConnection: (peerId) =>
       appState.session.sessions[peerId]?.peerConnection,
     isBusy: () =>
-      Object.values(appState.transfer.transferers).some(
+      Object.values(appState.transfer.transfers).some(
         Boolean,
       ),
     onState: (state) => {
@@ -300,103 +291,6 @@ export const AppStateProvider: Component<
       },
     );
 
-    const offSendFile = protocol.handle(
-      "send-file",
-      async ({ message }) => {
-        if (cacheManager.getCache(message.fid)) {
-          throw new Error(
-            `cache ${message.fid} already exists`,
-          );
-        }
-        messageStores.setReceiveMessage(message);
-
-        const cache = await cacheManager.createCache(
-          message.fid,
-        );
-
-        const receiveInfo = {
-          fileName: message.fileName,
-          fileSize: message.fileSize,
-          mimetype: message.mimeType,
-          lastModified: message.lastModified,
-          chunkSize: message.chunkSize,
-          createdAt: message.createdAt,
-          id: message.fid,
-        } satisfies FileMetaData;
-
-        const transferer = transferManager.createTransfer(
-          cache,
-          TransferMode.Receive,
-          receiveInfo,
-        );
-
-        messageStores.addTransfer(transferer);
-        await transferer.initialize();
-      },
-    );
-
-    const offRequestFile = protocol.handle(
-      "request-file",
-      async ({ message }) => {
-        const cache = cacheManager.getCache(message.fid);
-        if (!cache) {
-          throw new Error(`cache ${message.fid} not found`);
-        }
-
-        const info = await cache.getInfo();
-        if (!info) {
-          throw new Error(
-            `cache ${message.fid} info not found`,
-          );
-        }
-
-        if (!info.isComplete) {
-          throw new Error(
-            `cache ${message.fid} is not complete`,
-          );
-        }
-        messageStores.setReceiveMessage(message);
-        const transferer = transferManager.createTransfer(
-          cache,
-          TransferMode.Send,
-        );
-        messageStores.addTransfer(transferer);
-
-        transferer.addEventListener("ready", async () => {
-          const [error] = await catchError(
-            transferer.sendFile(message.ranges),
-          );
-          if (error) {
-            console.error(error);
-            toast.error(error.message);
-          }
-        });
-
-        await transferer.initialize();
-        transferer.setSendStatus(message);
-      },
-    );
-
-    const offResumeFile = protocol.handle(
-      "resume-file",
-      async ({ message, signal }) => {
-        const cache = cacheManager.getCache(message.fid);
-        if (!cache) {
-          throw new Error(`cache ${message.fid} not found`);
-        }
-        const info = await cache.getInfo();
-        if (!info) {
-          throw new Error(
-            `cache ${message.fid} info not found`,
-          );
-        }
-        await requestFile(message.client, info, true, {
-          signal,
-          throwOnError: true,
-        });
-      },
-    );
-
     const offStreamState = protocol.on(
       "stream-state",
       ({ message }) => {
@@ -440,36 +334,12 @@ export const AppStateProvider: Component<
       },
     );
 
-    const offChannel = rtc.onChannel(({ channel }) => {
-      if (channel.protocol !== "transfer") return;
-      console.log(`datachannel event`, channel);
-
-      const fileIdWithChannelId = channel.label.replace(
-        TRANSFER_CHANNEL_PREFIX,
-        "",
-      );
-
-      const index = fileIdWithChannelId.lastIndexOf("-");
-      const fileId =
-        index === -1
-          ? fileIdWithChannelId
-          : fileIdWithChannelId.slice(0, index);
-
-      console.log(`receive channel for file ${fileId}`);
-
-      transferManager.setChannel(fileId, channel);
-    });
-
     onCleanup(() => {
       controller.abort();
       offSendText();
       offClipboard();
-      offSendFile();
-      offRequestFile();
-      offResumeFile();
       offStreamState();
       offRequestStorage();
-      offChannel();
       offSpeedTestChannel();
     });
   });
@@ -603,6 +473,7 @@ export const AppStateProvider: Component<
   }
 
   function leaveRoom() {
+    files.cancelAll();
     speedTests.cancel();
     const room = appState.roomStatus.roomId;
     if (room) {
@@ -628,87 +499,36 @@ export const AppStateProvider: Component<
     return sessions.filter((s) => s);
   }
 
-  const addTransferChannel = async (
-    session: PeerSession,
-    transferId: FileID,
-    fileId: FileID,
+  // Presentation policy stays here; services reject errors without importing UI/toast.
+  const runFileAction = async (
+    action: () => Promise<void>,
   ) => {
-    const [err, channel] = await catchError(
-      session.createChannel(
-        // Keep the legacy "-0" suffix so older clients can
-        // still associate the channel with the file.
-        `${transferId}-0`,
-        "transfer",
-      ),
-    );
-    if (err) throw err;
-    if (!channel) return;
-    transferManager.setChannel(fileId, channel);
-  };
-
-  const setupTransferAfterAck = async (
-    session: PeerSession,
-    message: SendFileMessage | RequestFileMessage,
-    ackMessage: AckMessage,
-  ) => {
-    const cache = cacheManager.getCache(message.fid);
-    if (!cache) {
-      throw new Error(`cache ${message.fid} not found`);
-    }
-
-    if (message.type === "send-file") {
-      if (ackMessage.mode !== "receive") return;
-      const transferer = transferManager.createTransfer(
-        cache,
-        TransferMode.Send,
+    try {
+      await action();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.name === "AbortError"
+      )
+        return;
+      console.error(error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : String(error),
       );
-      messageStores.addTransfer(transferer);
-      transferer.addEventListener("ready", async () => {
-        const [error] = await catchError(
-          transferer.sendFile(),
-        );
-        if (error) {
-          console.error(error);
-          toast.error(error.message);
-        }
-      });
-      await transferer.initialize();
-      await addTransferChannel(
-        session,
-        transferer.id,
-        message.fid,
-      );
-      return;
     }
-
-    if (ackMessage.mode !== "send") return;
-    const transferer = transferManager.createTransfer(
-      cache,
-      TransferMode.Receive,
-    );
-    messageStores.addTransfer(transferer);
-    await transferer.initialize();
-    await addTransferChannel(
-      session,
-      transferer.id,
-      message.fid,
-    );
   };
-
-  const setupTransferAfterAckSafe = async (
-    session: PeerSession,
-    message: SendFileMessage | RequestFileMessage,
-    ackMessage: AckMessage,
-    options: { throwOnError?: boolean } = {},
-  ) => {
-    const [err] = await catchError(
-      setupTransferAfterAck(session, message, ackMessage),
-    );
-    if (!err) return;
-    console.error(err);
-    messaging.fail(message, err);
-    if (options.throwOnError) throw err;
-  };
+  const withFileSession = (
+    target: ClientID,
+    action: (session: PeerSession) => Promise<void>,
+  ) =>
+    runFileAction(async () => {
+      const session = sessionService.sessions[target];
+      if (!session)
+        throw new Error(`session ${target} not found`);
+      await action(session);
+    });
 
   async function sendText(
     text: string,
@@ -725,38 +545,10 @@ export const AppStateProvider: Component<
     file: File,
     target: ClientID | ClientID[],
   ) {
-    for (const session of getTargetSessions(target)) {
-      const fid = v4();
-      const payload = {
-        fid,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
-        lastModified: file.lastModified,
-        chunkSize: appState.options.chunkSize,
-      };
-      const cache = await cacheManager.createCache(fid);
-      await cache.setInfo({
-        fileName: file.name,
-        fileSize: file.size,
-        mimetype: file.type,
-        lastModified: file.lastModified,
-        chunkSize: payload.chunkSize,
-        createdAt: Date.now(),
-        file,
-      });
-      const result = await messaging.send(
-        session,
-        "send-file",
-        payload,
+    for (const session of getTargetSessions(target))
+      await runFileAction(() =>
+        files.sendFile(session, file),
       );
-      if (result)
-        await setupTransferAfterAckSafe(
-          session,
-          result.message,
-          result.ackMessage,
-        );
-    }
   }
 
   async function sendClipboard(
@@ -824,216 +616,32 @@ export const AppStateProvider: Component<
       );
       return;
     }
-    if (message.type !== "file" || !message.fid) return;
-    if (message.client !== self) {
-      const cache = cacheManager.getCache(message.fid);
-      const info = await cache?.getInfo();
-      await requestFile(
-        message.client,
-        {
-          id: message.fid,
-          fileName: info?.fileName ?? message.fileName,
-          fileSize: info?.fileSize ?? message.fileSize,
-          mimetype: info?.mimetype ?? message.mimeType,
-          lastModified:
-            info?.lastModified ?? message.lastModified,
-          chunkSize: info?.chunkSize ?? message.chunkSize,
-          createdAt: info?.createdAt ?? message.createdAt,
-        },
-        true,
-      );
-      return;
-    }
-    const cache = cacheManager.getCache(message.fid);
-    if (!cache) {
-      toast.error(`cache ${message.fid} not exist`);
-      return;
-    }
-    const info = await cache.getInfo();
-    if (!info?.file) {
-      toast.error(`cache ${message.fid} file not exist`);
-      return;
-    }
-    const result = await messaging.send(
-      session,
-      "send-file",
-      {
-        fid: message.fid,
-        fileName: message.fileName,
-        fileSize: message.fileSize,
-        mimeType: message.mimeType,
-        lastModified: message.lastModified,
-        chunkSize: message.chunkSize,
-      },
-      {
-        id: message.id,
-        createdAt: message.createdAt,
-        retry: true,
-      },
-    );
-    if (result)
-      await setupTransferAfterAckSafe(
-        session,
-        result.message,
-        result.ackMessage,
+    if (message.type === "file")
+      await runFileAction(() =>
+        files.retryFile(session, message),
       );
   }
 
-  async function shareFile(
-    fileId: FileID,
-    target: ClientID,
-  ) {
-    const cache = cacheManager.getCache(fileId);
-    if (!cache) {
-      console.warn(`cache ${fileId} not exist`);
-      return;
-    }
-    const session = sessionService.sessions[target];
-    if (!session) {
-      console.warn(`session ${target} not exist`);
-      return;
-    }
-    const info = await cache.getInfo();
-    if (!info?.file) {
-      console.warn(`cache ${fileId} file not exist`);
-      return;
-    }
-    const result = await messaging.send(
-      session,
-      "send-file",
-      {
-        fid: fileId,
-        fileName: info.fileName,
-        fileSize: info.fileSize,
-        mimeType: info.mimetype,
-        lastModified: info.lastModified,
-        chunkSize:
-          info.chunkSize ?? appState.options.chunkSize,
-      },
+  const shareFile = (fileId: FileID, target: ClientID) =>
+    withFileSession(target, (session) =>
+      files.shareFile(session, fileId),
     );
-    if (result)
-      await setupTransferAfterAckSafe(
-        session,
-        result.message,
-        result.ackMessage,
-      );
-  }
-
-  async function requestFile(
+  const requestFile = (
     target: ClientID,
     info: ChunkMetaData,
-    resume: boolean = false,
-    options: TrackedSendOptions = {},
-  ) {
-    const session = sessionService.sessions[target];
-    const client = sessionService.clientViewData[target];
-    if (!session || client?.onlineStatus !== "online") {
-      const error = new Error(
-        `can not request file from offline target: ${target}`,
-      );
-      if (options.throwOnError) throw error;
-      console.warn(error.message);
-      return;
-    }
-    let cache = cacheManager.getCache(info.id);
-    if (!cache) {
-      cache = await cacheManager.createCache(info.id);
-      await cache.setInfo({ ...info, file: undefined });
-    }
-    const ranges = await cache.getReqRanges();
-    if (ranges && getRangesLength(ranges) === 0) {
-      messageStores.addCache(cache);
-      await cache.getFile();
-      return;
-    }
-    const existing = resume
-      ? messageStores.messages.findLast(
-          (msg) =>
-            msg.type === "file" &&
-            msg.fid === info.id &&
-            ((msg.client === session.clientId &&
-              msg.target === session.targetClientId) ||
-              (msg.client === session.targetClientId &&
-                msg.target === session.clientId)),
-        )
-      : undefined;
-    const result = await messaging.send(
-      session,
-      "request-file",
-      {
-        fid: info.id,
-        ranges: ranges ?? undefined,
-        fileName: info.fileName,
-        fileSize: info.fileSize,
-        mimeType: info.mimetype,
-        lastModified: info.lastModified,
-        chunkSize:
-          info.chunkSize ?? appState.options.chunkSize,
-        resume,
-      },
-      {
-        ...options,
-        id: existing?.id,
-        createdAt:
-          existing?.status === "error"
-            ? existing.createdAt
-            : undefined,
-        retry: existing?.status === "error",
-      },
+    resume = false,
+  ) =>
+    withFileSession(target, (session) =>
+      files.requestFile(session, info, resume),
     );
-    if (result)
-      await setupTransferAfterAckSafe(
-        session,
-        result.message,
-        result.ackMessage,
-        options,
-      );
-  }
-
-  async function resumeFile(
-    fileId: FileID,
-    target: ClientID,
-  ) {
-    const session = sessionService.sessions[target];
-    const cache = cacheManager.getCache(fileId);
-    if (!session || !cache) return;
-    const info = await cache.getInfo();
-    if (!info?.file) return;
-    const transferMessage = messageStores.messages.findLast(
-      (msg) =>
-        msg.type === "file" &&
-        msg.fid === fileId &&
-        msg.client === session.clientId &&
-        msg.target === target,
-    ) as FileTransferMessage | undefined;
-    if (
-      !transferMessage ||
-      transferMessage.transferStatus === "complete"
-    )
-      return;
-    const [error] = await catchError(
-      protocol.call(
-        session,
-        "resume-file",
-        { fid: fileId },
-        { id: transferMessage.id },
-      ),
+  const resumeFile = (fileId: FileID, target: ClientID) =>
+    withFileSession(target, (session) =>
+      files.resumeFile(session, fileId),
     );
-    if (error)
-      console.warn("[AppState] resume-file failed", error);
-  }
-
-  async function pauseFile(
-    fileId: FileID,
-    target: ClientID,
-  ) {
-    const session = sessionService.sessions[target];
-    if (!session) return;
-    const transferer =
-      transferManager.getTransferer(fileId);
-    if (!transferer) return;
-    await transferer.pause(true);
-  }
+  const pauseFile = (fileId: FileID, target: ClientID) =>
+    withFileSession(target, (session) =>
+      files.pauseFile(session, fileId),
+    );
 
   return (
     <AppStateContext.Provider

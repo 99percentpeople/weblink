@@ -1,6 +1,5 @@
 import type { ChunkMetaData } from "@/libs/cache";
-import type { ClientID } from "../type";
-import type { FileID } from "../type";
+import type { ClientID, FileID } from "../ids";
 import {
   RTC_PROFILE_PROTOCOL_VERSION,
   type PeerProfile,

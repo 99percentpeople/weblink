@@ -1,7 +1,7 @@
-import {
+import type {
   ClientSignal,
   SignalingService,
-} from "./services/type";
+} from "./signaling";
 import {
   EventHandler,
   MultiEventEmitter,
@@ -21,7 +21,6 @@ import { waitChannel } from "./utils/channel";
 import { PeerNegotiationController } from "./peer-negotiation";
 export { handleOffer } from "./peer-negotiation";
 import { catchError, catchErrorSync } from "../catch";
-import { appState } from "@/libs/state/app-state";
 import {
   PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS,
   PEER_SESSION_AUTO_RECONNECT_MAX_DELAY_MS,
@@ -30,10 +29,24 @@ import {
   SIGNALING_CONNECTION_TIMEOUT_MS,
 } from "@/constants";
 
+export interface PeerSessionRuntimeOptions {
+  ordered: boolean;
+  preferredVideoCodec: string | null;
+  preferredAudioCodec: string | null;
+}
+
+const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
+  {
+    ordered: false,
+    preferredVideoCodec: null,
+    preferredAudioCodec: null,
+  };
+
 export interface PeerSessionOptions {
   polite?: boolean;
   iceServers?: RTCIceServer[];
   relayOnly?: boolean;
+  getRuntimeOptions?: () => PeerSessionRuntimeOptions;
 }
 
 export type PeerSessionEventMap = {
@@ -89,6 +102,7 @@ export class PeerSession {
     null;
   private disconnectionTimer: number | null = null;
   private suspended = false;
+  private readonly getRuntimeOptions: () => PeerSessionRuntimeOptions;
 
   private applyPreferredCodecPreferences(
     pc: RTCPeerConnection,
@@ -169,14 +183,11 @@ export class PeerSession {
       });
     };
 
-    applyForKind(
-      "video",
-      appState.options.preferredVideoCodec ?? "",
-    );
-    applyForKind(
-      "audio",
-      appState.options.preferredAudioCodec ?? "",
-    );
+    const { preferredVideoCodec, preferredAudioCodec } =
+      this.getRuntimeOptions();
+
+    applyForKind("video", preferredVideoCodec ?? "");
+    applyForKind("audio", preferredAudioCodec ?? "");
   }
   constructor(
     sender: SignalingService,
@@ -184,12 +195,15 @@ export class PeerSession {
       polite = true,
       iceServers,
       relayOnly = false,
+      getRuntimeOptions = () =>
+        DEFAULT_PEER_SESSION_RUNTIME_OPTIONS,
     }: PeerSessionOptions = {},
   ) {
     this.sender = sender;
     this.polite = polite;
     this.iceServers = iceServers ?? [];
     this.relayOnly = relayOnly;
+    this.getRuntimeOptions = getRuntimeOptions;
     this.negotiation = new PeerNegotiationController({
       sender,
       polite,
@@ -1372,7 +1386,7 @@ export class PeerSession {
     const channel = this.peerConnection.createDataChannel(
       label,
       {
-        ordered: appState.options.ordered,
+        ordered: this.getRuntimeOptions().ordered,
         protocol,
       },
     );
