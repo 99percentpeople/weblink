@@ -350,6 +350,23 @@ for a different room or identity.
 - [x] Run strict type checking, all Vitest tests, the production build and real
       Chromium protocol/transfer/cache/task/speed checks, including narrow task UI.
 
+## Completed slice: connection settings and ICE diagnostics
+
+Goal: start reducing the large settings route without changing connection options,
+layout or the underlying ICE probing behavior.
+
+- [x] Extract connection forms into `routes/setting/connection-settings.tsx`,
+      retaining the existing anchor, fragment layout, defaults and validation.
+- [x] Move credential resolution and STUN/TURN availability orchestration into
+      an injected `IceServerDiagnostics` application service.
+- [x] Preserve STUN srflx / TURN relay policies, concurrent probes and the
+      completion-order report, while isolating per-server failures.
+- [x] Share the diagnostic button view, release its busy state on failure and
+      defer toast content creation to the toast renderer's reactive owner.
+- [x] Add service and rendered-form tests for options, resets, failures, results,
+      independent busy states and the initial-join restriction.
+- [x] Run strict type checking, all Vitest tests, the production build and formatting.
+
 ## In progress: signaling backend contract parity
 
 - [x] Add Bun server input validation, socket/client identity checks, binary and
@@ -365,8 +382,9 @@ for a different room or identity.
    contract tests with the Worker; input validation and cache limits already exist.
 2. Inject the local stream service through the app context instead of importing
    the singleton directly from UI modules.
-3. Break large route components into state/controller and view modules without
-   moving WebRTC details into UI code.
+3. Continue splitting large routes into state/controller and view modules without
+   moving WebRTC details into UI code; settings connection forms and diagnostics
+   are now separated, while appearance, stream and file views remain candidates.
 4. Revisit the remaining PeerSession connection-establishment code only if it
    still blocks testing or changes; lifecycle, media and channel ownership are
    now separate controllers.

@@ -36,6 +36,10 @@ the low-level `domain` layer.
 - `src/routes/`: Route-level pages (Solid Router).
   - `src/routes/client/[id]/...`: Main client session pages
     (chat/sync, etc).
+  - `src/routes/setting/connection-settings.tsx`: connection-setting forms
+    and diagnostic feedback, composed by `setting.tsx` without an extra layout
+    wrapper. ICE probes and credential resolution belong to the injected
+    application diagnostics service, not the view.
 - `src/components/`: Reusable UI building blocks.
   - `components/app/`: app-scoped components (nav,
     wakelock, etc).
@@ -72,6 +76,8 @@ may select concrete infrastructure implementations.
     identity before client creation, shares concurrent same-identity joins through
     the handshake, and retires old work on identity changes, leave or disposal.
   - `session-service.ts`: owns live `PeerSession` instances and client views.
+  - `ice-server-diagnostics.ts`: coordinates STUN/TURN availability probes behind
+    injectable credential/probe functions, without UI or shared-state ownership.
   - `messaging/`: reactive message history, persistence port and tracked
     message workflows. IndexedDB does not live in this layer.
   - `rtc/`: Weblink's PeerSession transport adapter and protocol composition.

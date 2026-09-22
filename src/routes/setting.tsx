@@ -1,18 +1,11 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Show,
-} from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
+import { ConnectionSettings } from "./setting/connection-settings";
 import {
   Switch,
   SwitchControl,
   SwitchLabel,
   SwitchThumb,
 } from "@/components/ui/switch";
-import { parseTurnServer } from "@/libs/domain/ice-server";
-import { setClientProfile } from "@/libs/state/profile-store";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import {
   Slider,
@@ -27,18 +20,12 @@ import {
   formatBtyeSize,
 } from "@/libs/utils/format-filesize";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { textareaAutoResize } from "@/libs/hooks/input-resize";
-import { reconcile } from "solid-js/store";
 import { LocaleSelector, t } from "@/i18n";
 import {
-  TurnServerOptions,
   setAppOptions,
   CompressionLevel,
   getDefaultAppOptions,
   backgroundImage,
-  parseTurnServers,
-  stringifyTurnServers,
 } from "@/options";
 import createAboutDialog from "@/components/dialogs/about-dialog";
 import { Button } from "@/components/ui/button";
@@ -60,11 +47,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ComponentProps } from "solid-js";
-import { checkIceServerAvailability } from "@/libs/domain/utils/turn";
 import { createElementSize } from "@solid-primitives/resize-observer";
 import DropArea from "@/components/drop-area";
-import { catchError } from "@/libs/catch";
-import { cn } from "@/libs/cn";
 import {
   Select,
   SelectContent,
@@ -72,7 +56,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createAsync } from "@solidjs/router";
 import { appState } from "@/libs/state/app-state";
 import {
   createClearServiceWorkerCacheDialog,
@@ -147,12 +130,6 @@ export default function Settings() {
       mimeTypes.add(mt);
     });
     return options.concat(Array.from(mimeTypes).sort());
-  });
-
-  const turnServersValue = createMemo(() => {
-    return stringifyTurnServers(
-      appState.options.servers.turns,
-    );
   });
 
   return (
@@ -399,371 +376,7 @@ export default function Settings() {
             </p>
           </div>
 
-          <h3 id="connection" class="h3">
-            {t("setting.connection.title")}
-          </h3>
-
-          <div class="flex flex-col gap-2">
-            <Switch
-              disabled={appState.profile.initalJoin}
-              class="flex items-center justify-between"
-              checked={appState.profile.autoJoin}
-              onChange={(isChecked) =>
-                setClientProfile("autoJoin", isChecked)
-              }
-            >
-              <SwitchLabel>
-                {t("setting.connection.auto_join.title")}
-              </SwitchLabel>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-            <p class="muted">
-              {t(
-                "setting.connection.auto_join.description",
-              )}
-            </p>
-          </div>
-          <label class="flex flex-col gap-2">
-            <Label>
-              {t("setting.connection.stun_servers.title")}
-            </Label>
-            <Textarea
-              class="scrollbar-thin resize-none overflow-x-auto text-nowrap"
-              placeholder="stun:stun.l.google.com:19302"
-              ref={(ref) => {
-                createEffect(() => {
-                  textareaAutoResize(ref, () =>
-                    appState.options.servers.stuns.toString(),
-                  );
-                });
-              }}
-              value={
-                appState.options.servers.stuns.join("\n") +
-                (appState.options.servers.stuns ? "\n" : "")
-              }
-              onChange={(ev) => {
-                const value = ev.currentTarget.value
-                  .trim()
-                  .split("\n")
-                  .filter((v) => v.trim() !== "");
-                setAppOptions("servers", "stuns", value);
-              }}
-            />
-            <p class="muted">
-              {t(
-                "setting.connection.stun_servers.description",
-              )}
-            </p>
-            <div class="flex gap-2 self-end">
-              <Show
-                when={
-                  import.meta.env.VITE_STUN_SERVERS &&
-                  import.meta.env.VITE_STUN_SERVERS !==
-                    appState.options.servers.stuns.join(",")
-                }
-              >
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setAppOptions(
-                      "servers",
-                      "stuns",
-                      getDefaultAppOptions().servers.stuns,
-                    );
-                  }}
-                >
-                  {t("common.action.reset")}
-                </Button>
-              </Show>
-              <Show
-                when={
-                  appState.options.servers.stuns.length >
-                    0 && appState.options.servers.stuns
-                }
-              >
-                {(stuns) => {
-                  const [disabled, setDisabled] =
-                    createSignal(false);
-                  return (
-                    <Button
-                      variant="outline"
-                      disabled={disabled()}
-                      onClick={async () => {
-                        setDisabled(true);
-                        const results: {
-                          server: string;
-                          msg: string;
-                        }[] = [];
-
-                        const promises: Promise<void>[] =
-                          [];
-
-                        for (const stun of stuns()) {
-                          promises.push(
-                            checkIceServerAvailability(
-                              {
-                                urls: [stun],
-                              },
-                              {
-                                iceTransportPolicy: "all",
-                                candidateType: "srflx",
-                              },
-                            )
-                              .then((isAvailable) => {
-                                results.push({
-                                  server: stun,
-                                  msg: isAvailable
-                                    ? "available"
-                                    : "unavailable",
-                                });
-                              })
-                              .catch((err) => {
-                                results.push({
-                                  server: stun,
-                                  msg: err.message,
-                                });
-                              }),
-                          );
-                        }
-
-                        await Promise.all(promises);
-                        toast.info(
-                          <div class="flex flex-col gap-2 text-xs">
-                            <For each={results}>
-                              {(result) => (
-                                <p
-                                  class={cn(
-                                    "space-x-1",
-                                    result.msg ===
-                                      "available"
-                                      ? "text-success-foreground"
-                                      : "text-destructive-foreground",
-                                  )}
-                                >
-                                  <span>
-                                    {result.server}:
-                                  </span>
-                                  <span>{result.msg}</span>
-                                </p>
-                              )}
-                            </For>
-                          </div>,
-                        );
-                        setDisabled(false);
-                      }}
-                    >
-                      {t(
-                        "common.action.check_availability",
-                      )}
-                    </Button>
-                  );
-                }}
-              </Show>
-            </div>
-          </label>
-          <label class="flex flex-col gap-2">
-            <Label>
-              {t("setting.connection.turn_servers.title")}
-            </Label>
-            <Textarea
-              class="scrollbar-thin resize-none overflow-x-auto text-nowrap"
-              ref={(ref) => {
-                createEffect(() => {
-                  textareaAutoResize(
-                    ref,
-                    () =>
-                      appState.options.servers.turns?.toString() ??
-                      "",
-                  );
-                });
-              }}
-              placeholder={
-                "turn:turn1.example.com:3478|user1|pass1|longterm\nturns:turn2.example.com:5349|user2|pass2|hmac\nname|TURN_TOKEN_ID|API_TOKEN|cloudflare"
-              }
-              value={
-                turnServersValue() +
-                (turnServersValue() ? "\n" : "")
-              }
-              onChange={(ev) => {
-                try {
-                  const turns = parseTurnServers(
-                    ev.currentTarget.value.trim(),
-                  );
-
-                  setAppOptions(
-                    "servers",
-                    "turns",
-                    reconcile(turns),
-                  );
-                } catch (error) {
-                  if (error instanceof Error) {
-                    toast.error(error.message);
-                  } else {
-                    toast.error("unknown error");
-                  }
-                }
-              }}
-            />
-            <p class="muted">
-              {t(
-                "setting.connection.turn_servers.description",
-              )}
-            </p>
-            <div class="flex gap-2 self-end">
-              <Show
-                when={
-                  import.meta.env.VITE_TURN_SERVERS &&
-                  import.meta.env.VITE_TURN_SERVERS !==
-                    turnServersValue().split("\n").join(",")
-                }
-              >
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setAppOptions(
-                      "servers",
-                      "turns",
-                      getDefaultAppOptions().servers.turns,
-                    );
-                  }}
-                >
-                  {t("common.action.reset")}
-                </Button>
-              </Show>
-              <Show
-                when={
-                  appState.options.servers.turns.length >
-                    0 && appState.options.servers.turns
-                }
-              >
-                {(turns) => {
-                  const [disabled, setDisabled] =
-                    createSignal(false);
-                  return (
-                    <Show when={turns().length > 0}>
-                      <Button
-                        variant="outline"
-                        disabled={disabled()}
-                        onClick={async () => {
-                          setDisabled(true);
-                          const results: {
-                            server: string;
-                            msg: string;
-                          }[] = [];
-
-                          const promises: Promise<void>[] =
-                            [];
-
-                          for (const turn of turns()) {
-                            const [error, server] =
-                              await catchError(
-                                parseTurnServer(turn),
-                              );
-                            if (error) {
-                              results.push({
-                                server: turn.url,
-                                msg: error.message,
-                              });
-                              continue;
-                            }
-
-                            promises.push(
-                              checkIceServerAvailability(
-                                server,
-                                {
-                                  iceTransportPolicy:
-                                    "relay",
-                                },
-                              )
-                                .then((isAvailable) => {
-                                  results.push({
-                                    server: turn.url,
-                                    msg: isAvailable
-                                      ? "available"
-                                      : "unavailable",
-                                  });
-                                })
-                                .catch((error) => {
-                                  results.push({
-                                    server: turn.url,
-                                    msg: error.message,
-                                  });
-                                }),
-                            );
-                          }
-
-                          await Promise.all(
-                            promises,
-                          ).finally(() => {
-                            setDisabled(false);
-                          });
-
-                          toast.info(
-                            <div class="flex flex-col gap-2 text-xs">
-                              <For each={results}>
-                                {(result) => (
-                                  <p
-                                    class={cn(
-                                      "space-x-1",
-                                      result.msg ===
-                                        "available"
-                                        ? "text-success-foreground"
-                                        : "text-destructive-foreground",
-                                    )}
-                                  >
-                                    <span>
-                                      {result.server}:
-                                    </span>
-                                    <span>
-                                      {result.msg}
-                                    </span>
-                                  </p>
-                                )}
-                              </For>
-                            </div>,
-                          );
-                        }}
-                      >
-                        {t(
-                          "common.action.check_availability",
-                        )}
-                      </Button>
-                    </Show>
-                  );
-                }}
-              </Show>
-            </div>
-          </label>
-          <div class="flex flex-col gap-2">
-            <Switch
-              class="flex items-center justify-between"
-              checked={
-                appState.options.shareServersWithOthers
-              }
-              onChange={(isChecked) =>
-                setAppOptions(
-                  "shareServersWithOthers",
-                  isChecked,
-                )
-              }
-            >
-              <SwitchLabel>
-                {t(
-                  "setting.connection.share_servers_with_others.title",
-                )}
-              </SwitchLabel>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-            <p class="muted">
-              {t(
-                "setting.connection.share_servers_with_others.description",
-              )}
-            </p>
-          </div>
+          <ConnectionSettings />
           <h3 id="sender" class="h3">
             {t("setting.sender.title")}
           </h3>
