@@ -1,8 +1,8 @@
 import { faker } from "@faker-js/faker";
 import { createEffect } from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
-import { v4 } from "uuid";
 import { STORAGE_KEYS } from "@/constants";
+import { createClientId } from "@/libs/domain/ids";
 import type { ClientProfile } from "@/libs/domain/profile";
 import { appState, setAppState } from "./app-state";
 
@@ -27,7 +27,7 @@ export const getDefaultProfile = (): ClientProfile => {
   return {
     roomId: faker.word.noun(),
     name,
-    clientId: v4(),
+    clientId: createClientId(),
     password: null,
     avatar: null,
     autoJoin: false,

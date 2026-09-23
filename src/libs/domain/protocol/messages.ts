@@ -4,6 +4,10 @@ export type ProtocolFileID = string;
 export type ProtocolChunkRange = number | [number, number];
 
 export const P2P_PROFILE_PROTOCOL_VERSION = 1 as const;
+export const P2P_ROOM_CHAT_PROTOCOL_VERSION = 1 as const;
+export const P2P_ROOM_FILE_PROTOCOL_VERSION = 1 as const;
+export const ROOM_FILE_FEATURE = "room-file-v1" as const;
+export const ROOM_CHAT_MAX_TEXT_LENGTH = 64 * 1024;
 export const RTC_PROFILE_PROTOCOL_VERSION =
   P2P_PROFILE_PROTOCOL_VERSION;
 
@@ -34,6 +38,58 @@ export interface BaseExchangeMessage {
 export type SendTextMessage = BaseExchangeMessage & {
   type: "send-text";
   data: string;
+};
+
+/** Both peers announce a fresh binding token when their data channel opens. */
+export type RoomCapabilitiesMessage =
+  BaseExchangeMessage & {
+    type: "room-capabilities";
+    version: typeof P2P_ROOM_CHAT_PROTOCOL_VERSION;
+    roomId: string;
+    token: string;
+    features?: string[];
+  };
+
+/** The envelope target is still a peer; room scope belongs to the payload. */
+export type SendRoomTextMessage = BaseExchangeMessage & {
+  type: "send-room-text";
+  version: typeof P2P_ROOM_CHAT_PROTOCOL_VERSION;
+  roomId: string;
+  senderToken: string;
+  recipientToken: string;
+  senderName: string;
+  senderAvatar: string | null;
+  data: string;
+};
+
+/** A durable room offer; binary transfer starts only after an explicit pull. */
+export type SendRoomFileMessage = BaseExchangeMessage & {
+  type: "send-room-file";
+  version: typeof P2P_ROOM_FILE_PROTOCOL_VERSION;
+  roomId: string;
+  senderToken: string;
+  recipientToken: string;
+  senderName: string;
+  senderAvatar: string | null;
+  fid: ProtocolFileID;
+  fileName: string;
+  fileSize: number;
+  mimeType?: string;
+  lastModified?: number;
+  chunkSize: number;
+};
+
+/** Each download attempt has its own envelope id, separate from offerId. */
+export type RequestRoomFileMessage = BaseExchangeMessage & {
+  type: "request-room-file";
+  version: typeof P2P_ROOM_FILE_PROTOCOL_VERSION;
+  roomId: string;
+  senderToken: string;
+  recipientToken: string;
+  offerId: MessageID;
+  fid: ProtocolFileID;
+  ranges?: ProtocolChunkRange[];
+  resume: boolean;
 };
 
 export type AckMessage = BaseExchangeMessage & {
@@ -143,6 +199,10 @@ export type ClientProfileMessage = BaseExchangeMessage & {
 
 export type SessionMessage =
   | SendTextMessage
+  | RoomCapabilitiesMessage
+  | SendRoomTextMessage
+  | SendRoomFileMessage
+  | RequestRoomFileMessage
   | AckMessage
   | ReadTextMessage
   | RequestFileMessage
@@ -185,6 +245,10 @@ const createMessageBase = (
 /** Wire behavior, shared by every client implementation. */
 export const requestSpec = {
   "send-text": { ack: "receive" },
+  "room-capabilities": { ack: "receive" },
+  "send-room-text": { ack: "receive" },
+  "send-room-file": { ack: "receive" },
+  "request-room-file": { ack: "send" },
   "send-clipboard": { ack: "receive" },
   "send-file": { ack: "receive" },
   "request-file": { ack: "send" },
@@ -248,9 +312,15 @@ export function createSessionMessage<
     type,
     ...(type === "client-profile"
       ? { version: P2P_PROFILE_PROTOCOL_VERSION }
-      : type === "request-storage" || type === "storage"
-        ? { version: P2P_STORAGE_PROTOCOL_VERSION }
-        : {}),
+      : type === "room-capabilities" ||
+          type === "send-room-text"
+        ? { version: P2P_ROOM_CHAT_PROTOCOL_VERSION }
+        : type === "send-room-file" ||
+            type === "request-room-file"
+          ? { version: P2P_ROOM_FILE_PROTOCOL_VERSION }
+          : type === "request-storage" || type === "storage"
+            ? { version: P2P_STORAGE_PROTOCOL_VERSION }
+            : {}),
   } as MessageOf<T>;
 }
 

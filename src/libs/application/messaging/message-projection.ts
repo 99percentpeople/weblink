@@ -11,6 +11,7 @@ import type {
   SendTextMessage,
   SessionMessage,
 } from "@/libs/domain/protocol/messages";
+import { directConversationId } from "@/libs/domain/conversation";
 
 export type TrackedMessage =
   | SendTextMessage
@@ -25,6 +26,10 @@ function textMessage(
 ): TextMessage {
   return {
     ...message,
+    conversationId: directConversationId(
+      message.client,
+      message.target,
+    ),
     type: "text",
     status,
   };
@@ -36,6 +41,10 @@ function sentFileMessage(
 ): FileTransferMessage {
   return {
     ...message,
+    conversationId: directConversationId(
+      message.client,
+      message.target,
+    ),
     type: "file",
     status,
   };
@@ -47,6 +56,10 @@ function requestedFileMessage(
 ): FileTransferMessage {
   return {
     id: message.id,
+    conversationId: directConversationId(
+      message.client,
+      message.target,
+    ),
     type: "file",
     status,
     fid: message.fid,

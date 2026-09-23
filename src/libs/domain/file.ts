@@ -10,6 +10,9 @@ export interface ChunkMetaData {
   mimetype?: string;
   chunkSize?: number;
   from?: ClientID;
+  /** Local authorization scope and retention; never inferred from a legacy request. */
+  roomAttachment?: boolean;
+  roomOfferId?: string;
   createdAt?: number;
   file?: File;
 }

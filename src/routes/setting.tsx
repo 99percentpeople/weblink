@@ -1,5 +1,6 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { ConnectionSettings } from "./setting/connection-settings";
+import { MeetingSettings } from "./setting/meeting-settings";
 import {
   Switch,
   SwitchControl,
@@ -377,6 +378,7 @@ export default function Settings() {
           </div>
 
           <ConnectionSettings />
+          <MeetingSettings />
           <h3 id="sender" class="h3">
             {t("setting.sender.title")}
           </h3>

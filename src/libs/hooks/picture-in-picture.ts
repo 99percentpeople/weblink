@@ -13,13 +13,11 @@ type CreatePictureInPictureResult = {
   exitPictureInPicture: () => Promise<void>;
 };
 
-// Store the video element currently in PIP mode (if any)
 const [currentPipElement, setCurrentPipElement] =
   createSignal<HTMLVideoElement | null>(
-    document?.pictureInPictureElement as HTMLVideoElement | null,
+    (document.pictureInPictureElement as HTMLVideoElement | null) ??
+      null,
   );
-
-// Determine if picture-in-picture is supported
 const [isSupported] = createSignal(
   typeof document !== "undefined" &&
     "pictureInPictureEnabled" in document
@@ -32,28 +30,22 @@ export function createPictureInPicture(
     HTMLVideoElement | null | undefined
   >,
 ): CreatePictureInPictureResult {
-  // When the video enters PIP, update currentPipElement
-  const onEnterPictureInPicture = (event: Event) => {
-    const target = event.target as HTMLVideoElement;
-    setCurrentPipElement(target);
-  };
-
-  // When the video leaves PIP, update currentPipElement
-  const onLeavePictureInPicture = () => {
-    setCurrentPipElement(null);
-  };
-
-  // Determine if there is a video currently in PIP mode
+  const syncCurrentElement = () =>
+    setCurrentPipElement(
+      (document.pictureInPictureElement as HTMLVideoElement | null) ??
+        null,
+    );
   const isInPip = () => currentPipElement() !== null;
+  const isThisElementInPip = () => {
+    const current = videoElement();
+    return Boolean(
+      current && currentPipElement() === current,
+    );
+  };
 
-  // Determine if the current incoming video element is the current PIP element
-  const isThisElementInPip = () =>
-    currentPipElement() === videoElement();
-
-  // Request the incoming video to enter picture-in-picture mode
   const requestPictureInPicture = async () => {
-    const videoEle = videoElement();
-    if (!videoEle) return;
+    const video = videoElement();
+    if (!video) return;
     if (!isSupported()) {
       console.warn(
         "This browser does not support picture-in-picture.",
@@ -61,7 +53,7 @@ export function createPictureInPicture(
       return;
     }
     try {
-      await videoEle.requestPictureInPicture();
+      await video.requestPictureInPicture();
     } catch (error) {
       console.error(
         "Request to enter picture-in-picture failed:",
@@ -70,52 +62,50 @@ export function createPictureInPicture(
     }
   };
 
-  // Exit picture-in-picture mode
-  const exitPictureInPicture = async () => {
-    if (document.pictureInPictureElement) {
-      try {
-        await document.exitPictureInPicture();
-      } catch (error) {
-        console.error(
-          "Failed to exit picture-in-picture:",
-          error,
-        );
-      }
+  const exitOwnedPictureInPicture = async (
+    owned: HTMLVideoElement | null | undefined,
+  ) => {
+    if (
+      !owned ||
+      document.pictureInPictureElement !== owned
+    )
+      return;
+    try {
+      await document.exitPictureInPicture();
+      syncCurrentElement();
+    } catch (error) {
+      console.error(
+        "Failed to exit picture-in-picture:",
+        error,
+      );
     }
   };
+  const exitPictureInPicture = () =>
+    exitOwnedPictureInPicture(videoElement());
 
-  // Listen for event bindings and unbindings on the current video element
   createEffect(() => {
-    const videoEle = videoElement();
-    if (videoEle && isSupported()) {
-      videoEle.addEventListener(
+    const owned = videoElement();
+    syncCurrentElement();
+    if (!owned || !isSupported()) return;
+    owned.addEventListener(
+      "enterpictureinpicture",
+      syncCurrentElement,
+    );
+    owned.addEventListener(
+      "leavepictureinpicture",
+      syncCurrentElement,
+    );
+    onCleanup(() => {
+      owned.removeEventListener(
         "enterpictureinpicture",
-        onEnterPictureInPicture,
+        syncCurrentElement,
       );
-      videoEle.addEventListener(
+      owned.removeEventListener(
         "leavepictureinpicture",
-        onLeavePictureInPicture,
+        syncCurrentElement,
       );
-
-      onCleanup(() => {
-        videoEle.removeEventListener(
-          "enterpictureinpicture",
-          onEnterPictureInPicture,
-        );
-        videoEle.removeEventListener(
-          "leavepictureinpicture",
-          onLeavePictureInPicture,
-        );
-      });
-    }
-  });
-
-  // When videoAccessor becomes null, if currently in PIP, exit
-  createEffect(() => {
-    const videoEle = videoElement();
-    if (!videoEle && isThisElementInPip()) {
-      exitPictureInPicture();
-    }
+      void exitOwnedPictureInPicture(owned);
+    });
   });
 
   return {

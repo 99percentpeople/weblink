@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createClientId } from "@/libs/domain/ids";
 import {
   SIGNALING_MAX_CACHED_SIGNALS,
   SIGNALING_MAX_CLIENT_ID_LENGTH,
@@ -15,6 +16,27 @@ import {
 } from "@/libs/domain/signaling-protocol";
 
 describe("portable signaling contract", () => {
+  it("accepts prefixed client IDs alongside legacy UUIDs", () => {
+    const clientId = createClientId();
+    const targetClientId =
+      "a18f574d-63f6-442a-a9cf-cd482e0fc125";
+
+    expect(
+      parseSignalingClientPresence({
+        clientId,
+        createdAt: 42,
+      }),
+    ).toMatchObject({ clientId });
+    expect(
+      parseSignalingPeerMessage({
+        type: "offer",
+        clientId,
+        targetClientId,
+        data: "opaque",
+      }),
+    ).toMatchObject({ clientId, targetClientId });
+  });
+
   it("keeps the deployed signaling version and limits explicit", () => {
     expect(SIGNALING_PROTOCOL_VERSION).toBe(2);
     expect(SIGNALING_MAX_CLIENT_ID_LENGTH).toBe(128);

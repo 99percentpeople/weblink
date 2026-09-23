@@ -10,7 +10,10 @@ import type {
   StoreMessage,
   FileTransferMessage,
 } from "@/libs/domain/message";
-import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
+import {
+  TransferMode,
+  type FileTransferer,
+} from "@/libs/domain/transfer/file-transferer";
 import type {
   ActiveFileTransfer,
   FileTransferStates,
@@ -376,4 +379,192 @@ it("uses the registered message identity even when newer history has the same fi
     service.tasks().find((task) => task.id === "file:newer")
       ?.status,
   ).toBe("paused");
+});
+
+describe("room attachment tasks", () => {
+  const room = {
+    roomId: "room",
+    senderName: "Sender",
+    senderAvatar: null,
+  };
+
+  it("does not use another room offer's cache as a completed download or display name", () => {
+    const message = file({
+      room,
+      client: "peer",
+      target: "self",
+    });
+    const { service, setCaches } = setup([message]);
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "private.bin",
+        fileSize: 1024,
+        isComplete: true,
+        roomAttachment: true,
+        roomOfferId: "another-offer",
+        from: "peer",
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "paused",
+      fileName: "sample.bin",
+    });
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: message.fileName,
+        fileSize: message.fileSize,
+        chunkSize: message.chunkSize,
+        isComplete: true,
+        roomAttachment: true,
+        roomOfferId: message.id,
+        from: message.client,
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "completed",
+      fileName: "sample.bin",
+    });
+  });
+
+  it("does not create transfer tasks for announced but unclaimed room offers", () => {
+    const { service, setCaches } = setup([
+      file({
+        room,
+        target: "room:demo",
+        transferStatus: undefined,
+        deliveries: { peer: "delivered" },
+      }),
+      file({
+        id: "received-offer",
+        room,
+        client: "peer",
+        target: "self",
+        transferStatus: undefined,
+      }),
+    ]);
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        isComplete: true,
+        roomAttachment: true,
+      },
+    });
+    expect(service.tasks()).toEqual([]);
+    expect(service.activeCount()).toBe(0);
+  });
+
+  it("projects one room offer into independent uploads using actual peer identities", () => {
+    const message = file({
+      room,
+      target: "room:demo",
+      status: "error",
+      transferStatus: undefined,
+      deliveries: { a: "failed", b: "delivered" },
+      roomTransfers: {
+        a: {
+          status: "transfering",
+          progress: { total: 1024, received: 512 },
+        },
+        b: { status: "complete" },
+      },
+    });
+    const { service, setCaches, setTransfers } = setup([
+      message,
+    ]);
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        isComplete: true,
+        roomAttachment: true,
+      },
+    });
+    setTransfers({
+      a: {
+        ...live(message.id, "a"),
+        transferer: {
+          mode: TransferMode.Send,
+        } as FileTransferer,
+      },
+    });
+    expect(service.tasks()).toMatchObject([
+      {
+        kind: "file-send",
+        peerId: "a",
+        status: "running",
+        bytes: 512,
+        canPause: true,
+        canResume: false,
+      },
+      {
+        kind: "file-send",
+        peerId: "b",
+        status: "completed",
+        bytes: 1024,
+        canPause: false,
+        canResume: false,
+      },
+    ]);
+    expect(
+      new Set(service.tasks().map((task) => task.id)).size,
+    ).toBe(2);
+    expect(service.activeCount()).toBe(1);
+    service.clearFinished();
+    expect(service.tasks()).toHaveLength(1);
+    setTransfers({});
+    expect(service.tasks()[0]).toMatchObject({
+      peerId: "a",
+      status: "paused",
+    });
+    expect(message.deliveries).toEqual({
+      a: "failed",
+      b: "delivered",
+    });
+  });
+
+  it("binds room download progress to its original offer and sender after restart", () => {
+    const message = file({
+      room,
+      client: "peer",
+      target: "self",
+      status: "error",
+      transferStatus: "transfering",
+      progress: { total: 1024, received: 256 },
+    });
+    const { service, setTransfers } = setup([message]);
+    expect(service.tasks()[0]).toMatchObject({
+      peerId: "peer",
+      kind: "file-receive",
+      status: "paused",
+      bytes: 256,
+      canResume: true,
+    });
+    setTransfers({
+      wrong: {
+        ...live(message.id, "other"),
+        transferer: {
+          mode: TransferMode.Receive,
+        } as FileTransferer,
+      },
+    });
+    expect(service.activeCount()).toBe(0);
+    setTransfers({
+      receive: {
+        ...live(message.id),
+        transferer: {
+          mode: TransferMode.Receive,
+        } as FileTransferer,
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "running",
+      canPause: true,
+    });
+    expect(service.activeCount()).toBe(1);
+  });
 });

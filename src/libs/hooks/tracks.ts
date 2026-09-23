@@ -2,6 +2,7 @@ import {
   Accessor,
   createEffect,
   createSignal,
+  onCleanup,
 } from "solid-js";
 
 export const createMediaTracks = (
@@ -11,10 +12,8 @@ export const createMediaTracks = (
     MediaStreamTrack[]
   >(mediaStream()?.getTracks() ?? []);
 
-  createEffect<AbortController | undefined>((prev) => {
+  createEffect(() => {
     const stream = mediaStream();
-
-    if (prev) prev.abort();
 
     if (!stream) {
       setTracks([]);
@@ -22,35 +21,28 @@ export const createMediaTracks = (
     }
 
     const controller = new AbortController();
-    stream.addEventListener(
-      "addtrack",
-      (event) => {
-        setTracks((prev) => [...prev, event.track]);
-      },
-      {
-        signal: controller.signal,
-      },
-    );
-    stream.addEventListener(
-      "removetrack",
-      (event) => {
-        setTracks((prev) =>
-          prev.filter((track) => track !== event.track),
-        );
-      },
-      {
-        signal: controller.signal,
-      },
-    );
-    stream.getTracks().forEach((track) => {
-      track.addEventListener("ended", () => {
-        setTracks((prev) =>
-          prev.filter((t) => t !== track),
-        );
+    const observed = new WeakSet<MediaStreamTrack>();
+    const refresh = () => {
+      const current = stream
+        .getTracks()
+        .filter((track) => track.readyState !== "ended");
+      current.forEach((track) => {
+        if (observed.has(track)) return;
+        observed.add(track);
+        track.addEventListener("ended", refresh, {
+          signal: controller.signal,
+        });
       });
+      setTracks(current);
+    };
+    onCleanup(() => controller.abort());
+    stream.addEventListener("addtrack", refresh, {
+      signal: controller.signal,
     });
-    setTracks(stream.getTracks());
-    return controller;
+    stream.addEventListener("removetrack", refresh, {
+      signal: controller.signal,
+    });
+    refresh();
   });
 
   return tracks;

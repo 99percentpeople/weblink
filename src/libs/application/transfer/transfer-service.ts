@@ -10,13 +10,14 @@ import { TransferRegistry } from "./transfer-registry";
 import {
   bindTransferMessage,
   finishReceivedFile,
+  failTransferMessage,
 } from "./transfer-message-binding";
 
 /** Application wiring only. Run ownership is implemented by the injectable registry. */
 export let transferManager: TransferRegistry;
 export function createTransferManager(): TransferRegistry {
   return (transferManager ??= new TransferRegistry({
-    createTransfer: ({ cache, mode, info }) => {
+    createTransfer: ({ cache, mode, info, session }) => {
       const options = {
         cache,
         info,
@@ -29,6 +30,8 @@ export function createTransferManager(): TransferRegistry {
         ? new FileSender({
             ...options,
             blockSize: appState.options.blockSize,
+            maxMessageSize:
+              session.peerConnection?.sctp?.maxMessageSize,
             compressionLevel:
               appState.options.compressionLevel,
           })
@@ -48,13 +51,7 @@ export function createTransferManager(): TransferRegistry {
         );
     },
     failed: (entry, error) => {
-      messageStores.updateTransferMessage(
-        entry.messageId,
-        (message) => {
-          message.transferStatus = "error";
-          message.error = error.message;
-        },
-      );
+      failTransferMessage(entry, messageStores, error);
       console.error("[FileTransfer]", error);
     },
     automaticCacheDeletion: () =>

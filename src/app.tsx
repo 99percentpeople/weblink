@@ -63,6 +63,7 @@ import { getInitials } from "./libs/utils/name";
 import { Button } from "./components/ui/button";
 import { t, isDictLoaded } from "./i18n";
 import { v4 } from "uuid";
+import { createClientId } from "./libs/domain/ids";
 import { createIsMobile } from "./libs/hooks/create-mobile";
 import { messageStores } from "./libs/application/messaging/message-store";
 import { sleep } from "./libs/utils/sleep";
@@ -73,7 +74,9 @@ import { AppWakeLock } from "./components/app/wakelock";
 import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
+import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 import { ModalProvider } from "@/components/dialogs/base";
+import { MeetingSessionProvider } from "@/routes/video/components/meeting-session-context";
 
 const InnerApp = (props: ParentProps) => {
   const { joinRoom } = useAppState();
@@ -180,7 +183,7 @@ const InnerApp = (props: ParentProps) => {
   };
 
   const initStarterMessage = async () => {
-    const instructorClientId = v4();
+    const instructorClientId = createClientId();
     const instructorName = t("common.starter.starter_name");
     messageStores.setClient({
       clientId: instructorClientId,
@@ -384,7 +387,7 @@ const InnerApp = (props: ParentProps) => {
             <JoinRoomButton class="md:hidden" />
           </div>
         </div>
-        <div class="flex-1">
+        <div class="min-h-0 min-w-0 flex-1">
           <ErrorBoundary
             fallback={(err: Error, reset) => (
               <ErrorComponent error={err} reset={reset} />
@@ -496,11 +499,15 @@ export default function App(props: RouteSectionProps) {
         <AppStateProvider
           localStreamService={localStreamService}
         >
-          <ModalProvider>
-            <AudioPlayerProvider>
-              <InnerApp>{props.children}</InnerApp>
-            </AudioPlayerProvider>
-          </ModalProvider>
+          <AudioPlayerProvider>
+            <MeetingMediaProvider>
+              <ModalProvider>
+                <MeetingSessionProvider>
+                  <InnerApp>{props.children}</InnerApp>
+                </MeetingSessionProvider>
+              </ModalProvider>
+            </MeetingMediaProvider>
+          </AudioPlayerProvider>
         </AppStateProvider>
       </MetaProvider>
     </>

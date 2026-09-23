@@ -353,8 +353,14 @@ export class TransferRegistry {
       if (
         run.transferer.mode === TransferMode.Send &&
         this.options.automaticCacheDeletion()
-      )
-        this.deleteWhenIdle.add(run.transferer.cache);
+      ) {
+        const info = await run.transferer.cache.getInfo();
+        if (!this.isCurrent(run)) return;
+        // Offers remain available for recipients who have not clicked yet,
+        // including after a refresh or a previous recipient completed.
+        if (!info?.roomAttachment)
+          this.deleteWhenIdle.add(run.transferer.cache);
+      }
       this.destroy(run);
     } catch (error) {
       this.fail(run, error);

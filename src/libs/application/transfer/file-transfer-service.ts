@@ -49,24 +49,37 @@ export interface FileTransferServiceOptions {
   getSession(peerId: string): PeerSession | undefined;
   getChunkSize(): number;
 }
-type Operation = {
-  session: PeerSession;
-  fileId?: string;
-  mode: TransferMode;
-  controller: AbortController;
-  releases: Array<() => void>;
-  run?: TransferRun;
-};
+import type { FileTransferOperation as Operation } from "./file-transfer-operation";
+import {
+  FileOfferTransfers,
+  type ReceiveFileOfferOptions,
+  type ServeFileOfferOptions,
+} from "./file-offer-transfers";
 
 /** File workflows have application lifetime, independent of dialogs and routes. */
 export class FileTransferService {
   private readonly operations = new Set<Operation>();
   private readonly unsubscribe: Array<() => void>;
   private disposed = false;
+  private readonly offers: FileOfferTransfers;
 
   constructor(
     private readonly deps: FileTransferServiceOptions,
   ) {
+    this.offers = new FileOfferTransfers({
+      ...deps,
+      isDisposed: () => this.disposed,
+      operation: (session, fid, signal, work, mode) =>
+        this.operation(session, fid, signal, work, mode),
+      step: (op, work) => this.step(op, work),
+      hold: (op, cache) => this.hold(op, cache),
+      register: (op, cache, id, mode, incoming) =>
+        this.register(op, cache, id, mode, incoming),
+      sendWhenReady: (run, ranges) =>
+        this.sendWhenReady(run, ranges),
+      openChannel: (op, cache) =>
+        this.openChannel(op, cache),
+    });
     this.unsubscribe = [
       deps.protocol.handle("send-file", (ctx) =>
         this.receiveFile(ctx),
@@ -90,6 +103,7 @@ export class FileTransferService {
             throw new Error(
               `cache ${message.fid} info not found`,
             );
+          this.assertPrivateCache(info);
           await this.requestFile(session, info, true, {
             signal,
           });
@@ -360,28 +374,7 @@ export class FileTransferService {
         op,
         this.deps.registry.initialize(run),
       );
-      // createChannel itself is not abortable: close a late result instead of attaching it to a replacement.
-      const channelPromise = op.session
-        .createChannel(
-          `${cache.id}-0`,
-          FILE_TRANSFER_CHANNEL_PROTOCOL,
-        )
-        .then((channel) => {
-          if (
-            !this.valid(op) ||
-            !this.deps.registry.isCurrent(run)
-          ) {
-            channel.close();
-            throw new DOMException(
-              "File channel cancelled",
-              "AbortError",
-            );
-          }
-          return channel;
-        });
-      const channel = await this.step(op, channelPromise);
-      this.deps.registry.setChannel(run, channel);
-      this.check(op);
+      await this.openChannel(op, cache);
     } catch (error) {
       if (this.valid(op))
         this.deps.messaging.fail(result.message, error);
@@ -389,15 +382,74 @@ export class FileTransferService {
     }
   }
 
+  private async openChannel(
+    op: Operation,
+    cache: ChunkCache,
+  ): Promise<void> {
+    const run = op.run!;
+    // Channel creation is not abortable; a result from a retired setup is closed.
+    const channelPromise = op.session
+      .createChannel(
+        `${cache.id}-0`,
+        FILE_TRANSFER_CHANNEL_PROTOCOL,
+      )
+      .then((channel) => {
+        if (
+          !this.valid(op) ||
+          !this.deps.registry.isCurrent(run)
+        ) {
+          channel.close();
+          throw new DOMException(
+            "File channel cancelled",
+            "AbortError",
+          );
+        }
+        return channel;
+      });
+    const channel = await this.step(op, channelPromise);
+    this.deps.registry.setChannel(run, channel);
+    this.check(op);
+  }
+
+  private assertPrivateCache(
+    info: ChunkMetaData | null,
+  ): void {
+    if (info?.roomAttachment)
+      throw new Error(
+        "Room attachments require an authorized room request",
+      );
+  }
+
+  prepareRoomFile(
+    file: File,
+    origin?: { messageId: string; clientId: string },
+  ): Promise<ChunkMetaData> {
+    return this.offers.prepare(file, origin);
+  }
+  receiveFileOffer(
+    session: PeerSession,
+    info: ChunkMetaData,
+    options: ReceiveFileOfferOptions,
+  ): Promise<void> {
+    return this.offers.receive(session, info, options);
+  }
+  serveFileOffer(
+    session: PeerSession,
+    options: ServeFileOfferOptions,
+  ): Promise<void> {
+    return this.offers.serve(session, options);
+  }
+
   sendFile(
     session: PeerSession,
     file: File,
+    options: { signal?: AbortSignal } = {},
   ): Promise<void> {
     const fid = crypto.randomUUID();
     return this.operation(
       session,
       fid,
-      undefined,
+      options.signal,
       async (op) => {
         const cache = await this.step(
           op,
@@ -440,6 +492,26 @@ export class FileTransferService {
       async (op) => {
         const cache = this.cache(op, fileId);
         const info = await this.step(op, cache.getInfo());
+        if (info?.roomAttachment) {
+          if (!info.isComplete)
+            throw new Error(
+              `cache ${fileId} is not complete`,
+            );
+          const file = await this.step(op, cache.getFile());
+          if (!file)
+            throw new Error(
+              `cache ${fileId} file not found`,
+            );
+          // An explicit local forward creates a distinct private share. The
+          // original room-only cache keeps its authorization and retention.
+          await this.step(
+            op,
+            this.sendFile(session, file, {
+              signal: op.controller.signal,
+            }),
+          );
+          return;
+        }
         if (!info?.file)
           throw new Error(`cache ${fileId} file not found`);
         await this.outgoing(op, cache, "send-file", {
@@ -469,6 +541,7 @@ export class FileTransferService {
       info.id,
       options.signal,
       async (op) => {
+        this.assertPrivateCache(info);
         let cache = this.deps.caches.getCache(info.id);
         if (!cache) {
           cache = await this.step(
@@ -480,7 +553,12 @@ export class FileTransferService {
             op,
             cache.setInfo({ ...info, file: undefined }),
           );
-        } else this.hold(op, cache);
+        } else {
+          this.hold(op, cache);
+          this.assertPrivateCache(
+            await this.step(op, cache.getInfo()),
+          );
+        }
         const existing = resume
           ? this.deps.messages.messages.findLast(
               (message): message is FileTransferMessage =>
@@ -543,6 +621,12 @@ export class FileTransferService {
     session: PeerSession,
     message: FileTransferMessage,
   ): Promise<void> {
+    if (message.room)
+      return Promise.reject(
+        new Error(
+          "Room attachments require an authorized room request",
+        ),
+      );
     if (!message.fid) return Promise.resolve();
     if (
       message.client === session.targetClientId &&
@@ -580,6 +664,7 @@ export class FileTransferService {
       async (op) => {
         const cache = this.cache(op, fid);
         const info = await this.step(op, cache.getInfo());
+        this.assertPrivateCache(info);
         if (!info?.file)
           throw new Error(`cache ${fid} file not found`);
         await this.outgoing(
@@ -616,6 +701,7 @@ export class FileTransferService {
       async (op) => {
         const cache = this.cache(op, fileId);
         const info = await this.step(op, cache.getInfo());
+        this.assertPrivateCache(info);
         if (!info?.file)
           throw new Error(`cache ${fileId} file not found`);
         const message =
@@ -724,6 +810,7 @@ export class FileTransferService {
       async (op) => {
         const cache = this.cache(op, message.fid);
         const info = await this.step(op, cache.getInfo());
+        this.assertPrivateCache(info);
         if (!info?.isComplete)
           throw new Error(
             `cache ${message.fid} is not complete`,

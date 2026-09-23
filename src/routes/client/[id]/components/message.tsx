@@ -1,13 +1,10 @@
-import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
-import "photoswipe/style.css";
+import { DirectFileMessageCard as FileMessageCard } from "@/components/conversations/direct-file-message-card";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   Component,
   ComponentProps,
-  createEffect,
   createMemo,
   createResource,
-  createSignal,
   Match,
   Show,
   splitProps,
@@ -15,18 +12,7 @@ import {
 } from "solid-js";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/libs/cn";
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValueLabel,
-} from "@/components/ui/progress";
 import { appState } from "@/libs/state/app-state";
-import {
-  FileTransferer,
-  TransferMode,
-} from "@/libs/domain/transfer/file-transferer";
-import createTransferSpeed from "@/libs/hooks/transfer-speed";
-import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -44,22 +30,14 @@ import {
   IconContentCopy,
   IconDelete,
   IconDownload,
-  IconDownloading,
   IconFileCopy,
-  IconUploadFile,
   IconRestartAlt,
-  IconPlayArrow,
   IconPreview,
-  IconResume,
-  IconSchedule,
   IconShare,
-  IconDraft,
-  IconPause,
+  IconSchedule,
 } from "@/components/icons";
 import { t } from "@/i18n";
 import { Dynamic } from "solid-js/web";
-import { createTimeAgo } from "@/libs/utils/timeago";
-import { FileMetaData } from "@/libs/domain/file";
 import {
   Tooltip,
   TooltipContent,
@@ -67,453 +45,22 @@ import {
 } from "@/components/ui/tooltip";
 import { catchError } from "@/libs/catch";
 import { toast } from "solid-sonner";
-import { Spinner } from "@/components/common/spinner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { downloadFile } from "@/libs/utils/download-file";
-import type { FileID } from "@/libs/domain/ids";
 import { canShareFile } from "@/libs/utils/can-share";
-import { IconFile } from "@/components/icon-file";
+import { ClientAvatar } from "@/components/common/client-avatar";
+import { RoomDeliverySummary } from "@/components/conversations/room-delivery-summary";
+import {
+  getRoomFileCache,
+  RoomFileMessageCard,
+} from "@/components/conversations/room-file-message-card";
 
 export interface MessageCardProps extends ComponentProps<"li"> {
   message: StoreMessage;
-  onLoad?: () => void;
   onDelete?: () => void;
+  joinedPrevious?: boolean;
+  joinedNext?: boolean;
 }
-
-export interface FileMessageCardProps {
-  message: FileTransferMessage;
-  onLoad?: () => void;
-}
-
-const Title = (
-  props: {
-    name: string;
-    type?: string;
-  } & ComponentProps<"div">,
-) => {
-  const [local, other] = splitProps(props, [
-    "name",
-    "type",
-    "class",
-  ]);
-  return (
-    <div class={cn("relative", local.class)} {...other}>
-      {" "}
-      <div
-        class="absolute inset-0 space-x-1 overflow-hidden text-ellipsis
-          whitespace-nowrap [&>*]:align-middle [&>svg]:inline"
-      >
-        <IconFile mimetype={local.type} class="size-4" />
-        <span>{local.name}</span>
-      </div>
-    </div>
-  );
-};
-
-const FileMessageCard: Component<FileMessageCardProps> = (
-  props,
-) => {
-  const { requestFile, resumeFile, pauseFile } =
-    useAppState();
-
-  const transferer = createMemo<FileTransferer | null>(
-    () => {
-      if (!props.message.fid) return null;
-      return (
-        findMessageTransfer(
-          appState.transfer.transfers,
-          props.message,
-        )?.transferer ?? null
-      );
-    },
-  );
-
-  const isSender = createMemo(() => {
-    return (
-      props.message.client === appState.profile.clientId
-    );
-  });
-
-  const targetClientInfo = createMemo(() => {
-    if (isSender()) {
-      return appState.session.clientViewData[
-        props.message.target
-      ];
-    }
-    return appState.session.clientViewData[
-      props.message.client
-    ];
-  });
-
-  const cacheData = createMemo<FileMetaData | undefined>(
-    () =>
-      props.message.fid
-        ? appState.cache.cacheInfo[props.message.fid]
-        : undefined,
-  );
-  // sender local cache status
-  const localCacheStatus = createMemo(() => {
-    if (cacheData()?.isComplete) return "complete";
-    else if (cacheData()?.isMerging) return "merging";
-    else return "incomplete";
-  });
-
-  const transferStatus = createMemo(() => {
-    if (transferer()) return "transfering";
-    else return "paused";
-  });
-
-  const shouldShowPauseButton = createMemo(() => {
-    if (transferStatus() !== "transfering") return false;
-
-    return true;
-  });
-
-  const shouldShowResumeButton = createMemo(() => {
-    if (!targetClientInfo()?.messageChannel) return false;
-    if (props.message.status !== "received") return false;
-    if (!props.message.transferStatus) return false;
-    if (props.message.transferStatus === "complete")
-      return false;
-    const isCacheComplete = [
-      "complete",
-      "merging",
-    ].includes(localCacheStatus());
-
-    const isTransfering =
-      transferStatus() === "transfering";
-    if (!isSender() && isCacheComplete) return false;
-    if (isTransfering) return false;
-
-    return true;
-  });
-
-  createEffect(() => {
-    if (props.message.type === "file") {
-      props.onLoad?.();
-    }
-  });
-
-  const transferProgress = createMemo(() => {
-    if (!props.message.progress) return undefined;
-    if (isSender()) {
-      if (props.message.transferStatus !== "transfering")
-        return undefined;
-    } else {
-      if (transferStatus() !== "transfering")
-        return undefined;
-    }
-    return props.message.progress;
-  });
-
-  return (
-    <div class="flex flex-col gap-2">
-      <Show
-        when={cacheData()}
-        fallback={
-          <Title
-            class="w-full max-w-[calc(100vw*0.5)]"
-            type="default"
-            name={props.message.fileName}
-          />
-        }
-      >
-        {(cache) => (
-          <>
-            <Show
-              when={cache().file}
-              fallback={
-                <div class="flex items-center gap-1">
-                  <div>
-                    <Switch
-                      fallback={
-                        <IconSchedule class="size-8" />
-                      }
-                    >
-                      <Match
-                        when={
-                          transferer()?.mode ===
-                          TransferMode.Receive
-                        }
-                      >
-                        <IconDownloading class="size-8" />
-                      </Match>
-                      <Match
-                        when={
-                          transferer()?.mode ===
-                          TransferMode.Send
-                        }
-                      >
-                        <IconUploadFile class="size-8" />
-                      </Match>
-                    </Switch>
-                  </div>
-                  <p>{cache().fileName}</p>
-                </div>
-              }
-            >
-              {(file) => {
-                const url = URL.createObjectURL(file());
-                const [isLong, setIsLong] =
-                  createSignal(false);
-                return (
-                  <Switch
-                    fallback={
-                      <div class="flex items-center gap-1">
-                        <div>
-                          <IconDraft class="size-8" />
-                        </div>
-                        <p>{cache().fileName}</p>
-                      </div>
-                    }
-                  >
-                    <Match
-                      when={cache().mimetype?.startsWith(
-                        "image/",
-                      )}
-                    >
-                      <Title
-                        name={props.message.fileName}
-                        type={cache().mimetype}
-                      />
-                      <a
-                        id="pswp-item"
-                        href={url}
-                        target="_blank"
-                        class={cn(
-                          `flex h-full max-h-64 items-center justify-center
-                          overflow-hidden rounded-sm hover:cursor-pointer`,
-                          isLong()
-                            ? "aspect-square"
-                            : "aspect-video",
-                        )}
-                      >
-                        <img
-                          class="object-cover"
-                          src={url}
-                          alt={cache().fileName}
-                          onload={(ev) => {
-                            const parent =
-                              ev.currentTarget
-                                .parentElement!;
-                            parent.dataset.pswpWidth =
-                              ev.currentTarget.naturalWidth.toString();
-                            parent.dataset.pswpHeight =
-                              ev.currentTarget.naturalHeight.toString();
-                            parent.dataset.download =
-                              cache().fileName;
-
-                            const diff =
-                              ev.currentTarget
-                                .naturalWidth -
-                              ev.currentTarget
-                                .naturalHeight;
-                            if (diff <= 0) {
-                              setIsLong(true);
-                            }
-                            props.onLoad?.();
-                          }}
-                        />
-                      </a>
-                    </Match>
-                    <Match
-                      when={cache().mimetype?.startsWith(
-                        "video/",
-                      )}
-                    >
-                      <Title
-                        name={props.message.fileName}
-                        type={cache().mimetype}
-                      />
-                      <a
-                        id="pswp-item"
-                        href={url}
-                        data-pswp-type="video"
-                        data-pswp-video-type={
-                          cache().mimetype
-                        }
-                        target="_blank"
-                        class={cn(
-                          `relative aspect-video h-full max-h-64 overflow-hidden
-                          rounded-sm`,
-                          isLong()
-                            ? "aspect-square"
-                            : "aspect-video",
-                        )}
-                        data-pswp-video-src={url}
-                      >
-                        <video
-                          class="h-full w-full object-cover"
-                          src={url}
-                          onLoadedMetadata={(ev) => {
-                            props.onLoad?.();
-                            const parent =
-                              ev.currentTarget
-                                .parentElement!;
-                            parent.dataset.pswpWidth =
-                              ev.currentTarget.videoWidth.toString();
-                            parent.dataset.pswpHeight =
-                              ev.currentTarget.videoHeight.toString();
-                            parent.dataset.download =
-                              cache().fileName;
-                            const diff =
-                              ev.currentTarget.videoWidth -
-                              ev.currentTarget.videoHeight;
-                            if (diff <= 0) {
-                              setIsLong(true);
-                            }
-                          }}
-                        ></video>
-                        <div
-                          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                            rounded-lg bg-black/50 p-1 text-white/80"
-                        >
-                          <IconPlayArrow class="size-8" />
-                        </div>
-                      </a>
-                    </Match>
-                    <Match
-                      when={cache().mimetype?.startsWith(
-                        "audio/",
-                      )}
-                    >
-                      <Title
-                        name={props.message.fileName}
-                        type={cache().mimetype}
-                      />
-                      <audio
-                        controls
-                        src={url}
-                        onLoadedMetadata={() =>
-                          props.onLoad?.()
-                        }
-                      />
-                    </Match>
-                  </Switch>
-                );
-              }}
-            </Show>
-
-            <Show
-              when={props.message.transferStatus === "init"}
-            >
-              <Spinner size="sm" />
-            </Show>
-            <Show when={transferProgress()}>
-              {(progress) => {
-                const speed = createTransferSpeed(
-                  () => progress().received,
-                );
-
-                return (
-                  <Progress
-                    value={progress().received}
-                    maxValue={progress().total}
-                    getValueLabel={({ value, max }) =>
-                      `${((value / max) * 100).toFixed(
-                        2,
-                      )}% ${formatBtyeSize(value)}/${formatBtyeSize(max)}`
-                    }
-                  >
-                    <div
-                      class="text-muted-foreground mb-1 flex justify-between gap-2
-                        font-mono text-xs"
-                    >
-                      <ProgressLabel>
-                        {progress().received !==
-                        progress().total
-                          ? speed()
-                            ? `${formatBtyeSize(speed()!, 2)}/s`
-                            : `waiting...`
-                          : progress().received === 0
-                            ? `starting...`
-                            : `loading...`}
-                      </ProgressLabel>
-                      <ProgressValueLabel />
-                    </div>
-                  </Progress>
-                );
-              }}
-            </Show>
-            <Show when={localCacheStatus() === "merging"}>
-              <div class="flex items-center gap-1">
-                <Spinner size="sm" />
-                <p class="text-muted-foreground font-mono text-sm">
-                  {t("common.file_table.status.merging")}
-                </p>
-              </div>
-            </Show>
-
-            <div class="flex items-center justify-end gap-1">
-              <Show when={cache().file}>
-                {(file) => (
-                  <>
-                    <p class="muted mr-auto">
-                      {formatBtyeSize(file().size, 1)}
-                    </p>
-                    <Button
-                      as="a"
-                      variant="ghost"
-                      size="icon"
-                      href={URL.createObjectURL(file())}
-                      download={cache().fileName}
-                    >
-                      <IconDownload class="size-6" />
-                    </Button>
-                  </>
-                )}
-              </Show>
-              <Show when={shouldShowPauseButton()}>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => {
-                    if (isSender()) {
-                      pauseFile(
-                        cache().id,
-                        props.message.target,
-                      );
-                    } else {
-                      pauseFile(
-                        cache().id,
-                        props.message.client,
-                      );
-                    }
-                  }}
-                >
-                  <IconPause class="size-6" />
-                </Button>
-              </Show>
-
-              <Show when={shouldShowResumeButton()}>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => {
-                    if (isSender()) {
-                      resumeFile(
-                        cache().id,
-                        props.message.target,
-                      );
-                    } else {
-                      requestFile(
-                        props.message.client,
-                        cache(),
-                        true,
-                      );
-                    }
-                  }}
-                >
-                  <IconResume class="size-6" />
-                </Button>
-              </Show>
-            </div>
-          </>
-        )}
-      </Show>
-    </div>
-  );
-};
 
 export const MessageContent: Component<MessageCardProps> = (
   props,
@@ -521,8 +68,55 @@ export const MessageContent: Component<MessageCardProps> = (
   const [local, other] = splitProps(props, [
     "class",
     "message",
-    "onLoad",
+    "onDelete",
+    "joinedPrevious",
+    "joinedNext",
   ]);
+  const outgoing = () =>
+    appState.profile.clientId === local.message.client;
+  const roomSender = createMemo(() => {
+    const message = local.message;
+    if (!message.room) return;
+    const client =
+      appState.session.clientViewData[message.client] ??
+      appState.message.clients.find(
+        (client) => client.clientId === message.client,
+      );
+    return {
+      name: message.room.senderName,
+      avatar:
+        message.room.senderAvatar ??
+        (outgoing()
+          ? appState.profile.avatar
+          : client?.avatar) ??
+        undefined,
+    };
+  });
+  const sentAt = createMemo(
+    () => new Date(local.message.createdAt),
+  );
+  const fullSentAt = createMemo(() =>
+    sentAt().toLocaleString(appState.options.locale),
+  );
+  const shortSentAt = createMemo(() =>
+    sentAt().toLocaleTimeString(appState.options.locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  );
+  const groupPosition = () =>
+    local.joinedPrevious
+      ? local.joinedNext
+        ? "middle"
+        : "end"
+      : local.joinedNext
+        ? "start"
+        : "single";
+  const showMetadata = () =>
+    !local.joinedNext ||
+    local.message.status === "sending" ||
+    local.message.status === "error" ||
+    !!local.message.error;
   const targetClientInfo = createMemo(
     () =>
       appState.session.clientViewData[local.message.target],
@@ -531,6 +125,7 @@ export const MessageContent: Component<MessageCardProps> = (
   const { open: openPreviewDialog } = createPreviewDialog();
 
   const shouldShowRestoreButton = createMemo(() => {
+    if (props.message.room) return false;
     if (!targetClientInfo()?.messageChannel) return false;
     if (props.message.status !== "error") return false;
     return true;
@@ -611,7 +206,7 @@ export const MessageContent: Component<MessageCardProps> = (
     }) => {
       const [file] = createResource(async () => {
         if (!props.message.fid) return null;
-        return await getFileFromCache(props.message.fid);
+        return await getFileFromCache(props.message);
       });
       const shareableData = createMemo(() => {
         const f = file();
@@ -819,100 +414,221 @@ export const MessageContent: Component<MessageCardProps> = (
         <Menu
           message={props.message}
           close={close}
-          onDelete={props.onDelete}
+          onDelete={local.onDelete}
         />
       )}
     >
       {(p) => (
         <li
+          data-side={outgoing() ? "outgoing" : "incoming"}
+          data-group={groupPosition()}
           class={cn(
-            `flex flex-col gap-1 rounded-md p-2 shadow backdrop-blur
-            select-none sm:select-text`,
-            appState.profile.clientId ===
-              props.message.client
-              ? "self-end bg-lime-200/80 dark:bg-indigo-900/80"
-              : "border-border bg-background/80 self-start border",
+            "flex w-full min-w-0 flex-col",
             local.class,
           )}
-          {...p}
           {...other}
         >
-          <article class="w-full text-sm break-all whitespace-pre-wrap">
-            <Switch>
-              <Match
-                when={
-                  props.message.type === "text" &&
-                  props.message
-                }
-              >
-                {(message) => (
-                  <>
-                    <p>{message().data}</p>
-                  </>
-                )}
-              </Match>
-              <Match
-                when={
-                  props.message.type === "file" &&
-                  props.message
-                }
-              >
-                {(message) => (
-                  <FileMessageCard
-                    message={message()}
-                    onLoad={() => local.onLoad?.()}
-                  />
-                )}
-              </Match>
-            </Switch>
-          </article>
-          <div class="flex items-center justify-end gap-2">
-            <Show when={props.message.error}>
-              {(error) => (
-                <Tooltip>
-                  <TooltipTrigger class="text-destructive text-xs">
-                    {t("client.message_error")}
-                  </TooltipTrigger>
-                  <TooltipContent>{error()}</TooltipContent>
-                </Tooltip>
+          <div
+            data-slot="message-row"
+            class={cn(
+              "flex w-full min-w-0 items-end gap-1.5",
+              outgoing()
+                ? "flex-row-reverse justify-start"
+                : "justify-start",
+            )}
+          >
+            <Show when={roomSender()}>
+              {(sender) => (
+                <ClientAvatar
+                  data-slot="message-sender-avatar"
+                  name={sender().name}
+                  avatar={sender().avatar}
+                  class="size-7 shrink-0 self-start text-[10px]"
+                  title={sender().name}
+                  aria-label={sender().name}
+                  role="img"
+                />
               )}
             </Show>
-            <Show when={shouldShowRestoreButton()}>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => {
-                  void retryMessage(props.message);
-                }}
+            <div
+              data-slot="message-bubble"
+              title={fullSentAt()}
+              class={cn(
+                `text-foreground flex max-w-[88%] min-w-0 flex-col gap-1.5
+                rounded-2xl border px-3.5 py-2.5 shadow-sm select-none
+                sm:max-w-[80%] sm:select-text lg:max-w-[75%]`,
+                local.message.type === "file"
+                  ? "w-88"
+                  : "w-fit",
+                local.joinedNext && "py-2",
+                outgoing()
+                  ? "border-primary/15 bg-primary/10 self-end"
+                  : "border-border/60 bg-background/90 self-start",
+                outgoing()
+                  ? cn(
+                      local.joinedPrevious &&
+                        "rounded-tr-md",
+                      (local.joinedNext ||
+                        !local.joinedPrevious) &&
+                        "rounded-br-md",
+                    )
+                  : cn(
+                      local.joinedPrevious &&
+                        "rounded-tl-md",
+                      (local.joinedNext ||
+                        !local.joinedPrevious) &&
+                        "rounded-bl-md",
+                    ),
+              )}
+              {...p}
+            >
+              <Show
+                when={
+                  local.message.room &&
+                  !local.joinedPrevious &&
+                  !outgoing()
+                }
               >
-                <IconRestartAlt class="size-6" />
-              </Button>
+                <p class="text-primary text-xs font-medium">
+                  {local.message.room?.senderName}
+                </p>
+              </Show>
+              <article
+                class="w-full min-w-0 text-sm leading-relaxed
+                  [overflow-wrap:anywhere]"
+              >
+                <Switch>
+                  <Match
+                    when={
+                      props.message.type === "text" &&
+                      props.message
+                    }
+                  >
+                    {(message) => (
+                      <p class="whitespace-pre-wrap">
+                        {message().data}
+                      </p>
+                    )}
+                  </Match>
+                  <Match
+                    when={
+                      props.message.type === "file" &&
+                      props.message
+                    }
+                  >
+                    {(message) => (
+                      <Show
+                        when={message().room}
+                        fallback={
+                          <FileMessageCard
+                            message={message()}
+                          />
+                        }
+                      >
+                        <RoomFileMessageCard
+                          message={message()}
+                        />
+                      </Show>
+                    )}
+                  </Match>
+                </Switch>
+              </article>
+              <Show when={local.joinedNext}>
+                <time
+                  class="sr-only"
+                  dateTime={sentAt().toISOString()}
+                >
+                  {fullSentAt()}
+                </time>
+              </Show>
+              <Show when={showMetadata()}>
+                <div
+                  data-slot="message-meta"
+                  class="text-muted-foreground flex flex-wrap items-center
+                    justify-end gap-x-1.5 gap-y-1 text-[11px] leading-4
+                    tabular-nums"
+                >
+                  <Show when={props.message.error}>
+                    {(error) => (
+                      <Tooltip>
+                        <TooltipTrigger class="text-destructive text-[11px]">
+                          {t("client.message_error")}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {error()}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </Show>
+                  <Show when={shouldShowRestoreButton()}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      class="size-6 rounded-full"
+                      aria-label={t("tasks.resume")}
+                      onClick={() => {
+                        void retryMessage(props.message);
+                      }}
+                    >
+                      <IconRestartAlt class="size-3.5" />
+                    </Button>
+                  </Show>
+                  <Show when={!local.joinedNext}>
+                    <time
+                      dateTime={sentAt().toISOString()}
+                      title={fullSentAt()}
+                    >
+                      {shortSentAt()}
+                    </time>
+                  </Show>
+                  <Show
+                    when={outgoing() && !local.message.room}
+                  >
+                    <span
+                      class="inline-flex shrink-0 items-center"
+                      aria-hidden="true"
+                    >
+                      <Switch>
+                        <Match
+                          when={
+                            props.message.status ===
+                            "sending"
+                          }
+                        >
+                          <IconSchedule class="size-3.5" />
+                        </Match>
+                        <Match
+                          when={
+                            props.message.status ===
+                            "received"
+                          }
+                        >
+                          <IconCheck class="size-3.5" />
+                        </Match>
+                        <Match
+                          when={
+                            props.message.status === "error"
+                          }
+                        >
+                          <IconClose class="text-destructive size-3.5" />
+                        </Match>
+                      </Switch>
+                    </span>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+            <Show
+              when={
+                outgoing() &&
+                local.message.room &&
+                local.message
+              }
+            >
+              {(message) => (
+                <RoomDeliverySummary message={message()} />
+              )}
             </Show>
-          </div>
-          <div
-            class="text-muted-foreground flex justify-end gap-1 self-end
-              text-xs"
-          >
-            <p>{createTimeAgo(props.message.createdAt)}</p>
-            <p>
-              <Switch>
-                <Match
-                  when={props.message.status === "sending"}
-                >
-                  <IconSchedule class="size-4" />
-                </Match>
-                <Match
-                  when={props.message.status === "received"}
-                >
-                  <IconCheck class="size-4" />
-                </Match>
-                <Match
-                  when={props.message.status === "error"}
-                >
-                  <IconClose class="text-destructive size-4" />
-                </Match>
-              </Switch>
-            </p>
           </div>
         </li>
       )}
@@ -924,8 +640,15 @@ export interface MessageChatProps extends ComponentProps<"div"> {
   target: string;
 }
 
-async function getFileFromCache(fid: FileID) {
-  const cache = appState.cache.caches[fid];
+async function getFileFromCache(
+  message: FileTransferMessage,
+) {
+  if (
+    !message.fid ||
+    (message.room && !getRoomFileCache(message))
+  )
+    return null;
+  const cache = appState.cache.caches[message.fid];
   if (!cache) return null;
   return await cache.getFile();
 }

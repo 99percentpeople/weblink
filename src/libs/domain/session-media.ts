@@ -16,6 +16,32 @@ export class PeerSessionMediaController {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private streamStateNotified = false;
+  private localListeners: AbortController | null = null;
+  private readonly localTrackListeners = new Map<
+    MediaStreamTrack,
+    AbortController
+  >();
+  private connectionListeners: AbortController | null =
+    null;
+  private senderConnection: RTCPeerConnection | null = null;
+  private readonly senders = new Map<
+    MediaStreamTrack,
+    RTCRtpSender
+  >();
+  private readonly remoteTracks = new Map<
+    MediaStreamTrack,
+    {
+      controller: AbortController;
+      streams: Set<MediaStream>;
+    }
+  >();
+  private readonly remoteStreams = new Map<
+    MediaStream,
+    {
+      controller: AbortController;
+      tracks: Set<MediaStreamTrack>;
+    }
+  >();
 
   constructor(
     private readonly options: PeerSessionMediaOptions,
@@ -138,18 +164,11 @@ export class PeerSessionMediaController {
     event: RTCTrackEvent,
     signal: AbortSignal,
   ): void {
-    const stream = event.streams.at(0);
-    if (!stream) {
-      console.warn(
-        `[PeerSession] client ${this.options.targetClientId()} add track ${event.track.id} stream is null`,
-      );
+    if (
+      signal.aborted ||
+      event.track.readyState === "ended"
+    )
       return;
-    }
-
-    console.log(
-      `[PeerSession] client ${this.options.targetClientId()} add track ${event.track.id} stream ${stream.id}`,
-    );
-
     const receiver = event.receiver;
     if ("jitterBufferTarget" in receiver) {
       (receiver as any).jitterBufferTarget = 0;
@@ -159,72 +178,148 @@ export class PeerSessionMediaController {
     }
 
     const track = event.track;
+    // A reused transceiver may announce the same receiver track in a different
+    // source stream. Replace associations, never stop its other received tracks.
+    this.removeRemoteTrack(track);
+    const controller = new AbortController();
+    signal.addEventListener(
+      "abort",
+      () => controller.abort(),
+      {
+        once: true,
+        signal: controller.signal,
+      },
+    );
+    const streams = new Set(event.streams);
+    this.remoteTracks.set(track, { controller, streams });
+    for (const stream of streams) {
+      let observed = this.remoteStreams.get(stream);
+      if (!observed) {
+        const streamController = new AbortController();
+        observed = {
+          controller: streamController,
+          tracks: new Set(),
+        };
+        this.remoteStreams.set(stream, observed);
+        signal.addEventListener(
+          "abort",
+          () => streamController.abort(),
+          {
+            once: true,
+            signal: streamController.signal,
+          },
+        );
+        stream.addEventListener(
+          "removetrack",
+          ({ track: removed }) => {
+            // Ignore an old removal dispatched after this track was re-associated.
+            if (stream.getTracks().includes(removed))
+              return;
+            const record = this.remoteTracks.get(removed);
+            if (!record?.streams.delete(stream)) return;
+            this.releaseRemoteStream(stream, removed);
+            if (!record.streams.size)
+              this.removeRemoteTrack(removed);
+            this.publishRemoteStream();
+          },
+          { signal: streamController.signal },
+        );
+      }
+      observed.tracks.add(track);
+    }
     track.addEventListener(
       "ended",
       () => {
-        if (!this.remoteStream) return;
-        this.remoteStream.removeTrack(track);
-        this.options.onRemoteStreamChange(
-          this.remoteStream,
-        );
+        this.removeRemoteTrack(track);
+        this.publishRemoteStream();
       },
-      { once: true },
+      { once: true, signal: controller.signal },
     );
+    // Temporary RTP silence is not a removed source. Keep its track identity;
+    // publish a fresh view so renderers can observe mute recovery.
+    for (const type of ["mute", "unmute"] as const)
+      track.addEventListener(
+        type,
+        () => this.publishRemoteStream(),
+        { signal: controller.signal },
+      );
+    this.publishRemoteStream();
+  }
 
-    if (this.remoteStream) {
-      if (stream.id === this.remoteStream.id) {
-        this.remoteStream.addTrack(track);
-        this.options.onRemoteStreamChange(
-          this.remoteStream,
-        );
-        return;
-      }
+  private releaseRemoteStream(
+    stream: MediaStream,
+    track: MediaStreamTrack,
+  ): void {
+    const observed = this.remoteStreams.get(stream);
+    if (!observed) return;
+    observed.tracks.delete(track);
+    if (observed.tracks.size) return;
+    observed.controller.abort();
+    this.remoteStreams.delete(stream);
+  }
 
-      const previous = this.remoteStream;
-      for (const previousTrack of previous.getTracks()) {
-        previous.removeTrack(previousTrack);
-        previousTrack.stop();
-      }
-      this.remoteStream = null;
-    }
+  private removeRemoteTrack(track: MediaStreamTrack): void {
+    const record = this.remoteTracks.get(track);
+    if (!record) return;
+    record.controller.abort();
+    for (const stream of record.streams)
+      this.releaseRemoteStream(stream, track);
+    this.remoteTracks.delete(track);
+  }
 
-    stream.addEventListener(
-      "removetrack",
-      (removeEvent) => {
-        console.log(
-          `[PeerSession] client ${this.options.targetClientId()} removetrack`,
-          removeEvent.track.id,
-        );
-        if (stream.getTracks().length === 0) {
-          this.remoteStream = null;
-        }
-        this.options.onRemoteStreamChange(
-          this.remoteStream,
-        );
-      },
-      { signal },
+  private publishRemoteStream(): void {
+    const tracks = [...this.remoteTracks.keys()].filter(
+      (track) => track.readyState !== "ended",
     );
-
-    this.remoteStream = stream;
-    this.options.onRemoteStreamChange(stream);
+    // MediaStream.addTrack/removeTrack called by application code do not emit
+    // addtrack/removetrack. New containers notify reactive consumers reliably.
+    this.remoteStream = tracks.length
+      ? new MediaStream(tracks)
+      : null;
+    this.options.onRemoteStreamChange(this.remoteStream);
   }
 
   bindConnection(
     pc: RTCPeerConnection,
     signal: AbortSignal,
   ): void {
+    if (signal.aborted) return;
+    if (
+      this.senderConnection === pc &&
+      this.connectionListeners &&
+      !this.connectionListeners.signal.aborted
+    )
+      return;
+    if (
+      this.senderConnection &&
+      this.senderConnection !== pc
+    )
+      this.resetConnection();
+    else this.connectionListeners?.abort();
+    const controller = new AbortController();
+    this.connectionListeners = controller;
+    signal.addEventListener(
+      "abort",
+      () => controller.abort(),
+      {
+        once: true,
+        signal: controller.signal,
+      },
+    );
     pc.addEventListener(
       "track",
-      (event) => this.handleRemoteTrack(event, signal),
-      { signal },
+      (event) =>
+        this.handleRemoteTrack(event, controller.signal),
+      { signal: controller.signal },
     );
-
-    if (this.localStream) {
-      const stream = this.localStream;
-      this.notifyLocalStreamState(stream);
-      for (const track of stream.getTracks()) {
-        pc.addTrack(track, stream);
-      }
+    this.senderConnection = pc;
+    if (
+      this.localStream
+        ?.getTracks()
+        .some((track) => track.readyState !== "ended")
+    ) {
+      this.notifyLocalStreamState(this.localStream);
+      this.syncLocalTracks(false);
     } else {
       pc.addTransceiver("video", {
         direction: "recvonly",
@@ -237,130 +332,138 @@ export class PeerSessionMediaController {
     this.applyPreferredCodecPreferences(pc);
   }
 
-  private removeStream(): void {
-    console.log(
-      `[PeerSession] client ${this.options.targetClientId()} removeStream`,
-    );
-
-    const localStream = this.localStream;
-    if (localStream) {
-      for (const track of localStream.getTracks()) {
-        localStream.removeTrack(track);
-        track.stop();
-      }
-      this.localStream = null;
-    }
-
-    const pc = this.options.getPeerConnection();
-    if (!pc) {
-      console.log(
-        `[PeerSession] client ${this.options.targetClientId()} peer connection is null, skip remove stream`,
-      );
-      return;
-    }
-
-    for (const sender of pc.getSenders()) {
-      if (sender.track) {
-        pc.removeTrack(sender);
-      }
-    }
-
-    void this.options.renegotiate();
+  private releaseLocalListeners(): void {
+    this.localListeners?.abort();
+    this.localListeners = null;
+    for (const controller of this.localTrackListeners.values())
+      controller.abort();
+    this.localTrackListeners.clear();
   }
 
   setStream(stream: MediaStream | null): void {
-    console.log(
-      `[PeerSession] client ${this.options.targetClientId()} setStream`,
-      stream,
-    );
-
-    if (!stream) {
-      this.removeStream();
-      this.notifyLocalStreamState(null);
-      return;
-    }
-
-    if (this.localStream) {
-      if (this.localStream.id === stream.id) {
-        console.log(
-          `[PeerSession] client ${this.options.targetClientId()} stream is same, skip setStream`,
-        );
-        return;
+    const previous = this.localStream;
+    if (previous !== stream) {
+      this.releaseLocalListeners();
+      this.localStream = stream;
+      if (stream) {
+        const controller = new AbortController();
+        this.localListeners = controller;
+        for (const type of [
+          "addtrack",
+          "removetrack",
+        ] as const)
+          stream.addEventListener(
+            type,
+            () => this.syncLocalTracks(),
+            { signal: controller.signal },
+          );
       }
-      this.removeStream();
     }
-
-    this.localStream = stream;
     this.notifyLocalStreamState(stream);
+    // Explicit calls reconcile even the same MediaStream object: application
+    // mutations of its track list do not dispatch MediaStream track events.
+    const changed = this.syncLocalTracks();
+    if (
+      !changed &&
+      previous &&
+      !stream &&
+      this.options.getPeerConnection()
+    )
+      this.renegotiate();
+  }
 
-    let senders: RTCRtpSender[] = [];
-
-    stream.addEventListener("addtrack", (event) => {
-      const sender = this.options
-        .getPeerConnection()
-        ?.addTrack(event.track, stream);
-      if (sender) {
-        senders.push(sender);
-      }
-    });
-
-    stream.addEventListener("removetrack", (event) => {
-      const index = senders.findIndex(
-        (sender) => sender.track?.id === event.track.id,
-      );
-      if (index === -1) return;
-
-      const [sender] = senders.splice(index, 1);
-      const pc = this.options.getPeerConnection();
-      if (!sender || !pc) return;
-      pc.removeTrack(sender);
-    });
-
-    const pc = this.options.getPeerConnection();
-    if (!pc) {
-      console.log(
-        `[PeerSession] client ${this.options.targetClientId()} peer connection is null, skip add track`,
-      );
-      return;
-    }
-
-    senders.push(
-      ...stream.getTracks().map((track) => {
-        track.addEventListener("ended", () => {
-          console.log(
-            "[PeerSession] track ended, remove track from peer connection",
-            track.id,
-          );
-          const index = senders.findIndex(
-            (sender) => sender.track?.id === track.id,
-          );
-          if (index !== -1) {
-            pc.removeTrack(senders[index]);
-            senders.splice(index, 1);
-          }
-        });
-
-        console.log(
-          `[PeerSession] client ${this.options.targetClientId()} add track`,
-          track.id,
-        );
-
-        return pc.addTrack(track, stream);
-      }),
+  private syncLocalTracks(negotiate = true): boolean {
+    const stream = this.localStream;
+    const tracks = new Set(
+      stream
+        ?.getTracks()
+        .filter((track) => track.readyState !== "ended") ??
+        [],
     );
+    for (const [track, controller] of this
+      .localTrackListeners) {
+      if (tracks.has(track)) continue;
+      controller.abort();
+      this.localTrackListeners.delete(track);
+    }
+    for (const track of tracks) {
+      if (this.localTrackListeners.has(track)) continue;
+      const controller = new AbortController();
+      this.localTrackListeners.set(track, controller);
+      track.addEventListener(
+        "ended",
+        () => this.syncLocalTracks(),
+        { once: true, signal: controller.signal },
+      );
+    }
+    const pc = this.options.getPeerConnection();
+    if (!pc || pc.connectionState === "closed")
+      return false;
+    if (this.senderConnection !== pc) {
+      if (this.senderConnection) this.resetConnection();
+      this.senders.clear();
+      this.senderConnection = pc;
+    }
+    let changed = false;
+    for (const [track, sender] of this.senders) {
+      if (tracks.has(track)) continue;
+      pc.removeTrack(sender);
+      this.senders.delete(track);
+      changed = true;
+    }
+    if (stream)
+      for (const track of tracks) {
+        if (this.senders.has(track)) continue;
+        this.senders.set(track, pc.addTrack(track, stream));
+        changed = true;
+      }
+    if (changed) {
+      this.applyPreferredCodecPreferences(pc);
+      if (negotiate) this.renegotiate();
+    }
+    return changed;
+  }
 
-    this.applyPreferredCodecPreferences(pc);
-    void this.options.renegotiate();
+  private renegotiate(): void {
+    try {
+      Promise.resolve(this.options.renegotiate()).catch(
+        (error) => {
+          console.warn(
+            "[PeerSession] media renegotiation failed",
+            error,
+          );
+        },
+      );
+    } catch (error) {
+      console.warn(
+        "[PeerSession] media renegotiation failed",
+        error,
+      );
+    }
   }
 
   resetConnection(): void {
     this.streamStateNotified = false;
-
-    if (!this.remoteStream) return;
-
-    for (const track of this.remoteStream.getTracks()) {
+    this.connectionListeners?.abort();
+    this.connectionListeners = null;
+    this.senders.clear();
+    this.senderConnection = null;
+    const tracks = [...this.remoteTracks.keys()];
+    for (const track of tracks) {
+      this.removeRemoteTrack(track);
       track.stop();
     }
+    const hadRemoteStream = this.remoteStream !== null;
     this.remoteStream = null;
+    if (hadRemoteStream)
+      this.options.onRemoteStreamChange(null);
+  }
+
+  dispose(): void {
+    this.resetConnection();
+    this.releaseLocalListeners();
+    // LocalStreamService owns capture. Closing one peer must never stop the
+    // microphone, camera or screen tracks still published to other peers.
+    this.localStream = null;
   }
 }

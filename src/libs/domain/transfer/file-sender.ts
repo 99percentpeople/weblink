@@ -19,7 +19,10 @@ import {
   rangesIterator,
 } from "@/libs/utils/range";
 import type { RequestFileMessage } from "@/libs/domain/protocol/messages";
-import { buildTransferPacket } from "./packet";
+import {
+  buildTransferPacket,
+  FILE_TRANSFER_PACKET_HEADER_BYTES,
+} from "./packet";
 
 import CompressWorker from "./compress-worker?worker";
 import type { CompressionLevel } from "./options";
@@ -38,7 +41,26 @@ export class FileSender extends FileTransferBase {
 
   constructor(options: FileTransfererOptions) {
     super(options);
-    this.blockSize = options.blockSize ?? this.blockSize;
+    // The configured block size describes payload bytes. Sending it unchanged
+    // can exceed the peer's SCTP limit once our packet header is added, which
+    // some browsers handle by closing the channel instead of throwing.
+    const packetLimit =
+      options.maxMessageSize === 0
+        ? Infinity
+        : (options.maxMessageSize ?? 64 * 1024);
+    this.blockSize = Math.floor(
+      Math.min(
+        options.blockSize ?? this.blockSize,
+        packetLimit - FILE_TRANSFER_PACKET_HEADER_BYTES,
+      ),
+    );
+    if (
+      !Number.isSafeInteger(this.blockSize) ||
+      this.blockSize < 1
+    )
+      throw new RangeError(
+        "File transfer packet size exceeds the data channel limit",
+      );
     this.compressionLevel =
       options.compressionLevel ?? this.compressionLevel;
   }
@@ -195,7 +217,6 @@ export class FileSender extends FileTransferBase {
           this.getAvailableChannel(),
         );
         if (error) {
-          this.close();
           throw error;
         }
         if (this.paused) return;
@@ -204,10 +225,6 @@ export class FileSender extends FileTransferBase {
           channel.send(packet),
         );
         if (sendError) {
-          if (!this.closed) {
-            console.error(sendError);
-            this.close();
-          }
           throw sendError;
         }
       }
@@ -350,8 +367,19 @@ export class FileSender extends FileTransferBase {
         }
       }
     } catch (error) {
+      // Closing also rejects an already queued compression for the next chunk.
+      void nextCompression?.catch(() => {});
       if (this.paused) return;
-      if (!this.closed) this.close();
+      if (!this.closed) {
+        // Preserve the sending failure before close removes the run's listeners.
+        this.dispatchEvent(
+          "error",
+          error instanceof Error
+            ? error
+            : new Error(String(error)),
+        );
+        this.close();
+      }
       throw error;
     } finally {
       this.controller.signal.removeEventListener(

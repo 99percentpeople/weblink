@@ -48,6 +48,7 @@ export interface RoomServiceOptions {
   ): Promise<ClientService>;
   getLocalStream(): MediaStream | null;
   onLeaving?(): void;
+  onMemberJoined?(roomId: string, client: Client): void;
 }
 
 function abortError(message: string): DOMException {
@@ -84,6 +85,7 @@ export class RoomService {
   private bindClientService(
     service: ClientService,
     generation: number,
+    roomId: string,
   ): void {
     if (
       this.boundService === service &&
@@ -99,6 +101,7 @@ export class RoomService {
       void this.handleClientJoin(
         service,
         generation,
+        roomId,
         client,
       );
     });
@@ -118,6 +121,7 @@ export class RoomService {
   private async handleClientJoin(
     service: ClientService,
     generation: number,
+    roomId: string,
     targetClient: TransferClient,
   ): Promise<void> {
     if (!this.isServiceCurrent(service, generation)) return;
@@ -163,6 +167,7 @@ export class RoomService {
     }
 
     this.options.messages.setClient(targetClient);
+    this.options.onMemberJoined?.(roomId, targetClient);
 
     if (session.polite) return;
 
@@ -244,7 +249,11 @@ export class RoomService {
         this.options.sessions.setClientService(service);
       }
 
-      this.bindClientService(service, generation);
+      this.bindClientService(
+        service,
+        generation,
+        profile.roomId,
+      );
       await service.createClient();
       if (!this.isServiceCurrent(service, generation)) {
         throw abortError("Room changed while joining");

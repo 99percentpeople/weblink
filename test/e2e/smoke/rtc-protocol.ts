@@ -1,4 +1,6 @@
 import { FileCatalogIndex } from "../../../src/libs/application/file-catalog-index";
+import { runRoomChatSmoke } from "./room-chat";
+import { runSessionMediaSmoke } from "./session-media";
 import { RemoteFileCatalog } from "../../../src/libs/application/remote-file-catalog";
 import { RtcProtocol } from "../../../src/libs/application/rtc/rtc-protocol";
 import { MessageSendQueue } from "../../../src/libs/domain/session-send-queue";
@@ -336,6 +338,8 @@ async function main() {
       concurrentRequests: concurrent.length,
       notifications: notifications.length,
       pendingRejectedOnClose: true,
+      roomChat: await runRoomChatSmoke(),
+      multiSourceMedia: await runSessionMediaSmoke(),
     };
   } finally {
     a.dispose();

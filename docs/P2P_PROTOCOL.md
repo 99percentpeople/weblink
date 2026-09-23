@@ -101,6 +101,11 @@ Local UI state such as `sending`, `received`, progress or persistence status
 is **not** part of the wire protocol. Those fields belong to each client's local
 message model.
 
+The envelope rejects the reserved local fields `conversationId`, `room`,
+`deliveries`, `roomTransfers`, `localSequence` and `lastReadSequence`. Local arrival order and read
+cursors belong to the receiving browser. A private `send-text` cannot attach these fields to
+bypass room capability and binding validation during history projection.
+
 The canonical TypeScript wire DTOs and request policy are in
 `domain/protocol/messages.ts`. Runtime validation is in
 `domain/protocol/validation.ts`.
@@ -109,18 +114,27 @@ The canonical TypeScript wire DTOs and request policy are in
 
 The request policy is defined once by `requestSpec`:
 
-| Request           | Reply behavior                      |
-| ----------------- | ----------------------------------- |
-| `send-text`       | `ack` mode `receive`                |
-| `send-clipboard`  | `ack` mode `receive`                |
-| `send-file`       | `ack` mode `receive`                |
-| `request-file`    | `ack` mode `send`                   |
-| `resume-file`     | `ack` mode `receive`                |
-| `request-storage` | `storage` response plus receipt ACK |
+| Request             | Reply behavior                      |
+| ------------------- | ----------------------------------- |
+| `send-text`         | `ack` mode `receive`                |
+| `room-capabilities` | `ack` mode `receive`                |
+| `send-room-text`    | `ack` mode `receive`                |
+| `send-room-file`    | `ack` mode `receive`                |
+| `request-room-file` | `ack` mode `send`                   |
+| `send-clipboard`    | `ack` mode `receive`                |
+| `send-file`         | `ack` mode `receive`                |
+| `request-file`      | `ack` mode `send`                   |
+| `resume-file`       | `ack` mode `receive`                |
+| `request-storage`   | `storage` response plus receipt ACK |
 
 An ACK means the receiving request handler completed successfully. It does
 **not** mean durable database storage, file-transfer completion, clipboard
 permission or that a human read a message.
+
+The browser room-chat handler additionally waits for its local IndexedDB write
+before returning. Its receipt therefore confirms successful local persistence
+at that instant; it does not imply a read receipt, server history, or retention
+after the user deletes browser data.
 
 Typical use:
 
@@ -157,6 +171,119 @@ const stopHandling = protocol.handle(
 
 `request-storage` returns a `StoragePage`, not a metadata array. It never exposes a
 browser `File`, IndexedDB record or cache implementation.
+
+### Online room text chat (version 1)
+
+`room-capabilities` and `send-room-text` require
+`P2P_ROOM_CHAT_PROTOCOL_VERSION` (currently 1). They use the existing point-to-point
+control DataChannel: `client` and `target` remain the actual session's peer IDs.
+The signaling protocol, presence records, and private `send-text` contract do not
+change. Never turn an unsupported room message into a private message.
+
+After the message channel becomes ready, both peers send `room-capabilities`
+with `{ roomId, token }`. Each token is fresh for that local room/channel binding.
+The peer acknowledges only an offer belonging to its active room and actual
+session. A client is supported after receiving the peer's token and the ACK to
+its own offer. A later incoming offer can restart a failed initial negotiation;
+this permits different room-initialization timing. A missing/unsupported version
+or a peer that cannot complete negotiation is not a supported room-chat peer.
+The browser waits for both parts even when an unordered channel delivers the ACK
+before the reciprocal offer. Negotiation waits are bounded and cancelled when
+the room/channel binding ends.
+
+`send-room-text` carries:
+
+```ts
+{
+  roomId: string;
+  senderToken: string;
+  recipientToken: string;
+  senderName: string;
+  senderAvatar: string | null;
+  data: string;
+}
+```
+
+Room IDs are nonempty and at most 256 UTF-16 code units; binding tokens are at
+most 128. Names are at most 128, avatars at most 256 Ki, and nonblank text at most
+64 Ki UTF-16 code units. Receivers validate both binding tokens, the active room,
+and the session identity before writing history. Session replacement, room
+changes and channel closure retire the old binding. Names and avatars are
+sender-provided display snapshots, not independent identity authentication.
+The browser sends `senderAvatar: null` on room text requests; peer avatars already
+use the separate profile exchange. It may retain its own avatar in local history,
+but does not repeat a potentially large base64 image in every text frame. The
+character bounds do not override a transport's negotiated maximum message size;
+a transport rejection remains a visible failed delivery for that recipient.
+
+The browser sender stores one logical message and snapshots the peers whose
+channels are ready at send time. The same message ID, sender and creation time
+identify each recipient's copy. Each recipient has its own
+`sending` / `delivered` / `failed` / `unsupported` state; one ACK cannot complete
+the whole group. Fan-out runs with bounded concurrency so one failed peer does
+not stop all other recipients. Manual retries target only original failed peers
+that are currently connected to the same room. A replacement session uses its
+new binding tokens while retaining the logical message ID, time and content.
+
+There is no offline outbox, late-join history transfer, server message archive,
+or automatic replay to newly joined members. History and organization labels
+belong to the local browser. Conversation IDs include the signaling namespace
+and room ID locally; the namespace is not sent as an authentication claim.
+The application store persistently deduplicates matching logical room messages
+and rejects conflicting IDs. This supplements the protocol's bounded,
+session-local request cache; it does not provide globally ordered history or
+cross-device exactly-once delivery.
+
+### Room file offers and explicit downloads (version 1)
+
+Room text and capability envelopes remain version 1. A capability offer may add
+`features: ["room-file-v1"]`; at most 16 nonempty feature strings of at most 64
+UTF-16 code units are allowed. Unknown features are ignored. A peer without the
+file feature can still exchange room text. An ACK alone never proves file
+support: the peer's own capability offer must advertise the feature. Unsupported
+room offers are never automatically converted into private file messages.
+Explicit local forwarding creates a new private copy with a fresh file ID;
+the original room attachment keeps its room-only scope.
+
+`send-room-file` uses `P2P_ROOM_FILE_PROTOCOL_VERSION` (currently 1). Its payload
+contains `roomId`, `senderToken`, `recipientToken`, `senderName`, `senderAvatar`,
+`fid`, `fileName`, `fileSize`, `chunkSize`, and optional `mimeType` / `lastModified`.
+Only these fields and the standard envelope are accepted; no file bytes belong
+in the offer. Filenames contain 1–1024 UTF-16 code units, MIME types at most 255,
+file size is a nonnegative safe integer, and chunk size is a positive safe
+integer. Room/token/profile bounds match room text. The recipient durably stores
+the offer before ACKing it. That ACK means metadata was received, not downloaded.
+The receiver may opt in locally to request newly received small files up to a
+per-room size limit (default 5 MiB, auto-download off). This uses the same
+`request-room-file` flow as a manual download, without changing the protocol or
+replaying offers from history. Duplicate receipts and paused or failed transfers
+do not automatically start another request.
+
+An explicit download uses `request-room-file` version 1 with the room and current
+binding tokens, `offerId`, `fid`, `resume`, and optional chunk `ranges`. It does
+not repeat file metadata: the authorized original offer and provider cache are
+authoritative. Structural range validation happens at the protocol boundary;
+the application must check range bounds against the authorized file's actual
+chunk count. The offer ID and request envelope ID must differ. Each new or resumed
+download attempt uses a fresh request ID; transport retries repeat the same
+request. Reusing a completed request's ID/time can replay its cached ACK without
+starting another transfer. The `send` ACK acknowledges download setup, not binary
+completion.
+
+Both sides validate the current room/session and binding tokens. The provider
+also validates the stored offer's sender, room namespace, file identity and
+original recipient snapshot. Room-only attachments must not bypass this check
+through legacy `request-file` / `resume-file` entry points. Reconnection requires
+fresh binding tokens and a new download request; a saved offer does not guarantee
+that its provider is online or its file remains available.
+
+Room files and text share local history and per-recipient offer delivery states.
+Sender-side per-peer transfer status/progress lives separately in local
+`roomTransfers`, which is rejected on the wire. Receipt and transfer writes are
+serialized per logical message. Duplicate file offer IDs must retain the same
+sender, scope, timestamp, file identity and metadata. A reload marks interrupted
+delivery attempts failed and active per-peer transfers paused; an offer that has
+never been downloaded does not become a paused transfer merely by being loaded.
 
 ### Paginated directory contract (version 2)
 
@@ -271,6 +398,15 @@ await protocol.notify(session, "stream-state", {
 });
 ```
 
+`stream-state` describes the media mode, not a list of capture sources. Video and
+audio tracks travel over negotiated RTP transceivers. A participant may publish
+several video tracks at once; receivers aggregate tracks from all signaled
+streams, including streamless tracks. Removing one source renegotiates only the
+changed senders. Local capture tracks are borrowed by each peer connection and
+are stopped only by the application's capture owner, so closing a peer or a
+screen does not stop the remaining publications. Camera/screen labels are not
+advertised by this notification; remote views use participant names and numbers.
+
 The `client-profile` notification carries
 `P2P_PROFILE_PROTOCOL_VERSION` (currently 1). The historical
 `RTC_PROFILE_PROTOCOL_VERSION` name remains an alias. Profile versioning belongs to
@@ -384,6 +520,8 @@ Weblink adds those concerns above the protocol:
 
 - `application/messaging/peer-messaging-service.ts` maps tracked protocol
   requests to local message-history state.
+- `application/messaging/room-messaging-service.ts` owns room capability
+  negotiation, binding lifetime, recipient snapshots and per-peer receipts.
 - `application/messaging/message-store.ts` owns reactive chat/file history.
 - `application/messaging/message-repository.ts` is the persistence port.
 - `infrastructure/storage/indexeddb-message-repository.ts` is the browser

@@ -42,8 +42,12 @@ export default function Nav(props: ComponentProps<"nav">) {
         <TooltipTrigger
           as={A}
           href="/"
-          aria-label={t("nav.chat")}
-          class={cn(linkClasses, active("/client"))}
+          aria-label={t("common.nav.chat")}
+          class={cn(
+            linkClasses,
+            active("/client"),
+            active("/conversation"),
+          )}
         >
           <IconForum class="size-8" />
         </TooltipTrigger>
@@ -55,7 +59,7 @@ export default function Nav(props: ComponentProps<"nav">) {
         <TooltipTrigger
           as={A}
           href="/video"
-          aria-label={t("nav.screen_sharing")}
+          aria-label={t("meeting.title")}
           class={cn(linkClasses)}
         >
           <IconMonitor class="size-8" />

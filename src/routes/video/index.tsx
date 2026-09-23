@@ -1,730 +1,581 @@
 import "./index.css";
 import {
+  AnimatePresence,
+  Motion,
+} from "@/components/ui/motion";
+import { A, useLocation } from "@solidjs/router";
+import {
   createEffect,
-  createMemo,
   createSignal,
   For,
-  onMount,
+  on,
   Show,
-  untrack,
 } from "solid-js";
-import { Button } from "@/components/ui/button";
-import { useAppState } from "@/libs/state/app-state-context";
+import {
+  Circle,
+  Info,
+  List,
+  MessageSquare,
+  PanelRightOpen,
+  Pin,
+  ShieldAlert,
+  Users,
+  X,
+} from "lucide-solid";
+import { ClientAvatar } from "@/components/common/client-avatar";
+import { ConversationSidebar } from "@/components/conversations/conversation-sidebar";
+import { createMediaHashRoute } from "@/components/conversations/media-hash-route";
+import { ConversationView } from "@/components/conversations/conversation-view";
 import { t } from "@/i18n";
-import {
-  IconDelete,
-  IconFullscreen,
-  IconMeetingRoom,
-  IconMic,
-  IconMoreHoriz,
-  IconMicOff,
-  IconPip,
-  IconPipExit,
-  IconScreenShare,
-  IconSettings,
-  IconStopScreenShare,
-  IconVideoCam,
-  IconVideoCamOff,
-  IconViewCompactAlt,
-  IconVolumeOff,
-  IconVolumeUp,
-} from "@/components/icons";
-import { GripIcon } from "lucide-solid";
-import { cn } from "@/libs/cn";
-import type { ClientInfo } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
-import { Dynamic } from "solid-js/web";
-import { createMediaSelectionDialog } from "@/components/dialogs/media-selection-dialog";
-import { createApplyConstraintsDialog } from "@/components/dialogs/media-constraints-dialogs";
-import { useAudioPlayer } from "./components/audio-player";
+import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { createLayoutTransition } from "@/libs/hooks/layout-transition";
+import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import {
-  useVideoDisplay,
-  VideoDisplay,
-} from "./components/video-display";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { createMediaTracks } from "@/libs/hooks/tracks";
-import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
-import { createFullscreen } from "@/libs/hooks/fullscreen";
-import { FlexButton } from "./components/flex-button";
-import {
-  GridItemContent,
-  GridStack,
-  GridStackRef,
-  SavedGridItem,
-} from "@/libs/gridstack";
-import { createElementSize } from "@solid-primitives/resize-observer";
-import {
-  GridStackOptions,
-  numberOrString,
-} from "gridstack";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
-import { getInitials } from "@/libs/utils/name";
-import { makePersisted } from "@solid-primitives/storage";
+  Tabs,
+  TabsContent,
+  TabsIndicator,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { appState } from "@/libs/state/app-state";
+import { useAppState } from "@/libs/state/app-state-context";
+import { useAudioPlayer } from "./components/audio-player";
+import { MeetingControls } from "./components/meeting-controls";
+import {
+  MeetingStage,
+  type MeetingStageHandle,
+} from "./components/meeting-stage";
+import { useMeetingSession } from "./components/meeting-session-context";
+import { MeetingSharingStatus } from "./components/meeting-sharing-status";
+import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 
-const [removedClientIds, setRemovedClientIds] =
-  createSignal<string[]>([]);
+const tabs = [
+  "conversations",
+  "chat",
+  "members",
+  "info",
+] as const;
+type PanelTab = (typeof tabs)[number];
 
 export default function Video() {
-  const { localStream } = useAppState();
+  let page: HTMLElement | undefined;
+  let stage: MeetingStageHandle | undefined;
+  const transitionLayout = createLayoutTransition(
+    () => page,
+    ".meeting-stage [data-motion-layout], .meeting-canvas-placeholder[data-motion-layout]",
+    () => stage?.measure(),
+  );
+  const state = useAppState();
+  const audio = useAudioPlayer();
+  const { media, devices } = useMeetingMedia();
+  const { open: openRoomInfo } = createRoomInfoDialog();
+  const meeting = useMeetingSession();
+  const {
+    clients,
+    sources,
+    pinnedId,
+    setPinnedId,
+    railCollapsed,
+    setRailCollapsed,
+    toolbarFollowsRail,
+  } = meeting;
+  const controlsCollapsed = () =>
+    !meeting.pip.active() &&
+    railCollapsed() &&
+    toolbarFollowsRail();
   const isMobile = createIsMobile();
-
-  const { setPlay, playState, hasAudio } = useAudioPlayer();
-
-  const [gridRef, setGridRef] =
-    createSignal<GridStackRef>();
-
-  const gridSize = createElementSize(gridRef);
-
-  const gridCellHeight = createMemo<numberOrString>(() => {
-    if (!gridSize.width) return "128px";
-    const columns = isMobile() ? 6 : 12;
-    return `${(gridSize.width / columns) * (9 / 16)}px`;
-  });
-
-  const gridColumn = createMemo<number>(() => {
-    return isMobile() ? 1 : 12;
-  });
-
-  const [float, setFloat] = makePersisted(
-    createSignal(false),
-    {
-      storage: sessionStorage,
-      name: "video_float",
-    },
+  const [rightOpen, setRightOpen] = createSignal(
+    window.innerWidth >= 1280,
   );
-
-  const gridOptions = createMemo(
-    () =>
-      ({
-        draggable: {
-          handle: ".custom-drag-handle",
-          appendTo: "body",
-          scroll: false,
-        },
-        cellHeight: gridCellHeight(),
-        column: gridColumn(),
-        animate: true,
-        margin: 1,
-        minRow: 1,
-        float: float(),
-        resizable: {
-          handles: "se",
-        },
-        acceptWidgets: true,
-        removable: "[data-gs-removal-zone]",
-        styleInHead: true,
-      }) satisfies GridStackOptions,
-  );
-
+  const [tab, setTab] = createSignal<PanelTab>("chat");
+  const [selectedId, setSelectedId] =
+    createSignal<string>();
+  const activeConversationId = () =>
+    selectedId() ??
+    state.activeRoomConversationId() ??
+    undefined;
   createEffect(() => {
-    const availableClientIds = Object.values(
-      appState.session.clientViewData,
-    ).map((client) => client.clientId);
-    const newRemovedClientIds = untrack(
-      removedClientIds,
-    ).filter((removedClientId) =>
-      availableClientIds.includes(removedClientId),
+    if (isMobile()) setRightOpen(false);
+  });
+  const setPanelOpen = (open: boolean) => {
+    if (rightOpen() === open) return;
+    transitionLayout(() => setRightOpen(open));
+  };
+  const closePanel = () => setPanelOpen(false);
+  const selectConversation = (id: string) => {
+    setSelectedId(id);
+    setTab("chat");
+    setPanelOpen(true);
+  };
+  const routeLocation = useLocation();
+  const mediaRoute = createMediaHashRoute(
+    () => routeLocation.hash,
+  );
+  createEffect(
+    on(mediaRoute, (route) => {
+      if (route) selectConversation(route.conversationId);
+    }),
+  );
+  const togglePin = (id: string) =>
+    transitionLayout(() =>
+      setPinnedId((current) =>
+        current === id ? null : id,
+      ),
     );
-    setRemovedClientIds(newRemovedClientIds);
-  });
-
-  const [dragging, setDragging] = createSignal(false);
-
-  return (
-    <>
-      <div
-        class={cn(
-          "fixed bottom-8 left-1/2 size-28 -translate-x-1/2",
-          "border-destructive rounded-xl border-2 border-dashed",
-          "bg-destructive/10 hover:border-destructive/80 transition-all",
-          `hover:bg-destructive/20 visible z-10 touch-manipulation
-          opacity-100`,
-          !dragging() &&
-            "invisible scale-[0.95] cursor-move opacity-0",
-        )}
-        data-gs-removal-zone
-      >
-        <div class="text-destructive flex h-full items-center justify-center">
-          <IconDelete class="size-8" />
-        </div>
-      </div>
-      <div class="scrollbar-none flex size-full flex-col overflow-y-auto">
-        <div
-          class="border-border bg-background/80 sticky top-0 z-10 flex h-12
-            w-full items-center gap-2 border-b px-4 backdrop-blur
-            sm:top-0"
-        >
-          <h4 class="h4">
-            {appState.roomStatus.roomId ? (
-              <p class="space-x-1 [&>*]:align-middle [&>svg]:inline">
-                <IconMeetingRoom class="inline size-6" />
-                <span>{appState.roomStatus.roomId}</span>
-              </p>
-            ) : (
-              t("video.title")
-            )}
-          </h4>
-          <div class="flex-1"></div>
-          <Show when={hasAudio()}>
-            <Button
-              onClick={() => setPlay(!playState())}
-              size="icon"
-              class="size-8"
-              variant={
-                playState() ? "secondary" : "default"
-              }
-              aria-label={
-                playState()
-                  ? t("video.global_mute")
-                  : t("video.global_unmute")
-              }
-            >
-              <Dynamic
-                component={
-                  playState() ? IconVolumeUp : IconVolumeOff
-                }
-                class="size-4"
-              />
-            </Button>
-          </Show>
-          <Show when={gridRef()}>
-            {(gridRef) => (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  as={Button}
-                  size="icon"
-                  class="size-8"
-                  variant="secondary"
-                  aria-label={t("common.action.settings")}
-                >
-                  <IconMoreHoriz class="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent class="min-w-48">
-                  <DropdownMenuCheckboxItem
-                    checked={float()}
-                    onChange={(isChecked) =>
-                      setFloat(!!isChecked)
-                    }
-                  >
-                    {t("video.float")}
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuItem
-                    onSelect={() => gridRef().compact()}
-                  >
-                    <IconViewCompactAlt class="size-4" />
-                    {t("video.compact_layout")}
-                  </DropdownMenuItem>
-
-                  <Show
-                    when={removedClientIds().length > 0}
-                  >
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger class="gap-2">
-                        <IconDelete class="size-4" />
-                        {t("common.action.restore")}
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent class="min-w-48">
-                        <For each={removedClientIds()}>
-                          {(clientId) => (
-                            <Show
-                              when={
-                                appState.session
-                                  .clientViewData[clientId]
-                              }
-                            >
-                              {(client) => (
-                                <DropdownMenuItem
-                                  onSelect={() => {
-                                    setRemovedClientIds(
-                                      (prev) =>
-                                        prev.filter(
-                                          (id) =>
-                                            id !== clientId,
-                                        ),
-                                    );
-                                  }}
-                                >
-                                  <Avatar class="size-6">
-                                    <AvatarImage
-                                      src={
-                                        client().avatar ??
-                                        undefined
-                                      }
-                                    />
-                                    <AvatarFallback
-                                      seed={client().name}
-                                    >
-                                      {getInitials(
-                                        client().name,
-                                      )}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span class="truncate">
-                                    {client().name}
-                                  </span>
-                                </DropdownMenuItem>
-                              )}
-                            </Show>
-                          )}
-                        </For>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                  </Show>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </Show>
-        </div>
-
-        <GridStack
-          class="flex-1"
-          ref={setGridRef}
-          options={gridOptions()}
-          onDragStatusChange={(event, item, drag) => {
-            setDragging(drag);
-          }}
-          onRemove={(event, items) => {
-            items.forEach((item) => {
-              const clientId = item.el?.id;
-              if (clientId) {
-                setRemovedClientIds((prev) => [
-                  ...prev,
-                  clientId,
-                ]);
-              }
-            });
-          }}
-        >
-          <SavedGridItem
-            w={6}
-            h={6}
-            id={appState.profile.clientId}
-            noRemovable
-          >
-            <GridItemContent class="bg-muted relative rounded-lg shadow-lg">
-              <div
-                class="custom-drag-handle absolute top-2 right-2 z-10 flex h-6 w-6
-                  cursor-move items-center justify-center rounded bg-black/50
-                  text-white opacity-0 transition-opacity hover:opacity-100"
-              >
-                <GripIcon class="size-4" />
-              </div>
-
-              <VideoDisplay
-                class="absolute inset-0"
-                stream={localStream()}
-                name={`${appState.profile.name} (You)`}
-                avatar={
-                  appState.profile.avatar ?? undefined
-                }
-                muted={true}
-              >
-                <LocalToolbar
-                  client={
-                    appState.roomStatus.profile ?? undefined
-                  }
-                  class={cn(
-                    "absolute top-1 flex gap-1",
-                    "left-1/2 -translate-x-1/2",
-                  )}
-                />
-              </VideoDisplay>
-            </GridItemContent>
-          </SavedGridItem>
-          <For
-            each={Object.values(
-              appState.session.clientViewData,
-            ).filter(
-              (client) =>
-                !removedClientIds().includes(
-                  client.clientId,
-                ),
-            )}
-          >
-            {(client) => {
-              return (
-                <SavedGridItem
-                  w={6}
-                  h={6}
-                  id={client.clientId}
-                >
-                  <GridItemContent class="bg-muted relative rounded-lg shadow-lg">
-                    <div
-                      class="custom-drag-handle absolute top-2 right-2 z-10 flex h-6 w-6
-                        cursor-move items-center justify-center rounded bg-black/50
-                        text-white opacity-0 transition-opacity hover:opacity-100"
-                    >
-                      <GripIcon class="size-4" />
-                    </div>
-
-                    <VideoDisplay
-                      class="absolute inset-0"
-                      stream={client.stream}
-                      name={client.name}
-                      avatar={client.avatar ?? undefined}
-                      isPlaceholderStream={
-                        client.streamState === "placeholder"
-                      }
-                      muted={true}
-                    >
-                      <RemoteToolbar
-                        class={cn(
-                          "absolute top-1 flex gap-1",
-                          "left-1/2 -translate-x-1/2",
-                        )}
-                        client={client}
-                      />
-                    </VideoDisplay>
-                  </GridItemContent>
-                </SavedGridItem>
-              );
-            }}
-          </For>
-        </GridStack>
-      </div>
-    </>
-  );
-}
-
-const RemoteToolbar = (props: {
-  client?: ClientInfo;
-  class?: string;
-}) => {
-  const { videoRef, audioTracks } = useVideoDisplay();
-
-  const [muted, setMuted] = createSignal(false);
-
-  const {
-    isInPip,
-    isThisElementInPip,
-    isSupported: isPipSupported,
-    requestPictureInPicture,
-    exitPictureInPicture,
-  } = createPictureInPicture(videoRef);
-
-  onMount(() => {
-    setMuted(audioTracks().some((track) => !track.enabled));
-    createEffect(() => {
-      audioTracks().forEach((track) => {
-        track.enabled = !muted();
-      });
-    });
-  });
-
-  const {
-    isSupported: isFullscreenSupported,
-    isFullscreen,
-    requestFullscreen,
-    exitFullscreen,
-    isThisElementFullscreen,
-  } = createFullscreen(videoRef);
-
-  return (
-    <div
-      class={cn(
-        "flex gap-1 rounded-full bg-black/50",
-        props.class,
-      )}
-    >
-      <Show when={audioTracks().length > 0}>
-        <FlexButton
-          size="sm"
-          variant={muted() ? "default" : "secondary"}
-          onClick={() => setMuted(!muted())}
-          icon={
-            <Dynamic
-              component={
-                muted() ? IconVolumeOff : IconVolumeUp
-              }
-              class="size-4"
-            />
-          }
-        >
-          {muted()
-            ? t("common.action.unmute")
-            : t("common.action.mute")}
-        </FlexButton>
-      </Show>
-      <Show when={videoRef()}>
-        {(ref) => (
-          <>
-            <Show when={isFullscreenSupported()}>
-              <FlexButton
-                icon={<IconFullscreen class="size-4" />}
-                onClick={() => {
-                  if (isThisElementFullscreen()) {
-                    exitFullscreen();
-                  } else {
-                    requestFullscreen();
-                  }
-                }}
-                variant={
-                  isThisElementFullscreen()
-                    ? "default"
-                    : "secondary"
-                }
-              >
-                {isThisElementFullscreen()
-                  ? t("common.action.exit_fullscreen")
-                  : isFullscreen()
-                    ? t("common.action.switch_fullscreen")
-                    : t("common.action.fullscreen")}
-              </FlexButton>
-            </Show>
-            <Show when={isPipSupported()}>
-              <FlexButton
-                icon={
-                  <Dynamic
-                    component={
-                      isInPip() ? IconPipExit : IconPip
-                    }
-                    class="size-4"
-                  />
-                }
-                onClick={() => {
-                  if (isThisElementInPip()) {
-                    exitPictureInPicture();
-                  } else {
-                    requestPictureInPicture();
-                  }
-                }}
-                variant={
-                  isThisElementInPip()
-                    ? "default"
-                    : "secondary"
-                }
-              >
-                {isThisElementInPip()
-                  ? t(
-                      "common.action.exit_picture_in_picture",
-                    )
-                  : isInPip()
-                    ? t(
-                        "common.action.switch_picture_in_picture",
-                      )
-                    : t("common.action.picture_in_picture")}
-              </FlexButton>
-            </Show>
-          </>
-        )}
-      </Show>
-    </div>
-  );
-};
-
-const LocalToolbar = (props: {
-  client?: ClientInfo;
-  class?: string;
-}) => {
-  const {
-    localStream,
-    replaceLocalStream,
-    clearLocalStream,
-  } = useAppState();
-
-  const closeStream = () => {
-    clearLocalStream();
+  const participantSource = (id: string) =>
+    sources().find((source) => source.participantId === id);
+  const participantPinned = (id: string) =>
+    sources().some(
+      (source) =>
+        source.participantId === id &&
+        source.id === pinnedId(),
+    );
+  const pinParticipant = (id: string) => {
+    const source = participantSource(id);
+    if (source)
+      transitionLayout(() =>
+        setPinnedId(
+          participantPinned(id) ? null : source.id,
+        ),
+      );
+  };
+  const openTab = (value: PanelTab) => {
+    setTab(value);
+    setPanelOpen(true);
   };
 
-  const { open: openMediaSelection } =
-    createMediaSelectionDialog();
-
-  const { open: openApplyConstraintsDialog } =
-    createApplyConstraintsDialog();
-
-  const tracks = createMediaTracks(
-    () => localStream() ?? null,
-  );
-
-  const audioTracks = createMemo(() =>
-    tracks().filter((track) => track.kind === "audio"),
-  );
-
-  const videoTrack = createMemo(() =>
-    tracks().find((track) => track.kind === "video"),
-  );
-
-  const microphoneAudioTrack = createMemo(() => {
-    return (
-      audioTracks().find((track) => {
-        return track.contentHint === "speech";
-      }) ?? null
-    );
-  });
-
-  const speakerAudioTrack = createMemo(() => {
-    return (
-      audioTracks().find((track) => {
-        return track.contentHint === "music";
-      }) ?? null
-    );
-  });
-
-  const [microphoneMuted, setMicrophoneMuted] =
-    createSignal();
-  createEffect(() => {
-    const track = microphoneAudioTrack();
-    if (!track) return;
-
-    if (microphoneMuted() === undefined) {
-      setMicrophoneMuted(!track.enabled);
-    } else {
-      track.enabled = !microphoneMuted();
-    }
-  });
-
-  const [speakerMuted, setSpeakerMuted] = createSignal();
-  createEffect(() => {
-    const track = speakerAudioTrack();
-    if (!track) return;
-
-    if (speakerMuted() === undefined) {
-      setSpeakerMuted(!track.enabled);
-    } else {
-      track.enabled = !speakerMuted();
-    }
-  });
-
-  const [videoMuted, setVideoMuted] = createSignal();
-  createEffect(() => {
-    const track = videoTrack();
-    if (track) {
-      if (videoMuted() === undefined) {
-        setVideoMuted(!track.enabled);
-      } else {
-        track.enabled = !videoMuted();
-      }
-    }
-  });
-
   return (
-    <div
-      class={cn(
-        "flex gap-1 rounded-full bg-black/50",
-        props.class,
-      )}
+    <main
+      ref={page}
+      class="meeting"
+      classList={{
+        "is-controls-collapsed": controlsCollapsed(),
+      }}
+      data-testid="meeting-page"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") closePanel();
+      }}
     >
-      <FlexButton
-        size="sm"
-        onClick={async () => {
-          const { result } = await openMediaSelection();
-          if (result) {
-            replaceLocalStream(result);
-          }
-        }}
-        icon={<IconScreenShare class="size-4" />}
-        variant={localStream() ? "secondary" : "default"}
+      <header
+        class="meeting-header"
+        classList={{ "is-sharing": media.sharing() }}
       >
-        {localStream()
-          ? t("common.action.change")
-          : t("common.action.select")}
-      </FlexButton>
-      <Show when={speakerAudioTrack()}>
-        <FlexButton
-          size="sm"
-          variant={speakerMuted() ? "default" : "secondary"}
-          onClick={() => {
-            setSpeakerMuted(!speakerMuted());
-          }}
-          icon={
-            <Dynamic
-              component={
-                speakerMuted()
-                  ? IconVolumeOff
-                  : IconVolumeUp
-              }
-              class="size-4"
-            />
+        <button
+          type="button"
+          class="meeting-heading text-left"
+          aria-label={t("room_dialog.open")}
+          onClick={() =>
+            void openRoomInfo(
+              state.activeRoomConversationId(),
+            )
           }
         >
-          {speakerMuted()
-            ? t("common.action.unmute")
-            : t("common.action.mute")}
-        </FlexButton>
-      </Show>
-      <Show when={microphoneAudioTrack()}>
-        <FlexButton
-          size="sm"
-          variant={
-            microphoneMuted() ? "default" : "secondary"
-          }
-          onClick={() => {
-            setMicrophoneMuted(!microphoneMuted());
-          }}
-          icon={
-            <Dynamic
-              component={
-                microphoneMuted() ? IconMicOff : IconMic
-              }
-              class="size-4"
+          <h1>
+            {appState.roomStatus.roomId ??
+              t("meeting.title")}
+          </h1>
+          <span>
+            <Circle
+              classList={{
+                "is-connected": Boolean(
+                  appState.roomStatus.roomId,
+                ),
+              }}
             />
-          }
-        >
-          {microphoneMuted()
-            ? t("common.action.unmute")
-            : t("common.action.mute")}
-        </FlexButton>
-      </Show>
-      <Show when={videoTrack()}>
-        <FlexButton
-          size="sm"
-          onClick={() => setVideoMuted(!videoMuted())}
-          variant={videoMuted() ? "default" : "secondary"}
-          icon={
-            <Dynamic
-              component={
-                videoMuted()
-                  ? IconVideoCamOff
-                  : IconVideoCam
+            {appState.roomStatus.roomId
+              ? t("meeting.in_room")
+              : t("meeting.preview")}
+          </span>
+        </button>
+        <div class="meeting-header-actions">
+          <Show when={media.sharing()}>
+            <MeetingSharingStatus
+              name={appState.profile.name}
+              avatar={appState.profile.avatar ?? undefined}
+              count={
+                sources().filter(
+                  (source) =>
+                    source.local &&
+                    source.kind === "screen",
+                ).length
               }
-              class="size-4"
+              onStop={() => void media.toggleSharing()}
+              audioAvailable={media.sharingAudioAvailable()}
+              audioOn={media.sharingAudioOn()}
+              onAudioChange={media.setSharingAudioEnabled}
             />
-          }
-        >
-          {videoMuted()
-            ? t("common.action.continue")
-            : t("common.action.pause")}
-        </FlexButton>
-      </Show>
-      <Show when={audioTracks().length > 0 || videoTrack()}>
-        <FlexButton
-          size="sm"
-          onClick={() => {
-            const stream = localStream();
-            if (stream) {
-              openApplyConstraintsDialog(stream);
+          </Show>
+          <Show when={devices.access.needsPermission()}>
+            <button
+              type="button"
+              class="meeting-icon-button meeting-permission-button"
+              aria-label={t("meeting.get_permission")}
+              title={t("meeting.get_permission")}
+              onClick={() =>
+                void openRoomInfo(
+                  state.activeRoomConversationId(),
+                  "devices",
+                )
+              }
+            >
+              <ShieldAlert />
+              <span>{t("meeting.get_permission")}</span>
+            </button>
+          </Show>
+          <button
+            type="button"
+            class="meeting-icon-button meeting-member-count"
+            onClick={() => openTab("members")}
+            aria-label={t("meeting.members")}
+            title={t("meeting.members")}
+          >
+            <Users />
+            <span>{clients().length + 1}</span>
+          </button>
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-expanded={rightOpen()}
+            aria-controls="meeting-side-panel"
+            aria-label={
+              rightOpen()
+                ? t("meeting.hide_panel")
+                : t("meeting.show_panel")
             }
-          }}
-          variant="secondary"
-          icon={<IconSettings class="size-4" />}
-        >
-          {t("common.action.settings")}
-        </FlexButton>
-      </Show>
-      <Show when={localStream()}>
-        <FlexButton
-          size="sm"
-          onClick={() => closeStream()}
-          variant="destructive"
-          icon={<IconStopScreenShare class="size-4" />}
-        >
-          {t("common.action.close")}
-        </FlexButton>
-      </Show>
-    </div>
+            title={
+              rightOpen()
+                ? t("meeting.hide_panel")
+                : t("meeting.show_panel")
+            }
+            onClick={() => setPanelOpen(!rightOpen())}
+          >
+            <PanelRightOpen />
+          </button>
+        </div>
+      </header>
+      <div class="meeting-workspace">
+        <Show when={rightOpen()}>
+          <button
+            type="button"
+            class="meeting-panel-backdrop"
+            onClick={closePanel}
+            aria-label={t("meeting.close_panels")}
+          />
+        </Show>
+        <div class="meeting-canvas">
+          <AnimatePresence when={!meeting.pip.active()}>
+            <Motion.div
+              class="meeting-canvas-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.22,
+                ease: "easeOut",
+              }}
+            >
+              <MeetingStage
+                ref={(value) => {
+                  stage = value;
+                }}
+                transitionLayout={transitionLayout}
+                sources={sources()}
+                pinnedId={pinnedId()}
+                railCollapsed={railCollapsed()}
+                onRailCollapsedChange={setRailCollapsed}
+                toolbarFollowsRail={toolbarFollowsRail()}
+                onPin={togglePin}
+                onStop={media.stopVideoTrack}
+              >
+                <Show when={!appState.roomStatus.roomId}>
+                  <div class="meeting-notice">
+                    <span>{t("meeting.preview_hint")}</span>
+                    <A href="/">{t("meeting.join_room")}</A>
+                  </div>
+                </Show>
+              </MeetingStage>
+            </Motion.div>
+          </AnimatePresence>
+          <AnimatePresence when={meeting.pip.active()}>
+            <Motion.div
+              class="meeting-canvas-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.22,
+                ease: "easeOut",
+              }}
+            >
+              <Motion.div
+                class="meeting-canvas-placeholder"
+                layout
+                layoutId="meeting-pip-placeholder"
+              >
+                <MeetingPipPlaceholder
+                  onReturn={
+                    meeting.controls.returnToMeeting
+                  }
+                />
+              </Motion.div>
+            </Motion.div>
+          </AnimatePresence>
+        </div>
+        <AnimatePresence when={rightOpen()}>
+          <Motion.div
+            class="meeting-panel-slot"
+            classList={{ "is-closing": !rightOpen() }}
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 16 }}
+            transition={{
+              duration: 0.28,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
+            <Tabs
+              as="aside"
+              id="meeting-side-panel"
+              class="meeting-side-panel"
+              data-motion-layout-height="meeting-side-panel"
+              aria-label={t("meeting.side_panel")}
+              value={tab()}
+              onChange={(value) =>
+                setTab(value as PanelTab)
+              }
+            >
+              <div class="meeting-panel-header">
+                <TabsList
+                  class="meeting-tabs"
+                  aria-label={t("meeting.side_panel")}
+                >
+                  <For each={tabs}>
+                    {(value) => (
+                      <TabsTrigger
+                        value={value}
+                        id={`meeting-tab-${value}`}
+                        aria-label={t(`meeting.${value}`)}
+                        title={t(`meeting.${value}`)}
+                      >
+                        <Show
+                          when={value === "conversations"}
+                        >
+                          <List />
+                        </Show>
+                        <Show when={value === "chat"}>
+                          <MessageSquare />
+                        </Show>
+                        <Show when={value === "members"}>
+                          <Users />
+                        </Show>
+                        <Show when={value === "info"}>
+                          <Info />
+                        </Show>
+                        <span>{t(`meeting.${value}`)}</span>
+                      </TabsTrigger>
+                    )}
+                  </For>
+                  <TabsIndicator
+                    class="meeting-tabs-indicator data-[resizing=true]:transition-none
+                      motion-reduce:transition-none"
+                  />
+                </TabsList>
+                <button
+                  type="button"
+                  class="meeting-icon-button"
+                  aria-label={t("meeting.hide_panel")}
+                  onClick={closePanel}
+                >
+                  <X />
+                </button>
+              </div>
+              <TabsContent
+                value="conversations"
+                class="meeting-panel-content"
+                id="meeting-panel-conversations"
+              >
+                <ConversationSidebar
+                  selectedId={activeConversationId()}
+                  onSelect={selectConversation}
+                />
+              </TabsContent>
+              <TabsContent
+                value="chat"
+                class="meeting-panel-content"
+                id="meeting-panel-chat"
+              >
+                <Show
+                  when={activeConversationId()}
+                  fallback={
+                    <div class="meeting-empty">
+                      <MessageSquare />
+                      <p>
+                        {t("meeting.select_conversation")}
+                      </p>
+                    </div>
+                  }
+                >
+                  {(id) => (
+                    <ConversationView
+                      conversationId={id()}
+                      embedded
+                    />
+                  )}
+                </Show>
+              </TabsContent>
+              <TabsContent
+                value="members"
+                class="meeting-panel-content"
+                id="meeting-panel-members"
+              >
+                <div class="meeting-members">
+                  <p class="meeting-panel-caption">
+                    {t("meeting.members_hint")}
+                  </p>
+                  <div class="meeting-member">
+                    <ClientAvatar
+                      name={appState.profile.name}
+                      avatar={
+                        appState.profile.avatar ?? undefined
+                      }
+                    />
+                    <div>
+                      <strong>
+                        {appState.profile.name}
+                      </strong>
+                      <span>{t("meeting.you")}</span>
+                    </div>
+                  </div>
+                  <For each={clients()}>
+                    {(client) => (
+                      <div class="meeting-member">
+                        <ClientAvatar
+                          name={client.name}
+                          avatar={
+                            client.avatar ?? undefined
+                          }
+                        />
+                        <div>
+                          <strong>{client.name}</strong>
+                          <span>
+                            {t(
+                              `meeting.status_${client.onlineStatus}`,
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          class="meeting-icon-button"
+                          onClick={() =>
+                            pinParticipant(client.clientId)
+                          }
+                          aria-pressed={participantPinned(
+                            client.clientId,
+                          )}
+                          aria-label={
+                            participantPinned(
+                              client.clientId,
+                            )
+                              ? t("meeting.unpin")
+                              : t("meeting.pin")
+                          }
+                          title={
+                            participantPinned(
+                              client.clientId,
+                            )
+                              ? t("meeting.unpin")
+                              : t("meeting.pin")
+                          }
+                        >
+                          <Pin />
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </TabsContent>
+              <TabsContent
+                value="info"
+                class="meeting-panel-content"
+                id="meeting-panel-info"
+              >
+                <div class="meeting-info">
+                  <h2>{t("meeting.room_info")}</h2>
+                  <button
+                    type="button"
+                    class="meeting-room-chat"
+                    onClick={() =>
+                      void openRoomInfo(
+                        state.activeRoomConversationId(),
+                      )
+                    }
+                  >
+                    <Info />
+                    {t("room_dialog.open")}
+                  </button>
+                  <dl>
+                    <dt>{t("meeting.room_name")}</dt>
+                    <dd>
+                      {appState.roomStatus.roomId ??
+                        t("meeting.not_joined")}
+                    </dd>
+                    <dt>{t("meeting.message_history")}</dt>
+                    <dd>{t("meeting.local_history")}</dd>
+                  </dl>
+                  <p>{t("meeting.history_hint")}</p>
+                  <p>{t("meeting.leave_hint")}</p>
+                  <Show
+                    when={state.activeRoomConversationId()}
+                  >
+                    {(id) => (
+                      <button
+                        type="button"
+                        class="meeting-room-chat"
+                        onClick={() =>
+                          selectConversation(id())
+                        }
+                      >
+                        <MessageSquare />
+                        {t("meeting.open_room_chat")}
+                      </button>
+                    )}
+                  </Show>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </Motion.div>
+        </AnimatePresence>
+      </div>
+      <MeetingControls
+        collapsed={controlsCollapsed()}
+        pip={meeting.controls}
+        media={media}
+        devices={devices}
+        playingAudio={audio.playState()}
+        hasAudio={audio.hasAudio()}
+        onToggleAudio={() =>
+          audio.setPlay(!audio.playState())
+        }
+        spotlight={Boolean(pinnedId())}
+        onToggleLayout={() =>
+          transitionLayout(() =>
+            setPinnedId((current) =>
+              current
+                ? null
+                : (sources().find(
+                    (source) => source.kind === "screen",
+                  )?.id ??
+                  sources().find((source) => !source.local)
+                    ?.id ??
+                  sources()[0]?.id ??
+                  null),
+            ),
+          )
+        }
+        joined={Boolean(appState.roomStatus.roomId)}
+        onLeave={meeting.leave}
+      />
+    </main>
   );
-};
+}

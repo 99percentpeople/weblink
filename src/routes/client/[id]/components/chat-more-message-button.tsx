@@ -1,36 +1,38 @@
 import { IconArrowUpward } from "@/components/icons";
-import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { onMount, Show } from "solid-js";
+import { t } from "@/i18n";
+import { createEffect, onCleanup } from "solid-js";
 
-import { onCleanup } from "solid-js";
-
-export type ChatMoreMessageButtonProps = {
+export interface ChatMoreMessageButtonProps {
+  viewport: HTMLElement | undefined;
+  enabled: boolean;
   onIntersect: () => void;
-};
+}
 
 export const ChatMoreMessageButton = (
   props: ChatMoreMessageButtonProps,
 ) => {
-  let ref: HTMLButtonElement | undefined;
-  let enabled = false;
-  onMount(() => {
-    setTimeout(() => {
-      enabled = true;
-    }, 500);
-    if (!ref) return;
+  let ref!: HTMLButtonElement;
+  createEffect(() => {
+    const viewport = props.viewport;
+    const enabled = props.enabled;
+    const onIntersect = props.onIntersect;
+    if (!enabled || !viewport) return;
+    let active = true;
     const observer = new IntersectionObserver(
-      () => {
-        if (enabled) {
-          props.onIntersect();
+      (entries) => {
+        if (
+          active &&
+          entries.some((entry) => entry.isIntersecting)
+        ) {
+          onIntersect();
         }
       },
-      {
-        threshold: 0,
-      },
+      { root: viewport, threshold: 0 },
     );
     observer.observe(ref);
     onCleanup(() => {
+      active = false;
       observer.disconnect();
     });
   });
@@ -38,11 +40,13 @@ export const ChatMoreMessageButton = (
   return (
     <Button
       ref={ref}
+      onClick={() => props.onIntersect()}
       variant="ghost"
       size="icon"
+      aria-label={t("common.show_more")}
       class="rounded-full"
     >
-      <Spinner />
+      <IconArrowUpward />
     </Button>
   );
 };

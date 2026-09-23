@@ -103,6 +103,7 @@ describe("PeerSession stream management", () => {
     let removeTrackListener:
       | ((event: { track: MediaStreamTrack }) => void)
       | undefined;
+    let tracks = [track];
     const stream = {
       id: "media-3",
       addEventListener: (
@@ -119,13 +120,14 @@ describe("PeerSession stream management", () => {
             }) => void;
         }
       },
-      getTracks: () => [track],
+      getTracks: () => tracks,
     } as unknown as MediaStream;
 
     (session as any).peerConnection = pc;
     (session as any).renegotiate = vi.fn();
 
     session.setStream(stream);
+    tracks = [];
     removeTrackListener?.({ track });
 
     expect(addTrack).toHaveBeenCalledWith(track, stream);

@@ -1,8 +1,4 @@
-import {
-  IconVideoCamOff,
-  IconVolumeUpFilled,
-  IconSync,
-} from "@/components/icons";
+import { IconVolumeUpFilled } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libs/cn";
 import { createCheckVolume } from "@/libs/hooks/check-volume";
@@ -20,7 +16,7 @@ import {
 import { ClientAvatar } from "../../../components/common/client-avatar";
 import { createMediaTracks } from "@/libs/hooks/tracks";
 import { Spinner } from "../../../components/common/spinner";
-import { Button } from "@/components/ui/button";
+import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { getVisibleVideoDisplayTracks } from "./video-display-tracks";
 
@@ -122,60 +118,123 @@ export const VideoDisplay = (
   const [videoRef, setVideoRef] =
     createSignal<HTMLVideoElement | null>(null);
 
+  let playbackAttempt = 0;
+  let errorReported = false;
+  let disposed = false;
+  let errorToast: string | number | undefined;
+  const dismissError = () => {
+    if (errorToast !== undefined) toast.dismiss(errorToast);
+    errorToast = undefined;
+  };
+  const reportError = (
+    video: HTMLVideoElement,
+    track: MediaStreamTrack,
+  ) => {
+    if (
+      disposed ||
+      videoRef() !== video ||
+      videoTrack() !== track
+    )
+      return;
+    setIsLoaded(true);
+    setLoadingState("error");
+    if (errorReported) return;
+    errorReported = true;
+    errorToast = toast.error(
+      `${props.name}: ${t("video.loading_state.error")}`,
+      {
+        id: `video-playback-${track.id}`,
+        action: {
+          label: t("video.loading_state.retry"),
+          onClick: () => {
+            if (
+              disposed ||
+              videoRef() !== video ||
+              videoTrack() !== track
+            )
+              return;
+            retryLoadVideo();
+          },
+        },
+      },
+    );
+  };
+  const play = (
+    video: HTMLVideoElement,
+    track: MediaStreamTrack,
+  ) => {
+    const attempt = ++playbackAttempt;
+    void video.play().catch((error: unknown) => {
+      if (attempt !== playbackAttempt) return;
+      // Source changes and explicit retries abort earlier play requests.
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      )
+        return;
+      reportError(video, track);
+    });
+  };
+
   createEffect(() => {
     const video = videoRef();
     const currentStream = videoStream();
     const track = videoTrack();
+    errorReported = false;
+    dismissError();
+    setIsLoaded(false);
+    setLoadingState("initial");
     if (!video) return;
 
     video.srcObject = currentStream;
     if (!currentStream || !track) return;
 
     const controller = new AbortController();
-    onCleanup(() => controller.abort());
-
-    const play = () => {
-      void video.play().catch((error) => {
-        if (
-          error instanceof DOMException &&
-          error.name === "NotAllowedError"
-        ) {
-          return;
-        }
-        console.warn("Video playback failed:", error);
-      });
-    };
-
-    track.addEventListener("unmute", play, {
-      once: true,
-      signal: controller.signal,
+    onCleanup(() => {
+      controller.abort();
+      ++playbackAttempt;
+      // Presentation borrows the track: release the media element's decoder,
+      // while capture and RTC retain ownership of the live source.
+      video.pause();
+      video.srcObject = null;
     });
-    play();
+    track.addEventListener(
+      "unmute",
+      () => play(video, track),
+      {
+        once: true,
+        signal: controller.signal,
+      },
+    );
+    play(video, track);
   });
 
   createEffect(() => {
-    if (!videoStream()) {
-      setVideoRef(null);
-    }
+    if (!videoStream()) setVideoRef(null);
   });
 
-  // 重试加载视频
   const retryLoadVideo = () => {
+    const video = videoRef();
+    const currentStream = videoStream();
+    const track = videoTrack();
+    if (disposed || !video || !currentStream || !track)
+      return;
+    errorReported = false;
+    dismissError();
     setLoadingState("initial");
     setIsLoaded(false);
-
-    // 重新设置视频源
-    const video = videoRef();
-    if (video) {
-      const currentStream = videoStream();
-      video.srcObject = null;
-      setTimeout(() => {
-        if (video && currentStream) {
-          video.srcObject = currentStream;
-        }
-      }, 100);
-    }
+    video.srcObject = null;
+    video.srcObject = currentStream;
+    // Run directly in the toast action's user gesture so autoplay denial can
+    // also recover without changing or reacquiring the published track.
+    play(video, track);
   };
+
+  onCleanup(() => {
+    disposed = true;
+    ++playbackAttempt;
+    dismissError();
+  });
 
   return (
     <VideoContext.Provider
@@ -187,9 +246,12 @@ export const VideoDisplay = (
         <Show
           when={props.stream}
           fallback={
-            <IconVideoCamOff
-              class="text-muted-foreground/10 absolute top-1/2 left-1/2 size-1/2
-                -translate-x-1/2 -translate-y-1/2"
+            <ClientAvatar
+              data-motion-layout-size="avatar"
+              class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
+                -translate-x-1/2 -translate-y-1/2 text-2xl"
+              avatar={props.avatar}
+              name={props.name}
             />
           }
         >
@@ -197,14 +259,16 @@ export const VideoDisplay = (
             when={videoStream()}
             fallback={
               <ClientAvatar
-                class="absolute top-1/2 left-1/2 size-14 -translate-x-1/2
-                  -translate-y-1/2"
+                data-motion-layout-size="avatar"
+                class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
+                  -translate-x-1/2 -translate-y-1/2 text-2xl"
                 avatar={props.avatar}
                 name={props.name}
               />
             }
           >
             <video
+              playsinline
               autoplay
               muted={props.muted}
               class="pointer-events-none absolute inset-0 size-full bg-black
@@ -218,6 +282,9 @@ export const VideoDisplay = (
                 setLoadingState("canplay");
               }}
               onPlaying={() => {
+                errorReported = false;
+                dismissError();
+                setIsLoaded(true);
                 setLoadingState("playing");
               }}
               onWaiting={() => {
@@ -243,25 +310,22 @@ export const VideoDisplay = (
                 // 视频下载中断
                 console.log("Video download aborted");
               }}
-              onError={(e) => {
-                setIsLoaded(true);
-                setLoadingState("error");
-                console.error("Video error:", e);
+              onError={(event) => {
+                const track = videoTrack();
+                if (track)
+                  reportError(event.currentTarget, track);
               }}
             />
             <Show
               when={
                 !isLoaded() ||
                 loadingState() === "waiting" ||
-                loadingState() === "stalled" ||
-                loadingState() === "error"
+                loadingState() === "stalled"
               }
             >
               <div class="absolute inset-0 flex items-center justify-center">
                 <div class="flex flex-col items-center gap-2">
-                  <Show when={loadingState() !== "error"}>
-                    <Spinner />
-                  </Show>
+                  <Spinner />
                   <div class="rounded bg-black/50 px-2 py-1 text-xs text-white/80">
                     {loadingState() === "initial" &&
                       t("video.loading_state.initial")}
@@ -271,34 +335,26 @@ export const VideoDisplay = (
                       t("video.loading_state.waiting")}
                     {loadingState() === "stalled" &&
                       t("video.loading_state.stalled")}
-                    {loadingState() === "error" &&
-                      t("video.loading_state.error")}
                   </div>
-                  <Show when={loadingState() === "error"}>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      class="mt-2 bg-black/50 text-white"
-                      onClick={retryLoadVideo}
-                    >
-                      <IconSync class="mr-1 size-4" />
-                      {t("video.loading_state.retry")}
-                    </Button>
-                  </Show>
                 </div>
               </div>
             </Show>
           </Show>
         </Show>
-        <div class="absolute top-1 left-1 flex gap-1">
+        <div
+          data-motion-layout-overlay="name"
+          class="absolute top-1 right-1 left-1 flex gap-1"
+        >
           <Badge
             variant="secondary"
-            class="gap-1 bg-black/50 text-xs text-white hover:bg-black/80"
+            title={props.name}
+            class="max-w-full min-w-0 gap-1 bg-black/50 text-xs text-white
+              hover:bg-black/80"
           >
-            {props.name}
+            <span class="truncate">{props.name}</span>
             <IconVolumeUpFilled
               class={cn(
-                "size-4",
+                "size-4 shrink-0",
                 anySpeaking() ? "block" : "hidden",
               )}
             />

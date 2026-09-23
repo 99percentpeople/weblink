@@ -1,36 +1,27 @@
 import {
-  For,
   createMemo,
   createEffect,
   Show,
   createSignal,
-  ComponentProps,
   onCleanup,
 } from "solid-js";
 import {
   RouteSectionProps,
   useCurrentMatches,
   useNavigate,
+  useLocation,
 } from "@solidjs/router";
 import {
   Resizable,
   ResizableHandle,
   ResizablePanel,
 } from "@/components/ui/resizable";
-import type { ClientID } from "@/libs/domain/ids";
-import type { ClientInfo } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { makePersisted } from "@solid-primitives/storage";
-import { IconPerson } from "@/components/icons";
-import { t } from "@/i18n";
 import { cn } from "@/libs/cn";
-import { UserItem } from "./components/client-list-item";
 import { appState } from "@/libs/state/app-state";
-
-export interface UserItemProps extends ComponentProps<"li"> {
-  client: ClientInfo;
-  collapsed: boolean;
-}
+import { ConversationSidebar } from "@/components/conversations/conversation-sidebar";
+import { directConversationId } from "@/libs/domain/conversation";
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 const MIN_SIDEBAR_WIDTH = 220;
@@ -248,80 +239,39 @@ const ClientList = (props: {
   expand: () => void;
   path: string;
 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   createEffect(() => {
-    if (props.collapsed && props.path === "/") {
+    if (props.collapsed && props.path === "/")
       props.expand();
-    }
   });
-  const getLastMessage = (clientId: ClientID) =>
-    appState.message.messages.findLast(
-      (message) =>
-        message.client === clientId ||
-        message.target === clientId,
+  const selectedId = createMemo(() => {
+    const path = location.pathname;
+    const conversation = path.match(
+      /^\/conversation\/([^/]+)/,
     );
-
-  const clntWithLastMsg = createMemo(() => {
-    return appState.message.clients
-      .map((client) => {
-        return {
-          client,
-          message: getLastMessage(client.clientId),
-          clientInfo: appState.session.clientViewData[
-            client.clientId
-          ] as ClientInfo | undefined,
-        };
-      })
-      .slice()
-      .sort((c1, c2) => {
-        const c1Online =
-          c1.clientInfo?.onlineStatus === "online";
-        const c2Online =
-          c2.clientInfo?.onlineStatus === "online";
-        if (c1Online && !c2Online) return -1;
-        if (!c1Online && c2Online) return 1;
-
-        return (
-          (c2.message?.createdAt ?? 0) -
-          (c1.message?.createdAt ?? 0)
+    const client = path.match(/^\/client\/([^/]+)/);
+    try {
+      if (conversation)
+        return decodeURIComponent(conversation[1]);
+      if (client)
+        return directConversationId(
+          appState.profile.clientId,
+          decodeURIComponent(client[1]),
         );
-      });
+    } catch {
+      /* A malformed URL has no selected conversation. */
+    }
+    return undefined;
   });
   return (
-    <div
-      class="top-0 h-full w-full overflow-x-hidden md:sticky
-        md:max-h-[100vh] md:overflow-y-auto"
-    >
-      <ul
-        class={cn(
-          "flex h-full w-full flex-col [&>li]:py-1",
-          props.collapsed ? "" : "divide-muted divide-y",
-        )}
-      >
-        <For
-          each={clntWithLastMsg()}
-          fallback={
-            <div class="relative h-full w-full overflow-hidden">
-              <div
-                class="absolute top-1/2 left-1/2 flex w-1/2 -translate-x-1/2
-                  -translate-y-1/2 flex-col items-center"
-              >
-                <IconPerson class="text-muted/10" />
-                <p class="text-muted-foreground text-xs md:hidden">
-                  {t("client.index.mobile_tip")}
-                </p>
-              </div>
-            </div>
-          }
-        >
-          {({ client, message }) => (
-            <UserItem
-              message={message}
-              client={client}
-              collapsed={props.collapsed}
-            />
-          )}
-        </For>
-      </ul>
-    </div>
+    <ConversationSidebar
+      collapsed={props.collapsed}
+      onExpand={props.expand}
+      selectedId={selectedId()}
+      onSelect={(id) =>
+        navigate(`/conversation/${encodeURIComponent(id)}`)
+      }
+    />
   );
 };

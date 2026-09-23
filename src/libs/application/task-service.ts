@@ -13,6 +13,8 @@ import {
   findMessageTransfer,
   type FileTransferStates,
 } from "./transfer/file-transfer-state";
+import { TransferMode } from "@/libs/domain/transfer/file-transferer";
+import type { RoomFileTransferState } from "../domain/message";
 import type { SpeedTestState } from "./speed-test-service";
 
 export type TaskStatus =
@@ -36,6 +38,7 @@ export interface FileTask extends TaskBase {
   message: FileTransferMessage;
   fileName: string;
   canPause: boolean;
+  canResume?: boolean;
   bytes: number;
   total: number;
   error?: string;
@@ -89,34 +92,51 @@ export function fileTasks(
     );
   const caches = sources.caches();
   const transfers = sources.transfers();
-  return messages.map((message) => {
-    const outgoing = message.client === self;
-    const cache = caches[message.fid!];
-    const live = !!findMessageTransfer(transfers, message);
+  const task = (
+    message: FileTransferMessage,
+    peerId: string,
+    outgoing: boolean,
+    state: RoomFileTransferState,
+    live: boolean,
+    id = `file:${message.id}`,
+  ): FileTask => {
+    const candidate = caches[message.fid!];
+    const cache =
+      !message.room ||
+      (candidate?.roomAttachment &&
+        candidate.roomOfferId === message.id &&
+        candidate.from === message.client &&
+        candidate.fileName === message.fileName &&
+        candidate.fileSize === message.fileSize &&
+        candidate.chunkSize === message.chunkSize &&
+        candidate.lastModified === message.lastModified &&
+        (candidate.mimetype ?? "") ===
+          (message.mimeType ?? ""))
+        ? candidate
+        : undefined;
     let status: TaskStatus;
     if (!outgoing && cache?.isMerging)
       status = "finalizing";
     else if (
-      message.transferStatus === "complete" ||
+      state.status === "complete" ||
       (!outgoing && cache?.isComplete)
     )
       status = "completed";
     else if (live)
-      status = message.progress ? "running" : "waiting";
+      status = state.progress ? "running" : "waiting";
     else if (
-      message.transferStatus === "error" ||
-      message.status === "error"
+      state.status === "error" ||
+      (!message.room && message.status === "error")
     )
       status = "failed";
-    else if (message.status === "sending")
+    else if (!message.room && message.status === "sending")
       status = "waiting";
     else status = "paused";
-
     const total = Math.max(0, message.fileSize);
     return {
-      id: `file:${message.id}`,
+      id,
       kind: outgoing ? "file-send" : "file-receive",
-      peerId: outgoing ? message.target : message.client,
+      peerId,
       createdAt: message.createdAt,
       status,
       message,
@@ -129,17 +149,65 @@ export function fileTasks(
         live &&
         status !== "finalizing" &&
         status !== "completed",
+      // Group uploads resume only when that recipient asks for its missing chunks.
+      canResume: !message.room || !outgoing,
       total,
       bytes:
         status === "completed"
           ? total
           : Math.min(
               total,
-              Math.max(0, message.progress?.received ?? 0),
+              Math.max(0, state.progress?.received ?? 0),
             ),
-      error:
-        status === "failed" ? message.error : undefined,
+      error: status === "failed" ? state.error : undefined,
     };
+  };
+  return messages.flatMap((message): FileTask[] => {
+    const outgoing = message.client === self;
+    if (message.room && outgoing) {
+      const runs = Object.values(transfers).filter(
+        (entry) =>
+          entry?.messageId === message.id &&
+          entry.fileId === message.fid &&
+          entry.session.clientId === message.client &&
+          entry.transferer.mode === TransferMode.Send,
+      );
+      const peers = new Set([
+        ...Object.keys(message.roomTransfers ?? {}),
+        ...runs.flatMap((entry) =>
+          entry ? [entry.session.targetClientId] : [],
+        ),
+      ]);
+      return [...peers].map((peerId) =>
+        task(
+          message,
+          peerId,
+          true,
+          message.roomTransfers?.[peerId] ?? {},
+          runs.some(
+            (entry) =>
+              entry?.session.targetClientId === peerId,
+          ),
+          `file:${JSON.stringify([message.id, peerId])}`,
+        ),
+      );
+    }
+    const live = !!findMessageTransfer(transfers, message);
+    if (message.room && !message.transferStatus && !live)
+      return [];
+    return [
+      task(
+        message,
+        outgoing ? message.target : message.client,
+        outgoing,
+        {
+          status: message.transferStatus,
+          progress: message.progress,
+          error: message.error,
+        },
+        live,
+      ),
+    ];
   });
 }
 

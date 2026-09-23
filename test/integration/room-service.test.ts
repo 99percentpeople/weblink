@@ -94,6 +94,7 @@ function createHarness(
     setClient: vi.fn(),
   };
   const onLeaving = vi.fn();
+  const onMemberJoined = vi.fn();
   const room = new RoomService({
     sessions,
     rtc,
@@ -102,6 +103,7 @@ function createHarness(
     createClientService: createService,
     getLocalStream: () => null,
     onLeaving,
+    onMemberJoined,
   });
   rooms.push(room);
 
@@ -112,6 +114,7 @@ function createHarness(
     profiles,
     messages,
     onLeaving,
+    onMemberJoined,
   };
 }
 
@@ -132,6 +135,53 @@ beforeEach(() => {
 });
 
 describe("RoomService", () => {
+  it("records silent members against the joined room and ignores joins finishing after departure", async () => {
+    const service = createClientService();
+    const harness = createHarness(async () => service);
+    await harness.room.join();
+    const joined = vi.mocked(service.listenForJoin).mock
+      .calls[0][0];
+    const peer = {
+      clientId: "peer",
+      name: "Peer",
+      avatar: null,
+      createdAt: 2,
+    };
+    const session = {
+      setStream: vi.fn(),
+      listen: vi.fn(async () => {}),
+      close: vi.fn(),
+      polite: true,
+    } as unknown as PeerSession;
+    harness.sessions.addClient.mockResolvedValueOnce(
+      session,
+    );
+    // Editing the next room name does not change the scope of the active service.
+    setAppState("profile", "roomId", "room-b");
+    joined(peer);
+    await vi.waitFor(() =>
+      expect(harness.onMemberJoined).toHaveBeenCalledWith(
+        "room-a",
+        peer,
+      ),
+    );
+    expect(harness.messages.setClient).toHaveBeenCalledWith(
+      peer,
+    );
+
+    const pending = deferred<PeerSession>();
+    harness.sessions.addClient.mockReturnValueOnce(
+      pending.promise,
+    );
+    joined({ ...peer, clientId: "late" });
+    harness.room.leave();
+    pending.resolve(session);
+    await vi.waitFor(() =>
+      expect(session.close).toHaveBeenCalled(),
+    );
+    expect(harness.onMemberJoined).toHaveBeenCalledTimes(1);
+  });
+
   it("owns client service installation and room status", async () => {
     const clientService = createClientService();
     const harness = createHarness(

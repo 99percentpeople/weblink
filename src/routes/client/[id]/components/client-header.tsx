@@ -28,6 +28,7 @@ import type { Client } from "@/libs/domain/client";
 import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { getInitials } from "@/libs/utils/name";
+import { cn } from "@/libs/cn";
 
 const HeaderLink: Component<ComponentProps<typeof A>> = (
   props,
@@ -40,6 +41,8 @@ export const ClientHeader: Component<{
   client?: Client;
   info?: ClientInfo;
   view: "chat" | "sync";
+  class?: string;
+  embedded?: boolean;
 }> = (props) => {
   const { open: openClientInfoDialog } = clientInfoDialog();
   const client = () => props.client ?? props.info;
@@ -55,19 +58,24 @@ export const ClientHeader: Component<{
   return (
     <header
       data-slot="client-header"
-      class="border-border bg-background/80 sticky
-        top-[var(--mobile-header-height)] z-10 flex w-full shrink-0
-        items-center gap-2 border-b p-2 backdrop-blur md:top-0"
+      class={cn(
+        `border-border bg-background/80 sticky
+        top-(--mobile-header-height) z-10 flex w-full shrink-0
+        items-center gap-2 border-b p-2 backdrop-blur md:top-0`,
+        props.class,
+      )}
     >
-      <Button
-        as={A}
-        href="/"
-        size="icon"
-        variant="ghost"
-        aria-label={t("404.home")}
-      >
-        <IconChevronLeft class="size-8" />
-      </Button>
+      <Show when={!props.embedded}>
+        <Button
+          as={A}
+          href="/"
+          size="icon"
+          variant="ghost"
+          aria-label={t("404.home")}
+        >
+          <IconChevronLeft class="size-8" />
+        </Button>
+      </Show>
       <Avatar>
         <AvatarImage src={client()?.avatar ?? undefined} />
         <AvatarFallback seed={name()}>
@@ -83,23 +91,25 @@ export const ClientHeader: Component<{
         </div>
       </div>
       <div class="ml-auto flex shrink-0 items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger
-            as={HeaderLink}
-            href={destination()}
-            aria-label={destinationLabel()}
-          >
-            <Show
-              when={isChat()}
-              fallback={<IconChatBubble class="size-6" />}
+        <Show when={!props.embedded}>
+          <Tooltip>
+            <TooltipTrigger
+              as={HeaderLink}
+              href={destination()}
+              aria-label={destinationLabel()}
             >
-              <IconFolderMatch class="size-6" />
-            </Show>
-          </TooltipTrigger>
-          <TooltipContent>
-            {destinationLabel()}
-          </TooltipContent>
-        </Tooltip>
+              <Show
+                when={isChat()}
+                fallback={<IconChatBubble class="size-6" />}
+              >
+                <IconFolderMatch class="size-6" />
+              </Show>
+            </TooltipTrigger>
+            <TooltipContent>
+              {destinationLabel()}
+            </TooltipContent>
+          </Tooltip>
+        </Show>
         <Tooltip>
           <TooltipTrigger
             as={Button}

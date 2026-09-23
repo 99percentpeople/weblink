@@ -6,7 +6,10 @@ import { IDBChunkCache } from "../../../src/libs/infrastructure/storage/indexedd
 import { FileSender } from "../../../src/libs/domain/transfer/file-sender";
 import { FileReceiver } from "../../../src/libs/domain/transfer/file-receiver";
 import { TransferMode } from "../../../src/libs/domain/transfer/file-transferer";
-import type { PeerSession } from "../../../src/libs/domain/session";
+import type {
+  PeerSession,
+  PeerSessionEventMap,
+} from "../../../src/libs/domain/session";
 import type { FileTransferMessage } from "../../../src/libs/domain/message";
 import type { SessionMessage } from "../../../src/libs/domain/protocol/messages";
 import type {
@@ -21,8 +24,15 @@ import { TransferRegistry } from "../../../src/libs/application/transfer/transfe
 import {
   bindTransferMessage,
   finishReceivedFile,
+  failTransferMessage,
 } from "../../../src/libs/application/transfer/transfer-message-binding";
 import type { FileTransferStates } from "../../../src/libs/application/transfer/file-transfer-state";
+import { RoomMessagingService } from "../../../src/libs/application/messaging/room-messaging-service";
+import { RoomFileSharingService } from "../../../src/libs/application/messaging/room-file-sharing-service";
+import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
+import { getDefaultAppOptions } from "../../../src/libs/state/app-options";
+
+const transferDefaults = getDefaultAppOptions();
 
 const assert: (
   value: unknown,
@@ -46,6 +56,8 @@ async function until(
 }
 
 class BrowserTransport {
+  readonly sent: SessionMessage[] = [];
+  fileChannels = 0;
   readonly channels = new Map<
     PeerSession,
     RTCDataChannel
@@ -66,6 +78,7 @@ class BrowserTransport {
       channel?.readyState === "open",
       "control channel not open",
     );
+    this.sent.push(message);
     channel.send(JSON.stringify(message));
   }
   onAny(handler: RtcAnyMessageHandler<PeerSession>) {
@@ -100,13 +113,14 @@ class BrowserTransport {
           });
       });
     } else {
+      ++this.fileChannels;
       for (const handler of this.files)
         void handler({ session, channel });
     }
   }
 }
 
-function makeNode(id: string) {
+function makeNode(id: string, roomEnabled = false) {
   const transport = new BrowserTransport();
   const protocol = new RtcProtocol(transport);
   const sessions = new Map<string, PeerSession>();
@@ -202,13 +216,16 @@ function makeNode(id: string) {
     },
   };
   const registry = new TransferRegistry({
-    createTransfer: ({ cache, mode, info }) =>
+    createTransfer: ({ cache, mode, info, session }) =>
       mode === TransferMode.Send
         ? new FileSender({
             cache,
             info,
-            blockSize: 16 * 1024,
-            compressionLevel: 6,
+            blockSize: transferDefaults.blockSize,
+            maxMessageSize:
+              session.peerConnection?.sctp?.maxMessageSize,
+            compressionLevel:
+              transferDefaults.compressionLevel,
           })
         : new FileReceiver({ cache, info }),
     publish: (runId, entry) => {
@@ -228,12 +245,9 @@ function makeNode(id: string) {
     },
     failed: (run, error) => {
       errors.push(error.message);
-      update(run.messageId, (message) => {
-        message.transferStatus = "error";
-        message.error = error.message;
-      });
+      failTransferMessage(run, store, error);
     },
-    automaticCacheDeletion: () => false,
+    automaticCacheDeletion: () => roomEnabled,
     reportError: (error) => errors.push(String(error)),
   });
   const service = new FileTransferService({
@@ -244,8 +258,66 @@ function makeNode(id: string) {
     caches: cacheApi,
     messaging: new PeerMessagingService(protocol, store),
     getSession: (peer) => sessions.get(peer),
-    getChunkSize: () => 64 * 1024,
+    getChunkSize: () => transferDefaults.chunkSize,
   });
+  const rooms = roomEnabled
+    ? new RoomMessagingService(protocol, {
+        supportsFiles: true,
+        getRoom: () => ({
+          roomId: "binary-room",
+          namespace: "browser-smoke",
+          conversationId: "room:browser-smoke:binary-room",
+        }),
+        getSessions: () => [...sessions.values()],
+        getLocalClient: () => ({
+          clientId: id,
+          name: id,
+          avatar: null,
+        }),
+        store: {
+          async putRoomMessage(message) {
+            assert(
+              message.type === "file",
+              "room binary fixture only stores file offers",
+            );
+            const previous = messages.find(
+              (item) => item.id === message.id,
+            );
+            if (previous) {
+              assert(
+                previous.fid === message.fid &&
+                  previous.client === message.client &&
+                  previous.conversationId ===
+                    message.conversationId,
+                "conflicting room offer",
+              );
+              return false;
+            }
+            messages.push(structuredClone(message));
+            return true;
+          },
+          async setRoomDelivery(messageId, peerId, status) {
+            const message = messages.find(
+              (item) => item.id === messageId,
+            );
+            assert(
+              message?.deliveries,
+              "room offer has no delivery snapshot",
+            );
+            message.deliveries[peerId] = status;
+          },
+        },
+      })
+    : undefined;
+  const roomFiles = rooms
+    ? new RoomFileSharingService(protocol, {
+        rooms,
+        files: service,
+        getMessages: () => messages,
+        getSession: (peerId) => sessions.get(peerId),
+        getLocalClientId: () => id,
+      })
+    : undefined;
   return {
     id,
     transport,
@@ -256,6 +328,8 @@ function makeNode(id: string) {
     active,
     registry,
     service,
+    rooms,
+    roomFiles,
     cacheApi,
     errors,
     onProgress: (
@@ -264,6 +338,8 @@ function makeNode(id: string) {
       progressCallback = handler;
     },
     async close() {
+      roomFiles?.dispose();
+      rooms?.dispose();
       service.dispose();
       protocol.dispose();
       await Promise.all(
@@ -283,18 +359,28 @@ async function connect(a: Node, b: Node) {
     local: Node,
     remote: Node,
     pc: RTCPeerConnection,
-  ): PeerSession =>
-    ({
+  ): PeerSession => {
+    const events =
+      new MultiEventEmitter<PeerSessionEventMap>();
+    const result = {
       clientId: local.id,
       targetClientId: remote.id,
       peerConnection: pc,
+      get isMessageChannelReady() {
+        return (
+          local.transport.channels.get(result)
+            ?.readyState === "open"
+        );
+      },
+      addEventListener:
+        events.addEventListener.bind(events),
       createChannel: async (
         label: string,
         protocol: string,
       ) => {
         const channel = pc.createDataChannel(label, {
           protocol,
-          ordered: true,
+          ordered: transferDefaults.ordered,
         });
         await until(
           () => channel.readyState === "open",
@@ -302,7 +388,13 @@ async function connect(a: Node, b: Node) {
         );
         return channel;
       },
-    }) as PeerSession;
+    } as PeerSession;
+    pc.addEventListener("connectionstatechange", () => {
+      if (pc.connectionState === "closed")
+        events.dispatchEvent("statuschange", "closed");
+    });
+    return result;
+  };
   const aSession = session(a, b, pcA),
     bSession = session(b, a, pcB);
   a.sessions.set(b.id, aSession);
@@ -313,7 +405,7 @@ async function connect(a: Node, b: Node) {
     b.transport.attach(bSession, channel);
   const control = pcA.createDataChannel("message", {
     protocol: "message",
-    ordered: true,
+    ordered: !a.rooms,
   });
   a.transport.attach(aSession, control);
   await pcA.setLocalDescription(await pcA.createOffer());
@@ -321,13 +413,29 @@ async function connect(a: Node, b: Node) {
     () => pcA.iceGatheringState === "complete",
     "offer ICE timeout",
   );
-  await pcB.setRemoteDescription(pcA.localDescription!);
+  const remoteDescription = (
+    description: RTCSessionDescription,
+  ) => ({
+    type: description.type,
+    // Exercise the real negotiated limit, including the binary packet header.
+    sdp: a.rooms
+      ? description.sdp.replace(
+          /a=max-message-size:\d+/g,
+          "a=max-message-size:32768",
+        )
+      : description.sdp,
+  });
+  await pcB.setRemoteDescription(
+    remoteDescription(pcA.localDescription!),
+  );
   await pcB.setLocalDescription(await pcB.createAnswer());
   await until(
     () => pcB.iceGatheringState === "complete",
     "answer ICE timeout",
   );
-  await pcA.setRemoteDescription(pcB.localDescription!);
+  await pcA.setRemoteDescription(
+    remoteDescription(pcB.localDescription!),
+  );
   await until(
     () =>
       control.readyState === "open" &&
@@ -367,6 +475,238 @@ function payload(size: number) {
     type: "application/octet-stream",
   });
 }
+
+async function runRoomFileSmoke() {
+  const sender = makeNode("room-sender", true);
+  const first = makeNode("room-first", true);
+  const second = makeNode("room-second", true);
+  const participants = [sender, first, second];
+  const connections: Awaited<ReturnType<typeof connect>>[] =
+    [];
+  try {
+    const left = await connect(sender, first);
+    connections.push(left);
+    const right = await connect(sender, second);
+    connections.push(right);
+    assert(
+      left.aSession.peerConnection?.sctp?.maxMessageSize ===
+        32768 &&
+        right.aSession.peerConnection?.sctp
+          ?.maxMessageSize === 32768,
+      "room fixture did not negotiate the constrained packet size",
+    );
+    participants.forEach((node) =>
+      node.rooms!.syncSessions(),
+    );
+    await until(
+      () =>
+        participants.every(
+          (node) =>
+            node.sessions.size ===
+            Object.values(
+              node.rooms!.fileCapabilities,
+            ).filter((value) => value === "supported")
+              .length,
+        ),
+      "room file capabilities did not negotiate",
+    );
+    const source = payload(1024 * 1024 + 29);
+    await sender.roomFiles!.sendFile(source);
+    await until(
+      () =>
+        participants.every(
+          (node) => node.messages.length === 1,
+        ),
+      "room file offer was not received by both peers",
+    );
+    const offered = sender.messages[0];
+    const fid = offered.fid!;
+    assert(
+      offered.deliveries?.[first.id] === "delivered" &&
+        offered.deliveries?.[second.id] === "delivered",
+      "room metadata delivery receipts missing",
+    );
+    await sleep(100);
+    assert(
+      !first.caches.has(fid) && !second.caches.has(fid),
+      "a metadata offer created receiver binary caches before download",
+    );
+    assert(
+      participants.every(
+        (node) =>
+          node.transport.fileChannels === 0 &&
+          Object.keys(node.active).length === 0,
+      ),
+      "a metadata offer started binary transfer channels",
+    );
+    assert(
+      !participants.some((node) =>
+        node.transport.sent.some(
+          (message) => message.type === "request-room-file",
+        ),
+      ),
+      "offer triggered automatic download",
+    );
+
+    // A peer knowing a room file id cannot use the legacy private protocol to
+    // bypass the offer's room and recipient checks.
+    const failures: string[] = [];
+    for (const type of [
+      "request-file",
+      "resume-file",
+    ] as const) {
+      try {
+        if (type === "request-file")
+          await second.protocol.call(right.bSession, type, {
+            fid,
+            fileName: offered.fileName,
+            fileSize: offered.fileSize,
+            chunkSize: offered.chunkSize,
+            resume: false,
+          });
+        else
+          await second.protocol.call(right.bSession, type, {
+            fid,
+          });
+        throw new Error(
+          `legacy ${type} unexpectedly served a room-only attachment`,
+        );
+      } catch (error) {
+        assert(
+          error instanceof Error &&
+            error.message.includes(
+              "authorized room request",
+            ),
+          `unexpected ${type} rejection: ${String(error)}`,
+        );
+        failures.push(type);
+      }
+    }
+    assert(
+      !second.caches.has(fid),
+      "legacy request created a receiver cache",
+    );
+    assert(
+      participants.every(
+        (node) => node.messages.length === 1,
+      ),
+      "legacy room requests created private history",
+    );
+
+    await first.roomFiles!.requestFile(first.messages[0]);
+    await until(() => {
+      assert(
+        !participants.some((node) => node.errors.length),
+        `room download failed: ${participants.flatMap((node) => node.errors).join(", ")}`,
+      );
+      return (
+        first.messages[0].transferStatus === "complete" &&
+        offered.roomTransfers?.[first.id]?.status ===
+          "complete"
+      );
+    }, "first manual room download did not finish");
+    await until(
+      () =>
+        [sender, first].every(
+          (node) => Object.keys(node.active).length === 0,
+        ),
+      "first room transfer leaked a run",
+    );
+    const retained = await sender.caches
+      .get(fid)!
+      .getInfo();
+    assert(
+      retained?.roomAttachment === true &&
+        retained.isComplete,
+      "sender cache was deleted after the first recipient completed",
+    );
+    assert(
+      !second.caches.has(fid) &&
+        offered.roomTransfers?.[second.id] === undefined,
+      "first download started the other recipient",
+    );
+
+    await second.roomFiles!.requestFile(second.messages[0]);
+    await until(
+      () =>
+        second.messages[0].transferStatus === "complete" &&
+        offered.roomTransfers?.[second.id]?.status ===
+          "complete",
+      "second manual room download did not finish",
+    );
+    await until(
+      () =>
+        participants.every(
+          (node) => Object.keys(node.active).length === 0,
+        ),
+      "completed room transfers leaked runs",
+    );
+    const expected = await hash(source);
+    for (const receiver of [first, second]) {
+      const file = await receiver.caches
+        .get(fid)!
+        .getFile();
+      assert(
+        file &&
+          file.size === source.size &&
+          (await hash(file)) === expected,
+        "room attachment bytes differ from the original",
+      );
+      const requests = receiver.transport.sent.filter(
+        (message) => message.type === "request-room-file",
+      );
+      assert(
+        requests.length === 1 &&
+          requests[0].id !== offered.id,
+        "download reused the room offer request id",
+      );
+    }
+    assert(
+      participants.every(
+        (node) =>
+          node.messages.length === 1 &&
+          node.messages[0].id === offered.id &&
+          node.messages[0].room?.roomId === "binary-room",
+      ),
+      "room download produced private or duplicate history",
+    );
+    assert(
+      offered.deliveries?.[first.id] === "delivered" &&
+        offered.deliveries?.[second.id] === "delivered",
+      "download progress overwrote room offer receipts",
+    );
+    assert(
+      !participants.some((node) => node.errors.length),
+      `unexpected room transfer errors: ${participants.flatMap((node) => node.errors).join(",")}`,
+    );
+    return {
+      participants: 3,
+      negotiatedMaxMessageBytes: 32768,
+      configuredPayloadBytes: transferDefaults.blockSize,
+      bytes: source.size,
+      metadataRecipients: 2,
+      noReceiverCacheOrBinaryBeforeClick: true,
+      independentManualDownloads: 2,
+      byteExactCopies: true,
+      senderCacheRetainedWithAutomaticDeletionEnabled: true,
+      blockedLegacyRequests: failures,
+      independentRequestIds: true,
+      noPrivateHistoryProjection: true,
+      perRecipientTransferStatus: true,
+    };
+  } finally {
+    for (const node of participants) {
+      node.roomFiles?.dispose();
+      node.rooms?.dispose();
+      node.service.dispose();
+    }
+    connections.forEach((connection) => connection.close());
+    await Promise.all(
+      participants.map((node) => node.close()),
+    );
+  }
+}
+
 async function main() {
   const a = makeNode("sender"),
     b = makeNode("receiver-b"),
@@ -519,7 +859,10 @@ async function main() {
       [a, b, c].map((node) => node.close()),
     );
   }
-  window.__SPEED_TEST_REPORT__ = report;
+  window.__SPEED_TEST_REPORT__ = {
+    ...(report as Record<string, unknown>),
+    roomFiles: await runRoomFileSmoke(),
+  };
 }
 main().catch((error) => {
   window.__SPEED_TEST_ERROR__ =

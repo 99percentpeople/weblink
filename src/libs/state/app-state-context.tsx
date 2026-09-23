@@ -2,12 +2,14 @@ import {
   Component,
   createContext,
   createEffect,
+  createMemo,
   createSignal,
   type Accessor,
   onCleanup,
   onMount,
   ParentProps,
   useContext,
+  untrack,
 } from "solid-js";
 import type { ChunkMetaData } from "@/libs/domain/file";
 import type { PeerSession } from "@/libs/domain/session";
@@ -20,7 +22,10 @@ import {
   saveMediaConstraintsToSession,
   setAppState,
 } from "@/libs/state/app-state";
-import { resolveClientConfig } from "@/libs/state/app-options";
+import {
+  resolveClientConfig,
+  resolveRoomConfig,
+} from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/application/rtc/rtc-service";
 import {
   createRtcProtocol,
@@ -31,7 +36,10 @@ import { PeerProfileService } from "@/libs/application/peer-profile-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { toast } from "solid-sonner";
-import type { StoreMessage } from "@/libs/domain/message";
+import type {
+  FileTransferMessage,
+  StoreMessage,
+} from "@/libs/domain/message";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { catchError } from "@/libs/catch";
 import {
@@ -47,10 +55,29 @@ import { createClientService } from "@/libs/application/client-service-factory";
 import { RoomService } from "@/libs/application/room-service";
 import { FileCatalogService } from "@/libs/application/file-catalog-service";
 import type { LocalStreamService } from "@/libs/application/local-stream-service";
+import { RoomMessagingService } from "@/libs/application/messaging/room-messaging-service";
+import { RoomFileSharingService } from "@/libs/application/messaging/room-file-sharing-service";
+import { roomConversationId } from "@/libs/domain/conversation";
+import { getRoomNamespace } from "@/libs/application/room-identity";
 
 export interface AppStateContextProps {
   joinRoom: () => Promise<void>;
   leaveRoom: () => void;
+  activeRoomConversationId: Accessor<string | null>;
+  roomChatCapabilities: Accessor<
+    Readonly<
+      Record<
+        string,
+        "checking" | "supported" | "unsupported"
+      >
+    >
+  >;
+  sendRoomText: (text: string) => Promise<void>;
+  roomFileCapabilities: AppStateContextProps["roomChatCapabilities"];
+  sendRoomFile: (file: File) => Promise<void>;
+  requestRoomFile: (
+    message: FileTransferMessage,
+  ) => Promise<void>;
   requestFile: (
     target: ClientID,
     info: ChunkMetaData,
@@ -122,6 +149,81 @@ export const AppStateProvider: Component<
     protocol,
     messageStores,
   );
+  const namespace = getRoomNamespace();
+  const desiredRoom = createMemo(() => {
+    const rawRoomId = appState.roomStatus.roomId;
+    const roomId =
+      import.meta.env.VITE_BACKEND === "WEBSOCKET"
+        ? rawRoomId?.trim()
+        : rawRoomId;
+    return roomId
+      ? {
+          roomId,
+          namespace,
+          conversationId: roomConversationId(
+            namespace,
+            roomId,
+          ),
+        }
+      : null;
+  });
+  const [currentRoom, setCurrentRoom] =
+    createSignal<ReturnType<typeof desiredRoom>>(null);
+  const [roomChatCapabilities, setRoomChatCapabilities] =
+    createSignal<
+      Readonly<
+        Record<
+          string,
+          "checking" | "supported" | "unsupported"
+        >
+      >
+    >({});
+  const [roomFileCapabilities, setRoomFileCapabilities] =
+    createSignal<
+      ReturnType<
+        AppStateContextProps["roomChatCapabilities"]
+      >
+    >({});
+  const roomMessaging = new RoomMessagingService(protocol, {
+    supportsFiles: true,
+    onFileReceived: (message) => {
+      // Receiving bytes must not delay the metadata ACK or its local history.
+      void runFileAction(() =>
+        roomFiles.autoDownloadFile(message),
+      );
+    },
+    onFileCapabilitiesChange: setRoomFileCapabilities,
+    getRoom: currentRoom,
+    getSessions: () =>
+      Object.values(sessionService.sessions),
+    getLocalClient: () => ({
+      clientId: appState.profile.clientId,
+      name: appState.profile.name,
+      avatar: appState.profile.avatar,
+    }),
+    store: messageStores,
+    onCapabilitiesChange: setRoomChatCapabilities,
+  });
+  createEffect(() => {
+    const scope = desiredRoom();
+    // The active room stays available after its local history is cleared.
+    if (scope)
+      appState.message.conversations.some(
+        (item) => item.id === scope.conversationId,
+      );
+    Object.values(sessionService.sessions);
+    appState.profile.clientId;
+    untrack(() => {
+      if (scope)
+        messageStores.ensureRoomConversation(
+          scope.roomId,
+          scope.namespace,
+        );
+      setCurrentRoom(scope);
+      roomMessaging.syncSessions();
+    });
+  });
+  onCleanup(() => roomMessaging.dispose());
   const files = new FileTransferService({
     protocol,
     rtc,
@@ -133,6 +235,23 @@ export const AppStateProvider: Component<
     getChunkSize: () => appState.options.chunkSize,
   });
   onCleanup(() => files.dispose());
+  const roomFiles = new RoomFileSharingService(protocol, {
+    rooms: roomMessaging,
+    files,
+    getMessages: () => appState.message.messages,
+    getSession: (peerId) => sessionService.sessions[peerId],
+    getLocalClientId: () => appState.profile.clientId,
+    getAutoDownloadLimit: (conversationId) => {
+      const config = resolveRoomConfig(
+        appState.options,
+        conversationId,
+      );
+      return config.autoDownloadFiles
+        ? config.autoDownloadMaxSize
+        : 0;
+    },
+  });
+  onCleanup(() => roomFiles.dispose());
   const catalog = new FileCatalogService({
     protocol,
     index: cacheManager.catalog,
@@ -202,6 +321,16 @@ export const AppStateProvider: Component<
     messages: messageStores,
     createClientService,
     getLocalStream: () => localStream(),
+    onMemberJoined: (roomId, client) => {
+      const id =
+        import.meta.env.VITE_BACKEND === "WEBSOCKET"
+          ? roomId.trim()
+          : roomId;
+      messageStores.recordRoomMember(
+        roomConversationId(namespace, id),
+        client.clientId,
+      );
+    },
     onLeaving: () => {
       files.cancelAll();
       speedTests.cancel();
@@ -462,6 +591,10 @@ export const AppStateProvider: Component<
   }
 
   async function retryMessage(message: StoreMessage) {
+    if (message.room) {
+      await roomMessaging.retry(message);
+      return;
+    }
     const self = appState.profile.clientId;
     const sessionId =
       message.client === self
@@ -514,6 +647,16 @@ export const AppStateProvider: Component<
       value={{
         joinRoom,
         leaveRoom,
+        activeRoomConversationId: () =>
+          currentRoom()?.conversationId ?? null,
+        roomChatCapabilities,
+        roomFileCapabilities,
+        sendRoomFile: (file) => roomFiles.sendFile(file),
+        requestRoomFile: (message) =>
+          runFileAction(() =>
+            roomFiles.requestFile(message),
+          ),
+        sendRoomText: (text) => roomMessaging.send(text),
         shareFile: (fileId, target) => {
           void shareFile(fileId, target);
         },

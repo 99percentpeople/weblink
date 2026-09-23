@@ -219,10 +219,14 @@ function TaskRow(props: {
 
   const resume = async () => {
     const task = file();
-    if (!task?.message.fid) return;
+    if (!task?.message.fid || task.canResume === false)
+      return;
     const message = task.message;
     const fid = message.fid!;
-    if (message.status === "error")
+    if (message.room) {
+      if (task.kind === "file-receive")
+        await app.requestRoomFile(message);
+    } else if (message.status === "error")
       await app.retryMessage(message);
     else if (task.kind === "file-send")
       await app.resumeFile(fid, task.peerId);
@@ -410,6 +414,7 @@ function TaskRow(props: {
           <Show
             when={
               file() &&
+              file()?.canResume !== false &&
               ["paused", "failed"].includes(
                 props.task.status,
               )

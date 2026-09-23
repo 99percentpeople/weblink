@@ -17,23 +17,35 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const taskUi = process.argv.includes("--tasks");
+const chatUi = process.argv.includes("--chat");
+const meetingUi = process.argv.includes("--meeting");
+const conversationStorage = process.argv.includes(
+  "--conversations",
+);
+const ui = taskUi || chatUi || meetingUi;
 const protocolTest = process.argv.includes("--protocol");
 const transferTest = process.argv.includes("--transfer");
 const cacheBenchmark = process.argv.includes(
   "--cache-benchmark",
 );
 const cacheTest = process.argv.includes("--cache");
-const entry = cacheBenchmark
-  ? "test/e2e/benchmark/cache-merge.html"
-  : cacheTest
-    ? "test/e2e/smoke/cache-merge.html"
-    : taskUi
-      ? "test/e2e/smoke/task-center.html"
-      : protocolTest
-        ? "test/e2e/smoke/rtc-protocol.html"
-        : transferTest
-          ? "test/e2e/smoke/transfer-workflow.html"
-          : "test/e2e/smoke/speed-test.html";
+const entry = meetingUi
+  ? "test/e2e/smoke/meeting.html"
+  : conversationStorage
+    ? "test/e2e/smoke/conversation-storage.html"
+    : chatUi
+      ? "test/e2e/smoke/chat-scroll.html"
+      : cacheBenchmark
+        ? "test/e2e/benchmark/cache-merge.html"
+        : cacheTest
+          ? "test/e2e/smoke/cache-merge.html"
+          : taskUi
+            ? "test/e2e/smoke/task-center.html"
+            : protocolTest
+              ? "test/e2e/smoke/rtc-protocol.html"
+              : transferTest
+                ? "test/e2e/smoke/transfer-workflow.html"
+                : "test/e2e/smoke/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -108,19 +120,21 @@ async function main() {
       root,
       configFile: false,
       logLevel: "error",
-      plugins: taskUi
+      plugins: ui
         ? [solidPlugin(), solidSvg(), tailwindcss()]
         : [],
       resolve: {
         conditions: ["browser", "development"],
         alias: [
-          ...(taskUi
+          ...(ui
             ? [
                 {
                   find: "@/libs/state/app-state-context",
                   replacement: join(
                     root,
-                    "test/e2e/smoke/task-context.ts",
+                    chatUi || meetingUi
+                      ? "test/e2e/smoke/chat-context.ts"
+                      : "test/e2e/smoke/task-context.ts",
                   ),
                 },
               ]
@@ -139,9 +153,12 @@ async function main() {
     await vite.listen();
     const address = vite.httpServer.address();
     const query =
-      cacheBenchmark && process.argv.includes("--repeating")
-        ? "?repeating=1"
-        : "";
+      chatUi && process.env.CHAT_TEST_SCREENSHOT
+        ? "?snapshot=1"
+        : cacheBenchmark &&
+            process.argv.includes("--repeating")
+          ? "?repeating=1"
+          : "";
     const url = `http://127.0.0.1:${address.port}/${entry}${query}`;
     const probe = await fetch(url);
     if (!probe.ok)
@@ -154,6 +171,9 @@ async function main() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
+        ...(protocolTest
+          ? ["--autoplay-policy=no-user-gesture-required"]
+          : []),
         "--no-first-run",
         "--no-default-browser-check",
         "--remote-debugging-address=127.0.0.1",
@@ -203,13 +223,36 @@ async function main() {
     cdp = await connect(page.webSocketDebuggerUrl);
     await cdp.call("Page.enable");
     await cdp.call("Runtime.enable");
-    if (taskUi)
+    if (ui)
       await cdp.call("Emulation.setDeviceMetricsOverride", {
-        width: Number(process.env.TASK_TEST_WIDTH ?? 1000),
+        width: Number(
+          process.env.MEETING_TEST_WIDTH ??
+            process.env.CHAT_TEST_WIDTH ??
+            process.env.TASK_TEST_WIDTH ??
+            (meetingUi ? 1440 : 1000),
+        ),
         height: 900,
         deviceScaleFactor: 1,
         mobile: false,
       });
+    if (chatUi || meetingUi) {
+      await cdp.call("Emulation.setEmulatedMedia", {
+        features: [
+          {
+            name: "prefers-reduced-motion",
+            value:
+              process.env.CHAT_TEST_REDUCED_MOTION === "1"
+                ? "reduce"
+                : "no-preference",
+          },
+          {
+            name: "prefers-color-scheme",
+            value:
+              process.env.CHAT_TEST_COLOR_SCHEME ?? "light",
+          },
+        ],
+      });
+    }
     await cdp.call("Page.navigate", { url });
     const start = Date.now();
     while (Date.now() - start < 80000) {
@@ -236,6 +279,59 @@ async function main() {
             process.env.SPEED_TEST_REPORT,
             json + "\n",
           );
+        if (chatUi && process.env.CHAT_TEST_SCREENSHOT) {
+          const shot = await cdp.call(
+            "Page.captureScreenshot",
+            { format: "png" },
+          );
+          await writeFile(
+            process.env.CHAT_TEST_SCREENSHOT,
+            Buffer.from(shot.data, "base64"),
+          );
+          await cdp.call("Runtime.evaluate", {
+            expression:
+              "window.__CHAT_TEST_FINISH_SNAPSHOT__()",
+            awaitPromise: true,
+          });
+        }
+        if (
+          meetingUi &&
+          process.env.MEETING_TEST_SCREENSHOT
+        ) {
+          const shot = await cdp.call(
+            "Page.captureScreenshot",
+            { format: "png" },
+          );
+          await writeFile(
+            process.env.MEETING_TEST_SCREENSHOT,
+            Buffer.from(shot.data, "base64"),
+          );
+        }
+        if (
+          meetingUi &&
+          process.env.MEETING_TEST_ROOM_DIALOG_SCREENSHOT
+        ) {
+          const result = await cdp.call(
+            "Runtime.evaluate",
+            {
+              expression:
+                "window.__MEETING_OPEN_ROOM_SETTINGS__()",
+              awaitPromise: true,
+            },
+          );
+          if (result.exceptionDetails)
+            throw new Error(
+              JSON.stringify(result.exceptionDetails),
+            );
+          const shot = await cdp.call(
+            "Page.captureScreenshot",
+            { format: "png" },
+          );
+          await writeFile(
+            process.env.MEETING_TEST_ROOM_DIALOG_SCREENSHOT,
+            Buffer.from(shot.data, "base64"),
+          );
+        }
         if (taskUi && process.env.TASK_TEST_SCREENSHOT) {
           const shot = await cdp.call(
             "Page.captureScreenshot",
@@ -273,8 +369,10 @@ async function main() {
       `Browser check timed out. ${browserLog}`,
     );
   } catch (error) {
+    // Report failure before async cleanup: Bun can exit while Vite is closing.
+    process.exitCode = 1;
+    console.error(error.stack ?? error);
     if (browserLog) console.error(browserLog);
-    throw error;
   } finally {
     cdp?.close();
     if (

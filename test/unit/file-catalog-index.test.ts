@@ -160,4 +160,33 @@ describe("file catalog metadata index", () => {
       sharingEnabled: false,
     });
   });
+
+  it("keeps room attachments out of the remote catalog without altering local metadata", () => {
+    const index = new FileCatalogIndex();
+    const changed = vi.fn();
+    index.onChange(changed);
+    const attachment = file("room", {
+      roomAttachment: true,
+      roomOfferId: "offer",
+      from: "sender",
+    });
+    index.update("room", attachment);
+    index.update("public", file("public"));
+    expect(
+      index.query(query).items.map((item) => item.id),
+    ).toEqual(["public"]);
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    index.update(
+      "public",
+      file("public", { roomAttachment: true }),
+    );
+    expect(index.query(query).totalCount).toBe(0);
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(attachment).toMatchObject({
+      isComplete: true,
+      roomAttachment: true,
+      roomOfferId: "offer",
+    });
+  });
 });

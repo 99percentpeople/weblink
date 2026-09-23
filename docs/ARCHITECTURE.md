@@ -36,6 +36,126 @@ the low-level `domain` layer.
 - `src/routes/`: Route-level pages (Solid Router).
   - `src/routes/client/[id]/...`: Main client session pages
     (chat/sync, etc).
+  - `src/routes/conversation.tsx`: opens a saved conversation by its stable
+    identity, including private history created under an earlier local identity.
+  - `src/routes/video/`: meeting stage, participant views, bottom media controls
+    and the floating right panel with conversation, chat, member and info tabs.
+    Selecting a conversation switches to the chat tab inside that panel without
+    navigating away or changing the active room. The application media controller
+    independently acquires the microphone, camera and multiple shared screens.
+    Display capture requests optional audio from the browser picker. Each returned
+    audio track belongs to its display: microphone mute/device changes preserve
+    it, while stopping that display (including the browser's stop action) removes
+    its audio. Audio ending alone leaves the picture live. Capture without audio
+    remains valid; available audio sources depend on the browser and platform.
+    The header switch mutes/resumes all current display audio in place, preserving
+    the microphone and video. Newly added displays inherit that mute until all
+    displays stop. Without a captured display audio track, the switch is disabled.
+    The application service owns capture tracks and preserves retained tracks when their stream
+    container changes. The stage renders each video track as a separate view;
+    pinning chooses a view rather than a participant. Remote views use numbered
+    labels because the transport does not claim camera/screen source metadata.
+    All stage views use 16:9 frames and contain the source video. One stage-owned
+    ResizeObserver measures the grid's allotted content box and coalesces updates
+    per animation frame. Grid columns, centering offsets and tile dimensions use
+    that same measurement and fit both width and
+    height, with hysteresis near column boundaries. Size containment keeps tile
+    content from resizing the observed box; source-count changes reuse the same
+    measurement and observer. Focused and
+    single views fit both available dimensions; the thumbnail rail scrolls
+    independently and can be collapsed without unmounting its video elements.
+    Each source has one keyed Portal owner that moves its existing video view
+    between the grid, focused frame and rail when the layout changes.
+    Grid resizing, source-list updates, explicit layout and thumbnail visibility
+    changes use Motion JS through
+    `hooks/layout-transition.ts`, matching stable view identities across layouts.
+    Resize and source-list changes share the grid's frame queue; initial and hidden
+    measurements update directly without an entrance animation.
+    Moving boxes temporarily leave document flow and rail clipping; the controls
+    row keeps its space and rail scroll is restored afterward. Interrupted
+    transitions capture the current frame before clearing animation styles.
+    Avatar dimensions interpolate separately with parent-scale compensation.
+    Name overlays counter the frame's scale to retain typography and padding;
+    their insets and available width follow the transition, with long names
+    truncated within the frame.
+    Opening/closing the side panel refreshes the same grid measurement before
+    taking the destination snapshot, so the panel and stage transition together.
+    Transitions preserve the grid's single observer, respect reduced motion and
+    clear animation styles on disposal.
+    `components/ui/motion.tsx` provides Solid `Motion.*` elements and
+    `AnimatePresence` for declarative entrance/exit animations. See
+    [UI motion](UI_MOTION.md) for the supported API and layout scopes.
+    Sharing status lives in the right side of the header and
+    media errors use temporary toast feedback.
+    Expandable controls select microphone, camera and supported speaker outputs.
+    Selecting a disabled input only records a preference. Switching a live input
+    acquires its replacement before releasing the old track, preserves mute
+    state and leaves the other captures intact. Device enumeration never requests
+    capture permission by itself; the audio provider owns output routing.
+    `hooks/media-device-access.ts` combines permission queries with exposed device
+    identities. Missing access exposes a header action that opens device settings;
+    blocked access and absent/unsupported devices have separate states. Explicit
+    authorization uses short-lived input capture, enumerates devices and releases
+    every probe track without publishing it. Speaker access uses the native output
+    picker when available, otherwise an explained temporary microphone grant.
+    Permission changes and window focus refresh the state; disposal releases
+    listeners and any capture that resolves late.
+    `hooks/meeting-media-context.tsx` owns the shared controller and device
+    discovery beneath the audio provider and above the modal provider. Both the
+    toolbar and room device dialog use that same state; closing either view
+    preserves device choices and published media. Room changes cancel pending
+    capture requests. The capture implementation lives in
+    `application/meeting-media-service.ts` behind injected media/stream ports.
+    Device selections in room settings only save preferences and never open or
+    replace their streams. Unapplied preferences survive stream updates and are
+    used on the next toolbar activation, including unmuting a retained microphone.
+    Explicit device changes in the toolbar can still replace an active source.
+    `components/meeting-session-context.tsx` lives above route pages and owns
+    source selection, pin state, shared thumbnail rail visibility and a locally
+    saved rail/toolbar linking preference (off by default), configured under
+    Settings > Meeting in `routes/setting/meeting-settings.tsx`. Linking hides
+    the toolbar with the rail. Grid and single-source views expose a toolbar-only
+    toggle when linking is enabled; the reveal action remains available in both
+    windows. The provider also owns the
+    Document Picture-in-Picture window. The window reuses the focus stage with a
+    main source, a collapsible thumbnail rail and compact controls using the same
+    media controller. PiP stays in focus mode; its toolbar has no grid toggle.
+    Selecting a thumbnail switches
+    the source featured in the main view.
+    The main source is the pinned source, otherwise the first live video or first
+    participant; selecting a thumbnail updates the shared pin without recreating
+    video views. While PiP is open, `/video` replaces only its stage with an SVG
+    notice and a return action; its side panel and active chat remain mounted.
+    No capture is stopped. The stage schedules resize/source updates using its
+    own document's animation frames and ResizeObserver so PiP keeps updating
+    while the opener is hidden. `hooks/document-picture-in-picture.ts`
+    handles pending requests, native close and disposal without owning tracks.
+    The child document receives app styles, theme updates and its own Solid
+    delegated event handlers, all cleaned up when the window closes.
+    Automatic PiP is an opt-in app preference, available only while at least one
+    local or remote video track is live, enabled and unmuted. Audio-only and
+    placeholder sources do not qualify; manual entry remains available. The video
+    condition is rechecked after a pending request. Internal route exits request
+    it within the navigation gesture, while browser tab changes and window
+    occlusion use the Media Session `enterpictureinpicture` action. Background
+    requests require a hidden document or the browser's explicit
+    `contentoccluded` reason, and no pending screen picker. Browser-reported
+    occlusion may precede visibility events or leave the document visible.
+    Focus loss alone never opens PiP.
+    Hidden visibility events also request it while transient user activation
+    remains valid. Browser
+    eligibility and site permission determine whether background entry is granted
+    (Chrome requires HTTPS even on localhost; conference capture normally requires
+    an active microphone or camera). Screen-only capture does not meet Chrome's
+    conferencing condition. Recent user activation may allow an initial departure
+    to open PiP without guaranteeing later departures; eligible audible playback
+    has its own browser conditions.
+    Returning to a visible, focused meeting page closes only a
+    background-triggered window, including pending requests. Both visibility
+    and focus events handle return and reset native-dismissal suppression;
+    visibility alone does not establish that the user returned from the child.
+    These events do not bypass the browser's activation rules. The small window
+    cannot survive closing the opener or navigating that tab to another website.
   - `src/routes/setting/connection-settings.tsx`: connection-setting forms
     and diagnostic feedback, composed by `setting.tsx` without an extra layout
     wrapper. ICE probes and credential resolution belong to the injected
@@ -43,6 +163,36 @@ the low-level `domain` layer.
 - `src/components/`: Reusable UI building blocks.
   - `components/app/`: app-scoped components (nav,
     wakelock, etc).
+  - `components/conversations/`: shared conversation sidebar, label editor and
+    private/room view composition. Home supplies navigation; the meeting page
+    supplies an in-place selection callback. Neither maintains a separate copy
+    of conversation history or delivery state.
+    `chat-composer.tsx` supplies the same text and attachment controls to both
+    conversation types; their callbacks retain separate delivery policies.
+    Room file cards show metadata without loading remote bytes on mount.
+    Locally cached images, video and audio render inline, so senders can see
+    their own media immediately and recipients see it after a manual or opted-in
+    small-file download. The room dialog's settings tab stores per-room,
+    browser-local auto-download preferences: off by default, with an inclusive
+    5 MiB default limit. It uses the namespaced room conversation identity.
+    `file-attachment-bubble.tsx` shares media, metadata and download presentation
+    across private and room messages. `local-file-media.tsx` joins images/videos
+    to each conversation's PhotoSwipe gallery and uses native audio controls.
+    `media-thumbnail.tsx` keeps a fixed 16:9 frame while the inner image bounds
+    match the actual image aspect ratio. Videos use a local first-frame poster.
+    `media-hash-route.ts` identifies previews by stable conversation/message IDs
+    in `#/media/<encoded-conversation-id>/<encoded-message-id>`. Opening creates
+    one history entry; changing slides replaces it; Back/Forward closes/reopens
+    the preview. A directly loaded deep link closes within its current page.
+    Galleries reveal older message windows and wait for local media metadata,
+    without requesting missing room files. Meeting hash links select the matching
+    conversation and open its chat panel. Inline media object URLs are released
+    when the file changes or the view unmounts. `file-transfer-indicator.tsx` places pause/resume controls inside
+    a compact progress ring. Speed replaces the status label while transferring,
+    and the metadata stays on one line through pause/resume transitions. The two
+    message adapters retain their own service calls and room cache authorization.
+    Room senders open recipient download progress in a details dialog beside the download button; the list never expands
+    the message bubble. Only recipients can initiate or resume a room download.
   - `components/dialogs/`: unified dialog directory.
     - Modal primitives: `base.tsx`, `dialog.tsx`,
       `drawer.tsx`.
@@ -50,6 +200,21 @@ the low-level `domain` layer.
       forward, delete confirms, about, media selection,
       compatibility details, media-constraints dialogs,
       etc.
+    - `room-info-dialog.tsx`: room information, meeting devices, settings and member tabs, opened
+      from room headers or conversation menus. Capability and delivery details
+      live here rather than above the message composer. Historical-room dialogs
+      do not join rooms or change the active room's devices; opening information
+      never starts capture. The device tab contains selectors without capture
+      switches; output selection routes existing playback without starting it.
+      The member tab combines live participants in the active room with previous
+      members whose private conversations remain stored. `RoomService` records
+      silent joins with the captured room identity and generation checks;
+      direct-conversation metadata retains namespaced room conversation IDs.
+      Older history can establish membership through room-message senders and
+      original recipients, but unrelated contacts are never assumed to belong.
+      Deleting a private conversation removes that peer from previous members;
+      live presence remains visible independently. The optional metadata field
+      uses the existing conversation store and requires no database version bump.
     - `ModalProvider` is mounted once in `src/app.tsx` and
       dialog factories auto-register themselves globally.
       Consumers call `open()` directly and do not render
@@ -80,9 +245,48 @@ may select concrete infrastructure implementations.
     injectable credential/probe functions, without UI or shared-state ownership.
   - `messaging/`: reactive message history, persistence port and tracked
     message workflows. IndexedDB does not live in this layer.
+    - `message-store.ts`: private-message history and hydration, stable reactive
+      arrays, browser-local message sequencing, and the shared facade composed
+      from injected conversation and room-message stores.
+    - `conversation-store.ts`: local conversation metadata, labels and reading
+      cursors. Private and room history is queried and removed by conversation
+      identity; contact deletion never removes room messages authored by that
+      contact.
+    - `room-message-store.ts`: durable room-message insertion, duplicate identity
+      checks and serialized per-recipient delivery updates, without networking.
+    - `conversation-query.ts`: pure summary, search, label filtering and grouping
+      projections used by both sidebars. Text search and label selection combine
+      with AND; selected labels combine with OR. A conversation may appear under
+      several label groups, while unread totals count each conversation once.
+      Message order, recent activity and the reading cursor use persisted local
+      sequence numbers. Sender timestamps are display metadata, so remote clock
+      skew cannot reorder already-read history after reopening the browser.
+    - `room-messaging-service.ts`: capability negotiation, one logical room
+      message with a snapshot of online recipients, per-recipient outcomes and
+      retry of the original failed recipients. Session/room lifecycle checks
+      prevent delayed operations from entering a replacement room. There is no
+      offline outbox or late-join history synchronization.
+    - `room-file-sharing-service.ts`: prepares local attachments, publishes
+      file offers through room messaging, and authorizes explicit recipient
+      pulls against the original offer and current room binding. Each pull has
+      a fresh protocol request ID while progress belongs to the durable offer.
+      Opted-in small-file downloads reuse the same pull path. Room persistence
+      reports whether an offer is newly inserted, so only fresh, validated
+      incoming offers trigger the size check; history, duplicate receipts and
+      paused/failed/completed transfers do not start another download. The check
+      uses original stored metadata and does not delay the metadata ACK.
+  - `room-identity.ts`: derives the signaling namespace used by room conversation
+    identity so equal room names on different signaling services stay separate.
   - `rtc/`: Weblink's PeerSession transport adapter and protocol composition.
     The reusable P2P protocol itself lives in `domain/protocol/`.
   - `transfer/`: file-transfer workflows, registry and message binding.
+    `file-offer-transfers.ts` reuses run/channel ownership for room attachments
+    without creating private messages. Upload progress is per recipient;
+    delivery receipts describe offer delivery, not binary completion. Room
+    attachments remain cached after a recipient finishes and are excluded from
+    the remote file catalog and legacy private request/resume paths.
+    Explicit local forwarding creates a new private file copy with a fresh ID;
+    it does not make the original room cache available through private requests.
   - `file-catalog-index.ts`: completed-file metadata projection and in-memory
     search/sort/page queries, without File contents or storage reads during paging.
   - `file-catalog-service.ts`: version-2 directory provider, privacy policy and
@@ -94,8 +298,13 @@ may select concrete infrastructure implementations.
     application-scoped coordinators.
 - `src/libs/domain/`: low-level models and P2P behavior. Domain must not
   import `application`, `state` or `infrastructure`.
-  - `client.ts`, `ids.ts`, `file.ts`, `message.ts`: shared domain models
+  - `client.ts`, `ids.ts`, `file.ts`, `message.ts`, `conversation.ts`: shared domain models
     and contracts without application-state ownership.
+    Conversation identity is independent from live peer sessions: a direct
+    conversation identifies the original pair of client IDs, while a room
+    conversation identifies a signaling namespace and room ID. Labels and
+    reading cursors are local organization metadata, not room membership or
+    remotely shared settings.
   - `session.ts`, `peer-negotiation.ts`, `signaling.ts`: WebRTC session and
     signaling service contracts.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
@@ -107,6 +316,10 @@ may select concrete infrastructure implementations.
   - `transfer/protocol.ts` and `transfer/packet.ts`: portable file-channel
     JSON frames and exact binary block header; sender/receiver algorithms remain
     WebRTC/browser domain code around that contract.
+    Application wiring passes the connection's negotiated SCTP message limit to
+    the file sender. Payload blocks respect that limit minus the seven-byte
+    header; a missing limit uses a conservative 64 KiB packet budget. The wire
+    header and chunk identities remain unchanged.
   - `speed-test-protocol.ts`: the versioned `weblink-speedtest-v1` control
     DTO/parser/limits; `speed-test.ts` owns the WebRTC diagnostic state machine.
   - `transfer/`: chunked file sender/receiver and transfer-owned workers.
@@ -114,7 +327,17 @@ may select concrete infrastructure implementations.
   - `signaling/`: WebSocket and Firebase client/transport implementations.
   - `storage/`: IndexedDB chunk cache, transactional assembly, merge worker
     and the IndexedDB message-history repository adapter.
+    `indexeddb-message-repository.ts` owns the explicit version-2 message schema,
+    legacy private-message backfill, conversation index, conversation/label
+    metadata stores and atomic removal of a conversation's history or a label's
+    assignments. A room ACK follows durable local insertion; duplicate logical
+    messages remain idempotent after reload. Interrupted room deliveries become
+    retryable failures on hydration rather than silently restarting network work.
 - `src/libs/hooks/`: Solid hooks used by UI.
+  `conversation-read.ts` advances a shared local reading cursor only while the
+  document is visible and the mounted conversation follows its newest message;
+  `create-bottom-scroll.ts` owns each conversation's scroll viewport separately
+  from route/document scrolling.
 - `src/libs/utils/`: generic utilities; worker modules live beside their owner
   instead of in a global worker bucket.
 
@@ -137,6 +360,11 @@ The local media stream is now application-composed and injected through
 work.
 
 ## Signaling and profile privacy
+
+New client IDs use `uid_` followed by 16 cryptographically random
+URL-safe characters (96 bits of randomness). Stored profiles keep their
+existing IDs, including legacy UUIDs, so local conversation identities
+remain stable across upgrades and reloads.
 
 The signaling backend is a rendezvous layer, not an application
 message transport:

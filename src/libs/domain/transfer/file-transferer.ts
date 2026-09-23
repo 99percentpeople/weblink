@@ -29,6 +29,8 @@ export interface FileTransfererOptions {
   cache: ChunkCache;
   info?: FileMetaData;
   blockSize?: number;
+  /** Negotiated SCTP packet limit, including our binary packet header. */
+  maxMessageSize?: number;
   bufferedAmountLowThreshold?: number;
   bufferedAmountHighWaterMark?: number;
   compressionLevel?: CompressionLevel;

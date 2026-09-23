@@ -7,6 +7,12 @@ const routes = [
     component: lazy(() => import("@/routes/index")),
     children: [
       {
+        path: "conversation/:id",
+        component: lazy(
+          () => import("@/routes/conversation"),
+        ),
+      },
+      {
         path: "/",
         component: lazy(() => import("@/routes/client")),
       },

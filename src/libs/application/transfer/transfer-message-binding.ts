@@ -1,5 +1,8 @@
 import type { ChunkCache } from "@/libs/domain/file";
-import type { FileTransferMessage } from "@/libs/domain/message";
+import type {
+  FileTransferMessage,
+  RoomFileTransferState,
+} from "@/libs/domain/message";
 import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import type { ActiveFileTransfer } from "./file-transfer-state";
 
@@ -10,6 +13,57 @@ export interface TransferMessageStore {
   ): void;
 }
 
+/** Room uploads update only that recipient, never the shared offer's receipt. */
+function updateRun(
+  entry: ActiveFileTransfer,
+  store: TransferMessageStore,
+  update: (state: RoomFileTransferState) => void,
+  complete = false,
+): void {
+  store.updateTransferMessage(
+    entry.messageId,
+    (message) => {
+      if (
+        message.room &&
+        entry.transferer.mode === TransferMode.Send
+      ) {
+        const peerId = entry.session.targetClientId;
+        const state = {
+          ...message.roomTransfers?.[peerId],
+        };
+        update(state);
+        message.roomTransfers = {
+          ...message.roomTransfers,
+          [peerId]: state,
+        };
+      } else {
+        const state = {
+          status: message.transferStatus,
+          progress: message.progress,
+          error: message.error,
+        };
+        update(state);
+        message.transferStatus = state.status;
+        message.progress = state.progress;
+        message.error = state.error;
+        if (complete && !message.room)
+          message.status = "received";
+      }
+    },
+  );
+}
+
+export function failTransferMessage(
+  entry: ActiveFileTransfer,
+  store: TransferMessageStore,
+  error: Error,
+): void {
+  updateRun(entry, store, (state) => {
+    state.status = "error";
+    state.error = error.message;
+  });
+}
+
 /** Subscriptions belong to a run; updates resolve the message ID every time. */
 export function bindTransferMessage(
   entry: ActiveFileTransfer,
@@ -17,30 +71,48 @@ export function bindTransferMessage(
   signal: AbortSignal,
 ): void {
   const update = (
-    fn: (message: FileTransferMessage) => void,
+    fn: (state: RoomFileTransferState) => void,
+    complete = false,
   ) => {
     if (!signal.aborted)
-      store.updateTransferMessage(entry.messageId, fn);
+      updateRun(entry, store, fn, complete);
   };
+  // A metadata offer is not a transfer until a recipient explicitly starts one.
+  store.updateTransferMessage(
+    entry.messageId,
+    (message) => {
+      if (!message.room) return;
+      if (entry.transferer.mode === TransferMode.Send) {
+        const peerId = entry.session.targetClientId;
+        message.roomTransfers = {
+          ...message.roomTransfers,
+          [peerId]: { status: "init" },
+        };
+      } else {
+        message.transferStatus = "init";
+        message.error = undefined;
+      }
+    },
+  );
   const transfer = entry.transferer;
   transfer.addEventListener(
     "ready",
     () =>
-      update((message) => {
-        message.error = undefined;
-        message.transferStatus = "transfering";
+      update((state) => {
+        state.error = undefined;
+        state.status = "transfering";
       }),
     { signal },
   );
   transfer.addEventListener(
     "progress",
     ({ detail }) =>
-      update((message) => {
-        message.progress = {
+      update((state) => {
+        state.progress = {
           total: detail.total,
           received: detail.received,
         };
-        message.transferStatus = "transfering";
+        state.status = "transfering";
       }),
     { signal },
   );
@@ -48,32 +120,31 @@ export function bindTransferMessage(
     "complete",
     () => {
       if (transfer.mode !== TransferMode.Send) return;
-      update((message) => {
-        message.status = "received";
-        message.transferStatus = "complete";
-        message.error = undefined;
-      });
+      update((state) => {
+        state.status = "complete";
+        state.error = undefined;
+      }, true);
     },
     { signal },
   );
   transfer.addEventListener(
     "close",
     () =>
-      update((message) => {
+      update((state) => {
         if (
-          message.transferStatus !== "complete" &&
-          message.transferStatus !== "error"
+          state.status !== "complete" &&
+          state.status !== "error"
         )
-          message.transferStatus = "paused";
+          state.status = "paused";
       }),
     { signal },
   );
   transfer.addEventListener(
     "error",
     ({ detail }) =>
-      update((message) => {
-        message.transferStatus = "error";
-        message.error = detail.message;
+      update((state) => {
+        state.status = "error";
+        state.error = detail.message;
       }),
     { signal },
   );
@@ -95,7 +166,7 @@ export async function finishReceivedFile(
       `cache ${cache.id} could not be assembled`,
     );
   store.updateTransferMessage(messageId, (message) => {
-    message.status = "received";
+    if (!message.room) message.status = "received";
     message.transferStatus = "complete";
     message.error = undefined;
   });

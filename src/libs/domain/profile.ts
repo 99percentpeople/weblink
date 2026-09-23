@@ -1,4 +1,5 @@
 import type { Client } from "./client";
+import { CLIENT_ID_PREFIX } from "./ids";
 import type { ProtocolPeerProfile } from "./protocol/messages";
 export {
   P2P_PROFILE_PROTOCOL_VERSION,
@@ -20,7 +21,10 @@ export interface ClientProfile extends Client {
 export function createAnonymousPeerProfile(
   clientId: string,
 ): PeerProfile {
-  const suffix = clientId.replaceAll("-", "").slice(0, 8);
+  const identity = clientId.startsWith(CLIENT_ID_PREFIX)
+    ? clientId.slice(CLIENT_ID_PREFIX.length)
+    : clientId;
+  const suffix = identity.replaceAll("-", "").slice(0, 8);
   return {
     name: `Peer-${suffix || "unknown"}`,
     avatar: null,

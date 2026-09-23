@@ -43,6 +43,16 @@ This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
 - Prefer dependency injection (pass services in) over adding new global singletons.
 - If a protocol/message shape changes, version it and keep backward compatibility where possible.
 
+## Testing and visual acceptance
+
+- The user handles visual acceptance manually; UI styles and layouts change frequently.
+- Avoid adding or repeatedly running tests tied to screenshots, CSS classes,
+  exact dimensions, spacing or layout geometry unless explicitly requested.
+- Keep UI tests focused on meaningful behavior: interactions, permissions,
+  state transitions, data flow and resource cleanup.
+- Run focused checks appropriate to the change. Do not run broad browser or
+  visual test suites solely for routine styling and layout adjustments.
+
 ## Docs
 
 - Architecture and ownership: `docs/ARCHITECTURE.md`

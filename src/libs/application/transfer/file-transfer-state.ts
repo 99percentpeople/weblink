@@ -1,5 +1,8 @@
 import type { PeerSession } from "@/libs/domain/session";
-import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
+import {
+  TransferMode,
+  type FileTransferer,
+} from "@/libs/domain/transfer/file-transferer";
 import type { FileTransferMessage } from "@/libs/domain/message";
 
 /** A cache file is not a transfer. Every run has an owner and a message. */
@@ -24,10 +27,16 @@ export function findMessageTransfer(
     (entry) =>
       entry?.messageId === message.id &&
       entry.fileId === message.fid &&
-      ((entry.session.clientId === message.client &&
-        entry.session.targetClientId === message.target) ||
-        (entry.session.clientId === message.target &&
-          entry.session.targetClientId === message.client)),
+      (message.room
+        ? entry.transferer.mode === TransferMode.Receive &&
+          entry.session.targetClientId === message.client &&
+          entry.session.clientId === message.target
+        : (entry.session.clientId === message.client &&
+            entry.session.targetClientId ===
+              message.target) ||
+          (entry.session.clientId === message.target &&
+            entry.session.targetClientId ===
+              message.client)),
   );
 }
 

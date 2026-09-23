@@ -128,7 +128,7 @@ describe("shared client header", () => {
         "border-border",
         "bg-background/80",
         "backdrop-blur",
-        "top-[var(--mobile-header-height)]",
+        "top-(--mobile-header-height)",
         "md:top-0",
       );
       const back = screen.getByLabelText("404.home");

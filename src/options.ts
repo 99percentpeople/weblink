@@ -14,12 +14,14 @@ import { STORAGE_KEYS } from "@/constants";
 import type {
   AppOption,
   ClientConfig,
+  RoomConfig,
 } from "@/libs/state/app-options";
 import {
   defaultClientConfig,
   getDefaultAppOptions,
   parseTurnServers,
   resolveClientConfig,
+  resolveRoomConfig,
 } from "@/libs/state/app-options";
 
 export type {
@@ -142,6 +144,16 @@ export const setClientConfig = (
 ) => {
   setAppOptions("clientConfigs", clientId, {
     ...getClientConfig(clientId),
+    ...patch,
+  });
+};
+
+export const setRoomConfig = (
+  conversationId: string,
+  patch: Partial<RoomConfig>,
+) => {
+  setAppOptions("roomConfigs", conversationId, {
+    ...resolveRoomConfig(appState.options, conversationId),
     ...patch,
   });
 };

@@ -54,6 +54,19 @@ const flush = async () => {
 };
 
 describe("client signaling presence", () => {
+  it("uses the random part of a prefixed ID for anonymous names", () => {
+    expect(
+      hydrateClientPresence({
+        clientId: "uid_aBcD1234eFgH5678",
+        createdAt: 42,
+      }),
+    ).toMatchObject({
+      clientId: "uid_aBcD1234eFgH5678",
+      name: "Peer-aBcD1234",
+      avatar: null,
+    });
+  });
+
   it("omits profile data and hydrates an anonymous local view", () => {
     const client: TransferClient = {
       clientId: "12345678-abcd-efgh",

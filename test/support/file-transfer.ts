@@ -18,6 +18,7 @@ import { TransferRegistry } from "@/libs/application/transfer/transfer-registry"
 import {
   bindTransferMessage,
   finishReceivedFile,
+  failTransferMessage,
 } from "@/libs/application/transfer/transfer-message-binding";
 
 export function fileMessage(
@@ -238,13 +239,7 @@ export function registryFixture() {
         );
     },
     failed: (entry, error) =>
-      messages.updateTransferMessage(
-        entry.messageId,
-        (message) => {
-          message.transferStatus = "error";
-          message.error = error.message;
-        },
-      ),
+      failTransferMessage(entry, messages, error),
     automaticCacheDeletion: () => autoDelete,
     reportError: report,
     channelTimeoutMs: 1000,

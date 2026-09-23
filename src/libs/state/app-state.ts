@@ -13,6 +13,10 @@ import type {
 import type { PeerSession } from "@/libs/domain/session";
 import type { ClientProfile } from "@/libs/domain/profile";
 import type { StoreMessage } from "@/libs/domain/message";
+import type {
+  Conversation,
+  ConversationLabel,
+} from "@/libs/domain/conversation";
 import type { SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { AppOption } from "@/libs/state/app-options";
@@ -280,6 +284,8 @@ export type AppState = {
     status: "initializing" | "ready";
     messages: StoreMessage[];
     clients: Client[];
+    conversations: Conversation[];
+    labels: ConversationLabel[];
   };
 };
 
@@ -321,6 +327,8 @@ export const createInitialAppState = (): AppState => ({
     status: "initializing",
     messages: [],
     clients: [],
+    conversations: [],
+    labels: [],
   },
 });
 

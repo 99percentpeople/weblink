@@ -103,7 +103,9 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-foreground: var(
+    --destructive-foreground
+  );
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-success: var(--success);
@@ -123,9 +125,13 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary-foreground: var(
+    --sidebar-primary-foreground
+  );
   --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent-foreground: var(
+    --sidebar-accent-foreground
+  );
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
@@ -241,12 +247,15 @@ body::before {
 body {
   @apply overflow-y-auto overscroll-none;
 
-  min-height: calc(100vh - constant(safe-area-inset-bottom));
+  min-height: calc(
+    100vh - constant(safe-area-inset-bottom)
+  );
   min-height: calc(100vh - env(safe-area-inset-bottom));
 }
 
 #root {
-  @apply flex-1;
+  /* Let viewport-sized routes contain their own scrolling content. */
+  @apply min-h-0 min-w-0 flex-1;
 }
 
 /* Typography */
@@ -324,14 +333,18 @@ svg {
   @apply fill-current;
 }
 
-@keyframes popIn {
+svg.lucide {
+  fill: none;
+}
+
+@keyframes messageIn {
   from {
-    transform: scale(0.9);
+    transform: translateY(8px) scale(0.98);
     opacity: 0;
   }
 
   to {
-    transform: scale(1);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
@@ -346,6 +359,19 @@ svg {
   }
 }
 
-.animate-message {
-  animation: popIn 0.3s ease-out;
+/* Animate the bubble, never the row used as the scroll anchor. */
+.animate-message [data-slot="message-bubble"] {
+  transform-origin: bottom left;
+  animation: messageIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-message[data-side="outgoing"]
+  [data-slot="message-bubble"] {
+  transform-origin: bottom right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-message [data-slot="message-bubble"] {
+    animation: none;
+  }
 }

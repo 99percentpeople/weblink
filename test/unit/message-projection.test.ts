@@ -6,6 +6,7 @@ import {
   projectRetry,
 } from "@/libs/application/messaging/message-projection";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
+import { directConversationId } from "@/libs/domain/conversation";
 
 const peer = {
   clientId: "local",
@@ -24,8 +25,15 @@ describe("message projection", () => {
     const stored = projectOutgoingMessage(wire);
 
     expect(wire).not.toHaveProperty("status");
+    expect(wire).not.toHaveProperty("conversationId");
+    expect(wire).not.toHaveProperty("room");
+    expect(wire).not.toHaveProperty("deliveries");
     expect(stored).toEqual({
       ...wire,
+      conversationId: directConversationId(
+        "local",
+        "remote",
+      ),
       type: "text",
       status: "sending",
     });

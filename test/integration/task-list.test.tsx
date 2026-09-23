@@ -44,6 +44,7 @@ vi.mock("@/libs/state/app-state", () => ({
 const pause = vi.fn();
 const resume = vi.fn();
 const request = vi.fn();
+const requestRoom = vi.fn();
 const retry = vi.fn();
 const cancel = vi.fn();
 const approve = vi.fn();
@@ -91,6 +92,7 @@ beforeEach(() => {
   pause.mockResolvedValue(undefined);
   resume.mockResolvedValue(undefined);
   request.mockResolvedValue(undefined);
+  requestRoom.mockResolvedValue(undefined);
   retry.mockResolvedValue(undefined);
   current = {
     id: "run",
@@ -122,6 +124,7 @@ beforeEach(() => {
     pauseFile: pause,
     resumeFile: resume,
     requestFile: request,
+    requestRoomFile: requestRoom,
     retryMessage: retry,
     cancelSpeedTest: cancel,
     approveSpeedTest: approve,
@@ -252,6 +255,42 @@ describe("unified task list controls", () => {
         expect.objectContaining({ id: "filemsg" }),
       ),
     );
+    expect(resume).not.toHaveBeenCalled();
+  });
+  it("resumes a room download through the offer API and never proactively resumes a room upload", async () => {
+    const incoming = message({
+      id: "incoming-room",
+      client: "peer",
+      target: "self",
+      status: "error",
+      room: {
+        roomId: "room",
+        senderName: "Peer",
+        senderAvatar: null,
+      },
+    });
+    setMessages([
+      incoming,
+      message({
+        room: {
+          roomId: "room",
+          senderName: "Me",
+          senderAvatar: null,
+        },
+        roomTransfers: { peer: { status: "paused" } },
+      }),
+    ]);
+    render(() => <TaskList onInspect={inspect} />);
+    const buttons = screen.getAllByRole("button", {
+      name: "tasks.resume",
+    });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    await waitFor(() =>
+      expect(requestRoom).toHaveBeenCalledWith(incoming),
+    );
+    expect(request).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
     expect(resume).not.toHaveBeenCalled();
   });
   it("offers approval actions for an incoming speed test", () => {

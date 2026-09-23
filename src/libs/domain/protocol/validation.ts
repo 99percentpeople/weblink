@@ -5,6 +5,9 @@ import type {
 import { P2PProtocolError } from "./errors";
 import {
   P2P_STORAGE_PROTOCOL_VERSION,
+  P2P_ROOM_CHAT_PROTOCOL_VERSION,
+  P2P_ROOM_FILE_PROTOCOL_VERSION,
+  ROOM_CHAT_MAX_TEXT_LENGTH,
   STORAGE_MAX_PAGE_SIZE,
   STORAGE_MAX_SEARCH_LENGTH,
   STORAGE_SORT_FIELDS,
@@ -32,6 +35,31 @@ const optional = (
 ) => value === undefined || check(value);
 const chunkSize = (value: unknown): value is number =>
   integer(value) && value > 0;
+
+function roomBinding(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    id(value.roomId) &&
+    value.roomId.length <= 256 &&
+    id(value.senderToken) &&
+    value.senderToken.length <= 128 &&
+    id(value.recipientToken) &&
+    value.recipientToken.length <= 128
+  );
+}
+
+function roomSender(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    text(value.senderName) &&
+    value.senderName.length <= 128 &&
+    (value.senderAvatar === null ||
+      (text(value.senderAvatar) &&
+        value.senderAvatar.length <= 256 * 1024))
+  );
+}
 
 function fileMetadata(
   value: Record<string, unknown>,
@@ -176,8 +204,124 @@ export function validateSessionMessage(
     !timestamp(value.createdAt)
   )
     return fail();
+  // These are local history fields, never wire metadata. In particular, a
+  // legacy send-text must not smuggle itself into a room via object spreading
+  // in a storage projection and bypass the room handler's binding checks.
+  if (
+    [
+      "conversationId",
+      "room",
+      "deliveries",
+      "roomTransfers",
+      "localSequence",
+      "lastReadSequence",
+    ].some((key) => Object.hasOwn(value, key))
+  )
+    return fail();
   let valid = false;
   switch (value.type) {
+    case "room-capabilities":
+      valid =
+        value.version === P2P_ROOM_CHAT_PROTOCOL_VERSION &&
+        id(value.roomId) &&
+        value.roomId.length <= 256 &&
+        id(value.token) &&
+        value.token.length <= 128 &&
+        optional(
+          value.features,
+          (features) =>
+            Array.isArray(features) &&
+            features.length <= 16 &&
+            features.every(
+              (feature) =>
+                text(feature) &&
+                feature.length > 0 &&
+                feature.length <= 64,
+            ),
+        );
+      break;
+    case "send-room-file":
+      valid =
+        value.version === P2P_ROOM_FILE_PROTOCOL_VERSION &&
+        roomBinding(value) &&
+        roomSender(value) &&
+        fileMetadata(value, false) &&
+        (value.fileName as string).length > 0 &&
+        (value.fileName as string).length <= 1024 &&
+        optional(
+          value.mimeType,
+          (mime) => text(mime) && mime.length <= 255,
+        ) &&
+        Object.keys(value).every((key) =>
+          [
+            "id",
+            "type",
+            "createdAt",
+            "client",
+            "target",
+            "version",
+            "roomId",
+            "senderToken",
+            "recipientToken",
+            "senderName",
+            "senderAvatar",
+            "fid",
+            "fileName",
+            "fileSize",
+            "mimeType",
+            "lastModified",
+            "chunkSize",
+          ].includes(key),
+        );
+      break;
+    case "request-room-file":
+      valid =
+        value.version === P2P_ROOM_FILE_PROTOCOL_VERSION &&
+        roomBinding(value) &&
+        id(value.offerId) &&
+        value.offerId !== value.id &&
+        id(value.fid) &&
+        typeof value.resume === "boolean" &&
+        optional(value.ranges, (items) =>
+          ranges(items, Number.MAX_SAFE_INTEGER),
+        ) &&
+        Object.keys(value).every((key) =>
+          [
+            "id",
+            "type",
+            "createdAt",
+            "client",
+            "target",
+            "version",
+            "roomId",
+            "senderToken",
+            "recipientToken",
+            "offerId",
+            "fid",
+            "ranges",
+            "resume",
+          ].includes(key),
+        );
+      // The authorized offer supplies the actual chunk count for range checks.
+      break;
+    case "send-room-text":
+      valid =
+        value.version === P2P_ROOM_CHAT_PROTOCOL_VERSION &&
+        id(value.roomId) &&
+        value.roomId.length <= 256 &&
+        id(value.senderToken) &&
+        value.senderToken.length <= 128 &&
+        id(value.recipientToken) &&
+        value.recipientToken.length <= 128 &&
+        text(value.senderName) &&
+        value.senderName.length <= 128 &&
+        (value.senderAvatar === null ||
+          (text(value.senderAvatar) &&
+            value.senderAvatar.length <= 256 * 1024)) &&
+        text(value.data) &&
+        value.data.trim().length > 0 &&
+        value.data.length <= ROOM_CHAT_MAX_TEXT_LENGTH;
+      break;
     case "send-text":
     case "send-clipboard":
       valid = text(value.data);

@@ -13,15 +13,13 @@ type CreateFullscreenResult = {
   exitFullscreen: () => Promise<void>;
 };
 
-// Store the element currently in fullscreen mode (if any)
 const [
   currentFullscreenElement,
   setCurrentFullscreenElement,
 ] = createSignal<HTMLElement | null>(
-  document.fullscreenElement as HTMLElement | null,
+  (document.fullscreenElement as HTMLElement | null) ??
+    null,
 );
-
-// Determine if fullscreen is supported
 const [isSupported] = createSignal(
   typeof document !== "undefined" &&
     "fullscreenEnabled" in document
@@ -32,22 +30,21 @@ const [isSupported] = createSignal(
 export function createFullscreen(
   element: Accessor<HTMLElement | null | undefined>,
 ): CreateFullscreenResult {
-  // Event handler for when the fullscreen state changes
   const onFullscreenChange = () => {
     setCurrentFullscreenElement(
-      document.fullscreenElement as HTMLElement | null,
+      (document.fullscreenElement as HTMLElement | null) ??
+        null,
+    );
+  };
+  const isFullscreen = () =>
+    currentFullscreenElement() !== null;
+  const isThisElementFullscreen = () => {
+    const current = element();
+    return Boolean(
+      current && currentFullscreenElement() === current,
     );
   };
 
-  // Determine if any element is currently in fullscreen mode
-  const isFullscreen = () =>
-    currentFullscreenElement() !== null;
-
-  // Determine if the currently passed element is the one in fullscreen mode
-  const isThisElementFullscreen = () =>
-    currentFullscreenElement() === element();
-
-  // Request the element to enter fullscreen mode
   const requestFullscreen = async () => {
     const el = element();
     if (!el) return;
@@ -58,12 +55,10 @@ export function createFullscreen(
       return;
     }
     try {
-      if (el.requestFullscreen) {
+      if (el.requestFullscreen)
         await el.requestFullscreen();
-      } else if ((el as any).webkitRequestFullscreen) {
-        // Safari compatibility handling
+      else if ((el as any).webkitRequestFullscreen)
         (el as any).webkitRequestFullscreen();
-      }
     } catch (error) {
       console.error(
         "Request to enter fullscreen failed:",
@@ -72,39 +67,41 @@ export function createFullscreen(
     }
   };
 
-  // Exit fullscreen
-  const exitFullscreen = async () => {
-    if (document.fullscreenElement) {
-      try {
-        await document.exitFullscreen();
-      } catch (error) {
-        console.error("Exit fullscreen failed:", error);
-      }
+  const exitOwnedFullscreen = async (
+    owned: HTMLElement | null | undefined,
+  ) => {
+    if (!owned || document.fullscreenElement !== owned)
+      return;
+    try {
+      await document.exitFullscreen();
+      onFullscreenChange();
+    } catch (error) {
+      console.error("Exit fullscreen failed:", error);
     }
   };
+  const exitFullscreen = () =>
+    exitOwnedFullscreen(element());
 
-  // Listen for fullscreen event changes
-  // Note: fullscreenchange event is bound to document
   if (typeof document !== "undefined") {
     document.addEventListener(
       "fullscreenchange",
       onFullscreenChange,
     );
-    onCleanup(() => {
+    onFullscreenChange();
+    onCleanup(() =>
       document.removeEventListener(
         "fullscreenchange",
         onFullscreenChange,
-      );
-      exitFullscreen();
-    });
+      ),
+    );
   }
-
-  // When the elementAccessor becomes null, if the current element is in fullscreen mode, exit fullscreen
   createEffect(() => {
-    const el = element();
-    if (!el && isThisElementFullscreen()) {
-      exitFullscreen();
-    }
+    const owned = element();
+    // The captured old element remains available when its ref becomes null or
+    // changes to another source. Cleanup must never exit another tile's mode.
+    onCleanup(() => {
+      void exitOwnedFullscreen(owned);
+    });
   });
 
   return {

@@ -36,9 +36,10 @@ export class FileCatalogIndex {
 
   update(id: string, info: FileMetaData | null): void {
     const previous = this.entries.get(id);
-    const next = info?.isComplete
-      ? toCatalogMetadata(info)
-      : undefined;
+    const next =
+      info?.isComplete && !info.roomAttachment
+        ? toCatalogMetadata(info)
+        : undefined;
     if (JSON.stringify(previous) === JSON.stringify(next))
       return;
     if (next) this.entries.set(id, next);

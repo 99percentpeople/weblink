@@ -19,6 +19,27 @@ export const defaultClientConfig: ClientConfig = {
   provideFileList: true,
 };
 
+export type RoomConfig = {
+  autoDownloadFiles: boolean;
+  /** Maximum size in bytes, inclusive. */
+  autoDownloadMaxSize: number;
+};
+
+export const defaultRoomConfig: RoomConfig = {
+  autoDownloadFiles: false,
+  autoDownloadMaxSize: 5 * 1024 * 1024,
+};
+
+export const resolveRoomConfig = (
+  options: {
+    roomConfigs: Record<string, RoomConfig | undefined>;
+  },
+  conversationId: string,
+): RoomConfig => ({
+  ...defaultRoomConfig,
+  ...options.roomConfigs[conversationId],
+});
+
 export const resolveClientConfig = (
   options: {
     clientConfigs: Record<
@@ -62,6 +83,9 @@ export type AppOption = {
 
   // Per-client privacy / behavior
   clientConfigs: Record<ClientID, ClientConfig | undefined>;
+
+  // Local preferences keyed by the room's namespaced conversation identity.
+  roomConfigs: Record<string, RoomConfig | undefined>;
 
   // Stream
   videoMaxBitrate: number;
@@ -173,6 +197,7 @@ export const getDefaultAppOptions = (): AppOption => {
     backgroundImageOpacity: 0.5,
     automaticDownload: false,
     clientConfigs: {},
+    roomConfigs: {},
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

@@ -1,0 +1,235 @@
+import { Motion } from "@/components/ui/motion";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type ParentProps,
+} from "solid-js";
+import { Portal } from "solid-js/web";
+import { t } from "@/i18n";
+import { ChevronDown, ChevronUp } from "lucide-solid";
+import { MeetingTile } from "./meeting-tile";
+import type { MeetingSource } from "./meeting-sources";
+import { createMeetingGridLayout } from "./meeting-grid-layout";
+
+export type MeetingStageHandle = { measure(): void };
+
+export function MeetingStage(
+  props: ParentProps<{
+    ref?: (stage: MeetingStageHandle | undefined) => void;
+    compact?: boolean;
+    sources: readonly MeetingSource[];
+    pinnedId: string | null;
+    railCollapsed: boolean;
+    onRailCollapsedChange(collapsed: boolean): void;
+    toolbarFollowsRail: boolean;
+    onPin(id: string): void;
+    onStop(trackId: string): void;
+    transitionLayout(update: () => void): void;
+  }>,
+) {
+  const [grid, setGrid] = createSignal<HTMLDivElement>();
+  const [frame, setFrame] = createSignal<HTMLDivElement>();
+  const [rail, setRail] = createSignal<HTMLDivElement>();
+  const railId = createUniqueId();
+  const railCollapsed = () => props.railCollapsed;
+  const [sources, setSources] = createSignal(props.sources);
+  const layout = createMeetingGridLayout(
+    grid,
+    () => sources().length,
+    (update) => props.transitionLayout(update),
+  );
+  createEffect(
+    on(
+      () => props.sources,
+      (next) => {
+        const current = untrack(sources);
+        if (
+          current.length === next.length &&
+          current.every(
+            (source, i) => source.id === next[i].id,
+          )
+        ) {
+          // Stream/participant metadata does not need a layout animation.
+          setSources(next);
+        } else {
+          // Commit keyed views and grid geometry together, before measuring the
+          // destination. Read the latest sources when rapid updates coalesce.
+          layout.schedule(() => setSources(props.sources));
+        }
+      },
+    ),
+  );
+  onMount(() => {
+    props.ref?.({ measure: layout.measure });
+    onCleanup(() => props.ref?.(undefined));
+  });
+  const byId = createMemo(
+    () =>
+      new Map(
+        sources().map((source) => [source.id, source]),
+      ),
+  );
+  const featured = createMemo(() =>
+    sources().find(
+      (source) => source.id === props.pinnedId,
+    ),
+  );
+  const rest = createMemo(() =>
+    sources()
+      .filter((source) => source.id !== featured()?.id)
+      .map((source) => source.id),
+  );
+  const sourceIds = createMemo(() =>
+    sources().map((source) => source.id),
+  );
+  const hasRail = () =>
+    Boolean(featured() && rest().length);
+  const CollapseToggle = () => (
+    <Motion.div
+      class="meeting-thumbnails-toolbar"
+      layout
+      layoutId="meeting-thumbnail-controls"
+    >
+      <button
+        type="button"
+        class="meeting-thumbnails-toggle"
+        aria-controls={hasRail() ? railId : undefined}
+        aria-expanded={!railCollapsed()}
+        onClick={() =>
+          props.transitionLayout(() =>
+            props.onRailCollapsedChange(!railCollapsed()),
+          )
+        }
+      >
+        <Show
+          when={railCollapsed()}
+          fallback={<ChevronDown />}
+        >
+          <ChevronUp />
+        </Show>
+        {t(
+          hasRail()
+            ? railCollapsed()
+              ? "meeting.show_sources"
+              : "meeting.hide_sources"
+            : railCollapsed()
+              ? "meeting.show_toolbar"
+              : "meeting.hide_toolbar",
+        )}
+      </button>
+    </Motion.div>
+  );
+  const Tile = (tile: { id: string; order: number }) => (
+    <Show when={byId().get(tile.id)}>
+      {(source) => (
+        <MeetingTile
+          compact={props.compact}
+          onSelect={
+            props.compact && source().id !== featured()?.id
+              ? () => props.onPin(source().id)
+              : undefined
+          }
+          sourceId={source().id}
+          order={tile.order}
+          sourceKind={source().kind}
+          trackId={source().track?.id}
+          name={source().name}
+          avatar={source().avatar}
+          stream={source().stream}
+          local={source().local}
+          pinned={source().id === featured()?.id}
+          onPin={() => props.onPin(source().id)}
+          onStop={
+            source().local && source().track
+              ? () => props.onStop(source().track!.id)
+              : undefined
+          }
+        />
+      )}
+    </Show>
+  );
+
+  return (
+    <section
+      class="meeting-stage"
+      classList={{ "is-focused": Boolean(featured()) }}
+      aria-label={t("meeting.stage")}
+    >
+      {props.children}
+      <div
+        ref={setGrid}
+        class="meeting-grid"
+        data-layout-ready={layout().tileWidth > 0}
+        style={{
+          "--meeting-grid-columns": layout().columns,
+          "--meeting-grid-rows": layout().rows,
+          "--meeting-tile-width": `${layout().tileWidth}px`,
+          "--meeting-tile-height": `${layout().tileHeight}px`,
+          "--meeting-grid-gap": `${layout().gap}px`,
+          "--meeting-grid-offset-x": `${layout().offsetX}px`,
+          "--meeting-grid-offset-y": `${layout().offsetY}px`,
+        }}
+        classList={{
+          "has-featured": Boolean(featured()),
+          "is-solo": sources().length === 1,
+          "is-rail-collapsed": railCollapsed(),
+        }}
+      >
+        {/* Keep branch cleanup separate from the views portaled into the grid. */}
+        <div style={{ display: "contents" }}>
+          <Show when={featured()}>
+            <div
+              ref={setFrame}
+              class="meeting-featured-frame"
+            />
+            <Show when={rest().length}>
+              <CollapseToggle />
+              <div
+                ref={setRail}
+                id={railId}
+                class="meeting-thumbnails"
+                classList={{
+                  "is-collapsed": railCollapsed(),
+                }}
+                data-motion-layout-container="meeting-thumbnail-rail"
+                inert={railCollapsed()}
+                aria-hidden={railCollapsed()}
+                aria-label={t("meeting.other_sources")}
+              ></div>
+            </Show>
+          </Show>
+        </div>
+      </div>
+      <Show when={!hasRail() && props.toolbarFollowsRail}>
+        <CollapseToggle />
+      </Show>
+      {/* Portal retains its content when the layout host changes. */}
+      <For each={sourceIds()}>
+        {(id, index) => (
+          <Portal
+            mount={
+              featured()
+                ? featured()?.id === id
+                  ? frame()
+                  : rail()
+                : grid()
+            }
+            ref={(container) => {
+              container.style.display = "contents";
+            }}
+          >
+            <Tile id={id} order={index()} />
+          </Portal>
+        )}
+      </For>
+    </section>
+  );
+}

@@ -781,6 +781,7 @@ export class PeerSession {
   close() {
     this.lifecycle.dispose();
     this.resetSession();
+    this.media.dispose();
     this.dataChannels.close();
     this.setStatus("closed");
   }

@@ -1,6 +1,5 @@
 import type { Accessor } from "solid-js";
 import { createSignal } from "solid-js";
-import { stopMediaStream } from "@/libs/domain/media-stream";
 
 export interface LocalStreamService {
   readonly stream: Accessor<MediaStream | null>;
@@ -20,71 +19,65 @@ export const createLocalStreamService =
       listenerController = undefined;
     };
 
-    const clearIfEmpty = (target: MediaStream) => {
+    const refresh = (target: MediaStream) => {
       if (stream() !== target) return;
-      if (target.getTracks().length !== 0) return;
-
-      releaseListeners();
-      setStream(null);
+      const tracks = target
+        .getTracks()
+        .filter((track) => track.readyState !== "ended");
+      // Native removeTrack does not dispatch an event. A fresh wrapper makes
+      // track membership observable to Solid and the session sender effect.
+      replace(
+        tracks.length ? new MediaStream(tracks) : null,
+      );
     };
 
     const listen = (target: MediaStream) => {
       const controller = new AbortController();
-      const observedTracks =
-        new WeakSet<MediaStreamTrack>();
       listenerController = controller;
-
-      const observeTrack = (track: MediaStreamTrack) => {
-        if (observedTracks.has(track)) return;
-        observedTracks.add(track);
-
+      target.getTracks().forEach((track) => {
         track.addEventListener(
           "ended",
           () => {
             if (stream() !== target) return;
             target.removeTrack(track);
-            clearIfEmpty(target);
+            refresh(target);
           },
-          {
-            once: true,
-            signal: controller.signal,
-          },
+          { once: true, signal: controller.signal },
         );
-      };
-
-      target.getTracks().forEach(observeTrack);
+      });
       target.addEventListener(
         "addtrack",
-        (event) => observeTrack(event.track),
+        () => refresh(target),
         { signal: controller.signal },
       );
       target.addEventListener(
         "removetrack",
-        () => clearIfEmpty(target),
+        () => refresh(target),
         { signal: controller.signal },
       );
-
-      clearIfEmpty(target);
     };
 
     const replace = (next: MediaStream | null) => {
       const current = stream();
       if (current === next) return;
-
       releaseListeners();
-      stopMediaStream(current);
-      setStream(next);
-
-      if (next) listen(next);
+      const retained = new Set(next?.getTracks() ?? []);
+      current?.getTracks().forEach((track) => {
+        if (retained.has(track)) return;
+        current.removeTrack(track);
+        track.stop();
+      });
+      const published = next?.getTracks().length
+        ? next
+        : null;
+      // Install listeners before notifying reactive consumers. They may replace
+      // the stream synchronously while reacting to this publication.
+      if (published) listen(published);
+      setStream(published);
     };
 
     const clear = () => replace(null);
     const dispose = () => replace(null);
 
-    return {
-      stream,
-      replace,
-      clear,
-      dispose,
-    };
+    return { stream, replace, clear, dispose };
   };
