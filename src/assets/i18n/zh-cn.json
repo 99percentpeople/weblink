@@ -94,24 +94,35 @@
         "description": "更改应用程序的语言"
       },
       "background_image": {
-        "title": "背景图片",
-        "description": "更改应用程序的背景图片，也可以在文件缓存中选择",
-        "click_to_select": "点击选择"
+        "title": "墙纸背景",
+        "description": "选择预设纹理，或上传、拖入自己的图片。",
+        "click_to_select": "点击选择",
+        "preview": "背景预览",
+        "custom_image": "自定义图片",
+        "default": "默认背景",
+        "upload": "上传图片",
+        "uploading": "保存中…",
+        "reset": "恢复默认背景",
+        "textures": "预设纹理",
+        "drop_to_upload": "松开以设为背景",
+        "invalid_image": "请选择图片文件。",
+        "upload_failed": "图片保存失败，请重试。",
+        "presets": {
+          "dots": "点阵",
+          "grid": "方格",
+          "diagonal": "斜纹",
+          "linen": "织纹",
+          "waves": "波纹",
+          "checker": "棋格"
+        }
       },
       "background_image_opacity": {
-        "title": "背景图片透明度",
+        "title": "背景透明度",
         "description": "更改背景图片的透明度"
       },
       "wake_lock": {
         "title": "保持屏幕常亮",
         "description": "当启用时，应用程序将保持屏幕常亮"
-      }
-    },
-    "meeting": {
-      "title": "会议",
-      "toolbar_follows_rail": {
-        "title": "允许收起工具栏",
-        "description": "工具栏与画面列表共用展开状态；网格和单画面下也显示展开／收起按钮。主页面与画中画共用此设置，默认关闭。"
       }
     },
     "connection": {
@@ -244,8 +255,17 @@
     },
     "about": {
       "title": "关于",
-      "reset_options": "重置选项",
-      "clear_service_worker_cache": "清除 Service Worker 缓存"
+      "reset_options": "重置设置",
+      "clear_service_worker_cache": "清除应用缓存",
+      "copy_version": "复制版本信息",
+      "copy_failed": "复制版本信息失败，请重试。",
+      "build_time": "构建时间",
+      "changelog": "更新记录",
+      "feedback": "反馈问题",
+      "maintenance": "维护",
+      "reset_description": "恢复应用选项及房间、成员偏好的默认值，保留聊天记录和缓存文件。",
+      "reset_failed": "重置设置失败：{{error}}",
+      "cache_description": "清除缓存的页面资源，用于解决加载或更新异常。保留聊天记录、缓存文件和设置。"
     }
   },
   "cache": {
@@ -314,8 +334,7 @@
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter 或 Shift + Enter 发送消息",
-      "mobile_placeholder": "发送消息",
-      "paste_tip": "剪贴板粘贴已启用"
+      "mobile_placeholder": "发送消息"
     },
     "sync": {
       "title": "文件同步",
@@ -432,14 +451,14 @@
       "unsupported_file_type": "不支持的文件类型"
     },
     "reset_options_dialog": {
-      "title": "重置选项",
+      "title": "重置设置",
       "description": "重置后将无法恢复，请谨慎操作",
-      "content": "这个操作会重置所有选项，但不会清除用户数据"
+      "content": "恢复应用选项及房间、成员偏好的默认值，保留聊天记录和缓存文件。"
     },
     "clear_service_worker_cache_dialog": {
-      "title": "清除 Service Worker 缓存",
-      "description": "这个操作会清除 Service Worker 缓存",
-      "content": "如果你在页面更新后遇到问题，可以清除缓存后重试",
+      "title": "清除应用缓存",
+      "description": "清除此站点缓存的页面资源和离线支持。",
+      "content": "聊天记录、缓存文件和设置会保留。重新加载页面会中断正在进行的通话和传输。",
       "reload": "清除后重新加载页面"
     },
     "file_table": {
@@ -629,8 +648,8 @@
       "processing_files": "处理文件中...",
       "new_version_available": "新版本可用",
       "share_failed": "分享失败，错误: {{error}}",
-      "clear_cache_success": "Cache Storage 和 Service Worker 清除成功",
-      "clear_cache_failed": "清除 Cache Storage 和 Service Worker 失败，错误: {{error}}"
+      "clear_cache_success": "应用缓存已清除",
+      "clear_cache_failed": "清除应用缓存失败：{{error}}"
     },
     "nav": {
       "chat": "聊天",
@@ -686,9 +705,9 @@
     "no_messages": "暂无消息",
     "unread_count": "{{count}} 条未读消息",
     "actions": "{{name}} 的会话操作",
-    "delete": "删除本机会话",
-    "delete_title": "删除本机历史",
-    "delete_description": "删除此浏览器中“{{name}}”的历史？其他成员的历史不受影响。当前房间仍会保留在列表中。",
+    "delete": "删除会话",
+    "delete_title": "删除会话",
+    "delete_description": "删除此浏览器中“{{name}}”的聊天记录及会话列表项？不影响其他成员。",
     "expand": "展开会话列表",
     "empty": "没有匹配的会话",
     "select": "选择一个会话开始聊天。",
@@ -715,7 +734,13 @@
     "room_file_request": "点击传输",
     "room_file_offer": "已分享到房间，成员点击后开始传输。",
     "room_file_sender_unavailable": "回到原房间且发送者在线后可传输。",
-    "room_file_missing": "此文件在本机已不可用。"
+    "room_file_missing": "此文件在本机已不可用。",
+    "back_to_list": "返回会话列表",
+    "clear": "清空聊天记录",
+    "clear_title": "清空聊天记录",
+    "clear_description": "清空此浏览器中“{{name}}”的聊天记录？会话列表项会保留，不影响其他成员。",
+    "delete_requires_exit": "请先退出房间，再删除会话。",
+    "manage_hint": "清空仅移除聊天记录并保留会话；删除还会移除会话列表项。"
   },
   "meeting": {
     "pip_title": "会议画中画",
@@ -767,7 +792,7 @@
     "chat": "聊天",
     "members": "成员",
     "info": "信息",
-    "select_conversation": "在“会话”标签中选择会话，或加入房间开始群聊。",
+    "select_conversation": "从会话列表选择会话，或加入房间开始群聊。",
     "members_hint": "当前房间的成员与连接状态",
     "status_online": "在线",
     "status_offline": "离线",
@@ -815,9 +840,15 @@
     "device_disabled": "设备被禁用",
     "permission_disabled_hint": "请在浏览器的网站权限或系统隐私设置中允许访问，再刷新设备列表。",
     "permission_requesting": "正在获取权限…",
-    "output_permission_hint": "当前浏览器需要麦克风授权才能显示关联的扬声器列表。"
+    "output_permission_hint": "当前浏览器需要麦克风授权才能显示关联的扬声器列表。",
+    "expand_chat": "展开侧边栏",
+    "collapse_chat": "缩窄侧边栏",
+    "maximize_sidebar": "展开为完整工作区",
+    "restore_sidebar": "还原侧栏",
+    "return_to_stage": "返回会议画面"
   },
   "room_dialog": {
+    "actions": "房间操作",
     "open": "房间信息与设置",
     "title": "房间设置",
     "description": "查看房间信息，配置会议设备与房间偏好。",
@@ -842,5 +873,16 @@
     "members_not_joined": "当前未加入此房间，无法查看在线成员。",
     "no_previous_members": "暂无保留的历史成员。",
     "members_hint": "历史成员仅显示曾加入此房间，且本地仍保留私聊会话的成员。"
+  },
+  "app_menu": {
+    "title": "用户菜单",
+    "room_qrcode": "房间二维码",
+    "joining": "正在加入…",
+    "settings_categories": "设置分类",
+    "settings_appearance": "外观",
+    "settings_connection": "连接",
+    "settings_transfer": "传输",
+    "settings_advanced": "高级",
+    "settings_about": "关于"
   }
 }

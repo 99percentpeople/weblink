@@ -142,6 +142,7 @@ const DialogFooter: Component<ComponentProps<"div">> = (
   const [, rest] = splitProps(props, ["class"]);
   return (
     <div
+      data-slot="dialog-footer"
       class={cn(
         `flex shrink-0 flex-col-reverse gap-2 sm:flex-row
         sm:justify-end`,

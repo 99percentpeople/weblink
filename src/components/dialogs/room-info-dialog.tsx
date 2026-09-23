@@ -20,7 +20,7 @@ import { appState } from "@/libs/state/app-state";
 import type { Conversation } from "@/libs/domain/conversation";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
-import { MeetingDeviceField } from "@/routes/video/components/meeting-device-menu";
+import { MeetingDeviceField } from "@/routes/home/components/meeting-device-menu";
 import { t } from "@/i18n";
 import { RoomSettings } from "./room-settings";
 import { RoomMembersPanel } from "./room-members-panel";
@@ -101,6 +101,7 @@ export function RoomInfoPanel(props: {
   conversationId: string | null;
   tab: RoomInfoTab;
   onTabChange(tab: RoomInfoTab): void;
+  onDeleted?(): void;
 }) {
   const state = useAppState();
   const conversation = () =>
@@ -259,7 +260,13 @@ export function RoomInfoPanel(props: {
               </p>
             }
           >
-            {(id) => <RoomSettings conversationId={id()} />}
+            {(id) => (
+              <RoomSettings
+                conversationId={id()}
+                online={active()}
+                onDeleted={props.onDeleted}
+              />
+            )}
           </Show>
         </TabsContent>
         <TabsContent value="members" class="pt-2">
@@ -291,6 +298,7 @@ export function createRoomInfoDialog() {
           conversationId={target()}
           tab={tab()}
           onTabChange={setTab}
+          onDeleted={() => dialog.close()}
         />
       </Show>
     ),

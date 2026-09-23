@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getVisibleVideoDisplayTracks } from "@/routes/video/components/video-display-tracks";
+import { getVisibleVideoDisplayTracks } from "@/routes/home/components/video-display-tracks";
 
 const makeTrack = (
   id: string,

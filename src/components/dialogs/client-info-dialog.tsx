@@ -30,16 +30,15 @@ import {
 } from "@/components/ui/tabs";
 import { PeerSpeedTest } from "@/components/peer-speed-test";
 import { createClipboardHistoryDialog } from "@/components/dialogs/clipboard-history-dialog";
-import { createComfirmDeleteClientDialog } from "@/components/dialogs/confirm-delete-client-dialog";
+import { ConversationActions } from "@/components/conversations/conversation-actions";
+import { directConversationId } from "@/libs/domain/conversation";
 import {
   IconAssignment,
   IconConnectWithoutContract,
-  IconDelete,
   IconInfo,
 } from "@/components/icons";
 import { t } from "@/i18n";
 import { catchError } from "@/libs/catch";
-import { messageStores } from "@/libs/application/messaging/message-store";
 import type { ClientID } from "@/libs/domain/ids";
 import {
   notifyClientInfoDialogTabVisible,
@@ -76,6 +75,7 @@ function Metric(props: {
 /** Switching/unmounting these views must never cancel an application task. */
 export function ClientInfoPanel(props: {
   clientId: ClientID | null;
+  conversationId?: string;
   active: boolean;
   tab: ClientInfoTab;
   onTabChange: (tab: ClientInfoTab) => void;
@@ -99,8 +99,6 @@ export function ClientInfoPanel(props: {
   );
   const { open: openClipboardHistoryDialog } =
     createClipboardHistoryDialog();
-  const { open: openConfirmDeleteClientDialog } =
-    createComfirmDeleteClientDialog();
   const clientConfig = () =>
     props.clientId
       ? getClientConfig(props.clientId)
@@ -457,42 +455,25 @@ export function ClientInfoPanel(props: {
                   </Button>
                 )}
               </Show>
-              <div>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={async () => {
-                    if (!props.clientId || !client())
-                      return;
-                    const result = (
-                      await openConfirmDeleteClientDialog(
-                        client()!.name,
-                      )
-                    ).result;
-                    if (!result) return;
-                    const clientId = props.clientId;
-                    messageStores.deleteClient(clientId);
-                    setAppOptions(
-                      "clientConfigs",
-                      clientId,
-                      undefined,
-                    );
-                    if (
-                      appState.options.redirectToClient ===
-                      clientId
-                    ) {
-                      setAppOptions(
-                        "redirectToClient",
-                        undefined,
-                      );
-                    }
-                    props.onDeleted?.();
-                  }}
-                >
-                  <IconDelete class="size-4" />
-                  {t("client.menu.delete_client")}
-                </Button>
-              </div>
+              <Show when={props.clientId}>
+                {(id) => (
+                  <div class="sm:col-span-2">
+                    <ConversationActions
+                      conversationId={
+                        props.conversationId ??
+                        directConversationId(
+                          appState.profile.clientId,
+                          id(),
+                        )
+                      }
+                      online={
+                        info()?.onlineStatus === "online"
+                      }
+                      onDeleted={props.onDeleted}
+                    />
+                  </div>
+                )}
+              </Show>
             </div>
           </div>
         </TabsContent>
@@ -505,6 +486,8 @@ const clientInfoDialog = () => {
   const [target, setTarget] = createSignal<ClientID | null>(
     null,
   );
+  const [conversationId, setConversationId] =
+    createSignal<string>();
   const [active, setActive] = createSignal(false);
   const [tab, setTab] =
     createSignal<ClientInfoTab>("session");
@@ -523,6 +506,7 @@ const clientInfoDialog = () => {
     content: () => (
       <ClientInfoPanel
         clientId={target()}
+        conversationId={conversationId()}
         active={active()}
         tab={tab()}
         onTabChange={setTab}
@@ -534,8 +518,10 @@ const clientInfoDialog = () => {
     open: (
       clientId: ClientID,
       initialTab: ClientInfoTab = "session",
+      conversationId?: string,
     ) => {
       setTarget(clientId);
+      setConversationId(conversationId);
       setTab(initialTab);
       setActive(true);
       return dialog.open();

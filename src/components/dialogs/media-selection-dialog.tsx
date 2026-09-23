@@ -60,7 +60,7 @@ import {
   createPresetVideoConstraintsDialog,
 } from "@/components/dialogs/media-constraints-dialogs";
 import { makePersisted } from "@solid-primitives/storage";
-import { VideoDisplay } from "@/routes/video/components/video-display";
+import { VideoDisplay } from "@/routes/home/components/video-display";
 import { appState } from "@/libs/state/app-state";
 
 export type MediaDeviceInfoType = {

@@ -1,9 +1,13 @@
 import {
   RouteSectionProps,
   useSearchParams,
+  useLocation,
+  A,
 } from "@solidjs/router";
 import {
   createEffect,
+  createMemo,
+  on,
   ErrorBoundary,
   onCleanup,
   onMount,
@@ -11,18 +15,21 @@ import {
   Show,
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
-import Nav from "@/components/app/nav";
+import { AccountMenu } from "@/components/app/account-menu";
+import {
+  AppDialogsProvider,
+  useAppDialogs,
+} from "@/components/app/app-dialogs";
+import {
+  RoomActionsProvider,
+  useRoomActions,
+} from "@/components/app/room-actions";
+import { isHomePath } from "@/libs/application/home-navigation";
+import { resolveWallpaper } from "@/libs/wallpapers";
 import { setClientProfile } from "./libs/state/profile-store";
 import { optional } from "./libs/domain/utils/optional";
-import {
-  AppStateProvider,
-  useAppState,
-} from "@/libs/state/app-state-context";
-import {
-  JoinRoomButton,
-  createRoomDialog,
-  joinUrl,
-} from "./components/dialogs/join-dialog";
+import { AppStateProvider } from "@/libs/state/app-state-context";
+
 import { toast } from "solid-sonner";
 import createAboutDialog from "./components/dialogs/about-dialog";
 import {
@@ -38,69 +45,55 @@ import {
 } from "./options";
 import { MetaProvider, Style } from "@solidjs/meta";
 import { produce } from "solid-js/store";
-import { createQRCodeDialog } from "./components/dialogs/create-qrcode-dialog";
+
 import { createForwardDialog } from "./components/dialogs/forward-dialog";
 import { createReloadPrompt } from "./libs/hooks/reload-prompt";
-import { catchError } from "./libs/catch";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "./components/ui/avatar";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "./components/ui/hover-card";
+
 import {
   IconContentCopy,
   IconHome,
-  IconLink,
-  IconPermContactCalendar,
   IconResetWrench,
 } from "./components/icons";
-import { getInitials } from "./libs/utils/name";
+
 import { Button } from "./components/ui/button";
 import { t, isDictLoaded } from "./i18n";
 import { v4 } from "uuid";
 import { createClientId } from "./libs/domain/ids";
-import { createIsMobile } from "./libs/hooks/create-mobile";
+
 import { messageStores } from "./libs/application/messaging/message-store";
 import { sleep } from "./libs/utils/sleep";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
-import { AudioPlayerProvider } from "./routes/video/components/audio-player";
+import { AudioPlayerProvider } from "./routes/home/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
 import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 import { ModalProvider } from "@/components/dialogs/base";
-import { MeetingSessionProvider } from "@/routes/video/components/meeting-session-context";
+import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 
 const InnerApp = (props: ParentProps) => {
-  const { joinRoom } = useAppState();
+  const roomActions = useRoomActions();
+  const dialogs = useAppDialogs();
+  const route = useLocation();
   const [search, setSearch] = useSearchParams();
 
-  const { open: openRoomDialog } = createRoomDialog();
-
-  const { open: openQRCodeDialog } = createQRCodeDialog();
-
   const { open: openAboutDialog } = createAboutDialog();
-
-  const onJoinRoom = async () => {
-    if (appState.profile.initalJoin) {
-      const result = await openRoomDialog();
-      if (result.cancel) {
-        return;
-      }
-    }
-
-    await joinRoom().catch((err) => {
-      console.error(err);
-      toast.error(err.message);
-    });
-  };
+  const onJoinRoom = roomActions.join;
+  createEffect(
+    on(
+      () => search.dialog,
+      (dialog) => {
+        if (dialog !== "settings" && dialog !== "files")
+          return;
+        setSearch({ dialog: undefined }, { replace: true });
+        if (dialog === "settings")
+          void dialogs.openSettings();
+        else void dialogs.openFiles();
+      },
+    ),
+  );
 
   const parseSearchParams = async () => {
     const hasRoomIdParam = search.id !== undefined;
@@ -269,125 +262,20 @@ const InnerApp = (props: ParentProps) => {
       });
     });
   }
-  const isMobile = createIsMobile();
-
   return (
     <>
       <AppWakeLock enabled={appState.options.wakeLock} />
-
-      <div class="flex h-full min-h-full w-full flex-col md:flex-row">
-        <div
-          class="border-border bg-background/80 scrollbar-none sticky top-0
-            z-50 h-[var(--mobile-header-height)] max-h-[100vh]
-            w-[var(--desktop-header-width)] flex-shrink-0
-            overflow-y-auto border-b backdrop-blur md:border-r
-            md:border-b-0"
-        >
-          <div
-            class="sticky top-0 flex h-full max-h-[100vh] items-center gap-2
-              px-2 py-0 md:flex-col md:px-0 md:py-2"
-          >
-            <Nav class="items-center gap-2 p-2 md:flex-col md:gap-4" />
-            <div class="flex-1"></div>
-            <HoverCard
-              gutter={6}
-              placement={
-                isMobile() ? "bottom" : "right-end"
-              }
-            >
-              <HoverCardTrigger
-                as={Avatar}
-                class="size-8 hover:cursor-pointer md:mt-auto md:size-10"
-                onTouchStart={() => {
-                  if (isMobile()) {
-                    openQRCodeDialog();
-                  }
-                }}
-              >
-                <AvatarImage
-                  src={appState.profile.avatar ?? undefined}
-                />
-                <AvatarFallback
-                  seed={appState.profile.name}
-                >
-                  {getInitials(appState.profile.name)}
-                </AvatarFallback>
-              </HoverCardTrigger>
-              <HoverCardContent class="flex flex-col gap-2">
-                <div class="flex gap-4">
-                  <Avatar class="size-12">
-                    <AvatarImage
-                      src={
-                        appState.profile.avatar ?? undefined
-                      }
-                    />
-                    <AvatarFallback
-                      seed={appState.profile.name}
-                    >
-                      {getInitials(appState.profile.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div class="flex flex-col gap-2">
-                    <p class="text-sm font-medium">
-                      {appState.profile.name}
-                    </p>
-                    <Show when={appState.roomStatus.roomId}>
-                      {(room) => (
-                        <p class="text-muted-foreground flex items-center gap-1 text-xs">
-                          <IconHome class="size-4" />{" "}
-                          {room()}
-                        </p>
-                      )}
-                    </Show>
-                    <Show
-                      when={appState.roomStatus.profile}
-                    >
-                      {(profile) => (
-                        <p class="text-muted-foreground flex items-center gap-1 text-xs">
-                          <IconPermContactCalendar class="size-4" />
-                          {new Date(
-                            profile().createdAt,
-                          ).toLocaleString()}
-                        </p>
-                      )}
-                    </Show>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="gap-2"
-                  onClick={async () => {
-                    const [err] = await catchError(
-                      navigator.clipboard.writeText(
-                        joinUrl(),
-                      ),
-                    );
-                    if (err) {
-                      toast.error(
-                        t(
-                          "common.notification.link_copy_failed",
-                        ),
-                      );
-                    } else {
-                      toast.success(
-                        t(
-                          "common.notification.link_copy_success",
-                        ),
-                      );
-                    }
-                  }}
-                >
-                  <IconLink class="size-4" />
-
-                  {t("common.nav.share_link")}
-                </Button>
-              </HoverCardContent>
-            </HoverCard>
-            <JoinRoomButton class="md:hidden" />
-          </div>
-        </div>
-        <div class="min-h-0 min-w-0 flex-1">
+      <div class="app-shell">
+        <Show when={!isHomePath(route.pathname)}>
+          <header class="app-page-header">
+            <Button as={A} href="/" variant="ghost">
+              <IconHome />
+              {t("404.home")}
+            </Button>
+            <AccountMenu />
+          </header>
+        </Show>
+        <div class="app-page-content">
           <ErrorBoundary
             fallback={(err: Error, reset) => (
               <ErrorComponent error={err} reset={reset} />
@@ -485,13 +373,22 @@ export default function App(props: RouteSectionProps) {
     toast.error(err?.message ?? String(err));
   });
 
+  const wallpaper = createMemo(() =>
+    resolveWallpaper(
+      appState.options.backgroundPreset,
+      backgroundImage(),
+    ),
+  );
+
   return (
     <>
       <MetaProvider>
         <Style>
           {`
           :root {
-            --background-image: url(${backgroundImage() ?? ""});
+            --background-image: ${wallpaper().image};
+            --background-image-size: ${wallpaper().size};
+            --background-image-repeat: ${wallpaper().repeat};
             --background-image-opacity: ${appState.options.backgroundImageOpacity};
           }`}
         </Style>
@@ -501,11 +398,15 @@ export default function App(props: RouteSectionProps) {
         >
           <AudioPlayerProvider>
             <MeetingMediaProvider>
-              <ModalProvider>
+              <RoomActionsProvider>
                 <MeetingSessionProvider>
-                  <InnerApp>{props.children}</InnerApp>
+                  <AppDialogsProvider>
+                    <ModalProvider>
+                      <InnerApp>{props.children}</InnerApp>
+                    </ModalProvider>
+                  </AppDialogsProvider>
                 </MeetingSessionProvider>
-              </ModalProvider>
+              </RoomActionsProvider>
             </MeetingMediaProvider>
           </AudioPlayerProvider>
         </AppStateProvider>

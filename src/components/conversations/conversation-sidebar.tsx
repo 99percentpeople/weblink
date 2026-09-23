@@ -18,6 +18,7 @@ import {
   FolderSync,
   Settings,
   Trash2,
+  Eraser,
   PanelLeftOpen,
 } from "lucide-solid";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ import {
   type ConversationFilter,
   type ConversationSummary,
 } from "@/libs/application/messaging/conversation-query";
-import { createDeleteConversationDialog } from "@/components/dialogs/delete-conversation-dialog";
+import { createConversationActions } from "./conversation-actions";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import clientInfoDialog from "@/components/dialogs/client-info-dialog";
 import { LabelEditor } from "./label-editor";
@@ -94,8 +95,6 @@ export function ConversationSidebar(
       name: "conversation-closed-groups",
     },
   );
-  const { open: confirmDelete } =
-    createDeleteConversationDialog();
   const { open: showClientInfo } = clientInfoDialog();
   const { open: showRoomInfo } = createRoomInfoDialog();
   createEffect(() => {
@@ -156,13 +155,9 @@ export function ConversationSidebar(
         ? ids.filter((value) => value !== id)
         : [...ids, id],
     );
-  const remove = async (summary: ConversationSummary) => {
-    if (!(await confirmDelete(summary.title)).result)
-      return;
-    messageStores.deleteConversation(
-      summary.conversation.id,
-    );
-  };
+  const actions = createConversationActions(
+    (id) => byId().get(id)?.online ?? false,
+  );
   const Row = (row: { summary: ConversationSummary }) => {
     const conversation = () => row.summary.conversation;
     return (
@@ -355,7 +350,11 @@ export function ConversationSidebar(
                       <DropdownMenuItem
                         class="gap-2"
                         onSelect={() =>
-                          void showClientInfo(peer())
+                          void showClientInfo(
+                            peer(),
+                            "session",
+                            conversation().id,
+                          )
                         }
                       >
                         <Settings class="size-4" />
@@ -367,13 +366,33 @@ export function ConversationSidebar(
               </Show>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                class="gap-2"
+                disabled={actions.busy()}
+                onSelect={() =>
+                  void actions.clear(conversation().id)
+                }
+              >
+                <Eraser class="size-4" />
+                {t("conversations.clear")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 variant="destructive"
                 class="gap-2"
-                onSelect={() => void remove(row.summary)}
+                disabled={
+                  actions.busy() || row.summary.online
+                }
+                onSelect={() =>
+                  void actions.remove(conversation().id)
+                }
               >
                 <Trash2 class="size-4" />
                 {t("conversations.delete")}
               </DropdownMenuItem>
+              <Show when={row.summary.online}>
+                <p class="text-muted-foreground px-2 py-1.5 text-xs">
+                  {t("conversations.delete_requires_exit")}
+                </p>
+              </Show>
             </DropdownMenuContent>
           </DropdownMenu>
         </Show>

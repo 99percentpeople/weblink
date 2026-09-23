@@ -98,7 +98,7 @@ export function MeetingDeviceField(props: {
       class={
         props.variant === "dialog"
           ? "flex min-w-0 flex-col gap-2 text-sm"
-          : "meeting-device-field"
+          : "flex min-w-0 flex-1 flex-col gap-[7px] text-[12px]"
       }
     >
       <label
@@ -106,7 +106,8 @@ export function MeetingDeviceField(props: {
         class={
           props.variant === "dialog"
             ? "flex items-center gap-2 [&>svg]:size-4"
-            : "meeting-device-label"
+            : `flex items-center gap-[7px] [&>svg]:size-[15px]
+              [&>svg]:shrink-0`
         }
       >
         <Show
@@ -149,6 +150,11 @@ export function MeetingDeviceField(props: {
           itemComponent={(itemProps) => (
             <SelectItem
               item={itemProps.item}
+              class={
+                props.variant !== "dialog"
+                  ? "text-xs [overflow-wrap:anywhere]"
+                  : undefined
+              }
               data-device-id={itemProps.item.rawValue.id}
               onPointerUp={beginChoice}
               onClick={beginChoice}
@@ -167,7 +173,10 @@ export function MeetingDeviceField(props: {
             class={
               props.variant === "dialog"
                 ? "h-10"
-                : "meeting-device-select-trigger"
+                : `bg-background text-foreground focus-visible:outline-ring
+                  min-h-9 min-w-0 rounded-full py-[7px] text-xs
+                  focus-visible:outline-2 focus-visible:outline-offset-2
+                  disabled:opacity-55`
             }
           >
             <SelectValue<DeviceOption>>
@@ -182,7 +191,7 @@ export function MeetingDeviceField(props: {
               `max-h-[min(20rem,var(--kb-popper-content-available-height))]
               overflow-y-auto`,
               props.variant !== "dialog" &&
-                "meeting-device-select-content",
+                "border-input bg-background text-foreground",
             )}
           />
         </Select>
@@ -321,8 +330,11 @@ export function MeetingDeviceMenu(props: {
           : "meeting.camera_devices",
       )}
     >
-      <header class="meeting-device-menu-header">
-        <span>
+      <header
+        class="meeting-device-menu-header mb-2.5 flex items-center gap-1
+          text-[12px]"
+      >
+        <span class="flex-1">
           {t(
             props.mode === "audio"
               ? "meeting.audio_devices"
@@ -378,7 +390,7 @@ export function MeetingDeviceMenu(props: {
           <X />
         </button>
       </header>
-      <div class="meeting-device-fields">
+      <div class="flex gap-3.5 max-[520px]:flex-col">
         <Show
           when={props.mode === "audio"}
           fallback={
@@ -419,7 +431,9 @@ export function MeetingDeviceMenu(props: {
       <Show when={props.mode === "audio"}>
         <button
           type="button"
-          class="meeting-device-sound"
+          class="bg-muted hover:bg-accent mt-3.5 flex items-center gap-2
+            rounded-full px-3 py-2 text-[11px] [&>svg]:size-[15px]
+            [&>svg]:shrink-0"
           disabled={!props.hasAudio}
           aria-pressed={props.playingAudio}
           onClick={props.onToggleAudio}

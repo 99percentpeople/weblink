@@ -315,7 +315,7 @@ export const VideoTrackConstraints = (props: {
           getValueLabel={({ values }) => `${values[0]} FPS`}
           class="gap-2"
         >
-          <div class="flex w-full justify-between">
+          <div class="flex w-full items-center justify-between gap-3">
             <SliderLabel>
               {t(
                 "common.media_selection_dialog.constraints.max_frame_rate",
@@ -325,7 +325,6 @@ export const VideoTrackConstraints = (props: {
           </div>
           <SliderTrack>
             <SliderFill />
-            <SliderThumb />
             <SliderThumb />
           </SliderTrack>
         </Slider>

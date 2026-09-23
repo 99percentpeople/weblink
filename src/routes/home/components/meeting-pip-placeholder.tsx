@@ -5,14 +5,17 @@ export function MeetingPipPlaceholder(props: {
 }) {
   return (
     <section
-      class="meeting-pip-placeholder"
+      class="[container-type:size] flex min-h-0 min-w-0 flex-1 flex-col
+        items-center justify-center overflow-auto p-6 text-center"
       aria-label={t("meeting.pip_elsewhere")}
     >
       <div
-        class="meeting-pip-placeholder-content"
+        class="flex w-full max-w-[32em] shrink-0 flex-col items-center
+          gap-3"
         data-motion-layout-size="placeholder-content"
       >
         <svg
+          class="text-ring h-auto max-h-[32cqh] w-[min(240px,70%)] shrink-0"
           viewBox="0 0 280 190"
           width="280"
           height="190"
@@ -92,11 +95,18 @@ export function MeetingPipPlaceholder(props: {
             <circle cx="209" cy="166" r="2.5" />
           </g>
         </svg>
-        <h2>{t("meeting.pip_elsewhere")}</h2>
-        <p>{t("meeting.pip_elsewhere_hint")}</p>
+        <h2 class="text-[17px] font-medium">
+          {t("meeting.pip_elsewhere")}
+        </h2>
+        <p class="text-muted-foreground max-w-[32em] text-[13px] leading-[1.6]">
+          {t("meeting.pip_elsewhere_hint")}
+        </p>
         <button
           type="button"
-          class="meeting-control"
+          class="bg-accent text-accent-foreground mt-1 flex min-h-9 min-w-16
+            flex-col items-center justify-center gap-1.5 rounded-md px-4
+            py-2 text-[10px] whitespace-nowrap transition-[background]
+            duration-150"
           onClick={props.onReturn}
         >
           {t("meeting.pip_restore")}

@@ -52,7 +52,7 @@ export const createClearServiceWorkerCacheDialog = () => {
             "common.clear_service_worker_cache_dialog.content",
           )}
         </p>
-        <p>
+        <div>
           <Switch
             class="flex items-center justify-between text-sm"
             checked={reload()}
@@ -67,7 +67,7 @@ export const createClearServiceWorkerCacheDialog = () => {
               <SwitchThumb />
             </SwitchControl>
           </Switch>
-        </p>
+        </div>
       </>
     ),
     cancel: (
@@ -88,5 +88,10 @@ export const createClearServiceWorkerCacheDialog = () => {
       </Button>
     ),
   });
-  return { open };
+  return {
+    open: () => {
+      setReload(true);
+      return open();
+    },
+  };
 };

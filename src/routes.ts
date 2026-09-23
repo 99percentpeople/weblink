@@ -1,46 +1,33 @@
-import { RouteDefinition } from "@solidjs/router";
+import type { RouteDefinition } from "@solidjs/router";
 import { lazy } from "solid-js";
 
+const LegacyHome = lazy(
+  () => import("@/routes/legacy-home"),
+);
 const routes = [
   {
     path: "/",
-    component: lazy(() => import("@/routes/index")),
-    children: [
-      {
-        path: "conversation/:id",
-        component: lazy(
-          () => import("@/routes/conversation"),
-        ),
-      },
-      {
-        path: "/",
-        component: lazy(() => import("@/routes/client")),
-      },
-      {
-        path: "client/:id/chat",
-        component: lazy(
-          () => import("@/routes/client/[id]/chat"),
-        ),
-      },
-      {
-        path: "client/:id/sync",
-        component: lazy(
-          () => import("@/routes/client/[id]/sync"),
-        ),
-      },
+    component: lazy(() => import("@/routes/home")),
+  },
+  {
+    path: [
+      "/home",
+      "/video",
+      "/chat",
+      "/file",
+      "/setting",
+      "/conversation/:id",
+      "/chat/conversation/:id",
+      "/client/:id/chat",
+      "/chat/client/:id/chat",
     ],
+    component: LegacyHome,
   },
   {
-    path: "/video",
-    component: lazy(() => import("@/routes/video")),
-  },
-  {
-    path: "/file",
-    component: lazy(() => import("@/routes/file")),
-  },
-  {
-    path: "/setting",
-    component: lazy(() => import("@/routes/setting")),
+    path: "/client/:id/sync",
+    component: lazy(
+      () => import("@/routes/client/[id]/sync"),
+    ),
   },
   {
     path: "/share",

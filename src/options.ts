@@ -163,8 +163,8 @@ export const [backgroundImage, setBackgroundImage] =
 
 createEffect(() => {
   const fileId = appState.options.backgroundImage;
+  setBackgroundImage(undefined);
   if (!fileId) {
-    setBackgroundImage(undefined);
     return;
   }
   if (appState.cache.status === "loading") {
@@ -176,12 +176,20 @@ createEffect(() => {
   let cancelled = false;
   let url: string | null = null;
 
-  cache.getFile().then((file) => {
-    if (cancelled) return;
-    if (!file) return;
-    url = URL.createObjectURL(file);
-    setBackgroundImage(url);
-  });
+  cache
+    .getFile()
+    .then((file) => {
+      if (cancelled || !file) return;
+      url = URL.createObjectURL(file);
+      setBackgroundImage(url);
+    })
+    .catch((error) => {
+      if (!cancelled)
+        console.warn(
+          "Unable to load background image",
+          error,
+        );
+    });
 
   onCleanup(() => {
     cancelled = true;

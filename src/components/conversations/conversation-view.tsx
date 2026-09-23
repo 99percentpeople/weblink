@@ -3,10 +3,12 @@ import { appState } from "@/libs/state/app-state";
 import { ChatConversation } from "./direct-conversation";
 import { RoomConversation } from "./room-conversation";
 import { t } from "@/i18n";
+import { ConversationBackButton } from "./conversation-back-button";
 
 export function ConversationView(props: {
   conversationId: string;
   embedded?: boolean;
+  onBack?: () => void;
 }) {
   const conversation = createMemo(() =>
     appState.message.conversations.find(
@@ -18,9 +20,20 @@ export function ConversationView(props: {
       when={conversation()?.id}
       keyed
       fallback={
-        <p class="text-muted-foreground m-auto p-6 text-center text-sm">
-          {t("conversations.select")}
-        </p>
+        <div class="flex min-h-0 flex-1 flex-col">
+          <Show when={props.onBack}>
+            {(onBack) => (
+              <header class="flex shrink-0 items-center border-b p-2">
+                <ConversationBackButton
+                  onClick={onBack()}
+                />
+              </header>
+            )}
+          </Show>
+          <p class="text-muted-foreground m-auto p-6 text-center text-sm">
+            {t("conversations.select")}
+          </p>
+        </div>
       }
     >
       {(_id) => (
@@ -38,6 +51,7 @@ export function ConversationView(props: {
                   clientId={value.peerId}
                   conversationId={value.id}
                   embedded={props.embedded}
+                  onBack={props.onBack}
                 />
               ) : null;
             }}
@@ -54,6 +68,7 @@ export function ConversationView(props: {
                 <RoomConversation
                   conversation={value}
                   embedded={props.embedded}
+                  onBack={props.onBack}
                 />
               ) : null;
             }}

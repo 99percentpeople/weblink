@@ -96,7 +96,10 @@ export function ConnectionSettings(
   );
 
   return (
-    <>
+    <section
+      class="settings-section"
+      aria-labelledby="connection"
+    >
       <h3 id="connection" class="h3">
         {t("setting.connection.title")}
       </h3>
@@ -294,6 +297,6 @@ export function ConnectionSettings(
           )}
         </p>
       </div>
-    </>
+    </section>
   );
 }

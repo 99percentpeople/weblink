@@ -99,7 +99,7 @@ export const SelectContent = <
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95
-          relative z-50 min-w-[8rem] overflow-hidden rounded-md border
+          relative z-50 min-w-[8rem] overflow-hidden rounded-lg border
           shadow-md`,
           local.class,
         )}

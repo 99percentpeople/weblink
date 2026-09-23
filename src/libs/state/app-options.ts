@@ -5,6 +5,7 @@ import type {
 import type { CompressionLevel } from "@/libs/domain/transfer/options";
 import type { ClientID, FileID } from "@/libs/domain/ids";
 import languages from "@/assets/i18n/languages.json";
+import type { WallpaperPresetId } from "@/libs/wallpapers";
 
 export type Locale = string;
 export type ConnectionOptions = IceServerOptions;
@@ -78,6 +79,7 @@ export type AppOption = {
   wakeLock: boolean;
   locale: Locale;
   backgroundImage?: FileID;
+  backgroundPreset?: WallpaperPresetId;
   backgroundImageOpacity: number;
   redirectToClient?: ClientID;
 

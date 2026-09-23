@@ -1,0 +1,125 @@
+.wallpaper-picker {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+.wallpaper-picker > legend {
+  margin-bottom: 8px;
+}
+.wallpaper-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.wallpaper-preview {
+  position: relative;
+  display: grid;
+  height: 136px;
+  place-items: center;
+  overflow: hidden;
+  background: var(--background);
+}
+.wallpaper-preview-image {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+}
+.wallpaper-preview-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 8px;
+  border-radius: calc(var(--radius) - 8px);
+  background: color-mix(
+    in srgb,
+    var(--card) 85%,
+    transparent
+  );
+  color: var(--muted-foreground);
+  font-size: 11px;
+  backdrop-filter: blur(8px);
+}
+.wallpaper-card-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.wallpaper-drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--primary);
+  border-radius: inherit;
+  background: color-mix(
+    in srgb,
+    var(--background) 88%,
+    transparent
+  );
+  color: var(--primary);
+  font-size: 13px;
+  pointer-events: none;
+}
+.wallpaper-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.wallpaper-preset {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--card);
+  color: var(--muted-foreground);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s,
+    color 0.15s;
+}
+.wallpaper-preset:hover,
+.wallpaper-preset[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.wallpaper-preset:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.wallpaper-preset:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.wallpaper-preset-swatch {
+  position: relative;
+  width: 100%;
+  height: 56px;
+  background-color: var(--background);
+  background-position: center;
+}
+.wallpaper-preset-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}

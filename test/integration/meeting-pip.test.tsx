@@ -30,11 +30,12 @@ import {
 import {
   MeetingSessionProvider,
   useMeetingSession,
-} from "@/routes/video/components/meeting-session-context";
+} from "@/routes/home/components/meeting-session-context";
 
 const fixture = vi.hoisted(() => ({
   clear: vi.fn(),
   leave: vi.fn(),
+  join: vi.fn(),
   microphone: vi.fn(),
   camera: vi.fn(),
   sharing: vi.fn(),
@@ -48,6 +49,12 @@ vi.mock("solid-sonner", () => ({
 }));
 vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
+}));
+vi.mock("@/components/app/room-actions", () => ({
+  useRoomActions: () => ({
+    join: fixture.join,
+    busy: () => false,
+  }),
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
@@ -73,14 +80,14 @@ vi.mock("@/libs/hooks/meeting-media-context", () => ({
     },
   }),
 }));
-vi.mock("@/routes/video/components/audio-player", () => ({
+vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
     hasAudio: () => true,
     playState: () => true,
     setPlay: fixture.sound,
   }),
 }));
-vi.mock("@/routes/video/components/video-display", () => ({
+vi.mock("@/routes/home/components/video-display", () => ({
   VideoDisplay: (props: ParentProps<{ name: string }>) => (
     <div data-testid="pip-source">
       <span>{props.name}</span>
@@ -162,7 +169,7 @@ function setup(
     requestWindow,
   });
   const history = createMemoryHistory();
-  history.set({ value: "/video", scroll: false });
+  history.set({ value: "/", scroll: false });
   function Capture() {
     session = useMeetingSession();
     navigate = useNavigate();
@@ -179,16 +186,12 @@ function setup(
   const result = render(() => (
     <MemoryRouter history={history} root={Shell}>
       <Route
-        path="/video"
+        path="/"
         component={() => <div>Meeting page</div>}
       />
       <Route
-        path="/"
-        component={() => <div>Chat page</div>}
-      />
-      <Route
-        path="/setting"
-        component={() => <div>Settings page</div>}
+        path="/client/peer/sync"
+        component={() => <div>Sync page</div>}
       />
     </MemoryRouter>
   ));
@@ -288,6 +291,25 @@ afterEach(() => {
 });
 
 describe("meeting PiP across routes and documents", () => {
+  it("returns to Home to join from an unjoined preview window", async () => {
+    setAppState("roomStatus", "roomId", null);
+    setup();
+    navigate("/client/peer/sync");
+    session.controls.toggle();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(true),
+    );
+    click("meeting.join_room");
+    expect(fixture.join).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(false),
+    );
+    expect(document.body.textContent).toContain(
+      "Meeting page",
+    );
+    expect(fixture.clear).not.toHaveBeenCalled();
+  });
+
   it("only opens automatically for an active camera or screen, while manual entry still works without video", async () => {
     setAppState(
       "session",
@@ -341,10 +363,10 @@ describe("meeting PiP across routes and documents", () => {
       document.dispatchEvent(new Event("visibilitychange"));
       mediaAction!();
     }
-    navigate("/setting");
+    navigate("/client/peer/sync");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Settings page",
+        "Sync page",
       ),
     );
     expect(f.requestWindow).not.toHaveBeenCalled();
@@ -441,10 +463,10 @@ describe("meeting PiP across routes and documents", () => {
       expect(
         current().window.document.body.contains(view),
       ).toBe(true);
-    navigate("/setting");
+    navigate("/client/peer/sync");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Settings page",
+        "Sync page",
       ),
     );
     expect(session.pip.active()).toBe(true);
@@ -496,7 +518,6 @@ describe("meeting PiP across routes and documents", () => {
         ),
       ).toBe("dark"),
     );
-    session.setToolbarFollowsRail(true);
     setAppState("session", "clientViewData", reconcile({}));
     const pipScreen = within(
       current().window.document.body,
@@ -508,7 +529,9 @@ describe("meeting PiP across routes and documents", () => {
       },
     );
     fireEvent.click(hideToolbar);
-    expect(session.railCollapsed()).toBe(true);
+    await Promise.resolve();
+    expect(session.toolbarCollapsed()).toBe(true);
+    expect(session.railCollapsed()).toBe(false);
     expect(
       pipScreen.queryByLabelText("meeting.controls"),
     ).toBeNull();
@@ -517,6 +540,8 @@ describe("meeting PiP across routes and documents", () => {
         name: "meeting.show_toolbar",
       }),
     );
+    await Promise.resolve();
+    expect(session.toolbarCollapsed()).toBe(false);
     expect(session.railCollapsed()).toBe(false);
     expect(
       pipScreen.queryByLabelText("meeting.controls"),
@@ -533,16 +558,16 @@ describe("meeting PiP across routes and documents", () => {
     const f = setup();
     expect(session.controls.automatic()).toBe(false);
     session.controls.setAutomatic(true);
-    navigate("/video#details");
+    navigate("/#details");
     expect(f.requestWindow).not.toHaveBeenCalled();
-    navigate("/setting");
+    navigate("/client/peer/sync");
     expect(f.requestWindow).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(session.pip.active()).toBe(true),
     );
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Settings page",
+        "Sync page",
       ),
     );
     click("meeting.pip_return");
@@ -559,7 +584,7 @@ describe("meeting PiP across routes and documents", () => {
     click("meeting.leave_room");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Chat page",
+        "Meeting page",
       ),
     );
     expect(session.pip.active()).toBe(false);
@@ -739,10 +764,10 @@ describe("meeting PiP across routes and documents", () => {
     expect(session.pip.active()).toBe(false);
     expect(f.requestWindow).toHaveBeenCalledTimes(2);
     session.controls.setAutomatic(false);
-    navigate("/setting");
+    navigate("/client/peer/sync");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Settings page",
+        "Sync page",
       ),
     );
     session.controls.setAutomatic(true);
@@ -754,7 +779,7 @@ describe("meeting PiP across routes and documents", () => {
     windowFocused = true;
     setVisibility("visible");
     expect(session.pip.active()).toBe(true);
-    navigate("/video");
+    navigate("/");
     await waitFor(() =>
       expect(session.pip.active()).toBe(false),
     );
@@ -805,15 +830,15 @@ describe("meeting PiP across routes and documents", () => {
     });
     const f = setup(denied);
     session.controls.setAutomatic(true);
-    navigate("/setting");
+    navigate("/client/peer/sync");
     await waitFor(() =>
       expect(fixture.error).toHaveBeenCalledOnce(),
     );
     expect(document.body.textContent).toContain(
-      "Settings page",
+      "Sync page",
     );
     expect(session.pip.active()).toBe(false);
-    navigate("/video");
+    navigate("/");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Meeting page",
@@ -826,13 +851,13 @@ describe("meeting PiP across routes and documents", () => {
           resolve = done;
         }),
     );
-    navigate("/setting");
+    navigate("/client/peer/sync");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
-        "Settings page",
+        "Sync page",
       ),
     );
-    navigate("/video");
+    navigate("/");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Meeting page",

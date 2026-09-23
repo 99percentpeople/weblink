@@ -6,7 +6,7 @@ import {
   MicrophoneTrackConstraints,
   SpeakerTrackConstraints,
   VideoTrackConstraints,
-} from "@/routes/video/components/track-constaints";
+} from "@/routes/home/components/track-constaints";
 import {
   Switch,
   SwitchLabel,
@@ -21,7 +21,10 @@ import {
   SliderTrack,
   SliderValueLabel,
 } from "@/components/ui/slider";
-import { appState, setAppState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 
 export const createApplyConstraintsDialog = () => {
   const [mediaStream, setMediaStream] =
@@ -56,10 +59,7 @@ export const createApplyConstraintsDialog = () => {
     );
   };
 
-  const {
-    open: openDialog,
-    close,
-  } = createDialog({
+  const { open: openDialog, close } = createDialog({
     title: () =>
       t("common.media_selection_dialog.apply_constraints"),
     description: () =>
@@ -397,7 +397,7 @@ export const createPresetVideoConstraintsDialog = () => {
           getValueLabel={({ values }) => `${values[0]} FPS`}
           class="gap-2"
         >
-          <div class="flex w-full justify-between">
+          <div class="flex w-full items-center justify-between gap-3">
             <SliderLabel>
               {t(
                 "common.media_selection_dialog.constraints.max_frame_rate",
@@ -407,7 +407,6 @@ export const createPresetVideoConstraintsDialog = () => {
           </div>
           <SliderTrack>
             <SliderFill />
-            <SliderThumb />
             <SliderThumb />
           </SliderTrack>
         </Slider>

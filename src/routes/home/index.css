@@ -1,0 +1,500 @@
+@reference "../../global.css";
+
+/* Shared meeting controls and coordinated stage/sidebar/PiP layout.
+   Use @apply for shared primitives, keeping layout calculations and Motion
+   transforms/transitions explicit. One-off presentation lives in JSX. */
+.meeting {
+  @apply text-foreground relative flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent;
+  --meeting-surface: var(--card);
+  --meeting-controls-height: 82px;
+  --meeting-controls-bottom: max(
+    16px,
+    env(safe-area-inset-bottom)
+  );
+  --meeting-collapsed-controls-bottom: max(
+    8px,
+    env(safe-area-inset-bottom)
+  );
+}
+.meeting button {
+  @apply cursor-pointer;
+}
+.meeting button:disabled {
+  @apply cursor-not-allowed opacity-45;
+}
+.meeting button:focus-visible,
+.meeting a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.meeting-icon-button.meeting-permission-button {
+  @apply text-warning-foreground w-auto shrink-0 gap-1.5 px-2 py-0 text-[12px] whitespace-nowrap;
+}
+.meeting-icon-button {
+  @apply inline-flex size-8.5 shrink-0 items-center justify-center rounded-md;
+  transition: background 0.15s;
+}
+.meeting-icon-button:hover,
+.meeting-icon-button[aria-pressed="true"] {
+  @apply bg-muted;
+}
+.meeting-icon-button svg {
+  @apply size-[17px];
+}
+.meeting-panel-toggle {
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.meeting-panel-toggle[aria-expanded="true"] {
+  @apply bg-accent text-primary;
+}
+.meeting-member-count {
+  @apply w-auto gap-[7px] px-2 py-0 text-[12px];
+}
+.meeting-workspace {
+  @apply relative flex min-h-0 min-w-0 flex-1 gap-0;
+  margin-bottom: calc(
+    var(--meeting-controls-height) +
+      var(--meeting-controls-bottom) + 8px
+  );
+}
+.meeting.is-controls-collapsed .meeting-workspace {
+  margin-bottom: calc(
+    28px + var(--meeting-collapsed-controls-bottom) + 4px
+  );
+}
+.meeting-canvas {
+  @apply grid min-h-0 min-w-0 flex-1 overflow-hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  transition:
+    opacity 0.2s,
+    visibility 0s;
+}
+.meeting-workspace.is-panel-full .meeting-canvas {
+  @apply pointer-events-none invisible opacity-0;
+  transition:
+    opacity 0.2s,
+    visibility 0s 0.2s;
+}
+.meeting-canvas-view {
+  grid-area: 1 / 1;
+}
+.meeting-canvas-view,
+.meeting-canvas-placeholder {
+  @apply flex min-h-0 min-w-0 flex-1;
+}
+.meeting-stage {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4.5;
+}
+.meeting-grid {
+  @apply grid min-h-0 w-full min-w-0 flex-[1_1_0] place-content-center overflow-hidden;
+  grid-template-columns: repeat(
+    var(--meeting-grid-columns, 1),
+    var(--meeting-tile-width, 0px)
+  );
+  grid-template-rows: repeat(
+    var(--meeting-grid-rows, 1),
+    var(--meeting-tile-height, 0px)
+  );
+  gap: var(--meeting-grid-gap, 12px);
+  /* The observed box is allocated by the stage, never by its tile content. */
+  contain: size layout;
+}
+.meeting-grid[data-layout-ready="false"] {
+  @apply invisible;
+}
+.meeting-grid:not(.has-featured) {
+  /* Keep the previous placement until the observer commits size and position
+     together; automatic centering would jump before the resize animation. */
+  @apply place-content-start;
+}
+.meeting-grid:not(.has-featured) .meeting-tile {
+  translate: var(--meeting-grid-offset-x, 0px)
+    var(--meeting-grid-offset-y, 0px);
+}
+.meeting-tile {
+  @apply border-border relative aspect-video min-h-0 w-full min-w-0 self-center overflow-hidden rounded-lg border border-solid bg-(--meeting-surface);
+  container-type: inline-size;
+}
+.meeting-tile .meeting-video-avatar {
+  width: clamp(36px, 25cqw, 80px);
+  height: clamp(36px, 25cqw, 80px);
+  font-size: clamp(14px, 8cqw, 24px);
+}
+.meeting-tile-video {
+  @apply absolute inset-0;
+}
+.meeting-tile-select {
+  @apply absolute inset-0 rounded-[inherit] bg-transparent;
+}
+.meeting .meeting-tile-select:focus-visible {
+  outline-offset: -3px;
+}
+.meeting-featured-frame {
+  @apply grid size-full min-h-0 min-w-0 place-items-center;
+  container-type: size;
+}
+.meeting-featured-frame .meeting-tile {
+  @apply aspect-video h-auto;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+}
+.meeting-grid.has-featured {
+  @apply grid content-stretch items-stretch overflow-hidden;
+  --meeting-rail-height: clamp(92px, 22%, 128px);
+  --meeting-rail-toggle-height: 1.75rem;
+  grid-template-columns: minmax(0, 1fr);
+  /* Reserve the controls row while Motion temporarily positions its contents. */
+  grid-template-rows:
+    minmax(0, 1fr) var(--meeting-rail-toggle-height)
+    minmax(0, var(--meeting-rail-height));
+}
+.meeting-grid.has-featured.is-solo {
+  grid-template-rows: minmax(0, 1fr);
+}
+.meeting-grid.has-featured.is-rail-collapsed:not(
+    .is-solo
+  ):not(.is-rail-toggle-hidden) {
+  grid-template-rows: minmax(0, 1fr) var(
+      --meeting-rail-toggle-height
+    );
+}
+.meeting-grid.has-featured.is-rail-toggle-hidden:not(
+    .is-solo
+  ):not(.is-rail-collapsed) {
+  grid-template-rows: minmax(0, 1fr) minmax(
+      0,
+      var(--meeting-rail-height)
+    );
+}
+.meeting-grid.has-featured.is-rail-toggle-hidden.is-rail-collapsed {
+  grid-template-rows: minmax(0, 1fr);
+}
+.meeting-grid.has-featured .meeting-featured-frame {
+  grid-column: 1;
+  grid-row: 1;
+}
+.meeting-thumbnails {
+  @apply flex min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain pb-1;
+  gap: var(--meeting-grid-gap, 12px);
+  scrollbar-color: var(--muted-foreground) transparent;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+.meeting-thumbnails.is-collapsed {
+  @apply hidden;
+}
+.meeting-thumbnails[data-motion-layout-active] {
+  /* Views cross this boundary on their way between the grid and the rail. */
+  @apply snap-none overflow-visible;
+}
+.meeting-thumbnails-toolbar {
+  @apply flex min-h-6 min-w-0 shrink-0 items-center justify-center;
+}
+.meeting-thumbnails-toggle {
+  @apply bg-secondary text-muted-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px];
+}
+.meeting-thumbnails-toggle:hover {
+  @apply bg-accent text-accent-foreground;
+}
+.meeting-thumbnails-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.meeting-thumbnails-toggle svg {
+  @apply size-3.5;
+}
+.meeting-thumbnails .meeting-tile {
+  @apply aspect-video h-full min-h-0 w-auto flex-none snap-start;
+}
+.meeting-thumbnails .meeting-icon-button {
+  @apply size-7;
+}
+.meeting-tile-actions {
+  @apply absolute right-2 bottom-2 flex gap-[3px] rounded-md bg-[#10151cd9] p-[3px] text-white opacity-0;
+  transition: opacity 0.15s;
+}
+.meeting-tile:hover .meeting-tile-actions,
+.meeting-tile:focus-within .meeting-tile-actions {
+  @apply opacity-100;
+}
+.meeting-panel-slot {
+  @apply min-h-0 max-w-full min-w-0 flex-none;
+  width: min(379px, calc(100% - 280px));
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.meeting-panel-slot.is-closing {
+  @apply absolute top-0 right-0 bottom-0 z-33;
+}
+.meeting-panel-slot.is-expanded {
+  width: min(760px, 70%, calc(100% - 280px));
+}
+.meeting-panel-slot.is-full {
+  @apply w-full max-w-full;
+}
+.meeting-panel-slot.is-full .meeting-side-panel {
+  @apply mx-3.5 mt-3.5 mb-0;
+  width: calc(100% - 28px);
+}
+.meeting-leave.meeting-join {
+  @apply text-primary-foreground bg-primary;
+}
+.meeting-leave.meeting-join:hover {
+  background: color-mix(
+    in srgb,
+    var(--primary) 90%,
+    var(--foreground)
+  );
+}
+.meeting-side-panel {
+  @apply border-border bg-card text-foreground mt-3.5 mr-3.5 mb-0 ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid;
+  width: calc(100% - 14px);
+  /* The workspace already reserves the gap above the floating controls. */
+  height: calc(100% - 14px);
+  box-shadow: 0 8px 30px #0002;
+}
+.meeting-panel-content {
+  @apply m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+}
+.meeting-panel-content > :first-child {
+  @apply min-h-0;
+}
+.meeting-member {
+  @apply flex items-center gap-3 px-0 py-3;
+}
+.meeting-member > div {
+  @apply min-w-0 flex-1;
+}
+.meeting-member strong {
+  @apply block truncate text-[13px] font-medium;
+}
+.meeting-member div > span {
+  @apply text-muted-foreground mt-0.5 block text-[11px];
+}
+.meeting-info-action {
+  @apply h-auto min-h-10.5 justify-start px-3 py-2.5 text-left text-[12px] whitespace-normal;
+}
+.meeting-info-action > span {
+  @apply min-w-0 flex-1 wrap-anywhere;
+}
+.meeting-controls {
+  @apply border-input absolute left-1/2 z-45 flex w-max shrink-0 items-center justify-center gap-6.5 rounded-xl border border-solid bg-(--meeting-surface) p-3;
+  bottom: var(--meeting-controls-bottom);
+  max-width: calc(100% - 32px);
+  min-height: var(--meeting-controls-height);
+  translate: -50% 0;
+  filter: drop-shadow(0 12px 22px #0006);
+}
+.meeting-controls.is-device-menu-open {
+  @apply rounded-t-none border-t-transparent;
+}
+.meeting-collapsed-controls {
+  @apply bg-secondary absolute left-1/2 z-45 inline-flex shrink-0 items-center justify-center rounded-full whitespace-nowrap;
+  bottom: var(--meeting-collapsed-controls-bottom);
+  translate: -50% 0;
+}
+.meeting-controls-group {
+  @apply flex items-center gap-2;
+}
+.meeting-device-control {
+  @apply bg-secondary flex shrink-0 items-stretch rounded-md;
+}
+.meeting-device-toggle {
+  @apply text-muted-foreground grid w-6.5 shrink-0 place-items-center rounded-l-md rounded-r-none;
+}
+.meeting-device-toggle:hover,
+.meeting-device-toggle[aria-expanded="true"] {
+  @apply bg-accent text-accent-foreground;
+}
+.meeting-device-toggle svg {
+  @apply size-3.5;
+  transition: transform 0.15s;
+}
+.meeting-device-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.meeting-device-menu {
+  @apply border-input text-foreground absolute -left-px overflow-auto rounded-t-xl rounded-b-none border border-b-0 border-solid bg-(--meeting-surface) px-3.5 pt-2.5 pb-3.5;
+  bottom: calc(100% + 1px);
+  width: calc(100% + 2px);
+  max-height: min(360px, calc(100dvh - 180px));
+}
+.meeting-device-menu-header
+  .meeting-icon-button:not(.meeting-permission-button) {
+  @apply w-7;
+}
+.meeting-device-menu-header .meeting-icon-button {
+  @apply h-7;
+}
+.meeting-device-hint {
+  @apply text-muted-foreground flex-1 text-[11px] leading-[1.6];
+}
+.meeting-control {
+  @apply bg-secondary flex h-14 min-w-16 flex-col items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[10px] whitespace-nowrap;
+  transition: background 0.15s;
+}
+.meeting-control:hover {
+  @apply bg-muted;
+}
+.meeting-control svg,
+.meeting-leave svg {
+  @apply size-5;
+}
+.meeting-control.is-off {
+  @apply text-destructive;
+  background: color-mix(
+    in srgb,
+    var(--destructive) 14%,
+    var(--card)
+  );
+}
+.meeting-control.is-active {
+  @apply text-accent-foreground bg-accent;
+}
+.meeting-control-divider {
+  @apply bg-border mx-1 my-0 h-7.5 w-px;
+}
+.meeting-leave {
+  @apply bg-destructive flex min-h-12 items-center justify-center gap-2.5 rounded-md px-5 py-3 text-[12px] whitespace-nowrap text-white;
+}
+.meeting-leave:hover {
+  background: color-mix(
+    in srgb,
+    var(--destructive) 88%,
+    white
+  );
+}
+@media (max-width: 767px) {
+  .meeting-panel-slot.is-full .meeting-side-panel {
+    @apply m-0 size-full rounded-none border-0;
+    box-shadow: none;
+  }
+  .meeting {
+    --meeting-controls-height: 64px;
+    --meeting-controls-bottom: max(
+      10px,
+      env(safe-area-inset-bottom)
+    );
+  }
+  .meeting-permission-button span {
+    @apply hidden;
+  }
+  .meeting-stage {
+    @apply p-2.5;
+  }
+  .meeting-controls {
+    @apply gap-2.5 p-2;
+    max-width: calc(100% - 16px);
+  }
+  .meeting-controls-group {
+    @apply min-w-0 gap-[5px] overflow-x-auto;
+    scrollbar-width: none;
+  }
+  .meeting-device-toggle {
+    @apply w-6;
+  }
+  .meeting-control {
+    @apply h-11.5 w-10.5 min-w-10 rounded-md p-2.5;
+  }
+  .meeting-control span {
+    @apply hidden;
+  }
+  .meeting-control-divider {
+    @apply hidden;
+  }
+  .meeting-leave {
+    @apply min-h-11.5 w-11.5 p-3;
+  }
+  .meeting-leave span {
+    @apply hidden;
+  }
+  .meeting-tile-actions {
+    @apply opacity-100;
+  }
+}
+@media (max-width: 389px) {
+  .meeting {
+    --meeting-controls-height: 60px;
+  }
+  .meeting-controls {
+    @apply gap-1.5 px-1.5 py-2;
+  }
+  .meeting-controls-group {
+    @apply gap-1;
+  }
+  .meeting-device-toggle {
+    @apply w-5.5;
+  }
+  .meeting-control {
+    @apply h-10.5 w-9 min-w-9 p-2;
+  }
+  .meeting-leave {
+    @apply min-h-10.5 w-10.5 p-2.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meeting * {
+    transition: none !important;
+  }
+}
+
+.meeting-pip-settings {
+  @apply p-4.5;
+}
+.meeting-pip-settings .meeting-device-hint {
+  @apply mt-2.5;
+}
+html[data-meeting-pip],
+html[data-meeting-pip] body,
+html[data-meeting-pip] body > div {
+  @apply m-0 size-full min-h-0 min-w-0 overflow-hidden;
+}
+.meeting-pip {
+  --meeting-controls-height: 52px;
+  --meeting-controls-bottom: 0px;
+}
+.meeting-pip .meeting-stage {
+  @apply p-1.5;
+}
+.meeting-pip .meeting-grid.has-featured {
+  @apply gap-1.5;
+  --meeting-rail-height: clamp(48px, 24%, 88px);
+  --meeting-rail-toggle-height: 1.5rem;
+}
+.meeting-pip .meeting-thumbnails {
+  @apply gap-1.5;
+}
+.meeting-pip .meeting-tile {
+  @apply rounded-md;
+}
+.meeting-pip .meeting-controls {
+  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 min-h-13 max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
+  translate: none;
+  width: calc(100% - 12px);
+  filter: none;
+}
+.meeting-pip.is-controls-collapsed .meeting-controls {
+  @apply absolute bottom-0 left-0;
+}
+.meeting-pip .meeting-collapsed-controls {
+  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 self-center;
+  translate: none;
+}
+.meeting-pip:not(.is-controls-collapsed)
+  .meeting-collapsed-controls {
+  @apply absolute bottom-1.5 left-1/2;
+  translate: -50% 0;
+}
+.meeting-pip .meeting-controls-group {
+  @apply flex-wrap justify-center gap-1 overflow-visible;
+}
+.meeting-pip .meeting-control,
+.meeting-pip .meeting-leave {
+  @apply size-9 min-h-9 min-w-8.5 rounded-md p-2;
+}
+.meeting-pip .meeting-control span,
+.meeting-pip .meeting-leave span,
+.meeting-pip .meeting-control-divider {
+  @apply hidden;
+}

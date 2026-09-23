@@ -6,6 +6,7 @@ import * as SliderPrimitive from "@kobalte/core/slider";
 
 import { cn } from "@/libs/cn";
 import { Label } from "@/components/ui/label";
+import "./slider.css";
 
 type SliderRootProps<T extends ValidComponent = "div"> =
   SliderPrimitive.SliderRootProps<T> & {
@@ -22,8 +23,8 @@ const Slider = <T extends ValidComponent = "div">(
   return (
     <SliderPrimitive.Root
       class={cn(
-        `relative flex w-full touch-none select-none flex-col
-        items-center`,
+        `ui-slider relative flex w-full min-w-0 touch-none flex-col
+        items-center gap-2 select-none`,
         local.class,
       )}
       {...others}
@@ -45,12 +46,7 @@ const SliderTrack = <T extends ValidComponent = "div">(
   );
   return (
     <SliderPrimitive.Track
-      class={cn(
-        `relative h-2 w-full grow rounded-full bg-secondary
-        hover:cursor-pointer [&[data-disabled]]:cursor-auto
-        [&[data-disabled]]:opacity-50`,
-        local.class,
-      )}
+      class={cn("ui-slider-track", local.class)}
       {...others}
     />
   );
@@ -70,10 +66,7 @@ const SliderFill = <T extends ValidComponent = "div">(
   );
   return (
     <SliderPrimitive.Fill
-      class={cn(
-        "absolute h-full rounded-full bg-primary",
-        local.class,
-      )}
+      class={cn("ui-slider-fill", local.class)}
       {...others}
     />
   );
@@ -94,17 +87,10 @@ const SliderThumb = <T extends ValidComponent = "span">(
   );
   return (
     <SliderPrimitive.Thumb
-      class={cn(
-        `top-[-6px] block size-5 rounded-full border-2 border-primary
-        bg-background ring-offset-background transition-colors
-        hover:cursor-grab focus-visible:outline-none
-        focus-visible:ring-2 focus-visible:ring-ring
-        focus-visible:ring-offset-2 active:cursor-grabbing
-        [&[data-disabled]]:pointer-events-none`,
-        local.class,
-      )}
+      class={cn("ui-slider-thumb", local.class)}
       {...others}
     >
+      {local.children}
       <SliderPrimitive.Input />
     </SliderPrimitive.Thumb>
   );
@@ -113,10 +99,24 @@ const SliderThumb = <T extends ValidComponent = "span">(
 const SliderLabel = <T extends ValidComponent = "label">(
   props: PolymorphicProps<
     T,
-    SliderPrimitive.SliderLabelProps<T>
+    SliderPrimitive.SliderLabelProps<T> & {
+      class?: string;
+    }
   >,
 ) => {
-  return <SliderPrimitive.Label as={Label} {...props} />;
+  const [local, others] = splitProps(
+    props as SliderPrimitive.SliderLabelProps & {
+      class?: string;
+    },
+    ["class"],
+  );
+  return (
+    <SliderPrimitive.Label
+      as={Label}
+      class={cn("min-w-0 leading-snug", local.class)}
+      {...others}
+    />
+  );
 };
 
 const SliderValueLabel = <
@@ -124,11 +124,27 @@ const SliderValueLabel = <
 >(
   props: PolymorphicProps<
     T,
-    SliderPrimitive.SliderValueLabelProps<T>
+    SliderPrimitive.SliderValueLabelProps<T> & {
+      class?: string;
+    }
   >,
 ) => {
+  const [local, others] = splitProps(
+    props as SliderPrimitive.SliderValueLabelProps & {
+      class?: string;
+    },
+    ["class"],
+  );
   return (
-    <SliderPrimitive.ValueLabel as={Label} {...props} />
+    <SliderPrimitive.ValueLabel
+      as={Label}
+      class={cn(
+        `text-muted-foreground ml-auto shrink-0 text-sm leading-snug
+        whitespace-nowrap tabular-nums sm:text-sm`,
+        local.class,
+      )}
+      {...others}
+    />
   );
 };
 

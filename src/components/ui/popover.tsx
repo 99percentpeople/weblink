@@ -51,11 +51,11 @@ export const PopoverContent = <
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         class={cn(
-          `z-50 w-72 rounded-md border bg-popover p-4
-          text-popover-foreground shadow-md outline-none
+          `bg-popover text-popover-foreground
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
-          data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95`,
+          data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 z-50
+          w-72 rounded-lg border p-4 shadow-md outline-none`,
           local.class,
         )}
         {...rest}
@@ -82,10 +82,10 @@ export const PopoverCloseButton = <
   return (
     <PopoverPrimitive.CloseButton
       class={cn(
-        `absolute right-4 top-4 rounded-sm opacity-70
-        ring-offset-background transition-[opacity,box-shadow]
-        hover:opacity-100 focus:outline-none focus:ring-[1.5px]
-        focus:ring-ring focus:ring-offset-2
+        `ring-offset-background focus:ring-ring absolute top-4
+        right-4 rounded-sm opacity-70
+        transition-[opacity,box-shadow] hover:opacity-100
+        focus:ring-[1.5px] focus:ring-offset-2 focus:outline-none
         disabled:pointer-events-none`,
         local.class,
       )}

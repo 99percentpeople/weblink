@@ -18,7 +18,7 @@ import {
 import { reconcile } from "solid-js/store";
 import type { JSX } from "solid-js";
 import { toast } from "solid-sonner";
-import { ConnectionSettings } from "@/routes/setting/connection-settings";
+import { ConnectionSettings } from "@/components/settings/connection-settings";
 import {
   appState,
   setAppState,

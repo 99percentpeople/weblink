@@ -1,12 +1,9 @@
 import {
   batch,
-  ComponentProps,
   createEffect,
   createMemo,
   createSignal,
   For,
-  JSX,
-  onMount,
   Show,
 } from "solid-js";
 import {
@@ -18,7 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
-import { reset } from "@/libs/utils/syncscroll";
 import {
   Progress,
   ProgressValueLabel,
@@ -44,7 +40,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuGroupLabel,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -102,7 +97,7 @@ import { DataTableFacetedFilter } from "@/components/data-table/data-table-facet
 import { toast } from "solid-sonner";
 import { catchError } from "@/libs/catch";
 import { canShareFile } from "@/libs/utils/can-share";
-import { IconFile } from "../components/icon-file";
+import { IconFile } from "@/components/icon-file";
 import { getTotalChunkCount } from "@/libs/domain/file";
 
 const columnHelper = createColumnHelper<FileMetaData>();
@@ -146,12 +141,8 @@ const StorageStatus = (props: { class?: string }) => {
   );
 };
 
-export default function File() {
+export default function FileManager() {
   const { open: openPreviewDialog } = createPreviewDialog();
-
-  onMount(() => {
-    reset();
-  });
 
   const getStatus = (info: FileMetaData) => {
     if (info.isMerging) {
@@ -423,6 +414,7 @@ export default function File() {
                               setAppOptions({
                                 backgroundImage:
                                   row.original.id,
+                                backgroundPreset: undefined,
                               });
                             }}
                           >
@@ -582,10 +574,7 @@ export default function File() {
     createComfirmDeleteItemsDialog();
   return (
     <>
-      <div
-        class="bg-background/80 z-[10] container flex h-full
-          min-h-[calc(100%-3rem)] w-full flex-col gap-4 px-0 pt-4"
-      >
+      <div class="file-manager">
         <PortableContextMenu
           menu={(close) => (
             <>
@@ -662,7 +651,7 @@ export default function File() {
         >
           {(p) => (
             <label
-              class="bg-muted/80 hover:bg-muted/90 fixed right-4 bottom-4 z-50
+              class="bg-muted/80 hover:bg-muted/90 absolute right-4 bottom-4 z-20
                 flex size-12 items-center justify-center rounded-full
                 shadow-md backdrop-blur hover:cursor-pointer"
               style={{
@@ -697,12 +686,9 @@ export default function File() {
           )}
         </PortableContextMenu>
         <div class="pointer-events-none absolute inset-0 z-[-1] backdrop-blur" />
-        <h3 class="h3 px-2">{t("cache.title")}</h3>
+
         <StorageStatus class="px-2" />
-        <div
-          class="sticky top-[var(--mobile-header-height)] z-10 flex gap-2 p-2
-            backdrop-blur sm:top-0"
-        >
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
           <Show
             when={Object.keys(rowSelection()).length !== 0}
           >
@@ -839,7 +825,7 @@ export default function File() {
           />
         </div>
         <DropArea
-          class="relative flex h-full flex-col-reverse"
+          class="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           overlay={(ev) => {
             if (!ev) return;
             if (ev.dataTransfer) {
@@ -914,19 +900,12 @@ export default function File() {
             }
           }}
         >
-          <div
-            data-sync-scroll="file-table"
-            class="scrollbar-none sm:scrollbar-thin relative flex h-full w-full
-              max-w-full flex-col overflow-x-auto sm:absolute sm:inset-0"
-          >
+          <div class="scrollbar-thin min-h-0 w-full flex-1 overflow-auto">
             <Table
               class="mb-20 text-nowrap"
               ref={setTableBody}
             >
-              <TableHeader
-                class="bg-background/50 sticky top-0 z-10 hidden backdrop-blur
-                  sm:table-header-group"
-              >
+              <TableHeader class="bg-popover/95 sticky top-0 z-10 backdrop-blur">
                 <For each={table.getHeaderGroups()}>
                   {(headerGroup) => (
                     <TableRow>
@@ -1023,58 +1002,6 @@ export default function File() {
                   )}
                 </For>
               </TableBody>
-            </Table>
-          </div>
-          <div
-            data-sync-scroll="file-table"
-            class="bg-background/50 scrollbar-thin sticky
-              top-[calc(var(--mobile-header-height)+3rem)] z-10 block
-              h-auto overflow-x-auto overflow-y-hidden backdrop-blur
-              sm:top-12 sm:hidden"
-          >
-            <Table
-              style={{
-                width: `${size?.width ?? 0}px`,
-              }}
-            >
-              <TableHeader>
-                <For each={table.getHeaderGroups()}>
-                  {(headerGroup) => (
-                    <TableRow>
-                      <For each={headerGroup.headers}>
-                        {(header, index) => (
-                          <TableHead
-                            class={cn(
-                              header.column.getIsPinned() &&
-                                "bg-background/50 [tr:hover_&]:bg-muted transition-colors",
-                            )}
-                            style={{
-                              ...getCommonPinningStyles(
-                                header.column,
-                              ),
-                              width: `${
-                                tableCellSizes[index()]
-                                  ?.width ??
-                                header.column.getSize()
-                              }px`,
-                            }}
-                          >
-                            <Show
-                              when={!header.isPlaceholder}
-                            >
-                              {flexRender(
-                                header.column.columnDef
-                                  .header,
-                                header.getContext(),
-                              )}
-                            </Show>
-                          </TableHead>
-                        )}
-                      </For>
-                    </TableRow>
-                  )}
-                </For>
-              </TableHeader>
             </Table>
           </div>
         </DropArea>

@@ -68,7 +68,7 @@ export const DropdownMenuContent = <
           focus-visible:ring-ring data-[expanded]:animate-in
           data-[closed]:animate-out data-[closed]:fade-out-0
           data-[expanded]:fade-in-0 data-[closed]:zoom-out-95
-          data-[expanded]:zoom-in-95 z-50 overflow-hidden rounded-md
+          data-[expanded]:zoom-in-95 z-50 overflow-hidden rounded-lg
           border p-1 shadow-md transition-shadow
           focus-visible:ring-[1.5px] focus-visible:outline-none`,
           local.class,
@@ -313,7 +313,7 @@ export const DropdownMenuSubContent = <
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 z-50
-          overflow-hidden rounded-md border p-1 shadow-md`,
+          overflow-hidden rounded-lg border p-1 shadow-md`,
           local.class,
         )}
         {...rest}

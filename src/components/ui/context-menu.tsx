@@ -104,7 +104,7 @@ export const ContextMenuSubContent = <
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 z-50
-          min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-lg`,
+          min-w-[8rem] overflow-hidden rounded-lg border p-1 shadow-lg`,
           local.class,
         )}
         {...rest}
@@ -137,7 +137,7 @@ export const ContextMenuContent = <
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 z-50
-          min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-md
+          min-w-[8rem] overflow-hidden rounded-lg border p-1 shadow-md
           transition-shadow focus-visible:ring-[1.5px]
           focus-visible:outline-none`,
           local.class,

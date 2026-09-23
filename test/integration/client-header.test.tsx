@@ -1,3 +1,6 @@
+import { conversationHref } from "@/libs/application/home-navigation";
+import { directConversationId } from "@/libs/domain/conversation";
+import { appState } from "@/libs/state/app-state";
 // @vitest-environment jsdom
 import {
   afterEach,
@@ -139,7 +142,14 @@ describe("shared client header", () => {
       expect(link.tagName).toBe("A");
       expect(link).toHaveAttribute(
         "href",
-        `/client/b/${destination}`,
+        destination === "chat"
+          ? conversationHref(
+              directConversationId(
+                appState.profile.clientId,
+                "b",
+              ),
+            )
+          : `/client/b/${destination}`,
       );
       expect(link).toHaveClass("size-9");
       expect(link.querySelector("svg")).toHaveClass(
@@ -158,11 +168,15 @@ describe("shared client header", () => {
         ),
       ).toBeNull();
       fireEvent.click(settings);
-      expect(openClientInfo).toHaveBeenCalledWith("b");
+      expect(openClientInfo).toHaveBeenCalledWith(
+        "b",
+        "session",
+        undefined,
+      );
     },
   );
 
-  it("preserves header styling when switching between chat and sync", async () => {
+  it("returns from file sync to the selected conversation on Home", async () => {
     const { container, history } = renderHeader("chat");
     const headerClass =
       container.querySelector("header")!.className;
@@ -179,14 +193,15 @@ describe("shared client header", () => {
       screen.getByLabelText("client.sync.menu.chat"),
     );
     await waitFor(() =>
-      expect(history.get()).toBe("/client/b/chat"),
+      expect(history.get()).toBe(
+        conversationHref(
+          directConversationId(
+            appState.profile.clientId,
+            "b",
+          ),
+        ),
+      ),
     );
-    expect(
-      container.querySelector("header")!.className,
-    ).toBe(headerClass);
-    expect(
-      screen.getByRole("heading", { name: "Peer" }),
-    ).toBeInTheDocument();
   });
 
   it("keeps actions available without a connected client and truncates long names", () => {
@@ -200,7 +215,11 @@ describe("shared client header", () => {
     });
     expect(settings).toBeEnabled();
     fireEvent.click(settings);
-    expect(openClientInfo).toHaveBeenCalledWith("b");
+    expect(openClientInfo).toHaveBeenCalledWith(
+      "b",
+      "session",
+      undefined,
+    );
     const name = "A very long client display name "
       .repeat(10)
       .trim();

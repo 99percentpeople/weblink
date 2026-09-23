@@ -14,6 +14,10 @@ import {
   useLocation,
   useNavigate,
 } from "@solidjs/router";
+import {
+  HOME_PATH,
+  isHomePath,
+} from "@/libs/application/home-navigation";
 import { makePersisted } from "@solid-primitives/storage";
 import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
@@ -37,8 +41,7 @@ function createMeetingSession() {
   const { media } = useMeetingMedia();
   const location = useLocation();
   const navigate = useNavigate();
-  const onMeetingPage = () =>
-    location.pathname.replace(/\/$/, "") === "/video";
+  const onMeetingPage = () => isHomePath(location.pathname);
   const [engaged, setEngaged] =
     createSignal(onMeetingPage());
   const [pinnedId, setPinnedId] = createSignal<
@@ -46,11 +49,8 @@ function createMeetingSession() {
   >(null);
   const [railCollapsed, setRailCollapsed] =
     createSignal(false);
-  const [toolbarFollowsRail, setToolbarFollowsRail] =
-    makePersisted(createSignal(false), {
-      name: "meeting-toolbar-follows-rail",
-      storage: localStorage,
-    });
+  const [toolbarCollapsed, setToolbarCollapsed] =
+    createSignal(false);
   const [automatic, setAutomatic] = makePersisted(
     createSignal(false),
     {
@@ -157,10 +157,9 @@ function createMeetingSession() {
     if (!onMeetingPage() || event.defaultPrevented) return;
     if (
       typeof event.to === "string" &&
-      new URL(
-        event.to,
-        window.location.href,
-      ).pathname.replace(/\/$/, "") === "/video"
+      isHomePath(
+        new URL(event.to, window.location.href).pathname,
+      )
     )
       return;
     if (event.to === 0) return;
@@ -274,7 +273,7 @@ function createMeetingSession() {
   );
   const returnToMeeting = () => {
     window.focus();
-    navigate("/video");
+    navigate(HOME_PATH);
     pip.close();
   };
   const leave = () => {
@@ -307,8 +306,8 @@ function createMeetingSession() {
     setPinnedId,
     railCollapsed,
     setRailCollapsed,
-    toolbarFollowsRail,
-    setToolbarFollowsRail,
+    toolbarCollapsed,
+    setToolbarCollapsed,
     selected,
     pip,
     controls,
@@ -326,7 +325,7 @@ export function useMeetingSession() {
   return session;
 }
 
-/** Lives above the router's pages, so a PiP window survives leaving /video. */
+/** Lives above the router's pages, so a PiP window survives leaving Home. */
 export function MeetingSessionProvider(props: ParentProps) {
   const session = createMeetingSession();
   return (
@@ -340,7 +339,10 @@ export function MeetingSessionProvider(props: ParentProps) {
             featuredId={session.selected()?.id ?? null}
             railCollapsed={session.railCollapsed()}
             onRailCollapsedChange={session.setRailCollapsed}
-            toolbarFollowsRail={session.toolbarFollowsRail()}
+            toolbarCollapsed={session.toolbarCollapsed()}
+            onToolbarCollapsedChange={
+              session.setToolbarCollapsed
+            }
             onSelect={session.setPinnedId}
             controls={session.controls}
             onLeave={session.leave}

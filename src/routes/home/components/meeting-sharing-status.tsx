@@ -24,32 +24,35 @@ export function MeetingSharingStatus(props: {
 
   return (
     <div
-      class="meeting-sharing-status"
+      class="meeting-sharing-status bg-card flex max-w-[560px] min-w-0
+        shrink items-center gap-[7px] rounded-full border py-[5px]
+        pr-1.5 pl-2.5 text-[12px] max-md:gap-[5px] max-md:py-1
+        max-md:pr-[5px] max-md:pl-2 max-md:text-[11px]"
       data-sharing-count={props.count}
     >
       <MonitorUp
-        class="meeting-sharing-icon"
+        class="text-primary size-4 shrink-0"
         aria-hidden="true"
       />
       <ClientAvatar
-        class="meeting-sharing-avatar size-6 text-[10px]"
+        class="size-6 shrink-0 text-[10px] max-md:hidden"
         name={props.name}
         avatar={props.avatar}
       />
       <span
-        class="meeting-sharing-presenter"
+        class="meeting-sharing-presenter min-w-0 truncate font-medium"
         title={presenter()}
         role="status"
       >
         {presenter()}
       </span>
       <Show when={props.count > 1}>
-        <span class="meeting-sharing-count">
+        <span class="text-muted-foreground shrink-0 text-[11px] tabular-nums">
           ×{props.count}
         </span>
       </Show>
       <span
-        class="meeting-sharing-divider"
+        class="bg-input h-[18px] w-px shrink-0"
         aria-hidden="true"
       />
       <Switch
@@ -84,16 +87,18 @@ export function MeetingSharingStatus(props: {
       </Switch>
       <button
         type="button"
-        class="meeting-sharing-stop"
+        class="bg-accent text-accent-foreground hover:bg-secondary shrink-0
+          rounded-full px-2.5 py-1.5 text-[11px] leading-4
+          whitespace-nowrap max-md:px-2 max-md:py-[5px]"
         aria-label={t("meeting.stop_sharing")}
         title={t("meeting.stop_sharing")}
         disabled={props.busy}
         onClick={props.onStop}
       >
-        <span class="meeting-sharing-stop-full">
+        <span class="max-md:hidden">
           {t("meeting.stop_sharing")}
         </span>
-        <span class="meeting-sharing-stop-short">
+        <span class="hidden max-md:inline">
           {t("meeting.stop_sharing_short")}
         </span>
       </button>

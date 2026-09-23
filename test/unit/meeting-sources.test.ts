@@ -11,7 +11,7 @@ import {
   createMeetingSources,
   selectMeetingPipSource,
   type MeetingParticipant,
-} from "@/routes/video/components/meeting-sources";
+} from "@/routes/home/components/meeting-sources";
 
 vi.mock("@/i18n", () => ({
   t: (key: string, args?: { count: number }) =>

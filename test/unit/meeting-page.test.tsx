@@ -7,7 +7,7 @@ import {
   waitFor,
   within,
 } from "@solidjs/testing-library";
-import { onCleanup, type JSX } from "solid-js";
+import { onCleanup, Show, type JSX } from "solid-js";
 import {
   afterEach,
   beforeEach,
@@ -16,14 +16,16 @@ import {
   it,
   vi,
 } from "vitest";
-import Video from "@/routes/video";
-import { MeetingSettings } from "@/routes/setting/meeting-settings";
-import { MeetingSessionProvider } from "@/routes/video/components/meeting-session-context";
+import Video from "@/routes/home";
+import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 
 const fixture = vi.hoisted(() => ({
   mobile: false,
   navigate: vi.fn(),
+  joinRoom: vi.fn(),
+  editRoom: vi.fn(),
+  setSearch: vi.fn(),
   leaveRoom: vi.fn(),
   clearLocalStream: vi.fn(),
   replaceLocalStream: vi.fn(),
@@ -38,6 +40,16 @@ vi.mock("@/i18n", () => ({
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.pipError, dismiss: vi.fn() },
 }));
+vi.mock("@/components/app/account-menu", () => ({
+  AccountMenu: () => null,
+}));
+vi.mock("@/components/app/room-actions", () => ({
+  useRoomActions: () => ({
+    join: fixture.joinRoom,
+    edit: fixture.editRoom,
+    busy: () => false,
+  }),
+}));
 vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
@@ -48,9 +60,10 @@ vi.mock("@/components/dialogs/room-info-dialog", () => ({
 }));
 vi.mock("@solidjs/router", () => ({
   useNavigate: () => fixture.navigate,
+  useSearchParams: () => [{}, fixture.setSearch],
   useBeforeLeave: () => {},
   useLocation: () => ({
-    pathname: "/video",
+    pathname: "/",
     get hash() {
       return window.location.hash;
     },
@@ -65,6 +78,7 @@ vi.mock("@/libs/hooks/create-mobile", () => ({
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
     profile: { clientId: "me", name: "Me" },
+    options: {},
     roomStatus: { roomId: "Current room" },
     session: {
       clientViewData: {
@@ -91,7 +105,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
     leaveRoom: fixture.leaveRoom,
   }),
 }));
-vi.mock("@/routes/video/components/audio-player", () => ({
+vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
     playState: () => false,
     hasAudio: () => false,
@@ -133,22 +147,31 @@ vi.mock(
   () => ({
     ConversationView: (props: {
       conversationId: string;
+      onBack?: () => void;
     }) => {
       onCleanup(() => fixture.unmountChat());
       return (
-        <div data-testid="chat-view">
-          {props.conversationId}
-        </div>
+        <>
+          <Show when={props.onBack}>
+            <button
+              aria-label="conversations.back_to_list"
+              onClick={() => props.onBack?.()}
+            />
+          </Show>
+          <div data-testid="chat-view">
+            {props.conversationId}
+          </div>
+        </>
       );
     },
   }),
 );
-vi.mock("@/routes/video/components/meeting-tile", () => ({
+vi.mock("@/routes/home/components/meeting-tile", () => ({
   MeetingTile: (props: { name: string }) => (
     <article>{props.name}</article>
   ),
 }));
-vi.mock("@/routes/video/components/video-display", () => ({
+vi.mock("@/routes/home/components/video-display", () => ({
   VideoDisplay: (props: { name: string }) => (
     <div>{props.name}</div>
   ),
@@ -156,13 +179,17 @@ vi.mock("@/routes/video/components/video-display", () => ({
 
 let animationStyle: HTMLStyleElement;
 beforeEach(() => {
-  localStorage.removeItem("meeting-toolbar-follows-rail");
+  // Obsolete linking preferences must not affect the independent controls.
+  localStorage.setItem(
+    "meeting-toolbar-follows-rail",
+    "true",
+  );
   // jsdom does not complete CSS exit animations used by TabsContent presence.
   animationStyle = document.createElement("style");
   animationStyle.textContent =
     "* { animation-name: none !important; }";
   document.head.append(animationStyle);
-  history.replaceState(null, "", "/video");
+  history.replaceState(null, "", "/");
   fixture.mobile = false;
   vi.clearAllMocks();
   vi.stubGlobal("focus", vi.fn());
@@ -183,11 +210,12 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   animationStyle.remove();
+  localStorage.removeItem("meeting-toolbar-follows-rail");
   vi.unstubAllGlobals();
 });
 
 describe("meeting page navigation and panels", () => {
-  it("replaces only the stage during PiP, keeps chat mounted, and restores the layout from the placeholder", async () => {
+  it("keeps chat mounted through PiP and shares independent toolbar and thumbnail states", async () => {
     const frame = document.createElement("iframe");
     document.body.append(frame);
     const child = frame.contentWindow!;
@@ -201,16 +229,10 @@ describe("meeting page navigation and panels", () => {
       render(() => (
         <MeetingMediaProvider>
           <MeetingSessionProvider>
-            <MeetingSettings />
             <Video />
           </MeetingSessionProvider>
         </MeetingMediaProvider>
       ));
-      fireEvent.click(
-        screen.getByRole("tab", {
-          name: "meeting.conversations",
-        }),
-      );
       fireEvent.click(
         screen.getByRole("button", {
           name: "Private Alice",
@@ -227,12 +249,6 @@ describe("meeting page navigation and panels", () => {
         }),
       );
       const chat = screen.getByTestId("chat-view");
-      expect(
-        screen.getByRole("switch", {
-          name: "setting.meeting.toolbar_follows_rail.title",
-        }),
-      ).not.toBeChecked();
-      // The default only collapses thumbnails, leaving media controls available.
       expect(
         screen.getByLabelText("meeting.controls"),
       ).toBeInTheDocument();
@@ -257,13 +273,7 @@ describe("meeting page navigation and panels", () => {
           name: "meeting.pip_elsewhere",
         }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByLabelText("meeting.controls"),
-      ).toBeInTheDocument();
       expect(fixture.pipError).not.toHaveBeenCalled();
-      expect(
-        child.document.querySelector("main"),
-      ).not.toBeNull();
       const pipScreen = within(child.document.body);
       const showPipSources = pipScreen.getByRole("button", {
         name: "meeting.show_sources",
@@ -272,26 +282,52 @@ describe("meeting page navigation and panels", () => {
         showPipSources.getAttribute("aria-expanded"),
       ).toBe("false");
       fireEvent.click(
-        screen.getByRole("switch", {
-          name: "setting.meeting.toolbar_follows_rail.title",
+        pipScreen.getByRole("button", {
+          name: "meeting.hide_toolbar",
         }),
       );
-      expect(
-        localStorage.getItem(
-          "meeting-toolbar-follows-rail",
-        ),
-      ).toBe("true");
+      await Promise.resolve();
       expect(
         pipScreen.queryByLabelText("meeting.controls"),
       ).toBeNull();
-      // The opener has a placeholder instead of a rail and keeps its controls.
+      expect(
+        screen.queryByLabelText("meeting.controls"),
+      ).toBeNull();
+      expect(
+        pipScreen.queryByRole("button", {
+          name: "meeting.show_sources",
+        }),
+      ).toBeNull();
+      expect(
+        pipScreen.queryByRole("button", {
+          name: "meeting.hide_sources",
+        }),
+      ).toBeNull();
+      expect(
+        pipScreen
+          .getByLabelText("meeting.other_sources")
+          .getAttribute("aria-hidden"),
+      ).toBe("true");
+      fireEvent.click(
+        pipScreen.getByRole("button", {
+          name: "meeting.show_toolbar",
+        }),
+      );
+      await Promise.resolve();
+      expect(
+        pipScreen.getByLabelText("meeting.controls"),
+      ).not.toBeNull();
       expect(
         screen.getByLabelText("meeting.controls"),
       ).toBeInTheDocument();
-      fireEvent.click(showPipSources);
+      const restoredPipSources = pipScreen.getByRole(
+        "button",
+        { name: "meeting.show_sources" },
+      );
       expect(
-        pipScreen.queryByLabelText("meeting.controls"),
-      ).not.toBeNull();
+        restoredPipSources.getAttribute("aria-expanded"),
+      ).toBe("false");
+      fireEvent.click(restoredPipSources);
       fireEvent.click(
         screen.getByRole("button", {
           name: "meeting.pip_restore",
@@ -300,46 +336,31 @@ describe("meeting page navigation and panels", () => {
       expect(
         screen.getByLabelText("meeting.stage"),
       ).toBeInTheDocument();
-      expect(
-        screen.getByTestId("chat-view"),
-      ).toHaveTextContent("private-alice");
       expect(screen.getByTestId("chat-view")).toBe(chat);
       expect(
         screen.getByRole("button", {
           name: "meeting.hide_sources",
         }),
       ).toHaveAttribute("aria-expanded", "true");
-      expect(
-        screen.getByRole("switch", {
-          name: "setting.meeting.toolbar_follows_rail.title",
-        }),
-      ).toBeChecked();
       fireEvent.click(
         screen.getByRole("button", {
+          name: "meeting.hide_toolbar",
+        }),
+      );
+      await Promise.resolve();
+      expect(
+        screen.queryByRole("button", {
           name: "meeting.hide_sources",
         }),
-      );
-      expect(
-        screen.queryByLabelText("meeting.controls"),
       ).toBeNull();
-      fireEvent.click(
-        screen.getByRole("switch", {
-          name: "setting.meeting.toolbar_follows_rail.title",
-        }),
-      );
       expect(
-        screen.getByLabelText("meeting.controls"),
-      ).toBeInTheDocument();
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "meeting.grid_layout",
+        screen.queryByRole("button", {
+          name: "meeting.show_sources",
         }),
-      );
-      fireEvent.click(
-        screen.getByRole("switch", {
-          name: "setting.meeting.toolbar_follows_rail.title",
-        }),
-      );
+      ).toBeNull();
+      expect(
+        screen.getByLabelText("meeting.other_sources"),
+      ).toHaveAttribute("aria-hidden", "false");
       expect(
         screen.queryByLabelText("meeting.controls"),
       ).toBeNull();
@@ -348,17 +369,45 @@ describe("meeting page navigation and panels", () => {
           name: "meeting.show_toolbar",
         }),
       );
+      await Promise.resolve();
       expect(
-        screen.getByLabelText("meeting.controls"),
-      ).toBeInTheDocument();
+        screen.getByRole("button", {
+          name: "meeting.hide_sources",
+        }),
+      ).toHaveAttribute("aria-expanded", "true");
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.hide_sources",
+        }),
+      );
+      expect(
+        screen.getByRole("button", {
+          name: "meeting.show_sources",
+        }),
+      ).toHaveAttribute("aria-expanded", "false");
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.grid_layout",
+        }),
+      );
       fireEvent.click(
         screen.getByRole("button", {
           name: "meeting.hide_toolbar",
         }),
       );
+      await Promise.resolve();
       expect(
         screen.queryByLabelText("meeting.controls"),
       ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.show_toolbar",
+        }),
+      );
+      await Promise.resolve();
+      expect(
+        screen.getByLabelText("meeting.controls"),
+      ).toBeInTheDocument();
       expect(
         fixture.clearLocalStream,
       ).not.toHaveBeenCalled();
@@ -406,6 +455,101 @@ describe("meeting page navigation and panels", () => {
       fixture.replaceLocalStream,
     ).not.toHaveBeenCalled();
   });
+  it("cycles one control through compact, wide and full panels without remounting chat or media", () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Private Alice" }),
+    );
+    const chat = screen.getByTestId("chat-view");
+    const tabs = screen.getAllByRole("tab");
+    const stage = screen.getByLabelText("meeting.stage");
+    const sources = screen.getAllByRole("article");
+    const resize = screen.getByRole("button", {
+      name: "meeting.expand_chat",
+    });
+    const conversations = () =>
+      screen.queryByRole("navigation", {
+        name: "test conversations",
+      });
+
+    // Compact -> wide: the conversation list appears beside the same chat.
+    fireEvent.click(resize);
+    expect(
+      screen.getByRole("button", {
+        name: "meeting.maximize_sidebar",
+      }),
+    ).toBe(resize);
+    expect(conversations()).toBeInTheDocument();
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).toBeNull();
+    expect(screen.getByTestId("chat-view")).toBe(chat);
+
+    // Wide -> full: media remains mounted while the canvas is hidden.
+    fireEvent.click(resize);
+    expect(
+      screen.getByRole("button", {
+        name: "meeting.collapse_chat",
+      }),
+    ).toBe(resize);
+    expect(resize).toHaveAttribute("aria-pressed", "true");
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
+    expect(screen.getByTestId("chat-view")).toBe(chat);
+    for (const source of sources)
+      expect(source).toBeInTheDocument();
+
+    // Full -> compact: the list hides and the meeting canvas returns.
+    fireEvent.click(resize);
+    expect(
+      screen.getByRole("button", {
+        name: "meeting.expand_chat",
+      }),
+    ).toBe(resize);
+    expect(resize).toHaveAttribute("aria-pressed", "false");
+    expect(conversations()).toBeNull();
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).toBeNull();
+    expect(screen.getByTestId("chat-view")).toBe(chat);
+
+    // The cycle remains usable after changing tabs; Escape restores wide.
+    expect(fixture.unmountChat).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.members" }),
+    );
+    fireEvent.click(resize);
+    fireEvent.click(resize);
+    fireEvent.keyDown(screen.getByTestId("meeting-page"), {
+      key: "Escape",
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "meeting.maximize_sidebar",
+      }),
+    ).toBe(resize);
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.chat" }),
+    );
+    expect(conversations()).toBeInTheDocument();
+    expect(
+      screen.getByTestId("chat-view").textContent,
+    ).toBe("private-alice");
+    expect(screen.getAllByRole("tab")).toEqual(tabs);
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(fixture.leaveRoom).not.toHaveBeenCalled();
+  });
+
   it("opens private and historical room conversations without leaving the meeting route or joining another room", () => {
     render(() => (
       <MeetingMediaProvider>
@@ -414,22 +558,15 @@ describe("meeting page navigation and panels", () => {
         </MeetingSessionProvider>
       </MeetingMediaProvider>
     ));
-    expect(
-      screen.getByTestId("chat-view").textContent,
-    ).toBe("current-room-id");
+    expect(screen.queryByTestId("chat-view")).toBeNull();
     expect(
       document.querySelector("#meeting-conversations"),
     ).toBeNull();
     expect(
       screen.queryByRole("button", {
-        name: /meeting\.(show|hide)_conversations/,
-      }),
-    ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("tab", {
         name: "meeting.conversations",
       }),
-    );
+    ).toBeNull();
     expect(screen.getByRole("tabpanel")).toContainElement(
       screen.getByRole("navigation", {
         name: "test conversations",
@@ -450,9 +587,13 @@ describe("meeting page navigation and panels", () => {
       }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("tab", {
-        name: "meeting.conversations",
+      screen.getByRole("button", {
+        name: "conversations.back_to_list",
       }),
+    );
+    expect(fixture.setSearch).toHaveBeenLastCalledWith(
+      { conversation: undefined, panel: "conversations" },
+      { replace: true },
     );
     fireEvent.click(
       screen.getByRole("button", {
@@ -479,11 +620,6 @@ describe("meeting page navigation and panels", () => {
       </MeetingMediaProvider>
     ));
     fireEvent.click(
-      screen.getByRole("tab", {
-        name: "meeting.conversations",
-      }),
-    );
-    fireEvent.click(
       screen.getByRole("button", { name: "Private Alice" }),
     );
     const members = screen.getByRole("tab", {
@@ -491,7 +627,7 @@ describe("meeting page navigation and panels", () => {
     });
     fireEvent.click(members);
     expect(screen.queryByTestId("chat-view")).toBeNull();
-    expect(fixture.unmountChat).toHaveBeenCalledTimes(2);
+    expect(fixture.unmountChat).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(members, { key: "ArrowRight" });
     const info = screen.getByRole("tab", {
       name: "meeting.info",
@@ -499,19 +635,19 @@ describe("meeting page navigation and panels", () => {
     expect(info.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(info);
     fireEvent.keyDown(info, { key: "ArrowRight" });
-    const conversations = screen.getByRole("tab", {
-      name: "meeting.conversations",
+    const chatTab = screen.getByRole("tab", {
+      name: "meeting.chat",
     });
-    expect(conversations).toHaveAttribute(
+    expect(chatTab).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(document.activeElement).toBe(conversations);
-    fireEvent.keyDown(conversations, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(chatTab);
+    fireEvent.keyDown(chatTab, { key: "ArrowLeft" });
     expect(document.activeElement).toBe(info);
     fireEvent.keyDown(info, { key: "Home" });
-    expect(document.activeElement).toBe(conversations);
-    fireEvent.keyDown(conversations, { key: "End" });
+    expect(document.activeElement).toBe(chatTab);
+    fireEvent.keyDown(chatTab, { key: "End" });
     expect(document.activeElement).toBe(info);
     fireEvent.click(
       screen.getByRole("tab", { name: "meeting.chat" }),
@@ -637,7 +773,7 @@ describe("meeting page navigation and panels", () => {
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
   });
 
-  it("starts with a closed mobile panel and switches from conversations to selected chat in that panel", () => {
+  it("replaces the mobile canvas with chat and returns without disposing media", () => {
     fixture.mobile = true;
     window.innerWidth = 390;
     render(() => (
@@ -653,15 +789,30 @@ describe("meeting page navigation and panels", () => {
       }),
     ).toBeNull();
     expect(screen.queryByRole("tabpanel")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "meeting.show_panel",
-      }),
+    const stage = screen.getByLabelText("meeting.stage");
+    const sources = screen.getAllByRole("article");
+    const toggle = screen.getByRole("button", {
+      name: "meeting.show_panel",
+    });
+    expect(toggle).toHaveAttribute(
+      "aria-expanded",
+      "false",
     );
-    fireEvent.click(
-      screen.getByRole("tab", {
-        name: "meeting.conversations",
+    fireEvent.click(toggle);
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
+    for (const source of sources)
+      expect(source).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /meeting\.(expand_chat|maximize_sidebar|collapse_chat)/,
       }),
+    ).toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute(
+      "aria-label",
+      "meeting.hide_panel",
     );
     const panel = document.querySelector(
       "#meeting-side-panel",
@@ -688,12 +839,24 @@ describe("meeting page navigation and panels", () => {
     expect(
       screen.getByRole("tab", { name: "meeting.chat" }),
     ).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "meeting.close_panels",
-      }),
-    );
+    fireEvent.click(toggle);
     expect(screen.queryByRole("tabpanel")).toBeNull();
+    expect(
+      stage.closest('[aria-hidden="true"]'),
+    ).toBeNull();
+    expect(screen.getByLabelText("meeting.stage")).toBe(
+      stage,
+    );
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(fixture.leaveRoom).not.toHaveBeenCalled();
     expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(toggle).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(toggle).toHaveAttribute(
+      "aria-label",
+      "meeting.show_panel",
+    );
   });
 });

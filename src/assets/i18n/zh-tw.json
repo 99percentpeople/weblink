@@ -94,24 +94,35 @@
         "description": "變更應用程式的語言"
       },
       "background_image": {
-        "title": "背景圖片",
-        "description": "變更應用程式的背景圖片，也可以在檔案快取中選擇",
-        "click_to_select": "點擊選擇"
+        "title": "桌布背景",
+        "description": "選擇預設紋理，或上傳、拖入自己的圖片。",
+        "click_to_select": "點擊選擇",
+        "preview": "背景預覽",
+        "custom_image": "自訂圖片",
+        "default": "預設背景",
+        "upload": "上傳圖片",
+        "uploading": "儲存中…",
+        "reset": "恢復預設背景",
+        "textures": "預設紋理",
+        "drop_to_upload": "放開以設為背景",
+        "invalid_image": "請選擇圖片檔案。",
+        "upload_failed": "圖片儲存失敗，請重試。",
+        "presets": {
+          "dots": "點陣",
+          "grid": "方格",
+          "diagonal": "斜紋",
+          "linen": "織紋",
+          "waves": "波紋",
+          "checker": "棋格"
+        }
       },
       "background_image_opacity": {
-        "title": "背景圖片透明度",
+        "title": "背景透明度",
         "description": "變更背景圖片的透明度"
       },
       "wake_lock": {
         "title": "保持螢幕常亮",
         "description": "當啟用時，應用程式將保持螢幕常亮"
-      }
-    },
-    "meeting": {
-      "title": "會議",
-      "toolbar_follows_rail": {
-        "title": "允許收起工具列",
-        "description": "工具列與畫面列表共用展開狀態；網格和單畫面下也顯示展開／收起按鈕。主頁面與子母畫面共用此設定，預設關閉。"
       }
     },
     "connection": {
@@ -244,8 +255,17 @@
     },
     "about": {
       "title": "關於",
-      "reset_options": "重置選項",
-      "clear_service_worker_cache": "清除 Service Worker 快取"
+      "reset_options": "重設設定",
+      "clear_service_worker_cache": "清除應用程式快取",
+      "copy_version": "複製版本資訊",
+      "copy_failed": "複製版本資訊失敗，請重試。",
+      "build_time": "建置時間",
+      "changelog": "更新紀錄",
+      "feedback": "回報問題",
+      "maintenance": "維護",
+      "reset_description": "恢復應用程式選項及房間、成員偏好的預設值，保留聊天記錄和快取檔案。",
+      "reset_failed": "重設設定失敗：{{error}}",
+      "cache_description": "清除快取的頁面資源，用於解決載入或更新異常。保留聊天記錄、快取檔案和設定。"
     }
   },
   "cache": {
@@ -314,8 +334,7 @@
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter 或 Shift + Enter 發送訊息",
-      "mobile_placeholder": "發送訊息",
-      "paste_tip": "剪貼簿貼上已啟用"
+      "mobile_placeholder": "發送訊息"
     },
     "sync": {
       "title": "檔案同步",
@@ -432,14 +451,14 @@
       "unsupported_file_type": "不支援的檔案類型"
     },
     "reset_options_dialog": {
-      "title": "重置選項",
+      "title": "重設設定",
       "description": "重置後將無法恢復，請謹慎操作",
-      "content": "這個操作會重置所有選項，但不會清除使用者資料"
+      "content": "恢復應用程式選項及房間、成員偏好的預設值，保留聊天記錄和快取檔案。"
     },
     "clear_service_worker_cache_dialog": {
-      "title": "清除 Service Worker 快取",
-      "description": "這個操作會清除 Service Worker 快取",
-      "content": "如果你在頁面更新後遇到問題，可以清除快取後重試",
+      "title": "清除應用程式快取",
+      "description": "清除此網站快取的頁面資源與離線支援。",
+      "content": "聊天記錄、快取檔案和設定會保留。重新載入頁面會中斷進行中的通話和傳輸。",
       "reload": "清除後重新加載頁面"
     },
     "file_table": {
@@ -629,8 +648,8 @@
       "processing_files": "處理檔案中...",
       "new_version_available": "新版本可用",
       "share_failed": "分享失敗，錯誤: {{error}}",
-      "clear_cache_success": "Cache Storage 和 Service Worker 清除成功",
-      "clear_cache_failed": "清除 Cache Storage 和 Service Worker 失敗，錯誤: {{error}}"
+      "clear_cache_success": "應用程式快取已清除",
+      "clear_cache_failed": "清除應用程式快取失敗：{{error}}"
     },
     "nav": {
       "chat": "聊天",
@@ -686,9 +705,9 @@
     "no_messages": "尚無訊息",
     "unread_count": "{{count}} 則未讀訊息",
     "actions": "{{name}} 的對話操作",
-    "delete": "刪除本機對話",
-    "delete_title": "刪除本機歷史",
-    "delete_description": "刪除此瀏覽器中「{{name}}」的歷史？其他成員的歷史不受影響。目前房間仍會保留在清單中。",
+    "delete": "刪除對話",
+    "delete_title": "刪除對話",
+    "delete_description": "刪除此瀏覽器中「{{name}}」的聊天記錄及對話列表項目？不影響其他成員。",
     "expand": "展開對話清單",
     "empty": "沒有符合的對話",
     "select": "選擇對話開始聊天。",
@@ -715,7 +734,13 @@
     "room_file_request": "點擊傳輸",
     "room_file_offer": "已分享到房間，成員點擊後開始傳輸。",
     "room_file_sender_unavailable": "回到原房間且傳送者在線後可傳輸。",
-    "room_file_missing": "此檔案在本機已無法使用。"
+    "room_file_missing": "此檔案在本機已無法使用。",
+    "back_to_list": "返回對話列表",
+    "clear": "清空聊天記錄",
+    "clear_title": "清空聊天記錄",
+    "clear_description": "清空此瀏覽器中「{{name}}」的聊天記錄？對話列表項目會保留，不影響其他成員。",
+    "delete_requires_exit": "請先退出房間，再刪除對話。",
+    "manage_hint": "清空僅移除聊天記錄並保留對話；刪除還會移除對話列表項目。"
   },
   "meeting": {
     "pip_title": "會議子母畫面",
@@ -767,7 +792,7 @@
     "chat": "聊天",
     "members": "成員",
     "info": "資訊",
-    "select_conversation": "在「對話」分頁中選擇對話，或加入房間開始群聊。",
+    "select_conversation": "從對話列表選擇對話，或加入房間開始群聊。",
     "members_hint": "目前房間的成員與連線狀態",
     "status_online": "線上",
     "status_offline": "離線",
@@ -815,9 +840,15 @@
     "device_disabled": "裝置已停用",
     "permission_disabled_hint": "請在瀏覽器的網站權限或系統隱私設定中允許存取，再重新整理裝置清單。",
     "permission_requesting": "正在取得權限…",
-    "output_permission_hint": "目前瀏覽器需要麥克風授權才能顯示相關的揚聲器清單。"
+    "output_permission_hint": "目前瀏覽器需要麥克風授權才能顯示相關的揚聲器清單。",
+    "expand_chat": "展開側邊欄",
+    "collapse_chat": "縮窄側邊欄",
+    "maximize_sidebar": "展開為完整工作區",
+    "restore_sidebar": "還原側欄",
+    "return_to_stage": "返回會議畫面"
   },
   "room_dialog": {
+    "actions": "房間操作",
     "open": "房間資訊與設定",
     "title": "房間設定",
     "description": "查看房間資訊，配置會議裝置與房間偏好。",
@@ -842,5 +873,16 @@
     "members_not_joined": "目前未加入此房間，無法查看線上成員。",
     "no_previous_members": "暫無保留的歷史成員。",
     "members_hint": "歷史成員僅顯示曾加入此房間，且本機仍保留私聊對話的成員。"
+  },
+  "app_menu": {
+    "title": "使用者選單",
+    "room_qrcode": "房間 QR 碼",
+    "joining": "正在加入…",
+    "settings_categories": "設定分類",
+    "settings_appearance": "外觀",
+    "settings_connection": "連線",
+    "settings_transfer": "傳輸",
+    "settings_advanced": "進階",
+    "settings_about": "關於"
   }
 }

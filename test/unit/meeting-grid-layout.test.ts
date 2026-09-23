@@ -11,7 +11,7 @@ import { createRoot, createSignal } from "solid-js";
 import {
   calculateMeetingGridLayout,
   createMeetingGridLayout,
-} from "@/routes/video/components/meeting-grid-layout";
+} from "@/routes/home/components/meeting-grid-layout";
 
 describe("meeting grid geometry", () => {
   it("fits a wide short stage in one row and a narrow tall stage in multiple rows", () => {

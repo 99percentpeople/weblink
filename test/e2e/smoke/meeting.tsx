@@ -1,4 +1,4 @@
-import { MeetingSessionProvider } from "@/routes/video/components/meeting-session-context";
+import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 import { createRoot, type ParentProps } from "solid-js";
 import { render } from "solid-js/web";
 import {
@@ -7,11 +7,14 @@ import {
   useNavigate,
 } from "@solidjs/router";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
+import { RoomActionsProvider } from "@/components/app/room-actions";
+import { AppDialogsProvider } from "@/components/app/app-dialogs";
+import { ColorModeProvider } from "@kobalte/core";
 import { ModalProvider } from "@/components/dialogs/base";
-import Video from "@/routes/video";
-import Home from "@/routes/index";
-import ConversationPage from "@/routes/conversation";
-import { AudioPlayerProvider } from "@/routes/video/components/audio-player";
+import Video from "@/routes/home";
+import Home from "../../support/chat-workspace";
+import ConversationPage from "../../support/conversation-page";
+import { AudioPlayerProvider } from "@/routes/home/components/audio-player";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import { createMessageStores } from "@/libs/application/messaging/message-store";
 import type {
@@ -307,11 +310,12 @@ const conversationRows = (id?: string) =>
 async function showConversations() {
   if (!document.querySelector("#meeting-side-panel"))
     click("meeting.show_panel");
-  if (!sidebar()) click("meeting.conversations", "tab");
+  if (!sidebar()) click("meeting.chat", "tab");
+  if (!sidebar()) click("conversations.back_to_list");
   await until(() => Boolean(sidebar()));
   assert(
     document
-      .querySelector("#meeting-panel-conversations")
+      .querySelector("#meeting-panel-chat")
       ?.contains(sidebar()!) &&
       !document.querySelector("#meeting-conversations"),
     "conversation list must live in the right panel tab",
@@ -804,27 +808,33 @@ function Shell(props: ParentProps) {
   return (
     <AudioPlayerProvider>
       <MeetingMediaProvider>
-        <ModalProvider>
+        <RoomActionsProvider>
           <MeetingSessionProvider>
-            <div
-              id="meeting-test-shell"
-              class="flex h-full min-h-full w-full flex-col md:flex-row"
-            >
-              <nav
-                aria-label="App navigation fixture"
-                class="bg-background text-foreground flex
-                  h-[var(--mobile-header-height)]
-                  w-[var(--desktop-header-width)] shrink-0 items-center
-                  justify-center border-r font-semibold"
-              >
-                W
-              </nav>
-              <div class="min-h-0 min-w-0 flex-1">
-                {props.children}
-              </div>
-            </div>
+            <AppDialogsProvider>
+              <ColorModeProvider>
+                <ModalProvider>
+                  <div
+                    id="meeting-test-shell"
+                    class="flex h-full min-h-full w-full flex-col md:flex-row"
+                  >
+                    <nav
+                      aria-label="App navigation fixture"
+                      class="bg-background text-foreground flex
+                        h-[var(--mobile-header-height)]
+                        w-[var(--desktop-header-width)] shrink-0 items-center
+                        justify-center border-r font-semibold"
+                    >
+                      W
+                    </nav>
+                    <div class="min-h-0 min-w-0 flex-1">
+                      {props.children}
+                    </div>
+                  </div>
+                </ModalProvider>
+              </ColorModeProvider>
+            </AppDialogsProvider>
           </MeetingSessionProvider>
-        </ModalProvider>
+        </RoomActionsProvider>
       </MeetingMediaProvider>
     </AudioPlayerProvider>
   );

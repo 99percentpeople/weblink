@@ -27,6 +27,14 @@ export class RoomMessageStore {
     { message: RoomMessage; promise: Promise<void> }
   >();
   private deliveryWrites = new Map<string, Promise<void>>();
+  private conversationVersions = new Map<string, number>();
+
+  invalidateConversation(id: string): void {
+    this.conversationVersions.set(
+      id,
+      (this.conversationVersions.get(id) ?? 0) + 1,
+    );
+  }
   constructor(
     private readonly repository: MessageRepository,
     private readonly dependencies: RoomMessageStoreDependencies,
@@ -77,7 +85,21 @@ export class RoomMessageStore {
   async putRoomMessage(
     message: RoomMessage,
   ): Promise<boolean> {
+    const conversationId = message.conversationId;
+    if (!conversationId)
+      throw new Error(
+        "Room message does not belong to a known room conversation",
+      );
+    const version =
+      this.conversationVersions.get(conversationId);
     await this.dependencies.initialize();
+    if (
+      version !==
+      this.conversationVersions.get(conversationId)
+    )
+      throw new Error(
+        "Conversation history was cleared while saving the message",
+      );
     const conversation = this.conversations.find(
       (item) => item.id === message.conversationId,
     );
@@ -118,10 +140,14 @@ export class RoomMessageStore {
         labelIds: [...conversation.labelIds],
       });
       await this.repository.putMessage(snapshot);
-      if (!this.conversations.includes(conversation)) {
+      if (
+        !this.conversations.includes(conversation) ||
+        version !==
+          this.conversationVersions.get(conversationId)
+      ) {
         await this.repository.removeMessage(snapshot.id);
         throw new Error(
-          "Conversation was deleted while saving the message",
+          "Conversation was cleared or deleted while saving the message",
         );
       }
       this.dependencies.setMessages(

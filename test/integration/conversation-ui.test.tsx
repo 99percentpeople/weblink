@@ -20,6 +20,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route } from "@solidjs/router";
 import {
   createSignal,
+  Show,
   type JSX,
   type ParentProps,
 } from "solid-js";
@@ -65,6 +66,7 @@ vi.mock("lucide-solid", () => {
     FolderSync: Icon,
     Settings: Icon,
     Trash2: Icon,
+    Eraser: Icon,
     PanelLeftOpen: Icon,
     Plus: Icon,
     Check: Icon,
@@ -127,6 +129,9 @@ vi.mock(
     createDeleteConversationDialog: () => ({
       open: async () => ({ result: true }),
     }),
+    createClearConversationDialog: () => ({
+      open: async () => ({ result: true }),
+    }),
   }),
 );
 vi.mock("@/components/dialogs/client-info-dialog", () => ({
@@ -163,8 +168,16 @@ vi.mock("@/components/icons", () => ({
 vi.mock(
   "@/routes/client/[id]/components/client-header",
   () => ({
-    ClientHeader: () => (
-      <header>Private conversation</header>
+    ClientHeader: (props: { onBack?: () => void }) => (
+      <header>
+        Private conversation
+        <Show when={props.onBack}>
+          <button
+            aria-label="conversations.back_to_list"
+            onClick={() => props.onBack?.()}
+          />
+        </Show>
+      </header>
     ),
   }),
 );
@@ -321,8 +334,66 @@ afterEach(() => {
 });
 
 describe("shared conversation UI", () => {
+  it.each(["direct", "room"] as const)(
+    "clears an online %s conversation and disables its delete action",
+    async (kind) => {
+      const id = kind === "room" ? roomId : directId;
+      const user = userEvent.setup();
+      const { container } = renderInRouter(() => (
+        <ConversationSidebar onSelect={() => {}} />
+      ));
+      const row = rows(container).find(
+        (item) => item.dataset.conversationId === id,
+      )!;
+      await user.click(
+        within(row).getByRole("button", {
+          name:
+            kind === "room"
+              ? "conversations.actions:team"
+              : "conversations.actions:Alice",
+        }),
+      );
+      expect(
+        screen.getByRole("menuitem", {
+          name: "conversations.delete",
+        }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.getByText(
+          "conversations.delete_requires_exit",
+        ),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("menuitem", {
+          name: "conversations.clear",
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          store.getConversationMessages(id),
+        ).toHaveLength(0),
+      );
+      expect(
+        rows(container).some(
+          (item) => item.dataset.conversationId === id,
+        ),
+      ).toBe(true);
+      expect(
+        store.getConversationMessages(
+          kind === "room" ? directId : roomId,
+        ),
+      ).toHaveLength(1);
+    },
+  );
   it("deletes a selected private conversation while retaining the same peer's earlier identity history", async () => {
     const user = userEvent.setup();
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "onlineStatus",
+      "offline",
+    );
     await store.addMessage({
       id: "old-private",
       type: "text",
@@ -611,6 +682,7 @@ describe("shared conversation UI", () => {
   });
 
   it("switches sidebar-selected private and room views without leaking member messages or changing the shell", async () => {
+    const back = vi.fn();
     const [selected, select] = createSignal(directId);
     const { container } = renderInRouter(() => (
       <div>
@@ -623,11 +695,18 @@ describe("shared conversation UI", () => {
           <ConversationView
             conversationId={selected()}
             embedded
+            onBack={back}
           />
         </div>
       </div>
     ));
     const content = screen.getByTestId("current-view");
+    fireEvent.click(
+      within(content).getByRole("button", {
+        name: "conversations.back_to_list",
+      }),
+    );
+    expect(back).toHaveBeenCalledTimes(1);
     expect(
       within(content).getByText("private contents"),
     ).toBeTruthy();
@@ -639,6 +718,12 @@ describe("shared conversation UI", () => {
     )!;
     fireEvent.click(roomRow.querySelector("button")!);
     expect(selected()).toBe(roomId);
+    fireEvent.click(
+      within(content).getByRole("button", {
+        name: "conversations.back_to_list",
+      }),
+    );
+    expect(back).toHaveBeenCalledTimes(2);
     expect(
       within(content).getByText("group contents"),
     ).toBeTruthy();

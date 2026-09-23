@@ -358,7 +358,7 @@ export class ConversationStore {
     this.persist(this.conversations[index]);
   }
 
-  deleteConversation(id: string): void {
+  clearConversation(id: string): void {
     const messages = this.getConversationMessages(id);
     this.dependencies.removeMessages(
       messages.map((message) => message.id),
@@ -370,6 +370,10 @@ export class ConversationStore {
         ),
       ),
     );
+  }
+
+  deleteConversation(id: string): void {
+    this.clearConversation(id);
     // Queue deletion before publishing the removal: an active room observer
     // may immediately recreate its metadata in response to this state change.
     void this.repository

@@ -14,7 +14,7 @@ import {
 } from "solid-js";
 import { Portal } from "solid-js/web";
 import { t } from "@/i18n";
-import { ChevronDown, ChevronUp } from "lucide-solid";
+import { MeetingCollapseButton } from "./meeting-collapse-button";
 import { MeetingTile } from "./meeting-tile";
 import type { MeetingSource } from "./meeting-sources";
 import { createMeetingGridLayout } from "./meeting-grid-layout";
@@ -27,9 +27,9 @@ export function MeetingStage(
     compact?: boolean;
     sources: readonly MeetingSource[];
     pinnedId: string | null;
+    hideRailToggle?: boolean;
     railCollapsed: boolean;
     onRailCollapsedChange(collapsed: boolean): void;
-    toolbarFollowsRail: boolean;
     onPin(id: string): void;
     onStop(trackId: string): void;
     transitionLayout(update: () => void): void;
@@ -90,41 +90,26 @@ export function MeetingStage(
   const sourceIds = createMemo(() =>
     sources().map((source) => source.id),
   );
-  const hasRail = () =>
-    Boolean(featured() && rest().length);
   const CollapseToggle = () => (
     <Motion.div
       class="meeting-thumbnails-toolbar"
       layout
       layoutId="meeting-thumbnail-controls"
     >
-      <button
-        type="button"
-        class="meeting-thumbnails-toggle"
-        aria-controls={hasRail() ? railId : undefined}
-        aria-expanded={!railCollapsed()}
-        onClick={() =>
+      <MeetingCollapseButton
+        controls={railId}
+        expanded={!railCollapsed()}
+        onToggle={() =>
           props.transitionLayout(() =>
             props.onRailCollapsedChange(!railCollapsed()),
           )
         }
-      >
-        <Show
-          when={railCollapsed()}
-          fallback={<ChevronDown />}
-        >
-          <ChevronUp />
-        </Show>
-        {t(
-          hasRail()
-            ? railCollapsed()
-              ? "meeting.show_sources"
-              : "meeting.hide_sources"
-            : railCollapsed()
-              ? "meeting.show_toolbar"
-              : "meeting.hide_toolbar",
+        label={t(
+          railCollapsed()
+            ? "meeting.show_sources"
+            : "meeting.hide_sources",
         )}
-      </button>
+      />
     </Motion.div>
   );
   const Tile = (tile: { id: string; order: number }) => (
@@ -181,6 +166,7 @@ export function MeetingStage(
           "has-featured": Boolean(featured()),
           "is-solo": sources().length === 1,
           "is-rail-collapsed": railCollapsed(),
+          "is-rail-toggle-hidden": props.hideRailToggle,
         }}
       >
         {/* Keep branch cleanup separate from the views portaled into the grid. */}
@@ -191,7 +177,9 @@ export function MeetingStage(
               class="meeting-featured-frame"
             />
             <Show when={rest().length}>
-              <CollapseToggle />
+              <Show when={!props.hideRailToggle}>
+                <CollapseToggle />
+              </Show>
               <div
                 ref={setRail}
                 id={railId}
@@ -208,9 +196,6 @@ export function MeetingStage(
           </Show>
         </div>
       </div>
-      <Show when={!hasRail() && props.toolbarFollowsRail}>
-        <CollapseToggle />
-      </Show>
       {/* Portal retains its content when the layout host changes. */}
       <For each={sourceIds()}>
         {(id, index) => (

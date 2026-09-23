@@ -78,6 +78,96 @@ beforeEach(() => {
 });
 
 describe("conversation storage", () => {
+  it.each(["direct", "room"] as const)(
+    "clears %s history while retaining conversation metadata and other histories",
+    async (kind) => {
+      const repo = repository();
+      const store = new MessageStores(repo);
+      await store.initialize();
+      store.setClient({
+        clientId: "peer",
+        name: "Peer",
+        avatar: null,
+      });
+      const room = store.ensureRoomConversation(
+        "room",
+        "test-server",
+      );
+      store.recordRoomMember(room.id, "peer");
+      await store.addMessage(direct);
+      await store.putRoomMessage(roomMessage());
+      const id =
+        kind === "room"
+          ? room.id
+          : directConversationId("local", "peer");
+      const label = store.createLabel("Keep");
+      store.setConversationLabels(id, [label.id]);
+      store.markConversationRead(id);
+      const conversation = store.conversations.find(
+        (item) => item.id === id,
+      )!;
+      const messages = store.messages;
+      store.clearConversation(id);
+      expect(store.messages).toBe(messages);
+      expect(store.getConversationMessages(id)).toEqual([]);
+      expect(store.messages.map((item) => item.id)).toEqual(
+        [
+          kind === "room"
+            ? "direct-message"
+            : "room-message",
+        ],
+      );
+      expect(
+        store.conversations.find((item) => item.id === id),
+      ).toBe(conversation);
+      expect(conversation.labelIds).toEqual([label.id]);
+      expect(
+        store.conversations.find(
+          (item) => item.kind === "direct",
+        ),
+      ).toMatchObject({ roomConversationIds: [room.id] });
+      expect(
+        repo.removeConversation,
+      ).not.toHaveBeenCalled();
+      expect(repo.removeMessages).toHaveBeenCalledWith([
+        kind === "room" ? "room-message" : "direct-message",
+      ]);
+      await store.addMessage({
+        ...direct,
+        id: "new-direct",
+      });
+      await store.putRoomMessage(roomMessage("new-room"));
+      expect(
+        store.getConversationMessages(id),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("does not persist a private message after its conversation is cleared during a write", async () => {
+    let finish!: () => void;
+    const repo = repository({
+      putMessage: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const store = new MessageStores(repo);
+    await store.initialize();
+    const pending = store.addMessage(direct);
+    const id = directConversationId("local", "peer");
+    store.clearConversation(id);
+    finish();
+    await pending;
+    expect(store.getConversationMessages(id)).toEqual([]);
+    expect(
+      store.conversations.some((item) => item.id === id),
+    ).toBe(true);
+    expect(repo.removeMessage).toHaveBeenCalledWith(
+      direct.id,
+    );
+  });
   it("persists silent room membership with private conversations and does not recreate deleted conversations", async () => {
     const saved = new Map<string, Conversation>();
     const peer = {
@@ -370,33 +460,44 @@ describe("conversation storage", () => {
     expect(store.messages).toHaveLength(1);
   });
 
-  it("does not resurrect a room deleted while its message is being persisted", async () => {
-    let finish!: () => void;
-    const putMessage = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const repo = repository({ putMessage });
-    const store = new MessageStores(repo);
-    await store.initialize();
-    const room = store.ensureRoomConversation(
-      "room",
-      "test-server",
-    );
-    const pending = store.putRoomMessage(roomMessage());
-    await vi.waitFor(() =>
-      expect(putMessage).toHaveBeenCalledTimes(1),
-    );
-    store.deleteConversation(room.id);
-    finish();
-    await expect(pending).rejects.toThrow("deleted");
-    expect(store.messages).toHaveLength(0);
-    expect(repo.removeMessage).toHaveBeenCalledWith(
-      "room-message",
-    );
-  });
+  it.each([
+    "clearConversation",
+    "deleteConversation",
+  ] as const)(
+    "does not resurrect a room message after %s while it is being persisted",
+    async (action) => {
+      let finish!: () => void;
+      const putMessage = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const repo = repository({ putMessage });
+      const store = new MessageStores(repo);
+      await store.initialize();
+      const room = store.ensureRoomConversation(
+        "room",
+        "test-server",
+      );
+      const pending = store.putRoomMessage(roomMessage());
+      await vi.waitFor(() =>
+        expect(putMessage).toHaveBeenCalledTimes(1),
+      );
+      store[action](room.id);
+      finish();
+      await expect(pending).rejects.toThrow("deleted");
+      expect(store.messages).toHaveLength(0);
+      expect(
+        store.conversations.some(
+          (item) => item.id === room.id,
+        ),
+      ).toBe(action === "clearConversation");
+      expect(repo.removeMessage).toHaveBeenCalledWith(
+        "room-message",
+      );
+    },
+  );
 
   it("can remove migrated private history even when contact metadata is missing", async () => {
     const store = new MessageStores(

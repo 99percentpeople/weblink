@@ -7,7 +7,6 @@ import {
   type ComponentProps,
 } from "solid-js";
 import type { Client } from "@/libs/domain/client";
-import { t } from "@/i18n";
 import { createSendItemPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { appState } from "@/libs/state/app-state";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
@@ -60,19 +59,6 @@ export const ChatBar: Component<
           setTimeout(() => setText(""), 0);
         }
       }}
-      footer={
-        <Show
-          when={
-            mobile() &&
-            navigator.clipboard &&
-            appState.options.enableClipboard
-          }
-        >
-          <p class="text-muted-foreground text-xs">
-            {t("client.message_editor.paste_tip")}
-          </p>
-        </Show>
-      }
     />
   );
 };

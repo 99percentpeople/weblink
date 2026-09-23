@@ -28,11 +28,11 @@ export const HoverCardContent = <
     <HoverCardPrimitive.Portal>
       <HoverCardPrimitive.Content
         class={cn(
-          `z-50 w-64 rounded-md border bg-popover p-4
-          text-popover-foreground shadow-md outline-none
+          `bg-popover text-popover-foreground
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
-          data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95`,
+          data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95 z-50
+          w-64 rounded-lg border p-4 shadow-md outline-none`,
           local.class,
         )}
         {...rest}

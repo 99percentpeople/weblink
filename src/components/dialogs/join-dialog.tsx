@@ -1,3 +1,4 @@
+import { createStore, reconcile } from "solid-js/store";
 import { setClientProfile } from "@/libs/state/profile-store";
 import { createDialog } from "./dialog";
 import { Input } from "@/components/ui/input";
@@ -8,14 +9,7 @@ import {
 } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { optional } from "@/libs/domain/utils/optional";
-import { useAppState } from "@/libs/state/app-state-context";
-import {
-  ComponentProps,
-  createMemo,
-  createSignal,
-  Show,
-  splitProps,
-} from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import {
   Avatar,
   AvatarFallback,
@@ -31,8 +25,6 @@ import {
   IconCasino,
   IconContentCopy,
   IconInfo,
-  IconLogin,
-  IconLogout,
   IconUploadFile,
   IconVisibility,
   IconVisibilityOff,
@@ -47,10 +39,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Spinner } from "@/components/common/spinner";
 import { appState } from "@/libs/state/app-state";
 
 export const createRoomDialog = () => {
+  const [draft, setDraft] = createStore({
+    ...appState.profile,
+  });
   const [step, setStep] = createSignal<"profile" | "room">(
     "profile",
   );
@@ -168,12 +162,9 @@ export const createRoomDialog = () => {
             </span>
             <Input
               required
-              value={appState.profile.name}
+              value={draft.name}
               onInput={(ev) =>
-                setClientProfile(
-                  "name",
-                  ev.currentTarget.value,
-                )
+                setDraft("name", ev.currentTarget.value)
               }
             />
           </label>
@@ -195,14 +186,10 @@ export const createRoomDialog = () => {
               >
                 <Avatar class="size-14">
                   <AvatarImage
-                    src={
-                      appState.profile.avatar ?? undefined
-                    }
+                    src={draft.avatar ?? undefined}
                   />
-                  <AvatarFallback
-                    seed={appState.profile.name}
-                  >
-                    {getInitials(appState.profile.name)}
+                  <AvatarFallback seed={draft.name}>
+                    {getInitials(draft.name)}
                   </AvatarFallback>
                 </Avatar>
               </button>
@@ -214,9 +201,9 @@ export const createRoomDialog = () => {
                       "common.join_form.avatar_placeholder",
                     )}
                     type="url"
-                    value={appState.profile.avatar ?? ""}
+                    value={draft.avatar ?? ""}
                     onInput={(ev) =>
-                      setClientProfile(
+                      setDraft(
                         "avatar",
                         optional(ev.currentTarget.value),
                       )
@@ -259,7 +246,7 @@ export const createRoomDialog = () => {
                       file,
                       128,
                     );
-                  setClientProfile("avatar", url);
+                  setDraft("avatar", url);
                   ev.currentTarget.value = "";
                 }}
               />
@@ -298,9 +285,9 @@ export const createRoomDialog = () => {
               </div>
               <p
                 class="text-foreground/80 mt-0.5 truncate font-mono text-xs"
-                title={appState.profile.clientId}
+                title={draft.clientId}
               >
-                {appState.profile.clientId}
+                {draft.clientId}
               </p>
             </div>
             <button
@@ -313,7 +300,7 @@ export const createRoomDialog = () => {
               aria-label={t("common.action.copy")}
               onClick={() =>
                 navigator.clipboard.writeText(
-                  appState.profile.clientId,
+                  draft.clientId,
                 )
               }
             >
@@ -335,8 +322,11 @@ export const createRoomDialog = () => {
               );
               return;
             }
-            setClientProfile("initalJoin", false);
-            submit(appState.profile);
+            setClientProfile({
+              ...draft,
+              initalJoin: false,
+            });
+            submit({ ...draft, initalJoin: false });
           }}
         >
           <label class="flex flex-col gap-2">
@@ -345,12 +335,9 @@ export const createRoomDialog = () => {
             </span>
             <Input
               required
-              value={appState.profile.roomId}
+              value={draft.roomId}
               onInput={(ev) =>
-                setClientProfile(
-                  "roomId",
-                  ev.currentTarget.value,
-                )
+                setDraft("roomId", ev.currentTarget.value)
               }
             />
           </label>
@@ -389,9 +376,9 @@ export const createRoomDialog = () => {
                 placeholder={t(
                   "common.join_form.password.placeholder",
                 )}
-                value={appState.profile.password ?? ""}
+                value={draft.password ?? ""}
                 onInput={(ev) =>
-                  setClientProfile(
+                  setDraft(
                     "password",
                     optional(ev.currentTarget.value),
                   )
@@ -433,7 +420,7 @@ export const createRoomDialog = () => {
                 onClick={async () => {
                   const password =
                     await generateStrongPassword();
-                  setClientProfile("password", password);
+                  setDraft("password", password);
                 }}
               >
                 <IconCasino class="size-4" />
@@ -446,9 +433,9 @@ export const createRoomDialog = () => {
 
           <Switch
             class="flex items-center justify-between"
-            checked={appState.profile.autoJoin}
+            checked={draft.autoJoin}
             onChange={(isChecked) =>
-              setClientProfile("autoJoin", isChecked)
+              setDraft("autoJoin", isChecked)
             }
           >
             <SwitchLabel>
@@ -490,9 +477,8 @@ export const createRoomDialog = () => {
   });
 
   const open = () => {
-    setStep(
-      appState.profile.initalJoin ? "profile" : "room",
-    );
+    setDraft(reconcile({ ...appState.profile }));
+    setStep(draft.initalJoin ? "profile" : "room");
     setShowPassword(false);
     return openDialog();
   };
@@ -542,84 +528,6 @@ export const joinUrl = createMemo(() => {
   }
   return url.toString();
 });
-
-// const createRoomStatus = () => {
-//   const { joinRoom, roomStatus, leaveRoom } = useAppState();
-//   const [joinStatus, setJoinStatus] = createSignal<
-//     "connecting" | "connected" | "disconnected"
-//   >("disconnected");
-// };
-
-export function JoinRoomButton(
-  props: ComponentProps<"button">,
-) {
-  const { joinRoom, leaveRoom } = useAppState();
-  const { open } = createRoomDialog();
-  const [local, other] = splitProps(props, ["class"]);
-  return (
-    <Show
-      when={
-        appState.session.clientServiceStatus ===
-        "disconnected"
-      }
-      fallback={
-        <Tooltip>
-          <TooltipTrigger
-            as={Button}
-            class={local.class}
-            disabled={
-              appState.session.clientServiceStatus !==
-              "connected"
-            }
-            onClick={() => leaveRoom()}
-            variant="outline"
-            size="icon"
-          >
-            <Show
-              when={
-                appState.session.clientServiceStatus ===
-                "connecting"
-              }
-              fallback={<IconLogout class="size-6" />}
-            >
-              <Spinner />
-            </Show>
-          </TooltipTrigger>
-          <TooltipContent>
-            {t("common.nav.leave_room")}
-          </TooltipContent>
-        </Tooltip>
-      }
-    >
-      <Tooltip>
-        <TooltipTrigger
-          as={Button}
-          class={local.class}
-          size="icon"
-          disabled={
-            appState.session.clientServiceStatus !==
-            "disconnected"
-          }
-          onClick={async () => {
-            const result = await open();
-            if (result.cancel) return;
-
-            await joinRoom().catch((err) => {
-              console.error(err);
-              toast.error(err.message);
-            });
-          }}
-          {...props}
-        >
-          <IconLogin class="size-6" />
-        </TooltipTrigger>
-        <TooltipContent>
-          {t("common.nav.join_room")}
-        </TooltipContent>
-      </Tooltip>
-    </Show>
-  );
-}
 
 /**
  * Convert the image file to a dataURL that fills the entire square avatar

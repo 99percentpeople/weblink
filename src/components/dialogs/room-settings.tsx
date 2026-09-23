@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { ConversationActions } from "@/components/conversations/conversation-actions";
 import { appState } from "@/libs/state/app-state";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import { setRoomConfig } from "@/options";
@@ -23,6 +24,8 @@ const megabyte = 1024 * 1024;
 
 export function RoomSettings(props: {
   conversationId: string;
+  online: boolean;
+  onDeleted?(): void;
 }) {
   const limitId = createUniqueId();
   const config = () =>
@@ -89,6 +92,16 @@ export function RoomSettings(props: {
           <SelectContent />
         </Select>
       </div>
+      <section class="space-y-3 border-t pt-5">
+        <h3 class="text-sm font-medium">
+          {t("room_dialog.actions")}
+        </h3>
+        <ConversationActions
+          conversationId={props.conversationId}
+          online={props.online}
+          onDeleted={props.onDeleted}
+        />
+      </section>
     </div>
   );
 }

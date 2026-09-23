@@ -44,7 +44,10 @@ vi.mock("@/components/icons", () => ({
 vi.mock(
   "@/libs/application/messaging/message-store",
   () => ({
-    messageStores: { deleteClient: vi.fn() },
+    messageStores: {
+      deleteConversation: vi.fn(),
+      clearConversation: vi.fn(),
+    },
   }),
 );
 vi.mock("@/options", () => ({
@@ -65,7 +68,20 @@ vi.mock("@/libs/state/app-state", () => ({
       clientViewData: {},
       clientServiceStatus: "connected",
     },
-    message: { clients: [] },
+    profile: { clientId: "local" },
+    message: {
+      clients: [],
+      conversations: [
+        {
+          id: 'direct:["local","peer"]',
+          kind: "direct",
+          peerId: "peer",
+          title: "Peer",
+          labelIds: [],
+          createdAt: 1,
+        },
+      ],
+    },
   },
 }));
 const cancel = vi.fn();
@@ -172,6 +188,24 @@ function mount(initial: ClientInfoTab = "session") {
 }
 
 describe("tabbed client information", () => {
+  it("keeps clear history available in online private settings and disables deletion", () => {
+    mount("settings");
+    expect(
+      screen.getByRole("button", {
+        name: "conversations.clear",
+      }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "conversations.delete_requires_exit",
+      ),
+    ).toBeInTheDocument();
+  });
   it("shows four accessible tabs and keeps raw data out of the session pane", async () => {
     mount();
     expect(screen.getAllByRole("tab")).toHaveLength(4);

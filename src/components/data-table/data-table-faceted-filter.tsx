@@ -51,14 +51,15 @@ export function DataTableFacetedFilter<TData, TValue>(
   >((props.column?.getFilterValue() as string[]) ?? []);
 
   createEffect(() => {
-    const values = props.column?.getFilterValue() as string[];
+    const values =
+      props.column?.getFilterValue() as string[];
     if (values) {
       setSelectedValues(values);
     }
   });
 
   return (
-    <Popover gutter={12}>
+    <Popover gutter={12} modal>
       <PopoverTrigger
         as={Button}
         variant="outline"
@@ -77,7 +78,7 @@ export function DataTableFacetedFilter<TData, TValue>(
             />
             <Badge
               variant="secondary"
-              class="rounded-sm px-1 font-normal lg:hidden font-mono"
+              class="rounded-sm px-1 font-mono font-normal lg:hidden"
             >
               {selectedValues().length}
             </Badge>
@@ -147,8 +148,8 @@ export function DataTableFacetedFilter<TData, TValue>(
                     >
                       <div
                         class={cn(
-                          `mr-2 flex h-4 w-4 items-center justify-center rounded-sm
-                          border border-primary`,
+                          `border-primary mr-2 flex h-4 w-4 items-center justify-center
+                          rounded-sm border`,
                           isSelected()
                             ? "bg-primary text-primary-foreground"
                             : "opacity-50 [&_svg]:invisible",
@@ -157,7 +158,7 @@ export function DataTableFacetedFilter<TData, TValue>(
                         <IconCheck class="size-4" />
                       </div>
                       {option.icon && (
-                        <option.icon class="mr-2 h-4 w-4 text-muted-foreground" />
+                        <option.icon class="text-muted-foreground mr-2 h-4 w-4" />
                       )}
                       <span>{option.label}</span>
                       {facets?.get(option.value) && (

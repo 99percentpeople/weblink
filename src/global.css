@@ -10,26 +10,26 @@
 @custom-variant dark (&:where(.dark *, [data-kb-theme="dark"] *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --radius: 1rem;
+  --background: #f3f5f9;
+  --foreground: #182233;
+  --card: #ffffff;
+  --card-foreground: #182233;
+  --popover: #ffffff;
+  --popover-foreground: #182233;
+  --primary: #315fa8;
+  --primary-foreground: #ffffff;
+  --secondary: #e8edf5;
+  --secondary-foreground: #293b54;
+  --muted: #e8edf5;
+  --muted-foreground: #607086;
+  --accent: #dce7f7;
+  --accent-foreground: #244b80;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #dce2eb;
+  --input: #dce2eb;
+  --ring: #315fa8;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -42,25 +42,25 @@
 
 .dark,
 [data-kb-theme="dark"] {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.269 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #11151c;
+  --foreground: #e9edf5;
+  --card: #20252e;
+  --card-foreground: #e9edf5;
+  --popover: #20252e;
+  --popover-foreground: #e9edf5;
+  --primary: #96b9ff;
+  --primary-foreground: #11151c;
+  --secondary: #2a303a;
+  --secondary-foreground: #e9edf5;
+  --muted: #2a303a;
+  --muted-foreground: #a1aabb;
+  --accent: #394557;
+  --accent-foreground: #d5e4ff;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: #ffffff14;
+  --input: #ffffff20;
+  --ring: #96b9ff;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -139,8 +139,8 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
@@ -200,13 +200,8 @@
   }
 
   :root {
-    --mobile-header-height: 3rem;
-    --desktop-header-width: auto;
-
-    @media (min-width: 768px) {
-      --mobile-header-height: auto;
-      --desktop-header-width: 3.5rem;
-    }
+    --mobile-header-height: 0px;
+    --desktop-header-width: 0px;
   }
 }
 
@@ -239,8 +234,11 @@ body::before {
   bottom: 0;
   background-image: var(--background-image);
   background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
+  background-size: var(--background-image-size, cover);
+  background-repeat: var(
+    --background-image-repeat,
+    no-repeat
+  );
   z-index: -2;
 }
 
@@ -256,6 +254,136 @@ body {
 #root {
   /* Let viewport-sized routes contain their own scrolling content. */
   @apply min-h-0 min-w-0 flex-1;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-page-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.app-page-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+.account-menu-trigger {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.account-menu-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.account-task-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--card);
+  border-radius: 999px;
+  background: var(--primary);
+}
+.app-settings-dialog,
+.app-files-dialog {
+  width: calc(100% - 2rem);
+  max-width: 64rem;
+  height: min(46rem, calc(100dvh - 2rem));
+}
+.app-files-dialog {
+  max-width: 80rem;
+  height: min(54rem, calc(100dvh - 2rem));
+}
+.app-settings-dialog [data-slot="dialog-body"],
+.app-files-dialog [data-slot="dialog-body"] {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-settings-dialog [data-slot="dialog-footer"],
+.app-files-dialog [data-slot="dialog-footer"] {
+  display: none;
+}
+.settings-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 20px;
+}
+.settings-categories {
+  flex: 0 0 9rem;
+  width: 9rem;
+  align-self: flex-start;
+}
+.settings-categories [role="tab"] {
+  justify-content: flex-start;
+  height: 40px;
+}
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 8px 12px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.settings-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 24px;
+}
+.settings-section > :is(h3, h4):not(:first-child) {
+  margin-top: 8px;
+}
+.file-manager {
+  display: flex;
+  position: relative;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
+}
+@media (max-width: 767px) {
+  .app-settings-dialog,
+  .app-files-dialog {
+    padding: 16px;
+  }
+  .settings-tabs {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .settings-categories {
+    flex: 0 0 auto;
+    width: 100%;
+    overflow-x: auto;
+  }
+  .settings-categories [role="tab"] {
+    flex-shrink: 0;
+    width: auto;
+    justify-content: center;
+  }
 }
 
 /* Typography */

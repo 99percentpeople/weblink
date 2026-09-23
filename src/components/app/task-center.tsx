@@ -16,10 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 
 /** Navigation entry only. Task state lives in AppStateProvider. */
-export function TaskCenter(props: {
-  placement: "bottom" | "right";
-}) {
-  const app = useAppState();
+export function createTaskCenterDialog() {
   const details = clientInfoDialog();
   const dialog = createDialog({
     class:
@@ -60,6 +57,14 @@ export function TaskCenter(props: {
     );
   });
 
+  return dialog;
+}
+
+export function TaskCenter(props: {
+  placement: "bottom" | "right";
+}) {
+  const app = useAppState();
+  const dialog = createTaskCenterDialog();
   return (
     <Tooltip placement={props.placement}>
       <TooltipTrigger

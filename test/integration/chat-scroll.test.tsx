@@ -21,7 +21,7 @@ import {
 } from "@solidjs/router";
 import { reconcile } from "solid-js/store";
 import { type ParentProps } from "solid-js";
-import Chat from "@/routes/client/[id]/chat";
+import Chat from "../support/direct-chat-page";
 import type { StoreMessage } from "@/libs/domain/message";
 import {
   appState,

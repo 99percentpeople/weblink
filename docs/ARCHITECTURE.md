@@ -34,14 +34,23 @@ the low-level `domain` layer.
 - `src/constants.ts`: Project-wide constants shared across
   UI/application/domain (storage keys, timeouts, prefixes).
 - `src/routes/`: Route-level pages (Solid Router).
-  - `src/routes/client/[id]/...`: Main client session pages
-    (chat/sync, etc).
-  - `src/routes/conversation.tsx`: opens a saved conversation by its stable
-    identity, including private history created under an earlier local identity.
-  - `src/routes/video/`: meeting stage, participant views, bottom media controls
-    and the floating right panel with conversation, chat, member and info tabs.
-    Selecting a conversation switches to the chat tab inside that panel without
-    navigating away or changing the active room. The application media controller
+  - `src/routes/home/`: the main route `/`, containing the meeting stage,
+    bottom media controls and a floating panel with permanent chat, members
+    and room information tabs. The conversation list lives inside the chat tab. There is no separate chat page. The chat panel can
+    expand into a conversation-list/chat split view on wider screens; compact
+    screens start on the conversation list; selecting a row enters chat, whose
+    header has a back button to the list.
+    A single desktop control cycles compact, split and full-workspace panels,
+    then returns to compact. Maximizing hides the meeting canvas without
+    unmounting media; Escape returns to the previous docked width. Mobile panels replace the canvas and provide a return-to-meeting
+    action instead of a modal overlay. Expanding preserves the mounted chat, and
+    the chosen panel width is retained when switching tabs. The fixed tab group stays anchored to the right while
+    its indicator slides and newly selected content fades in. Width changes use
+    CSS transitions and the stage's existing ResizeObserver; no text is scaled
+    and no additional observer is introduced for the sidebar.
+    Selecting a conversation updates the `conversation` query parameter without
+    changing rooms. The existing media-preview hash contract is preserved.
+    The application media controller
     independently acquires the microphone, camera and multiple shared screens.
     Display capture requests optional audio from the browser picker. Each returned
     audio track belongs to its display: microphone mute/device changes preserve
@@ -111,12 +120,12 @@ the low-level `domain` layer.
     used on the next toolbar activation, including unmuting a retained microphone.
     Explicit device changes in the toolbar can still replace an active source.
     `components/meeting-session-context.tsx` lives above route pages and owns
-    source selection, pin state, shared thumbnail rail visibility and a locally
-    saved rail/toolbar linking preference (off by default), configured under
-    Settings > Meeting in `routes/setting/meeting-settings.tsx`. Linking hides
-    the toolbar with the rail. Grid and single-source views expose a toolbar-only
-    toggle when linking is enabled; the reveal action remains available in both
-    windows. The provider also owns the
+    source selection, pin state and independent thumbnail-rail and toolbar
+    visibility, shared between Home and picture-in-picture. The toolbar has its
+    own collapse/reveal control in every layout, including grid and single-source
+    views; collapsing thumbnails never changes toolbar visibility. While the toolbar
+    is collapsed, thumbnail toggles are hidden and only the toolbar reveal action
+    remains. Revealing the toolbar restores the toggles without changing rail state. The provider also owns the
     Document Picture-in-Picture window. The window reuses the focus stage with a
     main source, a collapsible thumbnail rail and compact controls using the same
     media controller. PiP stays in focus mode; its toolbar has no grid toggle.
@@ -124,7 +133,7 @@ the low-level `domain` layer.
     the source featured in the main view.
     The main source is the pinned source, otherwise the first live video or first
     participant; selecting a thumbnail updates the shared pin without recreating
-    video views. While PiP is open, `/video` replaces only its stage with an SVG
+    video views. While PiP is open, Home replaces only its stage with an SVG
     notice and a return action; its side panel and active chat remain mounted.
     No capture is stopped. The stage schedules resize/source updates using its
     own document's animation frames and ResizeObserver so PiP keeps updating
@@ -156,17 +165,56 @@ the low-level `domain` layer.
     visibility alone does not establish that the user returned from the child.
     These events do not bypass the browser's activation rules. The small window
     cannot survive closing the opener or navigating that tab to another website.
-  - `src/routes/setting/connection-settings.tsx`: connection-setting forms
-    and diagnostic feedback, composed by `setting.tsx` without an extra layout
-    wrapper. ICE probes and credential resolution belong to the injected
+  - `src/routes/client/[id]/sync.tsx`: peer file synchronization, reached from
+    the conversation menu, with a return-to-Home header.
+  - `legacy-home.tsx` redirects `/home`, `/video`, `/chat`, and old conversation
+    or private-chat links into Home, retaining invitations and media hashes.
+    `/file` and `/setting` are compatibility entries that open the respective
+    dialog on Home; the one-shot `dialog` parameter is then removed.
+  - `src/components/settings/`: appearance, connection, transfer,
+    advanced and about sections in a shared settings dialog. Desktop uses a
+    category rail and mobile uses horizontal tabs. Options keep their existing
+    persistence keys and apply immediately. ICE probes and credential resolution belong to the injected
     application diagnostics service, not the view.
+    About shows shared application metadata inline and copies only the version
+    and build time. Confirmed preference resets replace optional values and
+    per-room/member maps; page-cache cleanup affects Cache Storage and service
+    workers. Both preserve conversation history and IndexedDB file caches.
 - `src/components/`: Reusable UI building blocks.
-  - `components/app/`: app-scoped components (nav,
-    wakelock, etc).
+  - `components/app/`: app-scoped actions, dialogs, account dropdown and wake
+    lock. The previous global navigation rail has been removed. The account
+    dropdown opens local file management, tasks and settings and retains room
+    sharing and QR-code actions. Dialog controllers live above route pages;
+    opening them does not leave Home or trigger automatic picture-in-picture.
+    Settings and file-manager menu items warm their lazy chunks on pointer
+    entry, keyboard focus or touch/press. `libs/utils/preload.ts` shares the
+    import with rendering and primes Solid's public lazy API after success;
+    failed background warmups can be retried when opening. Preloading does not
+    mount dialog contents or start application operations. Route links retain
+    Solid Router's existing component preloading.
+    `room-actions.tsx` centralizes joining and editing. A configured profile can
+    join directly, first-time users confirm information first, and concurrent
+    joins are blocked. The shared room editor saves a draft only on confirmation;
+    editing alone never joins a room. Closing a file/settings dialog does not
+    dispose meeting media or the active chat.
+  - `components/files/file-manager.tsx`: local file management inside a dialog,
+    preserving imports, filtering, previews, downloads, forwarding and deletion.
+    The table scrolls inside the dialog and is mounted only while open.
+  - `global.css` owns the shared light/dark blue-gray palette and radius scale:
+    menu items 8px, controls 12px, panels 16px and dialogs/toolbars 20px. Meeting
+    CSS uses those tokens; the picture-in-picture document mirrors theme changes.
+    Home's component-specific presentation is colocated in JSX using Tailwind;
+    `routes/home/index.css` retains shared controls and coordinated grid,
+    sidebar and picture-in-picture layout rules. Selector hooks used by runtime
+    code or existing checks remain independent of presentation classes.
   - `components/conversations/`: shared conversation sidebar, label editor and
-    private/room view composition. Home supplies navigation; the meeting page
-    supplies an in-place selection callback. Neither maintains a separate copy
-    of conversation history or delivery state.
+    private/room view composition. Home supplies an in-place selection callback;
+    conversation history and delivery state remain in the shared stores.
+    Shared conversation actions separate clearing local history (keeping the
+    list entry, labels and membership metadata) from deleting history and its
+    list entry. Active rooms and online private peers allow clearing but block
+    deletion until leaving the room; confirmation rechecks presence. Private
+    actions target the selected conversation's original local identity.
     `chat-composer.tsx` supplies the same text and attachment controls to both
     conversation types; their callbacks retain separate delivery policies.
     Room file cards show metadata without loading remote bytes on mount.
@@ -254,6 +302,8 @@ may select concrete infrastructure implementations.
       contact.
     - `room-message-store.ts`: durable room-message insertion, duplicate identity
       checks and serialized per-recipient delivery updates, without networking.
+      Clearing or deleting a conversation invalidates pending room insertions;
+      late private and room writes cannot restore removed history.
     - `conversation-query.ts`: pure summary, search, label filtering and grouping
       projections used by both sidebars. Text search and label selection combine
       with AND; selected labels combine with OR. A conversation may appear under

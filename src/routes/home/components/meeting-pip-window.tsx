@@ -3,6 +3,7 @@ import { Portal } from "solid-js/web";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
 import { preparePictureInPictureDocument } from "@/libs/utils/picture-in-picture-document";
 import { Toaster } from "@/components/ui/sonner";
+import { useRoomActions } from "@/components/app/room-actions";
 import { appState } from "@/libs/state/app-state";
 import { t } from "@/i18n";
 import { useAudioPlayer } from "./audio-player";
@@ -15,7 +16,10 @@ import {
   MeetingStage,
   type MeetingStageHandle,
 } from "./meeting-stage";
-import { createLayoutTransition } from "@/libs/hooks/layout-transition";
+import {
+  createLayoutTransition,
+  createLayoutValue,
+} from "@/libs/hooks/layout-transition";
 
 export function MeetingPipWindow(props: {
   window: Window;
@@ -23,7 +27,8 @@ export function MeetingPipWindow(props: {
   featuredId: string | null;
   railCollapsed: boolean;
   onRailCollapsedChange(collapsed: boolean): void;
-  toolbarFollowsRail: boolean;
+  toolbarCollapsed: boolean;
+  onToolbarCollapsedChange(collapsed: boolean): void;
   onSelect(id: string): void;
   controls: MeetingPipControls;
   onLeave(): void;
@@ -35,9 +40,12 @@ export function MeetingPipWindow(props: {
     ".meeting-stage [data-motion-layout]",
     () => stage?.measure(),
   );
+  const displayedToolbarCollapsed = createLayoutValue(
+    () => props.toolbarCollapsed,
+    transitionLayout,
+  );
   const { media } = useMeetingMedia();
-  const controlsCollapsed = () =>
-    props.railCollapsed && props.toolbarFollowsRail;
+  const roomActions = useRoomActions();
   const audio = useAudioPlayer();
   const target = props.window.document;
   target.documentElement.dataset.meetingPip = "";
@@ -53,7 +61,8 @@ export function MeetingPipWindow(props: {
         ref={page}
         class="meeting meeting-pip"
         classList={{
-          "is-controls-collapsed": controlsCollapsed(),
+          "is-controls-collapsed":
+            displayedToolbarCollapsed(),
         }}
         aria-label={t("meeting.pip_title")}
       >
@@ -65,18 +74,19 @@ export function MeetingPipWindow(props: {
           transitionLayout={transitionLayout}
           sources={props.sources}
           pinnedId={props.featuredId}
+          hideRailToggle={displayedToolbarCollapsed()}
           railCollapsed={props.railCollapsed}
           onRailCollapsedChange={
             props.onRailCollapsedChange
           }
-          toolbarFollowsRail={props.toolbarFollowsRail}
           onPin={(id) =>
             transitionLayout(() => props.onSelect(id))
           }
           onStop={media.stopVideoTrack}
         />
         <MeetingControls
-          collapsed={controlsCollapsed()}
+          collapsed={displayedToolbarCollapsed()}
+          onCollapsedChange={props.onToolbarCollapsedChange}
           compact
           media={media}
           hasAudio={audio.hasAudio()}
@@ -87,6 +97,15 @@ export function MeetingPipWindow(props: {
           spotlight
           onToggleLayout={() => {}}
           joined={Boolean(appState.roomStatus.roomId)}
+          onJoin={() => {
+            props.controls.returnToMeeting();
+            void roomActions.join();
+          }}
+          joining={
+            roomActions.busy() ||
+            appState.session.clientServiceStatus ===
+              "connecting"
+          }
           onLeave={props.onLeave}
           pip={props.controls}
         />

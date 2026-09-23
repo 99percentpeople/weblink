@@ -6,8 +6,8 @@ import {
   useNavigate,
 } from "@solidjs/router";
 import { ModalProvider } from "@/components/dialogs/base";
-import Home from "@/routes/index";
-import Chat from "@/routes/client/[id]/chat";
+import Home from "../../support/chat-workspace";
+import Chat from "../../support/direct-chat-page";
 import { createTaskService } from "@/libs/application/task-service";
 import {
   appState,

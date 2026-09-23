@@ -3,9 +3,13 @@ import {
   AnimatePresence,
   Motion,
 } from "@/components/ui/motion";
-import { A, useLocation } from "@solidjs/router";
+import {
+  useSearchParams,
+  useLocation,
+} from "@solidjs/router";
 import {
   createEffect,
+  createMemo,
   createSignal,
   For,
   on,
@@ -13,8 +17,12 @@ import {
 } from "solid-js";
 import {
   Circle,
+  ArrowLeft,
+  Columns2,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
   Info,
-  List,
   MessageSquare,
   PanelRightOpen,
   Pin,
@@ -22,14 +30,17 @@ import {
   Users,
   X,
 } from "lucide-solid";
+import { AccountMenu } from "@/components/app/account-menu";
+import { useRoomActions } from "@/components/app/room-actions";
 import { ClientAvatar } from "@/components/common/client-avatar";
-import { ConversationSidebar } from "@/components/conversations/conversation-sidebar";
 import { createMediaHashRoute } from "@/components/conversations/media-hash-route";
-import { ConversationView } from "@/components/conversations/conversation-view";
 import { t } from "@/i18n";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
-import { createLayoutTransition } from "@/libs/hooks/layout-transition";
+import {
+  createLayoutTransition,
+  createLayoutValue,
+} from "@/libs/hooks/layout-transition";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import {
   Tabs,
@@ -38,6 +49,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { directConversationId } from "@/libs/domain/conversation";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useAudioPlayer } from "./components/audio-player";
@@ -49,16 +61,15 @@ import {
 import { useMeetingSession } from "./components/meeting-session-context";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
+import { MeetingChatPanel } from "./components/meeting-chat-panel";
+import { MeetingInfoPanel } from "./components/meeting-info-panel";
 
-const tabs = [
-  "conversations",
-  "chat",
-  "members",
-  "info",
-] as const;
+const tabs = ["chat", "members", "info"] as const;
 type PanelTab = (typeof tabs)[number];
+type DockedPanelMode = "compact" | "wide";
+type PanelMode = "closed" | DockedPanelMode | "full";
 
-export default function Video() {
+export default function Home() {
   let page: HTMLElement | undefined;
   let stage: MeetingStageHandle | undefined;
   const transitionLayout = createLayoutTransition(
@@ -67,6 +78,8 @@ export default function Video() {
     () => stage?.measure(),
   );
   const state = useAppState();
+  const roomActions = useRoomActions();
+  const [search, setSearch] = useSearchParams();
   const audio = useAudioPlayer();
   const { media, devices } = useMeetingMedia();
   const { open: openRoomInfo } = createRoomInfoDialog();
@@ -78,36 +91,127 @@ export default function Video() {
     setPinnedId,
     railCollapsed,
     setRailCollapsed,
-    toolbarFollowsRail,
+    toolbarCollapsed,
+    setToolbarCollapsed,
   } = meeting;
-  const controlsCollapsed = () =>
-    !meeting.pip.active() &&
-    railCollapsed() &&
-    toolbarFollowsRail();
-  const isMobile = createIsMobile();
-  const [rightOpen, setRightOpen] = createSignal(
-    window.innerWidth >= 1280,
+  const displayedToolbarCollapsed = createLayoutValue(
+    toolbarCollapsed,
+    transitionLayout,
   );
+  const isMobile = createIsMobile();
+  const [panelMode, setPanelMode] = createSignal<PanelMode>(
+    !isMobile() && window.innerWidth >= 1280
+      ? "compact"
+      : "closed",
+  );
+  let dockedMode: DockedPanelMode = "compact";
+  const rightOpen = () => panelMode() !== "closed";
+  // Preserve the exiting panel's width until its fade-out finishes.
+  const displayedPanelMode = createMemo<
+    Exclude<PanelMode, "closed">
+  >((previous) => {
+    const mode = panelMode();
+    return mode === "closed" ? previous : mode;
+  }, "compact");
+  const fullPanel = () =>
+    rightOpen() && (isMobile() || panelMode() === "full");
   const [tab, setTab] = createSignal<PanelTab>("chat");
+  const expanded = () => displayedPanelMode() !== "compact";
+  const [browsing, setBrowsing] = createSignal(true);
+  const splitChat = () => expanded() && !isMobile();
+  // Width transitions feed the stage's existing ResizeObserver. An explicit
+  // FLIP here would measure before the CSS width has reached its destination.
+  const cyclePanelMode = () => {
+    const mode = panelMode();
+    if (mode === "closed") return;
+    const next =
+      mode === "compact"
+        ? "wide"
+        : mode === "wide"
+          ? "full"
+          : "compact";
+    if (next !== "full") dockedMode = next;
+    setPanelMode(next);
+  };
+  const panelSizeAction = () =>
+    ({
+      compact: "meeting.expand_chat",
+      wide: "meeting.maximize_sidebar",
+      full: "meeting.collapse_chat",
+    })[displayedPanelMode()];
   const [selectedId, setSelectedId] =
     createSignal<string>();
   const activeConversationId = () =>
     selectedId() ??
     state.activeRoomConversationId() ??
     undefined;
-  createEffect(() => {
-    if (isMobile()) setRightOpen(false);
-  });
   const setPanelOpen = (open: boolean) => {
     if (rightOpen() === open) return;
-    transitionLayout(() => setRightOpen(open));
+    transitionLayout(() =>
+      setPanelMode(open ? dockedMode : "closed"),
+    );
   };
   const closePanel = () => setPanelOpen(false);
+  const browseConversations = () => {
+    setBrowsing(true);
+    setTab("chat");
+    setPanelOpen(true);
+    setSearch(
+      { conversation: undefined, panel: "conversations" },
+      { replace: true },
+    );
+  };
   const selectConversation = (id: string) => {
     setSelectedId(id);
+    setBrowsing(false);
+    if (search.conversation !== id)
+      setSearch(
+        { conversation: id, panel: undefined },
+        { replace: true },
+      );
     setTab("chat");
     setPanelOpen(true);
   };
+  createEffect(
+    on(
+      () => search.conversation,
+      (id) => {
+        if (typeof id === "string" && id)
+          selectConversation(id);
+      },
+    ),
+  );
+  createEffect(
+    on(
+      () => search.panel,
+      (panel) => {
+        if (panel === "conversations") {
+          setBrowsing(true);
+          setTab("chat");
+          setPanelOpen(true);
+        }
+      },
+    ),
+  );
+  createEffect(
+    on(
+      () => {
+        const id = appState.options.redirectToClient;
+        return id && appState.session.clientViewData[id]
+          ? id
+          : undefined;
+      },
+      (id) => {
+        if (id)
+          selectConversation(
+            directConversationId(
+              appState.profile.clientId,
+              id,
+            ),
+          );
+      },
+    ),
+  );
   const routeLocation = useLocation();
   const mediaRoute = createMediaHashRoute(
     () => routeLocation.hash,
@@ -150,20 +254,30 @@ export default function Video() {
       ref={page}
       class="meeting"
       classList={{
-        "is-controls-collapsed": controlsCollapsed(),
+        "is-controls-collapsed":
+          displayedToolbarCollapsed(),
       }}
       data-testid="meeting-page"
       onKeyDown={(event) => {
-        if (event.key === "Escape") closePanel();
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented
+        )
+          return;
+        if (!isMobile() && panelMode() === "full")
+          setPanelMode(dockedMode);
+        else closePanel();
       }}
     >
       <header
-        class="meeting-header"
-        classList={{ "is-sharing": media.sharing() }}
+        class="meeting-header flex min-h-[68px] items-center gap-3 border-b
+          px-5 py-2.5 backdrop-blur-[8px] max-md:min-h-[58px]
+          max-md:gap-2 max-md:px-3 max-md:py-2"
       >
         <button
           type="button"
-          class="meeting-heading text-left"
+          class="meeting-heading min-w-0 text-left"
+          classList={{ "max-md:sr-only": media.sharing() }}
           aria-label={t("room_dialog.open")}
           onClick={() =>
             void openRoomInfo(
@@ -171,14 +285,18 @@ export default function Video() {
             )
           }
         >
-          <h1>
+          <h1 class="truncate text-[15px] font-semibold">
             {appState.roomStatus.roomId ??
               t("meeting.title")}
           </h1>
-          <span>
+          <span
+            class="text-muted-foreground mt-0.5 flex items-center gap-[5px]
+              text-[11px]"
+          >
             <Circle
+              class="size-1.5 fill-current"
               classList={{
-                "is-connected": Boolean(
+                "text-success-foreground": Boolean(
                   appState.roomStatus.roomId,
                 ),
               }}
@@ -188,7 +306,10 @@ export default function Video() {
               : t("meeting.preview")}
           </span>
         </button>
-        <div class="meeting-header-actions">
+        <div
+          class="meeting-header-actions ml-auto flex min-w-0 shrink
+            items-center gap-2.5 max-md:gap-1"
+        >
           <Show when={media.sharing()}>
             <MeetingSharingStatus
               name={appState.profile.name}
@@ -235,7 +356,7 @@ export default function Video() {
           </button>
           <button
             type="button"
-            class="meeting-icon-button"
+            class="meeting-icon-button meeting-panel-toggle"
             aria-expanded={rightOpen()}
             aria-controls="meeting-side-panel"
             aria-label={
@@ -250,20 +371,25 @@ export default function Video() {
             }
             onClick={() => setPanelOpen(!rightOpen())}
           >
-            <PanelRightOpen />
+            <Show
+              when={rightOpen()}
+              fallback={<PanelRightOpen />}
+            >
+              <PanelRightClose />
+            </Show>
           </button>
+          <AccountMenu />
         </div>
       </header>
-      <div class="meeting-workspace">
-        <Show when={rightOpen()}>
-          <button
-            type="button"
-            class="meeting-panel-backdrop"
-            onClick={closePanel}
-            aria-label={t("meeting.close_panels")}
-          />
-        </Show>
-        <div class="meeting-canvas">
+      <div
+        class="meeting-workspace"
+        classList={{ "is-panel-full": fullPanel() }}
+      >
+        <div
+          class="meeting-canvas"
+          inert={fullPanel()}
+          aria-hidden={fullPanel()}
+        >
           <AnimatePresence when={!meeting.pip.active()}>
             <Motion.div
               class="meeting-canvas-view"
@@ -282,16 +408,49 @@ export default function Video() {
                 transitionLayout={transitionLayout}
                 sources={sources()}
                 pinnedId={pinnedId()}
+                hideRailToggle={displayedToolbarCollapsed()}
                 railCollapsed={railCollapsed()}
                 onRailCollapsedChange={setRailCollapsed}
-                toolbarFollowsRail={toolbarFollowsRail()}
                 onPin={togglePin}
                 onStop={media.stopVideoTrack}
               >
                 <Show when={!appState.roomStatus.roomId}>
-                  <div class="meeting-notice">
+                  <div
+                    class="text-muted-foreground bg-accent mb-3.5 flex flex-wrap
+                      items-center justify-between gap-2.5 rounded-md px-3.5
+                      py-2.5 text-xs leading-[1.6]"
+                  >
                     <span>{t("meeting.preview_hint")}</span>
-                    <A href="/">{t("meeting.join_room")}</A>
+                    <button
+                      type="button"
+                      class="text-primary underline underline-offset-[3px]"
+                      disabled={
+                        roomActions.busy() ||
+                        appState.session
+                          .clientServiceStatus ===
+                          "connecting"
+                      }
+                      onClick={() =>
+                        void roomActions.join()
+                      }
+                    >
+                      {t("meeting.join_room")}
+                    </button>
+                    <button
+                      type="button"
+                      class="text-primary underline underline-offset-[3px]"
+                      disabled={
+                        roomActions.busy() ||
+                        appState.session
+                          .clientServiceStatus ===
+                          "connecting"
+                      }
+                      onClick={() =>
+                        void roomActions.edit()
+                      }
+                    >
+                      {t("client.index.edit_room")}
+                    </button>
                   </div>
                 </Show>
               </MeetingStage>
@@ -325,7 +484,13 @@ export default function Video() {
         <AnimatePresence when={rightOpen()}>
           <Motion.div
             class="meeting-panel-slot"
-            classList={{ "is-closing": !rightOpen() }}
+            classList={{
+              "is-closing": !rightOpen(),
+              "is-expanded": splitChat(),
+              "is-full":
+                isMobile() ||
+                displayedPanelMode() === "full",
+            }}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16 }}
@@ -345,24 +510,26 @@ export default function Video() {
                 setTab(value as PanelTab)
               }
             >
-              <div class="meeting-panel-header">
+              <div
+                class="meeting-panel-header flex shrink-0 items-center justify-end
+                  gap-1 border-b p-2"
+              >
                 <TabsList
-                  class="meeting-tabs"
+                  class="w-auto min-w-0 flex-[0_1_auto] gap-0.5 bg-transparent p-0"
                   aria-label={t("meeting.side_panel")}
                 >
                   <For each={tabs}>
                     {(value) => (
                       <TabsTrigger
                         value={value}
+                        class="text-muted-foreground data-[selected]:text-foreground
+                          h-[46px] w-[68px] min-w-0 flex-[0_0_68px] flex-col gap-1
+                          rounded-sm px-[5px] py-1.5 text-[11px] font-normal
+                          [&>svg]:size-[15px] [&>svg]:shrink-0"
                         id={`meeting-tab-${value}`}
                         aria-label={t(`meeting.${value}`)}
                         title={t(`meeting.${value}`)}
                       >
-                        <Show
-                          when={value === "conversations"}
-                        >
-                          <List />
-                        </Show>
                         <Show when={value === "chat"}>
                           <MessageSquare />
                         </Show>
@@ -372,65 +539,96 @@ export default function Video() {
                         <Show when={value === "info"}>
                           <Info />
                         </Show>
-                        <span>{t(`meeting.${value}`)}</span>
+                        <span class="truncate">
+                          {t(`meeting.${value}`)}
+                        </span>
                       </TabsTrigger>
                     )}
                   </For>
                   <TabsIndicator
-                    class="meeting-tabs-indicator data-[resizing=true]:transition-none
+                    class="bg-muted pointer-events-none rounded-sm shadow-none
+                      data-[orientation=horizontal]:bottom-0
+                      data-[orientation=horizontal]:h-full
+                      data-[resizing=true]:transition-none
                       motion-reduce:transition-none"
                   />
                 </TabsList>
-                <button
-                  type="button"
-                  class="meeting-icon-button"
-                  aria-label={t("meeting.hide_panel")}
-                  onClick={closePanel}
-                >
-                  <X />
-                </button>
+                <Show when={!isMobile()}>
+                  <button
+                    type="button"
+                    class="meeting-icon-button"
+                    aria-label={t(panelSizeAction())}
+                    title={t(panelSizeAction())}
+                    aria-pressed={expanded()}
+                    onClick={cyclePanelMode}
+                  >
+                    <Show
+                      when={
+                        displayedPanelMode() === "compact"
+                      }
+                      fallback={
+                        <Show
+                          when={
+                            displayedPanelMode() === "wide"
+                          }
+                          fallback={<Minimize2 />}
+                        >
+                          <Maximize2 />
+                        </Show>
+                      }
+                    >
+                      <Columns2 />
+                    </Show>
+                  </button>
+                </Show>
+                <Show when={!isMobile()}>
+                  <button
+                    type="button"
+                    class="meeting-icon-button"
+                    aria-label={t(
+                      isMobile()
+                        ? "meeting.return_to_stage"
+                        : "meeting.close_panels",
+                    )}
+                    title={t(
+                      isMobile()
+                        ? "meeting.return_to_stage"
+                        : "meeting.close_panels",
+                    )}
+                    onClick={closePanel}
+                  >
+                    <X />
+                  </button>
+                </Show>
               </div>
               <TabsContent
-                value="conversations"
-                class="meeting-panel-content"
-                id="meeting-panel-conversations"
-              >
-                <ConversationSidebar
-                  selectedId={activeConversationId()}
-                  onSelect={selectConversation}
-                />
-              </TabsContent>
-              <TabsContent
+                as={Motion.div}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.18 }}
                 value="chat"
                 class="meeting-panel-content"
                 id="meeting-panel-chat"
               >
-                <Show
-                  when={activeConversationId()}
-                  fallback={
-                    <div class="meeting-empty">
-                      <MessageSquare />
-                      <p>
-                        {t("meeting.select_conversation")}
-                      </p>
-                    </div>
-                  }
-                >
-                  {(id) => (
-                    <ConversationView
-                      conversationId={id()}
-                      embedded
-                    />
-                  )}
-                </Show>
+                <MeetingChatPanel
+                  conversationId={activeConversationId()}
+                  split={splitChat()}
+                  browsing={browsing()}
+                  onBack={browseConversations}
+                  onSelect={selectConversation}
+                />
               </TabsContent>
               <TabsContent
+                as={Motion.div}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.18 }}
                 value="members"
                 class="meeting-panel-content"
                 id="meeting-panel-members"
               >
-                <div class="meeting-members">
-                  <p class="meeting-panel-caption">
+                <div class="overflow-auto p-4">
+                  <p class="text-muted-foreground mb-[15px] text-xs leading-[1.6]">
                     {t("meeting.members_hint")}
                   </p>
                   <div class="meeting-member">
@@ -496,59 +694,41 @@ export default function Video() {
                 </div>
               </TabsContent>
               <TabsContent
+                as={Motion.div}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.18 }}
                 value="info"
                 class="meeting-panel-content"
                 id="meeting-panel-info"
               >
-                <div class="meeting-info">
-                  <h2>{t("meeting.room_info")}</h2>
-                  <button
-                    type="button"
-                    class="meeting-room-chat"
-                    onClick={() =>
-                      void openRoomInfo(
-                        state.activeRoomConversationId(),
-                      )
-                    }
-                  >
-                    <Info />
-                    {t("room_dialog.open")}
-                  </button>
-                  <dl>
-                    <dt>{t("meeting.room_name")}</dt>
-                    <dd>
-                      {appState.roomStatus.roomId ??
-                        t("meeting.not_joined")}
-                    </dd>
-                    <dt>{t("meeting.message_history")}</dt>
-                    <dd>{t("meeting.local_history")}</dd>
-                  </dl>
-                  <p>{t("meeting.history_hint")}</p>
-                  <p>{t("meeting.leave_hint")}</p>
-                  <Show
-                    when={state.activeRoomConversationId()}
-                  >
-                    {(id) => (
-                      <button
-                        type="button"
-                        class="meeting-room-chat"
-                        onClick={() =>
-                          selectConversation(id())
-                        }
-                      >
-                        <MessageSquare />
-                        {t("meeting.open_room_chat")}
-                      </button>
-                    )}
-                  </Show>
-                </div>
+                <MeetingInfoPanel
+                  roomId={
+                    appState.roomStatus.roomId ??
+                    appState.profile.roomId
+                  }
+                  active={
+                    !!state.activeRoomConversationId()
+                  }
+                  onOpenSettings={() =>
+                    void openRoomInfo(
+                      state.activeRoomConversationId(),
+                    )
+                  }
+                  onOpenChat={() => {
+                    const id =
+                      state.activeRoomConversationId();
+                    if (id) selectConversation(id);
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </Motion.div>
         </AnimatePresence>
       </div>
       <MeetingControls
-        collapsed={controlsCollapsed()}
+        collapsed={displayedToolbarCollapsed()}
+        onCollapsedChange={setToolbarCollapsed}
         pip={meeting.controls}
         media={media}
         devices={devices}
@@ -575,6 +755,12 @@ export default function Video() {
         }
         joined={Boolean(appState.roomStatus.roomId)}
         onLeave={meeting.leave}
+        onJoin={() => void roomActions.join()}
+        joining={
+          roomActions.busy() ||
+          appState.session.clientServiceStatus ===
+            "connecting"
+        }
       />
     </main>
   );

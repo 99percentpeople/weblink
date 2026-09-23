@@ -16,7 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { MeetingControls } from "@/routes/video/components/meeting-controls";
+import { MeetingControls } from "@/routes/home/components/meeting-controls";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 let animationStyle: HTMLStyleElement;

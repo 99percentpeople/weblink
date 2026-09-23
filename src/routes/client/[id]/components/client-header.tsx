@@ -1,3 +1,6 @@
+import { conversationHref } from "@/libs/application/home-navigation";
+import { directConversationId } from "@/libs/domain/conversation";
+import { appState } from "@/libs/state/app-state";
 import {
   Show,
   type Component,
@@ -29,6 +32,7 @@ import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { getInitials } from "@/libs/utils/name";
 import { cn } from "@/libs/cn";
+import { ConversationBackButton } from "@/components/conversations/conversation-back-button";
 
 const HeaderLink: Component<ComponentProps<typeof A>> = (
   props,
@@ -38,18 +42,27 @@ const HeaderLink: Component<ComponentProps<typeof A>> = (
 
 export const ClientHeader: Component<{
   clientId: ClientID;
+  conversationId?: string;
   client?: Client;
   info?: ClientInfo;
   view: "chat" | "sync";
   class?: string;
   embedded?: boolean;
+  onBack?: () => void;
 }> = (props) => {
   const { open: openClientInfoDialog } = clientInfoDialog();
   const client = () => props.client ?? props.info;
   const name = () => client()?.name ?? props.clientId;
   const isChat = () => props.view === "chat";
   const destination = () =>
-    `/client/${encodeURIComponent(props.clientId)}/${isChat() ? "sync" : "chat"}`;
+    isChat()
+      ? `/client/${encodeURIComponent(props.clientId)}/sync`
+      : conversationHref(
+          directConversationId(
+            appState.profile.clientId,
+            props.clientId,
+          ),
+        );
   const destinationLabel = () =>
     isChat()
       ? t("client.sync.title")
@@ -65,7 +78,12 @@ export const ClientHeader: Component<{
         props.class,
       )}
     >
-      <Show when={!props.embedded}>
+      <Show when={props.onBack}>
+        {(onBack) => (
+          <ConversationBackButton onClick={onBack()} />
+        )}
+      </Show>
+      <Show when={!props.embedded && !props.onBack}>
         <Button
           as={A}
           href="/"
@@ -118,7 +136,11 @@ export const ClientHeader: Component<{
             variant="ghost"
             aria-label={t("client.config.open")}
             onClick={() =>
-              void openClientInfoDialog(props.clientId)
+              void openClientInfoDialog(
+                props.clientId,
+                "session",
+                props.conversationId,
+              )
             }
           >
             <IconSettings class="size-6" />

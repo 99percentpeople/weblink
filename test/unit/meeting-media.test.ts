@@ -11,7 +11,7 @@ import { createLocalStreamService } from "@/libs/application/local-stream-servic
 import {
   createMeetingMediaController,
   getMeetingVideoSourceKind,
-} from "@/routes/video/components/meeting-media";
+} from "@/routes/home/components/meeting-media";
 
 let trackCounter = 0;
 class FakeTrack extends EventTarget {

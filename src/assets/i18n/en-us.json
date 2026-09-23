@@ -94,24 +94,35 @@
         "description": "Change the language of the app"
       },
       "background_image": {
-        "title": "Background Image",
-        "description": "Change the background image of the app, also can be selected in the file cache",
-        "click_to_select": "Click to select"
+        "title": "Wallpaper",
+        "description": "Choose a texture, upload an image, or drag one into the preview.",
+        "click_to_select": "Click to select",
+        "preview": "Preview",
+        "custom_image": "Custom image",
+        "default": "Default background",
+        "upload": "Upload image",
+        "uploading": "Saving…",
+        "reset": "Restore default background",
+        "textures": "Preset textures",
+        "drop_to_upload": "Drop to use as wallpaper",
+        "invalid_image": "Please choose an image file.",
+        "upload_failed": "Could not save the image. Please try again.",
+        "presets": {
+          "dots": "Dots",
+          "grid": "Grid",
+          "diagonal": "Diagonal",
+          "linen": "Linen",
+          "waves": "Waves",
+          "checker": "Checkerboard"
+        }
       },
       "background_image_opacity": {
-        "title": "Background Image Opacity",
+        "title": "Wallpaper Opacity",
         "description": "Change the opacity of the background image"
       },
       "wake_lock": {
         "title": "Keep Screen On",
         "description": "When enabled, the app will keep the screen on"
-      }
-    },
-    "meeting": {
-      "title": "Meeting",
-      "toolbar_follows_rail": {
-        "title": "Allow toolbar collapse",
-        "description": "Collapse the toolbar with the view list, or use the toggle in grid and single-view layouts. Shared by the meeting page and picture-in-picture, and off by default."
       }
     },
     "connection": {
@@ -203,8 +214,17 @@
     },
     "about": {
       "title": "About",
-      "reset_options": "Reset Options",
-      "clear_service_worker_cache": "Clear Service Worker Cache"
+      "reset_options": "Reset preferences",
+      "clear_service_worker_cache": "Clear app cache",
+      "copy_version": "Copy version info",
+      "copy_failed": "Could not copy version info. Please try again.",
+      "build_time": "Built on",
+      "changelog": "Release notes",
+      "feedback": "Report an issue",
+      "maintenance": "Maintenance",
+      "reset_description": "Restore application preferences, including room and member settings. Chat history and cached files are kept.",
+      "reset_failed": "Could not reset preferences: {{error}}",
+      "cache_description": "Remove cached page resources to resolve loading or update problems. Chat history, cached files and preferences are kept."
     },
     "advanced_settings": {
       "title": "Advanced Settings",
@@ -314,8 +334,7 @@
     },
     "message_editor": {
       "placeholder": "Ctrl + Enter or Shift + Enter to send the message",
-      "mobile_placeholder": "Send message",
-      "paste_tip": "Clipboard paste enabled"
+      "mobile_placeholder": "Send message"
     },
     "message_error": "Error occurred",
     "sync": {
@@ -474,14 +493,14 @@
       "content": "Are you really sure you want to delete client {{name}} and all messages?"
     },
     "reset_options_dialog": {
-      "title": "Reset Options",
+      "title": "Reset preferences",
       "description": "This operation resets the options to default values, but will not clear user data",
-      "content": "Are you really sure you want to reset the options?"
+      "content": "Restore application preferences, including room and member settings. Chat history and cached files are kept."
     },
     "clear_service_worker_cache_dialog": {
-      "title": "Clear Service Worker Cache",
-      "description": "This operation clears the Service Worker cache",
-      "content": "If you encounter problems after page updates, you can clear the cache and try again",
+      "title": "Clear app cache",
+      "description": "Clear cached page resources and offline support for this site.",
+      "content": "Chat history, cached files and preferences are kept. Reloading will interrupt active calls and transfers.",
       "reload": "Reload the page after clearing"
     },
     "preview_dialog": {
@@ -562,8 +581,8 @@
       "processing_files": "Processing files...",
       "new_version_available": "New version available",
       "share_failed": "Share failed, error: {{error}}",
-      "clear_cache_success": "Cache Storage and Service Worker cleared successfully",
-      "clear_cache_failed": "Failed to clear Cache Storage and Service Worker, error: {{error}}"
+      "clear_cache_success": "App cache cleared",
+      "clear_cache_failed": "Could not clear app cache: {{error}}"
     },
     "forward_dialog": {
       "title": "Forward items",
@@ -683,9 +702,9 @@
     "no_messages": "No messages yet",
     "unread_count": "{{count}} unread messages",
     "actions": "Actions for {{name}}",
-    "delete": "Delete local conversation",
-    "delete_title": "Delete local history",
-    "delete_description": "Delete the history of {{name}} from this browser? Other members keep their own history. An active room remains in the list.",
+    "delete": "Delete conversation",
+    "delete_title": "Delete conversation",
+    "delete_description": "Delete the chat history and conversation list entry for {{name}} from this browser? Other members are not affected.",
     "expand": "Expand conversations",
     "empty": "No matching conversations",
     "select": "Select a conversation to start chatting.",
@@ -712,7 +731,13 @@
     "room_file_request": "Click to transfer",
     "room_file_offer": "Shared with the room. Transfer starts when a member requests this file.",
     "room_file_sender_unavailable": "To transfer, join the original room while the sender is online.",
-    "room_file_missing": "This file is no longer available on this device."
+    "room_file_missing": "This file is no longer available on this device.",
+    "back_to_list": "Back to conversations",
+    "clear": "Clear chat history",
+    "clear_title": "Clear chat history",
+    "clear_description": "Clear the chat history of {{name}} from this browser? The conversation stays in the list. Other members are not affected.",
+    "delete_requires_exit": "Leave the room before deleting this conversation.",
+    "manage_hint": "Clear removes chat history and keeps the conversation. Delete also removes its entry from the conversation list."
   },
   "meeting": {
     "pip_title": "Meeting picture-in-picture",
@@ -764,7 +789,7 @@
     "chat": "Chat",
     "members": "People",
     "info": "Info",
-    "select_conversation": "Choose a conversation in the Conversations tab, or join a room to chat.",
+    "select_conversation": "Choose a conversation from the list, or join a room to chat.",
     "members_hint": "People in this room and their connection status",
     "status_online": "Online",
     "status_offline": "Offline",
@@ -812,9 +837,15 @@
     "device_disabled": "Device access is blocked",
     "permission_disabled_hint": "Allow access in browser site permissions or system privacy settings, then refresh the device list.",
     "permission_requesting": "Requesting access…",
-    "output_permission_hint": "This browser needs microphone permission to list associated speakers."
+    "output_permission_hint": "This browser needs microphone permission to list associated speakers.",
+    "expand_chat": "Expand sidebar",
+    "collapse_chat": "Use compact sidebar",
+    "maximize_sidebar": "Maximize sidebar",
+    "restore_sidebar": "Restore sidebar",
+    "return_to_stage": "Return to meeting"
   },
   "room_dialog": {
+    "actions": "Room actions",
     "open": "Room information and settings",
     "title": "Room settings",
     "description": "View room information and configure meeting devices and room preferences.",
@@ -839,5 +870,16 @@
     "members_not_joined": "Join this room to see who is online.",
     "no_previous_members": "No previous members with retained conversations.",
     "members_hint": "Previous members appear only if they joined this room and their direct conversation is still saved locally."
+  },
+  "app_menu": {
+    "title": "Account menu",
+    "room_qrcode": "Room QR code",
+    "joining": "Joining…",
+    "settings_categories": "Settings categories",
+    "settings_appearance": "Appearance",
+    "settings_connection": "Connection",
+    "settings_transfer": "Transfers",
+    "settings_advanced": "Advanced",
+    "settings_about": "About"
   }
 }

@@ -346,7 +346,12 @@ export class MessageStores {
     );
   }
   deleteConversation(id: string): void {
+    this.roomMessages.invalidateConversation(id);
     this.metadata.deleteConversation(id);
+  }
+  clearConversation(id: string): void {
+    this.roomMessages.invalidateConversation(id);
+    this.metadata.clearConversation(id);
   }
 
   private persistMessage(message: StoreMessage): void {
@@ -364,6 +369,14 @@ export class MessageStores {
     const snapshot = snapshotStoreMessage(message);
     void this.repository
       .putMessage(snapshot)
+      .then(() => {
+        if (
+          !this.messages.some(
+            (item) => item.id === snapshot.id,
+          )
+        )
+          return this.repository.removeMessage(snapshot.id);
+      })
       .catch((error) => {
         console.error(
           "[MessageStore] could not persist message",
@@ -527,6 +540,10 @@ export class MessageStores {
     await this.repository.putMessage(
       snapshotStoreMessage(message),
     );
+    if (
+      !this.messages.some((item) => item.id === message.id)
+    )
+      await this.repository.removeMessage(message.id);
   }
 
   setClient(client: Client): void {

@@ -5,6 +5,7 @@ import {
   Show,
 } from "solid-js";
 import { A, useLocation } from "@solidjs/router";
+import { ConversationBackButton } from "./conversation-back-button";
 import { makePersisted } from "@solid-primitives/storage";
 import { ChevronLeft, Users, Video } from "lucide-solid";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
@@ -31,6 +32,7 @@ import { t } from "@/i18n";
 export function RoomConversation(props: {
   conversation: Conversation & { kind: "room" };
   embedded?: boolean;
+  onBack?: () => void;
 }) {
   const state = useAppState();
   const routeLocation = useLocation();
@@ -147,7 +149,12 @@ export function RoomConversation(props: {
         class="bg-background/80 flex shrink-0 items-center gap-2 border-b
           p-3"
       >
-        <Show when={!props.embedded}>
+        <Show when={props.onBack}>
+          {(onBack) => (
+            <ConversationBackButton onClick={onBack()} />
+          )}
+        </Show>
+        <Show when={!props.embedded && !props.onBack}>
           <Button
             as={A}
             href="/"
@@ -192,7 +199,7 @@ export function RoomConversation(props: {
         <Show when={active() && !props.embedded}>
           <Button
             as={A}
-            href="/video"
+            href="/"
             size="icon"
             variant="ghost"
             aria-label={t("meeting.title")}
@@ -310,8 +317,6 @@ export function RoomConversation(props: {
             scroll.positioned() && !scroll.following()
           }
           onClick={() => scroll.toBottom()}
-          class="right-3 bottom-3 size-9 shadow"
-          iconClass="size-5 sm:size-5"
         />
       </div>
       <Show

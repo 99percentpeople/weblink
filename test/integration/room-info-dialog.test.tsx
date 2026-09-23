@@ -36,6 +36,20 @@ import { deferred } from "../support/rtc-transport";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import type { Conversation } from "@/libs/domain/conversation";
 
+const deletion = vi.hoisted(() => ({
+  remove: vi.fn<(id: string) => void>(),
+  clear: vi.fn<(id: string) => void>(),
+}));
+vi.mock(
+  "@/libs/application/messaging/message-store",
+  () => ({
+    messageStores: {
+      deleteConversation: deletion.remove,
+      clearConversation: deletion.clear,
+    },
+  }),
+);
+
 vi.mock("@/components/icons", () => ({
   IconSync: () => null,
 }));
@@ -43,7 +57,7 @@ vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: vi.fn(),
 }));
-vi.mock("@/routes/video/components/audio-player", () => ({
+vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
     outputDeviceId: () => "",
     outputSupported: () => true,
@@ -241,6 +255,187 @@ const openDevices = async (name = "Current settings") => {
 };
 
 describe("room dialog and shared meeting device ownership", () => {
+  it("allows clearing an active room but requires leaving before deletion", async () => {
+    const f = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Current settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", {
+        name: "room_dialog.settings",
+      }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "conversations.delete_requires_exit",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.clear",
+      }),
+    );
+    const confirmation = screen.getByRole("dialog", {
+      name: "conversations.clear_title",
+    });
+    await userEvent.click(
+      within(confirmation).getByRole("button", {
+        name: "conversations.clear",
+      }),
+    );
+    await waitFor(() =>
+      expect(deletion.clear).toHaveBeenCalledWith(
+        "current",
+      ),
+    );
+    expect(deletion.remove).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", {
+        name: "room_dialog.title",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      appState.message.conversations.some(
+        (item) => item.id === "current",
+      ),
+    ).toBe(true);
+    f.setActiveRoom(null);
+    expect(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    ).toBeEnabled();
+  });
+
+  it("rechecks room membership if the room is joined while deletion confirmation is open", async () => {
+    const f = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Historical settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", {
+        name: "room_dialog.settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    );
+    const confirmation = screen.getByRole("dialog", {
+      name: "conversations.delete_title",
+    });
+    f.setActiveRoom("history");
+    await userEvent.click(
+      within(confirmation).getByRole("button", {
+        name: "common.action.delete",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "conversations.delete_title",
+        }),
+      ).toBeNull(),
+    );
+    expect(deletion.remove).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    ).toBeDisabled();
+  });
+  it("keeps the room conversation when removal is canceled", async () => {
+    setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Historical settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", {
+        name: "room_dialog.settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    );
+    const confirmation = screen.getByRole("dialog", {
+      name: "conversations.delete_title",
+    });
+    expect(deletion.remove).not.toHaveBeenCalled();
+    await userEvent.click(
+      within(confirmation).getByRole("button", {
+        name: "common.action.cancel",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "conversations.delete",
+        }),
+      ).toBeEnabled(),
+    );
+    expect(deletion.remove).not.toHaveBeenCalled();
+    expect(
+      appState.message.conversations.some(
+        (room) => room.id === "history",
+      ),
+    ).toBe(true);
+  });
+
+  it("removes the selected room after confirmation and closes its settings", async () => {
+    const f = setup();
+    deletion.remove.mockImplementationOnce((id) => {
+      setAppState("message", "conversations", (items) =>
+        items.filter((item) => item.id !== id),
+      );
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Historical settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", {
+        name: "room_dialog.settings",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.delete",
+      }),
+    );
+    const confirmation = screen.getByRole("dialog", {
+      name: "conversations.delete_title",
+    });
+    await userEvent.click(
+      within(confirmation).getByRole("button", {
+        name: "common.action.delete",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    expect(deletion.remove).toHaveBeenCalledOnce();
+    expect(deletion.remove).toHaveBeenCalledWith("history");
+    expect(
+      appState.message.conversations.map((room) => room.id),
+    ).toEqual(["current"]);
+    expect(f.joinRoom).not.toHaveBeenCalled();
+  });
+
   it("shows live members and retained room contacts, updating when a private conversation is deleted", async () => {
     setup();
     setAppState("profile", {

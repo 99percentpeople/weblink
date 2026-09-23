@@ -14,7 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { VideoDisplay } from "@/routes/video/components/video-display";
+import { VideoDisplay } from "@/routes/home/components/video-display";
 
 interface ErrorToastOptions {
   id: string;

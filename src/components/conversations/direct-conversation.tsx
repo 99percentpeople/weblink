@@ -56,6 +56,7 @@ export function ChatConversation(props: {
   clientId: string;
   conversationId?: string;
   embedded?: boolean;
+  onBack?: () => void;
 }) {
   const { sendFile, sendClipboard } = useAppState();
   const routeLocation = useLocation();
@@ -285,10 +286,12 @@ export function ChatConversation(props: {
           <div class="flex min-h-0 flex-1 flex-col">
             <ClientHeader
               clientId={client().clientId}
+              conversationId={conversationId()}
               client={client()}
               info={clientInfo()}
               view="chat"
               embedded={props.embedded}
+              onBack={props.onBack}
               class="static"
             />
             <DropArea

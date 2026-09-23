@@ -1,12 +1,48 @@
 import {
   batch,
   createEffect,
+  createSignal,
+  on,
   onCleanup,
+  untrack,
   type Accessor,
 } from "solid-js";
 import { animate } from "motion/mini";
 import type { AnimationPlaybackControls } from "motion";
 import { createReducedMotion } from "./reduced-motion";
+
+/** Commit shared state outside Solid's effect batch so layout reads see updated DOM. */
+export function createLayoutValue<T>(
+  source: Accessor<T>,
+  transition: (update: () => void) => void,
+): Accessor<T> {
+  const [displayed, setDisplayed] = createSignal(
+    untrack(source),
+  );
+  let version = 0;
+  createEffect(
+    on(
+      source,
+      (next) => {
+        const pending = ++version;
+        // Microtasks also run when the opener's animation frames are suspended by PiP.
+        queueMicrotask(() => {
+          if (
+            pending !== version ||
+            Object.is(untrack(displayed), next)
+          )
+            return;
+          transition(() => setDisplayed(() => next));
+        });
+      },
+      { defer: true },
+    ),
+  );
+  onCleanup(() => {
+    version++;
+  });
+  return displayed;
+}
 
 type Box = {
   element: HTMLElement;

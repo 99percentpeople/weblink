@@ -9,7 +9,7 @@ import {
 import { createMeetingMediaController } from "@/libs/application/meeting-media-service";
 import type { MeetingDeviceControls } from "@/libs/domain/meeting-devices";
 import { useAppState } from "@/libs/state/app-state-context";
-import { useAudioPlayer } from "@/routes/video/components/audio-player";
+import { useAudioPlayer } from "@/routes/home/components/audio-player";
 import { createMediaDevices } from "./media-devices";
 import { createMediaDeviceAccess } from "./media-device-access";
 import { t } from "@/i18n";

@@ -11,7 +11,7 @@ import {
 import {
   AudioPlayerProvider,
   useAudioPlayer,
-} from "@/routes/video/components/audio-player";
+} from "@/routes/home/components/audio-player";
 import {
   setAppState,
   type ClientInfo,
