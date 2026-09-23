@@ -193,13 +193,19 @@ the low-level `domain` layer.
     mount dialog contents or start application operations. Route links retain
     Solid Router's existing component preloading.
     `room-actions.tsx` centralizes joining and editing. A configured profile can
-    join directly, first-time users confirm information first, and concurrent
-    joins are blocked. The shared room editor saves a draft only on confirmation;
-    editing alone never joins a room. Closing a file/settings dialog does not
+    join directly, first-time users configure their profile first, and concurrent
+    joins are blocked. The shared room editor saves changes immediately, including
+    when closed without connecting. Its Connect action validates the profile and
+    joins the room from either entry point. Closing a file/settings dialog does not
     dispose meeting media or the active chat.
   - `components/files/file-manager.tsx`: local file management inside a dialog,
     preserving imports, filtering, previews, downloads, forwarding and deletion.
-    The table scrolls inside the dialog and is mounted only while open.
+    The compact list scrolls inside the dialog and is mounted only while open.
+    `file-browser.tsx`, `file-filters.tsx`, `file-list.tsx` and
+    `file-picker-dialog.tsx` share searching, filtering and selection between the
+    manager and composer. Sending existing content uses `FileSource`
+    (`File` or `{ kind: "library", localFileId }`), preserving drafts and the
+    conversation captured when the picker opened.
   - `global.css` owns the shared light/dark blue-gray palette and radius scale:
     menu items 8px, controls 12px, panels 16px and dialogs/toolbars 20px. Meeting
     CSS uses those tokens; the picture-in-picture document mirrors theme changes.
@@ -296,6 +302,11 @@ may select concrete infrastructure implementations.
     - `message-store.ts`: private-message history and hydration, stable reactive
       arrays, browser-local message sequencing, and the shared facade composed
       from injected conversation and room-message stores.
+    - `conversation-history-service.ts`: application API for caching local text
+      conversations. It waits for hydration, creates records and stable message
+      IDs, coalesces concurrent batches, and resumes incomplete writes without
+      duplicates. Callers supply content rather than storage records. The welcome
+      guide uses this shared API and marks completion only after persistence.
     - `conversation-store.ts`: local conversation metadata, labels and reading
       cursors. Private and room history is queried and removed by conversation
       identity; contact deletion never removes room messages authored by that
@@ -335,8 +346,32 @@ may select concrete infrastructure implementations.
     delivery receipts describe offer delivery, not binary completion. Room
     attachments remain cached after a recipient finishes and are excluded from
     the remote file catalog and legacy private request/resume paths.
-    Explicit local forwarding creates a new private file copy with a fresh ID;
+    Explicit local forwarding creates a private attachment with a fresh ID backed by shared immutable content;
     it does not make the original room cache available through private requests.
+  - `file-library-service.ts`: content-addressed storage ownership, independent
+    attachment references, explicit library retention, and lazy indexing of old
+    completed caches. The metadata database `weblink-file-library-v1` indexes
+    BLAKE3-256 identities; binary data stays in existing chunk databases.
+    Pending imports are published only after bytes commit. Per-content Web Locks
+    coordinate tabs; unique claims and recovery records prevent duplicate writes.
+    `files/reference-chunk-cache.ts` reads shared bytes using each attachment's
+    own name, permissions and chunk size. Removing a message releases its reference;
+    explicit deletion in the file manager cancels affected runs and removes all
+    local references, preserving chat metadata. Pinned imports survive message cleanup.
+  - `file-fingerprint-service.ts`: one incremental BLAKE3 Worker with 2 MiB reads,
+    shared jobs for identical Blob objects, cancellation and task-center progress.
+    A file's metadata alone never authorizes deduplication. The first use of an old
+    complete cache computes its fingerprint without blocking application startup.
+  - `transfer/file-content-capabilities.ts` negotiates `file-content-v1` through
+    session-scoped profile features. New offers use typed `have`/`need`/`deferred`
+    replies; room file offers with fingerprints use version 2. Unconfirmed peers
+    continue using legacy envelopes. A `have` reply follows durable history and
+    a readable local reference and creates no binary run. Deferred local jobs
+    share one authorized source; `file-content-ready` reliably completes each
+    waiting offer under its original identity and room binding. Binary receivers
+    verify decompressed, assembled content before emitting completion. Corrupt
+    bytes never enter the content index. Local completions carry
+    `completionSource: "local"`, without fabricated throughput.
   - `file-catalog-index.ts`: completed-file metadata projection and in-memory
     search/sort/page queries, without File contents or storage reads during paging.
   - `file-catalog-service.ts`: version-2 directory provider, privacy policy and

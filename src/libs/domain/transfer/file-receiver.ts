@@ -254,6 +254,7 @@ export class FileReceiver extends FileTransferBase {
     }, pollInterval);
   }
 
+  private finishing = false;
   private triggerReceiveComplete() {
     if (!this.receivedData) return false;
 
@@ -265,11 +266,24 @@ export class FileReceiver extends FileTransferBase {
     const complete =
       this.receivedData.indexes.size === chunkslength;
     if (complete) {
-      if (this.isComplete) return false;
+      if (this.isComplete || this.finishing) return true;
       console.log(`trigger receive complete`);
-      this.isComplete = true;
+      this.finishing = true;
 
-      this.getAvailableChannel()
+      Promise.resolve()
+        .then(async () => {
+          if (this.cache.verifyFile) {
+            const file = await this.cache.verifyFile(
+              this.controller.signal,
+            );
+            if (!file)
+              throw new Error(
+                "Received file is unavailable",
+              );
+          }
+          this.assertOpen();
+          return this.getAvailableChannel();
+        })
         .then((channel) => {
           channel.send(
             encodeTransferMessage({
@@ -279,6 +293,7 @@ export class FileReceiver extends FileTransferBase {
           return waitBufferedAmountLowThreshold(channel, 0);
         })
         .then(() => {
+          this.isComplete = true;
           this.dispatchEvent("complete", undefined);
         })
         .catch((err) => {

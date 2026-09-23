@@ -75,7 +75,9 @@ export class RoomMessageStore {
         current.fileSize === incoming.fileSize &&
         current.mimeType === incoming.mimeType &&
         current.lastModified === incoming.lastModified &&
-        current.chunkSize === incoming.chunkSize
+        current.chunkSize === incoming.chunkSize &&
+        JSON.stringify(current.fingerprint) ===
+          JSON.stringify(incoming.fingerprint)
       )
         return;
     }

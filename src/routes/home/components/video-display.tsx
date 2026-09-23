@@ -38,6 +38,7 @@ export const useVideoDisplay = () => {
 
 export const VideoDisplay = (
   props: {
+    ref?: (element: HTMLDivElement) => void;
     class?: string;
     stream: MediaStream | null | undefined;
     name: string;
@@ -241,6 +242,7 @@ export const VideoDisplay = (
       value={{ videoRef, videoTrack, audioTracks }}
     >
       <div
+        ref={props.ref}
         class={cn("relative overflow-hidden", props.class)}
       >
         <Show

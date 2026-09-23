@@ -274,6 +274,7 @@ export type AppState = {
   };
   cache: {
     status: CacheStatus;
+    error?: string;
     caches: Record<FileID, ChunkCache>;
     cacheInfo: Record<FileID, FileMetaData>;
   };

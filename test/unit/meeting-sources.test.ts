@@ -9,6 +9,7 @@ import {
 import { createRoot, createSignal } from "solid-js";
 import {
   createMeetingSources,
+  selectMeetingFeaturedSource,
   selectMeetingPipSource,
   type MeetingParticipant,
 } from "@/routes/home/components/meeting-sources";
@@ -44,6 +45,74 @@ beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("meeting source presentation", () => {
+  it("uses the large view only for a single source, regardless of its owner", () => {
+    createRoot((dispose) => {
+      const [participants, setParticipants] = createSignal<
+        MeetingParticipant[]
+      >([{ id: "me", name: "Me", local: true }]);
+      const sources = createMeetingSources(participants);
+      const local = sources()[0];
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBe(local);
+      expect(
+        selectMeetingFeaturedSource(sources(), local.id),
+      ).toBe(local);
+      const mine = {
+        id: "me",
+        name: "Me",
+        local: true,
+        stream: stream(
+          track("camera", "video"),
+          track("screen", "video", true),
+        ),
+      };
+      setParticipants([mine]);
+      const camera = sources()[0];
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBeUndefined();
+      expect(
+        selectMeetingFeaturedSource(sources(), camera.id),
+      ).toBe(camera);
+      setParticipants([mine, { id: "peer", name: "Peer" }]);
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBeUndefined();
+      expect(
+        selectMeetingFeaturedSource(sources(), camera.id)
+          ?.id,
+      ).toBe(camera.id);
+      setParticipants([mine]);
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBeUndefined();
+      setParticipants([
+        {
+          ...mine,
+          stream: stream(track("screen", "video", true)),
+        },
+      ]);
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBe(sources()[0]);
+      setParticipants([
+        { id: "peer", name: "Peer", stream: mine.stream },
+      ]);
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBeUndefined();
+      setParticipants([{ id: "peer", name: "Peer" }]);
+      expect(
+        selectMeetingFeaturedSource(sources(), null),
+      ).toBe(sources()[0]);
+      expect(
+        selectMeetingFeaturedSource([], null),
+      ).toBeUndefined();
+      dispose();
+    });
+  });
+
   it("selects the pinned view, then the first live video, then the first participant for PiP", () => {
     createRoot((dispose) => {
       const camera = track("camera", "video");

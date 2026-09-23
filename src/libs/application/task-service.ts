@@ -55,7 +55,15 @@ export interface SpeedTask extends TaskBase {
   run: SpeedTestRun;
 }
 
-export type AppTask = FileTask | SpeedTask;
+import type { FilePreparation } from "./file-fingerprint-service";
+export type AppTask =
+  | FileTask
+  | SpeedTask
+  | FilePreparation;
+
+export type TaskListItem = AppTask & {
+  statusChangedAt: number;
+};
 
 export const isActiveTask = (task: AppTask): boolean =>
   ["waiting", "running", "finalizing"].includes(
@@ -68,6 +76,8 @@ export const isFinishedTask = (task: AppTask): boolean =>
   );
 
 export interface TaskSources {
+  preparations?: Accessor<FilePreparation[]>;
+  clearPreparations?(): void;
   clientId: Accessor<string>;
   messages: Accessor<readonly StoreMessage[]>;
   caches: Accessor<
@@ -119,9 +129,13 @@ export function fileTasks(
       status = "finalizing";
     else if (
       state.status === "complete" ||
-      (!outgoing && cache?.isComplete)
+      (!outgoing &&
+        !message.localContentDetached &&
+        cache?.isComplete)
     )
       status = "completed";
+    else if (message.localContentPending)
+      status = "waiting";
     else if (live)
       status = state.progress ? "running" : "waiting";
     else if (
@@ -129,6 +143,7 @@ export function fileTasks(
       (!message.room && message.status === "error")
     )
       status = "failed";
+    else if (state.status === "paused") status = "paused";
     else if (!message.room && message.status === "sending")
       status = "waiting";
     else status = "paused";
@@ -146,7 +161,7 @@ export function fileTasks(
         message.fileName ||
         message.fid!,
       canPause:
-        live &&
+        (live || !!message.localContentPending) &&
         status !== "finalizing" &&
         status !== "completed",
       // Group uploads resume only when that recipient asks for its missing chunks.
@@ -157,7 +172,17 @@ export function fileTasks(
           ? total
           : Math.min(
               total,
-              Math.max(0, state.progress?.received ?? 0),
+              Math.max(
+                0,
+                state.progress?.received ?? 0,
+                !outgoing &&
+                  !(
+                    message.localContentDetached &&
+                    findMessageTransfer(transfers, message)
+                  )
+                  ? (cache?.cachedBytes ?? 0)
+                  : 0,
+              ),
             ),
       error: status === "failed" ? state.error : undefined,
     };
@@ -192,7 +217,9 @@ export function fileTasks(
         ),
       );
     }
-    const live = !!findMessageTransfer(transfers, message);
+    const live =
+      !message.localContentDetached &&
+      !!findMessageTransfer(transfers, message);
     if (message.room && !message.transferStatus && !live)
       return [];
     return [
@@ -254,20 +281,65 @@ export function createTaskService(sources: TaskSources) {
       return next;
     });
   });
-  const tasks = createMemo<AppTask[]>(() =>
-    [
-      ...files().filter(
+  const statusChanges = new Map<
+    string,
+    {
+      status: TaskStatus;
+      at: number;
+      sequence: number;
+    }
+  >();
+  let sequence = 0;
+  let lastChangeAt = 0;
+  const tasks = createMemo<TaskListItem[]>(() => {
+    const current: AppTask[] = [
+      ...files(),
+      ...speedRuns().map(speedTask),
+      ...(sources.preparations?.() ?? []),
+    ];
+    const ids = new Set(current.map((task) => task.id));
+    for (const id of statusChanges.keys()) {
+      if (!ids.has(id)) statusChanges.delete(id);
+    }
+    const items = current.map((task): TaskListItem => {
+      let change = statusChanges.get(task.id);
+      if (
+        change
+          ? change.status !== task.status
+          : isActiveTask(task)
+      ) {
+        lastChangeAt = Math.max(lastChangeAt, Date.now());
+        change = {
+          status: task.status,
+          at: lastChangeAt,
+          sequence: ++sequence,
+        };
+      } else if (!change) {
+        // Restored history has no observed transition in this app session.
+        change = {
+          status: task.status,
+          at: task.createdAt,
+          sequence: 0,
+        };
+      }
+      statusChanges.set(task.id, change);
+      return { ...task, statusChangedAt: change.at };
+    });
+    return items
+      .filter(
         (task) =>
           !hiddenFiles().has(task.id) ||
           !isFinishedTask(task),
-      ),
-      ...speedRuns().map(speedTask),
-    ].sort(
-      (a, b) =>
-        Number(isActiveTask(b)) - Number(isActiveTask(a)) ||
-        b.createdAt - a.createdAt,
-    ),
-  );
+      )
+      .sort(
+        (a, b) =>
+          b.statusChangedAt - a.statusChangedAt ||
+          statusChanges.get(b.id)!.sequence -
+            statusChanges.get(a.id)!.sequence ||
+          b.createdAt - a.createdAt ||
+          a.id.localeCompare(b.id),
+      );
+  });
   const activeCount = createMemo(
     () => tasks().filter(isActiveTask).length,
   );
@@ -295,6 +367,7 @@ export function createTaskService(sources: TaskSources) {
   const latestSpeedTest = (peerId: string | null) =>
     speedRuns().find((run) => run.peerId === peerId);
   const clearFinished = () => {
+    sources.clearPreparations?.();
     setHiddenFiles(
       (previous) =>
         new Set([

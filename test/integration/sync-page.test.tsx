@@ -389,17 +389,17 @@ describe("Sync controlled TanStack directory table", () => {
     const header = settings.closest(
       "[data-slot=client-header]",
     );
-    expect(header).toHaveClass(
-      "bg-background/80",
-      "border-b",
-      "p-2",
-    );
+    expect(header).toBeInTheDocument();
     expect(header).not.toContainElement(refresh);
     expect(header).toContainElement(
       screen.getByLabelText("client.sync.menu.chat"),
     );
     fireEvent.click(settings);
-    expect(openClientInfo).toHaveBeenCalledWith("b");
+    expect(openClientInfo).toHaveBeenCalledWith(
+      "b",
+      "session",
+      undefined,
+    );
     const previous = sentQueries().length;
     fireEvent.click(refresh);
     await waitFor(() =>
@@ -463,7 +463,11 @@ describe("Sync controlled TanStack directory table", () => {
       });
       expect(settings).toBeEnabled();
       fireEvent.click(settings);
-      expect(openClientInfo).toHaveBeenCalledWith("b");
+      expect(openClientInfo).toHaveBeenCalledWith(
+        "b",
+        "session",
+        undefined,
+      );
       await notifyChanged();
       expect(sentQueries()).toHaveLength(0);
     },

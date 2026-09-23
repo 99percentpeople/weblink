@@ -55,11 +55,14 @@ afterEach(() => {
 });
 
 function setup() {
+  const completed = vi.fn();
   function Harness() {
     const dialog = createRoomDialog();
     return (
       <>
-        <button onClick={() => void dialog.open()}>
+        <button
+          onClick={() => void dialog.open().then(completed)}
+        >
           Edit
         </button>
         <ModalProvider />
@@ -70,26 +73,31 @@ function setup() {
   fireEvent.click(
     screen.getByRole("button", { name: "Edit" }),
   );
+  return { completed };
 }
 
-describe("room profile drafts", () => {
-  it("discards canceled edits and starts the next edit from saved values", async () => {
-    setup();
+describe("room settings autosave", () => {
+  it("saves edits immediately and preserves them when closed without connecting", async () => {
+    const { completed } = setup();
     const input = await screen.findByLabelText(
       "common.join_form.room_id.title",
     );
     fireEvent.input(input, {
-      target: { value: "unsaved" },
+      target: { value: "saved-room" },
     });
-    expect(appState.profile.roomId).toBe("old-room");
+    expect(appState.profile.roomId).toBe("saved-room");
     fireEvent.click(
       screen.getByRole("button", {
-        name: "common.action.cancel",
+        name: "common.action.close",
       }),
     );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).toBeNull(),
     );
+    expect(completed).toHaveBeenCalledWith({
+      cancel: true,
+      result: undefined,
+    });
     fireEvent.click(
       screen.getByRole("button", { name: "Edit" }),
     );
@@ -97,27 +105,158 @@ describe("room profile drafts", () => {
       await screen.findByLabelText(
         "common.join_form.room_id.title",
       ),
-    ).toHaveValue("old-room");
+    ).toHaveValue("saved-room");
   });
 
-  it("saves confirmed information without replacing the user identity", async () => {
-    setup();
+  it("submits a connection request without replacing the user identity", async () => {
+    setAppState("profile", "initalJoin", true);
+    const { completed } = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.continue",
+      }),
+    );
     fireEvent.input(
       await screen.findByLabelText(
         "common.join_form.room_id.title",
       ),
       { target: { value: "new-room" } },
     );
+    expect(appState.profile.roomId).toBe("new-room");
+    expect(appState.profile.initalJoin).toBe(true);
+    expect(completed).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "common.action.confirm",
+        name: "client.menu.connect",
       }),
     );
     await waitFor(() =>
-      expect(appState.profile.roomId).toBe("new-room"),
+      expect(completed).toHaveBeenCalledWith({
+        cancel: false,
+        result: expect.objectContaining({
+          roomId: "new-room",
+          initalJoin: false,
+        }),
+      }),
     );
     expect(appState.profile.clientId).toBe("uid_saved");
     expect(appState.profile.name).toBe("Alice");
     expect(appState.profile.initalJoin).toBe(false);
+  });
+
+  it("saves profile, password and automatic-connection settings without submitting", async () => {
+    const { completed } = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.profile/,
+      }),
+    );
+    fireEvent.input(
+      screen.getByLabelText("common.join_form.name"),
+      { target: { value: "Updated Alice" } },
+    );
+    fireEvent.input(
+      screen.getByLabelText("common.join_form.avatar"),
+      {
+        target: { value: "https://example.com/avatar.png" },
+      },
+    );
+    expect(appState.profile.name).toBe("Updated Alice");
+    expect(appState.profile.avatar).toBe(
+      "https://example.com/avatar.png",
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.room/,
+      }),
+    );
+    fireEvent.input(
+      screen.getByLabelText(
+        "common.join_form.password.title",
+      ),
+      { target: { value: "secret" } },
+    );
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "common.join_form.auto_join",
+      }),
+    );
+    expect(appState.profile.password).toBe("secret");
+    expect(appState.profile.autoJoin).toBe(true);
+    fireEvent.input(
+      screen.getByLabelText(
+        "common.join_form.password.title",
+      ),
+      { target: { value: "" } },
+    );
+    expect(appState.profile.password).toBeNull();
+    expect(appState.profile.clientId).toBe("uid_saved");
+    expect(completed).not.toHaveBeenCalled();
+  });
+
+  it("saves incomplete inputs but requires a name and room before connecting", async () => {
+    const { completed } = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.profile/,
+      }),
+    );
+    fireEvent.input(
+      screen.getByLabelText("common.join_form.name"),
+      { target: { value: "   " } },
+    );
+    expect(appState.profile.name).toBe("   ");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.room/,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    expect(completed).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.profile/,
+      }),
+    ).toHaveAttribute("aria-current", "step");
+    fireEvent.input(
+      screen.getByLabelText("common.join_form.name"),
+      { target: { value: "Alice" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.continue",
+      }),
+    );
+    fireEvent.input(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+      { target: { value: "   " } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    expect(appState.profile.roomId).toBe("   ");
+    expect(completed).not.toHaveBeenCalled();
+    fireEvent.input(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+      { target: { value: "ready" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    await waitFor(() =>
+      expect(completed).toHaveBeenCalledOnce(),
+    );
   });
 });

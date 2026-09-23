@@ -1,4 +1,7 @@
-import type { ChunkMetaData } from "@/libs/domain/file";
+import type {
+  ChunkMetaData,
+  FileSource,
+} from "@/libs/domain/file";
 import type {
   FileTransferMessage,
   StoreMessage,
@@ -15,13 +18,17 @@ export interface RoomFileSharingOptions {
     | "sendFile"
     | "getFileBinding"
     | "validateFileBinding"
-  >;
+  > &
+    Partial<Pick<RoomMessagingService, "scopeSignal">>;
   files: Pick<
     FileTransferService,
     | "prepareRoomFile"
     | "receiveFileOffer"
     | "serveFileOffer"
-  >;
+  > &
+    Partial<
+      Pick<FileTransferService, "releasePreparedFile">
+    >;
   getMessages(): readonly StoreMessage[];
   getSession(peerId: string): PeerSession | undefined;
   getLocalClientId(): string;
@@ -32,6 +39,7 @@ export interface RoomFileSharingOptions {
 export class RoomFileSharingService {
   private readonly unsubscribe: () => void;
   private readonly pending = new Set<string>();
+  private readonly preparing = new Set<AbortController>();
 
   constructor(
     private readonly protocol: WebRtcProtocol,
@@ -89,23 +97,52 @@ export class RoomFileSharingService {
     );
   }
 
-  async sendFile(file: File): Promise<void> {
+  async sendFile(file: FileSource): Promise<void> {
     const scopeKey = this.options.rooms.currentScopeKey;
     if (!scopeKey)
       throw new Error("Join a room before sharing a file");
     const messageId = crypto.randomUUID();
-    const info = await this.options.files.prepareRoomFile(
-      file,
-      {
+    const controller = new AbortController();
+    this.preparing.add(controller);
+    const scopeSignal = this.options.rooms.scopeSignal;
+    const signal = scopeSignal
+      ? AbortSignal.any([scopeSignal, controller.signal])
+      : controller.signal;
+    let preparedId: string | undefined;
+    try {
+      const info = await this.options.files.prepareRoomFile(
+        file,
+        {
+          messageId,
+          clientId: this.options.getLocalClientId(),
+        },
+        signal,
+      );
+      preparedId = info.id;
+      signal.throwIfAborted();
+      await this.options.rooms.sendFile(
+        info,
+        scopeKey,
         messageId,
-        clientId: this.options.getLocalClientId(),
-      },
-    );
-    await this.options.rooms.sendFile(
-      info,
-      scopeKey,
-      messageId,
-    );
+      );
+    } catch (error) {
+      if (
+        preparedId &&
+        !this.options
+          .getMessages()
+          .some(
+            (message) =>
+              message.type === "file" &&
+              message.fid === preparedId,
+          )
+      )
+        await this.options.files.releasePreparedFile?.(
+          preparedId,
+        );
+      throw error;
+    } finally {
+      this.preparing.delete(controller);
+    }
   }
 
   async requestFile(
@@ -139,6 +176,23 @@ export class RoomFileSharingService {
         {
           messageId: offer.id,
           signal: binding.signal,
+          reused: async () => {
+            binding.assertCurrent();
+            if (!offer.fingerprint) return;
+            await this.protocol.call(
+              session,
+              "file-content-ready",
+              {
+                offerId: offer.id,
+                fid: offer.fid!,
+                fingerprint: offer.fingerprint,
+                roomId: binding.room.roomId,
+                senderToken: binding.senderToken,
+                recipientToken: binding.recipientToken,
+              },
+              { signal: binding.signal, retries: 2 },
+            );
+          },
           request: async (ranges, signal) => {
             binding.assertCurrent();
             await this.protocol.call(
@@ -215,6 +269,7 @@ export class RoomFileSharingService {
       mimetype: offer.mimeType,
       lastModified: offer.lastModified,
       chunkSize: offer.chunkSize,
+      fingerprint: offer.fingerprint,
       createdAt: offer.createdAt,
       from: offer.client,
       roomAttachment: true,
@@ -223,6 +278,8 @@ export class RoomFileSharingService {
   }
 
   dispose(): void {
+    for (const controller of this.preparing)
+      controller.abort();
     this.unsubscribe();
   }
 }

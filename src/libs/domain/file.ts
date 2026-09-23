@@ -1,6 +1,11 @@
 import type { ClientID, FileID } from "./ids";
 import type { EventHandler } from "@/libs/utils/event-emitter";
 import type { ChunkRange } from "@/libs/utils/range";
+import type { FileFingerprint } from "./protocol/file-fingerprint";
+
+export type FileSource =
+  | File
+  | { kind: "library"; localFileId: string };
 
 export interface ChunkMetaData {
   id: FileID;
@@ -15,12 +20,20 @@ export interface ChunkMetaData {
   roomOfferId?: string;
   createdAt?: number;
   file?: File;
+  fingerprint?: FileFingerprint;
+  /** Local-only shared content and library retention metadata. */
+  contentKey?: string;
+  contentStorage?: boolean;
+  libraryPinned?: boolean;
+  aliases?: string[];
 }
 
 export type ChunkCacheInfo = Omit<ChunkMetaData, "file">;
 
 export interface FileMetaData extends ChunkMetaData {
   chunkCount?: number;
+  /** Exact persisted bytes, including a possibly shorter final chunk. */
+  cachedBytes?: number;
   isComplete?: boolean;
   isMerging?: boolean;
 }
@@ -64,6 +77,9 @@ export interface ChunkCache {
   getCachedKeys(): Promise<number[]>;
   isTransferComplete(): Promise<boolean>;
   mergeFile(): Promise<File | null>;
+  /** Production receivers verify/promote immutable content before completion. */
+  verifyFile?(signal?: AbortSignal): Promise<File | null>;
+  retireReceiveStorage?(): Promise<void>;
 }
 
 export function getTotalChunkCount(

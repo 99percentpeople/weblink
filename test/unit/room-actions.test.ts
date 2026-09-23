@@ -52,14 +52,23 @@ beforeEach(() => {
 afterEach(() => dispose?.());
 
 describe("shared room actions", () => {
-  it("joins a configured room directly and keeps editing separate", async () => {
+  it("keeps a closed settings dialog disconnected and joins a configured room directly", async () => {
     const actions = setup();
+    fixture.open.mockResolvedValueOnce({ cancel: true });
     await actions.edit();
     expect(fixture.open).toHaveBeenCalledOnce();
     expect(fixture.join).not.toHaveBeenCalled();
     await actions.join();
     expect(fixture.open).toHaveBeenCalledOnce();
     expect(fixture.join).toHaveBeenCalledOnce();
+  });
+
+  it("connects when the settings dialog's Connect action is selected", async () => {
+    const actions = setup();
+    await actions.edit();
+    expect(fixture.open).toHaveBeenCalledOnce();
+    expect(fixture.join).toHaveBeenCalledOnce();
+    expect(actions.busy()).toBe(false);
   });
 
   it("waits for initial information and honors cancellation", async () => {

@@ -221,6 +221,9 @@ async function main() {
     );
   };
   setChatTestContext({
+    conversationHistory: {
+      cacheLocalTextBatch: unexpected,
+    },
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
     speedTestState: () => ({

@@ -70,10 +70,12 @@ export function RoomFileMessageCard(props: {
     props.message.client === appState.profile.clientId;
   const cache = () => getRoomFileCache(props.message);
   const incomingTransfer = createMemo(() =>
-    findMessageTransfer(
-      appState.transfer.transfers,
-      props.message,
-    ),
+    props.message.localContentDetached
+      ? undefined
+      : findMessageTransfer(
+          appState.transfer.transfers,
+          props.message,
+        ),
   );
   const outgoingTransfers = createMemo(() =>
     Object.values(appState.transfer.transfers).filter(
@@ -174,12 +176,16 @@ export function RoomFileMessageCard(props: {
                   ? t("common.file_table.status.merging")
                   : transferStatus(
                       incomingState(),
-                      !!incomingTransfer(),
+                      !!incomingTransfer() ||
+                        !!props.message.localContentPending,
                     )
               }
               received={props.message.progress?.received}
               total={props.message.fileSize}
-              live={!!incomingTransfer()}
+              live={
+                !!incomingTransfer() ||
+                !!props.message.localContentPending
+              }
               error={props.message.error}
             />
           </Show>
@@ -214,13 +220,15 @@ export function RoomFileMessageCard(props: {
                 total={props.message.fileSize}
                 busy={
                   !!incomingTransfer() ||
+                  !!props.message.localContentPending ||
                   pending() ||
                   merging()
                 }
                 action={
                   merging()
                     ? undefined
-                    : incomingTransfer()
+                    : incomingTransfer() ||
+                        props.message.localContentPending
                       ? "pause"
                       : props.message.transferStatus
                         ? "resume"
@@ -228,10 +236,15 @@ export function RoomFileMessageCard(props: {
                 }
                 disabled={
                   pending() ||
-                  (!incomingTransfer() && !canRequest())
+                  (!(
+                    incomingTransfer() ||
+                    props.message.localContentPending
+                  ) &&
+                    !canRequest())
                 }
                 onAction={() =>
-                  void (incomingTransfer()
+                  void (incomingTransfer() ||
+                  props.message.localContentPending
                     ? pause(props.message.client)
                     : request())
                 }
@@ -241,9 +254,19 @@ export function RoomFileMessageCard(props: {
         }
       >
         <Show
+          when={props.message.completionSource === "local"}
+        >
+          <span class="text-muted-foreground text-[11px]">
+            {t("file_library.local_completion")}
+          </span>
+        </Show>
+        <Show
           when={
             needsFile() &&
-            !incomingTransfer() &&
+            !(
+              incomingTransfer() ||
+              props.message.localContentPending
+            ) &&
             !merging() &&
             !canRequest()
           }
@@ -277,6 +300,15 @@ export function RoomFileMessageCard(props: {
               </DialogDescription>
             </DialogHeader>
             <DialogBody>
+              <Show
+                when={
+                  props.message.completionSource === "local"
+                }
+              >
+                <p class="text-muted-foreground mb-3 text-xs">
+                  {t("file_library.local_completion")}
+                </p>
+              </Show>
               <Show when={detailsOpen()}>
                 <Show
                   when={recipients().length}
@@ -305,6 +337,19 @@ export function RoomFileMessageCard(props: {
                                 {peerName(peerId)}
                               </p>
                               <div class="text-muted-foreground mt-0.5">
+                                <Show
+                                  when={
+                                    progress()
+                                      .completionSource ===
+                                    "local"
+                                  }
+                                >
+                                  <p class="text-xs">
+                                    {t(
+                                      "file_library.local_completion",
+                                    )}
+                                  </p>
+                                </Show>
                                 <FileTransferDetails
                                   status={transferStatus(
                                     progress(),

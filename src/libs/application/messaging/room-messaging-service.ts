@@ -29,6 +29,15 @@ export type RoomDeliveryStatus =
 
 export interface RoomMessagingServiceOptions {
   supportsFiles?: boolean;
+  supportsContent?(session: PeerSession): boolean;
+  reuseFile?(
+    message: FileTransferMessage,
+    signal: AbortSignal,
+  ): Promise<boolean>;
+  onFileReused?(
+    message: FileTransferMessage,
+    peerId: string,
+  ): Promise<void>;
   getRoom(): RoomChatScope | null;
   getSessions(): PeerSession[];
   getLocalClient(): Client;
@@ -93,6 +102,11 @@ export class RoomMessagingService {
   private readonly retries = new Set<string>();
   private scopeKey: string | null = null;
   private scopeRevision = 0;
+  private scopeLifetime = new AbortController();
+  get scopeSignal(): AbortSignal {
+    this.syncSessions();
+    return this.scopeLifetime.signal;
+  }
   private lastOfferAt = 0;
   private disposed = false;
 
@@ -203,6 +217,7 @@ export class RoomMessagingService {
             mimeType: message.mimeType,
             lastModified: message.lastModified,
             chunkSize: message.chunkSize,
+            fingerprint: message.fingerprint,
             createdAt: message.createdAt,
             client: message.client,
             target: message.target,
@@ -219,8 +234,29 @@ export class RoomMessagingService {
           binding.assertCurrent();
           if (signal.aborted)
             throw new Error("Room session closed");
+          if (
+            message.fingerprint &&
+            this.options.reuseFile
+          ) {
+            const reused = await this.options.reuseFile(
+              offer,
+              binding.signal,
+            );
+            binding.assertCurrent();
+            if (reused)
+              return {
+                fid: message.fid,
+                disposition: "have" as const,
+              };
+          }
           if (inserted)
             this.options.onFileReceived?.(offer);
+          if (message.fingerprint)
+            return {
+              fid: message.fid,
+              disposition: "deferred" as const,
+              reason: "user" as const,
+            };
         },
       ),
     ];
@@ -363,6 +399,8 @@ export class RoomMessagingService {
     if (this.disposed) return;
     const key = this.getScopeKey();
     if (key !== this.scopeKey) {
+      this.scopeLifetime.abort();
+      this.scopeLifetime = new AbortController();
       this.scopeRevision++;
       for (const binding of this.bindings.values())
         this.retire(binding);
@@ -641,6 +679,7 @@ export class RoomMessagingService {
         mimeType: info.mimetype,
         lastModified: info.lastModified,
         chunkSize: info.chunkSize,
+        fingerprint: info.fingerprint,
       },
       messageId,
     );
@@ -658,6 +697,7 @@ export class RoomMessagingService {
           | "mimeType"
           | "lastModified"
           | "chunkSize"
+          | "fingerprint"
         >,
     messageId: string = crypto.randomUUID(),
   ): Promise<void> {
@@ -832,7 +872,7 @@ export class RoomMessagingService {
           throw new Error(
             "File offer is missing its cache id",
           );
-        await this.protocol.call(
+        const result = await this.protocol.call(
           binding.session,
           "send-room-file",
           {
@@ -843,9 +883,19 @@ export class RoomMessagingService {
             mimeType: message.mimeType,
             lastModified: message.lastModified,
             chunkSize: message.chunkSize,
+            ...(this.options.supportsContent?.(
+              binding.session,
+            ) && message.fingerprint
+              ? { fingerprint: message.fingerprint }
+              : {}),
           },
           options,
         );
+        if (
+          result.type === "file-offer-result" &&
+          result.disposition === "have"
+        )
+          await this.options.onFileReused?.(message, peer);
       }
     } catch {
       await this.options.store.setRoomDelivery(
@@ -863,6 +913,7 @@ export class RoomMessagingService {
   }
 
   dispose(): void {
+    this.scopeLifetime.abort();
     if (this.disposed) return;
     this.disposed = true;
     for (const off of this.unsubscribe) off();

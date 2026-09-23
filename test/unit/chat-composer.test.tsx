@@ -16,6 +16,8 @@ import {
   within,
 } from "@solidjs/testing-library";
 import { ChatBar } from "@/routes/client/[id]/components/chat-bar";
+import { Show } from "solid-js";
+import { setAppState } from "@/libs/state/app-state";
 
 const service = vi.hoisted(() => ({
   sendText: vi.fn(),
@@ -32,8 +34,29 @@ vi.mock("@/libs/state/app-state-context", () => ({
     sendFile: service.sendFile,
   }),
 }));
-vi.mock("@/libs/state/app-state", () => ({
-  appState: { options: { enableClipboard: false } },
+vi.mock("@/libs/state/app-state", async () => {
+  const { createStore } = await import("solid-js/store");
+  const [appState, setAppState] = createStore({
+    options: { enableClipboard: false },
+    session: { clientViewData: {} },
+  });
+  return { appState, setAppState };
+});
+vi.mock("@/components/files/file-picker-dialog", () => ({
+  default: (props: {
+    open: boolean;
+    onSelect(ids: string[]): void;
+  }) => (
+    <Show when={props.open}>
+      <div role="dialog" aria-label="file picker">
+        <button
+          onClick={() => props.onSelect(["stored-file"])}
+        >
+          Select file
+        </button>
+      </div>
+    </Show>
+  ),
 }));
 vi.mock("@/libs/hooks/create-mobile", () => ({
   createIsMobile: () => () => service.mobile,
@@ -77,10 +100,184 @@ beforeEach(() => {
   service.sendFile.mockResolvedValue(undefined);
   service.preview.mockReset();
   service.preview.mockResolvedValue({ result: true });
+  for (const clientId of ["alice", "bob"]) {
+    setAppState("session", "clientViewData", clientId, {
+      clientId,
+      name: clientId,
+      avatar: null,
+      createdAt: 1,
+      onlineStatus: "online",
+      messageChannel: true,
+    });
+  }
 });
 afterEach(cleanup);
 
 describe("shared chat composer adapters", () => {
+  it("retains the private draft while disconnected, blocks every send entry and enables them again after reconnection", async () => {
+    const { container } = render(() => (
+      <ChatBar client={alice} />
+    ));
+    const textbox = screen.getByRole(
+      "textbox",
+    ) as HTMLTextAreaElement;
+    fireEvent.input(textbox, {
+      target: { value: "keep this draft" },
+    });
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "onlineStatus",
+      "offline",
+    );
+    expect(textbox.disabled).toBe(true);
+    expect(textbox.value).toBe("keep this draft");
+    for (const input of container.querySelectorAll<HTMLInputElement>(
+      'input[type="file"]',
+    )) {
+      expect(input.disabled).toBe(true);
+      fireEvent.change(input, {
+        target: {
+          files: [new File(["data"], "offline.txt")],
+        },
+      });
+    }
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "file_library.choose",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "common.action.send",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.paste(textbox, {
+      clipboardData: { items: [{ kind: "file" }] },
+    });
+    fireEvent.submit(textbox.form!);
+    fireEvent.keyDown(textbox, {
+      key: "Enter",
+      ctrlKey: true,
+    });
+    expect(service.sendText).not.toHaveBeenCalled();
+    expect(service.sendFile).not.toHaveBeenCalled();
+    expect(service.drop).not.toHaveBeenCalled();
+    expect(textbox.value).toBe("keep this draft");
+    setAppState("session", "clientViewData", "alice", {
+      onlineStatus: "reconnecting",
+      messageChannel: false,
+    });
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "onlineStatus",
+      "online",
+    );
+    expect(textbox.disabled).toBe(true);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      true,
+    );
+    expect(textbox.disabled).toBe(false);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(textbox.value).toBe("keep this draft");
+    expect(service.sendText).not.toHaveBeenCalled();
+    fireEvent.submit(textbox.form!);
+    await waitFor(() => expect(textbox.value).toBe(""));
+    expect(service.sendText).toHaveBeenCalledWith(
+      "keep this draft",
+      "alice",
+    );
+  });
+
+  it("closes a library picker on disconnect without clearing the draft or reopening on reconnect", async () => {
+    render(() => <ChatBar client={alice} />);
+    const textbox = screen.getByRole(
+      "textbox",
+    ) as HTMLTextAreaElement;
+    fireEvent.input(textbox, {
+      target: { value: "library draft" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "file_library.choose",
+      }),
+    );
+    await screen.findByRole("dialog", {
+      name: "file picker",
+    });
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      false,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      true,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(textbox.value).toBe("library draft");
+    expect(service.sendFile).not.toHaveBeenCalled();
+  });
+
+  it("cancels pending attachment preparation on disconnect and never sends it after reconnection", async () => {
+    let finish!: (file: File) => void;
+    let signal!: AbortSignal;
+    service.folder.mockImplementationOnce(
+      (_files: FileList, abortSignal: AbortSignal) => {
+        signal = abortSignal;
+        return new Promise<File>((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+    const { container } = render(() => (
+      <ChatBar client={alice} />
+    ));
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-attachment="folder"]',
+    )!;
+    fireEvent.change(input, {
+      target: { files: [new File(["data"], "file.txt")] },
+    });
+    expect(signal.aborted).toBe(false);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      false,
+    );
+    expect(signal.aborted).toBe(true);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      true,
+    );
+    finish(new File(["zip"], "folder.zip"));
+    await waitFor(() => expect(input.disabled).toBe(false));
+    expect(service.sendFile).not.toHaveBeenCalled();
+    expect(service.error).not.toHaveBeenCalled();
+  });
+
   it("routes file, media, phone capture and zipped folders to the private peer without submitting the text draft", async () => {
     service.mobile = true;
     const { container } = render(() => (

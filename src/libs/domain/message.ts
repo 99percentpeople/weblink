@@ -1,3 +1,4 @@
+import type { FileFingerprint } from "./protocol/file-fingerprint";
 import type { FileID } from "./ids";
 import type { BaseExchangeMessage } from "./protocol/messages";
 
@@ -29,6 +30,7 @@ export interface TextMessage extends BaseStorageMessage {
 }
 
 export type RoomFileTransferState = {
+  completionSource?: "local" | "network";
   status?:
     | "init"
     | "transfering"
@@ -41,6 +43,10 @@ export type RoomFileTransferState = {
 
 export interface FileTransferMessage extends BaseStorageMessage {
   type: "file";
+  fingerprint?: FileFingerprint;
+  localContentPending?: boolean;
+  localContentDetached?: boolean;
+  completionSource?: "local" | "network";
   fid?: FileID;
   fileName: string;
   fileSize: number;

@@ -1,6 +1,14 @@
+import { FileContentReceives } from "./file-content-receives";
+import { completeLocalFile } from "./file-content-completion";
+import { contentKey } from "@/libs/domain/protocol/file-fingerprint";
+import type {
+  FileOfferResult,
+  FileContentReadyMessage,
+} from "@/libs/domain/protocol/messages";
 import type {
   ChunkMetaData,
   FileMetaData,
+  FileSource,
 } from "@/libs/domain/file";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { PeerSession } from "@/libs/domain/session";
@@ -38,16 +46,24 @@ export interface FileTransferServiceOptions {
   caches: Pick<
     FileCacheFactory,
     "getCache" | "createCache"
-  >;
+  > &
+    Partial<Pick<FileCacheFactory, "library">>;
   messages: Pick<
     typeof messageStores,
     | "messages"
     | "setReceiveMessage"
     | "updateTransferMessage"
-  >;
+  > &
+    Partial<Pick<typeof messageStores, "flushMessage">>;
   messaging: Pick<PeerMessagingService, "send" | "fail">;
   getSession(peerId: string): PeerSession | undefined;
   getChunkSize(): number;
+  automaticCacheDeletion?(): boolean;
+  supportsContent?(session: PeerSession): boolean;
+  validateRoomReady?(
+    session: PeerSession,
+    message: FileContentReadyMessage,
+  ): void;
 }
 import type { FileTransferOperation as Operation } from "./file-transfer-operation";
 import {
@@ -62,10 +78,18 @@ export class FileTransferService {
   private readonly unsubscribe: Array<() => void>;
   private disposed = false;
   private readonly offers: FileOfferTransfers;
+  private readonly contentReceives: FileContentReceives;
 
   constructor(
     private readonly deps: FileTransferServiceOptions,
   ) {
+    this.contentReceives = new FileContentReceives(
+      (run) => deps.registry.destroy(run),
+      (id) => {
+        for (const op of this.operations)
+          if (op.fileId === id) op.controller.abort();
+      },
+    );
     this.offers = new FileOfferTransfers({
       ...deps,
       isDisposed: () => this.disposed,
@@ -81,6 +105,71 @@ export class FileTransferService {
         this.openChannel(op, cache),
     });
     this.unsubscribe = [
+      ...(deps.caches.library
+        ? [
+            deps.caches.library.onRemove((ids) => {
+              for (const id of ids) {
+                this.contentReceives.cancel(id);
+                for (const op of this.operations)
+                  if (op.fileId === id)
+                    op.controller.abort();
+                deps.registry.destroyFile(id);
+              }
+            }),
+          ]
+        : []),
+      deps.protocol.handle(
+        "file-content-ready",
+        async ({ session, message, signal }) => {
+          const offer = deps.messages.messages.find(
+            (item) => item.id === message.offerId,
+          );
+          if (
+            !offer ||
+            offer.type !== "file" ||
+            offer.client !== session.clientId ||
+            offer.fid !== message.fid ||
+            !offer.fingerprint ||
+            contentKey(offer.fingerprint) !==
+              contentKey(message.fingerprint)
+          )
+            throw new Error("Unknown file completion");
+          if (offer.room) {
+            if (
+              !deps.validateRoomReady ||
+              message.roomId !== offer.room.roomId ||
+              !Object.hasOwn(
+                offer.deliveries ?? {},
+                session.targetClientId,
+              )
+            )
+              throw new Error(
+                "File completion is outside the offered room",
+              );
+            deps.validateRoomReady(session, message);
+          } else if (
+            message.roomId ||
+            offer.target !== session.targetClientId
+          )
+            throw new Error(
+              "File completion peer does not match",
+            );
+          signal.throwIfAborted();
+          completeLocalFile(
+            deps.messages,
+            offer.id,
+            offer.room ? session.targetClientId : undefined,
+          );
+          await deps.messages.flushMessage?.(offer.id);
+          if (
+            !offer.room &&
+            deps.automaticCacheDeletion?.()
+          )
+            await deps.caches
+              .getCache(message.fid)
+              ?.cleanup();
+        },
+      ),
       deps.protocol.handle("send-file", (ctx) =>
         this.receiveFile(ctx),
       ),
@@ -245,11 +334,31 @@ export class FileTransferService {
       this.operations.add(op);
       return await work(op);
     } catch (error) {
+      if (
+        this.operations.has(op) &&
+        !op.run &&
+        op.mode === TransferMode.Receive &&
+        op.fileId
+      )
+        this.contentReceives.failFile(op.fileId, error);
       if (op.run) {
         if (this.valid(op))
           this.deps.registry.fail(op.run, error);
         else this.deps.registry.destroy(op.run);
       }
+      op.controller.abort(error);
+      if (
+        op.mode === TransferMode.Send &&
+        op.fileId &&
+        !this.deps.messages.messages.some(
+          (message) =>
+            message.type === "file" &&
+            message.fid === op.fileId,
+        )
+      )
+        await this.deps.caches.library
+          ?.releaseAttachment(op.fileId)
+          .catch(console.error);
       throw error;
     } finally {
       this.operations.delete(op);
@@ -287,6 +396,8 @@ export class FileTransferService {
       info,
     });
     op.run = run;
+    if (mode === TransferMode.Receive)
+      this.contentReceives.bind(run);
     const cancelSetup = () =>
       op.controller.abort(run.signal.reason);
     run.signal.addEventListener("abort", cancelSetup, {
@@ -329,13 +440,13 @@ export class FileTransferService {
       type === "send-file"
         ? TransferMode.Send
         : TransferMode.Receive;
-    const run = this.register(
-      op,
-      cache,
-      messageId,
-      mode,
-      false,
-    );
+    const negotiated =
+      type === "send-file" &&
+      "fingerprint" in payload &&
+      !!payload.fingerprint;
+    let run = negotiated
+      ? undefined
+      : this.register(op, cache, messageId, mode, false);
     const result = await this.step(
       op,
       this.deps.messaging
@@ -367,6 +478,24 @@ export class FileTransferService {
     );
     if (!result)
       throw new Error("file request was not prepared");
+    if (result.ackMessage.type === "file-offer-result") {
+      if (result.ackMessage.disposition === "have") {
+        completeLocalFile(this.deps.messages, messageId);
+        await this.deps.messages.flushMessage?.(messageId);
+        if (this.deps.automaticCacheDeletion?.())
+          await cache.cleanup();
+        return;
+      }
+      if (result.ackMessage.disposition === "deferred")
+        return;
+    }
+    run ??= this.register(
+      op,
+      cache,
+      messageId,
+      mode,
+      false,
+    );
     try {
       if (mode === TransferMode.Send)
         this.sendWhenReady(run);
@@ -420,18 +549,73 @@ export class FileTransferService {
       );
   }
 
-  prepareRoomFile(
-    file: File,
-    origin?: { messageId: string; clientId: string },
-  ): Promise<ChunkMetaData> {
-    return this.offers.prepare(file, origin);
+  releasePreparedFile(fileId: string): Promise<void> {
+    return (
+      this.deps.caches.library?.releaseAttachment(fileId) ??
+      Promise.resolve()
+    );
   }
-  receiveFileOffer(
+
+  prepareRoomFile(
+    file: FileSource,
+    origin?: { messageId: string; clientId: string },
+    signal?: AbortSignal,
+  ): Promise<ChunkMetaData> {
+    return this.offers.prepare(file, origin, signal);
+  }
+  private reattach(
+    fileId: string,
+    messageId?: string,
+  ): boolean {
+    const id = this.contentReceives.reattach(
+      fileId,
+      messageId,
+    );
+    if (!id) return false;
+    this.deps.messages.updateTransferMessage(
+      id,
+      (message) => {
+        message.localContentDetached = false;
+        message.transferStatus = "init";
+      },
+    );
+    return true;
+  }
+
+  async receiveFileOffer(
     session: PeerSession,
     info: ChunkMetaData,
     options: ReceiveFileOfferOptions,
   ): Promise<void> {
-    return this.offers.receive(session, info, options);
+    if (this.reattach(info.id, options.messageId)) return;
+    if (info.fingerprint && this.deps.caches.library) {
+      const stored = this.deps.messages.messages.find(
+        (item) => item.id === options.messageId,
+      );
+      if (!stored || stored.type !== "file")
+        throw new Error("File offer was removed");
+      if (
+        await this.reuseRoomOffer(stored, options.signal)
+      ) {
+        await options.reused?.();
+        return;
+      }
+      if (
+        !this.joinContent(
+          session,
+          stored,
+          options.signal,
+          options.reused,
+        )
+      )
+        return;
+    }
+    try {
+      await this.offers.receive(session, info, options);
+    } catch (error) {
+      this.contentReceives.fail(options.messageId, error);
+      throw error;
+    }
   }
   serveFileOffer(
     session: PeerSession,
@@ -440,9 +624,167 @@ export class FileTransferService {
     return this.offers.serve(session, options);
   }
 
+  private joinContent(
+    session: PeerSession,
+    message: FileTransferMessage,
+    signal: AbortSignal,
+    ready?: () => Promise<void>,
+  ): boolean {
+    if (!message.fingerprint || !message.fid) return true;
+    const current = () =>
+      !signal.aborted &&
+      this.deps.getSession(session.targetClientId) ===
+        session &&
+      this.deps.messages.messages.some(
+        (item) => item.id === message.id,
+      );
+    if (signal.aborted) return false;
+    const leader = this.contentReceives.join(
+      message.fingerprint,
+      {
+        id: message.id,
+        fileId: message.fid,
+        complete: async (waitingSignal) => {
+          const activeSignal = AbortSignal.any([
+            signal,
+            waitingSignal,
+          ]);
+          if (!current() || activeSignal.aborted) return;
+          if (message.room) {
+            if (
+              !(await this.reuseRoomOffer(
+                message,
+                activeSignal,
+              ))
+            )
+              throw new Error(
+                "Shared content is unavailable",
+              );
+            if (current() && !activeSignal.aborted)
+              await ready?.();
+          } else {
+            const cache =
+              await this.deps.caches.library!.reuse(
+                message.fingerprint!,
+                {
+                  id: message.fid!,
+                  fileName: message.fileName,
+                  fileSize: message.fileSize,
+                  chunkSize: message.chunkSize,
+                  lastModified: message.lastModified,
+                  mimetype: message.mimeType,
+                  from: message.client,
+                  createdAt: message.createdAt,
+                },
+                activeSignal,
+              );
+            if (!current() || activeSignal.aborted) {
+              await cache?.cleanup();
+              return;
+            }
+            if (!cache)
+              throw new Error(
+                "Shared content is unavailable",
+              );
+            completeLocalFile(
+              this.deps.messages,
+              message.id,
+            );
+            await this.deps.messages.flushMessage?.(
+              message.id,
+            );
+            if (current() && !activeSignal.aborted)
+              await this.deps.protocol.call(
+                session,
+                "file-content-ready",
+                {
+                  offerId: message.id,
+                  fid: message.fid!,
+                  fingerprint: message.fingerprint!,
+                },
+                { signal: activeSignal, retries: 2 },
+              );
+          }
+        },
+        paused: (error) =>
+          this.deps.messages.updateTransferMessage(
+            message.id,
+            (stored) => {
+              stored.transferStatus = error
+                ? "error"
+                : "paused";
+              stored.error = error
+                ? String(error)
+                : undefined;
+              stored.localContentPending = false;
+              stored.localContentDetached = true;
+            },
+          ),
+        release: () =>
+          this.deps.caches.library!.releaseAttachment(
+            message.fid!,
+          ),
+      },
+    );
+    if (!leader)
+      this.deps.messages.updateTransferMessage(
+        message.id,
+        (stored) => {
+          stored.transferStatus = "init";
+          stored.localContentPending = true;
+          stored.localContentDetached = false;
+          stored.error = undefined;
+          stored.progress = undefined;
+        },
+      );
+    return leader;
+  }
+
+  async reuseRoomOffer(
+    message: FileTransferMessage,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    if (
+      !message.fingerprint ||
+      !message.fid ||
+      !message.room ||
+      !this.deps.caches.library
+    )
+      return false;
+    const cache = await this.deps.caches.library.reuse(
+      message.fingerprint,
+      {
+        id: message.fid,
+        fileName: message.fileName,
+        fileSize: message.fileSize,
+        mimetype: message.mimeType,
+        lastModified: message.lastModified,
+        chunkSize: message.chunkSize,
+        roomAttachment: true,
+        roomOfferId: message.id,
+        from: message.client,
+        createdAt: message.createdAt,
+      },
+      signal,
+    );
+    signal.throwIfAborted();
+    if (!cache) return false;
+    if (
+      !this.deps.messages.messages.some(
+        (item) => item.id === message.id,
+      )
+    ) {
+      await cache.cleanup();
+      throw new Error("The file message was removed");
+    }
+    completeLocalFile(this.deps.messages, message.id);
+    await this.deps.messages.flushMessage?.(message.id);
+    return true;
+  }
+
   sendFile(
     session: PeerSession,
-    file: File,
+    file: FileSource,
     options: { signal?: AbortSignal } = {},
   ): Promise<void> {
     const fid = crypto.randomUUID();
@@ -451,31 +793,52 @@ export class FileTransferService {
       fid,
       options.signal,
       async (op) => {
-        const cache = await this.step(
-          op,
-          this.deps.caches.createCache(fid),
-        );
-        this.hold(op, cache);
         const chunkSize = this.deps.getChunkSize();
-        await this.step(
-          op,
-          cache.setInfo({
-            fileName: file.name,
-            fileSize: file.size,
-            mimetype: file.type,
-            lastModified: file.lastModified,
-            chunkSize,
-            createdAt: Date.now(),
-            file,
-          }),
-        );
+        let cache: ChunkCache;
+        if (this.deps.caches.library) {
+          cache = await this.step(
+            op,
+            this.deps.caches.library.prepare(
+              file,
+              { id: fid, chunkSize },
+              { signal: op.controller.signal },
+            ),
+          );
+        } else {
+          if (!(file instanceof File))
+            throw new Error("File library is unavailable");
+          cache = await this.step(
+            op,
+            this.deps.caches.createCache(fid),
+          );
+          await this.step(
+            op,
+            cache.setInfo({
+              fileName: file.name,
+              fileSize: file.size,
+              mimetype: file.type,
+              lastModified: file.lastModified,
+              chunkSize,
+              createdAt: Date.now(),
+              file,
+            }),
+          );
+        }
+        this.hold(op, cache);
+        const info = await this.step(op, cache.getInfo());
+        if (!info?.isComplete)
+          throw new Error("File content is unavailable");
         await this.outgoing(op, cache, "send-file", {
           fid,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
-          lastModified: file.lastModified,
+          fileName: info.fileName,
+          fileSize: info.fileSize,
+          mimeType: info.mimetype,
+          lastModified: info.lastModified,
           chunkSize,
+          ...(this.deps.supportsContent?.(session) &&
+          info.fingerprint
+            ? { fingerprint: info.fingerprint }
+            : {}),
         });
       },
     );
@@ -485,6 +848,11 @@ export class FileTransferService {
     session: PeerSession,
     fileId: string,
   ): Promise<void> {
+    if (this.deps.caches.library)
+      return this.sendFile(session, {
+        kind: "library",
+        localFileId: fileId,
+      });
     return this.operation(
       session,
       fileId,
@@ -536,29 +904,18 @@ export class FileTransferService {
       messageId?: string;
     } = {},
   ): Promise<void> {
+    if (
+      resume &&
+      !info.roomAttachment &&
+      this.reattach(info.id, options.messageId)
+    )
+      return Promise.resolve();
     return this.operation(
       session,
       info.id,
       options.signal,
       async (op) => {
         this.assertPrivateCache(info);
-        let cache = this.deps.caches.getCache(info.id);
-        if (!cache) {
-          cache = await this.step(
-            op,
-            this.deps.caches.createCache(info.id),
-          );
-          this.hold(op, cache);
-          await this.step(
-            op,
-            cache.setInfo({ ...info, file: undefined }),
-          );
-        } else {
-          this.hold(op, cache);
-          this.assertPrivateCache(
-            await this.step(op, cache.getInfo()),
-          );
-        }
         const existing = resume
           ? this.deps.messages.messages.findLast(
               (message): message is FileTransferMessage =>
@@ -570,6 +927,92 @@ export class FileTransferService {
                 message.target === session.clientId,
             )
           : undefined;
+        if (
+          existing?.fingerprint &&
+          this.deps.caches.library
+        ) {
+          const reused = await this.step(
+            op,
+            this.deps.caches.library.reuse(
+              existing.fingerprint,
+              {
+                id: existing.fid!,
+                fileName: existing.fileName,
+                fileSize: existing.fileSize,
+                mimetype: existing.mimeType,
+                lastModified: existing.lastModified,
+                chunkSize: existing.chunkSize,
+                from: existing.client,
+                createdAt: existing.createdAt,
+              },
+              op.controller.signal,
+            ),
+          );
+          if (reused) {
+            if (
+              !this.deps.messages.messages.some(
+                (item) => item.id === existing.id,
+              )
+            ) {
+              await reused.cleanup();
+              throw new Error("File message was removed");
+            }
+            completeLocalFile(
+              this.deps.messages,
+              existing.id,
+            );
+            await this.deps.messages.flushMessage?.(
+              existing.id,
+            );
+            if (this.deps.supportsContent?.(session))
+              await this.step(
+                op,
+                this.deps.protocol.call(
+                  session,
+                  "file-content-ready",
+                  {
+                    offerId: existing.id,
+                    fid: existing.fid!,
+                    fingerprint: existing.fingerprint,
+                  },
+                  {
+                    signal: op.controller.signal,
+                    retries: 2,
+                  },
+                ),
+              );
+            return;
+          }
+          if (
+            !this.joinContent(
+              session,
+              existing,
+              op.controller.signal,
+            )
+          )
+            return;
+        }
+        let cache = this.deps.caches.getCache(info.id);
+        if (!cache) {
+          cache = await this.step(
+            op,
+            this.deps.caches.createCache(info.id),
+          );
+          this.hold(op, cache);
+          await this.step(
+            op,
+            cache.setInfo({
+              ...info,
+              from: info.from ?? session.targetClientId,
+              file: undefined,
+            }),
+          );
+        } else {
+          this.hold(op, cache);
+          this.assertPrivateCache(
+            await this.step(op, cache.getInfo()),
+          );
+        }
         const ranges = await this.step(
           op,
           cache.getReqRanges(),
@@ -642,6 +1085,7 @@ export class FileTransferService {
           lastModified: message.lastModified,
           chunkSize: message.chunkSize,
           createdAt: message.createdAt,
+          fingerprint: message.fingerprint,
         },
         true,
         { messageId: message.id },
@@ -678,6 +1122,10 @@ export class FileTransferService {
             mimeType: message.mimeType,
             lastModified: message.lastModified,
             chunkSize: message.chunkSize,
+            ...(this.deps.supportsContent?.(session) &&
+            message.fingerprint
+              ? { fingerprint: message.fingerprint }
+              : {}),
           },
           {
             id: message.id,
@@ -737,6 +1185,7 @@ export class FileTransferService {
     session: PeerSession,
     fileId: string,
   ): Promise<void> {
+    if (this.contentReceives.cancel(fileId)) return;
     for (const op of this.operations) {
       if (op.session === session && op.fileId === fileId) {
         op.controller.abort();
@@ -754,16 +1203,128 @@ export class FileTransferService {
   }: RequestContext<
     "send-file",
     PeerSession
-  >): Promise<void> {
+  >): Promise<FileOfferResult | void> {
     return this.operation(
       session,
       message.fid,
       signal,
       async (op) => {
-        if (this.deps.caches.getCache(message.fid))
+        const previous = this.deps.messages.messages.find(
+          (item) => item.id === message.id,
+        );
+        if (
+          previous &&
+          (previous.type !== "file" ||
+            previous.room ||
+            previous.fid !== message.fid ||
+            previous.client !== message.client ||
+            previous.target !== message.target ||
+            previous.fileName !== message.fileName ||
+            previous.fileSize !== message.fileSize ||
+            previous.chunkSize !== message.chunkSize ||
+            previous.lastModified !==
+              message.lastModified ||
+            (previous.mimeType ?? "") !==
+              (message.mimeType ?? "") ||
+            JSON.stringify(previous.fingerprint) !==
+              JSON.stringify(message.fingerprint))
+        )
           throw new Error(
-            `cache ${message.fid} already exists`,
+            "Conflicting file message identity",
           );
+        if (
+          message.fingerprint &&
+          this.deps.caches.library
+        ) {
+          this.deps.messages.setReceiveMessage(message);
+          await this.deps.messages.flushMessage?.(
+            message.id,
+          );
+          const reused = await this.step(
+            op,
+            this.deps.caches.library.reuse(
+              message.fingerprint,
+              {
+                id: message.fid,
+                fileName: message.fileName,
+                fileSize: message.fileSize,
+                mimetype: message.mimeType,
+                lastModified: message.lastModified,
+                chunkSize: message.chunkSize,
+                from: message.client,
+                createdAt: message.createdAt,
+              },
+              op.controller.signal,
+            ),
+          );
+          if (reused) {
+            if (
+              !this.deps.messages.messages.some(
+                (item) => item.id === message.id,
+              )
+            ) {
+              await reused.cleanup();
+              throw new Error("File message was removed");
+            }
+            completeLocalFile(
+              this.deps.messages,
+              message.id,
+            );
+            await this.deps.messages.flushMessage?.(
+              message.id,
+            );
+            return {
+              fid: message.fid,
+              disposition: "have" as const,
+            };
+          }
+        }
+        if (
+          message.fingerprint &&
+          this.deps.caches.library
+        ) {
+          const stored = this.deps.messages.messages.find(
+            (item) => item.id === message.id,
+          );
+          if (!stored || stored.type !== "file")
+            throw new Error("File message was removed");
+          if (!this.joinContent(session, stored, signal))
+            return {
+              fid: message.fid,
+              disposition: "deferred" as const,
+              reason: "local-job" as const,
+            };
+        }
+        const existing = this.deps.caches.getCache(
+          message.fid,
+        );
+        if (existing) {
+          const info = await this.step(
+            op,
+            existing.getInfo(),
+          );
+          const stored = this.deps.messages.messages.find(
+            (item) => item.id === message.id,
+          );
+          if (
+            !message.fingerprint ||
+            !stored ||
+            stored.type !== "file" ||
+            stored.client !== message.client ||
+            stored.fid !== message.fid ||
+            !info ||
+            info.roomAttachment ||
+            info.fileName !== message.fileName ||
+            info.fileSize !== message.fileSize ||
+            info.chunkSize !== message.chunkSize ||
+            !info.fingerprint ||
+            contentKey(info.fingerprint) !==
+              contentKey(message.fingerprint)
+          )
+            throw new Error(
+              `cache ${message.fid} already exists`,
+            );
+        }
         const cache = await this.step(
           op,
           this.deps.caches.createCache(message.fid),
@@ -784,15 +1345,25 @@ export class FileTransferService {
             lastModified: message.lastModified,
             chunkSize: message.chunkSize,
             createdAt: message.createdAt,
+            fingerprint: message.fingerprint,
+            from: message.client,
           },
         );
         await this.step(
           op,
           this.deps.registry.initialize(run),
         );
+        if (message.fingerprint)
+          return {
+            fid: message.fid,
+            disposition: "need" as const,
+          };
       },
       TransferMode.Receive,
-    );
+    ).catch((error) => {
+      this.contentReceives.fail(message.id, error);
+      throw error;
+    });
   }
 
   private serveFile({
@@ -836,12 +1407,31 @@ export class FileTransferService {
     );
   }
 
+  releaseMessage(fileId: string): void {
+    if (this.contentReceives.cancel(fileId)) return;
+    for (const op of this.operations)
+      if (op.fileId === fileId) op.controller.abort();
+    this.deps.registry.destroyFile(fileId);
+    void this.deps.caches.library
+      ?.releaseAttachment(fileId)
+      .catch(console.error);
+  }
+
   closeSession(session: PeerSession): void {
+    for (const message of this.deps.messages.messages)
+      if (
+        message.type === "file" &&
+        message.client === session.targetClientId &&
+        message.localContentPending &&
+        message.fid
+      )
+        this.contentReceives.cancel(message.fid);
     for (const op of this.operations)
       if (op.session === session) op.controller.abort();
     this.deps.registry.closeSession(session);
   }
   cancelAll(): void {
+    this.contentReceives.clear();
     for (const op of this.operations) op.controller.abort();
     this.deps.registry.clear();
   }

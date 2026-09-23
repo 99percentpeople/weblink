@@ -5,6 +5,8 @@
     "retention_note": "Speed-test history keeps the latest 50 runs while this page is open. Refreshing or closing the browser page ends live connections. Clearing history does not delete files or chat messages.",
     "count": "{{active}} active · {{total}} total",
     "active_count": "{{count}} active tasks",
+    "search": "Search files or members…",
+    "local": "This device",
     "filters_label": "Filter tasks",
     "filters": {
       "all": "All",
@@ -26,7 +28,8 @@
     "kinds": {
       "file-send": "Send file",
       "file-receive": "Receive file",
-      "speed-test": "Peer speed test"
+      "speed-test": "Peer speed test",
+      "file-prepare": "Identifying file"
     },
     "status": {
       "waiting": "Waiting",
@@ -333,7 +336,7 @@
       }
     },
     "message_editor": {
-      "placeholder": "Ctrl + Enter or Shift + Enter to send the message",
+      "placeholder": "Type a message…",
       "mobile_placeholder": "Send message"
     },
     "message_error": "Error occurred",
@@ -398,6 +401,7 @@
       "description": "Set your profile and room information.",
       "profile_description": "Set the profile shown to other people in the room.",
       "room_description": "Set the room you want to create or join.",
+      "autosave_hint": "Changes save automatically. Select Connect to join the room.",
       "steps": {
         "profile": "Profile",
         "room": "Room"
@@ -521,9 +525,14 @@
     },
     "scan_qrcode_dialog": {
       "title": "Share Room Profile",
-      "description": "Scan QR Code to connect to this room",
+      "description": "Scan the code or share the link to join this room.",
       "tip": "Right-click or long press to copy the link",
-      "invite": "Invite you to join the room {{room}}"
+      "invite": "Invite you to join the room {{room}}",
+      "link": "Invitation link",
+      "shared_by": "Shared by {{name}}",
+      "save": "Save QR code",
+      "save_failed": "Could not save the QR code. Please try again.",
+      "no_room": "Set up a room to share its QR code."
     },
     "action": {
       "apply": "Apply",
@@ -661,10 +670,13 @@
       "just_now": "Just Now"
     },
     "starter": {
-      "starter_name": "Starter",
-      "welcome": "Welcome to weblink, a chat, file transfer, file synchronization and screen sharing tool that can be run directly in the browser.",
-      "tip1": "Please follow these steps to start:\n 1. Set your name and avatar.\n 2. Set the room ID and password to encrypt the signaling messages between clients, preventing others from joining.\n 3. Share the room profile to invite others to join the room.",
-      "tip2": "If you encounter any problems or have any suggestions, please submit an issue on GitHub."
+      "starter_name": "Weblink Guide",
+      "welcome": "Welcome to Weblink! Meet, chat, share your screen and transfer files right in your browser. This is a locally stored guide; no reply is needed.",
+      "connect": "Get connected\nSelect Join room on Home, enter your name, avatar, room ID and optional password, then select Connect. Changes save automatically. Use your avatar menu in the top right to share a room link or QR code and invite friends to join with the same room details.",
+      "chat": "Chats and conversations\nChoose a room chat or private conversation in the right sidebar. Search conversations, filter or group them by label, and expand the sidebar into a full chat workspace. Room messages go to members who are currently online; each browser keeps its own history.",
+      "files": "Send files\nAttach files in the message composer or choose saved files from your file list. Room chats share file details first; recipients select Transfer to receive the content. An identical local file can be reused. Room settings also offer automatic downloads for small files.",
+      "meeting": "Meetings and picture-in-picture\nUse the bottom toolbar to control your microphone, camera and screen sharing. You can share your camera and screen at the same time. Pin a tile to make it the main view. Open picture-in-picture from the toolbar or enable automatic picture-in-picture in settings.",
+      "settings": "Files, tasks and settings\nSelect your avatar in the top right to open file management, the task list or settings. The task list shows transfer progress and lets you pause or resume transfers. To report an issue, use the feedback link in Settings → About."
     },
     "error_boundary": {
       "title": "Error Occurred",
@@ -719,6 +731,7 @@
     "load_earlier": "Load earlier messages",
     "room_empty": "Messages are shared with online members and saved in your browser.",
     "room_inactive": "Join this room to send messages. Opening its history does not switch your current room.",
+    "composer_offline": "Not connected. Connect to this peer to send messages.",
     "room_alone": "Waiting for another member to connect…",
     "room_message": "Message this room",
     "send": "Send message",
@@ -760,6 +773,9 @@
     "enable_camera": "Turn camera on",
     "share_screen": "Share screen",
     "stop_sharing": "Stop sharing",
+    "show_screen_preview": "Show local screen preview",
+    "screen_preview_covered": "You are sharing your screen",
+    "screen_preview_covered_hint": "Click to dismiss the cover and view your shared screen.",
     "sharing_audio": "Share audio",
     "mute_sharing_audio": "Mute shared audio",
     "enable_sharing_audio": "Unmute shared audio",
@@ -881,5 +897,48 @@
     "settings_transfer": "Transfers",
     "settings_advanced": "Advanced",
     "settings_about": "About"
+  },
+  "file_library": {
+    "search": "Search files…",
+    "status": "Availability",
+    "sort": "Sort",
+    "type": "File type",
+    "status_all": "All states",
+    "status_complete": "Available",
+    "status_incomplete": "Incomplete",
+    "sort_recent": "Recently added",
+    "sort_name": "Name",
+    "sort_size": "Size",
+    "type_all": "All",
+    "type_image": "Images",
+    "type_video": "Videos",
+    "type_audio": "Audio",
+    "type_document": "Documents",
+    "type_other": "Other",
+    "no_results": "No matching files",
+    "empty": "Import files or receive them in a conversation",
+    "local_file": "Local file",
+    "actions": "File actions",
+    "action_preview": "Preview",
+    "action_download": "Save to device",
+    "action_send": "Send",
+    "action_details": "Details",
+    "action_delete": "Delete local file",
+    "choose": "Choose from files",
+    "choose_hint": "Select available files to send to this conversation.",
+    "selection": "{{count}} selected · {{size}}",
+    "send_count": "Send {{count}} files",
+    "import": "Import",
+    "reused": "Already exists; reused local content",
+    "imported": "Files imported",
+    "delete_description": "Delete these local files? {{count}} attachment references will become unavailable. Chat messages will remain.",
+    "aliases": "Names",
+    "references": "Attachment references",
+    "fingerprint": "Content fingerprint",
+    "legacy": "Fingerprint calculated on first send",
+    "identifying": "Identifying file",
+    "local_completion": "Already on this device; transfer skipped",
+    "related_messages": "Related messages",
+    "peer_unavailable": "The recipient is offline. Reconnect before sending files."
   }
 }

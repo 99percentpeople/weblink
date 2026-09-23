@@ -2,6 +2,7 @@ import type {
   ChunkCache,
   ChunkMetaData,
   FileMetaData,
+  FileSource,
 } from "@/libs/domain/file";
 import type { FileTransferMessage } from "@/libs/domain/message";
 import type { PeerSession } from "@/libs/domain/session";
@@ -17,6 +18,7 @@ import type { TransferRun } from "./transfer-registry";
 import { finishReceivedFile } from "./transfer-message-binding";
 
 export interface ReceiveFileOfferOptions {
+  reused?(): Promise<void>;
   messageId: string;
   signal: AbortSignal;
   request(
@@ -73,14 +75,33 @@ export class FileOfferTransfers {
   ) {}
 
   async prepare(
-    file: File,
+    file: FileSource,
     origin?: { messageId: string; clientId: string },
+    signal?: AbortSignal,
   ): Promise<ChunkMetaData> {
     if (this.deps.isDisposed())
       throw new DOMException(
         "File service disposed",
         "AbortError",
       );
+    if (this.deps.caches.library) {
+      const cache = await this.deps.caches.library.prepare(
+        file,
+        {
+          chunkSize: this.deps.getChunkSize(),
+          roomAttachment: true,
+          roomOfferId: origin?.messageId,
+          from: origin?.clientId,
+        },
+        { signal },
+      );
+      const info = await cache.getInfo();
+      if (!info)
+        throw new Error("File content is unavailable");
+      return info;
+    }
+    if (!(file instanceof File))
+      throw new Error("File library is unavailable");
     const info: ChunkMetaData = {
       id: crypto.randomUUID(),
       fileName: file.name,
@@ -148,6 +169,8 @@ export class FileOfferTransfers {
     if (
       !actual?.roomAttachment ||
       actual.id !== expected.id ||
+      JSON.stringify(actual.fingerprint) !==
+        JSON.stringify(expected.fingerprint) ||
       actual.roomOfferId !== expected.roomOfferId ||
       actual.from !== expected.from ||
       actual.fileName !== expected.fileName ||
@@ -171,6 +194,7 @@ export class FileOfferTransfers {
       mimetype: message.mimeType,
       lastModified: message.lastModified,
       chunkSize: message.chunkSize,
+      fingerprint: message.fingerprint,
       roomAttachment: true,
       roomOfferId: message.id,
       from: message.client,

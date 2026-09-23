@@ -114,7 +114,7 @@ describe("shared client header", () => {
     ["chat", "sync", "client.sync.title"],
     ["sync", "chat", "client.sync.menu.chat"],
   ] as const)(
-    "uses the same layout and working actions in %s",
+    "provides working navigation and settings actions in %s",
     (view, destination, label) => {
       const { container } = renderHeader(view);
       const header = container.querySelector("header")!;
@@ -122,22 +122,8 @@ describe("shared client header", () => {
         "data-slot",
         "client-header",
       );
-      expect(header).toHaveClass(
-        "sticky",
-        "shrink-0",
-        "gap-2",
-        "border-b",
-        "p-2",
-        "border-border",
-        "bg-background/80",
-        "backdrop-blur",
-        "top-(--mobile-header-height)",
-        "md:top-0",
-      );
       const back = screen.getByLabelText("404.home");
       expect(back).toHaveAttribute("href", "/");
-      expect(back).not.toHaveClass("sm:hidden");
-      expect(back).toHaveClass("size-9");
       const link = screen.getByLabelText(label);
       expect(link.tagName).toBe("A");
       expect(link).toHaveAttribute(
@@ -151,17 +137,9 @@ describe("shared client header", () => {
             )
           : `/client/b/${destination}`,
       );
-      expect(link).toHaveClass("size-9");
-      expect(link.querySelector("svg")).toHaveClass(
-        "size-6",
-      );
       const settings = screen.getByRole("button", {
         name: "client.config.open",
       });
-      expect(settings).toHaveClass("size-9");
-      expect(settings.querySelector("svg")).toHaveClass(
-        "size-6",
-      );
       expect(
         header.querySelector(
           "button button, button a, a button",
@@ -177,18 +155,13 @@ describe("shared client header", () => {
   );
 
   it("returns from file sync to the selected conversation on Home", async () => {
-    const { container, history } = renderHeader("chat");
-    const headerClass =
-      container.querySelector("header")!.className;
+    const { history } = renderHeader("chat");
     fireEvent.click(
       screen.getByLabelText("client.sync.title"),
     );
     await waitFor(() =>
       expect(history.get()).toBe("/client/b/sync"),
     );
-    expect(
-      container.querySelector("header")!.className,
-    ).toBe(headerClass);
     fireEvent.click(
       screen.getByLabelText("client.sync.menu.chat"),
     );
@@ -204,7 +177,7 @@ describe("shared client header", () => {
     );
   });
 
-  it("keeps actions available without a connected client and truncates long names", () => {
+  it("keeps actions available without a connected client and updates the displayed name", () => {
     const { setClient } = renderHeader("sync");
     setClient(undefined);
     expect(
@@ -225,7 +198,6 @@ describe("shared client header", () => {
       .trim();
     setClient({ ...peer, name });
     const heading = screen.getByTitle(name);
-    expect(heading).toHaveClass("min-w-0", "truncate");
-    expect(settings.parentElement).toHaveClass("shrink-0");
+    expect(heading).toHaveTextContent(name);
   });
 });

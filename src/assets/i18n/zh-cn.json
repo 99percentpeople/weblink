@@ -5,6 +5,8 @@
     "retention_note": "本次打开页面期间保留最近 50 次测速记录。刷新或关闭浏览器页面会结束实时连接；清除记录不会删除文件或聊天消息。",
     "count": "{{active}} 项进行中 · 共 {{total}} 项",
     "active_count": "{{count}} 项进行中的任务",
+    "search": "搜索文件或成员…",
+    "local": "本机",
     "filters_label": "筛选任务",
     "filters": {
       "all": "全部",
@@ -26,7 +28,8 @@
     "kinds": {
       "file-send": "发送文件",
       "file-receive": "接收文件",
-      "speed-test": "客户端测速"
+      "speed-test": "客户端测速",
+      "file-prepare": "正在识别文件"
     },
     "status": {
       "waiting": "等待中",
@@ -333,7 +336,7 @@
       }
     },
     "message_editor": {
-      "placeholder": "Ctrl + Enter 或 Shift + Enter 发送消息",
+      "placeholder": "输入消息…",
       "mobile_placeholder": "发送消息"
     },
     "sync": {
@@ -390,9 +393,14 @@
   "common": {
     "scan_qrcode_dialog": {
       "title": "分享房间信息",
-      "description": "扫描二维码以连接到此房间",
+      "description": "扫描二维码或分享链接，邀请朋友加入房间。",
       "tip": "右键或长按复制链接",
-      "invite": "邀请你加入房间 {{room}}"
+      "invite": "邀请你加入房间 {{room}}",
+      "link": "邀请链接",
+      "shared_by": "由 {{name}} 分享",
+      "save": "保存二维码",
+      "save_failed": "保存二维码失败，请重试。",
+      "no_room": "设置房间信息后即可分享二维码。"
     },
     "theme_toggle": {
       "light": "浅色模式",
@@ -404,6 +412,7 @@
       "description": "设置用户信息和房间信息。",
       "profile_description": "设置你在房间中显示的用户信息。",
       "room_description": "设置要创建或加入的房间信息。",
+      "autosave_hint": "修改会自动保存，点击“连接”后加入房间。",
       "steps": {
         "profile": "用户信息",
         "room": "房间信息"
@@ -664,10 +673,13 @@
       "just_now": "刚刚"
     },
     "starter": {
-      "starter_name": "欢迎",
-      "welcome": "欢迎使用weblink，这是一个可以直接在浏览器中运行的聊天、文件传输、文件同步和屏幕共享工具。",
-      "tip1": "请按以下步骤开始：\n 1. 设置你的名称和头像。\n 2. 设置房间ID和密码以加密客户端之间的信令消息，防止其他人加入。\n 3. 分享房间资料以邀请其他人加入房间。",
-      "tip2": "如果遇到任何问题或有任何建议，请在GitHub上提交issue, 或加入QQ群反馈：762463759"
+      "starter_name": "Weblink 使用指南",
+      "welcome": "欢迎使用 Weblink！在浏览器中就能开会、聊天、共享屏幕和传输文件。这里是保存在本机的使用指南，无需回复。",
+      "connect": "开始连接\n点击首页的“加入房间”，填写名称、头像、房间 ID 和可选密码，再点击“连接”。配置修改会自动保存。通过右上角头像菜单分享房间链接或二维码，邀请朋友使用相同的房间信息加入。",
+      "chat": "聊天与会话\n在右侧边栏选择房间群聊或成员私聊。会话列表支持搜索、标签筛选和按标签分组，也可展开为完整聊天工作区。群聊消息只发给当前在线成员，历史保存在各自的浏览器中。",
+      "files": "发送文件\n在输入栏添加文件，或从文件列表选择已保存的文件发送。群聊默认先发送文件信息，对方点击“传输”后才开始接收；本地已有相同文件时可直接复用。房间设置中还可以开启小文件自动下载。",
+      "meeting": "会议与画中画\n使用底部工具栏控制麦克风、摄像头和屏幕共享，可以同时分享摄像头与屏幕。将画面钉住可设为主画面；工具栏中可打开画中画，设置中也可开启自动画中画。",
+      "settings": "文件、任务和设置\n点击右上角自己的头像，打开文件管理、任务列表或设置。任务列表可查看传输进度并暂停或继续传输。如需反馈问题，可在设置的“关于”页面打开反馈入口。"
     },
     "error_boundary": {
       "title": "发生错误",
@@ -722,6 +734,7 @@
     "load_earlier": "加载更早的消息",
     "room_empty": "消息发送给当前在线成员，并保存在本机浏览器中。",
     "room_inactive": "加入此房间后可发送消息。浏览历史不会切换当前房间。",
+    "composer_offline": "尚未连接，连接后即可发送消息。",
     "room_alone": "等待其他成员连接后发送…",
     "room_message": "发送房间消息",
     "send": "发送消息",
@@ -763,6 +776,9 @@
     "enable_camera": "开启摄像头",
     "share_screen": "共享屏幕",
     "stop_sharing": "结束共享",
+    "show_screen_preview": "查看本机共享预览",
+    "screen_preview_covered": "正在共享你的屏幕",
+    "screen_preview_covered_hint": "点击关闭遮罩，查看共享画面",
     "sharing_audio": "共享音频",
     "mute_sharing_audio": "关闭共享音频",
     "enable_sharing_audio": "开启共享音频",
@@ -884,5 +900,48 @@
     "settings_transfer": "传输",
     "settings_advanced": "高级",
     "settings_about": "关于"
+  },
+  "file_library": {
+    "search": "搜索文件…",
+    "status": "可用状态",
+    "sort": "排序",
+    "type": "文件类型",
+    "status_all": "全部状态",
+    "status_complete": "可用",
+    "status_incomplete": "未完成",
+    "sort_recent": "最近添加",
+    "sort_name": "名称",
+    "sort_size": "大小",
+    "type_all": "全部",
+    "type_image": "图片",
+    "type_video": "视频",
+    "type_audio": "音频",
+    "type_document": "文档",
+    "type_other": "其他",
+    "no_results": "没有符合条件的文件",
+    "empty": "导入文件，或从会话中接收文件",
+    "local_file": "本地文件",
+    "actions": "文件操作",
+    "action_preview": "预览",
+    "action_download": "保存到设备",
+    "action_send": "发送",
+    "action_details": "查看详情",
+    "action_delete": "删除本地文件",
+    "choose": "从文件列表选择",
+    "choose_hint": "选择可用的文件，发送到当前会话。",
+    "selection": "已选 {{count}} 项 · {{size}}",
+    "send_count": "发送 {{count}} 个文件",
+    "import": "导入",
+    "reused": "文件已存在，已复用本地内容",
+    "imported": "文件已导入",
+    "delete_description": "删除这些本地文件后，{{count}} 个附件引用将不可用。聊天消息仍会保留。",
+    "aliases": "文件名称",
+    "references": "关联附件",
+    "fingerprint": "内容指纹",
+    "legacy": "首次发送时计算指纹",
+    "identifying": "正在识别文件",
+    "local_completion": "本地已有，已跳过传输",
+    "related_messages": "关联消息",
+    "peer_unavailable": "对方已离线，请连接后再发送文件。"
   }
 }

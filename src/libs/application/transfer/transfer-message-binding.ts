@@ -24,6 +24,11 @@ function updateRun(
     entry.messageId,
     (message) => {
       if (
+        message.localContentDetached &&
+        entry.transferer.mode === TransferMode.Receive
+      )
+        return;
+      if (
         message.room &&
         entry.transferer.mode === TransferMode.Send
       ) {
@@ -46,6 +51,7 @@ function updateRun(
         message.transferStatus = state.status;
         message.progress = state.progress;
         message.error = state.error;
+        if (complete) message.completionSource = "network";
         if (complete && !message.room)
           message.status = "received";
       }
@@ -81,12 +87,17 @@ export function bindTransferMessage(
   store.updateTransferMessage(
     entry.messageId,
     (message) => {
+      message.localContentDetached = false;
       if (!message.room) return;
       if (entry.transferer.mode === TransferMode.Send) {
         const peerId = entry.session.targetClientId;
         message.roomTransfers = {
           ...message.roomTransfers,
-          [peerId]: { status: "init" },
+          [peerId]: {
+            ...message.roomTransfers?.[peerId],
+            status: "init",
+            error: undefined,
+          },
         };
       } else {
         message.transferStatus = "init";
@@ -122,6 +133,7 @@ export function bindTransferMessage(
       if (transfer.mode !== TransferMode.Send) return;
       update((state) => {
         state.status = "complete";
+        state.completionSource = "network";
         state.error = undefined;
       }, true);
     },
@@ -159,15 +171,20 @@ export async function finishReceivedFile(
 ): Promise<void> {
   await cache.flush();
   if (signal.aborted) return;
-  const file = await cache.getFile();
+  const file = cache.verifyFile
+    ? await cache.verifyFile(signal)
+    : await cache.getFile();
   if (signal.aborted) return;
   if (!file)
     throw new Error(
       `cache ${cache.id} could not be assembled`,
     );
   store.updateTransferMessage(messageId, (message) => {
+    if (message.localContentDetached) return;
     if (!message.room) message.status = "received";
     message.transferStatus = "complete";
+    message.completionSource = "network";
+    message.localContentPending = false;
     message.error = undefined;
   });
 }

@@ -89,6 +89,10 @@ export function ChatConversation(props: {
     props.conversationId ?? liveConversationId();
   const currentIdentity = () =>
     conversationId() === liveConversationId();
+  const canSend = () =>
+    currentIdentity() &&
+    clientInfo()?.onlineStatus === "online" &&
+    !!clientInfo()?.messageChannel;
   const [historyRevision, setHistoryRevision] =
     createSignal(0);
   const ready = () => appState.message.status === "ready";
@@ -183,7 +187,7 @@ export function ChatConversation(props: {
   );
 
   const onClipboard = (ev: ClipboardEvent) => {
-    if (!currentIdentity()) return;
+    if (!canSend()) return;
     if (
       props.embedded &&
       !(
@@ -197,7 +201,11 @@ export function ChatConversation(props: {
     for (const item of ev.clipboardData?.items ?? []) {
       if (item.kind === "string") {
         item.getAsString((data) => {
-          if (data) {
+          if (
+            data &&
+            canSend() &&
+            props.clientId === s.targetClientId
+          ) {
             void sendClipboard(data, s.targetClientId);
           }
         });
@@ -257,7 +265,8 @@ export function ChatConversation(props: {
       if (fid !== undefined && result?.deleteCache) {
         transferManager.destroyFile(fid);
         const [error] = await catchError(
-          cacheManager.remove(fid),
+          cacheManager.getCache(fid)?.cleanup() ??
+            Promise.resolve(),
         );
         if (error) {
           console.error(error);
@@ -300,6 +309,7 @@ export function ChatConversation(props: {
                 if (!ev) return;
                 if (ev.dataTransfer) {
                   const hasFiles =
+                    canSend() &&
                     ev.dataTransfer?.types.includes(
                       "Files",
                     );
@@ -332,8 +342,9 @@ export function ChatConversation(props: {
                 );
               }}
               onDrop={async (ev) => {
-                if (!currentIdentity()) return;
+                if (!canSend()) return;
                 if (!ev.dataTransfer?.items) return;
+                const target = props.clientId;
                 const abortController =
                   new AbortController();
                 const toastId = toast.loading(
@@ -365,9 +376,24 @@ export function ChatConversation(props: {
                   return;
                 }
 
-                files.forEach((file) => {
-                  sendFile(file, client().clientId);
-                });
+                try {
+                  for (const file of files) {
+                    if (
+                      !canSend() ||
+                      props.clientId !== target
+                    )
+                      break;
+                    await sendFile(file, target);
+                  }
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : t(
+                          "common.notification.unknown_error",
+                        ),
+                  );
+                }
               }}
             >
               <div
@@ -478,13 +504,7 @@ export function ChatConversation(props: {
                 onClick={() => scroll.toBottom()}
               />
             </DropArea>
-            <Show
-              when={
-                currentIdentity() &&
-                clientInfo()?.onlineStatus === "online" &&
-                clientInfo()?.messageChannel
-              }
-            >
+            <Show when={currentIdentity()}>
               <ChatBar
                 client={client()}
                 class="static shrink-0 p-2"

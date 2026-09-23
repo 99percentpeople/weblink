@@ -20,7 +20,7 @@ export function createTaskCenterDialog() {
   const details = clientInfoDialog();
   const dialog = createDialog({
     class:
-      "min-h-[min(34rem,calc(100dvh-2rem))] sm:max-w-4xl lg:max-w-6xl",
+      "h-[min(40rem,calc(100dvh-2rem))] sm:max-w-3xl [&>[data-slot=dialog-body]]:flex [&>[data-slot=dialog-body]]:flex-1 [&>[data-slot=dialog-body]]:overflow-hidden",
     title: () => t("tasks.title"),
     content: () => (
       <TaskList

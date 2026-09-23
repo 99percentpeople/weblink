@@ -1,3 +1,4 @@
+import type { FileFingerprint } from "./file-fingerprint";
 export type MessageID = string;
 export type ProtocolPeerID = string;
 export type ProtocolFileID = string;
@@ -6,6 +7,8 @@ export type ProtocolChunkRange = number | [number, number];
 export const P2P_PROFILE_PROTOCOL_VERSION = 1 as const;
 export const P2P_ROOM_CHAT_PROTOCOL_VERSION = 1 as const;
 export const P2P_ROOM_FILE_PROTOCOL_VERSION = 1 as const;
+export const FILE_CONTENT_FEATURE =
+  "file-content-v1" as const;
 export const ROOM_FILE_FEATURE = "room-file-v1" as const;
 export const ROOM_CHAT_MAX_TEXT_LENGTH = 64 * 1024;
 export const RTC_PROFILE_PROTOCOL_VERSION =
@@ -65,7 +68,8 @@ export type SendRoomTextMessage = BaseExchangeMessage & {
 /** A durable room offer; binary transfer starts only after an explicit pull. */
 export type SendRoomFileMessage = BaseExchangeMessage & {
   type: "send-room-file";
-  version: typeof P2P_ROOM_FILE_PROTOCOL_VERSION;
+  version: typeof P2P_ROOM_FILE_PROTOCOL_VERSION | 2;
+  fingerprint?: FileFingerprint;
   roomId: string;
   senderToken: string;
   recipientToken: string;
@@ -122,6 +126,7 @@ export type ResumeFileMessage = BaseExchangeMessage & {
 
 export type SendFileMessage = BaseExchangeMessage & {
   type: "send-file";
+  fingerprint?: FileFingerprint;
   fid: ProtocolFileID;
   fileName: string;
   fileSize: number;
@@ -195,9 +200,34 @@ export type ClientProfileMessage = BaseExchangeMessage & {
   type: "client-profile";
   version: typeof P2P_PROFILE_PROTOCOL_VERSION;
   profile: ProtocolPeerProfile;
+  features?: string[];
 };
 
+export type FileOfferResult = {
+  fid: string;
+  disposition: "have" | "need" | "deferred";
+  reason?: "user" | "local-job";
+};
+export type FileOfferResultMessage = BaseExchangeMessage &
+  FileOfferResult & {
+    type: "file-offer-result";
+    version: 1;
+  };
+export type FileContentReadyMessage =
+  BaseExchangeMessage & {
+    type: "file-content-ready";
+    version: 1;
+    offerId: string;
+    fid: string;
+    fingerprint: FileFingerprint;
+    roomId?: string;
+    senderToken?: string;
+    recipientToken?: string;
+  };
+
 export type SessionMessage =
+  | FileOfferResultMessage
+  | FileContentReadyMessage
   | SendTextMessage
   | RoomCapabilitiesMessage
   | SendRoomTextMessage
@@ -251,6 +281,7 @@ export const requestSpec = {
   "request-room-file": { ack: "send" },
   "send-clipboard": { ack: "receive" },
   "send-file": { ack: "receive" },
+  "file-content-ready": { ack: "receive" },
   "request-file": { ack: "send" },
   "resume-file": { ack: "receive" },
   "request-storage": { ack: "receive" },
@@ -284,10 +315,18 @@ export type MessageMetadata = {
 };
 
 export type RequestResult<T extends RequestType> =
-  T extends "request-storage" ? StoragePage : AckMessage;
+  T extends "request-storage"
+    ? StoragePage
+    : T extends "send-file" | "send-room-file"
+      ? AckMessage | FileOfferResultMessage
+      : AckMessage;
 
 export type HandlerResult<T extends RequestType> =
-  T extends "request-storage" ? StoragePage : void;
+  T extends "request-storage"
+    ? StoragePage
+    : T extends "send-file" | "send-room-file"
+      ? FileOfferResult | void
+      : void;
 
 export type ProtocolPeer = {
   clientId: ProtocolPeerID;
@@ -310,17 +349,25 @@ export function createSessionMessage<
       target: peer.targetClientId,
     }),
     type,
-    ...(type === "client-profile"
-      ? { version: P2P_PROFILE_PROTOCOL_VERSION }
-      : type === "room-capabilities" ||
-          type === "send-room-text"
-        ? { version: P2P_ROOM_CHAT_PROTOCOL_VERSION }
-        : type === "send-room-file" ||
-            type === "request-room-file"
-          ? { version: P2P_ROOM_FILE_PROTOCOL_VERSION }
-          : type === "request-storage" || type === "storage"
-            ? { version: P2P_STORAGE_PROTOCOL_VERSION }
-            : {}),
+    ...(type === "file-offer-result" ||
+    type === "file-content-ready"
+      ? { version: 1 }
+      : type === "send-room-file" &&
+          "fingerprint" in payload &&
+          payload.fingerprint
+        ? { version: 2 }
+        : type === "client-profile"
+          ? { version: P2P_PROFILE_PROTOCOL_VERSION }
+          : type === "room-capabilities" ||
+              type === "send-room-text"
+            ? { version: P2P_ROOM_CHAT_PROTOCOL_VERSION }
+            : type === "send-room-file" ||
+                type === "request-room-file"
+              ? { version: P2P_ROOM_FILE_PROTOCOL_VERSION }
+              : type === "request-storage" ||
+                  type === "storage"
+                ? { version: P2P_STORAGE_PROTOCOL_VERSION }
+                : {}),
   } as MessageOf<T>;
 }
 

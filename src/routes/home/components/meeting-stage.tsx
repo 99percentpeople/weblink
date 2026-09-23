@@ -16,7 +16,10 @@ import { Portal } from "solid-js/web";
 import { t } from "@/i18n";
 import { MeetingCollapseButton } from "./meeting-collapse-button";
 import { MeetingTile } from "./meeting-tile";
-import type { MeetingSource } from "./meeting-sources";
+import {
+  selectMeetingFeaturedSource,
+  type MeetingSource,
+} from "./meeting-sources";
 import { createMeetingGridLayout } from "./meeting-grid-layout";
 
 export type MeetingStageHandle = { measure(): void };
@@ -78,9 +81,7 @@ export function MeetingStage(
       ),
   );
   const featured = createMemo(() =>
-    sources().find(
-      (source) => source.id === props.pinnedId,
-    ),
+    selectMeetingFeaturedSource(sources(), props.pinnedId),
   );
   const rest = createMemo(() =>
     sources()

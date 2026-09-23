@@ -1,8 +1,9 @@
 import { ComponentProps, onMount } from "solid-js";
 import QRCodeJS from "qrcode";
 
-export interface QRCodeProps
-  extends ComponentProps<"canvas"> {
+const QR_CODE_MARGIN = 2;
+
+export interface QRCodeProps extends ComponentProps<"canvas"> {
   value: string;
   dark?: string;
   light?: string;
@@ -16,13 +17,18 @@ export const QRCode = (props: QRCodeProps) => {
   let canvasRef: HTMLCanvasElement | undefined;
   onMount(async () => {
     if (canvasRef) {
+      const { width, height } = canvasRef.style;
       await QRCodeJS.toCanvas(canvasRef, props.value, {
         color: {
           dark: props.dark ?? "#000000",
           light: props.light ?? "#ffffff",
         },
+        margin: QR_CODE_MARGIN,
         width: props.width ?? 256,
       });
+      // Keep display sizing independent of the renderer's pixel resolution.
+      canvasRef.style.width = width;
+      canvasRef.style.height = height;
 
       if (props.logo) {
         const ctx = canvasRef.getContext("2d");
@@ -64,7 +70,10 @@ export async function downloadQRCode(
   value: string,
   name: string,
 ) {
-  const svg = await QRCodeJS.toString(value);
+  const svg = await QRCodeJS.toString(value, {
+    type: "svg",
+    margin: QR_CODE_MARGIN,
+  });
   const blob = new Blob([svg], {
     type: "image/svg+xml",
   });
@@ -73,5 +82,12 @@ export async function downloadQRCode(
   const a = document.createElement("a");
   a.href = dataurl;
   a.download = name;
-  a.click();
+  a.hidden = true;
+  document.body.append(a);
+  try {
+    a.click();
+  } finally {
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(dataurl), 1000);
+  }
 }

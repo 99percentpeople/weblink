@@ -68,6 +68,86 @@ function sender(
 
 describe("file sender packet limits", () => {
   it.each([
+    { size: 16, ranges: [0], received: 8 },
+    { size: 19, ranges: [[0, 1]], received: 3 },
+    { size: 0, ranges: [], received: 0 },
+  ])(
+    "counts confirmed resume bytes for $size-byte files",
+    async ({ size, ranges, received }) => {
+      const transfer = new FileSender({
+        cache: {
+          id: "file",
+          getInfo: async () => ({
+            id: "file",
+            fileName: "sample.bin",
+            fileSize: size,
+            chunkSize: 8,
+          }),
+        } as unknown as ChunkCache,
+      });
+      const progress = vi.fn();
+      transfer.addEventListener("progress", ({ detail }) =>
+        progress(detail),
+      );
+      try {
+        await transfer.initialize();
+        await transfer.setSendStatus({
+          type: "request-file",
+          id: "resume",
+          fid: "file",
+          client: "peer",
+          target: "self",
+          createdAt: 1,
+          fileName: "sample.bin",
+          fileSize: size,
+          chunkSize: 8,
+          resume: true,
+          ranges:
+            ranges as import("@/libs/utils/range").ChunkRange[],
+        });
+        await transfer.pause();
+        expect(progress).toHaveBeenLastCalledWith({
+          total: size,
+          received,
+        });
+      } finally {
+        transfer.close();
+      }
+    },
+  );
+  it("waits for receiver ranges before reporting resume progress", async () => {
+    const transfer = sender(32768, 32768);
+    const progress = vi.fn();
+    transfer.addEventListener("progress", progress);
+    try {
+      await transfer.initialize();
+      expect(progress).not.toHaveBeenCalled();
+      await transfer.setSendStatus({
+        type: "request-file",
+        id: "resume",
+        fid: "file",
+        client: "peer",
+        target: "self",
+        createdAt: 1,
+        fileName: "image.png",
+        fileSize: contents.length,
+        chunkSize: contents.length,
+        resume: true,
+        ranges: [],
+      });
+      expect(progress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: {
+            total: contents.length,
+            received: contents.length,
+          },
+        }),
+      );
+    } finally {
+      transfer.close();
+    }
+  });
+  it.each([
     { block: 32768, limit: 32768, packet: 32768 },
     { block: 32768, limit: 8192, packet: 8192 },
     {

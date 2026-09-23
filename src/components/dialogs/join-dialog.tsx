@@ -1,4 +1,3 @@
-import { createStore, reconcile } from "solid-js/store";
 import { setClientProfile } from "@/libs/state/profile-store";
 import { createDialog } from "./dialog";
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,12 @@ import {
 } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { optional } from "@/libs/domain/utils/optional";
-import { createMemo, createSignal, Show } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  createUniqueId,
+  Show,
+} from "solid-js";
 import {
   Avatar,
   AvatarFallback,
@@ -42,14 +46,15 @@ import {
 import { appState } from "@/libs/state/app-state";
 
 export const createRoomDialog = () => {
-  const [draft, setDraft] = createStore({
-    ...appState.profile,
-  });
   const [step, setStep] = createSignal<"profile" | "room">(
     "profile",
   );
   const [showPassword, setShowPassword] =
     createSignal(false);
+  const [uploadingAvatar, setUploadingAvatar] =
+    createSignal(false);
+  const avatarInputId = createUniqueId();
+  const passwordInputId = createUniqueId();
   let profileForm: HTMLFormElement | undefined;
   let roomForm: HTMLFormElement | undefined;
   let avatarFileInput: HTMLInputElement | undefined;
@@ -63,7 +68,8 @@ export const createRoomDialog = () => {
     close,
     submit,
   } = createDialog({
-    class: "h-[32rem] [&_[data-slot=dialog-body]]:flex-1",
+    class:
+      "h-[34rem] sm:max-w-md [&_[data-slot=dialog-body]]:flex-1",
     title: () => t("common.join_form.title"),
     description: () =>
       t(
@@ -73,7 +79,10 @@ export const createRoomDialog = () => {
       ),
     content: () => (
       <div class="flex min-h-0 flex-col gap-5 p-1">
-        <div class="flex items-center px-1">
+        <nav
+          class="flex items-center px-1"
+          aria-label={t("common.join_form.title")}
+        >
           <button
             type="button"
             class="group flex min-w-0 items-center gap-2 text-left"
@@ -105,8 +114,10 @@ export const createRoomDialog = () => {
               {t("common.join_form.steps.profile")}
             </span>
           </button>
-
-          <div class="bg-border mx-3 h-px min-w-6 flex-1">
+          <div
+            class="bg-border mx-3 h-px min-w-6 flex-1"
+            aria-hidden="true"
+          >
             <div
               class="bg-primary h-full origin-left transition-transform"
               classList={{
@@ -115,14 +126,13 @@ export const createRoomDialog = () => {
               }}
             />
           </div>
-
           <button
             type="button"
             class="group flex min-w-0 items-center gap-2 text-left"
             aria-current={
               step() === "room" ? "step" : undefined
             }
-            onClick={goToRoomStep}
+            onClick={() => setStep("room")}
           >
             <span
               class="border-border text-muted-foreground flex size-7 shrink-0
@@ -145,7 +155,7 @@ export const createRoomDialog = () => {
               {t("common.join_form.steps.room")}
             </span>
           </button>
-        </div>
+        </nav>
 
         <form
           ref={profileForm}
@@ -162,17 +172,22 @@ export const createRoomDialog = () => {
             </span>
             <Input
               required
-              value={draft.name}
+              pattern={".*\\S.*"}
+              autocomplete="nickname"
+              value={appState.profile.name}
               onInput={(ev) =>
-                setDraft("name", ev.currentTarget.value)
+                setClientProfile(
+                  "name",
+                  ev.currentTarget.value,
+                )
               }
             />
           </label>
 
           <div class="flex flex-col gap-2">
-            <span class="input-label">
+            <label for={avatarInputId} class="input-label">
               {t("common.join_form.avatar")}
-            </span>
+            </label>
             <div class="flex items-center gap-3">
               <button
                 type="button"
@@ -182,14 +197,19 @@ export const createRoomDialog = () => {
                 aria-label={t(
                   "common.join_form.upload_avatar",
                 )}
+                disabled={uploadingAvatar()}
                 onClick={() => avatarFileInput?.click()}
               >
                 <Avatar class="size-14">
                   <AvatarImage
-                    src={draft.avatar ?? undefined}
+                    src={
+                      appState.profile.avatar ?? undefined
+                    }
                   />
-                  <AvatarFallback seed={draft.name}>
-                    {getInitials(draft.name)}
+                  <AvatarFallback
+                    seed={appState.profile.name}
+                  >
+                    {getInitials(appState.profile.name)}
                   </AvatarFallback>
                 </Avatar>
               </button>
@@ -197,13 +217,14 @@ export const createRoomDialog = () => {
               <div class="min-w-0 flex-1">
                 <InputGroup>
                   <InputGroupInput
+                    id={avatarInputId}
                     placeholder={t(
                       "common.join_form.avatar_placeholder",
                     )}
                     type="url"
-                    value={draft.avatar ?? ""}
+                    value={appState.profile.avatar ?? ""}
                     onInput={(ev) =>
-                      setDraft(
+                      setClientProfile(
                         "avatar",
                         optional(ev.currentTarget.value),
                       )
@@ -211,6 +232,7 @@ export const createRoomDialog = () => {
                   />
                   <InputGroupButton
                     type="button"
+                    disabled={uploadingAvatar()}
                     aria-label={t(
                       "common.join_form.upload_avatar",
                     )}
@@ -237,26 +259,33 @@ export const createRoomDialog = () => {
                 accept="image/*"
                 class="hidden"
                 onChange={async (ev) => {
-                  const file =
-                    ev.currentTarget.files?.item(0);
+                  const input = ev.currentTarget;
+                  const file = input.files?.item(0);
                   if (!file) return;
-
-                  const url =
-                    await imageFileToFilledSquareAvatar(
-                      file,
-                      128,
+                  setUploadingAvatar(true);
+                  try {
+                    const url =
+                      await imageFileToFilledSquareAvatar(
+                        file,
+                        128,
+                      );
+                    setClientProfile("avatar", url);
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : String(error),
                     );
-                  setDraft("avatar", url);
-                  ev.currentTarget.value = "";
+                  } finally {
+                    input.value = "";
+                    setUploadingAvatar(false);
+                  }
                 }}
               />
             </div>
           </div>
 
-          <div
-            class="border-border/60 bg-muted/30 flex items-center gap-3
-              rounded-md border px-3 py-2.5"
-          >
+          <div class="bg-muted/40 flex items-center gap-3 rounded-lg px-3 py-2.5">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1">
                 <p class="text-muted-foreground text-xs font-medium">
@@ -285,9 +314,9 @@ export const createRoomDialog = () => {
               </div>
               <p
                 class="text-foreground/80 mt-0.5 truncate font-mono text-xs"
-                title={draft.clientId}
+                title={appState.profile.clientId}
               >
-                {draft.clientId}
+                {appState.profile.clientId}
               </p>
             </div>
             <button
@@ -300,7 +329,7 @@ export const createRoomDialog = () => {
               aria-label={t("common.action.copy")}
               onClick={() =>
                 navigator.clipboard.writeText(
-                  draft.clientId,
+                  appState.profile.clientId,
                 )
               }
             >
@@ -315,6 +344,7 @@ export const createRoomDialog = () => {
           classList={{ hidden: step() !== "room" }}
           onSubmit={(ev) => {
             ev.preventDefault();
+            if (uploadingAvatar()) return;
             if (!profileForm?.checkValidity()) {
               setStep("profile");
               queueMicrotask(() =>
@@ -322,11 +352,8 @@ export const createRoomDialog = () => {
               );
               return;
             }
-            setClientProfile({
-              ...draft,
-              initalJoin: false,
-            });
-            submit({ ...draft, initalJoin: false });
+            setClientProfile("initalJoin", false);
+            submit({ ...appState.profile });
           }}
         >
           <label class="flex flex-col gap-2">
@@ -335,18 +362,25 @@ export const createRoomDialog = () => {
             </span>
             <Input
               required
-              value={draft.roomId}
+              pattern={".*\\S.*"}
+              value={appState.profile.roomId}
               onInput={(ev) =>
-                setDraft("roomId", ev.currentTarget.value)
+                setClientProfile(
+                  "roomId",
+                  ev.currentTarget.value,
+                )
               }
             />
           </label>
 
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-1">
-              <span class="input-label">
+              <label
+                for={passwordInputId}
+                class="input-label"
+              >
                 {t("common.join_form.password.title")}
-              </span>
+              </label>
               <Tooltip>
                 <TooltipTrigger
                   as="button"
@@ -371,14 +405,15 @@ export const createRoomDialog = () => {
 
             <InputGroup>
               <InputGroupInput
+                id={passwordInputId}
                 type={showPassword() ? "text" : "password"}
                 autocomplete="off"
                 placeholder={t(
                   "common.join_form.password.placeholder",
                 )}
-                value={draft.password ?? ""}
+                value={appState.profile.password ?? ""}
                 onInput={(ev) =>
-                  setDraft(
+                  setClientProfile(
                     "password",
                     optional(ev.currentTarget.value),
                   )
@@ -420,7 +455,7 @@ export const createRoomDialog = () => {
                 onClick={async () => {
                   const password =
                     await generateStrongPassword();
-                  setDraft("password", password);
+                  setClientProfile("password", password);
                 }}
               >
                 <IconCasino class="size-4" />
@@ -432,10 +467,10 @@ export const createRoomDialog = () => {
           </div>
 
           <Switch
-            class="flex items-center justify-between"
-            checked={draft.autoJoin}
+            class="flex items-center justify-between gap-4 border-t pt-4"
+            checked={appState.profile.autoJoin}
             onChange={(isChecked) =>
-              setDraft("autoJoin", isChecked)
+              setClientProfile("autoJoin", isChecked)
             }
           >
             <SwitchLabel>
@@ -446,6 +481,9 @@ export const createRoomDialog = () => {
             </SwitchControl>
           </Switch>
         </form>
+        <p class="text-muted-foreground text-xs leading-relaxed">
+          {t("common.join_form.autosave_hint")}
+        </p>
       </div>
     ),
     confirm: (
@@ -454,13 +492,20 @@ export const createRoomDialog = () => {
         fallback={
           <Button
             type="button"
+            class="min-w-24"
+            disabled={uploadingAvatar()}
             onClick={() => roomForm?.requestSubmit()}
           >
-            {t("common.action.confirm")}
+            {t("client.menu.connect")}
           </Button>
         }
       >
-        <Button type="button" onClick={goToRoomStep}>
+        <Button
+          type="button"
+          class="min-w-24"
+          disabled={uploadingAvatar()}
+          onClick={goToRoomStep}
+        >
           {t("common.action.continue")}
         </Button>
       </Show>
@@ -468,17 +513,18 @@ export const createRoomDialog = () => {
     cancel: (
       <Button
         type="button"
-        variant="destructive"
+        variant="outline"
         onClick={() => close()}
       >
-        {t("common.action.cancel")}
+        {t("common.action.close")}
       </Button>
     ),
   });
 
   const open = () => {
-    setDraft(reconcile({ ...appState.profile }));
-    setStep(draft.initalJoin ? "profile" : "room");
+    setStep(
+      appState.profile.initalJoin ? "profile" : "room",
+    );
     setShowPassword(false);
     return openDialog();
   };

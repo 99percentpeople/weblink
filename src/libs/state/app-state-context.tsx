@@ -1,3 +1,6 @@
+import { t } from "@/i18n";
+import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
+import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
 import {
   Component,
   createContext,
@@ -11,7 +14,10 @@ import {
   useContext,
   untrack,
 } from "solid-js";
-import type { ChunkMetaData } from "@/libs/domain/file";
+import type {
+  ChunkMetaData,
+  FileSource,
+} from "@/libs/domain/file";
 import type { PeerSession } from "@/libs/domain/session";
 import type { ClientID, FileID } from "@/libs/domain/ids";
 import type { RoomStatus } from "@/libs/state/app-state";
@@ -41,6 +47,7 @@ import type {
   StoreMessage,
 } from "@/libs/domain/message";
 import { messageStores } from "@/libs/application/messaging/message-store";
+import { ConversationHistoryService } from "@/libs/application/messaging/conversation-history-service";
 import { catchError } from "@/libs/catch";
 import {
   SpeedTestService,
@@ -61,6 +68,10 @@ import { roomConversationId } from "@/libs/domain/conversation";
 import { getRoomNamespace } from "@/libs/application/room-identity";
 
 export interface AppStateContextProps {
+  conversationHistory: Pick<
+    ConversationHistoryService,
+    "cacheLocalTextBatch"
+  >;
   joinRoom: () => Promise<void>;
   leaveRoom: () => void;
   activeRoomConversationId: Accessor<string | null>;
@@ -74,7 +85,7 @@ export interface AppStateContextProps {
   >;
   sendRoomText: (text: string) => Promise<void>;
   roomFileCapabilities: AppStateContextProps["roomChatCapabilities"];
-  sendRoomFile: (file: File) => Promise<void>;
+  sendRoomFile: (file: FileSource) => Promise<void>;
   requestRoomFile: (
     message: FileTransferMessage,
   ) => Promise<void>;
@@ -88,7 +99,7 @@ export interface AppStateContextProps {
     target: ClientID | ClientID[],
   ) => Promise<void>;
   sendFile: (
-    file: File,
+    file: FileSource,
     target: ClientID | ClientID[],
   ) => Promise<void>;
   sendClipboard: (
@@ -143,8 +154,18 @@ export const AppStateProvider: Component<
   AppStateProviderProps
 > = (props) => {
   const localStream = props.localStreamService.stream;
+  const conversationHistory =
+    new ConversationHistoryService(
+      messageStores,
+      () => appState.profile.clientId,
+    );
   const rtc = createRtcService();
   const protocol = createRtcProtocol();
+  const fileContent = new FileContentCapabilities(
+    protocol,
+    rtc,
+  );
+  onCleanup(() => fileContent.dispose());
   const messaging = new PeerMessagingService(
     protocol,
     messageStores,
@@ -186,6 +207,14 @@ export const AppStateProvider: Component<
     >({});
   const roomMessaging = new RoomMessagingService(protocol, {
     supportsFiles: true,
+    supportsContent: (session) =>
+      fileContent.supports(session),
+    reuseFile: (message, signal) =>
+      files.reuseRoomOffer(message, signal),
+    onFileReused: async (message, peerId) => {
+      completeLocalFile(messageStores, message.id, peerId);
+      await messageStores.flushMessage(message.id);
+    },
     onFileReceived: (message) => {
       // Receiving bytes must not delay the metadata ACK or its local history.
       void runFileAction(() =>
@@ -224,6 +253,8 @@ export const AppStateProvider: Component<
     });
   });
   onCleanup(() => roomMessaging.dispose());
+  cacheManager.isCacheInUse = (cache) =>
+    transferManager.isCacheInUse(cache);
   const files = new FileTransferService({
     protocol,
     rtc,
@@ -233,8 +264,34 @@ export const AppStateProvider: Component<
     messaging,
     getSession: (peerId) => sessionService.sessions[peerId],
     getChunkSize: () => appState.options.chunkSize,
+    automaticCacheDeletion: () =>
+      appState.options.automaticCacheDeletion,
+    supportsContent: (session) =>
+      fileContent.supports(session),
+    validateRoomReady: (session, message) => {
+      roomMessaging.validateFileBinding(
+        session,
+        message as Parameters<
+          typeof roomMessaging.validateFileBinding
+        >[1],
+      );
+    },
   });
   onCleanup(() => files.dispose());
+  let previousAttachments = new Set<string>();
+  createEffect(() => {
+    const current = new Set(
+      appState.message.messages.flatMap((message) =>
+        message.type === "file" && message.fid
+          ? [message.fid]
+          : [],
+      ),
+    );
+    for (const id of previousAttachments)
+      if (!current.has(id))
+        untrack(() => files.releaseMessage(id));
+    previousAttachments = current;
+  });
   const roomFiles = new RoomFileSharingService(protocol, {
     rooms: roomMessaging,
     files,
@@ -281,6 +338,8 @@ export const AppStateProvider: Component<
   });
   let clipboardCacheData: SendClipboardMessage[] = [];
   const tasks = createTaskService({
+    preparations: cacheManager.preparations,
+    clearPreparations: cacheManager.clearPreparations,
     clientId: () => appState.profile.clientId,
     messages: () => appState.message.messages,
     caches: () => appState.cache.cacheInfo,
@@ -555,18 +614,32 @@ export const AppStateProvider: Component<
     text: string,
     target: ClientID | ClientID[],
   ) {
-    for (const session of getTargetSessions(target)) {
-      await messaging.send(session, "send-text", {
-        data: text,
-      });
+    const sessions = getTargetSessions(target);
+    if (
+      !sessions.length ||
+      sessions.some(
+        (session) => !session.isMessageChannelReady,
+      )
+    )
+      throw new Error(t("conversations.composer_offline"));
+    for (const session of sessions) {
+      await messaging.send(
+        session,
+        "send-text",
+        { data: text },
+        { throwOnError: true },
+      );
     }
   }
 
   async function sendFile(
-    file: File,
+    file: FileSource,
     target: ClientID | ClientID[],
   ) {
-    for (const session of getTargetSessions(target))
+    const sessions = getTargetSessions(target);
+    if (!sessions.length)
+      throw new Error(t("file_library.peer_unavailable"));
+    for (const session of sessions)
       await runFileAction(() =>
         files.sendFile(session, file),
       );
@@ -645,6 +718,7 @@ export const AppStateProvider: Component<
   return (
     <AppStateContext.Provider
       value={{
+        conversationHistory,
         joinRoom,
         leaveRoom,
         activeRoomConversationId: () =>

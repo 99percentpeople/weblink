@@ -78,6 +78,7 @@ export class MessageStores {
     appState.message.status;
 
   private initialization: Promise<void> | null = null;
+  private hydrated = false;
   private lastSequence = 0;
 
   constructor(
@@ -260,15 +261,23 @@ export class MessageStores {
                     return {
                       ...message,
                       transferStatus: "paused",
+                      localContentPending: false,
+                      localContentDetached: false,
                     } satisfies FileTransferMessage;
                   }
                   return message;
                 }),
             ),
           );
+          this.hydrated = true;
           setAppState("message", "status", "ready");
         },
-      );
+      )
+      .catch((error) => {
+        this.initialization = null;
+        this.hydrated = false;
+        throw error;
+      });
 
     return this.initialization;
   }
@@ -385,16 +394,16 @@ export class MessageStores {
       });
   }
 
-  private persistClient(client: Client): void {
+  private persistClient(client: Client): Promise<void> {
     const snapshot = snapshotClient(client);
-    void this.repository
-      .putClient(snapshot)
-      .catch((error) => {
-        console.error(
-          "[MessageStore] could not persist client",
-          error,
-        );
-      });
+    const persisted = this.repository.putClient(snapshot);
+    void persisted.catch((error) => {
+      console.error(
+        "[MessageStore] could not persist client",
+        error,
+      );
+    });
+    return persisted;
   }
 
   private removePersistedMessage(
@@ -530,7 +539,28 @@ export class MessageStores {
     this.persistMessage(message);
   }
 
+  /** A content receipt must follow durable history, not just reactive publication. */
+  async flushMessage(id: string): Promise<void> {
+    await this.initialize();
+    const message = this.messages.find(
+      (item) => item.id === id,
+    );
+    if (!message) throw new Error("Message was removed");
+    if (message.room)
+      await this.roomMessages.persistCurrentRoomMessage(id);
+    else {
+      await this.repository.putMessage(
+        snapshotStoreMessage(message),
+      );
+      if (!this.messages.some((item) => item.id === id)) {
+        await this.repository.removeMessage(id);
+        throw new Error("Message was removed");
+      }
+    }
+  }
+
   async addMessage(message: StoreMessage): Promise<void> {
+    if (!this.hydrated) await this.initialize();
     message = this.metadata.attach(message);
     this.setMessages(
       produce((state) => {
@@ -546,7 +576,20 @@ export class MessageStores {
       await this.repository.removeMessage(message.id);
   }
 
-  setClient(client: Client): void {
+  setClient(client: Client): Promise<void> {
+    if (!this.hydrated) {
+      const snapshot = snapshotClient(client);
+      const pending = this.initialize().then(() =>
+        this.setClient(snapshot),
+      );
+      void pending.catch((error) => {
+        console.error(
+          "[MessageStore] could not cache client after hydration",
+          error,
+        );
+      });
+      return pending;
+    }
     const index = this.clients.findIndex(
       (candidate) => candidate.clientId === client.clientId,
     );
@@ -557,7 +600,7 @@ export class MessageStores {
         produce((state) => state.push(client)),
       );
     }
-    this.persistClient(client);
+    const persisted = this.persistClient(client);
     for (
       let index = 0;
       index < this.conversations.length;
@@ -579,6 +622,7 @@ export class MessageStores {
       }
     }
     this.ensureDirectConversation(client.clientId);
+    return persisted;
   }
 
   deleteClient(clientId: ClientID): void {

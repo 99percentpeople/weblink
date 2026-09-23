@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createRoot, createSignal } from "solid-js";
 import {
   createTaskService,
@@ -23,9 +29,10 @@ import type { FileMetaData } from "@/libs/domain/file";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
 
 const disposers: Array<() => void> = [];
-afterEach(() =>
-  disposers.splice(0).forEach((dispose) => dispose()),
-);
+afterEach(() => {
+  disposers.splice(0).forEach((dispose) => dispose());
+  vi.restoreAllMocks();
+});
 const file = (
   overrides: Partial<FileTransferMessage> = {},
 ): FileTransferMessage => ({
@@ -76,24 +83,29 @@ function setup(initial: StoreMessage[] = []) {
     >({});
     const [transfers, setTransfers] =
       createSignal<FileTransferStates>({});
+    const [preparations, setPreparations] = createSignal<
+      ReturnType<NonNullable<TaskSources["preparations"]>>
+    >([]);
     const sources: TaskSources = {
       clientId: () => "self",
       messages,
       caches,
       transfers,
+      preparations,
     };
     return {
       service: createTaskService(sources),
       setMessages,
       setCaches,
       setTransfers,
+      setPreparations,
       messages,
     };
   });
 }
 
 describe("application task list", () => {
-  it("unifies file sends, file receives and speed tests with active work first", () => {
+  it("unifies file sends, file receives and speed tests with the latest status change first", () => {
     const { service, setTransfers } = setup([
       file(),
       file({
@@ -110,6 +122,120 @@ describe("application task list", () => {
       service.tasks().map((task) => task.kind),
     ).toEqual(["speed-test", "file-send", "file-receive"]);
     expect(service.activeCount()).toBe(2);
+  });
+  it("sorts pause, resume and completion by status change time without progress updates moving rows", () => {
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(1000);
+    const { service, setTransfers, setMessages } = setup([
+      file({ progress: { total: 1024, received: 256 } }),
+    ]);
+    setTransfers({ active: live() });
+    clock.mockReturnValue(2000);
+    service.recordSpeedTest(run());
+    expect(service.tasks().map((task) => task.id)).toEqual([
+      "speed:run-1",
+      "file:message-1",
+    ]);
+    clock.mockReturnValue(3000);
+    setMessages([
+      file({ progress: { total: 1024, received: 512 } }),
+    ]);
+    expect(
+      service.tasks().map((task) => task.statusChangedAt),
+    ).toEqual([2000, 1000]);
+    setTransfers({});
+    expect(service.tasks()[0]).toMatchObject({
+      id: "file:message-1",
+      status: "paused",
+      statusChangedAt: 3000,
+    });
+    clock.mockReturnValue(4000);
+    service.recordSpeedTest(
+      run("run-1", {
+        progress: { phase: "download", bytes: 2048 },
+      }),
+    );
+    expect(service.tasks()[0].id).toBe("file:message-1");
+    setTransfers({ active: live() });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "running",
+      statusChangedAt: 4000,
+    });
+    clock.mockReturnValue(5000);
+    setMessages([file({ transferStatus: "complete" })]);
+    setTransfers({});
+    expect(service.tasks()[0]).toMatchObject({
+      status: "completed",
+      statusChangedAt: 5000,
+    });
+    expect(service.tasks()[1].status).toBe("running");
+  });
+
+  it("keeps equal-time ordering deterministic when source arrays are rebuilt or reordered", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+    const a = file({ id: "a" });
+    const b = file({ id: "b" });
+    const { service, setMessages } = setup([b, a]);
+    expect(service.tasks().map((task) => task.id)).toEqual([
+      "file:a",
+      "file:b",
+    ]);
+    const failedA = {
+      ...a,
+      transferStatus: "error" as const,
+    };
+    const failedB = {
+      ...b,
+      transferStatus: "error" as const,
+    };
+    setMessages([failedA, b]);
+    setMessages([failedA, failedB]);
+    expect(service.tasks().map((task) => task.id)).toEqual([
+      "file:b",
+      "file:a",
+    ]);
+    setMessages([{ ...failedB }, { ...failedA }]);
+    expect(service.tasks().map((task) => task.id)).toEqual([
+      "file:b",
+      "file:a",
+    ]);
+  });
+
+  it("uses the same status ordering for file preparation and retains it when other history is cleared", () => {
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(1000);
+    const { service, setPreparations, setMessages } = setup(
+      [file()],
+    );
+    const preparation = {
+      id: "hash",
+      kind: "file-prepare" as const,
+      peerId: "",
+      fileName: "sample.bin",
+      createdAt: 50,
+      status: "running" as const,
+      bytes: 0,
+      total: 1024,
+      cancel: () => {},
+    };
+    setPreparations([preparation]);
+    clock.mockReturnValue(2000);
+    setMessages([file({ transferStatus: "error" })]);
+    expect(service.tasks()[0].id).toBe("file:message-1");
+    clock.mockReturnValue(3000);
+    setPreparations([{ ...preparation, bytes: 512 }]);
+    expect(service.tasks()[1].statusChangedAt).toBe(1000);
+    service.clearFinished();
+    expect(service.tasks()[0]).toMatchObject({
+      id: "hash",
+      statusChangedAt: 1000,
+    });
+    setPreparations([
+      { ...preparation, status: "completed", bytes: 1024 },
+    ]);
+    expect(service.tasks()[0].statusChangedAt).toBe(3000);
   });
   it("ignores text messages and unrelated peers' messages", () => {
     const { service } = setup([
@@ -196,6 +322,93 @@ describe("application task list", () => {
       file({ status: "sending", transferStatus: "init" }),
     ]);
     expect(service.tasks()[0].status).toBe("waiting");
+  });
+  it("retains progress after a run pauses and uses exact cached bytes for restored downloads", () => {
+    const {
+      service,
+      setCaches,
+      setTransfers,
+      setMessages,
+    } = setup([
+      file({
+        client: "peer",
+        target: "self",
+        progress: { total: 1024, received: 512 },
+      }),
+    ]);
+    setTransfers({ active: live() });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "running",
+      bytes: 512,
+    });
+    setTransfers({});
+    expect(service.tasks()[0]).toMatchObject({
+      status: "paused",
+      bytes: 512,
+    });
+    setMessages([
+      file({
+        client: "peer",
+        target: "self",
+        status: "sending",
+      }),
+    ]);
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        cachedBytes: 700,
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "paused",
+      bytes: 700,
+    });
+    expect(service.activeCount()).toBe(0);
+    // A complete local source says nothing about the peer's upload progress.
+    setMessages([
+      file({ progress: { total: 1024, received: 256 } }),
+    ]);
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        cachedBytes: 1024,
+        isComplete: true,
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "paused",
+      bytes: 256,
+    });
+  });
+
+  it("freezes a detached shared download while its source continues for another message", () => {
+    const message = file({
+      client: "peer",
+      target: "self",
+      localContentDetached: true,
+      progress: { total: 1024, received: 256 },
+    });
+    const { service, setTransfers, setCaches } = setup([
+      message,
+    ]);
+    setTransfers({ active: live() });
+    setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        cachedBytes: 1024,
+        isComplete: true,
+      },
+    });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "paused",
+      bytes: 256,
+    });
   });
   it("does not attach one live transfer to every historical message for that file", () => {
     const { service, setTransfers } = setup([
@@ -341,7 +554,11 @@ describe("application task list", () => {
         run(String(i), { status: "done", startedAt: i }),
       );
     expect(service.tasks()).toHaveLength(51);
-    expect(service.tasks()[0].id).toBe("speed:active");
+    expect(
+      service
+        .tasks()
+        .some((task) => task.id === "speed:active"),
+    ).toBe(true);
     expect(service.latestSpeedTest("peer")?.id).toBe("60");
   });
 });

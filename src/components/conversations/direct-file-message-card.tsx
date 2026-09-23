@@ -20,10 +20,12 @@ export function DirectFileMessageCard(props: {
   const [pending, setPending] = createSignal(false);
   const live = createMemo(
     () =>
-      !!findMessageTransfer(
-        appState.transfer.transfers,
-        props.message,
-      ),
+      !props.message.localContentDetached &&
+      (!!props.message.localContentPending ||
+        !!findMessageTransfer(
+          appState.transfer.transfers,
+          props.message,
+        )),
   );
   const sender = () =>
     props.message.client === appState.profile.clientId;
@@ -37,7 +39,7 @@ export function DirectFileMessageCard(props: {
   const complete = () =>
     props.message.transferStatus === "complete";
   const canResume = () =>
-    !!cache() &&
+    !!props.message.fid &&
     !!appState.session.clientViewData[peerId()]
       ?.messageChannel &&
     props.message.status === "received" &&
@@ -59,7 +61,26 @@ export function DirectFileMessageCard(props: {
         );
   const act = async () => {
     if (pending()) return;
-    const info = cache();
+    const info =
+      cache() ??
+      (props.message.fid
+        ? {
+            id: props.message.fid,
+            fileName: props.message.fileName,
+            fileSize: props.message.fileSize,
+            lastModified: props.message.lastModified,
+            mimetype: props.message.mimeType,
+            chunkSize: props.message.chunkSize,
+            fingerprint: props.message.fingerprint,
+          }
+        : undefined);
+    if (
+      props.message.localContentPending &&
+      props.message.fid
+    ) {
+      await state.pauseFile(props.message.fid, peerId());
+      return;
+    }
     if (!info) return;
     setPending(true);
     try {
@@ -95,15 +116,21 @@ export function DirectFileMessageCard(props: {
       size={props.message.fileSize}
       mimeType={props.message.mimeType ?? cache()?.mimetype}
       details={
-        <Show when={showTransfer()}>
-          <FileTransferDetails
-            status={status()}
-            received={props.message.progress?.received}
-            total={props.message.fileSize}
-            live={live()}
-            error={props.message.error}
-          />
-        </Show>
+        props.message.completionSource === "local" ? (
+          <span class="text-muted-foreground text-[11px]">
+            {t("file_library.local_completion")}
+          </span>
+        ) : (
+          <Show when={showTransfer()}>
+            <FileTransferDetails
+              status={status()}
+              received={props.message.progress?.received}
+              total={props.message.fileSize}
+              live={live()}
+              error={props.message.error}
+            />
+          </Show>
+        )
       }
       action={
         <Show when={showTransfer()}>

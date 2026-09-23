@@ -103,6 +103,10 @@ export class TransferRegistry {
     return entry?.run === run ? entry : undefined;
   }
 
+  isCacheInUse(cache: ChunkCache): boolean {
+    return (this.cacheUsers.get(cache) ?? 0) > 0;
+  }
+
   /** Preparation also holds a lease so another peer's completion cannot delete its cache. */
   retainCache(cache: ChunkCache): () => void {
     if (this.deleting.has(cache))
@@ -362,6 +366,8 @@ export class TransferRegistry {
           this.deleteWhenIdle.add(run.transferer.cache);
       }
       this.destroy(run);
+      if (run.transferer.mode === TransferMode.Receive)
+        await run.transferer.cache.retireReceiveStorage?.();
     } catch (error) {
       this.fail(run, error);
     }

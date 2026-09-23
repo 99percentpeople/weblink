@@ -44,6 +44,82 @@ beforeEach(() => {
 });
 
 describe("MessageStores persistence boundary", () => {
+  it("defers client and local message writes until the repository snapshot is loaded", async () => {
+    const snapshot =
+      deferred<
+        Awaited<ReturnType<MessageRepository["load"]>>
+      >();
+    const putClient = vi.fn(async () => {});
+    const putMessage = vi.fn(async () => {});
+    const store = new MessageStores(
+      createRepository({
+        load: () => snapshot.promise,
+        putClient,
+        putMessage,
+      }),
+    );
+    const client = store.setClient({
+      clientId: "peer",
+      name: "Peer",
+      avatar: null,
+    });
+    const message = store.addMessage({
+      id: "local-note",
+      type: "text",
+      client: "peer",
+      target: "self",
+      data: "Hello",
+      createdAt: 1,
+    });
+    expect(putClient).not.toHaveBeenCalled();
+    expect(putMessage).not.toHaveBeenCalled();
+    snapshot.resolve({
+      clients: [],
+      messages: [],
+      conversations: [],
+    });
+    await Promise.all([client, message]);
+    expect(store.clients).toEqual([
+      { clientId: "peer", name: "Peer", avatar: null },
+    ]);
+    expect(store.messages.map((item) => item.id)).toEqual([
+      "local-note",
+    ]);
+  });
+
+  it("allows a later API call to retry failed hydration", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const load = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error("temporarily unavailable"),
+        )
+        .mockResolvedValue({
+          clients: [],
+          messages: [],
+          conversations: [],
+        });
+      const store = new MessageStores(
+        createRepository({ load }),
+      );
+      const client = {
+        clientId: "peer",
+        name: "Peer",
+        avatar: null,
+      };
+      await expect(store.setClient(client)).rejects.toThrow(
+        "temporarily unavailable",
+      );
+      await store.setClient(client);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(store.status()).toBe("ready");
+      expect(store.clients).toEqual([client]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("publishes ready only after the repository snapshot is loaded", async () => {
     const snapshot =
       deferred<

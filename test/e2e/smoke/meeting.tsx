@@ -938,6 +938,9 @@ async function main() {
     );
   };
   setChatTestContext({
+    conversationHistory: {
+      cacheLocalTextBatch: unexpected,
+    },
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
     speedTestState: () => ({
@@ -968,6 +971,10 @@ async function main() {
       kai: "supported",
     }),
     sendRoomFile: async (file) => {
+      if (!(file instanceof File))
+        throw new Error(
+          "This fixture accepts local files only",
+        );
       sentFiles++;
       const offer = fileOffer(
         `sent-file-${sentFiles}`,

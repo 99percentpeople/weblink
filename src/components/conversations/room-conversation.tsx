@@ -5,9 +5,9 @@ import {
   Show,
 } from "solid-js";
 import { A, useLocation } from "@solidjs/router";
-import { ConversationBackButton } from "./conversation-back-button";
+import { ConversationHeader } from "./conversation-header";
 import { makePersisted } from "@solid-primitives/storage";
-import { ChevronLeft, Users, Video } from "lucide-solid";
+import { Users, Video } from "lucide-solid";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import { IconSettings } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -145,69 +145,47 @@ export function RoomConversation(props: {
           : "h-[calc(100dvh-var(--mobile-header-height))] md:h-dvh",
       )}
     >
-      <header
-        class="bg-background/80 flex shrink-0 items-center gap-2 border-b
-          p-3"
-      >
-        <Show when={props.onBack}>
-          {(onBack) => (
-            <ConversationBackButton onClick={onBack()} />
-          )}
-        </Show>
-        <Show when={!props.embedded && !props.onBack}>
-          <Button
-            as={A}
-            href="/"
-            size="icon"
-            variant="ghost"
-            aria-label={t("404.home")}
-          >
-            <ChevronLeft class="size-5" />
-          </Button>
-        </Show>
-        <span
-          class="bg-primary/10 text-primary flex size-9 shrink-0 items-center
-            justify-center rounded-full"
-        >
-          <Users class="size-5" />
-        </span>
-        <div class="min-w-0 flex-1">
-          <h2 class="truncate text-sm font-semibold">
-            {props.conversation.title}
-          </h2>
-          <p class="text-muted-foreground text-xs">
-            {active()
-              ? t("conversations.members_online", {
-                  count: peers().length + 1,
-                })
-              : t("conversations.local_history")}
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          class="shrink-0"
-          aria-label={t("room_dialog.open")}
-          title={t("room_dialog.open")}
-          onClick={() =>
-            void openRoomInfo(props.conversation.id)
-          }
-        >
-          <IconSettings class="size-5" />
-        </Button>
-        <Show when={active() && !props.embedded}>
-          <Button
-            as={A}
-            href="/"
-            size="icon"
-            variant="ghost"
-            aria-label={t("meeting.title")}
-          >
-            <Video class="size-5" />
-          </Button>
-        </Show>
-      </header>
+      <ConversationHeader
+        title={props.conversation.title}
+        subtitle={
+          active()
+            ? t("conversations.members_online", {
+                count: peers().length + 1,
+              })
+            : t("conversations.local_history")
+        }
+        icon={<Users class="size-5" />}
+        embedded={props.embedded}
+        onBack={props.onBack}
+        actions={
+          <>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              class="shrink-0"
+              aria-label={t("room_dialog.open")}
+              title={t("room_dialog.open")}
+              onClick={() =>
+                void openRoomInfo(props.conversation.id)
+              }
+            >
+              <IconSettings class="size-5" />
+            </Button>
+            <Show when={active() && !props.embedded}>
+              <Button
+                as={A}
+                href="/"
+                size="icon"
+                variant="ghost"
+                aria-label={t("meeting.title")}
+              >
+                <Video class="size-5" />
+              </Button>
+            </Show>
+          </>
+        }
+      />
       <div class="relative min-h-0 flex-1">
         <div
           ref={scroll.viewportRef}
@@ -319,56 +297,45 @@ export function RoomConversation(props: {
           onClick={() => scroll.toBottom()}
         />
       </div>
-      <Show
-        when={active()}
-        fallback={
-          <p
-            class="text-muted-foreground shrink-0 border-t p-3 text-center
-              text-xs"
-          >
-            {t("conversations.room_inactive")}
-          </p>
-        }
-      >
-        <ChatComposer
-          class="static"
-          value={draft()}
-          onValueChange={setDraft}
-          onSendText={(text) => state.sendRoomText(text)}
-          onSendFiles={async (files) => {
-            const conversationId = props.conversation.id;
-            for (const file of files) {
-              if (
-                state.activeRoomConversationId() !==
-                conversationId
-              )
-                throw new Error(
-                  t("conversations.room_inactive"),
-                );
-              await state.sendRoomFile(file);
-            }
-          }}
-          previewFile={async (file) =>
-            Boolean(
-              (
-                await openPreview(
-                  file,
-                  props.conversation.title,
-                )
-              ).result,
+      <ChatComposer
+        class="static"
+        conversationKey={props.conversation.id}
+        value={draft()}
+        onValueChange={setDraft}
+        onSendText={(text) => state.sendRoomText(text)}
+        onSendFiles={async (files) => {
+          const conversationId = props.conversation.id;
+          for (const file of files) {
+            if (
+              state.activeRoomConversationId() !==
+              conversationId
             )
+              throw new Error(
+                t("conversations.room_inactive"),
+              );
+            await state.sendRoomFile(file);
           }
-          onPaste={(event) => event.stopPropagation()}
-          onSent={() => scroll.toBottom()}
-          disabled={!canSend()}
-          filesDisabled={!canSendFiles()}
-          maxLength={ROOM_CHAT_MAX_TEXT_LENGTH}
-          inputLabel={t("conversations.room_message")}
-          placeholder={t("conversations.room_message")}
-          sendLabel={t("conversations.send")}
-          sendShortcut="enter"
-        />
-      </Show>
+        }}
+        previewFile={async (file) =>
+          Boolean(
+            (
+              await openPreview(
+                file,
+                props.conversation.title,
+              )
+            ).result,
+          )
+        }
+        onPaste={(event) => event.stopPropagation()}
+        onSent={() => scroll.toBottom()}
+        disabled={!active() || peers().length === 0}
+        textDisabled={!canSend()}
+        filesDisabled={!canSendFiles()}
+        maxLength={ROOM_CHAT_MAX_TEXT_LENGTH}
+        inputLabel={t("conversations.room_message")}
+        sendLabel={t("conversations.send")}
+        sendShortcut="enter"
+      />
     </section>
   );
 }

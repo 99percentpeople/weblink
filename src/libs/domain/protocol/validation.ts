@@ -1,3 +1,4 @@
+import { isFileFingerprint } from "./file-fingerprint";
 import type {
   ProtocolPeer,
   SessionMessage,
@@ -70,6 +71,11 @@ function fileMetadata(
     text(value.fileName) &&
     integer(value.fileSize) &&
     optional(value.lastModified, timestamp) &&
+    optional(
+      value.fingerprint,
+      (fp) =>
+        isFileFingerprint(fp) && fp.size === value.fileSize,
+    ) &&
     optional(
       storage ? value.mimetype : value.mimeType,
       text,
@@ -215,6 +221,13 @@ export function validateSessionMessage(
       "roomTransfers",
       "localSequence",
       "lastReadSequence",
+      "localContentPending",
+      "localContentDetached",
+      "contentKey",
+      "contentStorage",
+      "libraryPinned",
+      "aliases",
+      "completionSource",
     ].some((key) => Object.hasOwn(value, key))
   )
     return fail();
@@ -242,7 +255,11 @@ export function validateSessionMessage(
       break;
     case "send-room-file":
       valid =
-        value.version === P2P_ROOM_FILE_PROTOCOL_VERSION &&
+        ((value.version ===
+          P2P_ROOM_FILE_PROTOCOL_VERSION &&
+          value.fingerprint === undefined) ||
+          (value.version === 2 &&
+            isFileFingerprint(value.fingerprint))) &&
         roomBinding(value) &&
         roomSender(value) &&
         fileMetadata(value, false) &&
@@ -271,6 +288,7 @@ export function validateSessionMessage(
             "mimeType",
             "lastModified",
             "chunkSize",
+            ...(value.version === 2 ? ["fingerprint"] : []),
           ].includes(key),
         );
       break;
@@ -382,9 +400,73 @@ export function validateSessionMessage(
         value.mode === "placeholder" ||
         value.mode === "media";
       break;
+    case "file-offer-result":
+      valid =
+        value.version === 1 &&
+        id(value.fid) &&
+        ["have", "need", "deferred"].includes(
+          value.disposition as string,
+        ) &&
+        (value.disposition === "deferred"
+          ? ["user", "local-job"].includes(
+              value.reason as string,
+            )
+          : value.reason === undefined) &&
+        Object.keys(value).every((key) =>
+          [
+            "type",
+            "id",
+            "client",
+            "target",
+            "createdAt",
+            "version",
+            "fid",
+            "disposition",
+            "reason",
+          ].includes(key),
+        );
+      break;
+    case "file-content-ready":
+      valid =
+        value.version === 1 &&
+        id(value.offerId) &&
+        value.offerId !== value.id &&
+        id(value.fid) &&
+        isFileFingerprint(value.fingerprint) &&
+        (value.roomId === undefined
+          ? value.senderToken === undefined &&
+            value.recipientToken === undefined
+          : roomBinding(value)) &&
+        Object.keys(value).every((key) =>
+          [
+            "type",
+            "id",
+            "client",
+            "target",
+            "createdAt",
+            "version",
+            "offerId",
+            "fid",
+            "fingerprint",
+            "roomId",
+            "senderToken",
+            "recipientToken",
+          ].includes(key),
+        );
+      break;
     case "client-profile":
       valid =
         integer(value.version) &&
+        optional(
+          value.features,
+          (features) =>
+            Array.isArray(features) &&
+            features.length <= 16 &&
+            features.every(
+              (feature) =>
+                text(feature) && feature.length <= 64,
+            ),
+        ) &&
         record(value.profile) &&
         text(value.profile.name) &&
         (value.profile.avatar === null ||

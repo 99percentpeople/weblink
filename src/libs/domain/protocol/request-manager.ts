@@ -3,6 +3,8 @@ import {
   isRequestType,
   requestSpec,
   type AckMessage,
+  type FileOfferResult,
+  type FileOfferResultMessage,
   type HandlerResult,
   type MessageOf,
   type NotificationType,
@@ -50,7 +52,10 @@ export type NotificationHandler<
 > = (
   context: ProtocolMessageContext<S, MessageOf<T>>,
 ) => void | Promise<void>;
-type Reply = AckMessage | StorageMessage;
+type Reply =
+  | AckMessage
+  | StorageMessage
+  | FileOfferResultMessage;
 type PendingRequest = {
   request: SessionMessage;
   complete: (message: Reply) => void;
@@ -59,7 +64,8 @@ type PendingRequest = {
 type ProcessedRequest = {
   seenAt: number;
   ack: AckMessage;
-  response?: StorageMessage;
+  response?: StorageMessage | FileOfferResultMessage;
+  contentRequest?: string;
 };
 type SessionState = {
   lifetime: AbortController;
@@ -162,7 +168,9 @@ export class P2PRequestManager<
 
   request(
     session: S,
-    message: MessageOf<RequestType | "storage">,
+    message: MessageOf<
+      RequestType | "storage" | "file-offer-result"
+    >,
     options: RequestOptions = {},
     onPrepared?: () => void,
   ): Promise<Reply> {
@@ -351,16 +359,52 @@ export class P2PRequestManager<
     if (message.type === "ack") {
       if (
         !pending ||
-        pending.request.type === "request-storage"
+        pending.request.type === "request-storage" ||
+        ((pending.request.type === "send-file" ||
+          pending.request.type === "send-room-file") &&
+          pending.request.fingerprint !== undefined)
       )
         return;
       const expected =
-        pending.request.type === "storage"
+        pending.request.type === "storage" ||
+        pending.request.type === "file-offer-result"
           ? "receive"
           : requestSpec[pending.request.type as RequestType]
               .ack;
       if (message.mode === expected)
         pending.complete(message);
+      return;
+    }
+    if (message.type === "file-offer-result") {
+      const request = pending?.request;
+      const expected =
+        request &&
+        (request.type === "send-file" ||
+          request.type === "send-room-file") &&
+        !!request.fingerprint;
+      const key = `file:${message.id}`;
+      if (!expected && !state.receivedStorage.has(key))
+        return;
+      if (expected && request.fid !== message.fid) {
+        pending!.fail(
+          new P2PProtocolError(
+            "invalid-message",
+            "File response does not match the offered file",
+          ),
+        );
+        return;
+      }
+      state.receivedStorage.set(key, Date.now());
+      await this.send(
+        session,
+        createSessionMessage(
+          session,
+          "ack",
+          { mode: "receive" },
+          { id: message.id },
+        ),
+      );
+      if (expected) pending!.complete(message);
       return;
     }
     if (message.type === "storage") {
@@ -446,6 +490,17 @@ export class P2PRequestManager<
     state.inFlight.add(key);
     try {
       let entry = state.processed.get(key);
+      const contentRequest =
+        (message.type === "send-file" ||
+          message.type === "send-room-file") &&
+        message.fingerprint
+          ? JSON.stringify(message)
+          : undefined;
+      if (entry && entry.contentRequest !== contentRequest)
+        throw new P2PProtocolError(
+          "invalid-message",
+          "Conflicting file offer identity",
+        );
       if (!entry) {
         const handler = this.handlers.get(message.type);
         if (!handler)
@@ -458,7 +513,10 @@ export class P2PRequestManager<
           signal: state.lifetime.signal,
         });
         if (state.lifetime.signal.aborted) return;
-        let response =
+        let response:
+          | StorageMessage
+          | FileOfferResultMessage
+          | undefined =
           message.type === "request-storage"
             ? createSessionMessage(
                 session,
@@ -466,10 +524,20 @@ export class P2PRequestManager<
                 { data: result as StorageMessage["data"] },
                 { id: message.id },
               )
-            : undefined;
+            : (message.type === "send-file" ||
+                  message.type === "send-room-file") &&
+                message.fingerprint
+              ? createSessionMessage(
+                  session,
+                  "file-offer-result",
+                  result as FileOfferResult,
+                  { id: message.id },
+                )
+              : undefined;
         if (response)
           response = snapshotSessionMessage(response);
         entry = {
+          contentRequest,
           seenAt: Date.now(),
           response,
           ack: createSessionMessage(

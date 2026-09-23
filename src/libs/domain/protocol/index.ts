@@ -8,3 +8,5 @@ export {
   snapshotSessionMessage,
   validateSessionMessage,
 } from "./validation";
+
+export * from "./file-fingerprint";

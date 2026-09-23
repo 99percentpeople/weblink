@@ -41,6 +41,8 @@ vi.mock("@/libs/state/app-state", () => ({
     },
   },
 }));
+const notification = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock("solid-sonner", () => ({ toast: notification }));
 const pause = vi.fn();
 const resume = vi.fn();
 const request = vi.fn();
@@ -138,12 +140,77 @@ afterEach(() => {
 });
 
 describe("unified task list controls", () => {
+  it("searches file names and members without changing the underlying tasks", () => {
+    render(() => <TaskList onInspect={inspect} />);
+    const search = screen.getByRole("searchbox", {
+      name: "tasks.search",
+    });
+    fireEvent.input(search, {
+      target: { value: "EXAMPLE.bin" },
+    });
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      screen.getByText("example.bin"),
+    ).toBeInTheDocument();
+    fireEvent.input(search, { target: { value: "Peer" } });
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(tasks.tasks()).toHaveLength(2);
+  });
+
+  it("keeps the current percentage when pausing changes the action to resume", async () => {
+    const active = message({
+      transferStatus: "transfering",
+      progress: { total: 1024, received: 512 },
+    });
+    setMessages([active]);
+    setTransfers({
+      run: {
+        id: "run",
+        fileId: "file",
+        messageId: "filemsg",
+        session: {
+          clientId: "self",
+          targetClientId: "peer",
+        } as PeerSession,
+        transferer: {} as FileTransferer,
+      },
+    });
+    pause.mockImplementationOnce(async () => {
+      setMessages([
+        { ...active, transferStatus: "paused" },
+      ]);
+      setTransfers({});
+    });
+    render(() => <TaskList onInspect={inspect} />);
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "50",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "tasks.pause" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "tasks.resume",
+        }),
+      ).not.toBeDisabled(),
+    );
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "50",
+    );
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(
+      screen.getByText("tasks.status.paused"),
+    ).toBeInTheDocument();
+  });
   it("uses faceted type filters without changing the underlying tasks", () => {
     render(() => <TaskList onInspect={inspect} />);
     expect(
-      screen.getByRole("table", { name: "tasks.title" }),
+      screen.getByRole("list", { name: "tasks.title" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(3);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -155,7 +222,7 @@ describe("unified task list controls", () => {
     );
     fireEvent.click(speedLabels[speedLabels.length - 1]);
 
-    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByText("example.bin")).toBeNull();
 
     fireEvent.click(
@@ -165,7 +232,7 @@ describe("unified task list controls", () => {
       screen.getAllByText("tasks.kinds.speed-test").at(-1)!,
     );
 
-    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(
       screen.getByText("example.bin"),
     ).toBeInTheDocument();
@@ -185,7 +252,7 @@ describe("unified task list controls", () => {
       runningLabels[runningLabels.length - 1],
     );
 
-    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByText("example.bin")).toBeNull();
     expect(
       screen.getByText("speed_test.title"),
@@ -371,7 +438,7 @@ describe("unified task list controls", () => {
         name: "tasks.clear_finished",
       }),
     );
-    expect(screen.getAllByRole("row")).toHaveLength(3);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(cancel).not.toHaveBeenCalled();
     expect(tasks.activeCount()).toBe(1);
   });
@@ -381,7 +448,11 @@ describe("unified task list controls", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "tasks.resume" }),
     );
-    await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(notification.error).toHaveBeenCalledWith(
+        "tasks.action_failed",
+      ),
+    );
     expect(
       screen.getByText("example.bin"),
     ).toBeInTheDocument();

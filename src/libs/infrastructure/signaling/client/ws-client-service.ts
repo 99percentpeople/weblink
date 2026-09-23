@@ -248,9 +248,7 @@ export class WebSocketClientService implements ClientService {
     this.passwordHashPromise = null;
     if (!this.warnedUnprotectedRoom) {
       this.warnedUnprotectedRoom = true;
-      toast.warning(
-        "[WebSocketClientService] the room is not password protected",
-      );
+      toast.warning("the room is not password protected");
     }
   }
 

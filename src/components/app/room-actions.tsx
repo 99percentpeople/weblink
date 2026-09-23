@@ -16,20 +16,12 @@ export function createRoomActions() {
   const available = () =>
     !busy() &&
     appState.session.clientServiceStatus === "disconnected";
-  const edit = async () => {
-    if (!available()) return;
-    setBusy(true);
-    try {
-      await dialog.open();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const join = async () => {
+  const connect = async (configure: boolean) => {
     if (!available()) return;
     setBusy(true);
     try {
       if (
+        configure ||
         appState.profile.initalJoin ||
         !appState.profile.name.trim() ||
         !appState.profile.roomId.trim()
@@ -47,7 +39,11 @@ export function createRoomActions() {
       setBusy(false);
     }
   };
-  return { join, edit, busy };
+  return {
+    join: () => connect(false),
+    edit: () => connect(true),
+    busy,
+  };
 }
 
 const RoomActionsContext =

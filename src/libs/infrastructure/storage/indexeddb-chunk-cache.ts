@@ -24,6 +24,25 @@ export interface IDBChunkCacheOptions {
   id: string;
   maxMomeryCacheSize: number;
   createMergeWorker?: () => Worker;
+  isRetained?: () => boolean;
+}
+
+function cachedBytes(
+  info: ChunkMetaData,
+  count: number,
+  last: IDBValidKey | undefined,
+): number | undefined {
+  if (info.file) return info.fileSize;
+  if (!info.chunkSize) return undefined;
+  const shortTail =
+    last === Math.ceil(info.fileSize / info.chunkSize) - 1
+      ? info.chunkSize -
+        (info.fileSize % info.chunkSize || info.chunkSize)
+      : 0;
+  return Math.min(
+    info.fileSize,
+    Math.max(0, count * info.chunkSize - shortTail),
+  );
 }
 
 export class IDBChunkCache implements ChunkCache {
@@ -44,6 +63,7 @@ export class IDBChunkCache implements ChunkCache {
   private generation = 0;
   private metrics: MergeMetrics | null = null;
   private readonly createMergeWorker: () => Worker;
+  private readonly isRetained: () => boolean;
 
   get mergeMetrics(): MergeMetrics | null {
     return this.metrics;
@@ -52,6 +72,7 @@ export class IDBChunkCache implements ChunkCache {
   private maxMomeryCacheSize: number;
   constructor(options: IDBChunkCacheOptions) {
     this.id = options.id;
+    this.isRetained = options.isRetained ?? (() => false);
     this.maxMomeryCacheSize = options.maxMomeryCacheSize;
     this.createMergeWorker =
       options.createMergeWorker ??
@@ -108,38 +129,7 @@ export class IDBChunkCache implements ChunkCache {
 
   async calcCachedBytes() {
     const info = await this.getInfo();
-    if (!info) {
-      return null;
-    }
-    if (!info.chunkSize) {
-      return null;
-    }
-    if (info.file) return info.fileSize;
-    if (info.fileSize === 0) return 0;
-    const totalLength = getTotalChunkCount(info);
-
-    const hasLast = async () => {
-      const lastKey = totalLength - 1;
-      const store = await this.getChunkStore();
-      const request = store.getKey(lastKey);
-      return new Promise<boolean>((reslove, reject) => {
-        request.onsuccess = () => {
-          reslove(request.result !== undefined);
-        };
-        request.onerror = () => reject(request.error);
-      });
-    };
-
-    const count = await this.getChunkCount();
-
-    let bytes = count * info.chunkSize;
-
-    if (await hasLast()) {
-      const remainSize =
-        info.fileSize % info.chunkSize || info.chunkSize;
-      bytes = bytes - info.chunkSize + remainSize;
-    }
-    return bytes;
+    return info?.cachedBytes ?? null;
   }
 
   async getCachedKeys() {
@@ -301,9 +291,14 @@ export class IDBChunkCache implements ChunkCache {
     const done = transactionDone(transaction);
     try {
       transaction.objectStore("info").put(setData);
-      const [chunkCount] = await Promise.all([
+      const [chunkCount, last] = await Promise.all([
         requestResult(
           transaction.objectStore("chunks").count(),
+        ),
+        requestResult(
+          transaction
+            .objectStore("chunks")
+            .openKeyCursor(null, "prev"),
         ),
         done,
       ]);
@@ -312,6 +307,11 @@ export class IDBChunkCache implements ChunkCache {
         ...setData,
         isComplete: !!setData.file,
         chunkCount,
+        cachedBytes: cachedBytes(
+          setData,
+          chunkCount,
+          last?.key,
+        ),
         isMerging: false,
       };
       this.dispatchEvent("update", this.info);
@@ -334,12 +334,17 @@ export class IDBChunkCache implements ChunkCache {
       ["info", "chunks"],
       "readonly",
     );
-    const [data, chunkCount] = await Promise.all([
+    const [data, chunkCount, last] = await Promise.all([
       requestResult<ChunkMetaData | undefined>(
         transaction.objectStore("info").get(this.id),
       ),
       requestResult(
         transaction.objectStore("chunks").count(),
+      ),
+      requestResult(
+        transaction
+          .objectStore("chunks")
+          .openKeyCursor(null, "prev"),
       ),
       transactionDone(transaction),
     ]);
@@ -349,6 +354,11 @@ export class IDBChunkCache implements ChunkCache {
           ...data,
           isComplete: !!data.file,
           chunkCount,
+          cachedBytes: cachedBytes(
+            data,
+            chunkCount,
+            last?.key,
+          ),
           isMerging: this.isMerging,
         }
       : null;
@@ -387,13 +397,22 @@ export class IDBChunkCache implements ChunkCache {
       const store = transaction.objectStore("chunks");
       for (const [chunkIndex, data] of batch)
         store.put({ chunkIndex, data });
-      const [chunkCount] = await Promise.all([
+      const [chunkCount, last] = await Promise.all([
         requestResult(store.count()),
+        requestResult(store.openKeyCursor(null, "prev")),
         done,
       ]);
       this.assertGeneration(generation);
       if (this.info) {
-        this.info = { ...this.info, chunkCount };
+        this.info = {
+          ...this.info,
+          chunkCount,
+          cachedBytes: cachedBytes(
+            this.info,
+            chunkCount,
+            last?.key,
+          ),
+        };
         this.dispatchEvent("update", this.info);
       }
     } catch (error) {
@@ -510,6 +529,7 @@ export class IDBChunkCache implements ChunkCache {
   }
 
   cleanup(): Promise<void> {
+    if (this.isRetained()) return Promise.resolve();
     if (this.cleanupPromise) return this.cleanupPromise;
     this.generation++;
     this.cancelMerge?.(
@@ -662,6 +682,9 @@ export class IDBChunkCache implements ChunkCache {
           chunkCount: result.info.file
             ? 0
             : info.chunkCount,
+          cachedBytes: result.info.file
+            ? result.info.fileSize
+            : info.cachedBytes,
         }
       : null;
     this.dispatchEvent("update", this.info);

@@ -1,6 +1,13 @@
 import { Motion } from "@/components/ui/motion";
-import { createEffect, createSignal, Show } from "solid-js";
 import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  Show,
+} from "solid-js";
+import {
+  EyeOff,
   Maximize2,
   Minimize2,
   Pin,
@@ -32,6 +39,26 @@ export function MeetingTile(props: {
   onPin(): void;
   onStop?: () => void;
 }) {
+  const [displayRef, setDisplayRef] =
+    createSignal<HTMLDivElement>();
+  // Fullscreen the display container so its cover and controls remain usable.
+  const fullscreen = createFullscreen(displayRef);
+  const [previewRevealed, setPreviewRevealed] =
+    createSignal(false);
+  createEffect(
+    on(
+      () => [props.sourceId, props.trackId],
+      () => setPreviewRevealed(false),
+    ),
+  );
+  const previewCovered = createMemo(
+    () =>
+      props.local === true &&
+      props.sourceKind === "screen" &&
+      (props.pinned ||
+        fullscreen.isThisElementFullscreen()) &&
+      !previewRevealed(),
+  );
   return (
     <Motion.article
       class="meeting-tile"
@@ -50,6 +77,7 @@ export function MeetingTile(props: {
       data-track-id={props.trackId}
     >
       <VideoDisplay
+        ref={setDisplayRef}
         class="meeting-tile-video"
         stream={props.stream}
         name={props.name}
@@ -70,8 +98,31 @@ export function MeetingTile(props: {
             onClick={() => props.onSelect?.()}
           />
         </Show>
+        <Show when={previewCovered()}>
+          <button
+            type="button"
+            class="absolute inset-0 flex flex-col items-center justify-center
+              gap-3 bg-black/80 p-4 text-center text-white
+              focus-visible:outline focus-visible:outline-2
+              focus-visible:-outline-offset-4 focus-visible:outline-white"
+            aria-label={t("meeting.show_screen_preview")}
+            onClick={() => setPreviewRevealed(true)}
+          >
+            <EyeOff
+              class="size-8 shrink-0"
+              aria-hidden="true"
+            />
+            <span class="text-sm font-medium">
+              {t("meeting.screen_preview_covered")}
+            </span>
+            <span class="text-xs text-white/75">
+              {t("meeting.screen_preview_covered_hint")}
+            </span>
+          </button>
+        </Show>
         <Show when={!props.compact}>
           <TileActions
+            fullscreen={fullscreen}
             local={props.local}
             pinned={props.pinned}
             onPin={props.onPin}
@@ -85,6 +136,7 @@ export function MeetingTile(props: {
 }
 
 function TileActions(props: {
+  fullscreen: ReturnType<typeof createFullscreen>;
   local?: boolean;
   pinned: boolean;
   onPin(): void;
@@ -93,7 +145,7 @@ function TileActions(props: {
 }) {
   const { videoRef, audioTracks } = useVideoDisplay();
   const [muted, setMuted] = createSignal(false);
-  const fullscreen = createFullscreen(videoRef);
+  const fullscreen = props.fullscreen;
   createEffect(() => {
     if (props.local) return;
     const tracks = audioTracks();

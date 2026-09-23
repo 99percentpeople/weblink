@@ -1,5 +1,7 @@
 import {
+  createEffect,
   createSignal,
+  Suspense,
   createUniqueId,
   onCleanup,
   Show,
@@ -26,18 +28,30 @@ import { cn } from "@/libs/cn";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 
+import type { FileSource } from "@/libs/domain/file";
+import { Library } from "lucide-solid";
+import { preload } from "@/libs/utils/preload";
+const pickerLoader = preload(
+  () => import("@/components/files/file-picker-dialog"),
+);
+const FilePickerDialog = pickerLoader;
+
 export type ChatComposerProps = Omit<
   ComponentProps<"div">,
   "onPaste"
 > & {
+  conversationKey?: string;
   value: string;
   onValueChange(value: string): void;
   onSendText(text: string): Promise<void> | void;
-  onSendFiles(files: readonly File[]): Promise<void> | void;
+  onSendFiles(
+    files: readonly FileSource[],
+  ): Promise<void> | void;
   previewFile?(file: File): Promise<boolean>;
   onPaste?(event: ClipboardEvent): void;
   onSent?(): void;
   disabled?: boolean;
+  textDisabled?: boolean;
   filesDisabled?: boolean;
   maxLength?: number;
   placeholder?: string;
@@ -51,6 +65,7 @@ export type ChatComposerProps = Omit<
 export function ChatComposer(props: ChatComposerProps) {
   const [local, rest] = splitProps(props, [
     "class",
+    "conversationKey",
     "value",
     "onValueChange",
     "onSendText",
@@ -59,6 +74,7 @@ export function ChatComposer(props: ChatComposerProps) {
     "onPaste",
     "onSent",
     "disabled",
+    "textDisabled",
     "filesDisabled",
     "maxLength",
     "placeholder",
@@ -73,6 +89,16 @@ export function ChatComposer(props: ChatComposerProps) {
   const [sendingText, setSendingText] = createSignal(false);
   const [sendingFiles, setSendingFiles] =
     createSignal(false);
+  const [pickerTarget, setPickerTarget] =
+    createSignal<string>();
+  // Load once on demand; Dialog owns the content's exit animation and removal.
+  const [pickerMounted, setPickerMounted] =
+    createSignal(false);
+  let textarea: HTMLTextAreaElement | undefined;
+  const target = () => local.conversationKey ?? "current";
+  const closePicker = () => {
+    setPickerTarget(undefined);
+  };
   let disposed = false;
   const processing = new Set<AbortController>();
   onCleanup(() => {
@@ -81,11 +107,24 @@ export function ChatComposer(props: ChatComposerProps) {
       controller.abort("User cancelled");
   });
   const busy = () => sendingText() || sendingFiles();
+  const textDisabled = () =>
+    local.disabled || local.textDisabled;
   const filesDisabled = () =>
-    local.filesDisabled ?? local.disabled;
+    local.disabled || local.filesDisabled;
+  createEffect(() => {
+    if (
+      pickerTarget() &&
+      (pickerTarget() !== target() || filesDisabled())
+    )
+      closePicker();
+    if (filesDisabled()) {
+      for (const controller of processing)
+        controller.abort("User cancelled");
+    }
+  });
   const canSendText = () =>
-    !local.disabled &&
-    !busy() &&
+    !textDisabled() &&
+    !sendingText() &&
     Boolean(local.value.trim()) &&
     (local.maxLength === undefined ||
       local.value.trim().length <= local.maxLength);
@@ -93,7 +132,8 @@ export function ChatComposer(props: ChatComposerProps) {
     if (
       disposed ||
       (error instanceof Error &&
-        error.message === "User cancelled")
+        (error.message === "User cancelled" ||
+          error.name === "AbortError"))
     )
       return;
     toast.error(
@@ -119,7 +159,9 @@ export function ChatComposer(props: ChatComposerProps) {
       setSendingText(false);
     }
   };
-  const sendFiles = async (files: readonly File[]) => {
+  const sendFiles = async (
+    files: readonly FileSource[],
+  ) => {
     if (disposed || filesDisabled() || !files.length)
       return;
     await local.onSendFiles(files);
@@ -131,6 +173,7 @@ export function ChatComposer(props: ChatComposerProps) {
   ) => {
     if (busy() || filesDisabled()) return;
     setSendingFiles(true);
+    const conversation = target();
     const controller = new AbortController();
     processing.add(controller);
     const id = toast.loading(
@@ -146,11 +189,26 @@ export function ChatComposer(props: ChatComposerProps) {
     try {
       const files = await read(controller.signal);
       toast.dismiss(id);
-      if (disposed || controller.signal.aborted) return;
+      if (
+        disposed ||
+        controller.signal.aborted ||
+        filesDisabled() ||
+        conversation !== target()
+      )
+        return;
       if (preview && local.previewFile) {
         for (const file of files) {
-          if (disposed || filesDisabled()) break;
-          if (await local.previewFile(file))
+          if (
+            disposed ||
+            filesDisabled() ||
+            conversation !== target()
+          )
+            break;
+          if (
+            (await local.previewFile(file)) &&
+            !controller.signal.aborted &&
+            conversation === target()
+          )
             await sendFiles([file]);
         }
       } else await sendFiles(files);
@@ -180,11 +238,7 @@ export function ChatComposer(props: ChatComposerProps) {
   };
   const placeholder = () =>
     local.placeholder ??
-    t(
-      mobile()
-        ? "client.message_editor.mobile_placeholder"
-        : "client.message_editor.placeholder",
-    );
+    t("client.message_editor.placeholder");
   return (
     <div
       data-slot="chat-composer"
@@ -209,7 +263,10 @@ export function ChatComposer(props: ChatComposerProps) {
           void send();
         }}
       >
-        <div class="flex gap-1">
+        <div
+          class="flex gap-1 [&>[data-disabled]]:pointer-events-none
+            [&>[data-disabled]]:opacity-50"
+        >
           <Button
             as="label"
             variant="ghost"
@@ -304,6 +361,26 @@ export function ChatComposer(props: ChatComposerProps) {
               />
             </Button>
           </Show>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={busy() || filesDisabled()}
+            title={t("file_library.choose")}
+            aria-label={t("file_library.choose")}
+            onPointerEnter={() =>
+              void pickerLoader.preload().catch(() => {})
+            }
+            onFocus={() =>
+              void pickerLoader.preload().catch(() => {})
+            }
+            onClick={() => {
+              setPickerTarget(target());
+              setPickerMounted(true);
+            }}
+          >
+            <Library class="size-6" />
+          </Button>
         </div>
         <label
           class="border-input focus-within:ring-ring relative flex min-w-0
@@ -312,18 +389,27 @@ export function ChatComposer(props: ChatComposerProps) {
         >
           <textarea
             class="scrollbar-none my-1 max-h-36 min-w-0 flex-1 resize-none
-              overflow-y-auto bg-transparent outline-none"
-            ref={(element) =>
-              textareaAutoResize(element, () => local.value)
-            }
+              overflow-y-auto bg-transparent outline-none
+              disabled:cursor-not-allowed disabled:opacity-60"
+            ref={(element) => {
+              textarea = element;
+              textareaAutoResize(
+                element,
+                () => local.value,
+              );
+            }}
             rows={1}
+            disabled={textDisabled()}
             maxLength={local.maxLength}
             value={local.value}
             placeholder={placeholder()}
             aria-label={local.inputLabel ?? placeholder()}
-            onInput={(event) =>
-              local.onValueChange(event.currentTarget.value)
-            }
+            onInput={(event) => {
+              if (!textDisabled())
+                local.onValueChange(
+                  event.currentTarget.value,
+                );
+            }}
             onKeyDown={(event) => {
               if (
                 event.key !== "Enter" ||
@@ -340,6 +426,11 @@ export function ChatComposer(props: ChatComposerProps) {
               }
             }}
             onPaste={(event) => {
+              if (textDisabled()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
               local.onPaste?.(event);
               const items = event.clipboardData?.items;
               if (
@@ -373,6 +464,38 @@ export function ChatComposer(props: ChatComposerProps) {
         </label>
       </form>
       <Show when={local.footer}>{local.footer}</Show>
+      <Show when={pickerMounted()}>
+        <Suspense>
+          <FilePickerDialog
+            open={pickerTarget() !== undefined}
+            disabled={filesDisabled()}
+            onClose={closePicker}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              textarea?.focus();
+            }}
+            onSelect={(ids) => {
+              if (
+                pickerTarget() !== target() ||
+                filesDisabled()
+              ) {
+                closePicker();
+                return;
+              }
+              closePicker();
+              setSendingFiles(true);
+              void sendFiles(
+                ids.map((localFileId) => ({
+                  kind: "library" as const,
+                  localFileId,
+                })),
+              )
+                .catch(report)
+                .finally(() => setSendingFiles(false));
+            }}
+          />
+        </Suspense>
+      </Show>
     </div>
   );
 }

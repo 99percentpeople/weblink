@@ -1,7 +1,6 @@
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   createSignal,
-  Show,
   splitProps,
   type Component,
   type ComponentProps,
@@ -24,10 +23,17 @@ export const ChatBar: Component<
   const { open: openPreview } =
     createSendItemPreviewDialog();
   const mobile = createIsMobile();
+  const peer = () =>
+    appState.session.clientViewData[local.client.clientId];
+  const connected = () =>
+    peer()?.onlineStatus === "online" &&
+    !!peer()?.messageChannel;
   return (
     <ChatComposer
       {...other}
       class={local.class}
+      conversationKey={local.client.clientId}
+      disabled={!connected()}
       value={text()}
       onValueChange={setText}
       onSendText={(value) =>

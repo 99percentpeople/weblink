@@ -112,7 +112,8 @@ export class FileSender extends FileTransferBase {
       indexes: new Set(),
     };
 
-    this.updateProgress();
+    // Resume progress is known only after the receiver supplies its missing
+    // ranges. Initializing a replacement run must not publish a spurious zero.
     if (this.channel?.readyState === "open") {
       this.dispatchEvent("ready", undefined);
     }
@@ -455,11 +456,14 @@ function getRequestContentSize(
     getRangesLength(ranges) * info.chunkSize;
   const lastRangeIndex = getLastIndex(ranges);
   const lastChunkIndex = getTotalChunkCount(info) - 1;
-  if (lastRangeIndex === lastChunkIndex) {
+  if (
+    lastChunkIndex >= 0 &&
+    lastRangeIndex === lastChunkIndex
+  ) {
     requestBytes =
       requestBytes -
       info.chunkSize +
-      (info.fileSize % info.chunkSize);
+      (info.fileSize % info.chunkSize || info.chunkSize);
   }
   return requestBytes;
 }

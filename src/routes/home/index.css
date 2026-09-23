@@ -215,6 +215,20 @@
   @apply absolute right-2 bottom-2 flex gap-[3px] rounded-md bg-[#10151cd9] p-[3px] text-white opacity-0;
   transition: opacity 0.15s;
 }
+.meeting-tile-actions .meeting-icon-button:hover {
+  @apply bg-white/15 text-white;
+}
+.meeting-tile-actions
+  .meeting-icon-button[aria-pressed="true"] {
+  @apply bg-white/25 text-white;
+}
+.meeting-tile-actions
+  .meeting-icon-button[aria-pressed="true"]:hover {
+  @apply bg-white/35;
+}
+.meeting-tile-actions .meeting-icon-button:focus-visible {
+  outline-color: white;
+}
 .meeting-tile:hover .meeting-tile-actions,
 .meeting-tile:focus-within .meeting-tile-actions {
   @apply opacity-100;

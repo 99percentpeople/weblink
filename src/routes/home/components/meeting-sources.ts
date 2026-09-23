@@ -22,6 +22,19 @@ export interface MeetingSource {
   track?: MediaStreamTrack;
 }
 
+export function selectMeetingFeaturedSource(
+  sources: readonly MeetingSource[],
+  pinnedId: string | null,
+): MeetingSource | undefined {
+  const pinned = sources.find(
+    (source) => source.id === pinnedId,
+  );
+  if (pinned) return pinned;
+  // A single tile fills the main view in either layout, regardless of owner.
+  // Multiple tiles keep the selected layout, including multiple local tracks.
+  return sources.length === 1 ? sources[0] : undefined;
+}
+
 export function selectMeetingPipSource(
   sources: readonly MeetingSource[],
   pinnedId: string | null,

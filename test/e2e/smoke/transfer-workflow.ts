@@ -1,3 +1,7 @@
+import { FileLibraryService } from "../../../src/libs/application/file-library-service";
+import { FileFingerprintService } from "../../../src/libs/application/file-fingerprint-service";
+import { IndexedDbFileLibrary } from "../../../src/libs/infrastructure/storage/indexeddb-file-library";
+import { completeLocalFile } from "../../../src/libs/application/transfer/file-content-completion";
 import type {
   ChunkCache,
   FileMetaData,
@@ -120,7 +124,11 @@ class BrowserTransport {
   }
 }
 
-function makeNode(id: string, roomEnabled = false) {
+function makeNode(
+  id: string,
+  roomEnabled = false,
+  contentEnabled = false,
+) {
   const transport = new BrowserTransport();
   const protocol = new RtcProtocol(transport);
   const sessions = new Map<string, PeerSession>();
@@ -185,10 +193,17 @@ function makeNode(id: string, roomEnabled = false) {
     },
     updateTransferMessage: update,
   };
+  const rawCaches = new Map<string, ChunkCache>();
+  let library: FileLibraryService | undefined;
   const cacheApi = {
+    get library() {
+      return library;
+    },
     getCache: (fid: string) => caches.get(fid) ?? null,
-    createCache: async (fid = crypto.randomUUID()) => {
-      const existing = caches.get(fid);
+    createCache: async (
+      fid: string = crypto.randomUUID(),
+    ) => {
+      const existing = rawCaches.get(fid);
       if (existing) return existing;
       // Nodes share this test origin. Isolate physical IndexedDB names, while the
       // actual sender/receiver still see the same logical wire file ID.
@@ -211,10 +226,37 @@ function makeNode(id: string, roomEnabled = false) {
             : value;
         },
       });
+      rawCaches.set(fid, scoped);
+      if (contentEnabled) {
+        let verified: Promise<File | null> | undefined;
+        scoped.verifyFile = (signal) =>
+          (verified ??= library!
+            .verifyReceived(scoped, signal)
+            .catch((error) => {
+              verified = undefined;
+              throw error;
+            }));
+      }
       caches.set(fid, scoped);
       return scoped;
     },
   };
+  if (contentEnabled) {
+    const fingerprints = new FileFingerprintService();
+    library = new FileLibraryService({
+      repository: new IndexedDbFileLibrary(
+        `library-smoke-${id}`,
+      ),
+      fingerprint: (file, options) =>
+        fingerprints.hash(file, options),
+      storage: (fid) => cacheApi.createCache(fid),
+      getCache: (fid) => caches.get(fid) ?? null,
+      publish: async (cache) => {
+        caches.set(cache.id, cache);
+        await cache.initialize();
+      },
+    });
+  }
   const registry = new TransferRegistry({
     createTransfer: ({ cache, mode, info, session }) =>
       mode === TransferMode.Send
@@ -259,10 +301,34 @@ function makeNode(id: string, roomEnabled = false) {
     messaging: new PeerMessagingService(protocol, store),
     getSession: (peer) => sessions.get(peer),
     getChunkSize: () => transferDefaults.chunkSize,
+    supportsContent: (session) =>
+      contentEnabled &&
+      !session.targetClientId.includes("legacy"),
+    validateRoomReady: (session, message) => {
+      assert(
+        message.roomId &&
+          message.senderToken &&
+          message.recipientToken,
+        "Missing room completion binding",
+      );
+      rooms!.validateFileBinding(session, {
+        roomId: message.roomId,
+        senderToken: message.senderToken,
+        recipientToken: message.recipientToken,
+      });
+    },
   });
   const rooms = roomEnabled
     ? new RoomMessagingService(protocol, {
         supportsFiles: true,
+        supportsContent: (session) =>
+          contentEnabled &&
+          !session.targetClientId.includes("legacy"),
+        reuseFile: (message, signal) =>
+          service.reuseRoomOffer(message, signal),
+        onFileReused: async (message, peerId) => {
+          completeLocalFile(store, message.id, peerId);
+        },
         getRoom: () => ({
           roomId: "binary-room",
           namespace: "browser-smoke",
@@ -331,6 +397,8 @@ function makeNode(id: string, roomEnabled = false) {
     rooms,
     roomFiles,
     cacheApi,
+    library,
+    rawCaches,
     errors,
     onProgress: (
       handler?: (message: FileTransferMessage) => void,
@@ -862,8 +930,340 @@ async function main() {
   window.__SPEED_TEST_REPORT__ = {
     ...(report as Record<string, unknown>),
     roomFiles: await runRoomFileSmoke(),
+    contentLibrary: await runContentLibrarySmoke(),
+    productionLibrary: await runProductionLibrarySmoke(),
+    fingerprintBenchmark: await fingerprintBenchmark(),
   };
 }
+async function runProductionLibrarySmoke() {
+  const [
+    { FileCacheFactory },
+    { appState },
+    { IndexedDbMessageRepository },
+    { snapshotStoreMessage },
+    { createStore },
+  ] = await Promise.all([
+    import("../../../src/libs/application/cache-service"),
+    import("../../../src/libs/state/app-state"),
+    import("../../../src/libs/infrastructure/storage/indexeddb-message-repository"),
+    import("../../../src/libs/application/messaging/message-snapshot"),
+    import("solid-js/store"),
+  ]);
+  const factory = new FileCacheFactory();
+  await factory.initialize();
+  assert(
+    !appState.cache.error,
+    "production library initialization failed",
+  );
+  const file = new File(
+    ["production persistence"],
+    "library.txt",
+  );
+  const imported = await factory.library.importFile(file);
+  const duplicate = await factory.library.importFile(
+    new File([file], "alias.txt"),
+  );
+  assert(
+    duplicate.reused &&
+      duplicate.cache.id === imported.cache.id,
+    "production import duplicated content",
+  );
+  const info = (await imported.cache.getInfo())!;
+  const [message] = createStore<FileTransferMessage>({
+    id: "persistent-library-offer",
+    type: "file",
+    client: "peer",
+    target: "self",
+    status: "received",
+    createdAt: Date.now(),
+    fid: "persistent-library-attachment",
+    fileName: "received.txt",
+    fileSize: file.size,
+    chunkSize: 1024,
+    fingerprint: info.fingerprint,
+    completionSource: "local",
+  });
+  const reference = await factory.library.reuse(
+    message.fingerprint!,
+    {
+      id: message.fid!,
+      fileName: message.fileName,
+      fileSize: message.fileSize,
+      chunkSize: message.chunkSize,
+      from: message.client,
+    },
+  );
+  assert(
+    reference &&
+      (await reference.getFile())?.name === "received.txt",
+    "reactive offer metadata failed to persist",
+  );
+  const repository = new IndexedDbMessageRepository();
+  await repository.putMessage(
+    snapshotStoreMessage(message),
+  );
+  const stored = (await repository.load()).messages.find(
+    (item) => item.id === message.id,
+  );
+  assert(
+    stored?.type === "file" &&
+      stored.fingerprint?.digest ===
+        info.fingerprint?.digest &&
+      stored.completionSource === "local",
+    "fingerprint receipt did not survive IndexedDB persistence",
+  );
+  const visible = Object.values(
+    appState.cache.cacheInfo,
+  ).filter((item) => item?.contentKey === info.contentKey);
+  assert(
+    visible.length === 2 &&
+      visible.every(
+        (item) => !item.contentStorage && item.isComplete,
+      ),
+    "production cache projection exposed hidden storage or incomplete aliases",
+  );
+  await factory.library.releaseAttachment(reference.id);
+  assert(
+    await imported.cache.getFile(),
+    "releasing a message removed a pinned import",
+  );
+  await factory.library.removeFile(imported.cache.id);
+  await repository.removeMessage(message.id);
+  factory.library.dispose();
+  return {
+    reactiveIndexedDbPersistence: true,
+    pinnedContentRetained: true,
+    hiddenStorageExcluded: true,
+  };
+}
+
+async function fingerprintBenchmark() {
+  const service = new FileFingerprintService();
+  await service.hash(new File(["warmup"], "warmup"));
+  const file = new File(
+    [new Uint8Array(16 * 1024 * 1024).fill(123)],
+    "benchmark",
+  );
+  let frames = 0,
+    last = performance.now(),
+    maxFrameGapMs = 0,
+    active = true;
+  const frame = (now: number) => {
+    if (!active) return;
+    frames++;
+    maxFrameGapMs = Math.max(maxFrameGapMs, now - last);
+    last = now;
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  const start = performance.now();
+  await service.hash(file);
+  const blake3Ms = performance.now() - start;
+  active = false;
+  const shaStart = performance.now();
+  await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  const sha256Ms = performance.now() - shaStart;
+  return {
+    bytes: file.size,
+    blake3WorkerMs: Math.round(blake3Ms),
+    sha256WebCryptoMs: Math.round(sha256Ms),
+    renderedFramesDuringWorker: frames,
+    maxFrameGapMs: Math.round(maxFrameGapMs),
+    environment:
+      "headless Chromium; synthetic file, no active camera",
+  };
+}
+
+async function runContentLibrarySmoke() {
+  const a = makeNode("content-a", true, true);
+  const b = makeNode("content-b", true, true);
+  const legacy = makeNode("content-legacy", true);
+  const ab = await connect(a, b);
+  const al = await connect(a, legacy);
+  try {
+    const source = new File(
+      [
+        new Uint8Array(256 * 1024 + 17).map(
+          (_, index) => index % 251,
+        ),
+      ],
+      "original.bin",
+      { type: "application/octet-stream", lastModified: 1 },
+    );
+    const local = await b.library!.importFile(
+      new File([source], "renamed.bin"),
+    );
+    const channels = b.transport.fileChannels;
+    await a.service.sendFile(ab.aSession, source);
+    const first = a.messages.at(-1)!;
+    await until(
+      () => first.completionSource === "local",
+      "local receipt not reflected at sender",
+    );
+    assert(
+      b.transport.fileChannels === channels,
+      "local hit opened a binary channel",
+    );
+    const received = await b.caches
+      .get(first.fid!)!
+      .getFile();
+    assert(
+      received?.name === source.name &&
+        (await hash(received)) === (await hash(source)),
+      "reused attachment lost its metadata or bytes",
+    );
+    assert(
+      b.rawCaches.size === 1,
+      "local hit wrote duplicate binary data",
+    );
+    await a.service.sendFile(ab.aSession, {
+      kind: "library",
+      localFileId: first.fid!,
+    });
+    assert(
+      a.messages.at(-1)!.fid !== first.fid &&
+        a.messages.at(-1)!.id !== first.id,
+      "repeated sends must use independent identities",
+    );
+    assert(
+      b.transport.fileChannels === channels,
+      "repeat hit opened a binary channel",
+    );
+    const fresh = new File(
+      ["missing content ".repeat(80000)],
+      "network.txt",
+    );
+    await a.service.sendFile(ab.aSession, fresh);
+    const network = a.messages.at(-1)!;
+    await until(
+      () =>
+        network.transferStatus === "complete" &&
+        b.messages.some(
+          (m) =>
+            m.id === network.id &&
+            m.transferStatus === "complete",
+        ),
+      "verified network transfer did not complete",
+    );
+    assert(
+      b.transport.fileChannels === channels + 1,
+      "miss did not use exactly one binary channel",
+    );
+    assert(
+      (await hash(
+        (await b.caches.get(network.fid!)!.getFile())!,
+      )) === (await hash(fresh)),
+      "received bytes differ",
+    );
+    assert(
+      (await b.caches.get(network.fid!)!.getInfo())
+        ?.contentKey,
+      "received content was not published after verification",
+    );
+    [a, b, legacy].forEach((node) =>
+      node.rooms!.syncSessions(),
+    );
+    await until(
+      () =>
+        a.rooms?.fileCapabilities["content-b"] ===
+          "supported" &&
+        a.rooms?.fileCapabilities["content-legacy"] ===
+          "supported",
+      "room capabilities unavailable",
+    );
+    await a.roomFiles!.sendFile({
+      kind: "library",
+      localFileId: first.fid!,
+    });
+    const room = a.messages.at(-1)!;
+    await until(
+      () =>
+        room.roomTransfers?.["content-b"]
+          ?.completionSource === "local",
+      "room local hit receipt missing",
+    );
+    assert(
+      b.transport.fileChannels === channels + 1,
+      "room local hit transferred binary data",
+    );
+    const legacyOffer = legacy.messages.find(
+      (item) => item.id === room.id,
+    )!;
+    assert(
+      !legacyOffer.fingerprint,
+      "new fingerprint leaked into legacy room envelope",
+    );
+    await legacy.roomFiles!.requestFile(legacyOffer);
+    await until(
+      () => legacyOffer.transferStatus === "complete",
+      "mixed version room transfer failed",
+    );
+    assert(
+      (await hash(
+        (await legacy.caches
+          .get(legacyOffer.fid!)!
+          .getFile())!,
+      )) === (await hash(source)),
+      "legacy content differs",
+    );
+    const concurrent = new File(
+      [new Uint8Array(4 * 1024 * 1024).fill(97)],
+      "concurrent.bin",
+    );
+    const count = b.transport.fileChannels;
+    await Promise.all([
+      a.service.sendFile(ab.aSession, concurrent),
+      a.service.sendFile(ab.aSession, concurrent),
+    ]);
+    const simultaneous = a.messages.slice(-2);
+    await until(
+      () =>
+        simultaneous.every(
+          (message) =>
+            message.transferStatus === "complete",
+        ),
+      "shared receive completion missing",
+    );
+    assert(
+      b.transport.fileChannels === count + 1,
+      "concurrent content opened multiple binary channels",
+    );
+    assert(
+      simultaneous.filter(
+        (message) => message.completionSource === "local",
+      ).length === 1,
+      "deferred sender did not receive local completion",
+    );
+    await b.library!.removeFile(local.cache.id);
+    assert(
+      (await b.caches.get(first.fid!)!.getFile()) === null,
+      "explicit delete left a readable alias",
+    );
+    return {
+      localHitChannels: 0,
+      repeatedSends: 2,
+      missChannels: 1,
+      verifiedBytes: fresh.size,
+      roomLocalHit: true,
+      mixedVersionRoom: true,
+      explicitDeletion: true,
+      concurrentContentChannels: 1,
+      worker: "BLAKE3-256",
+    };
+  } finally {
+    ab.close();
+    al.close();
+    await Promise.all([
+      a.close(),
+      b.close(),
+      legacy.close(),
+    ]);
+  }
+}
+
 main().catch((error) => {
   window.__SPEED_TEST_ERROR__ =
     error.stack ?? String(error);

@@ -138,6 +138,27 @@ async function test(
 
 async function main() {
   try {
+    await test("paused progress metadata counts an out-of-order short tail exactly", async () => {
+      const value = await cache();
+      await value.storeChunk(2, bytes(2, 3).buffer);
+      await value.flush();
+      equal((await value.getInfo())?.cachedBytes, 3);
+      equal(await value.calcCachedBytes(), 3);
+      await value.storeChunk(0, bytes(0, 8).buffer);
+      await value.storeChunk(0, bytes(0, 8).buffer);
+      await value.flush();
+      equal((await value.getInfo())?.cachedBytes, 11);
+      await value.setInfo({
+        id: value.id,
+        fileName: "cache.bin",
+        fileSize: 19,
+        chunkSize: 8,
+      });
+      equal((await value.getInfo())?.cachedBytes, 11);
+      await value.storeChunk(1, bytes(1, 8).buffer);
+      await value.getFile();
+      equal((await value.getInfo())?.cachedBytes, 19);
+    });
     await test("Blob storage, snapshot, duplicate count and ordered assembly", async () => {
       const value = await cache();
       const input = bytes(0, 8);

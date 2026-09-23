@@ -20,6 +20,11 @@ export function snapshotStoreMessage(
     ...message,
     room,
     deliveries,
+    localContentPending: undefined,
+    localContentDetached: undefined,
+    fingerprint: message.fingerprint
+      ? { ...message.fingerprint }
+      : undefined,
     roomTransfers: message.roomTransfers
       ? Object.fromEntries(
           Object.entries(message.roomTransfers).map(

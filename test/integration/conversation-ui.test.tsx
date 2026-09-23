@@ -57,6 +57,7 @@ vi.mock("lucide-solid", () => {
   const Icon = () => null;
   return {
     Search: Icon,
+    Library: Icon,
     ListFilter: Icon,
     ChevronDown: Icon,
     ChevronRight: Icon,
@@ -826,13 +827,43 @@ describe("shared conversation UI", () => {
     ).toBeTruthy();
   });
 
-  it("sends only in the currently joined room and leaves inactive history read-only", async () => {
+  it("keeps the private composer mounted when the peer disconnects or reconnects", () => {
+    renderInRouter(() => (
+      <ConversationView
+        conversationId={directId}
+        embedded
+      />
+    ));
+    const composer = screen.getByTestId("private-composer");
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "onlineStatus",
+      "offline",
+    );
+    expect(screen.getByTestId("private-composer")).toBe(
+      composer,
+    );
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "onlineStatus",
+      "online",
+    );
+    expect(screen.getByTestId("private-composer")).toBe(
+      composer,
+    );
+  });
+
+  it("preserves the room draft and disables the composer until joined and another member is connected", async () => {
     renderInRouter(() => (
       <ConversationView conversationId={roomId} embedded />
     ));
     const textbox = screen.getByRole("textbox", {
       name: "conversations.room_message",
-    });
+    }) as HTMLTextAreaElement;
     fireEvent.input(textbox, {
       target: { value: "  team hello  " },
     });
@@ -851,22 +882,50 @@ describe("shared conversation UI", () => {
         "",
       ),
     );
-    setAppState("roomStatus", "roomId", "elsewhere");
-    expect(
-      screen.queryByRole("textbox", {
-        name: "conversations.room_message",
-      }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "conversations.send",
-      }),
-    ).toBeNull();
-    expect(screen.getByText("group contents")).toBeTruthy();
-    expect(
-      screen.getByText("conversations.room_inactive"),
-    ).toBeTruthy();
+    fireEvent.input(textbox, {
+      target: { value: "next room draft" },
+    });
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      false,
+    );
+    expect(textbox.disabled).toBe(true);
+    fireEvent.submit(textbox.form!);
     expect(service.sendRoomText).toHaveBeenCalledTimes(1);
+    setAppState("roomStatus", "roomId", "elsewhere");
+    expect(textbox.disabled).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "conversations.send",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "file_library.choose",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(screen.getByText("group contents")).toBeTruthy();
+    expect(service.sendRoomText).toHaveBeenCalledTimes(1);
+    expect(textbox.value).toBe("next room draft");
+    setAppState("roomStatus", "roomId", "team");
+    expect(textbox.disabled).toBe(true);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      true,
+    );
+    expect(textbox.disabled).toBe(false);
+    expect(textbox.value).toBe("next room draft");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("routes a binary attachment to the room offer API without sending or clearing the text draft", async () => {

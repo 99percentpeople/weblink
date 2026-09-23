@@ -33,6 +33,48 @@ afterEach(async () => {
 });
 
 describe("session-owned file transfers", () => {
+  it("preserves each room recipient's paused progress when binding a replacement run", () => {
+    fixture.messages.messages = [
+      {
+        ...fileMessage(),
+        room: {
+          roomId: "room",
+          senderName: "Me",
+          senderAvatar: null,
+        },
+        roomTransfers: {
+          peer: {
+            status: "paused",
+            progress: { total: 2048, received: 768 },
+          },
+          other: {
+            status: "paused",
+            progress: { total: 2048, received: 256 },
+          },
+        },
+      },
+    ];
+    const run = fixture.register();
+    expect(
+      fixture.messages.messages[0].roomTransfers?.peer,
+    ).toMatchObject({
+      status: "init",
+      progress: { received: 768 },
+    });
+    fixture.registry.destroy(run);
+    expect(
+      fixture.messages.messages[0].roomTransfers,
+    ).toMatchObject({
+      peer: {
+        status: "paused",
+        progress: { received: 768 },
+      },
+      other: {
+        status: "paused",
+        progress: { received: 256 },
+      },
+    });
+  });
   it("sends the same cache to two peers without replacing either run", () => {
     const cache = fakeCache();
     const a = fixture.register(

@@ -423,7 +423,7 @@ export default function Home() {
                     <span>{t("meeting.preview_hint")}</span>
                     <button
                       type="button"
-                      class="text-primary underline underline-offset-[3px]"
+                      class="text-primary ml-auto underline underline-offset-[3px]"
                       disabled={
                         roomActions.busy() ||
                         appState.session

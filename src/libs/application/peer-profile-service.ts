@@ -1,3 +1,4 @@
+import { FILE_CONTENT_FEATURE } from "@/libs/domain/protocol/messages";
 import {
   normalizePeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
@@ -150,7 +151,7 @@ export class PeerProfileService {
       .notify(
         session,
         "client-profile",
-        { profile },
+        { profile, features: [FILE_CONTENT_FEATURE] },
         { createdAt },
       )
       .catch((error) => {

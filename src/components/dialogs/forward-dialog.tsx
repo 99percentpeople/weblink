@@ -208,15 +208,24 @@ export const createForwardDialog = () => {
 
         <Button
           disabled={selectedClients().length === 0}
-          onClick={() => {
+          onClick={async () => {
             const data = shareData();
-            for (const clientId of selectedClients()) {
+            const targets = selectedClients();
+            setSelectedClients([]);
+            setOpen(false);
+            for (const clientId of targets) {
               for (const item of data ?? []) {
                 try {
                   if (item.type === "text") {
-                    sendText(item.data as string, clientId);
+                    await sendText(
+                      item.data as string,
+                      clientId,
+                    );
                   } else if (item.type === "file") {
-                    sendFile(item.data as File, clientId);
+                    await sendFile(
+                      item.data as File,
+                      clientId,
+                    );
                   } else if (item.type === "cache") {
                     shareFile(
                       (item.data as FileMetaData).id,
@@ -236,8 +245,6 @@ export const createForwardDialog = () => {
                 }
               }
             }
-            setSelectedClients([]);
-            setOpen(false);
           }}
         >
           <IconForward class="mr-2 size-4" />

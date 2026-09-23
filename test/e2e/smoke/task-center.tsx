@@ -180,6 +180,9 @@ async function main() {
       );
     };
     setTaskTestContext({
+      conversationHistory: {
+        cacheLocalTextBatch: unexpected,
+      },
       tasks,
       getSpeedTestState: tasks.latestSpeedTest,
       speedTestState: state,
@@ -267,7 +270,7 @@ async function main() {
     click("tasks.title");
     await sleep(100);
     assert(
-      document.querySelectorAll("table tbody tr").length >=
+      document.querySelectorAll("[data-task-id]").length >=
         3,
       "unified task list missing file/speed tasks",
     );

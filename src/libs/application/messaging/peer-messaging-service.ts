@@ -3,6 +3,7 @@ import type { messageStores } from "./message-store";
 import {
   createSessionMessage,
   type AckMessage,
+  type FileOfferResultMessage,
   type MessageMetadata,
   type MessageOf,
   type MessagePayload,
@@ -44,7 +45,7 @@ export class PeerMessagingService {
     options: TrackedSendOptions = {},
   ): Promise<{
     message: MessageOf<T>;
-    ackMessage: AckMessage;
+    ackMessage: AckMessage | FileOfferResultMessage;
   } | null> {
     let prepared: MessageOf<T> | undefined;
     try {
@@ -62,7 +63,19 @@ export class PeerMessagingService {
           },
         },
       );
-      this.store.setReceiveMessage(ackMessage);
+      this.store.setReceiveMessage(
+        ackMessage.type === "file-offer-result"
+          ? createSessionMessage(
+              {
+                clientId: session.targetClientId,
+                targetClientId: session.clientId,
+              },
+              "ack",
+              { mode: "receive" },
+              { id: ackMessage.id },
+            )
+          : ackMessage,
+      );
       return { message: prepared!, ackMessage };
     } catch (error) {
       if (

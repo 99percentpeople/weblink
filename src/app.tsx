@@ -28,7 +28,10 @@ import { isHomePath } from "@/libs/application/home-navigation";
 import { resolveWallpaper } from "@/libs/wallpapers";
 import { setClientProfile } from "./libs/state/profile-store";
 import { optional } from "./libs/domain/utils/optional";
-import { AppStateProvider } from "@/libs/state/app-state-context";
+import {
+  AppStateProvider,
+  useAppState,
+} from "@/libs/state/app-state-context";
 
 import { toast } from "solid-sonner";
 import createAboutDialog from "./components/dialogs/about-dialog";
@@ -57,11 +60,7 @@ import {
 
 import { Button } from "./components/ui/button";
 import { t, isDictLoaded } from "./i18n";
-import { v4 } from "uuid";
-import { createClientId } from "./libs/domain/ids";
 
-import { messageStores } from "./libs/application/messaging/message-store";
-import { sleep } from "./libs/utils/sleep";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 import { AudioPlayerProvider } from "./routes/home/components/audio-player";
@@ -74,6 +73,7 @@ import { ModalProvider } from "@/components/dialogs/base";
 import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 
 const InnerApp = (props: ParentProps) => {
+  const { conversationHistory } = useAppState();
   const roomActions = useRoomActions();
   const dialogs = useAppDialogs();
   const route = useLocation();
@@ -175,46 +175,6 @@ const InnerApp = (props: ParentProps) => {
     }
   };
 
-  const initStarterMessage = async () => {
-    const instructorClientId = createClientId();
-    const instructorName = t("common.starter.starter_name");
-    messageStores.setClient({
-      clientId: instructorClientId,
-      name: instructorName,
-      avatar: null,
-    });
-
-    await messageStores.addMessage({
-      id: v4(),
-      type: "text",
-      client: instructorClientId,
-      target: appState.profile.clientId,
-      data: t("common.starter.welcome"),
-      createdAt: Date.now(),
-      status: "received",
-    });
-    await sleep(1);
-    await messageStores.addMessage({
-      id: v4(),
-      type: "text",
-      client: instructorClientId,
-      target: appState.profile.clientId,
-      data: t("common.starter.tip1"),
-      createdAt: Date.now(),
-      status: "received",
-    });
-    await sleep(1);
-    await messageStores.addMessage({
-      id: v4(),
-      type: "text",
-      client: instructorClientId,
-      target: appState.profile.clientId,
-      data: t("common.starter.tip2"),
-      createdAt: Date.now(),
-      status: "received",
-    });
-  };
-
   onMount(async () => {
     parseSearchParams();
     if (!localeOptionsMap[appState.options.locale]) {
@@ -230,12 +190,48 @@ const InnerApp = (props: ParentProps) => {
     }
   });
 
-  createEffect(() => {
-    if (isDictLoaded() && !starterMessageSent()) {
-      setStarterMessageSent(true);
-      initStarterMessage();
-    }
-  });
+  let creatingGuide = false;
+  createEffect(
+    on(
+      () => isDictLoaded() && !starterMessageSent(),
+      (ready) => {
+        if (!ready || creatingGuide) return;
+        creatingGuide = true;
+        void conversationHistory
+          .cacheLocalTextBatch(
+            "welcome",
+            "weblink:welcome",
+            t("common.starter.starter_name"),
+            [
+              "welcome",
+              "connect",
+              "chat",
+              "files",
+              "meeting",
+              "settings",
+            ].map((key) => ({
+              key,
+              text: t(`common.starter.${key}`),
+            })),
+          )
+          .then(() => setStarterMessageSent(true))
+          .catch((error) => {
+            console.error(
+              "[Welcome] could not save the guide",
+              error,
+            );
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : String(error),
+            );
+          })
+          .finally(() => {
+            creatingGuide = false;
+          });
+      },
+    ),
+  );
 
   createReloadPrompt();
 
