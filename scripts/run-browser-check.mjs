@@ -124,6 +124,8 @@ async function main() {
     // Avoid the application backend, HMR reruns and changes to a real profile.
     vite = await createServer({
       root,
+      // Never overwrite a running dev server's optimized dependencies.
+      cacheDir: join(profile, "vite-cache"),
       configFile: false,
       logLevel: "error",
       plugins: ui
@@ -148,7 +150,10 @@ async function main() {
           { find: "@", replacement: join(root, "src") },
         ],
       },
-      optimizeDeps: { entries: [entry] },
+      optimizeDeps: {
+        entries: [entry],
+        include: ["hash-wasm", "fflate"],
+      },
       server: {
         host: "127.0.0.1",
         port: 0,

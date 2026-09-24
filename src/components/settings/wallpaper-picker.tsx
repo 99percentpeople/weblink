@@ -123,6 +123,7 @@ export default function WallpaperPicker() {
       />
       <DropArea
         class="wallpaper-card"
+        disabled={uploading()}
         onDrop={(event) => {
           const files = Array.from(
             event.dataTransfer?.files ?? [],
@@ -133,27 +134,19 @@ export default function WallpaperPicker() {
             ) ?? files[0],
           );
         }}
-        overlay={(event) => {
-          if (!event) return null;
-          const canDrop =
-            !uploading() &&
-            event.dataTransfer?.types.includes("Files");
-          if (event.dataTransfer)
-            event.dataTransfer.dropEffect = canDrop
-              ? "copy"
-              : "none";
-          return (
+        overlay={(state) => (
+          <Show when={state.active}>
             <div class="wallpaper-drop-overlay">
               <Show
-                when={canDrop}
+                when={state.accepted}
                 fallback={<IconClose class="size-7" />}
               >
                 <IconUploadFile class="size-7" />
                 <span>{label("drop_to_upload")}</span>
               </Show>
             </div>
-          );
-        }}
+          </Show>
+        )}
       >
         <div
           class="wallpaper-preview"

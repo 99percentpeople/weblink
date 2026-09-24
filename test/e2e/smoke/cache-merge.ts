@@ -1,4 +1,11 @@
+import { createStore } from "solid-js/store";
 import type { ChunkMetaData } from "../../../src/libs/domain/file";
+import type {
+  ContentRecord,
+  FileReference,
+} from "../../../src/libs/domain/file-library";
+import { contentKey } from "../../../src/libs/domain/protocol/file-fingerprint";
+import { IndexedDbFileLibrary } from "../../../src/libs/infrastructure/storage/indexeddb-file-library";
 import {
   assembleCachedFile,
   requestResult,
@@ -138,6 +145,164 @@ async function test(
 
 async function main() {
   try {
+    await test("reactive file metadata is snapshotted before IndexedDB writes", async () => {
+      const value = await cache(7);
+      const file = new File(["content"], "source.txt", {
+        type: "text/plain",
+        lastModified: 123,
+      });
+      const [metadata, setMetadata] =
+        createStore<ChunkMetaData>({
+          id: value.id,
+          fileName: file.name,
+          fileSize: file.size,
+          file,
+          fingerprint: {
+            version: 1,
+            algorithm: "blake3-256",
+            digest: "a".repeat(64),
+            size: file.size,
+          },
+          aliases: ["alias.txt"],
+        });
+      // A shallow copy still contains Solid store proxies.
+      await rejects(
+        Promise.resolve().then(() =>
+          structuredClone({ ...metadata }),
+        ),
+        /clone/i,
+      );
+      const pending = value.setInfo({ ...metadata });
+      setMetadata("fingerprint", "digest", "b".repeat(64));
+      setMetadata("aliases", 0, "changed.txt");
+      await pending;
+      const saved = (await read(value)).info;
+      equal(saved.fingerprint?.digest, "a".repeat(64));
+      equal(saved.aliases, ["alias.txt"]);
+      assert(
+        saved.file instanceof File,
+        "File lost its native type",
+      );
+      equal(await saved.file.text(), "content");
+      equal(
+        [
+          saved.file.name,
+          saved.file.type,
+          saved.file.lastModified,
+        ],
+        [file.name, file.type, file.lastModified],
+      );
+      equal(
+        (await value.getInfo())?.fingerprint?.digest,
+        "a".repeat(64),
+      );
+      equal(metadata.fingerprint?.digest, "b".repeat(64));
+    });
+    await test("file library writes snapshot reactive content records and references", async () => {
+      const name = `file-library-snapshot-${crypto.randomUUID()}`;
+      const library = new IndexedDbFileLibrary(name);
+      const fingerprint = {
+        version: 1 as const,
+        algorithm: "blake3-256" as const,
+        digest: "a".repeat(64),
+        size: 7,
+      };
+      const key = contentKey(fingerprint);
+      const [record, setRecord] =
+        createStore<ContentRecord>({
+          key,
+          fingerprint: { ...fingerprint },
+          storageId: "storage-id",
+          createdAt: 123,
+          state: "pending",
+        });
+      const [reference, setReference] =
+        createStore<FileReference>({
+          id: "reference-id",
+          contentKey: key,
+          fingerprint: { ...fingerprint },
+          fileName: "source.txt",
+          fileSize: 7,
+          aliases: ["alias.txt"],
+        });
+      try {
+        const claiming = library.claim(record);
+        setRecord("fingerprint", "digest", "b".repeat(64));
+        equal(await claiming, true);
+        equal(
+          (await library.content(key))?.fingerprint,
+          fingerprint,
+        );
+        equal(
+          (await library.content(key))?.state,
+          "pending",
+        );
+        equal(await library.claim(record), false);
+        equal(
+          (await library.content(key))?.fingerprint,
+          fingerprint,
+        );
+
+        setRecord(
+          "fingerprint",
+          "digest",
+          fingerprint.digest,
+        );
+        const committing = library.commit(
+          { ...record },
+          { ...reference },
+        );
+        setRecord("fingerprint", "digest", "b".repeat(64));
+        setReference(
+          "fingerprint",
+          "digest",
+          "b".repeat(64),
+        );
+        setReference("aliases", 0, "changed.txt");
+        await committing;
+        equal((await library.content(key))?.state, "ready");
+        equal(
+          (await library.content(key))?.fingerprint,
+          fingerprint,
+        );
+        equal(
+          (await library.reference(reference.id))
+            ?.fingerprint,
+          fingerprint,
+        );
+        equal(
+          (await library.reference(reference.id))?.aliases,
+          ["alias.txt"],
+        );
+
+        setReference(
+          "fingerprint",
+          "digest",
+          fingerprint.digest,
+        );
+        setReference("aliases", 0, "updated.txt");
+        const updating = library.putReference(reference);
+        setReference(
+          "fingerprint",
+          "digest",
+          "b".repeat(64),
+        );
+        setReference("aliases", 0, "changed-again.txt");
+        await updating;
+        equal(
+          (await library.reference(reference.id))
+            ?.fingerprint,
+          fingerprint,
+        );
+        equal(
+          (await library.reference(reference.id))?.aliases,
+          ["updated.txt"],
+        );
+      } finally {
+        // The repository closes its connection on versionchange.
+        await requestResult(indexedDB.deleteDatabase(name));
+      }
+    });
     await test("paused progress metadata counts an out-of-order short tail exactly", async () => {
       const value = await cache();
       await value.storeChunk(2, bytes(2, 3).buffer);

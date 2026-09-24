@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import { createBottomScroll } from "@/libs/hooks/create-bottom-scroll";
 import { cn } from "@/libs/cn";
-import DropArea from "@/components/drop-area";
+import { ChatFileDropArea } from "./chat-file-drop-area";
 import { ChatScrollButton } from "./chat-scroll-button";
 import { ChatEmptyState } from "./chat-empty-state";
 import { createMessageGallery } from "./message-gallery";
@@ -21,14 +21,9 @@ import {
   StoreMessage,
 } from "@/libs/application/messaging/message-store";
 import { ChatBar } from "@/routes/client/[id]/components/chat-bar";
-import {
-  IconClose,
-  IconPlaceItem,
-} from "@/components/icons";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import { PeerSession } from "@/libs/domain/session";
-import { handleDropItems } from "@/libs/utils/process-file";
 import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { catchError } from "@/libs/catch";
@@ -282,13 +277,20 @@ export function ChatConversation(props: {
     messageStores.deleteMessage(message.id);
   };
 
-  let container: HTMLDivElement | undefined;
+  let container: HTMLElement | undefined;
   return (
-    <div
-      ref={container}
+    <ChatFileDropArea
+      ref={(element) => {
+        container = element;
+      }}
+      conversationKey={conversationId()}
+      disabled={!canSend()}
+      onSendFile={(file) => sendFile(file, props.clientId)}
+      onSent={() => scroll.toBottom()}
       data-slot="chat-page"
       class={cn(
-        "flex min-h-0 w-full flex-col overflow-hidden",
+        `relative isolate flex min-h-0 w-full flex-col
+        overflow-hidden`,
         props.embedded
           ? "h-full"
           : "h-[calc(100dvh-var(--mobile-header-height))] md:h-dvh",
@@ -307,104 +309,7 @@ export function ChatConversation(props: {
               onBack={props.onBack}
               class="static"
             />
-            <DropArea
-              class="relative min-h-0 flex-1"
-              overlay={(ev) => {
-                if (!ev) return;
-                if (ev.dataTransfer) {
-                  const hasFiles =
-                    canSend() &&
-                    ev.dataTransfer?.types.includes(
-                      "Files",
-                    );
-
-                  if (hasFiles) {
-                    ev.dataTransfer.dropEffect = "move";
-                  } else {
-                    ev.dataTransfer.dropEffect = "none";
-                  }
-                }
-                return (
-                  <div
-                    class="bg-muted/50 pointer-events-none absolute inset-0 z-10 grid
-                      place-items-center"
-                  >
-                    <span class="text-muted-foreground/20">
-                      <Show
-                        when={
-                          ev.dataTransfer?.dropEffect ===
-                          "move"
-                        }
-                        fallback={
-                          <IconClose class="size-32" />
-                        }
-                      >
-                        <IconPlaceItem class="size-32" />
-                      </Show>
-                    </span>
-                  </div>
-                );
-              }}
-              onDrop={async (ev) => {
-                if (!canSend()) return;
-                if (!ev.dataTransfer?.items) return;
-                const target = props.clientId;
-                const abortController =
-                  new AbortController();
-                const toastId = toast.loading(
-                  t("common.notification.processing_files"),
-                  {
-                    duration: Infinity,
-                    action: {
-                      label: t("common.action.cancel"),
-                      onClick: () =>
-                        abortController.abort(
-                          "User cancelled",
-                        ),
-                    },
-                  },
-                );
-
-                const [error, files] = await catchError(
-                  handleDropItems(
-                    ev.dataTransfer.items,
-                    abortController.signal,
-                  ),
-                );
-                toast.dismiss(toastId);
-                if (error) {
-                  console.warn(error);
-                  if (error.message !== "User cancelled") {
-                    toast.error(
-                      userErrorMessage(
-                        error,
-                        "errors.file_failed",
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                try {
-                  for (const file of files) {
-                    if (
-                      !canSend() ||
-                      props.clientId !== target
-                    )
-                      break;
-                    await sendFile(file, target);
-                  }
-                } catch (error) {
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : t(
-                          "common.notification.unknown_error",
-                        ),
-                  );
-                }
-              }}
-            >
+            <div class="relative min-h-0 flex-1">
               <div
                 ref={scroll.viewportRef}
                 data-slot="chat-viewport"
@@ -517,7 +422,7 @@ export function ChatConversation(props: {
                 }
                 onClick={() => scroll.toBottom()}
               />
-            </DropArea>
+            </div>
             <Show when={currentIdentity()}>
               <ChatBar
                 client={client()}
@@ -535,6 +440,6 @@ export function ChatConversation(props: {
           </div>
         )}
       </Show>
-    </div>
+    </ChatFileDropArea>
   );
 }

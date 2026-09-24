@@ -266,6 +266,7 @@ export default function FileManager() {
   return (
     <DropArea
       class="relative flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+      disabled={importing()}
       onDrop={(event) => {
         if (event.dataTransfer?.items)
           void importFiles((signal) =>
@@ -275,12 +276,8 @@ export default function FileManager() {
             ),
           );
       }}
-      overlay={(event) => (
-        <Show
-          when={event?.dataTransfer?.types.includes(
-            "Files",
-          )}
-        >
+      overlay={(state) => (
+        <Show when={state.active && state.accepted}>
           <div
             class="bg-background/90 pointer-events-none absolute inset-0 z-20
               flex items-center justify-center rounded-lg border-2

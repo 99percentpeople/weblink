@@ -20,7 +20,6 @@ import {
   createMemoryHistory,
 } from "@solidjs/router";
 import { reconcile } from "solid-js/store";
-import { type ParentProps } from "solid-js";
 import Chat from "../support/direct-chat-page";
 import type { StoreMessage } from "@/libs/domain/message";
 import {
@@ -86,11 +85,6 @@ vi.mock("photoswipe/lightbox", () => ({
 }));
 vi.mock("photoswipe-video-plugin", () => ({
   default: class {},
-}));
-vi.mock("@/components/drop-area", () => ({
-  default: (props: ParentProps) => (
-    <div>{props.children}</div>
-  ),
 }));
 vi.mock(
   "@/routes/client/[id]/components/client-header",

@@ -76,6 +76,10 @@ export default defineConfig({
     },
   },
   server: {},
+  optimizeDeps: {
+    // Pre-bundle worker dependencies before their first use.
+    include: ["hash-wasm", "fflate"],
+  },
   build: {
     rollupOptions: {
       treeshake: true,

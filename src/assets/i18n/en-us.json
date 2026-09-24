@@ -597,6 +597,10 @@
     "attach_media": "Send photos or videos",
     "attach_file": "Send file",
     "capture_media": "Take photo or video",
+    "file_drop": {
+      "title": "Drop to send files",
+      "unavailable_title": "Files cannot be sent yet"
+    },
     "room_file_details": "View details",
     "room_file_request": "Click to transfer",
     "room_file_offer": "Shared with the room. Transfer starts when a member requests this file.",

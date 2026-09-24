@@ -12,6 +12,7 @@ import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import { IconSettings } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ChatComposer } from "./chat-composer";
+import { ChatFileDropArea } from "./chat-file-drop-area";
 import { ChatScrollButton } from "./chat-scroll-button";
 import { ChatEmptyState } from "./chat-empty-state";
 import { createSendItemPreviewDialog } from "@/components/dialogs/preview-dialog";
@@ -137,10 +138,16 @@ export function RoomConversation(props: {
     () => scroll.positioned() && scroll.following(),
   );
   return (
-    <section
+    <ChatFileDropArea
+      as="section"
+      conversationKey={props.conversation.id}
+      disabled={!canSendFiles()}
+      onSendFile={(file) => state.sendRoomFile(file)}
+      onSent={() => scroll.toBottom()}
       data-slot="room-conversation"
       class={cn(
-        "flex min-h-0 w-full flex-col overflow-hidden",
+        `relative isolate flex min-h-0 w-full flex-col
+        overflow-hidden`,
         props.embedded
           ? "h-full"
           : "h-[calc(100dvh-var(--mobile-header-height))] md:h-dvh",
@@ -336,6 +343,6 @@ export function RoomConversation(props: {
         sendLabel={t("conversations.send")}
         sendShortcut="enter"
       />
-    </section>
+    </ChatFileDropArea>
   );
 }

@@ -597,6 +597,10 @@
     "attach_media": "傳送圖片或影片",
     "attach_file": "傳送檔案",
     "capture_media": "拍攝圖片或影片",
+    "file_drop": {
+      "title": "放開以傳送檔案",
+      "unavailable_title": "暫時無法傳送檔案"
+    },
     "room_file_details": "查看詳情",
     "room_file_request": "點擊傳輸",
     "room_file_offer": "已分享到房間，成員點擊後開始傳輸。",

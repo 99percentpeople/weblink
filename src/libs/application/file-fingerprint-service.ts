@@ -186,6 +186,10 @@ export class FileFingerprintService {
       const cleanup = () => {
         worker.removeEventListener("message", message);
         worker.removeEventListener("error", error);
+        worker.removeEventListener(
+          "messageerror",
+          messageError,
+        );
         signal.removeEventListener("abort", abort);
       };
       const fail = (reason: unknown) => {
@@ -195,8 +199,44 @@ export class FileFingerprintService {
         reject(reason);
       };
       const abort = () => fail(signal.reason);
-      const error = (event: ErrorEvent) =>
-        fail(new Error(event.message));
+      const error = (event: Event) => {
+        const details = event as ErrorEvent;
+        if (
+          details.error !== undefined &&
+          details.error !== null
+        )
+          return fail(details.error);
+        const message = details.message?.trim();
+        if (message) {
+          const location = details.filename
+            ? [
+                details.filename,
+                details.lineno || undefined,
+                details.colno || undefined,
+              ]
+                .filter((part) => part !== undefined)
+                .join(":")
+            : "";
+          return fail(
+            new Error(
+              location
+                ? `${message} (${location})`
+                : message,
+            ),
+          );
+        }
+        return fail(
+          new Error(
+            "Fingerprint worker failed to load. Reload the page and try again.",
+          ),
+        );
+      };
+      const messageError = () =>
+        fail(
+          new Error(
+            "Could not deserialize fingerprint worker response. Reload the page and try again.",
+          ),
+        );
       const message = (event: MessageEvent) => {
         if (event.data.id !== id) return;
         if (event.data.error)
@@ -218,6 +258,7 @@ export class FileFingerprintService {
       };
       worker.addEventListener("message", message);
       worker.addEventListener("error", error);
+      worker.addEventListener("messageerror", messageError);
       signal.addEventListener("abort", abort, {
         once: true,
       });

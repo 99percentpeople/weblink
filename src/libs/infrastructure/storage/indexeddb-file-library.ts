@@ -7,6 +7,10 @@ import {
   requestResult,
   transactionDone,
 } from "./chunk-assembly";
+import {
+  snapshotContentRecord,
+  snapshotFileMetadata,
+} from "./metadata-snapshot";
 
 /** Only metadata lives here. File bytes remain in the existing chunk databases. */
 export class IndexedDbFileLibrary implements FileLibraryRepository {
@@ -78,6 +82,7 @@ export class IndexedDbFileLibrary implements FileLibraryRepository {
     );
   }
   async claim(record: ContentRecord): Promise<boolean> {
+    const stored = snapshotContentRecord(record);
     const tx = (await this.database()).transaction(
       "contents",
       "readwrite",
@@ -85,9 +90,9 @@ export class IndexedDbFileLibrary implements FileLibraryRepository {
     const done = transactionDone(tx);
     const store = tx.objectStore("contents");
     const exists = await requestResult(
-      store.get(record.key),
+      store.get(stored.key),
     );
-    if (!exists) store.add(record);
+    if (!exists) store.add(stored);
     await done;
     return !exists;
   }
@@ -95,21 +100,24 @@ export class IndexedDbFileLibrary implements FileLibraryRepository {
     record: ContentRecord,
     reference: FileReference,
   ): Promise<void> {
+    const storedRecord = snapshotContentRecord(record);
+    const storedReference = snapshotFileMetadata(reference);
     const tx = (await this.database()).transaction(
       ["contents", "references"],
       "readwrite",
     );
     const done = transactionDone(tx);
     tx.objectStore("contents").put({
-      ...record,
+      ...storedRecord,
       state: "ready",
     });
-    tx.objectStore("references").put(reference);
+    tx.objectStore("references").put(storedReference);
     await done;
   }
   async putReference(
     reference: FileReference,
   ): Promise<void> {
+    const stored = snapshotFileMetadata(reference);
     const tx = (await this.database()).transaction(
       ["contents", "references"],
       "readwrite",
@@ -117,7 +125,7 @@ export class IndexedDbFileLibrary implements FileLibraryRepository {
     const done = transactionDone(tx);
     const content = await requestResult<
       ContentRecord | undefined
-    >(tx.objectStore("contents").get(reference.contentKey));
+    >(tx.objectStore("contents").get(stored.contentKey));
     if (content?.state !== "ready") {
       tx.abort();
       await done.catch(() => {});
@@ -125,7 +133,7 @@ export class IndexedDbFileLibrary implements FileLibraryRepository {
         "File content is no longer available",
       );
     }
-    tx.objectStore("references").put(reference);
+    tx.objectStore("references").put(stored);
     await done;
   }
   async removeReference(id: string): Promise<void> {

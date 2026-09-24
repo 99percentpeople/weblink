@@ -18,12 +18,7 @@ import {
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route } from "@solidjs/router";
-import {
-  createSignal,
-  Show,
-  type JSX,
-  type ParentProps,
-} from "solid-js";
+import { createSignal, Show, type JSX } from "solid-js";
 import { reconcile } from "solid-js/store";
 import { ConversationSidebar } from "@/components/conversations/conversation-sidebar";
 import { ConversationView } from "@/components/conversations/conversation-view";
@@ -46,6 +41,7 @@ const service = vi.hoisted(() => ({
   sendRoomText: vi.fn(),
   sendRoomFile: vi.fn(),
   sendFile: vi.fn(),
+  fileCapability: "supported",
   sendClipboard: vi.fn(),
   following: (() => true) as () => boolean,
 }));
@@ -88,7 +84,9 @@ vi.mock("@/libs/state/app-state-context", () => ({
           )
         : null,
     roomChatCapabilities: () => ({ alice: "supported" }),
-    roomFileCapabilities: () => ({ alice: "supported" }),
+    roomFileCapabilities: () => ({
+      alice: service.fileCapability,
+    }),
     sendRoomText: service.sendRoomText,
     sendRoomFile: service.sendRoomFile,
     sendFile: service.sendFile,
@@ -148,11 +146,6 @@ vi.mock("photoswipe/lightbox", () => ({
 }));
 vi.mock("photoswipe-video-plugin", () => ({
   default: class {},
-}));
-vi.mock("@/components/drop-area", () => ({
-  default: (props: ParentProps) => (
-    <div>{props.children}</div>
-  ),
 }));
 vi.mock("@/components/icons", () => ({
   IconSettings: () => null,
@@ -253,6 +246,23 @@ function renderInRouter(component: () => JSX.Element) {
   ));
 }
 
+function dropFile(target: Element, file: File) {
+  const event = new Event("drop", {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      types: ["Files"],
+      files: [file],
+      items: [],
+      dropEffect: "none",
+    },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 beforeAll(async () => {
   await store.initialize();
 });
@@ -296,6 +306,9 @@ beforeEach(async () => {
   service.sendRoomText.mockResolvedValue(undefined);
   service.sendRoomFile.mockReset();
   service.sendRoomFile.mockResolvedValue(undefined);
+  service.sendFile.mockReset();
+  service.sendFile.mockResolvedValue(undefined);
+  service.fileCapability = "supported";
   store.setClient({
     clientId: "alice",
     name: "Alice",
@@ -335,6 +348,119 @@ afterEach(() => {
 });
 
 describe("shared conversation UI", () => {
+  it.each([
+    ["direct", "header"],
+    ["direct", "messages"],
+    ["direct", "composer"],
+    ["room", "header"],
+    ["room", "messages"],
+    ["room", "composer"],
+  ] as const)(
+    "accepts files from the %s conversation's %s",
+    async (kind, area) => {
+      const { container } = renderInRouter(() => (
+        <ConversationView
+          conversationId={
+            kind === "room" ? roomId : directId
+          }
+          embedded
+        />
+      ));
+      const root = container.querySelector(
+        kind === "room"
+          ? '[data-slot="room-conversation"]'
+          : '[data-slot="chat-page"]',
+      )!;
+      const target =
+        area === "header"
+          ? root.querySelector("header")!
+          : area === "messages"
+            ? root.querySelector("[data-chat-message]")!
+            : root.querySelector(
+                kind === "room" ? "textarea" : "footer",
+              )!;
+      const textbox =
+        kind === "room"
+          ? root.querySelector("textarea")!
+          : null;
+      if (textbox)
+        fireEvent.input(textbox, {
+          target: { value: "keep draft" },
+        });
+      const file = new File(["upload"], "drop.txt");
+      expect(dropFile(target, file).defaultPrevented).toBe(
+        true,
+      );
+      await waitFor(() => {
+        if (kind === "room")
+          expect(service.sendRoomFile).toHaveBeenCalledWith(
+            file,
+          );
+        else
+          expect(service.sendFile).toHaveBeenCalledWith(
+            file,
+            "alice",
+          );
+      });
+      expect(
+        kind === "room"
+          ? service.sendFile
+          : service.sendRoomFile,
+      ).not.toHaveBeenCalled();
+      expect(service.sendRoomText).not.toHaveBeenCalled();
+      if (textbox) expect(textbox.value).toBe("keep draft");
+    },
+  );
+
+  it.each(["direct", "room"] as const)(
+    "rejects files in an offline %s conversation without browser navigation",
+    (kind) => {
+      setAppState(
+        "session",
+        "clientViewData",
+        "alice",
+        "messageChannel",
+        false,
+      );
+      const { container } = renderInRouter(() => (
+        <ConversationView
+          conversationId={
+            kind === "room" ? roomId : directId
+          }
+          embedded
+        />
+      ));
+      const target = container.querySelector("header")!;
+      expect(
+        dropFile(target, new File(["no"], "blocked.txt"))
+          .defaultPrevented,
+      ).toBe(true);
+      expect(service.sendFile).not.toHaveBeenCalled();
+      expect(service.sendRoomFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["inactive", "unsupported"])(
+    "rejects files when the selected room is %s",
+    (reason) => {
+      if (reason === "inactive")
+        setAppState("roomStatus", "roomId", "other-room");
+      else service.fileCapability = "unsupported";
+      const { container } = renderInRouter(() => (
+        <ConversationView
+          conversationId={roomId}
+          embedded
+        />
+      ));
+      dropFile(
+        container.querySelector("header")!,
+        new File(["no"], "blocked.txt"),
+      );
+      expect(service.sendRoomFile).not.toHaveBeenCalled();
+      expect(service.sendFile).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["direct", "room"] as const)(
     "clears an online %s conversation and disables its delete action",
     async (kind) => {

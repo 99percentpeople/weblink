@@ -11,6 +11,7 @@ import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { ChunkRange } from "@/libs/utils/range";
 import { getSubRanges } from "@/libs/utils/range";
 import MergeChunkWorker from "./merge-worker?worker";
+import { snapshotFileMetadata } from "./metadata-snapshot";
 import {
   expectedChunkSize,
   requestResult,
@@ -281,9 +282,12 @@ export class IDBChunkCache implements ChunkCache {
         "Cannot change file metadata during assembly",
       );
     const generation = this.generation;
+    const setData = snapshotFileMetadata({
+      ...data,
+      id: this.id,
+    });
     await this.flush();
     this.assertGeneration(generation);
-    const setData = { ...data, id: this.id };
     const transaction = this.database().transaction(
       ["info", "chunks"],
       "readwrite",

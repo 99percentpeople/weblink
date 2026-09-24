@@ -597,6 +597,10 @@
     "attach_media": "发送图片或视频",
     "attach_file": "发送文件",
     "capture_media": "拍摄图片或视频",
+    "file_drop": {
+      "title": "松开以发送文件",
+      "unavailable_title": "暂时无法发送文件"
+    },
     "room_file_details": "查看详情",
     "room_file_request": "点击传输",
     "room_file_offer": "已分享到房间，成员点击后开始传输。",
