@@ -57,7 +57,6 @@ async function main() {
       preferredAudioCodec: null,
     }),
     notifyStreamState: () => {},
-    renegotiate: () => {},
   };
   const sending = new PeerSessionMediaController({
     ...defaults,

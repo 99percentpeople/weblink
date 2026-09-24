@@ -112,7 +112,6 @@ function setup() {
   const state = { pc: null as PeerConnection | null };
   const remote =
     vi.fn<(stream: MediaStream | null) => void>();
-  const renegotiate = vi.fn();
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
     targetClientId: () => "peer",
@@ -123,7 +122,6 @@ function setup() {
       preferredAudioCodec: null,
     }),
     notifyStreamState: notify,
-    renegotiate,
     onRemoteStreamChange: remote,
   });
   const bind = (pc = new PeerConnection()) => {
@@ -136,7 +134,6 @@ function setup() {
     state,
     controller,
     remote,
-    renegotiate,
     notify,
     bind,
   };
@@ -153,7 +150,7 @@ describe("multiple video sources in a peer session", () => {
     const camera = new Track("video", "camera"),
       screen = new Track("video", "screen"),
       mic = new Track("audio", "mic");
-    const { controller, bind, renegotiate } = setup();
+    const { controller, bind } = setup();
     controller.setStream(
       asStream(media(camera, screen, mic)),
     );
@@ -161,7 +158,6 @@ describe("multiple video sources in a peer session", () => {
     expect(
       pc.getSenders().map((sender) => sender.track),
     ).toEqual([camera, screen, mic]);
-    expect(renegotiate).not.toHaveBeenCalled();
     screen.end();
     expect(pc.removeTrack).toHaveBeenCalledTimes(1);
     expect(
@@ -172,7 +168,6 @@ describe("multiple video sources in a peer session", () => {
     ).toEqual([camera, mic]);
     expect(camera.stop).not.toHaveBeenCalled();
     expect(mic.stop).not.toHaveBeenCalled();
-    expect(renegotiate).toHaveBeenCalledTimes(1);
     controller.dispose();
   });
 

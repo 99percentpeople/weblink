@@ -60,7 +60,7 @@ describe("PeerSession stream management", () => {
     session.close();
   });
 
-  it("syncs null stream to transceivers when pc exists", () => {
+  it("does not force an offer for an already empty stream", () => {
     const session = new PeerSession(makeSender("a", "b"), {
       polite: false,
     });
@@ -72,13 +72,15 @@ describe("PeerSession stream management", () => {
     const media = (session as any).media;
     media.localStream = makeStream("media-2");
 
-    const renegotiate = vi.fn();
-    (session as any).renegotiate = renegotiate;
+    const offer = vi.spyOn(
+      (session as any).negotiation,
+      "sendOffer",
+    );
 
     session.setStream(null);
 
     expect(media.localStream).toBeNull();
-    expect(renegotiate).toHaveBeenCalledTimes(1);
+    expect(offer).not.toHaveBeenCalled();
     session.close();
   });
 
@@ -124,7 +126,6 @@ describe("PeerSession stream management", () => {
     } as unknown as MediaStream;
 
     (session as any).peerConnection = pc;
-    (session as any).renegotiate = vi.fn();
 
     session.setStream(stream);
     tracks = [];

@@ -31,25 +31,34 @@ function peer() {
       null as RTCSessionDescriptionInit | null,
     remoteDescription:
       null as RTCSessionDescriptionInit | null,
+    currentRemoteDescription:
+      null as RTCSessionDescriptionInit | null,
     createOffer: vi.fn(async () => ({
       type: "offer" as const,
       sdp: "local-offer",
     })),
     setLocalDescription: vi.fn(
       async (description?: RTCSessionDescriptionInit) => {
+        const answering =
+          pc.signalingState === "have-remote-offer";
         pc.localDescription = description ?? {
-          type: "answer",
-          sdp: "local-answer",
+          type: answering ? "answer" : "offer",
+          sdp: answering ? "local-answer" : "local-offer",
         };
         pc.signalingState =
           pc.localDescription.type === "offer"
             ? "have-local-offer"
             : "stable";
+        if (pc.localDescription.type === "answer")
+          pc.currentRemoteDescription =
+            pc.remoteDescription;
       },
     ),
     setRemoteDescription: vi.fn(
       async (description: RTCSessionDescriptionInit) => {
         pc.remoteDescription = description;
+        if (description.type === "answer")
+          pc.currentRemoteDescription = description;
         pc.signalingState =
           description.type === "offer"
             ? "have-remote-offer"
@@ -89,21 +98,27 @@ function harness(polite: boolean) {
     getPeerConnection: () =>
       current as unknown as RTCPeerConnection,
     createGeneration: () => `local-${++sequence}`,
+    replacePeerConnection: () =>
+      replace() as unknown as RTCPeerConnection,
   });
   negotiation.startConnection(
     current as unknown as RTCPeerConnection,
   );
+  const replace = vi.fn(() => {
+    current = peer();
+    negotiation.reset();
+    negotiation.startConnection(
+      current as unknown as RTCPeerConnection,
+    );
+    return current;
+  });
   return {
     negotiation,
     sendSignal,
     sender,
     pc: current,
-    replace() {
-      current = peer();
-      negotiation.reset();
-      negotiation.startConnection(
-        current as unknown as RTCPeerConnection,
-      );
+    replace,
+    get current() {
       return current;
     },
   };
@@ -121,6 +136,12 @@ beforeEach(() => {
       }
     },
   );
+  vi.stubGlobal(
+    "RTCIceCandidate",
+    class {
+      constructor(readonly init: RTCIceCandidateInit) {}
+    },
+  );
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "debug").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -132,6 +153,137 @@ afterEach(() => {
 });
 
 describe("negotiation recovery races", () => {
+  it.each([false, true])(
+    "accepts an earlier remote offer ahead of a queued local intent (polite=%s)",
+    async (polite) => {
+      const h = harness(polite);
+      const incoming = h.negotiation.enqueueSignal(
+        signal("offer", "remote-first"),
+      );
+      const local = h.negotiation.sendOffer(
+        h.pc as unknown as RTCPeerConnection,
+      );
+      await Promise.all([incoming, local]);
+      expect(h.negotiation.generation).toBe("remote-first");
+      expect(
+        h.pc.setRemoteDescription,
+      ).toHaveBeenCalledOnce();
+      expect(h.sendSignal).toHaveBeenCalledOnce();
+      expect(h.sendSignal).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "answer" }),
+      );
+      expect(h.replace).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not replace an established connection for malformed or retired offers", async () => {
+    const h = harness(true);
+    await h.negotiation.enqueueSignal(
+      signal("offer", "first"),
+    );
+    await h.negotiation.enqueueSignal({
+      ...signal("offer", "invalid"),
+      data: { generation: "invalid", sdp: null },
+    });
+    expect(h.replace).not.toHaveBeenCalled();
+    await h.negotiation.enqueueSignal(
+      signal("offer", "second"),
+    );
+    await h.negotiation.enqueueSignal(
+      signal("offer", "first"),
+    );
+    expect(h.replace).toHaveBeenCalledOnce();
+    expect(h.negotiation.generation).toBe("second");
+  });
+
+  it.each([false, true])(
+    "replaces an established PC for a remote restart and migrates only its ICE (polite=%s)",
+    async (polite) => {
+      const h = harness(polite);
+      await h.negotiation.enqueueSignal(
+        signal("offer", "established"),
+      );
+      const candidate = (
+        generation: string,
+        value: string,
+      ): ClientSignal => ({
+        clientId: "remote",
+        targetClientId: "local",
+        type: "candidate",
+        data: {
+          generation,
+          candidate: { candidate: value },
+        },
+      });
+      await h.negotiation.enqueueSignal(
+        candidate("replacement", "early"),
+      );
+      await h.negotiation.enqueueSignal(
+        candidate("unrelated", "unrelated"),
+      );
+      // Remote restart must also win over a local renegotiation, including on
+      // the impolite side. The new offer is not a same-session collision.
+      await h.negotiation.sendOffer(
+        h.pc as unknown as RTCPeerConnection,
+      );
+      const restarting = h.negotiation.enqueueSignal(
+        signal("offer", "replacement"),
+      );
+      const late = h.negotiation.enqueueSignal(
+        candidate("replacement", "queued"),
+      );
+      const stale = h.negotiation.enqueueSignal(
+        candidate("established", "stale"),
+      );
+      await Promise.all([restarting, late, stale]);
+      await flush();
+      expect(h.replace).toHaveBeenCalledOnce();
+      expect(h.negotiation.generation).toBe("replacement");
+      expect(
+        h.pc.setRemoteDescription,
+      ).toHaveBeenCalledOnce();
+      expect(
+        h.current.setRemoteDescription,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "offer",
+          sdp: "remote-offer",
+        }),
+      );
+      expect(h.current.addIceCandidate.mock.calls).toEqual([
+        [
+          expect.objectContaining({
+            init: { candidate: "early" },
+          }),
+        ],
+        [
+          expect.objectContaining({
+            init: { candidate: "queued" },
+          }),
+        ],
+      ]);
+      await h.negotiation.enqueueSignal(
+        signal("offer", "established"),
+      );
+      expect(h.replace).toHaveBeenCalledOnce();
+      expect(console.error).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the same PC for same-generation media renegotiation", async () => {
+    const h = harness(true);
+    await h.negotiation.enqueueSignal(
+      signal("offer", "established"),
+    );
+    await h.negotiation.enqueueSignal(
+      signal("offer", "established"),
+    );
+    expect(h.pc.setRemoteDescription).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
   it("uses debug for expected collisions and stale signals, not warnings or errors", async () => {
     const { negotiation, pc, replace } = harness(false);
     const generation = negotiation.generation!;
@@ -255,10 +407,14 @@ describe("negotiation recovery races", () => {
   it("finishes local offer creation before performing polite rollback", async () => {
     const { negotiation, pc, sendSignal } = harness(true);
     const pending = deferred();
-    pc.createOffer.mockImplementationOnce(async () => {
-      await pending.promise;
-      return { type: "offer", sdp: "local-offer" };
-    });
+    const applyLocal =
+      pc.setLocalDescription.getMockImplementation()!;
+    pc.setLocalDescription.mockImplementationOnce(
+      async () => {
+        await pending.promise;
+        await applyLocal();
+      },
+    );
     const offering = negotiation.sendOffer(
       pc as unknown as RTCPeerConnection,
     );

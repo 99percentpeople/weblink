@@ -151,6 +151,8 @@ async function main() {
   let a!: PeerSession, b!: PeerSession;
   let sa!: Sender, sb!: Sender;
   let remote: MediaStream | null = null;
+  let reverseRemote: MediaStream | null = null;
+  const sdpFailures: string[] = [];
   const remoteTracks = () => remote?.getTracks() ?? [];
   const dispose = () => {
     a?.close();
@@ -181,6 +183,29 @@ async function main() {
         "peerconnectioninit",
         (event) => {
           const pc = event.detail;
+          const observe =
+            <T>(
+              method: string,
+              apply: (description: T) => Promise<void>,
+            ) =>
+            async (description: T) => {
+              try {
+                await apply(description);
+              } catch (error) {
+                const failure = `${session.clientId} ${method}: ${String(error)}`;
+                sdpFailures.push(failure);
+                record(failure);
+                throw error;
+              }
+            };
+          pc.setLocalDescription = observe(
+            "setLocalDescription",
+            pc.setLocalDescription.bind(pc),
+          );
+          pc.setRemoteDescription = observe(
+            "setRemoteDescription",
+            pc.setRemoteDescription.bind(pc),
+          );
           pc.addEventListener("connectionstatechange", () =>
             record(
               `${session.clientId} pc ${pc.connectionState}`,
@@ -191,6 +216,9 @@ async function main() {
     }
     b.addEventListener("remotestreamchange", (event) => {
       remote = event.detail;
+    });
+    a.addEventListener("remotestreamchange", (event) => {
+      reverseRemote = event.detail;
     });
     a.setStream(stream);
     await Promise.all([a.listen(), b.listen()]);
@@ -224,7 +252,93 @@ async function main() {
           receivedAudio++;
       },
     );
-    return decodedVideos === videos && receivedAudio === 1;
+    return decodedVideos >= videos && receivedAudio >= 1;
+  };
+  const exerciseMediaChanges = async (label: string) => {
+    const oldA = a.peerConnection!,
+      oldB = b.peerConnection!;
+    const extra = videoSource("purple");
+    const stable = () =>
+      ready() &&
+      a.peerConnection?.signalingState === "stable" &&
+      b.peerConnection?.signalingState === "stable";
+    const decoded = async (
+      session: PeerSession,
+      view: MediaStream | null,
+      count: number,
+    ) => {
+      const tracks = view?.getVideoTracks() ?? [];
+      if (!stable() || tracks.length !== count)
+        return false;
+      const ids = new Set(tracks.map((track) => track.id));
+      const received = new Set<string>();
+      (await session.peerConnection!.getStats()).forEach(
+        (report) => {
+          if (
+            report.type === "inbound-rtp" &&
+            report.kind === "video" &&
+            report.framesDecoded > 0 &&
+            ids.has(report.trackIdentifier)
+          )
+            received.add(report.trackIdentifier);
+        },
+      );
+      return received.size === count;
+    };
+    try {
+      a.setStream(
+        new MediaStream([camera.track, microphone]),
+      );
+      await until(
+        () => decoded(b, remote, 1),
+        `${label}: stop screen`,
+      );
+      sa.holdOffers = true;
+      a.setStream(stream);
+      await until(
+        () => !!sa.heldOffer,
+        `${label}: media offer is pending`,
+      );
+      a.setStream(
+        new MediaStream([
+          ...stream.getTracks(),
+          extra.track,
+        ]),
+      );
+      sa.releaseOffer();
+      await until(
+        () => decoded(b, remote, 3),
+        `${label}: add another video while awaiting answer`,
+      );
+      // The former receive-only peer now becomes a media sender as well.
+      b.setStream(new MediaStream([extra.track]));
+      await until(
+        () => decoded(a, reverseRemote, 1),
+        `${label}: reverse video`,
+      );
+      b.setStream(null);
+      await until(
+        () => stable() && reverseRemote === null,
+        `${label}: stop reverse video`,
+      );
+      a.setStream(null);
+      await until(
+        () => stable() && remote === null,
+        `${label}: stop all media`,
+      );
+      a.setStream(stream);
+      await until(
+        () => decoded(b, remote, 2),
+        `${label}: resume media`,
+      );
+      assert(
+        a.peerConnection === oldA &&
+          b.peerConnection === oldB,
+        `${label}: media changes must not reconnect`,
+      );
+    } finally {
+      extra.close();
+    }
   };
   try {
     await audio.resume();
@@ -263,17 +377,19 @@ async function main() {
     // Both established peers now share one generation. Ignoring a colliding
     // offer must not retire that generation and discard the subsequent answer.
     sa.holdOffers = sb.holdOffers = true;
-    const renegotiation = Promise.all([
-      a.renegotiate(),
-      b.renegotiate(),
-    ]);
+    // Actual local changes drive native negotiationneeded on both peers.
+    a.peerConnection!.addTransceiver("video", {
+      direction: "recvonly",
+    });
+    b.peerConnection!.addTransceiver("video", {
+      direction: "recvonly",
+    });
     await until(
       () => !!sa.heldOffer && !!sb.heldOffer,
       "established offers prepared",
     );
     sa.releaseOffer();
     sb.releaseOffer();
-    await renegotiation;
     await until(
       () =>
         a.peerConnection?.signalingState === "stable" &&
@@ -336,6 +452,10 @@ async function main() {
       );
     }
 
+    await exerciseMediaChanges(
+      "after simultaneous recovery",
+    );
+
     // Force both SDP offers to exist before either is delivered. This verifies
     // polite rollback rather than merely relying on different retry timings.
     sa.holdOffers = sb.holdOffers = true;
@@ -354,6 +474,27 @@ async function main() {
       () => mediaReady(),
       "simultaneous offer collision resolved",
     );
+    await exerciseMediaChanges("after rollback recovery");
+
+    // A fresh offer is a new PC session, not a renegotiation of the remote's
+    // old SDP layout. Exercise both initiator roles and then change media.
+    for (const initiator of [b, a]) {
+      const oldA = a.peerConnection!,
+        oldB = b.peerConnection!;
+      await initiator.reconnect({ initiate: true });
+      await until(
+        () => mediaReady(),
+        `one-sided reconnect ${initiator.clientId}`,
+      );
+      assert(
+        a.peerConnection !== oldA &&
+          b.peerConnection !== oldB,
+        "one-sided restart replaces both peer connections",
+      );
+      await exerciseMediaChanges(
+        `after one-sided recovery ${initiator.clientId}`,
+      );
+    }
 
     dispose();
     await createPair();
@@ -378,9 +519,16 @@ async function main() {
       () => mediaReady(1),
       "rejoin reuses screen and microphone without reopening stopped camera",
     );
+    assert(
+      sdpFailures.length === 0,
+      `Unexpected SDP failures: ${sdpFailures.join("; ")}`,
+    );
     return {
       ok: true,
       realRtp: true,
+      mediaChangesAfterRecovery: true,
+      mediaChangesWhileAwaitingAnswer: true,
+      oneSidedRecoveryBothRoles: true,
       initialInterruptedJoinRecovered: true,
       signalingOnlyOutagePreservedMedia: true,
       simultaneousRecoveryCycles: 3,

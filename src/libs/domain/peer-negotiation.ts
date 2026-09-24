@@ -26,6 +26,8 @@ export type PeerNegotiationOptions = {
   polite: boolean;
   getPeerConnection: () => RTCPeerConnection | null;
   createGeneration?: () => string;
+  // Rebuild transport/media resources and call startConnection for the new PC.
+  replacePeerConnection?: () => RTCPeerConnection;
 };
 
 function createGeneration() {
@@ -43,6 +45,10 @@ export class PeerNegotiationController {
   private readonly polite: boolean;
   private readonly getPeerConnection: () => RTCPeerConnection | null;
   private readonly createGeneration: () => string;
+  private readonly replacePeerConnection?: () => RTCPeerConnection;
+  private readonly queuedSignals = new Set<{
+    signal: ClientSignal;
+  }>();
 
   private makingOffer = false;
   private ignoreOffer = false;
@@ -63,6 +69,8 @@ export class PeerNegotiationController {
     this.getPeerConnection = options.getPeerConnection;
     this.createGeneration =
       options.createGeneration ?? createGeneration;
+    this.replacePeerConnection =
+      options.replacePeerConnection;
   }
 
   get generation() {
@@ -81,6 +89,7 @@ export class PeerNegotiationController {
     }
     this.retireGeneration(this.connectionGeneration);
     this.pendingRemoteCandidates.clear();
+    this.queuedSignals.clear();
     this.connectionEpoch++;
     // A closed PC can leave browser SDP operations pending. A new connection
     // gets its own queue; epoch checks keep late old completions harmless.
@@ -97,14 +106,32 @@ export class PeerNegotiationController {
     this.signalProcessingTail = Promise.resolve();
     this.connectionGeneration = null;
     this.pendingRemoteCandidates.clear();
+    this.queuedSignals.clear();
     this.makingOffer = false;
     this.ignoreOffer = false;
   }
 
-  async sendOffer(
-    pc: RTCPeerConnection,
-    options?: RTCOfferOptions,
-  ) {
+  // After the initial offer, native negotiationneeded is the only driver of
+  // local media/data-channel negotiation. The browser retains changes made
+  // while an offer/answer is pending; we do not maintain another dirty queue.
+  handleNegotiationNeeded(pc: RTCPeerConnection): void {
+    if (
+      pc !== this.getPeerConnection() ||
+      !pc.localDescription ||
+      !pc.remoteDescription
+    )
+      return;
+    void this.sendOffer(pc).catch((error: unknown) => {
+      this.logFailure(
+        pc,
+        "negotiate local changes",
+        error,
+        true,
+      );
+    });
+  }
+
+  async sendOffer(pc: RTCPeerConnection) {
     const generation = this.connectionGeneration;
     const epoch = this.connectionEpoch;
     if (!generation || pc !== this.getPeerConnection()) {
@@ -112,16 +139,12 @@ export class PeerNegotiationController {
         "[PeerNegotiation] peer connection generation is unavailable",
       );
     }
-    if (this.makingOffer) {
-      throw new Error(
-        "[PeerNegotiation] offer creation already in progress",
-      );
-    }
+    if (this.makingOffer) return;
 
     this.makingOffer = true;
-    // Local SDP creation and remote SDP application must share one queue.
-    // Otherwise polite rollback can adopt the remote generation between
-    // createOffer and setLocalDescription, failing the whole connect attempt.
+    // One queue owns SDP application and signaling sends, including the first
+    // offer. Recheck state inside it: an earlier remote offer can win while a
+    // negotiationneeded event is waiting. Native implicit rollback handles glare.
     const processing = this.signalProcessingTail
       .then(async () => {
         if (
@@ -135,18 +158,33 @@ export class PeerNegotiationController {
         }
         // An earlier queued remote offer already won on this same PC. Continue
         // waiting for its connection rather than treating polite yielding as an error.
-        if (generation !== this.connectionGeneration)
+        if (
+          generation !== this.connectionGeneration ||
+          pc.signalingState !== "stable"
+        )
           return;
-        await handleOffer(
-          pc,
-          this.sender,
-          options,
-          generation,
-          () =>
-            epoch === this.connectionEpoch &&
-            pc === this.getPeerConnection() &&
-            generation === this.connectionGeneration,
-        );
+        // Let the browser generate AND apply SDP atomically. Do not edit SDP
+        // or keep a createOffer snapshot across asynchronous media changes.
+        await pc.setLocalDescription();
+        if (
+          epoch !== this.connectionEpoch ||
+          pc !== this.getPeerConnection() ||
+          generation !== this.connectionGeneration
+        )
+          return;
+        const description = pc.localDescription;
+        if (!description || description.type !== "offer") {
+          throw new Error(
+            "[PeerNegotiation] local offer is unavailable",
+          );
+        }
+        await this.sender.sendSignal({
+          type: description.type,
+          data: JSON.stringify({
+            sdp: description.sdp,
+            generation,
+          } satisfies SessionDescriptionSignalData),
+        });
       })
       .finally(() => {
         if (epoch === this.connectionEpoch)
@@ -175,10 +213,13 @@ export class PeerNegotiationController {
   }
 
   enqueueSignal(signal: ClientSignal) {
+    const queued = { signal };
+    this.queuedSignals.add(queued);
     const connectionEpoch = this.connectionEpoch;
     const pc = this.getPeerConnection();
     const processing = this.signalProcessingTail.then(
       () => {
+        this.queuedSignals.delete(queued);
         if (
           connectionEpoch !== this.connectionEpoch ||
           pc !== this.getPeerConnection()
@@ -196,7 +237,7 @@ export class PeerNegotiationController {
     return this.signalProcessingTail;
   }
 
-  async handleSignal(signal: ClientSignal) {
+  private async handleSignal(signal: ClientSignal) {
     const pc = this.getPeerConnection();
     if (!pc) {
       console.debug(
@@ -227,8 +268,48 @@ export class PeerNegotiationController {
         return;
       }
 
-      const offerCollision =
-        this.makingOffer || pc.signalingState !== "stable";
+      // A different generation on an already negotiated PC is a remote
+      // restart, not renegotiation. Its m-lines and RTP extension mappings
+      // belong to a fresh SDP session, even if our old ICE still looks healthy.
+      // This also takes precedence over a local renegotiation collision.
+      if (
+        generation &&
+        generation !== this.connectionGeneration &&
+        pc.currentRemoteDescription &&
+        this.replacePeerConnection
+      ) {
+        const candidates =
+          this.pendingRemoteCandidates.get(generation);
+        const queued = [...this.queuedSignals].filter(
+          ({ signal }) =>
+            this.getSignalGeneration(signal.data) ===
+            generation,
+        );
+        const replacement = this.replacePeerConnection();
+        if (
+          replacement === pc ||
+          replacement !== this.getPeerConnection()
+        ) {
+          throw new Error(
+            "[PeerNegotiation] remote restart did not replace the peer connection",
+          );
+        }
+        if (candidates?.length)
+          this.pendingRemoteCandidates.set(
+            generation,
+            candidates,
+          );
+        // The replacement has its own queue. Migrate only this generation;
+        // epoch checks discard the retired queue, including legacy signals.
+        const processing = this.enqueueSignal(signal);
+        for (const item of queued)
+          void this.enqueueSignal(item.signal);
+        return processing;
+      }
+
+      // This runs inside the shared SDP queue, after any earlier local SLD.
+      // A merely queued later offer must not reject an earlier remote offer.
+      const offerCollision = pc.signalingState !== "stable";
       this.ignoreOffer = !this.polite && offerCollision;
       if (this.ignoreOffer) {
         // Established peers reuse one generation for renegotiation. Rejecting
@@ -532,39 +613,4 @@ export class PeerNegotiationController {
       }
     }
   }
-}
-
-export async function handleOffer(
-  pc: RTCPeerConnection,
-  sender: SignalingService,
-  options?: RTCOfferOptions,
-  generation?: string,
-  isCurrent: () => boolean = () => true,
-) {
-  const offer = await pc.createOffer(options);
-  const sdp = offer.sdp;
-  if (typeof sdp !== "string") {
-    throw new Error(
-      "[PeerNegotiation] offer SDP is unavailable",
-    );
-  }
-  if (!isCurrent()) {
-    throw new Error(
-      "[PeerNegotiation] stale offer generation",
-    );
-  }
-
-  await pc.setLocalDescription(offer);
-  if (!isCurrent()) {
-    throw new Error(
-      "[PeerNegotiation] stale offer generation",
-    );
-  }
-  await sender.sendSignal({
-    type: offer.type,
-    data: JSON.stringify({
-      sdp,
-      generation,
-    } satisfies SessionDescriptionSignalData),
-  });
 }

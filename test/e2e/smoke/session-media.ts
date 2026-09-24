@@ -80,15 +80,19 @@ export async function runSessionMediaSmoke() {
     screenDestination.stream.getAudioTracks()[0];
   let remote: MediaStream | null = null;
   let renegotiationsRequested = 0;
+  sender.addEventListener(
+    "negotiationneeded",
+    () => {
+      renegotiationsRequested++;
+    },
+    { signal: lifetime.signal },
+  );
   const options = {
     getCodecOptions: () => ({
       preferredVideoCodec: null,
       preferredAudioCodec: null,
     }),
     notifyStreamState: () => {},
-    renegotiate: () => {
-      renegotiationsRequested++;
-    },
   };
   const sending = new PeerSessionMediaController({
     ...options,

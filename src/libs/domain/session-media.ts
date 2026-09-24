@@ -8,7 +8,6 @@ export interface PeerSessionMediaOptions {
   getPeerConnection(): RTCPeerConnection | null;
   getCodecOptions(): SessionMediaCodecOptions;
   notifyStreamState(): void;
-  renegotiate(): void | Promise<void>;
   onRemoteStreamChange(stream: MediaStream | null): void;
 }
 
@@ -319,7 +318,7 @@ export class PeerSessionMediaController {
         .some((track) => track.readyState !== "ended")
     ) {
       this.notifyLocalStreamState(this.localStream);
-      this.syncLocalTracks(false);
+      this.syncLocalTracks();
     } else {
       pc.addTransceiver("video", {
         direction: "recvonly",
@@ -362,17 +361,10 @@ export class PeerSessionMediaController {
     this.notifyLocalStreamState(stream);
     // Explicit calls reconcile even the same MediaStream object: application
     // mutations of its track list do not dispatch MediaStream track events.
-    const changed = this.syncLocalTracks();
-    if (
-      !changed &&
-      previous &&
-      !stream &&
-      this.options.getPeerConnection()
-    )
-      this.renegotiate();
+    this.syncLocalTracks();
   }
 
-  private syncLocalTracks(negotiate = true): boolean {
+  private syncLocalTracks(): void {
     const stream = this.localStream;
     const tracks = new Set(
       stream
@@ -397,8 +389,7 @@ export class PeerSessionMediaController {
       );
     }
     const pc = this.options.getPeerConnection();
-    if (!pc || pc.connectionState === "closed")
-      return false;
+    if (!pc || pc.connectionState === "closed") return;
     if (this.senderConnection !== pc) {
       if (this.senderConnection) this.resetConnection();
       this.senders.clear();
@@ -417,29 +408,9 @@ export class PeerSessionMediaController {
         this.senders.set(track, pc.addTrack(track, stream));
         changed = true;
       }
-    if (changed) {
-      this.applyPreferredCodecPreferences(pc);
-      if (negotiate) this.renegotiate();
-    }
-    return changed;
-  }
-
-  private renegotiate(): void {
-    try {
-      Promise.resolve(this.options.renegotiate()).catch(
-        (error) => {
-          console.warn(
-            "[PeerSession] media renegotiation failed",
-            error,
-          );
-        },
-      );
-    } catch (error) {
-      console.warn(
-        "[PeerSession] media renegotiation failed",
-        error,
-      );
-    }
+    // addTrack/removeTrack request native negotiationneeded. Do not also
+    // start offers here: it duplicates the browser's coalescing/state handling.
+    if (changed) this.applyPreferredCodecPreferences(pc);
   }
 
   resetConnection(): void {

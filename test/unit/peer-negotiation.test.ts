@@ -19,18 +19,25 @@ const makeSender = () =>
     close: vi.fn(),
   }) as unknown as SignalingService;
 
-const makeOfferPeerConnection = () =>
-  ({
-    signalingState: "stable",
+const makeOfferPeerConnection = () => {
+  const pc = {
+    signalingState: "stable" as RTCSignalingState,
     connectionState: "new",
-    createOffer: vi.fn(async () => ({
-      type: "offer" as const,
-      sdp: "offer-sdp",
-    })),
-    setLocalDescription: vi.fn(async () => {}),
+    localDescription:
+      null as RTCSessionDescriptionInit | null,
+    createOffer: vi.fn(),
+    setLocalDescription: vi.fn(async () => {
+      pc.localDescription = {
+        type: "offer",
+        sdp: "offer-sdp",
+      };
+      pc.signalingState = "have-local-offer";
+    }),
     addIceCandidate: vi.fn(async () => {}),
     close: vi.fn(),
-  }) as unknown as RTCPeerConnection;
+  };
+  return pc as unknown as RTCPeerConnection;
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -53,6 +60,8 @@ describe("PeerNegotiationController", () => {
       "generation-a",
     );
     await negotiation.sendOffer(pc);
+    expect(pc.setLocalDescription).toHaveBeenCalledWith();
+    expect(pc.createOffer).not.toHaveBeenCalled();
     await negotiation.sendCandidate(pc, {
       candidate: "candidate-a",
     });
@@ -135,7 +144,7 @@ describe("PeerNegotiationController", () => {
     });
     negotiation.startConnection(pc);
 
-    await negotiation.handleSignal({
+    await negotiation.enqueueSignal({
       type: "candidate",
       data: {
         candidate: { candidate: "candidate-a" },
@@ -146,7 +155,7 @@ describe("PeerNegotiationController", () => {
     });
     expect(addIceCandidate).not.toHaveBeenCalled();
 
-    await negotiation.handleSignal({
+    await negotiation.enqueueSignal({
       type: "offer",
       data: {
         sdp: "remote-offer",

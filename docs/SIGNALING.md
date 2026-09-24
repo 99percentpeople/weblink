@@ -257,12 +257,48 @@ is retired so delayed answers and candidates from the old connection cannot
 pollute the replacement. Payloads without `generation` remain accepted for
 compatibility with older clients.
 
-Local offer creation and incoming SDP processing share one per-connection
-queue so polite rollback cannot interrupt a half-created local offer. Replacing
-the peer connection detaches the old queue, so a pending retired browser SDP
-operation cannot block new signals. Rejecting a colliding offer with the current
-generation must not retire that generation: the answer to the local offer and
-its ICE candidates still belong to it.
+Local SDP application and incoming signals share one per-connection queue.
+The controller rechecks signaling state when an operation reaches the queue;
+a later queued local intent must not cause an earlier remote offer to be ignored.
+Replacing the peer connection detaches the old queue, so a pending retired
+browser SDP operation cannot block new signals. Rejecting a colliding offer
+with the current generation must not retire that generation: the answer to
+the local offer and its ICE candidates still belong to it.
+
+An offer with a new, non-retired generation received on an already negotiated
+peer connection is a remote restart, not an ordinary renegotiation. Replace the
+old peer connection before applying it, even when local ICE still appears
+connected or a local renegotiation is pending. Rebind the existing local capture
+tracks and migrate only the new generation's buffered ICE and queued signals.
+Initial simultaneous offers still use polite rollback; same-generation media
+renegotiation keeps the existing peer connection.
+
+### Negotiation and connection ownership
+
+`PeerSession.replaceConnection` is the only peer-connection creation/replacement
+entry, used for initial setup, local recovery and accepted remote restarts.
+The room sender subscription belongs to the session and survives transport
+replacement. Each peer connection has its own abort lifetime; replacing it
+cancels its signaling/connection waits and media/channel listeners. Late native
+SDP completions cannot send signaling or mutate the replacement, and an old
+pending native promise does not block the new queue.
+A valid remote restart supersedes the old automatic recovery attempt. Local
+capture and application subscriptions survive; leaving disposes both lifetimes.
+
+Initial connect/recovery explicitly bootstraps `PeerNegotiationController.sendOffer`.
+Once an SDP exchange exists, native `negotiationneeded` is the only driver of
+local media and data-channel renegotiation, using that same controller/queue.
+The media controller only changes tracks and codec preferences; it does not
+request offers. Native WebRTC coalesces media changes while an answer is pending.
+There is no application dirty flag, stable-event drain, or renegotiation timer.
+
+Offers and answers use no-argument `setLocalDescription()`; the browser chooses,
+generates and applies the appropriate description. Signaling sends its resulting
+`localDescription` unchanged. Weblink does not parse, normalize or rewrite SDP
+header-extension IDs. Native SDP rejections are logged without retrying the same
+unchanged offer in a loop or closing an otherwise working media connection.
+A failed local offer alone is not evidence that receiving or displaying remote
+media has stopped.
 
 The signaling backends treat this encrypted payload as opaque data; no backend
 protocol change is required for connection generations.

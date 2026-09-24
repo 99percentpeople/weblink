@@ -53,18 +53,32 @@ const makeSender = (
     close: () => {},
   }) as SignalingService;
 
+// The callback models the browser's implicit offer generation inside SLD,
+// not an application createOffer()/setLocalDescription() pair.
 const makePeerConnection = (
-  createOffer: () => Promise<RTCSessionDescriptionInit>,
-) =>
-  ({
-    signalingState: "stable",
+  makeLocalDescription: () => Promise<RTCSessionDescriptionInit>,
+) => {
+  const pc = {
+    signalingState: "stable" as RTCSignalingState,
     connectionState: "new",
-    createOffer,
-    setLocalDescription: vi.fn(async () => {}),
+    localDescription:
+      null as RTCSessionDescriptionInit | null,
+    setLocalDescription: vi.fn(async () => {
+      pc.localDescription = await makeLocalDescription();
+      pc.signalingState = "have-local-offer";
+    }),
     addEventListener: vi.fn(),
+    addTransceiver: vi.fn(),
     close: vi.fn(),
     getSenders: () => [],
-  }) as unknown as RTCPeerConnection;
+  };
+  return pc as unknown as RTCPeerConnection;
+};
+
+const sendOffer = (session: PeerSession): Promise<void> =>
+  (session as any).negotiation.sendOffer(
+    session.peerConnection,
+  );
 
 const attachPeerConnection = (
   session: PeerSession,
@@ -146,7 +160,10 @@ describe("PeerSession lifecycle", () => {
         }),
     );
     attachPeerConnection(session, old);
-    const oldOffer = session.renegotiate();
+    const oldOffer = sendOffer(session);
+    const oldFailure = expect(oldOffer).rejects.toThrow(
+      "old offer failed",
+    );
     await Promise.resolve();
     const current = makePeerConnection(
       () =>
@@ -155,13 +172,16 @@ describe("PeerSession lifecycle", () => {
         }),
     );
     attachPeerConnection(session, current);
-    const newOffer = session.renegotiate();
+    const newOffer = sendOffer(session);
+    const newFailure = expect(newOffer).rejects.toThrow(
+      "new offer failed",
+    );
     await Promise.resolve();
     rejectOld(new Error("old offer failed"));
-    await oldOffer;
+    await oldFailure;
     expect(isMakingOffer(session)).toBe(true);
     rejectNew(new Error("new offer failed"));
-    await newOffer;
+    await newFailure;
     expect(isMakingOffer(session)).toBe(false);
     session.close();
   });
@@ -198,7 +218,7 @@ describe("PeerSession lifecycle", () => {
     const offer = new Promise<RTCSessionDescriptionInit>(
       () => {},
     );
-    Object.assign(pc, { createOffer: () => offer });
+    Object.assign(pc, { setLocalDescription: () => offer });
     vi.spyOn(session, "createChannel").mockImplementation(
       () => new Promise(() => {}),
     );
@@ -274,11 +294,13 @@ describe("PeerSession lifecycle", () => {
     attachPeerConnection(session, pc);
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await session.renegotiate();
+    await expect(sendOffer(session)).rejects.toThrow(
+      "offer failed",
+    );
 
     expect(isMakingOffer(session)).toBe(false);
 
-    await session.renegotiate();
+    await sendOffer(session);
 
     expect(createOffer).toHaveBeenCalledTimes(2);
     expect(isMakingOffer(session)).toBe(false);
@@ -289,6 +311,14 @@ describe("PeerSession lifecycle", () => {
     const session = new PeerSession(
       makeSender("local", "remote"),
       { polite: false },
+    );
+    const replacement = makePeerConnection(async () => ({
+      type: "offer",
+      sdp: "offer",
+    }));
+    vi.stubGlobal(
+      "RTCPeerConnection",
+      vi.fn(() => replacement),
     );
     const listenError = new Error("listen failed");
     vi.spyOn(session, "listen").mockRejectedValueOnce(
@@ -324,6 +354,12 @@ describe("PeerSession lifecycle", () => {
           sdp: "offer-sdp",
         })),
         setLocalDescription: vi.fn(async () => {
+          Object.assign(pc, {
+            localDescription: {
+              type: "offer",
+              sdp: "offer-sdp",
+            },
+          });
           connectionState = "connected";
           onConnectionStateChange?.();
         }),
@@ -436,7 +472,7 @@ describe("PeerSession lifecycle", () => {
     }));
     const generation = attachPeerConnection(session, pc);
 
-    await session.renegotiate();
+    await sendOffer(session);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const sent = sendSignal.mock.calls[0][0];
@@ -465,7 +501,7 @@ describe("PeerSession lifecycle", () => {
     (session as any).negotiation.startConnection(pc);
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await (session as any).handleSignal({
+    await (session as any).negotiation.enqueueSignal({
       type: "answer",
       data: {
         sdp: "stale-answer",
@@ -537,7 +573,7 @@ describe("PeerSession lifecycle", () => {
     } as unknown as RTCPeerConnection;
     attachPeerConnection(session, pc);
 
-    await (session as any).handleSignal({
+    await (session as any).negotiation.enqueueSignal({
       type: "candidate",
       data: {
         candidate: { candidate: "candidate-a" },
@@ -548,7 +584,7 @@ describe("PeerSession lifecycle", () => {
     });
     expect(addIceCandidate).not.toHaveBeenCalled();
 
-    await (session as any).handleSignal({
+    await (session as any).negotiation.enqueueSignal({
       type: "offer",
       data: {
         sdp: "remote-offer",
@@ -570,7 +606,7 @@ describe("PeerSession lifecycle", () => {
       generation: "remote-generation",
     });
 
-    await (session as any).handleSignal({
+    await (session as any).negotiation.enqueueSignal({
       type: "offer",
       data: { sdp: "legacy-offer" },
       clientId: "remote",
@@ -599,7 +635,7 @@ describe("PeerSession lifecycle", () => {
     );
 
     await expect(session.connect()).rejects.toThrow(
-      "Failed to create and send offer: offer failed",
+      "offer failed",
     );
 
     expect(isMakingOffer(session)).toBe(false);
