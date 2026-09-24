@@ -151,18 +151,18 @@ and secure WebSocket deployment all work most reliably in a secure context.
 
 ### Cloudflare Pages releases from Git tags
 
-The [Pages release workflow](../.github/workflows/deploy-pages.yml) deploys the
-existing `weblink` Pages project when a stable version tag such as `v1.0.0` is
-pushed. Ordinary branch pushes and pull requests continue to run
-[CI](../.github/workflows/ci.yml), but do not trigger this release workflow.
-Successful `public` branch pushes deploy the development channel described below.
-Prerelease tags such as `v1.1.0-beta.1` do not publish to production.
+The [CI workflow](../.github/workflows/ci.yml) is the single gate for both
+development and production publishing. Stable tags such as `v1.0.0` run the same
+`Checks` job as branch pushes: release metadata validation, type-checking, unit
+tests and integration tests. Only after `Checks` succeeds does the
+`deploy-production` job build the production bundle and upload `dist/`.
+Prerelease tags such as `v1.1.0-beta.1` do not match the workflow trigger and
+therefore do not publish to production.
 
-The workflow checks out the tagged commit, verifies that its tag matches
-`package.json` and has dated notes in `CHANGELOG.md`, then runs type-checking,
-unit tests, integration tests, and the production build. Only a successful run
-uploads `dist/`. Bun, Node's major version, and Wrangler are explicitly selected;
-application dependencies use the frozen lockfile. Production runs are serialized.
+Tests are not repeated in the deployment job. Production deployments are
+serialized, while a failed `Checks` job prevents the build and upload entirely.
+Bun, Node's major version, and Wrangler are explicitly selected; application
+dependencies use the frozen lockfile.
 
 The workflow reads the existing project's `production_branch` through the
 Cloudflare API and supplies it to `wrangler pages deploy --branch`. This preserves
@@ -221,26 +221,29 @@ git push origin v1.0.0
 ```
 
 For subsequent releases, replace `v1.0.0` with the matching version. Inspect the
-**Deploy Cloudflare Pages** Actions run and the production deployment in Pages
-before treating the release as deployed. A failed check prevents the upload. A
-failed deployment can be retried through the existing Actions run; do not move a
-published tag to another commit. To roll back, select a previous successful
-production deployment in the Pages dashboard.
+tag-triggered **CI** Actions run and its **Deploy production release** job before
+treating the release as deployed. A failed `Checks` job prevents the production
+build and upload. A failed deployment can be retried through the existing Actions
+run; do not move a published tag to another commit. To roll back, select a
+previous successful production deployment in the Pages dashboard.
 
 ### Continuous development channel
 
 `https://dev.webl.ink` follows the latest successful push to `public`. The
-[CI workflow](../.github/workflows/ci.yml) runs type-checking, unit tests,
-integration tests and a production build before its separate `deploy-dev` job
-builds and uploads the development bundle. Pull requests, other branches and
-release tags cannot publish to this hostname. Local commits take effect only
-after a push; when several commits are pushed together, the branch tip is built.
-New pushes cancel superseded CI runs.
+[CI workflow](../.github/workflows/ci.yml) first runs only the shared validation
+gate: type-checking, unit tests and integration tests. After `Checks` succeeds,
+the dependent `deploy-dev` job builds and uploads the development bundle. Tests
+are not repeated, and CI no longer builds a throwaway production bundle before
+the dev build. Pull requests, other branches and release tags cannot publish to
+this hostname. Local commits take effect only after a push; when several commits
+are pushed together, the branch tip is built. New pushes cancel superseded CI
+runs.
 
 The development job uploads to the **`dev` preview branch** of the existing
 `weblink` Pages project. It reads the project configuration and refuses to run
-if `dev` is its production branch. The release workflow and production domains
-remain unchanged. The actual preview alias is `dev.weblink-main.pages.dev`;
+if `dev` is its production branch. The production deployment job and domains
+remain isolated from this preview branch. The actual preview alias is
+`dev.weblink-main.pages.dev`;
 do not assume that a Pages project's name equals its pages.dev subdomain.
 
 #### Build identity and debugging
@@ -259,9 +262,10 @@ control.
 
 Every build exposes `/version.json` containing its channel, full commit hash,
 version and build timestamp, with `Cache-Control: no-store`. The CI job checks
-this endpoint on the preview alias and only succeeds when it serves the tested
-commit. Browser application data and PWA installations belong to the separate
-hostname; signaling and ICE settings can still be shared with the stable site.
+this endpoint on both the Pages preview alias and `dev.webl.ink`, and only
+succeeds when both serve the tested commit. Browser application data and PWA
+installations belong to the separate hostname; signaling and ICE settings can
+still be shared with the stable site.
 
 #### Preview environment
 
@@ -279,22 +283,18 @@ Keep any TURN/Firebase settings that the development frontend needs in its own
 `PAGES_BUILD_ENV`. These `VITE_*` values are public frontend configuration, not
 deployment credentials. Regular deployments need no DNS-edit permission.
 
-#### One-time custom domain setup
+#### Development custom domain
 
-After the workflow has been pushed, manually run **CI** on `public` with
-`configure_dev_domain: true`. This first validates and deploys the preview, then
-runs `scripts/pages-dev.mjs configure-domain` to attach **only** `dev.webl.ink`
-and set its proxied CNAME to `dev.weblink-main.pages.dev`. This one-time action
-additionally requires Zone Read and DNS Edit for `webl.ink`; it fails explicitly
-rather than altering conflicting or unrelated records. Repeated setup is
-idempotent. The final step verifies the dev commit through the custom hostname.
+`dev.webl.ink` is configured manually in Cloudflare and is not modified by CI.
+It must be attached to the existing `weblink` Pages project and its **proxied**
+CNAME must target `dev.weblink-main.pages.dev`. Cloudflare requires proxying for
+[custom branch aliases](https://developers.cloudflare.com/pages/how-to/custom-branch-aliases/);
+an unproxied or production-alias target can serve the wrong deployment. Do not
+point it to `weblink-main.pages.dev`.
 
-Alternatively, attach `dev.webl.ink` under the project's Custom domains, then
-set the **proxied** CNAME `dev` to `dev.weblink-main.pages.dev`. Cloudflare requires
-proxying for [custom branch aliases](https://developers.cloudflare.com/pages/how-to/custom-branch-aliases/);
-an unproxied record can serve the production branch instead. Do not point it to
-`weblink-main.pages.dev`, and do not change the DNS records for `webl.ink` or
-`v.webl.ink`. Subsequent pushes only upload the dev preview and do not edit DNS.
+Each successful `public` deployment updates the Pages `dev` branch first, then
+verifies that both `dev.weblink-main.pages.dev` and `dev.webl.ink` serve the
+same commit. CI never changes DNS records.
 
 ## Docker
 

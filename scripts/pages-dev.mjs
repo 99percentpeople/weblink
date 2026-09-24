@@ -3,7 +3,6 @@ import { pathToFileURL } from "node:url";
 
 export const DEV_BRANCH = "dev";
 export const DEV_DOMAIN = "dev.webl.ink";
-const ZONE_NAME = "webl.ink";
 
 /** Refuse to publish a development build through the production branch. */
 export function getDevTarget(project) {
@@ -63,79 +62,6 @@ export function createCloudflareClient(
     }
     return data.result;
   };
-}
-
-/** One-time, explicitly requested setup. Only the exact dev hostname is changed. */
-export async function configureDevDomain(
-  api,
-  projectPath,
-  target,
-) {
-  const zones = await api(`/zones?name=${ZONE_NAME}`);
-  if (
-    !Array.isArray(zones) ||
-    zones.length !== 1 ||
-    zones[0].name !== ZONE_NAME
-  ) {
-    throw new Error(
-      "The token must have Zone Read and DNS Edit access to webl.ink",
-    );
-  }
-  const zoneId = zones[0].id;
-  const recordsPath = `/zones/${encodeURIComponent(zoneId)}/dns_records`;
-  const lookup = () =>
-    api(`${recordsPath}?name=${DEV_DOMAIN}`);
-  const validateRecords = (records) => {
-    if (
-      !Array.isArray(records) ||
-      records.length > 1 ||
-      records.some(
-        (record) =>
-          record.name !== DEV_DOMAIN ||
-          !["CNAME", "A", "AAAA"].includes(record.type),
-      )
-    ) {
-      throw new Error(
-        "Conflicting dev DNS records; refusing to change unrelated records",
-      );
-    }
-  };
-  // Check read permissions and conflicts before making any changes.
-  validateRecords(await lookup());
-  const domains = await api(`${projectPath}/domains`);
-  if (
-    !domains.some((domain) => domain.name === DEV_DOMAIN)
-  ) {
-    await api(`${projectPath}/domains`, "POST", {
-      name: DEV_DOMAIN,
-    });
-  }
-  // Domain activation may create a default DNS record; read it again.
-  const records = await lookup();
-  validateRecords(records);
-  const existing = records[0];
-  if (
-    existing?.type === "CNAME" &&
-    existing.content === target &&
-    existing.proxied === true
-  )
-    return;
-  const record = {
-    type: "CNAME",
-    name: DEV_DOMAIN,
-    content: target,
-    proxied: true,
-    ttl: 1,
-  };
-  if (existing) {
-    await api(
-      `${recordsPath}/${encodeURIComponent(existing.id)}`,
-      "PATCH",
-      record,
-    );
-  } else {
-    await api(recordsPath, "POST", record);
-  }
 }
 
 export async function verifyDevDeployment(
@@ -199,10 +125,8 @@ async function main() {
     );
     return;
   }
-  if (!["check", "configure-domain"].includes(command))
-    throw new Error(
-      "Expected check, configure-domain or verify",
-    );
+  if (command !== "check")
+    throw new Error("Expected check or verify");
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (!account)
     throw new Error(
@@ -213,21 +137,14 @@ async function main() {
   );
   const projectPath = `/accounts/${encodeURIComponent(account)}/pages/projects/weblink`;
   const target = getDevTarget(await api(projectPath));
-  if (command === "configure-domain") {
-    await configureDevDomain(api, projectPath, target);
-    console.info(
-      `${DEV_DOMAIN} now targets ${target} with Cloudflare proxy enabled`,
+  console.info(
+    `Development target: ${target}; production branch unchanged`,
+  );
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `alias=${target}\n`,
     );
-  } else {
-    console.info(
-      `Development target: ${target}; production branch unchanged`,
-    );
-    if (process.env.GITHUB_OUTPUT)
-      appendFileSync(
-        process.env.GITHUB_OUTPUT,
-        `alias=${target}\n`,
-      );
-  }
 }
 
 if (
