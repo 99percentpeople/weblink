@@ -239,12 +239,9 @@ this hostname. Local commits take effect only after a push; when several commits
 are pushed together, the branch tip is built. New pushes cancel superseded CI
 runs.
 
-The development job uploads to the **`dev` preview branch** of the existing
-`weblink` Pages project. It reads the project configuration and refuses to run
-if `dev` is its production branch. The production deployment job and domains
-remain isolated from this preview branch. The actual preview alias is
-`dev.weblink-main.pages.dev`;
-do not assume that a Pages project's name equals its pages.dev subdomain.
+The development job uploads to the fixed **`dev` preview branch** of the
+existing `weblink` Pages project. The production deployment job and domains
+remain isolated from this preview branch.
 
 #### Build identity and debugging
 
@@ -261,18 +258,17 @@ and an `X-Robots-Tag` header to discourage search indexing; this is not access
 control.
 
 Every build exposes `/version.json` containing its channel, full commit hash,
-version and build timestamp, with `Cache-Control: no-store`. The CI job checks
-this endpoint on both the Pages preview alias and `dev.webl.ink`, and only
-succeeds when both serve the tested commit. Browser application data and PWA
+version and build timestamp, with `Cache-Control: no-store`. After uploading the
+`dev` branch, CI polls `dev.webl.ink/version.json` and succeeds only when the
+custom domain serves the tested commit. Browser application data and PWA
 installations belong to the separate hostname; signaling and ICE settings can
 still be shared with the stable site.
 
 #### Preview environment
 
 The GitHub **Preview** environment uses the repository's existing
-`CLOUDFLARE_API_TOKEN` secret (Pages Edit). The workflow supplies the public
-account ID; an environment/repository `CLOUDFLARE_ACCOUNT_ID` variable can
-override it. No new credential is needed for ordinary preview uploads.
+`CLOUDFLARE_API_TOKEN` secret (Pages Edit). No account lookup or DNS permission
+is needed for ordinary preview uploads.
 
 Committed `.env.dev` provides public WebSocket and STUN defaults. Optional
 `PAGES_BUILD_ENV` in Preview supplies additional `VITE_*` settings and is written
@@ -293,8 +289,8 @@ an unproxied or production-alias target can serve the wrong deployment. Do not
 point it to `weblink-main.pages.dev`.
 
 Each successful `public` deployment updates the Pages `dev` branch first, then
-verifies that both `dev.weblink-main.pages.dev` and `dev.webl.ink` serve the
-same commit. CI never changes DNS records.
+verifies that `dev.webl.ink` serves the same commit. CI never changes DNS
+records.
 
 ## Docker
 
