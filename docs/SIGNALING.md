@@ -150,6 +150,49 @@ For older clients or browsers without Web Locks, explicit server close reasons
 (1008) stop automatic reconnects. Ordinary network closures still reconnect.
 These checks do not change the signaling wire format.
 
+### WebSocket liveness
+
+An open browser WebSocket is not sufficient evidence that signaling is still
+reachable. After joining the room, the client sends `{"type":"ping"}` after
+15 seconds without incoming traffic and replaces the socket if no response
+arrives within 10 seconds. Any incoming frame counts as activity, including
+legacy server-driven `ping` messages. The worker already answers this exact
+ping envelope through its hibernation auto-response; the signaling wire format
+is unchanged.
+
+Focus, visibility restoration, page resume and network-online events probe the
+transport immediately. Repeated events do not extend an outstanding probe's
+deadline. An unresponsive socket is detached without waiting for its `close`
+event, its peer signaling senders become disconnected, and the existing room
+resume loop installs a replacement. Heartbeat timers and listeners belong to
+that socket and are removed on replacement or room exit. A timeout is logged
+as `[WebSocketClientService] heartbeat timeout` separately from SDP/ICE failures.
+
+### Connection logging
+
+Connection code uses native console levels rather than a runtime logger:
+
+| Level   | Purpose                                                                                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `info`  | Room signaling ready, WebRTC connected, recovery started, session ownership replaced, explicit room exit.                                                     |
+| `warn`  | Socket loss, heartbeat timeout, the first failed WebSocket reconnect, malformed signals, compatibility fallbacks and recoverable failures.                    |
+| `error` | SDP processing failures, failed session initialization, unexpected reconnect-loop failures and exhausted peer recovery (including its last error).            |
+| `debug` | Individual signals (type and peer ID only), intermediate states, expected offer collisions, stale signals, repeated retries and cancellation/cleanup details. |
+
+Do not log full SDP, ICE candidates, room passwords or peer profile payloads.
+Key events include client/peer identifiers where needed to distinguish peers.
+The peer session owns connection-state logging; application/UI listeners do not
+repeat it. Per-attempt peer failures stay at debug level, while final exhaustion
+retains the last failure for production diagnosis.
+
+`vite build` defaults to production mode. In that mode,
+`scripts/build-logging.ts` removes `console.log`, `console.debug`,
+`console.trace` and `debugger` while retaining `info`, `warn` and `error`.
+The main app and Web Workers use Vite's esbuild options; the PWA service-worker
+build receives the same options explicitly. Other modes retain verbose logs.
+The configuration uses selective `pure` calls, not `drop: ["console"]`, so
+argument side effects are preserved and important diagnostics are not removed.
+
 ### Room join acknowledgment
 
 After password validation, the client sends `join`. Protocol version 2 servers
@@ -189,7 +232,10 @@ cannot leave competing SCTP media sections. A polite-only initiation establishes
 media first and negotiates the data channel after connection. Each peer
 owns at most one automatic recovery loop, and a retired connection's asynchronous
 failure cannot disconnect its replacement. Rebuilt peers reuse live local
-capture tracks without requesting device permission again.
+capture tracks without requesting device permission again. An already-started
+incoming negotiation remains pending until WebRTC reports `connected`; the
+`connecting` state is not a successful recovery. If the remote peer completes
+connection during retry backoff, the next retry preserves that connection.
 
 ### WebRTC connection generations
 
@@ -210,6 +256,13 @@ are queued by generation. When a peer connection is replaced, its generation
 is retired so delayed answers and candidates from the old connection cannot
 pollute the replacement. Payloads without `generation` remain accepted for
 compatibility with older clients.
+
+Local offer creation and incoming SDP processing share one per-connection
+queue so polite rollback cannot interrupt a half-created local offer. Replacing
+the peer connection detaches the old queue, so a pending retired browser SDP
+operation cannot block new signals. Rejecting a colliding offer with the current
+generation must not retire that generation: the answer to the local offer and
+its ICE candidates still belong to it.
 
 The signaling backends treat this encrypted payload as opaque data; no backend
 protocol change is required for connection generations.

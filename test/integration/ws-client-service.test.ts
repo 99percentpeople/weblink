@@ -186,6 +186,8 @@ beforeEach(() => {
   });
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "debug").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -200,6 +202,63 @@ afterEach(() => {
 });
 
 describe("WebSocketClientService reconnect lifecycle", () => {
+  it("replaces a silent half-open socket without waiting for its close event", async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    const socket = await connectService(service);
+    const sender = service.createSender("remote")!;
+    vi.spyOn(socket, "close").mockImplementation(() => {
+      socket.readyState = FakeWebSocket.CLOSING;
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(socket.sent).toContain(
+      JSON.stringify({ type: "ping" }),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(sender.status).toBe("disconnected");
+    const replacement = FakeWebSocket.instances[1];
+    replacement.accept();
+    await flushMicrotasks(20);
+    expect(sender.status).toBe("connected");
+    socket.receive({ type: "pong" });
+    await sender.sendSignal({ type: "offer", data: "{}" });
+    expect(replacement.parsedMessages().at(-1)?.type).toBe(
+      "message",
+    );
+  });
+
+  it("keeps healthy sockets alive with pong or legacy server traffic", async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    const socket = await connectService(service);
+    for (const response of ["pong", "ping", "pong"]) {
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(socket.parsedMessages().at(-1)?.type).toBe(
+        "ping",
+      );
+      socket.receive({ type: response });
+    }
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    service.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("probes on browser resume without postponing an outstanding timeout", async () => {
+    vi.useFakeTimers();
+    const service = createService();
+    const socket = await connectService(service);
+    browserWindow.dispatchEvent(new Event("focus"));
+    expect(socket.parsedMessages().at(-1)?.type).toBe(
+      "ping",
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    browserWindow.dispatchEvent(new Event("online"));
+    browserWindow.dispatchEvent(new Event("pageshow"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
   const installLocks = () => {
     const held = new Map<string, Promise<void>>();
     const channels = new Set<BroadcastChannel>();
@@ -787,6 +846,58 @@ describe("WebSocketClientService reconnect lifecycle", () => {
         attempt + 2,
       );
     }
+  });
+
+  it("logs repeated reconnect closures at debug and retains the next real outage", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const service = createService();
+    const first = await connectService(service);
+    first.serverClose();
+    await flushMicrotasks();
+
+    // These attempts reach room joining (activating close listeners), then
+    // disconnect before the join acknowledgement arrives.
+    FakeWebSocket.acknowledgeJoins = false;
+    let firstFailureWarnings = 0;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const socket = FakeWebSocket.instances.at(-1)!;
+      socket.accept();
+      await flushMicrotasks();
+      socket.serverClose();
+      await flushMicrotasks();
+      if (attempt === 1) {
+        firstFailureWarnings = vi.mocked(console.warn).mock
+          .calls.length;
+        expect(firstFailureWarnings).toBeGreaterThan(0);
+      } else {
+        expect(console.warn).toHaveBeenCalledTimes(
+          firstFailureWarnings,
+        );
+        expect(console.debug).toHaveBeenCalledWith(
+          "[WebSocketClientService] retry socket closed",
+          expect.objectContaining({ code: 1006 }),
+        );
+      }
+      await vi.advanceTimersByTimeAsync(
+        getReconnectDelayMs(attempt, { random: () => 0 }),
+      );
+    }
+
+    FakeWebSocket.acknowledgeJoins = true;
+    const restored = FakeWebSocket.instances.at(-1)!;
+    restored.accept();
+    await flushMicrotasks(20);
+    expect(console.info).toHaveBeenCalledWith(
+      "[WebSocketClientService] room signaling ready",
+      expect.objectContaining({ reconnect: true }),
+    );
+    vi.mocked(console.warn).mockClear();
+    restored.serverClose();
+    expect(console.warn).toHaveBeenCalledWith(
+      "[WebSocketClientService] socket closed",
+      expect.objectContaining({ code: 1006 }),
+    );
   });
 
   it("cancels delayed retries when the service closes", async () => {

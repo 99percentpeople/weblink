@@ -81,6 +81,9 @@ function harness(connected = false, negotiated = true) {
     reconnect,
     resetSession,
     sender,
+    setPeerConnection: (next: RTCPeerConnection) => {
+      pc = next;
+    },
     setPeerStatus: (next: PeerSessionStatus) => {
       status = next;
     },
@@ -101,6 +104,24 @@ afterEach(() => {
 });
 
 describe("peer recovery after room signaling resumes", () => {
+  it("keeps a connection completed by the peer during retry backoff", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.reconnect.mockRejectedValueOnce(
+      new Error("attempt timed out"),
+    );
+    h.signal("connected");
+    const recovery = h.controller.handleDisconnection();
+    await vi.advanceTimersByTimeAsync(0);
+    h.setPeerConnection({
+      connectionState: "connected",
+    } as RTCPeerConnection);
+    h.setPeerStatus("connected");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await recovery;
+    expect(h.reconnect).toHaveBeenCalledOnce();
+  });
+
   it("does not interrupt the initial negotiation just because the browser focuses", async () => {
     const h = harness(false, false);
     h.setPeerStatus("created");

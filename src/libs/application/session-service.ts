@@ -88,8 +88,8 @@ export class SessionService {
 
   setClientService(cs: ClientService) {
     if (this.service) {
-      console.warn(
-        `client service already set, destory old service`,
+      console.debug(
+        "[SessionService] replacing client service",
       );
       this.removeService();
     }
@@ -136,8 +136,8 @@ export class SessionService {
       this.service?.removeSender(target);
     const session = this.sessions[target];
     if (!session) {
-      console.log(
-        `can not destory session, session ${target} not found`,
+      console.debug(
+        `[SessionService] session ${target} already removed`,
       );
       return;
     }
@@ -281,7 +281,6 @@ export class SessionService {
     session.addEventListener(
       "statuschange",
       (ev) => {
-        console.log(`session status change`, ev.detail);
         switch (ev.detail) {
           case "created":
             break;
@@ -459,12 +458,6 @@ export function createSessionService() {
                   if (audioParameters) {
                     sender
                       .setParameters(audioParameters)
-                      .then(() => {
-                        console.log(
-                          `set audio parameters success, encoding:`,
-                          audioParameters.encodings?.[0],
-                        );
-                      })
                       .catch((e) => {
                         console.error(
                           `set audio parameters error: ${e}`,
@@ -480,12 +473,6 @@ export function createSessionService() {
                   if (videoParameters) {
                     sender
                       .setParameters(videoParameters)
-                      .then(() => {
-                        console.log(
-                          `set video parameters success, encoding:`,
-                          videoParameters.encodings?.[0],
-                        );
-                      })
                       .catch((e) => {
                         console.error(
                           `set video parameters error: ${e}`,

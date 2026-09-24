@@ -244,28 +244,28 @@ export class PeerSessionLifecycleController {
     reason = "unknown",
   ): Promise<void> {
     if (this.options.getStatus() === "closed") {
-      console.warn(
+      console.debug(
         `[PeerSession] session ${this.options.clientId()} is closed, skip handle disconnection`,
       );
       return;
     }
 
     if (this.suspended) {
-      console.log(
+      console.debug(
         `[PeerSession] session ${this.options.clientId()} is suspended, defer reconnect: ${reason}`,
       );
       return;
     }
 
     if (this.autoReconnectController) {
-      console.log(
+      console.debug(
         `[PeerSession] auto reconnect already running, skip: ${reason}`,
       );
       return;
     }
 
     if (!this.connectable && !this.listening) {
-      console.warn(
+      console.debug(
         `[PeerSession] session ${this.options.clientId()} is not connectable, disconnect`,
       );
       this.options.disconnect();
@@ -279,14 +279,28 @@ export class PeerSessionLifecycleController {
     this.options.resetSession();
     this.options.setStatus("reconnecting");
 
+    console.info("[PeerSession] recovery started", {
+      clientId: this.options.sender.clientId,
+      peerId: this.options.sender.targetClientId,
+      signalingStatus: this.options.sender.status,
+      reason,
+    });
     let attempts = 0;
+    let lastError: Error | undefined;
 
     while (
       !controller.signal.aborted &&
       attempts < PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS
     ) {
+      // The peer can complete negotiation while our retry is backing off.
+      // Do not replace that recovered connection with another attempt.
+      if (
+        this.options.getPeerConnection()
+          ?.connectionState === "connected"
+      )
+        break;
       if (this.options.sender.status === "closed") {
-        console.warn(
+        console.debug(
           "[PeerSession] signaling service is closed, stop reconnect",
         );
         this.options.close();
@@ -294,7 +308,7 @@ export class PeerSessionLifecycleController {
       }
 
       const initiate = !this.options.polite || attempts > 0;
-      console.log(
+      console.debug(
         `[PeerSession] auto reconnect attempt ${attempts + 1}/${PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS} (initiate=${initiate})`,
       );
 
@@ -306,7 +320,7 @@ export class PeerSessionLifecycleController {
           ),
         );
         if (signalError) {
-          console.warn(
+          console.debug(
             `[PeerSession] wait signaling connected failed: ${signalError.message}`,
           );
           // Waiting for room signaling is not a failed WebRTC attempt. Keep
@@ -317,19 +331,20 @@ export class PeerSessionLifecycleController {
       }
 
       if (controller.signal.aborted) break;
+      if (
+        this.options.getPeerConnection()
+          ?.connectionState === "connected"
+      )
+        break;
 
       const [error] = await catchError(
         this.options.reconnect({ initiate }),
       );
-      if (!error) {
-        console.log(
-          `[PeerSession] auto reconnect success, session ${this.options.clientId()}`,
-        );
-        break;
-      }
+      if (!error) break;
 
       attempts++;
-      console.error(
+      lastError = error;
+      console.debug(
         `[PeerSession] auto reconnect attempt ${attempts} failed:`,
         error,
       );
@@ -361,7 +376,14 @@ export class PeerSessionLifecycleController {
       "connected"
     ) {
       console.error(
-        "[PeerSession] auto reconnect failed, reach max attempts",
+        "[PeerSession] recovery exhausted",
+        {
+          clientId: this.options.sender.clientId,
+          peerId: this.options.sender.targetClientId,
+          attempts,
+          reason,
+        },
+        lastError,
       );
       this.options.disconnect();
     }

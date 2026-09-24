@@ -112,7 +112,9 @@ export class RoomService {
         return;
       }
 
-      console.log(`client ${client.clientId} leave`);
+      console.debug("[RoomService] peer left", {
+        peerId: client.clientId,
+      });
       this.options.profiles.unbindSession(client.clientId);
       this.options.sessions.removeSession(client.clientId);
       this.options.rtc.unbindSession(client.clientId);
@@ -127,7 +129,9 @@ export class RoomService {
   ): Promise<void> {
     if (!this.isServiceCurrent(service, generation)) return;
 
-    console.log("new client join in ", targetClient);
+    console.debug("[RoomService] peer joined", {
+      peerId: targetClient.clientId,
+    });
     const [error, session] = await catchError(
       this.options.sessions.addClient(targetClient),
     );
@@ -137,7 +141,11 @@ export class RoomService {
         !(error instanceof DOMException) ||
         error.name !== "AbortError"
       ) {
-        console.error(error);
+        console.error(
+          "[RoomService] failed to create peer session",
+          { peerId: targetClient.clientId },
+          error,
+        );
       }
       return;
     }
@@ -156,7 +164,11 @@ export class RoomService {
     );
     if (listenError) {
       if (this.isServiceCurrent(service, generation)) {
-        console.error(listenError);
+        console.error(
+          "[RoomService] failed to initialize peer signaling",
+          { peerId: targetClient.clientId },
+          listenError,
+        );
       }
       session.close();
       return;
@@ -178,7 +190,11 @@ export class RoomService {
     if (!connectError) return;
 
     if (this.isServiceCurrent(service, generation)) {
-      console.error(connectError);
+      console.warn(
+        "[RoomService] initial peer connection failed",
+        { peerId: targetClient.clientId },
+        connectError,
+      );
     }
   }
 
@@ -282,9 +298,8 @@ export class RoomService {
 
     this.options.onLeaving?.();
 
-    const room = appState.roomStatus.roomId;
-    if (room) {
-      console.log(`on leave room ${room}`);
+    if (appState.roomStatus.roomId) {
+      console.info("[RoomService] left room");
     }
 
     this.options.profiles.unbindAllSessions();

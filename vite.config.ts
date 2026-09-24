@@ -7,6 +7,7 @@ import { compression } from "vite-plugin-compression2";
 import { readFileSync } from "fs";
 import tailwindcss from "@tailwindcss/vite";
 import { webLinkBranding } from "./scripts/brand-plugin";
+import { getBuildLoggingOptions } from "./scripts/build-logging";
 import {
   BRAND_ASSETS,
   BRAND_MANIFEST_ICONS,
@@ -69,7 +70,7 @@ const pwaOptions: Partial<VitePWAOptions> = {
   },
 };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": "/src",
@@ -97,11 +98,22 @@ export default defineConfig({
         },
       },
     }),
-    VitePWA(pwaOptions),
+    VitePWA({
+      ...pwaOptions,
+      integration: {
+        // injectManifest runs its own Vite build instead of inheriting esbuild.
+        configureCustomSWViteBuild(config) {
+          config.esbuild = {
+            ...(config.esbuild || {}),
+            ...getBuildLoggingOptions(mode),
+          };
+        },
+      },
+    }),
     compression(),
     tailwindcss(),
   ],
-  esbuild: {},
+  esbuild: getBuildLoggingOptions(mode),
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
     __APP_LICENSE__: JSON.stringify(packageJson.license),
@@ -116,4 +128,4 @@ export default defineConfig({
     ),
     __APP_BUILD_TIME__: Date.now(),
   },
-});
+}));

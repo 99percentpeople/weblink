@@ -10,7 +10,6 @@ import {
   ref,
   remove,
   update,
-  onValue,
 } from "firebase/database";
 import { app } from "@/libs/infrastructure/firebase";
 import type {
@@ -76,8 +75,6 @@ export class FirebaseClientService implements ClientService {
 
     this.singlingServices = new Map();
     if (password) this.password = password;
-
-    this.setupDisconnectListener();
   }
 
   private dispatchEvent<
@@ -140,14 +137,6 @@ export class FirebaseClientService implements ClientService {
     };
   }
 
-  private setupDisconnectListener() {
-    const connectedRef = ref(this.db, ".info/connected");
-
-    onValue(connectedRef, (snap) => {
-      console.log("firebase connection", snap.val());
-    });
-  }
-
   async createClient() {
     this.dispatchEvent("statuschange", "connecting");
 
@@ -192,6 +181,12 @@ export class FirebaseClientService implements ClientService {
       this.clientRef = clientRef;
     }
     this.dispatchEvent("statuschange", "connected");
+    console.info(
+      "[FirebaseClientService] room signaling ready",
+      {
+        clientId: this.client.clientId,
+      },
+    );
   }
 
   async updateClient(options: UpdateClientOptions) {
@@ -219,8 +214,8 @@ export class FirebaseClientService implements ClientService {
       targetClientId,
       this.password,
     );
-    console.log(
-      `create sender to remote client: ${targetClientId}`,
+    console.debug(
+      `[FirebaseClientService] create sender to peer ${targetClientId}`,
     );
     this.singlingServices.set(targetClientId, newService);
     return newService;
@@ -243,10 +238,6 @@ export class FirebaseClientService implements ClientService {
       const data = childSnapshot.val() as ClientPresence;
       if (!data) return;
       if (data.clientId === this.client.clientId) return;
-      console.log(
-        `getJoinedClients ${data.clientId}`,
-        data,
-      );
       clients.push(hydrateClientPresence(data));
     });
     return clients;
@@ -280,7 +271,6 @@ export class FirebaseClientService implements ClientService {
         const data = snapshot.val() as ClientPresence;
         if (!data) return;
         if (data.clientId === this.client.clientId) return;
-        console.log(`client ${data.clientId} leave`);
         callback(hydrateClientPresence(data));
       },
     );

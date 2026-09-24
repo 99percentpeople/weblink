@@ -260,6 +260,36 @@ async function main() {
       "signaling-only outage should preserve working media",
     );
 
+    // Both established peers now share one generation. Ignoring a colliding
+    // offer must not retire that generation and discard the subsequent answer.
+    sa.holdOffers = sb.holdOffers = true;
+    const renegotiation = Promise.all([
+      a.renegotiate(),
+      b.renegotiate(),
+    ]);
+    await until(
+      () => !!sa.heldOffer && !!sb.heldOffer,
+      "established offers prepared",
+    );
+    sa.releaseOffer();
+    sb.releaseOffer();
+    await renegotiation;
+    await until(
+      () =>
+        a.peerConnection?.signalingState === "stable" &&
+        b.peerConnection?.signalingState === "stable",
+      "same-generation collision resolved",
+    );
+    assert(
+      a.peerConnection === stableA &&
+        b.peerConnection === stableB,
+      "renegotiation must preserve both connections",
+    );
+    await until(
+      () => mediaReady(),
+      "media and data survive renegotiation collision",
+    );
+
     // Both endpoints detect a broken transport, then regain signaling together.
     // Repeat to expose competing recovery loops and retired-connection races.
     for (let cycle = 0; cycle < 3; cycle++) {
@@ -355,6 +385,7 @@ async function main() {
       signalingOnlyOutagePreservedMedia: true,
       simultaneousRecoveryCycles: 3,
       simultaneousOfferCollisionResolved: true,
+      sameGenerationCollisionResolved: true,
       politeOnlyInitiationRecovered: true,
       cameraScreenAndAudioRecovered: true,
       sameCaptureTracksReused: true,

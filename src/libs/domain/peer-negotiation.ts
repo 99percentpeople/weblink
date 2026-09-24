@@ -82,6 +82,9 @@ export class PeerNegotiationController {
     this.retireGeneration(this.connectionGeneration);
     this.pendingRemoteCandidates.clear();
     this.connectionEpoch++;
+    // A closed PC can leave browser SDP operations pending. A new connection
+    // gets its own queue; epoch checks keep late old completions harmless.
+    this.signalProcessingTail = Promise.resolve();
     this.connectionGeneration = this.createGeneration();
     this.makingOffer = false;
     this.ignoreOffer = false;
@@ -91,6 +94,7 @@ export class PeerNegotiationController {
   reset() {
     this.retireGeneration(this.connectionGeneration);
     this.connectionEpoch++;
+    this.signalProcessingTail = Promise.resolve();
     this.connectionGeneration = null;
     this.pendingRemoteCandidates.clear();
     this.makingOffer = false;
@@ -115,20 +119,41 @@ export class PeerNegotiationController {
     }
 
     this.makingOffer = true;
-    try {
-      await handleOffer(
-        pc,
-        this.sender,
-        options,
-        generation,
-        () =>
-          pc === this.getPeerConnection() &&
-          generation === this.connectionGeneration,
-      );
-    } finally {
-      if (epoch === this.connectionEpoch)
-        this.makingOffer = false;
-    }
+    // Local SDP creation and remote SDP application must share one queue.
+    // Otherwise polite rollback can adopt the remote generation between
+    // createOffer and setLocalDescription, failing the whole connect attempt.
+    const processing = this.signalProcessingTail
+      .then(async () => {
+        if (
+          epoch !== this.connectionEpoch ||
+          pc !== this.getPeerConnection()
+        ) {
+          throw new DOMException(
+            "Peer connection replaced",
+            "AbortError",
+          );
+        }
+        // An earlier queued remote offer already won on this same PC. Continue
+        // waiting for its connection rather than treating polite yielding as an error.
+        if (generation !== this.connectionGeneration)
+          return;
+        await handleOffer(
+          pc,
+          this.sender,
+          options,
+          generation,
+          () =>
+            epoch === this.connectionEpoch &&
+            pc === this.getPeerConnection() &&
+            generation === this.connectionGeneration,
+        );
+      })
+      .finally(() => {
+        if (epoch === this.connectionEpoch)
+          this.makingOffer = false;
+      });
+    this.signalProcessingTail = processing.catch(() => {});
+    await processing;
   }
 
   async sendCandidate(
@@ -165,10 +190,7 @@ export class PeerNegotiationController {
     );
     this.signalProcessingTail = processing.catch(
       (error) => {
-        console.error(
-          "[PeerNegotiation] failed to process signaling message:",
-          error,
-        );
+        this.logFailure(pc, `handle ${signal.type}`, error);
       },
     );
     return this.signalProcessingTail;
@@ -177,7 +199,7 @@ export class PeerNegotiationController {
   async handleSignal(signal: ClientSignal) {
     const pc = this.getPeerConnection();
     if (!pc) {
-      console.log(
+      console.debug(
         "[PeerNegotiation] peer connection is null, skip signal",
       );
       return;
@@ -187,7 +209,7 @@ export class PeerNegotiationController {
       signal.data,
     );
     if (this.isRetiredGeneration(generation)) {
-      console.warn(
+      console.debug(
         `[PeerNegotiation] ignore stale ${signal.type} for retired generation ${generation}`,
       );
       return;
@@ -200,6 +222,7 @@ export class PeerNegotiationController {
       if (typeof data.sdp !== "string") {
         console.warn(
           "[PeerNegotiation] invalid offer payload",
+          { peerId: this.sender.targetClientId },
         );
         return;
       }
@@ -208,10 +231,15 @@ export class PeerNegotiationController {
         this.makingOffer || pc.signalingState !== "stable";
       this.ignoreOffer = !this.polite && offerCollision;
       if (this.ignoreOffer) {
-        if (generation) {
+        // Established peers reuse one generation for renegotiation. Rejecting
+        // a colliding offer must not also discard our own answer and ICE.
+        if (
+          generation &&
+          generation !== this.connectionGeneration
+        ) {
           this.retireGeneration(generation);
         }
-        console.warn(
+        console.debug(
           `[PeerNegotiation] offer ignored due to collision, signalingState: ${pc.signalingState}`,
         );
         return;
@@ -226,10 +254,7 @@ export class PeerNegotiationController {
         ),
       );
       if (err) {
-        console.error(
-          "[PeerNegotiation] setRemoteDescription error:",
-          err,
-        );
+        this.logFailure(pc, "apply remote offer", err);
         return;
       }
       if (pc !== this.getPeerConnection()) return;
@@ -245,17 +270,18 @@ export class PeerNegotiationController {
 
       [err] = await catchError(pc.setLocalDescription());
       if (err) {
-        console.error(
-          "[PeerNegotiation] setLocalDescription error:",
-          err,
-        );
+        this.logFailure(pc, "create answer", err);
         return;
       }
       if (pc !== this.getPeerConnection()) return;
 
       if (!pc.localDescription) {
         console.warn(
-          `[PeerNegotiation] localDescription is null, signalingState: ${pc.signalingState}`,
+          "[PeerNegotiation] local description unavailable",
+          {
+            peerId: this.sender.targetClientId,
+            signalingState: pc.signalingState,
+          },
         );
         return;
       }
@@ -271,10 +297,7 @@ export class PeerNegotiationController {
         }),
       );
       if (err) {
-        console.error(
-          "[PeerNegotiation] sendSignal error:",
-          err,
-        );
+        this.logFailure(pc, "send answer", err, true);
       }
       return;
     }
@@ -285,6 +308,7 @@ export class PeerNegotiationController {
       if (typeof data.sdp !== "string") {
         console.warn(
           "[PeerNegotiation] invalid answer payload",
+          { peerId: this.sender.targetClientId },
         );
         return;
       }
@@ -292,13 +316,13 @@ export class PeerNegotiationController {
         generation &&
         generation !== this.connectionGeneration
       ) {
-        console.warn(
+        console.debug(
           `[PeerNegotiation] ignore answer for non-current generation ${generation}`,
         );
         return;
       }
       if (pc.signalingState !== "have-local-offer") {
-        console.warn(
+        console.debug(
           `[PeerNegotiation] answer ignored due to signalingState is ${pc.signalingState}`,
         );
         return;
@@ -313,10 +337,7 @@ export class PeerNegotiationController {
         ),
       );
       if (err) {
-        console.error(
-          "[PeerNegotiation] setRemoteDescription error:",
-          err,
-        );
+        this.logFailure(pc, "apply remote answer", err);
         return;
       }
       if (pc !== this.getPeerConnection()) return;
@@ -337,6 +358,7 @@ export class PeerNegotiationController {
     ) {
       console.warn(
         "[PeerNegotiation] invalid candidate payload",
+        { peerId: this.sender.targetClientId },
       );
       return;
     }
@@ -364,11 +386,42 @@ export class PeerNegotiationController {
     const candidate = new RTCIceCandidate(data.candidate);
     [err] = await catchError(pc.addIceCandidate(candidate));
     if (err && !this.ignoreOffer) {
-      console.error(
-        "[PeerNegotiation] addIceCandidate error:",
-        err,
-      );
+      this.logFailure(pc, "add ICE candidate", err);
     }
+  }
+
+  private logFailure(
+    pc: RTCPeerConnection | null,
+    operation: string,
+    error: unknown,
+    sending = false,
+  ): void {
+    // Closing/replacing a connection rejects pending browser operations. These
+    // are cleanup details, not new failures of the replacement connection.
+    if (
+      pc !== this.getPeerConnection() ||
+      pc?.signalingState === "closed" ||
+      (sending && this.sender.status !== "connected")
+    ) {
+      console.debug(
+        "[PeerNegotiation] operation interrupted",
+        { peerId: this.sender.targetClientId, operation },
+        error,
+      );
+      return;
+    }
+
+    console.error(
+      "[PeerNegotiation] operation failed",
+      {
+        clientId: this.sender.clientId,
+        peerId: this.sender.targetClientId,
+        operation,
+        signalingState: pc?.signalingState,
+        generation: this.connectionGeneration,
+      },
+      error,
+    );
   }
 
   private retireGeneration(generation: string | null) {
@@ -471,8 +524,9 @@ export class PeerNegotiationController {
         pc.addIceCandidate(candidate),
       );
       if (err && !this.ignoreOffer) {
-        console.error(
-          "[PeerNegotiation] addIceCandidate error:",
+        this.logFailure(
+          pc,
+          "add queued ICE candidate",
           err,
         );
       }

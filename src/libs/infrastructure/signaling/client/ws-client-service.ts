@@ -37,6 +37,7 @@ import {
   SIGNALING_MAX_CACHED_SIGNALS,
 } from "@/libs/domain/signaling-protocol";
 import { catchErrorSync } from "@/libs/catch";
+import { startSocketHeartbeat } from "./ws-heartbeat";
 import {
   acquireRoomConnectionLock,
   roomConnectionLockName,
@@ -292,8 +293,9 @@ export class WebSocketClientService implements ClientService {
         if (!this.isCurrentConnection(socket, generation)) {
           return;
         }
-        console.warn(
-          "[WebSocketClientService] socket error:",
+        // The close/reconnect path records the actionable failure once.
+        console.debug(
+          "[WebSocketClientService] socket error",
           event,
         );
         if (
@@ -459,6 +461,37 @@ export class WebSocketClientService implements ClientService {
         return;
       this.routeSocketSignal(socket, signal);
     });
+
+    if (
+      this.activeSocket === socket &&
+      this.socketController
+    ) {
+      const generation = this.connectionGeneration;
+      startSocketHeartbeat(
+        socket,
+        this.socketController.signal,
+        () => {
+          if (!this.isCurrentConnection(socket, generation))
+            return;
+          console.warn(
+            "[WebSocketClientService] heartbeat timeout; replacing unresponsive socket",
+            {
+              clientId: this.client.clientId,
+              readyState: socket.readyState,
+              generation,
+            },
+          );
+          // close() can remain in CLOSING indefinitely on a broken network.
+          // Invalidate senders and replace the transport without awaiting it.
+          this.signalingServices.forEach((service) =>
+            service.setStatus("disconnected"),
+          );
+          this.releaseSocket(socket, false);
+          this.setStatus("disconnected");
+          this.startReconnect();
+        },
+      );
+    }
   }
 
   private handleSocketClose(
@@ -470,11 +503,6 @@ export class WebSocketClientService implements ClientService {
       return;
     }
 
-    console.warn("[WebSocketClientService] socket closed", {
-      code: event.code,
-      reason: event.reason,
-      wasClean: event.wasClean,
-    });
     if (
       (event.code === 1000 || event.code === 1008) &&
       [
@@ -488,6 +516,23 @@ export class WebSocketClientService implements ClientService {
       return;
     }
 
+    const details = {
+      clientId: this.client.clientId,
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean,
+    };
+    if (this.reconnectAttempts > 0) {
+      console.debug(
+        "[WebSocketClientService] retry socket closed",
+        details,
+      );
+    } else {
+      console.warn(
+        "[WebSocketClientService] socket closed",
+        details,
+      );
+    }
     this.socket = null;
     if (this.activeSocket === socket) {
       this.activeSocket = null;
@@ -786,6 +831,15 @@ export class WebSocketClientService implements ClientService {
           socket,
           resume && resumed === false,
         );
+        console.info(
+          "[WebSocketClientService] room signaling ready",
+          {
+            clientId: this.client.clientId,
+            reconnect: resume,
+            resumed: resumed ?? null,
+            generation,
+          },
+        );
         return socket;
       })
       .catch((error: unknown) => {
@@ -868,17 +922,23 @@ export class WebSocketClientService implements ClientService {
       try {
         await this.initialize(true);
         this.reconnectAttempts = 0;
-        console.log(
-          "[WebSocketClientService] socket reconnect success",
-        );
         return;
       } catch (error) {
         if (signal.aborted || this.closed) return;
         this.reconnectAttempts++;
-        console.warn(
-          `[WebSocketClientService] reconnect failed, attempt ${this.reconnectAttempts}`,
-          error,
-        );
+        // Preserve the first failure, not a new warning for every retry.
+        if (this.reconnectAttempts === 1) {
+          console.warn(
+            "[WebSocketClientService] reconnect failed; retrying",
+            { clientId: this.client.clientId },
+            error,
+          );
+        } else {
+          console.debug(
+            `[WebSocketClientService] reconnect attempt ${this.reconnectAttempts} failed`,
+            error,
+          );
+        }
       }
     }
   }
@@ -945,6 +1005,13 @@ export class WebSocketClientService implements ClientService {
 
   private handleSessionReplaced(local = false): void {
     if (this.closed) return;
+    console.info(
+      "[WebSocketClientService] session replaced",
+      {
+        clientId: this.client.clientId,
+        source: local ? "local-tab" : "server",
+      },
+    );
     this.close();
     this.onNotice?.(
       local ? "tab-replaced" : "session-replaced",

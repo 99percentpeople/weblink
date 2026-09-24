@@ -95,6 +95,43 @@ afterEach(() => {
 });
 
 describe("PeerSession lifecycle", () => {
+  it("waits for an incoming negotiation instead of treating connecting as connected", async () => {
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      { polite: false },
+    );
+    const pc = Object.assign(new EventTarget(), {
+      connectionState:
+        "connecting" as RTCPeerConnectionState,
+      signalingState: "stable" as RTCSignalingState,
+      getSenders: () => [],
+      close: vi.fn(),
+    });
+    attachPeerConnection(
+      session,
+      pc as unknown as RTCPeerConnection,
+    );
+    (session as any).controller = new AbortController();
+    (session as any).listenController =
+      new AbortController();
+    let settled = false;
+    const connecting = session.connect().then(() => {
+      settled = true;
+    });
+    try {
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      pc.connectionState = "connected";
+      pc.dispatchEvent(new Event("connectionstatechange"));
+      await connecting;
+      expect(settled).toBe(true);
+    } finally {
+      session.close();
+      await connecting.catch(() => {});
+    }
+  });
+
   it("does not let a retired offer unlock negotiation on the new connection", async () => {
     const session = new PeerSession(
       makeSender("local", "remote"),
@@ -110,6 +147,7 @@ describe("PeerSession lifecycle", () => {
     );
     attachPeerConnection(session, old);
     const oldOffer = session.renegotiate();
+    await Promise.resolve();
     const current = makePeerConnection(
       () =>
         new Promise((_resolve, reject) => {
@@ -118,6 +156,7 @@ describe("PeerSession lifecycle", () => {
     );
     attachPeerConnection(session, current);
     const newOffer = session.renegotiate();
+    await Promise.resolve();
     rejectOld(new Error("old offer failed"));
     await oldOffer;
     expect(isMakingOffer(session)).toBe(true);
@@ -206,6 +245,7 @@ describe("PeerSession lifecycle", () => {
       () => new Promise(() => {}),
     );
     const pending = session.connect();
+    await Promise.resolve();
     const replacement = {
       connectionState: "connected",
       close: vi.fn(),

@@ -20,10 +20,6 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
 });
 
-self.addEventListener("install", () => {
-  console.log("weblink installed");
-});
-
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
