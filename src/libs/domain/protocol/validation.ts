@@ -172,6 +172,7 @@ function storagePage(value: unknown): boolean {
       (item) =>
         record(item) &&
         fileMetadata(item, true) &&
+        isFileFingerprint(item.fingerprint) &&
         optional(item.createdAt, timestamp) &&
         optional(item.from, id) &&
         Object.keys(item).every((key) =>
@@ -184,6 +185,7 @@ function storagePage(value: unknown): boolean {
             "chunkSize",
             "from",
             "createdAt",
+            "fingerprint",
           ].includes(key),
         ),
     ) &&
@@ -375,6 +377,43 @@ export function validateSessionMessage(
       break;
     case "send-file":
       valid = fileMetadata(value, false);
+      break;
+    case "request-shared-file":
+      valid =
+        value.version === 1 &&
+        id(value.fid) &&
+        id(value.transferId) &&
+        /^shared-transfer_[a-zA-Z0-9-]+$/.test(
+          value.transferId,
+        ) &&
+        isFileFingerprint(value.fingerprint) &&
+        chunkSize(value.chunkSize) &&
+        typeof value.have === "boolean" &&
+        optional(value.ranges, (items) =>
+          ranges(
+            items,
+            Math.ceil(
+              (value.fingerprint as { size: number }).size /
+                (value.chunkSize as number),
+            ),
+          ),
+        ) &&
+        Object.keys(value).every((key) =>
+          [
+            "type",
+            "id",
+            "client",
+            "target",
+            "createdAt",
+            "version",
+            "fid",
+            "transferId",
+            "fingerprint",
+            "chunkSize",
+            "ranges",
+            "have",
+          ].includes(key),
+        );
       break;
     case "request-file":
       valid =

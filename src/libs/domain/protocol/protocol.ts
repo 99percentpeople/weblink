@@ -28,7 +28,9 @@ export type ProtocolCallOptions<T extends RequestType> =
   RequestOptions &
     MessageMetadata & {
       /** Runs once after reserving the request, before sending. */
-      onPrepared?: (message: MessageOf<T>) => void;
+      onPrepared?: (
+        message: MessageOf<T>,
+      ) => void | Promise<void>;
     };
 
 /**

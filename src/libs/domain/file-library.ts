@@ -7,6 +7,9 @@ export interface ContentRecord {
   storageId: string;
   createdAt: number;
   state: "pending" | "ready";
+  /** Missing on pre-sharing caches: private by default. */
+  isShared?: boolean;
+  sharedReferenceId?: string;
 }
 export interface FileReference extends ChunkCacheInfo {
   contentKey: string;

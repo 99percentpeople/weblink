@@ -38,6 +38,7 @@ import {
   IconInfo,
 } from "@/components/icons";
 import { t } from "@/i18n";
+import { userErrorMessage } from "@/libs/user-error";
 import { catchError } from "@/libs/catch";
 import type { ClientID } from "@/libs/domain/ids";
 import {
@@ -301,7 +302,13 @@ export function ClientInfoPanel(props: {
                 const [error] = await catchError(
                   session.reconnect(),
                 );
-                if (error) toast.error(error.message);
+                if (error)
+                  toast.error(
+                    userErrorMessage(
+                      error,
+                      "errors.member_offline",
+                    ),
+                  );
               }}
             >
               <IconConnectWithoutContract class="size-4" />

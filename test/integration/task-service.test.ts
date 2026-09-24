@@ -270,7 +270,7 @@ describe("application task list", () => {
     if (task.kind !== "file-send")
       throw new Error("expected file task");
     expect(task.fileName).toBe("report.pdf");
-    expect(task.message.fileName).toBe(
+    expect(task.message!.fileName).toBe(
       "8d3b7861-legacy-file-id",
     );
   });

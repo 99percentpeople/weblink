@@ -42,7 +42,10 @@ export function createTransferManager(): TransferRegistry {
     bind: (entry, signal) =>
       bindTransferMessage(entry, messageStores, signal),
     complete: async (entry, signal) => {
-      if (entry.transferer.mode === TransferMode.Receive)
+      if (
+        entry.messageId &&
+        entry.transferer.mode === TransferMode.Receive
+      )
         await finishReceivedFile(
           entry.transferer.cache,
           entry.messageId,

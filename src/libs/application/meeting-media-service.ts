@@ -87,6 +87,9 @@ export function createMeetingMediaController(
     createSignal(preference(currentCameras()[0]));
   const [microphoneOn, setMicrophoneOn] =
     createSignal(false);
+  const [audioAvailable, setAudioAvailable] =
+    createSignal(false);
+  const [audioOn, setAudioOn] = createSignal(false);
   const [cameraOn, setCameraOn] = createSignal(false);
   const [sharing, setSharing] = createSignal(false);
   const [sharingAudioAvailable, setSharingAudioAvailable] =
@@ -123,6 +126,11 @@ export function createMeetingMediaController(
   const updateState = () => {
     const tracks =
       port.stream()?.getTracks().filter(live) ?? [];
+    const liveAudio = tracks.filter(
+      (track) => track.kind === "audio",
+    );
+    setAudioAvailable(liveAudio.length > 0);
+    setAudioOn(liveAudio.some((track) => track.enabled));
     setMicrophoneOn(
       tracks.some(
         (track) => microphone(track) && track.enabled,
@@ -286,7 +294,7 @@ export function createMeetingMediaController(
       tracks.forEach((track) => {
         track.enabled = enabled;
       });
-      setMicrophoneOn(enabled);
+      updateState();
       return;
     }
     await captureMicrophone(selectedMicrophoneId(), true);
@@ -372,6 +380,15 @@ export function createMeetingMediaController(
       deviceId,
       tracks.some((track) => track.enabled),
     );
+  };
+
+  const setAudioEnabled = (enabled: boolean) => {
+    if (disposed) return;
+    for (const track of port.stream()?.getAudioTracks() ??
+      []) {
+      if (live(track)) track.enabled = enabled;
+    }
+    updateState();
   };
 
   const setSharingAudioEnabled = (enabled: boolean) => {
@@ -489,6 +506,9 @@ export function createMeetingMediaController(
   sync();
   return {
     microphoneOn,
+    audioAvailable,
+    audioOn,
+    setAudioEnabled,
     cameraOn,
     sharing,
     sharingAudioAvailable,

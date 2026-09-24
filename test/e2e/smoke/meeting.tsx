@@ -820,9 +820,8 @@ function Shell(props: ParentProps) {
                     <nav
                       aria-label="App navigation fixture"
                       class="bg-background text-foreground flex
-                        h-[var(--mobile-header-height)]
-                        w-[var(--desktop-header-width)] shrink-0 items-center
-                        justify-center border-r font-semibold"
+                        h-(--mobile-header-height) w-(--desktop-header-width)
+                        shrink-0 items-center justify-center border-r font-semibold"
                     >
                       W
                     </nav>
@@ -1008,6 +1007,11 @@ async function main() {
     sendText: unexpected,
     sendFile: unexpected,
     sendClipboard: unexpected,
+    sharedFiles: {
+      download: async () => {},
+      downloadTask: () => undefined,
+    },
+    supportsSharedFiles: () => false,
     catalog: {
       watch: () => {
         throw new Error("Unexpected directory query");
@@ -2043,16 +2047,16 @@ async function main() {
 
   click("meeting.members", "tab");
   assert(
-    document.querySelectorAll(".meeting-member").length ===
-      4,
+    document.querySelectorAll("#meeting-panel-members li")
+      .length === 4,
     "member tab missing participants",
   );
   click("meeting.info", "tab");
   assert(
     document.body.textContent?.includes(
-      t("meeting.local_history"),
+      t("meeting.online_duration"),
     ),
-    "room history semantics missing",
+    "room online information missing",
   );
   click("meeting.chat", "tab");
   await checkGridResizing();

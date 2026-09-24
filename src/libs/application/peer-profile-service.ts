@@ -1,4 +1,7 @@
-import { FILE_CONTENT_FEATURE } from "@/libs/domain/protocol/messages";
+import {
+  FILE_CONTENT_FEATURE,
+  SHARED_FILES_FEATURE,
+} from "@/libs/domain/protocol/messages";
 import {
   normalizePeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
@@ -151,7 +154,13 @@ export class PeerProfileService {
       .notify(
         session,
         "client-profile",
-        { profile, features: [FILE_CONTENT_FEATURE] },
+        {
+          profile,
+          features: [
+            FILE_CONTENT_FEATURE,
+            SHARED_FILES_FEATURE,
+          ],
+        },
         { createdAt },
       )
       .catch((error) => {

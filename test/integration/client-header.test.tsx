@@ -135,7 +135,7 @@ describe("shared client header", () => {
                 "b",
               ),
             )
-          : `/client/b/${destination}`,
+          : "/?panel=files&member=b",
       );
       const settings = screen.getByRole("button", {
         name: "client.config.open",
@@ -154,26 +154,13 @@ describe("shared client header", () => {
     },
   );
 
-  it("returns from file sync to the selected conversation on Home", async () => {
+  it("opens the file tab with the current private peer selected", async () => {
     const { history } = renderHeader("chat");
     fireEvent.click(
       screen.getByLabelText("client.sync.title"),
     );
     await waitFor(() =>
-      expect(history.get()).toBe("/client/b/sync"),
-    );
-    fireEvent.click(
-      screen.getByLabelText("client.sync.menu.chat"),
-    );
-    await waitFor(() =>
-      expect(history.get()).toBe(
-        conversationHref(
-          directConversationId(
-            appState.profile.clientId,
-            "b",
-          ),
-        ),
-      ),
+      expect(history.get()).toBe("/?panel=files&member=b"),
     );
   });
 

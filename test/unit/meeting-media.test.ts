@@ -135,6 +135,56 @@ afterEach(() => {
 });
 
 describe("meeting media controls", () => {
+  it("only mutes existing outgoing audio without acquiring, replacing or stopping streams", async () => {
+    const microphone = new FakeTrack("audio");
+    const camera = new FakeTrack("video");
+    const screen = new FakeTrack("video", "screen");
+    const sharedAudio = new FakeTrack("audio");
+    const f = setup(stream(microphone, camera));
+    f.getDisplayMedia.mockResolvedValueOnce(
+      stream(screen, sharedAudio),
+    );
+    await f.media.addSharing();
+    const current = f.service.stream();
+    f.media.setMicrophonePreference("next-device");
+    f.media.setAudioEnabled(false);
+    expect(f.media.audioAvailable()).toBe(true);
+    expect(f.media.audioOn()).toBe(false);
+    expect(f.media.microphoneOn()).toBe(false);
+    expect(f.media.sharingAudioOn()).toBe(false);
+    expect(microphone.enabled).toBe(false);
+    expect(sharedAudio.enabled).toBe(false);
+    f.media.setSharingAudioEnabled(true);
+    expect(f.media.audioOn()).toBe(true);
+    expect(microphone.enabled).toBe(false);
+    f.media.setAudioEnabled(true);
+    expect(microphone.enabled).toBe(true);
+    expect(sharedAudio.enabled).toBe(true);
+    expect(f.service.stream()).toBe(current);
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+    expect(f.getDisplayMedia).toHaveBeenCalledOnce();
+    for (const track of [
+      microphone,
+      camera,
+      screen,
+      sharedAudio,
+    ])
+      expect(track.stop).not.toHaveBeenCalled();
+    expect(camera.enabled).toBe(true);
+    expect(screen.enabled).toBe(true);
+  });
+
+  it("does not start capture when changing sound without existing audio", () => {
+    const f = setup();
+    f.media.setAudioEnabled(true);
+    f.media.setAudioEnabled(false);
+    expect(f.media.audioAvailable()).toBe(false);
+    expect(f.media.audioOn()).toBe(false);
+    expect(f.service.stream()).toBeNull();
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+    expect(f.getDisplayMedia).not.toHaveBeenCalled();
+  });
+
   it("reflects devices captured elsewhere and retains their selection after stopping", () => {
     const f = setup();
     const microphone = new FakeTrack(

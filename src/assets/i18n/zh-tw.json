@@ -1,7 +1,6 @@
 {
   "tasks": {
     "title": "任務列表",
-    "description": "統一查看檔案傳送、接收和客戶端測速。關閉任務列表或切換頁面不會中斷正在執行的任務。",
     "retention_note": "本次開啟頁面期間保留最近 50 次測速記錄。重新整理或關閉瀏覽器頁面會結束即時連線；清除記錄不會刪除檔案或聊天訊息。",
     "count": "{{active}} 項進行中 · 共 {{total}} 項",
     "active_count": "{{count}} 項進行中的任務",
@@ -9,21 +8,9 @@
     "local": "本機",
     "filters_label": "篩選任務",
     "filters": {
-      "all": "全部",
-      "active": "進行中",
-      "file": "檔案",
-      "speed": "測速",
-      "finished": "已結束",
       "status": "狀態",
       "type": "類型",
       "no_results": "沒有符合項目"
-    },
-    "columns": {
-      "task": "任務",
-      "status": "狀態",
-      "detail": "進度 / 結果",
-      "time": "時間",
-      "actions": "操作"
     },
     "kinds": {
       "file-send": "傳送檔案",
@@ -85,7 +72,6 @@
     }
   },
   "setting": {
-    "title": "設定",
     "appearance": {
       "title": "外觀",
       "theme": {
@@ -120,8 +106,7 @@
         }
       },
       "background_image_opacity": {
-        "title": "背景透明度",
-        "description": "變更背景圖片的透明度"
+        "title": "背景透明度"
       },
       "wake_lock": {
         "title": "保持螢幕常亮",
@@ -145,7 +130,8 @@
       "share_servers_with_others": {
         "title": "分享伺服器給他人",
         "description": "在生成加入 URL 時，分享 STUN 和 TURN 伺服器給他人"
-      }
+      },
+      "available": "可用"
     },
     "sender": {
       "title": "檔案傳送設定",
@@ -155,16 +141,13 @@
         "unsupported": "剪貼簿功能不受支援，請在安全的上下文中使用"
       },
       "chunk_size": {
-        "title": "區塊大小",
-        "description": "每個傳輸區塊的大小"
+        "title": "區塊大小"
       },
       "block_size": {
-        "title": "塊大小",
-        "description": "每次傳送的塊大小"
+        "title": "塊大小"
       },
       "max_buffer_amount": {
-        "title": "最大緩衝區大小",
-        "description": "更改傳送端的最大緩衝區大小"
+        "title": "最大緩衝區大小"
       },
       "ordered": {
         "title": "有序",
@@ -191,32 +174,7 @@
         "description": "接收完成後自動下載"
       }
     },
-    "media": {
-      "title": "媒體設定",
-      "description": "更改應用程式的媒體設定",
-      "camera": {
-        "title": "攝影機",
-        "description": "更改應用程式的攝影機"
-      },
-      "microphone": {
-        "title": "麥克風",
-        "description": "更改應用程式的麥克風"
-      },
-      "speaker": {
-        "title": "揚聲器",
-        "description": "更改應用程式的揚聲器"
-      },
-      "request_permission": {
-        "camera_title": "請求攝影機權限",
-        "microphone_title": "請求麥克風權限",
-        "camera_success": "攝影機權限已授予",
-        "microphone_success": "麥克風權限已授予",
-        "description": "請求媒體權限以使用媒體設定，如果請求權限後無法選擇媒體裝置，請嘗試重新整理頁面",
-        "fallback_description": "請允許瀏覽器使用攝影機和麥克風"
-      }
-    },
     "advanced_settings": {
-      "title": "進階設定",
       "advanced_connection": {
         "title": "進階連接設定",
         "relay_only": {
@@ -236,10 +194,6 @@
           "title": "視訊最大位元速率",
           "description": "視訊通話的最大比特率"
         },
-        "audio_max_bitrate": {
-          "title": "音訊最大位元速率",
-          "description": "視訊通話的音訊最大比特率"
-        },
         "degradation_preference": {
           "title": "降級偏好",
           "description": "當網路條件較差時，應用程式將優先考慮視訊質量還是幀率"
@@ -257,7 +211,6 @@
       }
     },
     "about": {
-      "title": "關於",
       "reset_options": "重設設定",
       "clear_service_worker_cache": "清除應用程式快取",
       "copy_version": "複製版本資訊",
@@ -273,8 +226,7 @@
   },
   "cache": {
     "title": "檔案快取",
-    "usage": "已用 {{value}}, 總共 {{max}}, 剩餘 {{remaining}}",
-    "search_input": "搜尋快取檔案..."
+    "usage": "已用 {{value}}, 總共 {{max}}, 剩餘 {{remaining}}"
   },
   "404": {
     "title": "404 未找到",
@@ -283,24 +235,12 @@
   },
   "client": {
     "scroll_to_bottom": "回到最新訊息",
-    "client_list": {
-      "context_menu": {
-        "chat": "聊天",
-        "sync": "檔案同步"
-      }
-    },
     "menu": {
       "connect": "連接",
-      "connection_status": "連接狀態",
-      "delete_client": "刪除客戶端",
-      "clipboard": "剪貼簿",
-      "options": "選項",
-      "redirect": "連接後自動跳轉"
+      "clipboard": "剪貼簿"
     },
     "config": {
       "open": "客戶端設定",
-      "title": "{{name}} 的客戶端設定",
-      "description": "管理這個客戶端的連線行為、分享權限和常用操作。",
       "preferences": "客戶端設定",
       "preferences_description": "這些設定只套用到目前客戶端。",
       "redirect": {
@@ -311,68 +251,31 @@
         "title": "提供檔案列表",
         "description": "允許這個客戶端查看本機已完成快取檔案的列表。關閉後，檔案列表請求會回傳空列表；聊天、直接傳送檔案及既有傳輸不受影響。"
       },
-      "actions": "客戶端操作",
-      "actions_description": "查看連線資訊或執行與目前客戶端相關的操作。"
+      "actions": "客戶端操作"
     },
     "index": {
-      "setup_room": "建立或加入房間",
-      "edit_room": "編輯房間資訊",
-      "join_room": "加入房間",
-      "share_room": "分享房間",
-      "leave_room": "離開房間",
-      "mobile_tip": "提示：請點擊右上角按鈕創建或加入房間，點擊頭像分享房間",
-      "before_join": {
-        "title": "創建或連接到房間",
-        "description": "請點擊按鈕，創建一個新房間或連接到一個現有房間"
-      },
-      "connecting": {
-        "title": "連接中...",
-        "description": "請等待連接建立"
-      },
-      "after_join": {
-        "title": "已加入房間 {{room}}",
-        "description": "分享房間資料以邀請其他人加入房間",
-        "tip": "提示：在移動設備上點擊頭像以分享房間資料"
-      }
+      "edit_room": "編輯房間資訊"
     },
     "message_editor": {
-      "placeholder": "輸入訊息…",
-      "mobile_placeholder": "發送訊息"
+      "placeholder": "輸入訊息…"
     },
     "sync": {
       "title": "檔案同步",
       "menu": {
-        "refresh": "重新整理",
         "chat": "聊天"
-      },
-      "search_input": "搜尋對方檔案名稱…",
-      "loading": "正在載入目錄…",
-      "load_failed": "目錄重新整理失敗",
-      "sharing_disabled": "對方已關閉檔案清單分享。",
-      "disconnected": {
-        "title": "用戶端尚未連線",
-        "description": "連線建立後，將自動載入對方分享的檔案清單。"
       }
     },
-    "message_error": "發生錯誤"
+    "message_error": "發生錯誤",
+    "chat": {
+      "compress_folder": "壓縮資料夾"
+    }
   },
   "video": {
-    "title": "螢幕共享",
-    "device": {
-      "screen": "螢幕",
-      "camera": "攝影機"
-    },
-    "no_stream": "沒有串流",
-    "float": "浮動",
     "global_mute": "全局靜音",
     "global_unmute": "全局取消靜音",
-    "reset_layout": "重置佈局",
-    "compact_layout": "緊湊佈局",
     "loading_state": {
       "initial": "初始化中...",
       "loading": "載入中...",
-      "canplay": "準備播放",
-      "playing": "播放中",
       "waiting": "緩衝中...",
       "stalled": "連接中斷，正在重試...",
       "error": "載入失敗",
@@ -392,10 +295,7 @@
   },
   "common": {
     "scan_qrcode_dialog": {
-      "title": "分享房間資訊",
       "description": "掃描二維碼或分享連結，邀請朋友加入房間。",
-      "tip": "右鍵或長按複製連結",
-      "invite": "邀請你加入房間 {{room}}",
       "link": "邀請連結",
       "shared_by": "由 {{name}} 分享",
       "save": "儲存二維碼",
@@ -409,7 +309,6 @@
     },
     "join_form": {
       "title": "連線設定",
-      "description": "設定使用者資訊和房間資訊。",
       "profile_description": "設定你在房間中顯示的使用者資訊。",
       "room_description": "設定要建立或加入的房間資訊。",
       "autosave_hint": "修改會自動儲存，點擊「連接」後加入房間。",
@@ -422,8 +321,7 @@
         "description": "自動產生，用於識別目前客戶端"
       },
       "room_id": {
-        "title": "房間 ID",
-        "description": "房間的 ID"
+        "title": "房間 ID"
       },
       "name": "名稱",
       "avatar": "頭像",
@@ -456,8 +354,7 @@
     },
     "send_item_preview_dialog": {
       "title": "傳送檔案",
-      "description": "確認傳送檔案 {{fileName}} 給 {{name}}？",
-      "unsupported_file_type": "不支援的檔案類型"
+      "description": "確認傳送檔案 {{fileName}} 給 {{name}}？"
     },
     "reset_options_dialog": {
       "title": "重設設定",
@@ -471,29 +368,14 @@
       "reload": "清除後重新加載頁面"
     },
     "file_table": {
-      "columns": {
-        "name": "名稱",
-        "size": "大小",
-        "last_modified": "最後修改",
-        "status": "狀態",
-        "created_at": "創建時間",
-        "mime_type": "MIME 類型",
-        "progress": "進度"
-      },
       "status": {
-        "not_started": "未開始",
-        "stopped": "已停止",
-        "transferring": "傳輸中",
-        "merging": "合併中",
-        "complete": "已完成",
-        "incomplete": "未完成"
+        "merging": "合併中"
       },
       "filter": {
         "clear_filters": "清空過濾器",
         "selected": "已選"
       },
-      "toggle_columns": "切換欄位",
-      "no_data": "沒有資料"
+      "toggle_columns": "切換欄位"
     },
     "client_info_dialog": {
       "tabs": {
@@ -535,19 +417,15 @@
       "leave": "離開"
     },
     "action": {
-      "apply": "應用",
       "copy": "複製",
       "copy_link": "複製連結",
       "copy_file_name": "複製檔案名",
       "copy_as_png": "複製為 PNG",
       "copy_as_svg": "複製為 SVG",
-      "paste": "貼上",
       "delete": "刪除",
       "download": "下載",
       "cancel": "取消",
       "confirm": "確定",
-      "actions": "操作",
-      "open": "打開",
       "change": "更改",
       "close": "關閉",
       "preview": "預覽",
@@ -557,29 +435,20 @@
       "asc": "升序",
       "desc": "降序",
       "hide": "隱藏",
-      "set_as_background": "設為背景",
-      "test": "測試",
       "share": "分享",
       "forward": "轉發",
-      "request_download": "請求下載",
-      "resume": "恢復",
       "add_folder": "添加資料夾",
       "check_availability": "檢查可用性",
       "reload": "重新加載",
       "mute": "靜音",
       "unmute": "恢復",
-      "select": "選擇",
       "settings": "設置",
       "fullscreen": "全螢幕",
       "exit_fullscreen": "退出全螢幕",
-      "switch_fullscreen": "切換全螢幕",
       "picture_in_picture": "子母畫面",
       "exit_picture_in_picture": "退出子母畫面",
-      "switch_picture_in_picture": "切換子母畫面",
-      "stop": "停止",
-      "pause": "暫停",
       "continue": "繼續",
-      "restore": "恢復"
+      "retry": "重試"
     },
     "clipboard_history": {
       "title": "剪貼簿歷史"
@@ -592,10 +461,7 @@
     "about_dialog": {
       "title": "關於 Weblink",
       "description1": "Weblink 是一款基於瀏覽器的P2P聊天、檔案傳輸、檔案同步和螢幕共享工具。",
-      "description2": "它提供傳輸進度顯示、斷點續傳、資料夾傳輸、剪貼簿傳輸、檔案快取、視訊通話等多種功能。",
-      "description3": "此專案是純網頁應用程式，無需安裝。如遇到任何不穩定情況，請嘗試重新整理頁面。資訊不會遺失。",
       "disclaimer": "免責聲明：此應用程式採用點對點（P2P）技術，所有資料儲存於使用者端（瀏覽器）中，伺服器不儲存任何使用者資料，僅負責轉送訊號。使用者應自行承擔使用風險，開發者不對任何資料遺失或隱私洩露負責。",
-      "star_repo": "如果您喜歡這個專案，歡迎在 GitHub 上給我一顆 ⭐！",
       "version": "版本",
       "author": "作者",
       "license": "授權條款",
@@ -605,22 +471,13 @@
       "title": "媒體選擇",
       "screen": "螢幕",
       "media_device": "媒體設備",
-      "camera": "攝影機",
-      "microphone": "麥克風",
-      "speaker": "揚聲器",
-      "enable_screen": "啟用螢幕",
       "enable_camera": "啟用攝影機",
       "enable_microphone": "啟用麥克風",
-      "enable_speaker": "啟用揚聲器",
       "enable_system_audio": "啟用系統音訊",
       "enable_program_audio": "啟用節目音訊",
       "obs_audio_setup_tip": "OBS + VB-CABLE 設定：\n1. OBS 設定 → 音訊 → 進階 → 監聽裝置：CABLE Input。\n2. OBS 編輯 → 進階音訊屬性 → 音訊監聽：監聽並輸出。\n3. Weblink 節目音訊選擇 CABLE Output。",
-      "no_camera_available": "沒有攝影機可用",
-      "no_microphone_available": "沒有麥克風可用",
-      "no_speaker_available": "沒有揚聲器可用",
       "request_camera_permission": "請求攝影機權限",
       "request_microphone_permission": "請求麥克風權限",
-      "select_speaker": "選擇揚聲器 (自動)",
       "select_system_audio_source": "選擇系統音訊來源（自動）",
       "select_program_audio": "選擇節目音訊輸入（自動）",
       "select_microphone": "選擇麥克風 (自動)",
@@ -631,7 +488,6 @@
       "preview": "預覽",
       "apply_constraints": "應用媒體約束",
       "apply_constraints_description": "某些約束可能不支持動態更改，請選擇新的流以應用",
-      "preset_constraints": "預設媒體約束",
       "microphone_constraints": "麥克風約束",
       "speaker_constraints": "系統/節目音訊約束",
       "not_support_display_media": "您的瀏覽器不支持螢幕共享",
@@ -658,15 +514,12 @@
       "new_version_available": "新版本可用",
       "share_failed": "分享失敗，錯誤: {{error}}",
       "clear_cache_success": "應用程式快取已清除",
-      "clear_cache_failed": "清除應用程式快取失敗：{{error}}"
+      "clear_cache_failed": "清除應用程式快取失敗：{{error}}",
+      "copy_failed": "複製失敗，請檢查剪貼簿權限後重試。",
+      "room_unprotected": "此房間未設定密碼。"
     },
     "nav": {
-      "chat": "聊天",
-      "file_cache": "檔案快取",
-      "screen_sharing": "會議",
       "settings": "設定",
-      "join_room": "加入房間",
-      "leave_room": "離開房間",
       "share_link": "分享連結"
     },
     "timeago": {
@@ -692,7 +545,8 @@
       "page": "{{page}} / {{count}}",
       "previous": "上一頁",
       "next": "下一頁"
-    }
+    },
+    "show_more": "顯示更多"
   },
   "conversations": {
     "title": "對話",
@@ -732,10 +586,8 @@
     "members_online": "{{count}} 位成員在線",
     "local_history": "此瀏覽器中的歷史",
     "load_earlier": "載入更早的訊息",
-    "room_empty": "訊息傳送給目前在線成員，並保存在本機瀏覽器中。",
     "room_inactive": "加入此房間後可傳送訊息。瀏覽歷史不會切換目前房間。",
     "composer_offline": "尚未連線，連線後即可傳送訊息。",
-    "room_alone": "等待其他成員連線後傳送…",
     "room_message": "傳送房間訊息",
     "send": "傳送訊息",
     "previous_identity": "此歷史屬於先前的本機身分。請開啟目前身分的私聊對話傳送訊息。",
@@ -809,7 +661,14 @@
     "members": "成員",
     "info": "資訊",
     "select_conversation": "從對話列表選擇對話，或加入房間開始群聊。",
-    "members_hint": "目前房間的成員與連線狀態",
+    "members_hint": "點擊成員開啟私訊；對方和房間的靜音僅影響本機播放。",
+    "mute_local_audio": "靜音我正在傳送的聲音",
+    "unmute_local_audio": "恢復我正在傳送的聲音",
+    "mute_room_audio": "靜音房間聲音",
+    "unmute_room_audio": "恢復房間聲音",
+    "open_private_chat": "與 {{name}} 私訊",
+    "mute_member": "在本機靜音 {{name}}",
+    "unmute_member": "在本機恢復 {{name}} 的聲音",
     "status_online": "線上",
     "status_offline": "離線",
     "status_connecting": "連線中",
@@ -855,13 +714,15 @@
     "permission_needed": "需要授權才能取得裝置清單。",
     "device_disabled": "裝置已停用",
     "permission_disabled_hint": "請在瀏覽器的網站權限或系統隱私設定中允許存取，再重新整理裝置清單。",
-    "permission_requesting": "正在取得權限…",
     "output_permission_hint": "目前瀏覽器需要麥克風授權才能顯示相關的揚聲器清單。",
+    "output_default_only": "此瀏覽器需要可用的麥克風及其權限，才能取得更多揚聲器。你仍可使用系統預設揚聲器，或在系統設定中切換輸出裝置。",
     "expand_chat": "展開側邊欄",
     "collapse_chat": "縮窄側邊欄",
-    "maximize_sidebar": "展開為完整工作區",
-    "restore_sidebar": "還原側欄",
-    "return_to_stage": "返回會議畫面"
+    "return_to_stage": "返回會議畫面",
+    "files": "檔案",
+    "online_duration": "本次上線時長",
+    "chat_support": "支援群組聊天的成員",
+    "file_support": "支援檔案分享的成員"
   },
   "room_dialog": {
     "actions": "房間操作",
@@ -873,8 +734,6 @@
     "devices": "會議裝置",
     "devices_hint": "這裡只選擇裝置，下次透過會議工具列開啟時生效。取得權限會短暫存取裝置並立即釋放，不會發布會議影音。",
     "online_members": "線上成員",
-    "chat_support": "支援群組聊天的成員",
-    "file_support": "支援檔案分享的成員",
     "file_hint": "檔案資訊傳送給線上成員，點擊傳輸或開啟小檔案自動下載後才接收檔案。傳輸時傳送者需要在線上，並保留本機檔案。",
     "inactive_devices": "加入此房間後可設定會議裝置。",
     "settings": "房間設定",
@@ -939,9 +798,77 @@
     "references": "關聯附件",
     "fingerprint": "內容指紋",
     "legacy": "首次傳送時計算指紋",
-    "identifying": "正在識別檔案",
     "local_completion": "本機已有，已略過傳輸",
     "related_messages": "關聯訊息",
     "peer_unavailable": "對方已離線，請連線後再傳送檔案。"
+  },
+  "shared_files": {
+    "add": "選擇檔案",
+    "from_library": "從檔案庫選擇",
+    "upload_files": "上傳檔案",
+    "upload_folder": "上傳資料夾",
+    "added": "檔案已加入共享清單。",
+    "title": "共享檔案",
+    "mine": "我的共享檔案",
+    "shared": "已共享",
+    "share": "共享",
+    "unshare": "取消共享",
+    "filter": "共享狀態",
+    "filter_all": "全部檔案",
+    "filter_shared": "已共享",
+    "filter_private": "未共享",
+    "choose": "從檔案庫選擇共享檔案",
+    "choose_hint": "選中的檔案將加入本機共享清單，在不同房間共用。",
+    "share_count": "共享 {{count}} 個檔案",
+    "get": "取得",
+    "get_count": "取得選中項（{{count}}）",
+    "search": "搜尋共享檔案",
+    "refresh": "重新整理",
+    "asc": "升冪",
+    "desc": "降冪",
+    "disconnected": "該成員尚未連線。",
+    "unsupported": "該成員不支援共享檔案功能。",
+    "disabled": "該成員未向你開放共享目錄。",
+    "empty": "暫無符合條件的共享檔案。",
+    "loading": "正在讀取共享檔案…",
+    "error": "讀取共享檔案失敗。",
+    "select_all": "選擇本頁",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "page_size": "每頁檔案數",
+    "select_member": "選擇成員以瀏覽其共享檔案。",
+    "back": "返回成員列表"
+  },
+  "errors": {
+    "unexpected": "操作失敗，請稍後重試。",
+    "connection_failed": "無法連線至房間伺服器，請檢查網路及伺服器設定後重試。",
+    "connection_timeout": "連線至房間伺服器逾時，請檢查網路後重試。",
+    "connection_closed": "連線已中斷，請重新連線後重試。",
+    "connection_config": "房間伺服器位址或設定無效，請檢查連線設定。",
+    "connection_response": "伺服器回應異常，請檢查伺服器位址，或更新應用程式及伺服器後重試。",
+    "password_required": "此房間需要密碼，請輸入密碼後重試。",
+    "incorrect_password": "房間密碼錯誤，請檢查密碼後重試。",
+    "password_prepare": "無法處理房間密碼，請重新整理頁面後重試。",
+    "request_timeout": "請求逾時，請確認雙方保持在線後重試。",
+    "member_offline": "對方尚未連線，請等待對方重新連線後重試。",
+    "sharing_disabled": "對方未開放共享檔案存取。",
+    "file_not_shared": "此檔案已取消共享或被刪除，請重新整理清單。",
+    "shared_unsupported": "對方版本不支援取得共享檔案，請雙方更新應用程式後重試。",
+    "file_unavailable": "檔案已刪除或無法讀取，請重新選擇或取得檔案。",
+    "file_incomplete": "檔案尚未完整可用，請等待處理或接收完成後重試。",
+    "file_busy": "此檔案正在處理或傳輸，請等待目前工作完成。",
+    "file_failed": "檔案操作失敗，請檢查連線及本機儲存空間後重試。",
+    "file_list_failed": "無法載入檔案清單，請確認雙方在線後重新整理。",
+    "verification_failed": "接收的檔案驗證失敗，請重新取得。",
+    "storage_full": "本機儲存空間不足，請刪除不再需要的檔案後重試。",
+    "storage_unavailable": "無法存取本機檔案庫，請檢查瀏覽器儲存權限後重試。",
+    "permission_denied": "操作權限遭拒，請檢查瀏覽器權限後重試。",
+    "cancelled": "操作已取消。",
+    "avatar_failed": "無法讀取此圖片，請選擇其他圖片後重試。",
+    "ice_unavailable": "伺服器無法使用，請檢查位址、憑證及網路連線。",
+    "ice_credentials": "無法取得中繼憑證，請檢查 TURN 服務的驗證設定。",
+    "ice_config": "中繼伺服器設定無效，請檢查位址及驗證方式。",
+    "ice_config_line": "第 {{line}} 行需包含位址、使用者名稱、密碼及驗證方式，使用 | 分隔。",
+    "ice_auth_line": "第 {{line}} 行的驗證方式不受支援，請使用 longterm、hmac 或 cloudflare。"
   }
 }

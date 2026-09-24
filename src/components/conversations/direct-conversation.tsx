@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { useLocation } from "@solidjs/router";
 import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -13,6 +14,7 @@ import { createBottomScroll } from "@/libs/hooks/create-bottom-scroll";
 import { cn } from "@/libs/cn";
 import DropArea from "@/components/drop-area";
 import { ChatScrollButton } from "./chat-scroll-button";
+import { ChatEmptyState } from "./chat-empty-state";
 import { createMessageGallery } from "./message-gallery";
 import {
   messageStores,
@@ -270,7 +272,9 @@ export function ChatConversation(props: {
         );
         if (error) {
           console.error(error);
-          toast.error(error.message);
+          toast.error(
+            userErrorMessage(error, "errors.file_failed"),
+          );
         }
       }
     }
@@ -371,7 +375,12 @@ export function ChatConversation(props: {
                 if (error) {
                   console.warn(error);
                   if (error.message !== "User cancelled") {
-                    toast.error(error.message);
+                    toast.error(
+                      userErrorMessage(
+                        error,
+                        "errors.file_failed",
+                      ),
+                    );
                   }
                   return;
                 }
@@ -458,6 +467,11 @@ export function ChatConversation(props: {
                         onIntersect={loadMore}
                       />
                     </li>
+                  </Show>
+                  <Show
+                    when={ready() && !allMessages().length}
+                  >
+                    <ChatEmptyState />
                   </Show>
                   <For each={messages()}>
                     {(message, index) => {

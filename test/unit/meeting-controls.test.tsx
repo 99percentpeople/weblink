@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { createSignal } from "solid-js";
@@ -17,6 +18,7 @@ import {
   vi,
 } from "vitest";
 import { MeetingControls } from "@/routes/home/components/meeting-controls";
+import type { MeetingDeviceAccessState } from "@/libs/domain/meeting-devices";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 let animationStyle: HTMLStyleElement;
@@ -68,7 +70,7 @@ function setup(withDevices = false) {
   const [requesting, setRequesting] =
     createSignal<MediaDeviceKind | null>(null);
   const [permissions, setPermissions] = createSignal<
-    Record<MediaDeviceKind, PermissionState>
+    Record<MediaDeviceKind, MeetingDeviceAccessState>
   >({
     audioinput: "granted",
     audiooutput: "granted",
@@ -103,7 +105,7 @@ function setup(withDevices = false) {
       state: (kind: MediaDeviceKind) => permissions()[kind],
       requesting,
       needsPermission: () => false,
-      outputNeedsMicrophone: () => false,
+      outputNeedsMicrophone: vi.fn(() => false),
       request: vi.fn(async () => {}),
     },
     list,
@@ -132,6 +134,9 @@ function setup(withDevices = false) {
   });
   const media = {
     microphoneOn,
+    audioAvailable: () => true,
+    audioOn: microphoneOn,
+    setAudioEnabled: setMicrophoneOn,
     cameraOn,
     sharing,
     sharingAudioAvailable: () => false,
@@ -189,12 +194,174 @@ function setup(withDevices = false) {
     setOutputSupported,
     setList,
     setMicrophoneId,
+    setOutputId,
     setPermissions,
     setRequesting,
   };
 }
 
 describe("meeting control interactions", () => {
+  it("requires speaker permission even with a native output picker and a saved output", async () => {
+    const { devices, setPermissions, setOutputId } =
+      setup(true);
+    setOutputId("saved-speaker");
+    setPermissions({
+      audioinput: "granted",
+      audiooutput: "prompt",
+      videoinput: "granted",
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.audio_devices",
+      }),
+    );
+    const speaker = screen.getByRole("combobox", {
+      name: /^meeting\.speaker_device/,
+    });
+    expect(speaker).toBeDisabled();
+    await userEvent.click(speaker);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(devices.selectOutput).not.toHaveBeenCalled();
+
+    setPermissions({
+      audioinput: "granted",
+      audiooutput: "granted",
+      videoinput: "granted",
+    });
+    expect(speaker).toBeEnabled();
+    await chooseDevice(speaker, "speaker-1");
+    expect(devices.selectOutput).toHaveBeenLastCalledWith(
+      "speaker-1",
+    );
+
+    setPermissions({
+      audioinput: "granted",
+      audiooutput: "denied",
+      videoinput: "granted",
+    });
+    expect(speaker).toBeDisabled();
+    expect(devices.selectOutput).toHaveBeenCalledOnce();
+  });
+
+  it("disables a default-only speaker selector without a native output picker and enables it when devices become available", async () => {
+    const { devices, setList, setPermissions } =
+      setup(true);
+    devices.access.outputNeedsMicrophone.mockReturnValue(
+      true,
+    );
+    const available = devices.list();
+    setList([]);
+    setPermissions({
+      audioinput: "unavailable",
+      audiooutput: "default-only",
+      videoinput: "granted",
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.audio_devices",
+      }),
+    );
+    const speaker = screen.getByRole("combobox", {
+      name: /^meeting\.speaker_device/,
+    });
+    expect(speaker).toBeDisabled();
+    expect(speaker).toHaveTextContent(
+      "meeting.default_device",
+    );
+    await userEvent.click(speaker);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(devices.selectOutput).not.toHaveBeenCalled();
+
+    setList(available);
+    setPermissions({
+      audioinput: "granted",
+      audiooutput: "granted",
+      videoinput: "granted",
+    });
+    expect(speaker).toBeEnabled();
+    await chooseDevice(speaker, "speaker-1");
+    expect(devices.selectOutput).toHaveBeenLastCalledWith(
+      "speaker-1",
+    );
+  });
+
+  it("allows returning to the default speaker when microphone access cannot unlock output devices", async () => {
+    const {
+      devices,
+      setList,
+      setOutputId,
+      setPermissions,
+    } = setup(true);
+    devices.access.outputNeedsMicrophone.mockReturnValue(
+      true,
+    );
+    setList([]);
+    setOutputId("removed-speaker");
+    setPermissions({
+      audioinput: "unavailable",
+      audiooutput: "default-only",
+      videoinput: "granted",
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.audio_devices",
+      }),
+    );
+    const speaker = screen.getByRole("combobox", {
+      name: /^meeting\.speaker_device/,
+    });
+    expect(speaker).toBeEnabled();
+    expect(
+      screen.getByText("meeting.output_default_only"),
+    ).toBeInTheDocument();
+    await chooseDevice(speaker as HTMLButtonElement, "");
+    expect(devices.selectOutput).toHaveBeenLastCalledWith(
+      "",
+    );
+    expect(devices.outputId()).toBe("");
+    expect(speaker).toBeDisabled();
+    expect(devices.access.request).not.toHaveBeenCalled();
+  });
+
+  it("offers separate microphone and speaker permission actions in the audio menu", () => {
+    const { devices, setPermissions } = setup(true);
+    setPermissions({
+      audioinput: "prompt",
+      audiooutput: "prompt",
+      videoinput: "granted",
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.audio_devices",
+      }),
+    );
+    const microphone = within(
+      document.querySelector<HTMLElement>(
+        '[data-device-kind="audioinput"]',
+      )!,
+    );
+    const speaker = within(
+      document.querySelector<HTMLElement>(
+        '[data-device-kind="audiooutput"]',
+      )!,
+    );
+    fireEvent.click(speaker.getByRole("button"));
+    expect(devices.access.request).toHaveBeenLastCalledWith(
+      "audiooutput",
+    );
+    fireEvent.click(microphone.getByRole("button"));
+    expect(devices.access.request).toHaveBeenLastCalledWith(
+      "audioinput",
+    );
+    setPermissions({
+      audioinput: "granted",
+      audiooutput: "prompt",
+      videoinput: "granted",
+    });
+    expect(microphone.queryByRole("button")).toBeNull();
+    expect(speaker.getByRole("button")).toBeEnabled();
+  });
+
   it("exposes the microphone state and changes the accessible action after toggling", () => {
     setup();
     fireEvent.click(
@@ -541,6 +708,10 @@ describe("meeting control interactions", () => {
       name: "meeting.get_permission",
     }) as HTMLButtonElement;
     expect(permission.disabled).toBe(true);
+    expect(permission).toHaveTextContent(
+      "meeting.get_permission",
+    );
+    expect(permission).toHaveAttribute("aria-busy", "true");
     fireEvent.click(permission);
     expect(devices.access.request).toHaveBeenCalledTimes(1);
     setPermissions({

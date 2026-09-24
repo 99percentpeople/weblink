@@ -20,6 +20,7 @@ function updateRun(
   update: (state: RoomFileTransferState) => void,
   complete = false,
 ): void {
+  if (!entry.messageId) return;
   store.updateTransferMessage(
     entry.messageId,
     (message) => {
@@ -84,6 +85,7 @@ export function bindTransferMessage(
       updateRun(entry, store, fn, complete);
   };
   // A metadata offer is not a transfer until a recipient explicitly starts one.
+  if (!entry.messageId) return;
   store.updateTransferMessage(
     entry.messageId,
     (message) => {

@@ -1,4 +1,7 @@
-import { conversationHref } from "@/libs/application/home-navigation";
+import {
+  conversationHref,
+  sharedFilesHref,
+} from "@/libs/application/home-navigation";
 import { directConversationId } from "@/libs/domain/conversation";
 import { appState } from "@/libs/state/app-state";
 import {
@@ -48,7 +51,7 @@ export const ClientHeader: Component<{
   const isChat = () => props.view === "chat";
   const destination = () =>
     isChat()
-      ? `/client/${encodeURIComponent(props.clientId)}/sync`
+      ? sharedFilesHref(props.clientId)
       : conversationHref(
           directConversationId(
             appState.profile.clientId,
@@ -76,7 +79,7 @@ export const ClientHeader: Component<{
       )}
       actions={
         <>
-          <Show when={!props.embedded}>
+          <Show when={isChat() || !props.embedded}>
             <Tooltip>
               <TooltipTrigger
                 as={HeaderLink}

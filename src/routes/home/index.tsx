@@ -1,4 +1,6 @@
 import "./index.css";
+import { createWindowSize } from "@solid-primitives/resize-observer";
+import { SharedFilesPanel } from "@/components/files/shared-files-panel";
 import {
   AnimatePresence,
   Motion,
@@ -17,22 +19,20 @@ import {
 } from "solid-js";
 import {
   Circle,
+  FolderOpen,
   ArrowLeft,
   Columns2,
-  Maximize2,
   Minimize2,
   PanelRightClose,
   Info,
   MessageSquare,
   PanelRightOpen,
-  Pin,
   ShieldAlert,
   Users,
   X,
 } from "lucide-solid";
 import { AccountMenu } from "@/components/app/account-menu";
 import { useRoomActions } from "@/components/app/room-actions";
-import { ClientAvatar } from "@/components/common/client-avatar";
 import { createMediaHashRoute } from "@/components/conversations/media-hash-route";
 import { t } from "@/i18n";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
@@ -63,11 +63,12 @@ import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 import { MeetingChatPanel } from "./components/meeting-chat-panel";
 import { MeetingInfoPanel } from "./components/meeting-info-panel";
+import { MeetingMembersPanel } from "./components/meeting-members-panel";
 
-const tabs = ["chat", "members", "info"] as const;
+const tabs = ["chat", "files", "members", "info"] as const;
 type PanelTab = (typeof tabs)[number];
 type DockedPanelMode = "compact" | "wide";
-type PanelMode = "closed" | DockedPanelMode | "full";
+type PanelMode = "closed" | DockedPanelMode;
 
 export default function Home() {
   let page: HTMLElement | undefined;
@@ -98,11 +99,11 @@ export default function Home() {
     toolbarCollapsed,
     transitionLayout,
   );
-  const isMobile = createIsMobile();
+  const viewport = createWindowSize();
+  const isMobile = createIsMobile(viewport);
+  const canDockExpanded = () => viewport.width >= 1280;
   const [panelMode, setPanelMode] = createSignal<PanelMode>(
-    !isMobile() && window.innerWidth >= 1280
-      ? "compact"
-      : "closed",
+    !isMobile() && canDockExpanded() ? "compact" : "closed",
   );
   let dockedMode: DockedPanelMode = "compact";
   const rightOpen = () => panelMode() !== "closed";
@@ -113,32 +114,44 @@ export default function Home() {
     const mode = panelMode();
     return mode === "closed" ? previous : mode;
   }, "compact");
+  const panelFillsWorkspace = () =>
+    isMobile() ||
+    (displayedPanelMode() === "wide" && !canDockExpanded());
   const fullPanel = () =>
-    rightOpen() && (isMobile() || panelMode() === "full");
+    rightOpen() && panelFillsWorkspace();
+  const [fileMember, setFileMember] =
+    createSignal<string>();
+  const [fileBrowsing, setFileBrowsing] =
+    createSignal(true);
+  const selectFileMember = (id?: string) => {
+    if (id) setFileMember(id);
+    setFileBrowsing(!id);
+    setSearch(
+      {
+        panel: "files",
+        member: id,
+        conversation: undefined,
+      },
+      { replace: true },
+    );
+  };
   const [tab, setTab] = createSignal<PanelTab>("chat");
   const expanded = () => displayedPanelMode() !== "compact";
   const [browsing, setBrowsing] = createSignal(true);
   const splitChat = () => expanded() && !isMobile();
   // Width transitions feed the stage's existing ResizeObserver. An explicit
   // FLIP here would measure before the CSS width has reached its destination.
-  const cyclePanelMode = () => {
+  const togglePanelSize = () => {
     const mode = panelMode();
     if (mode === "closed") return;
-    const next =
-      mode === "compact"
-        ? "wide"
-        : mode === "wide"
-          ? "full"
-          : "compact";
-    if (next !== "full") dockedMode = next;
+    const next = mode === "compact" ? "wide" : "compact";
+    dockedMode = next;
     setPanelMode(next);
   };
   const panelSizeAction = () =>
-    ({
-      compact: "meeting.expand_chat",
-      wide: "meeting.maximize_sidebar",
-      full: "meeting.collapse_chat",
-    })[displayedPanelMode()];
+    expanded()
+      ? "meeting.collapse_chat"
+      : "meeting.expand_chat";
   const [selectedId, setSelectedId] =
     createSignal<string>();
   const activeConversationId = () =>
@@ -179,6 +192,37 @@ export default function Home() {
         if (typeof id === "string" && id)
           selectConversation(id);
       },
+    ),
+  );
+  createEffect(
+    on(
+      () => [search.panel, search.member] as const,
+      ([panel, member]) => {
+        if (panel !== "files") return;
+        const id =
+          typeof member === "string" && member
+            ? member
+            : undefined;
+        if (id) setFileMember(id);
+        setFileBrowsing(!id);
+        setTab("files");
+        setPanelOpen(true);
+      },
+    ),
+  );
+  createEffect(
+    on(
+      () => state.activeRoomConversationId(),
+      () => {
+        setFileMember(undefined);
+        setFileBrowsing(true);
+        if (search.panel === "files")
+          setSearch(
+            { member: undefined },
+            { replace: true },
+          );
+      },
+      { defer: true },
     ),
   );
   createEffect(
@@ -264,15 +308,15 @@ export default function Home() {
           event.defaultPrevented
         )
           return;
-        if (!isMobile() && panelMode() === "full")
-          setPanelMode(dockedMode);
-        else closePanel();
+        closePanel();
       }}
     >
       <header
-        class="meeting-header flex min-h-[68px] items-center gap-3 border-b
-          px-5 py-2.5 backdrop-blur-[8px] max-md:min-h-[58px]
-          max-md:gap-2 max-md:px-3 max-md:py-2"
+        class="meeting-header bg-background/80 max-md:bg-background
+          md:border-border/50 flex min-h-[68px] items-center gap-3
+          px-5 py-2.5 backdrop-blur-sm transition-all
+          max-md:min-h-[58px] max-md:gap-2 max-md:px-3 max-md:py-2
+          md:border-b"
       >
         <button
           type="button"
@@ -487,9 +531,7 @@ export default function Home() {
             classList={{
               "is-closing": !rightOpen(),
               "is-expanded": splitChat(),
-              "is-full":
-                isMobile() ||
-                displayedPanelMode() === "full",
+              "is-full": panelFillsWorkspace(),
             }}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
@@ -522,10 +564,9 @@ export default function Home() {
                     {(value) => (
                       <TabsTrigger
                         value={value}
-                        class="text-muted-foreground data-[selected]:text-foreground
-                          h-[46px] w-[68px] min-w-0 flex-[0_0_68px] flex-col gap-1
-                          rounded-sm px-[5px] py-1.5 text-[11px] font-normal
-                          [&>svg]:size-[15px] [&>svg]:shrink-0"
+                        class="text-muted-foreground data-selected:text-foreground h-11.5
+                          w-17 min-w-0 grow-0 basis-17 flex-col gap-1 px-1.25 py-1.5
+                          text-[11px] font-normal [&>svg]:size-3.75 [&>svg]:shrink-0"
                         id={`meeting-tab-${value}`}
                         aria-label={t(`meeting.${value}`)}
                         title={t(`meeting.${value}`)}
@@ -535,6 +576,9 @@ export default function Home() {
                         </Show>
                         <Show when={value === "members"}>
                           <Users />
+                        </Show>
+                        <Show when={value === "files"}>
+                          <FolderOpen />
                         </Show>
                         <Show when={value === "info"}>
                           <Info />
@@ -560,22 +604,13 @@ export default function Home() {
                     aria-label={t(panelSizeAction())}
                     title={t(panelSizeAction())}
                     aria-pressed={expanded()}
-                    onClick={cyclePanelMode}
+                    onClick={togglePanelSize}
                   >
                     <Show
                       when={
                         displayedPanelMode() === "compact"
                       }
-                      fallback={
-                        <Show
-                          when={
-                            displayedPanelMode() === "wide"
-                          }
-                          fallback={<Minimize2 />}
-                        >
-                          <Maximize2 />
-                        </Show>
-                      }
+                      fallback={<Minimize2 />}
                     >
                       <Columns2 />
                     </Show>
@@ -623,75 +658,55 @@ export default function Home() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.18 }}
+                value="files"
+                class="meeting-panel-content"
+                id="meeting-panel-files"
+              >
+                <SharedFilesPanel
+                  active={rightOpen() && tab() === "files"}
+                  split={splitChat()}
+                  member={fileMember()}
+                  browsing={fileBrowsing()}
+                  onBack={() => selectFileMember()}
+                  onSelect={selectFileMember}
+                />
+              </TabsContent>
+              <TabsContent
+                as={Motion.div}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.18 }}
                 value="members"
                 class="meeting-panel-content"
                 id="meeting-panel-members"
               >
-                <div class="overflow-auto p-4">
-                  <p class="text-muted-foreground mb-[15px] text-xs leading-[1.6]">
-                    {t("meeting.members_hint")}
-                  </p>
-                  <div class="meeting-member">
-                    <ClientAvatar
-                      name={appState.profile.name}
-                      avatar={
-                        appState.profile.avatar ?? undefined
-                      }
-                    />
-                    <div>
-                      <strong>
-                        {appState.profile.name}
-                      </strong>
-                      <span>{t("meeting.you")}</span>
-                    </div>
-                  </div>
-                  <For each={clients()}>
-                    {(client) => (
-                      <div class="meeting-member">
-                        <ClientAvatar
-                          name={client.name}
-                          avatar={
-                            client.avatar ?? undefined
-                          }
-                        />
-                        <div>
-                          <strong>{client.name}</strong>
-                          <span>
-                            {t(
-                              `meeting.status_${client.onlineStatus}`,
-                            )}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          class="meeting-icon-button"
-                          onClick={() =>
-                            pinParticipant(client.clientId)
-                          }
-                          aria-pressed={participantPinned(
-                            client.clientId,
-                          )}
-                          aria-label={
-                            participantPinned(
-                              client.clientId,
-                            )
-                              ? t("meeting.unpin")
-                              : t("meeting.pin")
-                          }
-                          title={
-                            participantPinned(
-                              client.clientId,
-                            )
-                              ? t("meeting.unpin")
-                              : t("meeting.pin")
-                          }
-                        >
-                          <Pin />
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                </div>
+                <MeetingMembersPanel
+                  clients={clients()}
+                  roomId={appState.roomStatus.roomId}
+                  onOpenRoomChat={
+                    state.activeRoomConversationId()
+                      ? () => {
+                          const id =
+                            state.activeRoomConversationId();
+                          if (id) selectConversation(id);
+                        }
+                      : undefined
+                  }
+                  onOpenChat={(id) =>
+                    selectConversation(
+                      directConversationId(
+                        appState.profile.clientId,
+                        id,
+                      ),
+                    )
+                  }
+                  onOpenFiles={(id) => {
+                    selectFileMember(id);
+                    openTab("files");
+                  }}
+                  isPinned={participantPinned}
+                  onPin={pinParticipant}
+                />
               </TabsContent>
               <TabsContent
                 as={Motion.div}
@@ -715,11 +730,6 @@ export default function Home() {
                       state.activeRoomConversationId(),
                     )
                   }
-                  onOpenChat={() => {
-                    const id =
-                      state.activeRoomConversationId();
-                    if (id) selectConversation(id);
-                  }}
                 />
               </TabsContent>
             </Tabs>

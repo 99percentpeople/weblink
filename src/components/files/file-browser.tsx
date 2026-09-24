@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createEffect,
   createMemo,
@@ -28,6 +29,8 @@ export function FileBrowser(props: {
   selected: readonly string[];
   onSelection(ids: string[]): void;
   picker?: boolean;
+  sharing?: "shared" | "private";
+  actions?: FileAction[];
   onAction?(action: FileAction, file: LibraryFile): void;
   footer?: JSX.Element;
 }) {
@@ -37,25 +40,32 @@ export function FileBrowser(props: {
   const [status, setStatus] = createSignal<
     "all" | "complete" | "incomplete"
   >("all");
+  const [sharing, setSharing] = createSignal<
+    "all" | "shared" | "private"
+  >("all");
   const [sort, setSort] = createSignal<
     "recent" | "name" | "size"
   >("recent");
+  const eligible = createMemo(() =>
+    files().filter(
+      (file) =>
+        (!props.picker || (file.isComplete && file.file)) &&
+        (!props.sharing ||
+          !!file.isShared === (props.sharing === "shared")),
+    ),
+  );
   const visible = createMemo(() =>
-    queryLibrary(files(), {
+    queryLibrary(eligible(), {
+      sharing: props.sharing ?? sharing(),
       search: search(),
       kind: kind(),
-      status: status(),
+      status: props.picker ? "complete" : status(),
       sort: sort(),
     }),
   );
   createEffect(() => {
     const valid = new Set(
-      files()
-        .filter(
-          (file) =>
-            !props.picker || (file.isComplete && file.file),
-        )
-        .map((file) => file.id),
+      eligible().map((file) => file.id),
     );
     const next = props.selected.filter((id) =>
       valid.has(id),
@@ -66,11 +76,13 @@ export function FileBrowser(props: {
   return (
     <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <FileFilters
+        sharing={props.sharing ? undefined : sharing()}
+        onSharing={setSharing}
         search={search()}
         onSearch={setSearch}
         kind={kind()}
         onKind={setKind}
-        status={status()}
+        status={props.picker ? undefined : status()}
         onStatus={setStatus}
         sort={sort()}
         onSort={setSort}
@@ -84,7 +96,12 @@ export function FileBrowser(props: {
             role="alert"
             class="flex flex-col items-center gap-3 p-8 text-sm"
           >
-            <p>{appState.cache.error}</p>
+            <p>
+              {userErrorMessage(
+                appState.cache.error,
+                "errors.storage_unavailable",
+              )}
+            </p>
             <Button
               variant="outline"
               onClick={() => void cacheManager.initialize()}
@@ -127,6 +144,11 @@ export function FileBrowser(props: {
             <FileList
               files={visible()}
               picker={props.picker}
+              showSharedStatus={!props.sharing}
+              showAvailableStatus={
+                props.sharing !== "shared"
+              }
+              actions={props.actions}
               selected={props.selected}
               onToggle={(id) =>
                 props.onSelection(

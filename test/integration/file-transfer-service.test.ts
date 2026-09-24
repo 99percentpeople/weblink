@@ -198,6 +198,7 @@ describe("file control handlers", () => {
     expect(f.registry.get(other, "file")).toBeUndefined();
   });
   it("initializes requested ranges before opening the sending side", async () => {
+    f.messages.messages.push(fileMessage("sent-offer"));
     f.caches.set("file", fakeCache());
     const incoming = createSessionMessage(
       remote,

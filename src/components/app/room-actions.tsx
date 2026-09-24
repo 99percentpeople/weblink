@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createContext,
   createSignal,
@@ -30,10 +31,16 @@ export function createRoomActions() {
       }
       await state.joinRoom();
     } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        error.name === "AbortError"
+      )
+        return;
+      console.error("Unable to join room", error);
       toast.error(
-        error instanceof Error
-          ? error.message
-          : String(error),
+        userErrorMessage(error, "errors.connection_failed"),
       );
     } finally {
       setBusy(false);

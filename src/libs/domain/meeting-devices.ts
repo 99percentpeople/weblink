@@ -3,6 +3,7 @@ import type { Accessor } from "solid-js";
 export type MeetingDeviceAccessState =
   | PermissionState
   | "checking"
+  | "default-only"
   | "unavailable"
   | "unsupported";
 

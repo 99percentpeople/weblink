@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createEffect,
   createSignal,
@@ -137,9 +138,7 @@ export function ChatComposer(props: ChatComposerProps) {
     )
       return;
     toast.error(
-      error instanceof Error
-        ? error.message
-        : t("common.notification.unknown_error"),
+      userErrorMessage(error, "errors.unexpected"),
     );
   };
   const send = async () => {

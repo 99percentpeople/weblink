@@ -563,6 +563,12 @@ describe("typed file-list responses", () => {
         id: "f",
         fileName: "a.txt",
         fileSize: 10,
+        fingerprint: {
+          version: 1 as const,
+          algorithm: "blake3-256" as const,
+          digest: "0".repeat(64),
+          size: 10,
+        },
         chunkSize: 4,
       },
     ],

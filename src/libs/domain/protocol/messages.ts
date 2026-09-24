@@ -9,6 +9,8 @@ export const P2P_ROOM_CHAT_PROTOCOL_VERSION = 1 as const;
 export const P2P_ROOM_FILE_PROTOCOL_VERSION = 1 as const;
 export const FILE_CONTENT_FEATURE =
   "file-content-v1" as const;
+export const SHARED_FILES_FEATURE =
+  "shared-files-v1" as const;
 export const ROOM_FILE_FEATURE = "room-file-v1" as const;
 export const ROOM_CHAT_MAX_TEXT_LENGTH = 64 * 1024;
 export const RTC_PROFILE_PROTOCOL_VERSION =
@@ -20,6 +22,7 @@ export type ProtocolPeerProfile = {
 };
 
 export type ProtocolFileMetadata = {
+  fingerprint?: FileFingerprint;
   id: ProtocolFileID;
   fileName: string;
   fileSize: number;
@@ -147,7 +150,7 @@ export type ErrorMessage = BaseExchangeMessage & {
 };
 
 /** Breaking directory protocol: queries and responses are paginated. */
-export const P2P_STORAGE_PROTOCOL_VERSION = 2 as const;
+export const P2P_STORAGE_PROTOCOL_VERSION = 3 as const;
 export const STORAGE_MAX_PAGE_SIZE = 100;
 export const STORAGE_MAX_SEARCH_LENGTH = 256;
 export const STORAGE_SORT_FIELDS = [
@@ -225,7 +228,21 @@ export type FileContentReadyMessage =
     recipientToken?: string;
   };
 
+export type RequestSharedFileMessage =
+  BaseExchangeMessage & {
+    type: "request-shared-file";
+    version: 1;
+    fid: string;
+    transferId: string;
+    fingerprint: FileFingerprint;
+    chunkSize: number;
+    ranges?: ProtocolChunkRange[];
+    /** Authorization-only check for already verified local content. */
+    have: boolean;
+  };
+
 export type SessionMessage =
+  | RequestSharedFileMessage
   | FileOfferResultMessage
   | FileContentReadyMessage
   | SendTextMessage
@@ -283,6 +300,7 @@ export const requestSpec = {
   "send-file": { ack: "receive" },
   "file-content-ready": { ack: "receive" },
   "request-file": { ack: "send" },
+  "request-shared-file": { ack: "send" },
   "resume-file": { ack: "receive" },
   "request-storage": { ack: "receive" },
 } as const satisfies Partial<
@@ -350,7 +368,8 @@ export function createSessionMessage<
     }),
     type,
     ...(type === "file-offer-result" ||
-    type === "file-content-ready"
+    type === "file-content-ready" ||
+    type === "request-shared-file"
       ? { version: 1 }
       : type === "send-room-file" &&
           "fingerprint" in payload &&

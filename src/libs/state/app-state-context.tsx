@@ -1,4 +1,6 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { t } from "@/i18n";
+import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
 import {
@@ -107,6 +109,11 @@ export interface AppStateContextProps {
     target: ClientID | ClientID[],
   ) => Promise<void>;
   catalog: Pick<FileCatalogService<PeerSession>, "watch">;
+  sharedFiles: Pick<
+    SharedFileTransfers,
+    "download" | "downloadTask"
+  >;
+  supportsSharedFiles(session: PeerSession): boolean;
   retryMessage: (message: StoreMessage) => Promise<void>;
   shareFile: (fileId: FileID, target: ClientID) => void;
   resumeFile: (
@@ -207,6 +214,8 @@ export const AppStateProvider: Component<
     >({});
   const roomMessaging = new RoomMessagingService(protocol, {
     supportsFiles: true,
+    onFileSending: (id) =>
+      cacheManager.library.setShared(id, true),
     supportsContent: (session) =>
       fileContent.supports(session),
     reuseFile: (message, signal) =>
@@ -309,17 +318,48 @@ export const AppStateProvider: Component<
     },
   });
   onCleanup(() => roomFiles.dispose());
+  const canShareFiles = (session: PeerSession) =>
+    sessionService.sessions[session.targetClientId] ===
+      session &&
+    session.isMessageChannelReady &&
+    resolveClientConfig(
+      appState.options,
+      session.targetClientId,
+    ).provideFileList;
+  const sharedFiles = new SharedFileTransfers({
+    protocol,
+    rtc,
+    registry: transferManager,
+    caches: cacheManager,
+    receives: files.contentReceives,
+    getSession: (id) => sessionService.sessions[id],
+    canShare: canShareFiles,
+    supports: (session) =>
+      fileContent.supportsShared(session),
+    reportError: (error) =>
+      toast.error(
+        userErrorMessage(error, "errors.file_failed"),
+      ),
+  });
+  createEffect(() => {
+    // Read the permission sources even before any transfer has started.
+    Object.values(sessionService.sessions).forEach(
+      canShareFiles,
+    );
+    sharedFiles.syncPermissions();
+  });
+  onCleanup(() => sharedFiles.dispose());
   const catalog = new FileCatalogService({
     protocol,
     index: cacheManager.catalog,
     getSessions: () =>
       Object.values(sessionService.sessions),
-    isReady: (session) => session.isMessageChannelReady,
-    canList: (session) =>
-      resolveClientConfig(
-        appState.options,
-        session.targetClientId,
-      ).provideFileList,
+    isReady: (session) =>
+      sessionService.sessions[session.targetClientId] ===
+        session && session.isMessageChannelReady,
+    supports: (session) =>
+      fileContent.supportsShared(session),
+    canList: canShareFiles,
     onSessionClosed: (handler) =>
       rtc.onSessionClosed(handler),
   });
@@ -338,6 +378,8 @@ export const AppStateProvider: Component<
   });
   let clipboardCacheData: SendClipboardMessage[] = [];
   const tasks = createTaskService({
+    sharedFiles: sharedFiles.tasks,
+    clearSharedFiles: sharedFiles.clearFinished,
     preparations: cacheManager.preparations,
     clearPreparations: cacheManager.clearPreparations,
     clientId: () => appState.profile.clientId,
@@ -378,7 +420,17 @@ export const AppStateProvider: Component<
     rtc,
     profiles: peerProfiles,
     messages: messageStores,
-    createClientService,
+    createClientService: (options) =>
+      createClientService({
+        ...options,
+        onNotice: (notice) => {
+          if (notice === "room-unprotected")
+            toast.warning(
+              t("common.notification.room_unprotected"),
+            );
+          else toast.error(t("errors.password_prepare"));
+        },
+      }),
     getLocalStream: () => localStream(),
     onMemberJoined: (roomId, client) => {
       const id =
@@ -447,7 +499,7 @@ export const AppStateProvider: Component<
         toast.success(data);
       })
       .catch((err) => {
-        toast.error(err.message);
+        toast.error(t("common.notification.copy_failed"));
       })
       .finally(() => {
         clipboardCacheData.length = 0;
@@ -593,9 +645,7 @@ export const AppStateProvider: Component<
         return;
       console.error(error);
       toast.error(
-        error instanceof Error
-          ? error.message
-          : String(error),
+        userErrorMessage(error, "errors.file_failed"),
       );
     }
   };
@@ -738,6 +788,9 @@ export const AppStateProvider: Component<
         sendFile,
         sendClipboard,
         catalog,
+        sharedFiles,
+        supportsSharedFiles: (session) =>
+          fileContent.supportsShared(session),
         retryMessage,
         requestFile,
         resumeFile,

@@ -329,7 +329,7 @@ describe("message bubble layout", () => {
       screen.getByText("client.message_error"),
     );
     expect(
-      screen.getByText("Network unavailable"),
+      screen.getByText("errors.connection_failed"),
     ).toBeInTheDocument();
     const button = screen.getByLabelText("tasks.resume");
     fireEvent.click(button);
@@ -425,7 +425,7 @@ describe("message bubble layout", () => {
       view.meta.querySelector('[data-icon="IconClose"]'),
     ).not.toBeNull();
     expect(
-      screen.getByText("Disconnected"),
+      screen.getByText("errors.connection_closed"),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("tasks.resume"));
     expect(retryMessage).toHaveBeenCalledWith(failed);

@@ -49,14 +49,6 @@ export function MeetingPipPlaceholder(props: {
             <circle cx="51" cy="30" r="2" />
           </g>
           <rect
-            x="128"
-            y="82"
-            width="138"
-            height="96"
-            rx="16"
-            fill="#11151c"
-          />
-          <rect
             x="132"
             y="86"
             width="130"

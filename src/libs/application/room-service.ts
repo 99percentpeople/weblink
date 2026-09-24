@@ -259,8 +259,14 @@ export class RoomService {
         throw abortError("Room changed while joining");
       }
 
-      setAppState("roomStatus", "profile", service.info);
-      setAppState("roomStatus", "roomId", profile.roomId);
+      setAppState("roomStatus", {
+        profile: service.info,
+        roomId: profile.roomId,
+        joinedAt:
+          appState.roomStatus.roomId === profile.roomId
+            ? (appState.roomStatus.joinedAt ?? Date.now())
+            : Date.now(),
+      });
     } catch (error) {
       if (!this.isGenerationCurrent(generation)) {
         throw abortError("Room changed while joining");
@@ -287,8 +293,11 @@ export class RoomService {
     this.options.profiles.unbindAllSessions();
     this.options.rtc.unbindAllSessions();
     this.options.sessions.destoryAllSession();
-    setAppState("roomStatus", "roomId", null);
-    setAppState("roomStatus", "profile", null);
+    setAppState("roomStatus", {
+      roomId: null,
+      profile: null,
+      joinedAt: null,
+    });
   }
 
   dispose(): void {

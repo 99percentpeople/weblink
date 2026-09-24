@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createEffect,
   createMemo,
@@ -184,9 +185,7 @@ export default function FileManager() {
   });
   const report = (error: unknown) =>
     toast.error(
-      error instanceof Error
-        ? error.message
-        : String(error),
+      userErrorMessage(error, "errors.file_failed"),
     );
   const remove = async (items: LibraryFile[]) => {
     setDeleting(items);
@@ -200,6 +199,11 @@ export default function FileManager() {
     file: LibraryFile,
   ) => {
     if (action === "delete") return remove([file]);
+    if (action === "share" || action === "unshare")
+      return cacheManager.library.setShared(
+        file.id,
+        action === "share",
+      );
     if (action === "details") {
       setDetail(file);
       await details.open();
@@ -208,7 +212,7 @@ export default function FileManager() {
     const cache = cacheManager.getCache(file.id);
     const current = await cache?.getInfo();
     if (!current?.file || !current.isComplete)
-      throw new Error(t("file_library.status_incomplete"));
+      throw new Error("File is incomplete");
     if (action === "preview")
       await preview.open(current.file);
     else if (action === "download")
@@ -345,12 +349,12 @@ export default function FileManager() {
             <DropdownMenuItem
               onSelect={() => fileInput.click()}
             >
-              {t("conversations.attach_file")}
+              {t("shared_files.upload_files")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => folderInput.click()}
             >
-              {t("common.action.add_folder")}
+              {t("shared_files.upload_folder")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -403,6 +407,34 @@ export default function FileManager() {
           >
             {t("common.action.download")}
           </Button>
+          <For each={[true, false]}>
+            {(enabled) => (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={
+                  enabled &&
+                  selected().some(
+                    (file) => !file.isComplete,
+                  )
+                }
+                onClick={() =>
+                  void cacheManager.library
+                    .setSharedBatch(
+                      selected().map((file) => file.id),
+                      enabled,
+                    )
+                    .catch(report)
+                }
+              >
+                {t(
+                  enabled
+                    ? "shared_files.share"
+                    : "shared_files.unshare",
+                )}
+              </Button>
+            )}
+          </For>
           <Button
             size="sm"
             variant="destructive"

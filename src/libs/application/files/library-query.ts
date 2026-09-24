@@ -75,6 +75,7 @@ export function queryLibrary(
     search: string;
     kind: FileKind;
     status: "all" | "complete" | "incomplete";
+    sharing?: "all" | "shared" | "private";
     sort: "recent" | "name" | "size";
   },
 ): LibraryFile[] {
@@ -85,6 +86,10 @@ export function queryLibrary(
   return files
     .filter(
       (file) =>
+        (!options.sharing ||
+          options.sharing === "all" ||
+          !!file.isShared ===
+            (options.sharing === "shared")) &&
         (options.kind === "all" ||
           fileKind(file) === options.kind) &&
         (options.status === "all" ||

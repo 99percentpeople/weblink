@@ -18,13 +18,6 @@ vi.mock("@/libs/domain/utils/encrypt/e2e", () => ({
   ),
 }));
 
-vi.mock("solid-sonner", () => ({
-  toast: {
-    error: vi.fn(),
-    warning: vi.fn(),
-  },
-}));
-
 import { WebSocketClientService } from "@/libs/infrastructure/signaling/client/ws-client-service";
 import {
   getReconnectDelayMs,
@@ -134,11 +127,13 @@ class FakeWebSocket extends EventTarget {
 }
 
 const services: WebSocketClientService[] = [];
+const notice = vi.fn();
 let browserWindow: EventTarget;
 let online = true;
 
 function createService(): WebSocketClientService {
   const service = new WebSocketClientService({
+    onNotice: notice,
     roomId: "room-a",
     password: null,
     websocketUrl: "wss://socket.test/ws",
@@ -171,6 +166,7 @@ async function connectService(
 }
 
 beforeEach(() => {
+  notice.mockClear();
   FakeWebSocket.instances = [];
   FakeWebSocket.acknowledgeJoins = true;
   browserWindow = new EventTarget();
@@ -198,6 +194,11 @@ afterEach(() => {
 });
 
 describe("WebSocketClientService reconnect lifecycle", () => {
+  it("delegates room notices to presentation without English UI strings", async () => {
+    await connectService(createService());
+    expect(notice).toHaveBeenCalledOnce();
+    expect(notice).toHaveBeenCalledWith("room-unprotected");
+  });
   it("does not register the deprecated unload event", () => {
     const addEventListener = vi.spyOn(
       browserWindow,

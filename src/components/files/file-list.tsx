@@ -33,8 +33,11 @@ import {
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
 import { Dynamic } from "solid-js/web";
+import type { FileMetaData } from "@/libs/domain/file";
 
-function FileThumbnail(props: { file: LibraryFile }) {
+export function FileThumbnail(props: {
+  file: FileMetaData;
+}) {
   const [url, setUrl] = createSignal<string>();
   createEffect(() => {
     const file = props.file.file;
@@ -77,6 +80,8 @@ function FileThumbnail(props: { file: LibraryFile }) {
 }
 
 export type FileAction =
+  | "share"
+  | "unshare"
   | "preview"
   | "download"
   | "send"
@@ -86,6 +91,9 @@ export function FileList(props: {
   files: LibraryFile[];
   selected: readonly string[];
   picker?: boolean;
+  showSharedStatus?: boolean;
+  showAvailableStatus?: boolean;
+  actions?: FileAction[];
   onToggle(id: string): void;
   onAction?(action: FileAction, file: LibraryFile): void;
 }) {
@@ -133,6 +141,14 @@ export function FileList(props: {
                   <span>
                     {formatBtyeSize(file.fileSize)}
                   </span>
+                  <Show
+                    when={
+                      file.isShared &&
+                      props.showSharedStatus !== false
+                    }
+                  >
+                    <span>{t("shared_files.shared")}</span>
+                  </Show>
                   <span>·</span>
                   <span class="truncate">
                     {file.createdAt
@@ -143,33 +159,40 @@ export function FileList(props: {
                   </span>
                 </span>
               </button>
-              <span
-                class="text-muted-foreground flex shrink-0 items-center gap-1
-                  text-xs"
+              <Show
+                when={
+                  !available() ||
+                  props.showAvailableStatus !== false
+                }
               >
-                <Show
-                  when={available()}
-                  fallback={
-                    <Show
-                      when={file.isMerging}
-                      fallback={
-                        <span>
-                          {t(
-                            "file_library.status_incomplete",
-                          )}
-                        </span>
-                      }
-                    >
-                      <LoaderCircle class="size-4 animate-spin" />
-                    </Show>
-                  }
+                <span
+                  class="text-muted-foreground flex shrink-0 items-center gap-1
+                    text-xs"
                 >
-                  <Check class="size-3.5" />
-                  <span class="hidden sm:inline">
-                    {t("file_library.status_complete")}
-                  </span>
-                </Show>
-              </span>
+                  <Show
+                    when={available()}
+                    fallback={
+                      <Show
+                        when={file.isMerging}
+                        fallback={
+                          <span>
+                            {t(
+                              "file_library.status_incomplete",
+                            )}
+                          </span>
+                        }
+                      >
+                        <LoaderCircle class="size-4 animate-spin" />
+                      </Show>
+                    }
+                  >
+                    <Check class="size-3.5" />
+                    <span class="hidden sm:inline">
+                      {t("file_library.status_complete")}
+                    </span>
+                  </Show>
+                </span>
+              </Show>
               <Show when={!props.picker}>
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -184,21 +207,28 @@ export function FileList(props: {
                   <DropdownMenuContent>
                     <For
                       each={
-                        [
+                        props.actions ??
+                        ([
+                          file.isShared
+                            ? "unshare"
+                            : "share",
                           "preview",
                           "download",
                           "send",
                           "details",
                           "delete",
-                        ] as FileAction[]
+                        ] as FileAction[])
                       }
                     >
                       {(action) => (
                         <DropdownMenuItem
                           disabled={
-                            !["details", "delete"].includes(
-                              action,
-                            ) && !available()
+                            ![
+                              "details",
+                              "delete",
+                              "unshare",
+                            ].includes(action) &&
+                            !available()
                           }
                           class={
                             action === "delete"
@@ -210,7 +240,10 @@ export function FileList(props: {
                           }
                         >
                           {t(
-                            `file_library.action_${action}`,
+                            action === "share" ||
+                              action === "unshare"
+                              ? `shared_files.${action}`
+                              : `file_library.action_${action}`,
                           )}
                         </DropdownMenuItem>
                       )}

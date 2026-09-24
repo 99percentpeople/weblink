@@ -209,7 +209,10 @@ function fixture(automaticDeletion = false) {
     bind: (run, signal) =>
       bindTransferMessage(run, store, signal),
     complete: async (run, signal) => {
-      if (run.transferer.mode === TransferMode.Receive)
+      if (
+        run.messageId &&
+        run.transferer.mode === TransferMode.Receive
+      )
         await finishReceivedFile(
           run.transferer.cache,
           run.messageId,
@@ -218,7 +221,7 @@ function fixture(automaticDeletion = false) {
         );
     },
     failed: (run, error) =>
-      update(run.messageId, (item) => {
+      update(run.messageId!, (item) => {
         item.transferStatus = "error";
         item.error = error.message;
       }),
@@ -230,6 +233,13 @@ function fixture(automaticDeletion = false) {
   const channels: TestChannel[] = [];
   const peer = (id: string) => {
     const session = makeSession("local", id);
+    Object.defineProperty(
+      session,
+      "isMessageChannelReady",
+      {
+        value: true,
+      },
+    );
     session.createChannel = vi.fn(async (label: string) => {
       const channel = new TestChannel(label);
       channels.push(channel);

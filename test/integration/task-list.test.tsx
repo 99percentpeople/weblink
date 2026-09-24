@@ -16,7 +16,10 @@ import {
 } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { TaskList } from "@/components/task-list";
-import { createTaskService } from "@/libs/application/task-service";
+import {
+  createTaskService,
+  type SharedFileTask,
+} from "@/libs/application/task-service";
 import { useAppState } from "@/libs/state/app-state-context";
 import type { FileTransferMessage } from "@/libs/domain/message";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
@@ -57,6 +60,7 @@ let tasks: ReturnType<typeof createTaskService>;
 let current: SpeedTestState;
 let setMessages: (messages: FileTransferMessage[]) => void;
 let setTransfers: (transfers: FileTransferStates) => void;
+let setShared: (shared: SharedFileTask[]) => void;
 const message = (
   props: Partial<FileTransferMessage> = {},
 ): FileTransferMessage => ({
@@ -112,7 +116,12 @@ beforeEach(() => {
       createSignal<FileTransferStates>({});
     setMessages = writeMessages;
     setTransfers = writeTransfers;
+    const [sharedFiles, writeShared] = createSignal<
+      SharedFileTask[]
+    >([]);
+    setShared = writeShared;
     tasks = createTaskService({
+      sharedFiles,
       clientId: () => "self",
       messages,
       transfers,
@@ -425,6 +434,60 @@ describe("unified task list controls", () => {
       screen.getByText(/speed_test.phases.download/),
     ).toBeInTheDocument();
   });
+  it.each(["running", "paused"] as const)(
+    "cancels a %s shared task without acting on chat attachments",
+    async (status) => {
+      const cancelShared = vi.fn(async () => {
+        setShared([
+          {
+            ...shared,
+            status: "cancelled",
+            canPause: false,
+            canResume: false,
+          },
+        ]);
+      });
+      const shared: SharedFileTask = {
+        id: "shared-task",
+        shared: true,
+        peerId: "peer",
+        fileName: "shared.bin",
+        kind: "file-receive",
+        bytes: 256,
+        total: 1024,
+        createdAt: 30,
+        status,
+        canPause: status === "running",
+        canResume: true,
+        pause: vi.fn(),
+        resume: vi.fn(async () => {}),
+        cancel: cancelShared,
+      };
+      setShared([shared]);
+      render(() => <TaskList onInspect={inspect} />);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "common.action.cancel",
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByText("tasks.status.cancelled"),
+        ).toBeInTheDocument(),
+      );
+      expect(cancelShared).toHaveBeenCalledOnce();
+      expect(pause).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("example.bin"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: "common.action.cancel",
+        }),
+      ).toBeNull();
+    },
+  );
   it("clearing history retains running work and paused files", () => {
     tasks.recordSpeedTest({
       id: "old",

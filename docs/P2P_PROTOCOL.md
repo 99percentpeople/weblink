@@ -114,18 +114,19 @@ The canonical TypeScript wire DTOs and request policy are in
 
 The request policy is defined once by `requestSpec`:
 
-| Request             | Reply behavior                      |
-| ------------------- | ----------------------------------- |
-| `send-text`         | `ack` mode `receive`                |
-| `room-capabilities` | `ack` mode `receive`                |
-| `send-room-text`    | `ack` mode `receive`                |
-| `send-room-file`    | `ack` mode `receive`                |
-| `request-room-file` | `ack` mode `send`                   |
-| `send-clipboard`    | `ack` mode `receive`                |
-| `send-file`         | `ack` mode `receive`                |
-| `request-file`      | `ack` mode `send`                   |
-| `resume-file`       | `ack` mode `receive`                |
-| `request-storage`   | `storage` response plus receipt ACK |
+| Request               | Reply behavior                      |
+| --------------------- | ----------------------------------- |
+| `send-text`           | `ack` mode `receive`                |
+| `room-capabilities`   | `ack` mode `receive`                |
+| `send-room-text`      | `ack` mode `receive`                |
+| `send-room-file`      | `ack` mode `receive`                |
+| `request-room-file`   | `ack` mode `send`                   |
+| `send-clipboard`      | `ack` mode `receive`                |
+| `send-file`           | `ack` mode `receive`                |
+| `request-file`        | `ack` mode `send`                   |
+| `request-shared-file` | `ack` mode `send`                   |
+| `resume-file`         | `ack` mode `receive`                |
+| `request-storage`     | `storage` response plus receipt ACK |
 
 An ACK means the receiving request handler completed successfully. It does
 **not** mean durable database storage, file-transfer completion, clipboard
@@ -285,11 +286,13 @@ sender, scope, timestamp, file identity and metadata. A reload marks interrupted
 delivery attempts failed and active per-peer transfers paused; an offer that has
 never been downloaded does not become a paused transfer merely by being loaded.
 
-### Paginated directory contract (version 2)
+### Shared directory contract (version 3)
 
-`request-storage` and `storage` require `version: 2` (the message factory supplies
-it). This is a breaking replacement; version 1/unversioned full-list requests and
-array responses are not accepted. It does not change the file-data protocol or signaling.
+`request-storage` and `storage` require `version: 3` (the message factory supplies
+it). Peers announce `shared-files-v1` in their profile features before browsing or
+fetching. Earlier directory versions and full-cache responses are rejected;
+unsupported peers are reported without falling back to cache enumeration.
+The binary data protocol and signaling remain unchanged.
 
 Query payload:
 
@@ -332,14 +335,38 @@ type StoragePage = {
 
 An empty or denied directory has zero items/count and page index zero. A denied
 response has `sharingEnabled: false` and reveals no underlying count. A request
-re-checks per-peer `provideFileList` every time. This flag controls enumeration,
-not authorization for independently known file IDs or existing transfers.
+re-checks per-peer `provideFileList` every time. This flag also authorizes directory
+fetches; disabling it stops that member's active directory uploads. Explicit chat
+attachment grants remain independent.
 
-Only complete, assembled cache files enter the metadata index. Explicit DTO
-projection excludes `file`, `chunkCount`, `isComplete`, and `isMerging`.
+Only complete, verified content with a locally enabled sharing flag enters the
+index, once per content identity. IDs refer to independent shared references,
+never original private or room attachment IDs. Each item includes its BLAKE3
+fingerprint. Explicit DTO projection excludes `file`, `chunkCount`, `isComplete`,
+`isShared`, and `isMerging`.
 The browser index is updated by committed cache events; page queries do not flush
 or scan every IndexedDB file database. Query-time CPU still filters/sorts the
 in-memory metadata index; this is not a persistent database pagination index.
+
+### Shared file downloads
+
+`request-shared-file` version 1 carries `fid` (shared reference), `fingerprint`,
+`chunkSize`, `transferId` (a fresh `shared-transfer_` UUID for local receive
+storage), optional inclusive `ranges`, and `have`. A `have: true` request checks
+current authorization without opening a binary channel, allowing verified local
+content to be reused. Otherwise the provider creates a read-only transfer alias,
+validates the request against its shared content, and acknowledges setup. Binary
+channels use `<transferId>-0`. New attempts and resumes use fresh control request
+IDs; a resumed task keeps its transfer ID and cached chunks.
+
+Both enumeration and fetching require a current connected member session and
+permission. Fetching also validates the shared reference, fingerprint and chunk
+size. Unsharing or deleting content terminates its directory uploads. Unknown
+IDs, room attachment IDs and private reference IDs cannot be used as shared IDs.
+Legacy `request-file` requires a matching outgoing private message to that peer;
+`resume-file` requires a matching incoming private message. Neither can fetch an
+arbitrary cache. Shared fetches create tasks and local library references on the
+receiver, never chat messages on either peer.
 
 ### Directory invalidation
 

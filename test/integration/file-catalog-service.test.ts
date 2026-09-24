@@ -73,6 +73,14 @@ function add(peer: ReturnType<typeof side>, id: string) {
     fileSize: 10,
     chunkSize: 4,
     isComplete: true,
+    isShared: true,
+    sharedReference: true,
+    fingerprint: {
+      version: 1,
+      algorithm: "blake3-256",
+      digest: "0".repeat(64),
+      size: 10,
+    },
   });
 }
 const query: StorageQuery = {

@@ -7,6 +7,8 @@ export interface ContentRecipient {
   fileId: string;
   complete(signal: AbortSignal): Promise<void>;
   paused(error?: unknown): void;
+  /** Retire source preparation when its last recipient detaches, even before bind. */
+  stop?(): void;
   release?(): Promise<void>;
 }
 type Subscriber = {
@@ -74,7 +76,8 @@ export class FileContentReceives {
   }
   bind(run: TransferRun): void {
     const found = [...this.jobs].find(
-      ([, job]) => job.source.id === run.messageId,
+      ([, job]) =>
+        job.source.id === (run.messageId ?? run.taskId),
     );
     if (!found) return;
     const [key, job] = found;
@@ -118,19 +121,23 @@ export class FileContentReceives {
       "abort",
       () => {
         if (job.completing) {
-          void job.completing
-            .then(async () => {
-              // Keep the source's bytes until waiting references have committed.
-              if (!job.recipients.has(job.source.id)) {
-                job.source.paused();
-                await job.source.release?.();
-              }
-            })
-            .catch(console.error);
+          this.releaseDetached(job);
         } else this.fail(job.source.id, run.signal.reason);
       },
       { once: true },
     );
+  }
+
+  private releaseDetached(job: ContentJob): void {
+    // Keep the source's bytes until waiting references have committed.
+    void Promise.resolve(job.completing)
+      .then(async () => {
+        if (!job.recipients.has(job.source.id)) {
+          job.source.paused();
+          await job.source.release?.();
+        }
+      })
+      .catch(console.error);
   }
 
   failFile(fileId: string, error?: unknown): void {
@@ -151,6 +158,7 @@ export class FileContentReceives {
         controller.abort();
         recipient.paused(error);
       }
+      this.releaseDetached(job);
     }
   }
 
@@ -168,8 +176,10 @@ export class FileContentReceives {
       }
       if (!job.recipients.size) {
         this.jobs.delete(key);
+        job.source.stop?.();
         this.stopPreparing(job.source.fileId);
         if (job.run) this.stop(job.run);
+        this.releaseDetached(job);
       }
       return true;
     }
@@ -178,6 +188,7 @@ export class FileContentReceives {
   clear(): void {
     for (const job of [...this.jobs.values()]) {
       this.fail(job.source.id);
+      job.source.stop?.();
       this.stopPreparing(job.source.fileId);
       if (job.run) this.stop(job.run);
     }

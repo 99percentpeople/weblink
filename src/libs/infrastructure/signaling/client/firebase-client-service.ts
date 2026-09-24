@@ -38,7 +38,6 @@ import {
   EventHandler,
   MultiEventEmitter,
 } from "@/libs/utils/event-emitter";
-import { toast } from "solid-sonner";
 
 export class FirebaseClientService implements ClientService {
   private eventEmitter =
@@ -62,11 +61,15 @@ export class FirebaseClientService implements ClientService {
     return this.client;
   }
 
+  private readonly onNotice: ClientServiceInitOptions["onNotice"];
+
   constructor({
+    onNotice,
     roomId,
     password,
     client,
   }: ClientServiceInitOptions) {
+    this.onNotice = onNotice;
     this.client = { ...client, createdAt: Date.now() };
     this.roomId = roomId;
     this.roomRef = ref(this.db, `rooms/${roomId}`);
@@ -120,9 +123,7 @@ export class FirebaseClientService implements ClientService {
         this.password,
       ).catch((error) => {
         console.error(error);
-        toast.error(
-          `failed to hash password: ${error.message}`,
-        );
+        this.onNotice?.("password-hash-failed");
         this.password = null;
         return null;
       });
@@ -169,7 +170,7 @@ export class FirebaseClientService implements ClientService {
       }
     } else {
       this.password = null;
-      toast.warning("the room is not password protected");
+      this.onNotice?.("room-unprotected");
     }
 
     const clientsRef = child(this.roomRef, "/clients");

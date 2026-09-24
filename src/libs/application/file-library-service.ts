@@ -91,6 +91,16 @@ export class FileLibraryService {
       this.removals.delete(listener);
     };
   }
+  private readonly unshares = new Set<
+    (ids: string[]) => void
+  >();
+  private sharedIds = new Set<string>();
+  onUnshare(listener: (ids: string[]) => void): () => void {
+    this.unshares.add(listener);
+    return () => {
+      this.unshares.delete(listener);
+    };
+  }
   private channel?: BroadcastChannel;
   private refreshing?: Promise<void>;
   constructor(
@@ -155,6 +165,22 @@ export class FileLibraryService {
           record.storageId,
           record.key,
         );
+      const shared = new Set(
+        (await this.repository.contents())
+          .filter(
+            (record) =>
+              record.isShared && record.sharedReferenceId,
+          )
+          .map((record) => record.sharedReferenceId!),
+      );
+      const revoked = [...this.sharedIds].filter(
+        (id) => !shared.has(id),
+      );
+      this.sharedIds = shared;
+      if (revoked.length)
+        this.unshares.forEach((listener) =>
+          listener(revoked),
+        );
       this.changed(false);
     };
     const pending = work().finally(() => {
@@ -168,6 +194,7 @@ export class FileLibraryService {
     this.channel?.close();
     this.changes.clear();
     this.removals.clear();
+    this.unshares.clear();
   }
 
   onChange(listener: () => void): () => void {
@@ -209,6 +236,43 @@ export class FileLibraryService {
     if (await this.read(record)) return record;
     await this.removeRecord(record);
   }
+
+  /** Check verified local bytes without creating another file reference. */
+  async hasContent(
+    fingerprint: FileFingerprint,
+  ): Promise<boolean> {
+    const key = contentKey(fingerprint);
+    return withContentLock(
+      key,
+      async () => !!(await this.available(key)),
+    );
+  }
+
+  /** Discard only this receive's reference and unowned partial bytes. */
+  async discardReceive(
+    id: string,
+    fingerprint: FileFingerprint,
+    storage?: ChunkCache,
+  ): Promise<void> {
+    const key = contentKey(fingerprint);
+    await withContentLock(key, async () => {
+      const ref = await this.repository.reference(id);
+      if (ref) {
+        if (ref.contentKey !== key || ref.sharedReference)
+          throw new Error(
+            "Cannot discard another file's reference",
+          );
+        await this.releaseReference(ref);
+      }
+      const cache = storage ?? this.options.getCache(id);
+      if (
+        cache &&
+        !(cache instanceof ReferenceChunkCache) &&
+        !this.ownsStorage(id)
+      )
+        await cache.cleanup();
+    });
+  }
   private async publish(
     ref: FileReference,
   ): Promise<ReferenceChunkCache> {
@@ -229,6 +293,9 @@ export class FileLibraryService {
         },
         (next) => this.repository.putReference(next),
         () => this.release(ref.id),
+        async () =>
+          !!(await this.repository.content(ref.contentKey))
+            ?.isShared,
       );
       this.references.set(ref.id, cache);
       await this.options.publish(cache);
@@ -574,6 +641,111 @@ export class FileLibraryService {
     return file;
   }
 
+  /** One retained reference per content, with a separate directory authorization ID. */
+  async setShared(
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
+    let ref = await this.repository.reference(id);
+    if (!ref) {
+      if (!enabled) return;
+      // Lazy upgrade of old complete caches, without inferring intent from history.
+      const cache = this.options.getCache(id);
+      if (!cache || !(await cache.getInfo())?.isComplete)
+        throw new Error("File content is unavailable");
+      await this.verifyReceived(cache);
+      ref = await this.repository.reference(id);
+    }
+    if (!ref)
+      throw new Error("File content is unavailable");
+    const source = ref;
+    await withContentLock(source.contentKey, async () => {
+      const record = await this.available(
+        source.contentKey,
+      );
+      if (!record)
+        throw new Error("File content is unavailable");
+      if (!!record.isShared === enabled) return;
+      const sharedId =
+        record.sharedReferenceId ??
+        `shared_${crypto.randomUUID()}`;
+      const retained = (await this.repository.reference(
+        sharedId,
+      )) ?? {
+        ...source,
+        chunkSize:
+          source.chunkSize ??
+          this.options.getChunkSize?.() ??
+          256 * 1024,
+        id: sharedId,
+        roomAttachment: undefined,
+        roomOfferId: undefined,
+        from: undefined,
+        libraryPinned: true,
+        sharedReference: true,
+      };
+      await this.repository.commit(
+        {
+          ...record,
+          isShared: enabled,
+          sharedReferenceId: sharedId,
+        },
+        retained,
+      );
+      if (enabled) this.sharedIds.add(sharedId);
+      else {
+        this.sharedIds.delete(sharedId);
+        this.unshares.forEach((listener) =>
+          listener([sharedId]),
+        );
+      }
+      for (const reference of await this.repository.references(
+        source.contentKey,
+      ))
+        await this.publish(reference);
+      this.changed();
+    });
+  }
+
+  async setSharedBatch(
+    ids: readonly string[],
+    enabled: boolean,
+  ): Promise<void> {
+    for (const id of new Set(ids))
+      await this.setShared(id, enabled);
+  }
+
+  async getSharedFile(
+    id: string,
+  ): Promise<ChunkCache | null> {
+    const ref = await this.repository.reference(id);
+    if (!ref?.sharedReference) return null;
+    const record = await this.repository.content(
+      ref.contentKey,
+    );
+    if (
+      !record?.isShared ||
+      record.sharedReferenceId !== id ||
+      !(await this.read(record))
+    )
+      return null;
+    return this.references.get(id) ?? this.publish(ref);
+  }
+
+  async sharedFiles(): Promise<ChunkMetaData[]> {
+    const result: ChunkMetaData[] = [];
+    for (const record of await this.repository.contents()) {
+      if (!record.isShared || !record.sharedReferenceId)
+        continue;
+      const cache = await this.getSharedFile(
+        record.sharedReferenceId,
+      );
+      const info = await cache?.getInfo();
+      if (info?.isComplete) result.push(info);
+    }
+    return result;
+  }
+
   async releaseAttachment(id: string): Promise<void> {
     const ref = await this.repository.reference(id);
     if (ref && !ref.libraryPinned) await this.release(id);
@@ -581,28 +753,32 @@ export class FileLibraryService {
 
   async release(id: string): Promise<void> {
     const reference = await this.repository.reference(id);
-    if (!reference) return;
-    await withContentLock(
-      reference.contentKey,
-      async () => {
-        await this.repository.removeReference(id);
-        this.references.get(id)?.invalidate();
-        this.references.delete(id);
-        if (
-          !(
-            await this.repository.references(
-              reference.contentKey,
-            )
-          ).length
-        ) {
-          const record = await this.repository.content(
-            reference.contentKey,
-          );
-          if (record) await this.removeRecord(record);
-        }
-        this.changed();
-      },
+    if (!reference || reference.sharedReference) return;
+    await withContentLock(reference.contentKey, () =>
+      this.releaseReference(reference),
     );
+  }
+
+  private async releaseReference(
+    reference: FileReference,
+  ): Promise<void> {
+    const id = reference.id;
+    await this.repository.removeReference(id);
+    this.references.get(id)?.invalidate();
+    this.references.delete(id);
+    if (
+      !(
+        await this.repository.references(
+          reference.contentKey,
+        )
+      ).length
+    ) {
+      const record = await this.repository.content(
+        reference.contentKey,
+      );
+      if (record) await this.removeRecord(record);
+    }
+    this.changed();
   }
 
   /** Explicit deletion removes local bytes for all aliases, retaining chat metadata. */

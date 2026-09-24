@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createMemo,
   createSignal,
@@ -125,9 +126,7 @@ export function RoomFileMessageCard(props: {
       await run();
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : String(error),
+        userErrorMessage(error, "errors.file_failed"),
       );
     } finally {
       setPending(false);

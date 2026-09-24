@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { DirectFileMessageCard as FileMessageCard } from "@/components/conversations/direct-file-message-card";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
@@ -555,7 +556,7 @@ export const MessageContent: Component<MessageCardProps> = (
                           {t("client.message_error")}
                         </TooltipTrigger>
                         <TooltipContent>
-                          {error()}
+                          {userErrorMessage(error())}
                         </TooltipContent>
                       </Tooltip>
                     )}

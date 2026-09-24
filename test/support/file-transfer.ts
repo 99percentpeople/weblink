@@ -167,6 +167,7 @@ export function fakeChannel(label = "file-0") {
 export function fileSession(peer = "peer"): PeerSession {
   return {
     clientId: "local",
+    isMessageChannelReady: true,
     targetClientId: peer,
     createChannel: vi.fn(async (label: string) =>
       fakeChannel(label),
@@ -230,7 +231,10 @@ export function registryFixture() {
     bind: (entry, signal) =>
       bindTransferMessage(entry, messages, signal),
     complete: async (entry, signal) => {
-      if (entry.transferer.mode === TransferMode.Receive)
+      if (
+        entry.messageId &&
+        entry.transferer.mode === TransferMode.Receive
+      )
         await finishReceivedFile(
           entry.transferer.cache,
           entry.messageId,

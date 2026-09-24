@@ -23,6 +23,9 @@ export function toCatalogMetadata(
     chunkSize: info.chunkSize,
     from: info.from,
     createdAt: info.createdAt,
+    fingerprint: info.fingerprint && {
+      ...info.fingerprint,
+    },
   };
 }
 
@@ -37,7 +40,10 @@ export class FileCatalogIndex {
   update(id: string, info: FileMetaData | null): void {
     const previous = this.entries.get(id);
     const next =
-      info?.isComplete && !info.roomAttachment
+      info?.isComplete &&
+      info.isShared &&
+      info.sharedReference &&
+      info.fingerprint
         ? toCatalogMetadata(info)
         : undefined;
     if (JSON.stringify(previous) === JSON.stringify(next))
@@ -104,7 +110,12 @@ export class FileCatalogIndex {
           pageIndex * query.pageSize,
           (pageIndex + 1) * query.pageSize,
         )
-        .map((item) => ({ ...item })),
+        .map((item) => ({
+          ...item,
+          fingerprint: item.fingerprint && {
+            ...item.fingerprint,
+          },
+        })),
       totalCount,
       pageIndex,
       pageSize: query.pageSize,

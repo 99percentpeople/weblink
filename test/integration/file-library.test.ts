@@ -1,3 +1,5 @@
+import { FileLibraryService } from "@/libs/application/file-library-service";
+import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import {
   afterEach,
   beforeEach,
@@ -7,92 +9,9 @@ import {
   vi,
 } from "vitest";
 import { File as NodeFile } from "node:buffer";
-import type {
-  ContentRecord,
-  FileLibraryRepository,
-  FileReference,
-} from "@/libs/domain/file-library";
-import type { ChunkCache } from "@/libs/domain/file";
-import { FileLibraryService } from "@/libs/application/file-library-service";
-import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import { fakeCache } from "../support/file-transfer";
 
-class MemoryLibrary implements FileLibraryRepository {
-  blobs = new Map<string, ContentRecord>();
-  refs = new Map<string, FileReference>();
-  async contents() {
-    return [...this.blobs.values()].map((value) =>
-      structuredClone(value),
-    );
-  }
-  async content(key: string) {
-    return structuredClone(this.blobs.get(key));
-  }
-  async claim(record: ContentRecord) {
-    if (this.blobs.has(record.key)) return false;
-    this.blobs.set(record.key, structuredClone(record));
-    return true;
-  }
-  async commit(record: ContentRecord, ref: FileReference) {
-    this.blobs.set(record.key, {
-      ...record,
-      state: "ready",
-    });
-    this.refs.set(ref.id, structuredClone(ref));
-  }
-  async references(key?: string) {
-    return [...this.refs.values()]
-      .filter((ref) => !key || ref.contentKey === key)
-      .map((value) => structuredClone(value));
-  }
-  async reference(id: string) {
-    return structuredClone(this.refs.get(id));
-  }
-  async putReference(ref: FileReference) {
-    if (this.blobs.get(ref.contentKey)?.state !== "ready")
-      throw new Error("Missing content");
-    this.refs.set(ref.id, structuredClone(ref));
-  }
-  async removeReference(id: string) {
-    this.refs.delete(id);
-  }
-  async removeContent(key: string) {
-    this.blobs.delete(key);
-    for (const [id, ref] of this.refs)
-      if (ref.contentKey === key) this.refs.delete(id);
-  }
-}
-function setup() {
-  const repository = new MemoryLibrary();
-  const raw = new Map<
-    string,
-    ReturnType<typeof fakeCache>
-  >();
-  const caches = new Map<string, ChunkCache>();
-  const storage = async (id: string) => {
-    if (!raw.has(id)) raw.set(id, fakeCache(id));
-    return raw.get(id)!;
-  };
-  const hash = vi.fn((file: Blob) => fingerprintBlob(file));
-  const library = new FileLibraryService({
-    repository,
-    fingerprint: hash,
-    storage,
-    getCache: (id) => caches.get(id) ?? null,
-    publish: async (cache) => {
-      caches.set(cache.id, cache);
-      await cache.initialize();
-    },
-  });
-  return {
-    library,
-    repository,
-    raw,
-    caches,
-    hash,
-    storage,
-  };
-}
+import { setupLibrary as setup } from "../support/file-library";
 beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
@@ -332,5 +251,125 @@ describe("shared file library", () => {
         chunkSize: 4,
       }),
     ).rejects.toThrow("identity conflict");
+  });
+});
+
+describe("content-owned sharing", () => {
+  it("defaults imports and legacy records to private, ignores received flags, and projects one state to every reference", async () => {
+    const f = setup();
+    const imported = await f.library.importFile(
+      new File(["shared bytes"], "local.txt"),
+    );
+    expect((await imported.cache.getInfo())?.isShared).toBe(
+      false,
+    );
+    const room = await f.library.prepare(
+      { kind: "library", localFileId: imported.cache.id },
+      {
+        id: "room",
+        roomAttachment: true,
+        roomOfferId: "offer",
+        isShared: true,
+      },
+    );
+    expect((await room.getInfo())?.isShared).toBe(false);
+    expect(await f.library.sharedFiles()).toEqual([]);
+    await f.library.setShared(room.id, true);
+    expect((await imported.cache.getInfo())?.isShared).toBe(
+      true,
+    );
+    expect((await room.getInfo())?.isShared).toBe(true);
+    const [shared] = await f.library.sharedFiles();
+    expect(shared.id).not.toBe(room.id);
+    expect(shared.fingerprint).toEqual(
+      (await room.getInfo())?.fingerprint,
+    );
+    expect(shared.roomAttachment).toBeUndefined();
+    expect(
+      await f.library.getSharedFile(room.id),
+    ).toBeNull();
+    await f.library.releaseAttachment(room.id);
+    expect(
+      await f.library.getSharedFile(shared.id),
+    ).not.toBeNull();
+    expect(f.raw.size).toBe(1);
+    await f.library.setShared(imported.cache.id, false);
+    const duplicate = await f.library.importFile(
+      new File(["shared bytes"], "alias.txt"),
+    );
+    expect(
+      (await duplicate.cache.getInfo())?.isShared,
+    ).toBe(false);
+    expect(await f.library.sharedFiles()).toEqual([]);
+    expect(await imported.cache.getFile()).not.toBeNull();
+    await f.library.setShared(imported.cache.id, true);
+    expect(
+      (await duplicate.cache.getInfo())?.isShared,
+    ).toBe(true);
+    await f.library.removeFile(imported.cache.id);
+    expect(await f.library.sharedFiles()).toEqual([]);
+    expect(
+      await f.library.getSharedFile(shared.id),
+    ).toBeNull();
+  });
+  it("retains shared bytes after all chat references are released, including after reopening and unsharing", async () => {
+    const f = setup();
+    const attachment = await f.library.prepare(
+      new File(["retained"], "sent.txt"),
+      { id: "chat-file" },
+    );
+    await f.library.setShared(attachment.id, true);
+    const [shared] = await f.library.sharedFiles();
+    await f.library.releaseAttachment(attachment.id);
+    await f.library.refresh();
+    expect(
+      await (
+        await f.library.getSharedFile(shared.id)
+      )?.getFile(),
+    ).not.toBeNull();
+    const revoked = vi.fn();
+    f.library.onUnshare(revoked);
+    await f.library.setShared(shared.id, false);
+    expect(revoked).toHaveBeenCalledWith([shared.id]);
+    expect(
+      await f.caches.get(shared.id)?.getFile(),
+    ).not.toBeNull();
+    await f.library.setShared(shared.id, true);
+    expect((await f.library.sharedFiles())[0].id).toBe(
+      shared.id,
+    );
+  });
+  it("preserves locally shared state on duplicate receives and never inherits a remote sharing flag", async () => {
+    const f = setup();
+    const original = await f.library.importFile(
+      new File(["content"], "a.txt"),
+    );
+    const info = (await original.cache.getInfo())!;
+    await f.library.setShared(original.cache.id, true);
+    const reused = await f.library.reuse(
+      info.fingerprint!,
+      { ...info, id: "received", isShared: false },
+    );
+    expect((await reused?.getInfo())?.isShared).toBe(true);
+    await f.library.setShared("received", false);
+    const received = fakeCache("new-received");
+    await received.setInfo({
+      file: new File(["new"], "new.txt"),
+      fileName: "new.txt",
+      fileSize: 3,
+      fingerprint: undefined,
+      isShared: true,
+      sharedReference: true,
+    });
+    await f.library.verifyReceived(received);
+    expect(
+      (await f.caches.get(received.id)?.getInfo())
+        ?.isShared,
+    ).toBe(false);
+    expect(
+      (await f.repository.reference(received.id))
+        ?.sharedReference,
+    ).toBeUndefined();
+    expect(await f.library.sharedFiles()).toEqual([]);
   });
 });

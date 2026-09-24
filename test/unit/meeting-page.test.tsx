@@ -7,7 +7,12 @@ import {
   waitFor,
   within,
 } from "@solidjs/testing-library";
-import { onCleanup, Show, type JSX } from "solid-js";
+import {
+  createSignal,
+  onCleanup,
+  Show,
+  type JSX,
+} from "solid-js";
 import {
   afterEach,
   beforeEach,
@@ -19,9 +24,9 @@ import {
 import Video from "@/routes/home";
 import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
+import { directConversationId } from "@/libs/domain/conversation";
 
 const fixture = vi.hoisted(() => ({
-  mobile: false,
   navigate: vi.fn(),
   joinRoom: vi.fn(),
   editRoom: vi.fn(),
@@ -32,7 +37,16 @@ const fixture = vi.hoisted(() => ({
   unmountChat: vi.fn(),
   openRoomInfo: vi.fn(),
   pipError: vi.fn(),
+  setPeerMuted: vi.fn(),
+  setPlay: vi.fn(),
 }));
+const [mutedMembers, setMutedMembers] = createSignal<
+  string[]
+>([]);
+const [audibleMembers, setAudibleMembers] = createSignal([
+  "bob",
+]);
+const [playingAudio, setPlayingAudio] = createSignal(false);
 vi.mock("@/i18n", () => ({
   t: (key: string, values?: { error: string }) =>
     values?.error ?? key,
@@ -72,9 +86,6 @@ vi.mock("@solidjs/router", () => ({
     props: JSX.AnchorHTMLAttributes<HTMLAnchorElement>,
   ) => <a {...props} />,
 }));
-vi.mock("@/libs/hooks/create-mobile", () => ({
-  createIsMobile: () => () => fixture.mobile,
-}));
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
     profile: { clientId: "me", name: "Me" },
@@ -102,14 +113,21 @@ vi.mock("@/libs/state/app-state-context", () => ({
     replaceLocalStream: fixture.replaceLocalStream,
     clearLocalStream: fixture.clearLocalStream,
     activeRoomConversationId: () => "current-room-id",
+    roomChatCapabilities: () => ({}),
+    roomFileCapabilities: () => ({}),
     leaveRoom: fixture.leaveRoom,
   }),
 }));
 vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
-    playState: () => false,
-    hasAudio: () => false,
-    setPlay: vi.fn(),
+    playState: playingAudio,
+    hasAudio: () => audibleMembers().length > 0,
+    setPlay: fixture.setPlay,
+    hasPeerAudio: (id: string) =>
+      audibleMembers().includes(id),
+    isPeerMuted: (id: string) =>
+      mutedMembers().includes(id),
+    setPeerMuted: fixture.setPeerMuted,
     outputDeviceId: () => "",
     outputSupported: () => false,
     outputBusy: () => false,
@@ -190,9 +208,26 @@ beforeEach(() => {
     "* { animation-name: none !important; }";
   document.head.append(animationStyle);
   history.replaceState(null, "", "/");
-  fixture.mobile = false;
   vi.clearAllMocks();
+  setMutedMembers([]);
+  setAudibleMembers(["bob"]);
+  setPlayingAudio(false);
+  fixture.setPlay.mockImplementation(setPlayingAudio);
+  fixture.setPeerMuted.mockImplementation(
+    (id: string, muted: boolean) =>
+      setMutedMembers((previous) =>
+        muted
+          ? [...previous, id]
+          : previous.filter((peer) => peer !== id),
+      ),
+  );
   vi.stubGlobal("focus", vi.fn());
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -215,6 +250,167 @@ afterEach(() => {
 });
 
 describe("meeting page navigation and panels", () => {
+  it("opens member private chats and moves the room chat entry from info to members", () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.info" }),
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "meeting.open_room_chat",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.members" }),
+    );
+    const members = within(
+      screen.getByRole("list", { name: "meeting.members" }),
+    );
+    const bob = within(
+      members.getByText("Bob").closest("li")!,
+    );
+    fireEvent.click(
+      bob.getByRole("button", {
+        name: "meeting.open_private_chat",
+      }),
+    );
+    expect(
+      screen.getByTestId("chat-view"),
+    ).toHaveTextContent(directConversationId("me", "bob"));
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.members" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.open_room_chat",
+      }),
+    );
+    expect(
+      screen.getByTestId("chat-view"),
+    ).toHaveTextContent("current-room-id");
+    expect(fixture.joinRoom).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+  });
+
+  it("mutes one member without opening chat and reflects that state after returning to the tab", () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    const openMembers = () =>
+      fireEvent.click(
+        screen.getByRole("tab", {
+          name: "meeting.members",
+        }),
+      );
+    openMembers();
+    const members = () =>
+      within(
+        screen.getByRole("list", {
+          name: "meeting.members",
+        }),
+      );
+    const bob = () =>
+      within(members().getByText("Bob").closest("li")!);
+    const chris = within(
+      members().getByText("Chris").closest("li")!,
+    );
+    expect(
+      chris.queryByRole("button", {
+        name: "meeting.mute_member",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      bob().getByRole("button", {
+        name: "meeting.mute_member",
+      }),
+    );
+    expect(fixture.setPeerMuted).toHaveBeenLastCalledWith(
+      "bob",
+      true,
+    );
+    expect(
+      bob().getByRole("button", {
+        name: "meeting.unmute_member",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("chat-view")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.info" }),
+    );
+    openMembers();
+    fireEvent.click(
+      bob().getByRole("button", {
+        name: "meeting.unmute_member",
+      }),
+    );
+    expect(fixture.setPeerMuted).toHaveBeenLastCalledWith(
+      "bob",
+      false,
+    );
+  });
+
+  it("only shows sound controls for existing audio and toggles room playback without changing outgoing media", () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.members" }),
+    );
+    const panel = within(screen.getByRole("tabpanel"));
+    expect(
+      panel.queryByRole("button", {
+        name: "meeting.mute_local_audio",
+      }),
+    ).toBeNull();
+    expect(
+      panel.queryByRole("button", {
+        name: "meeting.unmute_local_audio",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      panel.getByRole("button", {
+        name: "meeting.unmute_room_audio",
+      }),
+    );
+    expect(fixture.setPlay).toHaveBeenLastCalledWith(true);
+    fireEvent.click(
+      panel.getByRole("button", {
+        name: "meeting.mute_room_audio",
+      }),
+    );
+    expect(fixture.setPlay).toHaveBeenLastCalledWith(false);
+    expect(
+      fixture.replaceLocalStream,
+    ).not.toHaveBeenCalled();
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("chat-view")).toBeNull();
+    setAudibleMembers([]);
+    expect(
+      panel.queryByRole("button", {
+        name: "meeting.unmute_room_audio",
+      }),
+    ).toBeNull();
+    expect(
+      panel.queryByRole("button", {
+        name: "meeting.mute_member",
+      }),
+    ).toBeNull();
+  });
+
   it("keeps chat mounted through PiP and shares independent toolbar and thumbnail states", async () => {
     const frame = document.createElement("iframe");
     document.body.append(frame);
@@ -455,7 +651,7 @@ describe("meeting page navigation and panels", () => {
       fixture.replaceLocalStream,
     ).not.toHaveBeenCalled();
   });
-  it("cycles one control through compact, wide and full panels without remounting chat or media", () => {
+  it("toggles ordinary expansion and adapts canvas visibility to the available width without remounting chat or media", async () => {
     render(() => (
       <MeetingMediaProvider>
         <MeetingSessionProvider>
@@ -482,7 +678,7 @@ describe("meeting page navigation and panels", () => {
     fireEvent.click(resize);
     expect(
       screen.getByRole("button", {
-        name: "meeting.maximize_sidebar",
+        name: "meeting.collapse_chat",
       }),
     ).toBe(resize);
     expect(conversations()).toBeInTheDocument();
@@ -491,8 +687,14 @@ describe("meeting page navigation and panels", () => {
     ).toBeNull();
     expect(screen.getByTestId("chat-view")).toBe(chat);
 
-    // Wide -> full: media remains mounted while the canvas is hidden.
-    fireEvent.click(resize);
+    // A narrower window automatically hides the canvas, without another click.
+    window.innerWidth = 1000;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() =>
+      expect(
+        stage.closest('[aria-hidden="true"]'),
+      ).not.toBeNull(),
+    );
     expect(
       screen.getByRole("button", {
         name: "meeting.collapse_chat",
@@ -506,7 +708,19 @@ describe("meeting page navigation and panels", () => {
     for (const source of sources)
       expect(source).toBeInTheDocument();
 
-    // Full -> compact: the list hides and the meeting canvas returns.
+    // Widening the window restores the stage while keeping the expanded panel.
+    window.innerWidth = 1440;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() =>
+      expect(
+        stage.closest('[aria-hidden="true"]'),
+      ).toBeNull(),
+    );
+    expect(resize).toHaveAttribute("aria-pressed", "true");
+    expect(conversations()).toBeInTheDocument();
+    expect(screen.getByTestId("chat-view")).toBe(chat);
+
+    // Expanded -> compact: a second click always returns to the ordinary sidebar.
     fireEvent.click(resize);
     expect(
       screen.getByRole("button", {
@@ -520,21 +734,26 @@ describe("meeting page navigation and panels", () => {
     ).toBeNull();
     expect(screen.getByTestId("chat-view")).toBe(chat);
 
-    // The cycle remains usable after changing tabs; Escape restores wide.
+    // Expansion survives tab changes and closing/reopening the panel.
     expect(fixture.unmountChat).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("tab", { name: "meeting.members" }),
     );
     fireEvent.click(resize);
-    fireEvent.click(resize);
+    expect(resize).toHaveAttribute("aria-pressed", "true");
     fireEvent.keyDown(screen.getByTestId("meeting-page"), {
       key: "Escape",
     });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.show_panel",
+      }),
+    );
     expect(
       screen.getByRole("button", {
-        name: "meeting.maximize_sidebar",
+        name: "meeting.collapse_chat",
       }),
-    ).toBe(resize);
+    ).toHaveAttribute("aria-pressed", "true");
     expect(
       stage.closest('[aria-hidden="true"]'),
     ).toBeNull();
@@ -545,7 +764,11 @@ describe("meeting page navigation and panels", () => {
     expect(
       screen.getByTestId("chat-view").textContent,
     ).toBe("private-alice");
-    expect(screen.getAllByRole("tab")).toEqual(tabs);
+    expect(
+      screen
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(tabs.map((tab) => tab.textContent));
     expect(fixture.clearLocalStream).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
   });
@@ -610,6 +833,144 @@ describe("meeting page navigation and panels", () => {
     expect(fixture.navigate).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
   });
+  it.each([false, true])(
+    "keeps canvas visibility in sync through mobile resizing when the panel is closed=%s",
+    async (closed) => {
+      render(() => (
+        <MeetingMediaProvider>
+          <MeetingSessionProvider>
+            <Video />
+          </MeetingSessionProvider>
+        </MeetingMediaProvider>
+      ));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Private Alice",
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.expand_chat",
+        }),
+      );
+      const stage = screen.getByLabelText("meeting.stage");
+      if (closed)
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "meeting.hide_panel",
+          }),
+        );
+
+      // Orientation notifications can precede the actual viewport resize.
+      fireEvent(window, new Event("orientationchange"));
+      window.innerWidth = 390;
+      fireEvent(window, new Event("resize"));
+      if (closed)
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "meeting.show_panel",
+          }),
+        );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", {
+            name: /meeting\.(expand_chat|collapse_chat)/,
+          }),
+        ).toBeNull(),
+      );
+      expect(
+        screen.queryByRole("navigation", {
+          name: "test conversations",
+        }),
+      ).toBeNull();
+      expect(
+        screen.getByTestId("chat-view"),
+      ).toHaveTextContent("private-alice");
+      expect(
+        stage.closest('[aria-hidden="true"]'),
+      ).not.toBeNull();
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "conversations.back_to_list",
+        }),
+      );
+      expect(
+        screen.getByRole("navigation", {
+          name: "test conversations",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("chat-view")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Private Alice",
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.hide_panel",
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.show_panel",
+        }),
+      );
+      expect(
+        screen.queryByRole("navigation", {
+          name: "test conversations",
+        }),
+      ).toBeNull();
+
+      // Returning to the meeting closes the full panel before gradually widening.
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.hide_panel",
+        }),
+      );
+      expect(
+        stage.closest('[aria-hidden="true"]'),
+      ).toBeNull();
+      for (const width of [
+        740, 766, 767, 768, 769, 1000, 1279, 1280, 1281,
+        1440,
+      ]) {
+        window.innerWidth = width;
+        fireEvent(window, new Event("resize"));
+        await Promise.resolve();
+        expect(
+          stage.closest('[aria-hidden="true"]'),
+        ).toBeNull();
+      }
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "meeting.show_panel",
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", {
+            name: "meeting.collapse_chat",
+          }),
+        ).toHaveAttribute("aria-pressed", "true"),
+      );
+      expect(
+        screen.getByRole("navigation", {
+          name: "test conversations",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-view"),
+      ).toHaveTextContent("private-alice");
+      expect(
+        stage.closest('[aria-hidden="true"]'),
+      ).toBeNull();
+      expect(
+        fixture.clearLocalStream,
+      ).not.toHaveBeenCalled();
+      expect(fixture.leaveRoom).not.toHaveBeenCalled();
+    },
+  );
 
   it("unmounts hidden chat, supports keyboard tabs, and reopens the selected conversation", () => {
     render(() => (
@@ -749,7 +1110,6 @@ describe("meeting page navigation and panels", () => {
   });
 
   it("opens the hash-selected conversation on a mobile meeting mount", () => {
-    fixture.mobile = true;
     window.innerWidth = 390;
     history.replaceState(
       null,
@@ -774,7 +1134,6 @@ describe("meeting page navigation and panels", () => {
   });
 
   it("replaces the mobile canvas with chat and returns without disposing media", () => {
-    fixture.mobile = true;
     window.innerWidth = 390;
     render(() => (
       <MeetingMediaProvider>
@@ -806,7 +1165,7 @@ describe("meeting page navigation and panels", () => {
       expect(source).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
-        name: /meeting\.(expand_chat|maximize_sidebar|collapse_chat)/,
+        name: /meeting\.(expand_chat|collapse_chat)/,
       }),
     ).toBeNull();
     expect(toggle).toHaveAttribute("aria-expanded", "true");

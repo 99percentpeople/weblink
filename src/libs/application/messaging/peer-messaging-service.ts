@@ -29,6 +29,7 @@ export type TrackedSendOptions = RequestOptions &
     retry?: boolean;
     /** Nested remote commands must propagate failure instead of ACKing success. */
     throwOnError?: boolean;
+    onStored?(): void | Promise<void>;
   };
 
 /** The only bridge between control-request lifecycle and persisted chat state. */
@@ -60,6 +61,7 @@ export class PeerMessagingService {
             if (options.retry)
               this.store.retrySendMessage(message);
             else this.store.setSendMessage(message);
+            return options.onStored?.();
           },
         },
       );

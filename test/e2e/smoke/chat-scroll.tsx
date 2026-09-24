@@ -249,6 +249,11 @@ async function main() {
     sendText: unexpected,
     sendFile: unexpected,
     sendClipboard: unexpected,
+    sharedFiles: {
+      download: async () => {},
+      downloadTask: () => undefined,
+    },
+    supportsSharedFiles: () => false,
     catalog: {
       watch: () => {
         throw new Error("Unexpected directory query");
@@ -258,7 +263,11 @@ async function main() {
     shareFile: unexpected,
     resumeFile: unexpected,
     pauseFile: unexpected,
-    roomStatus: { roomId: null, profile: null },
+    roomStatus: {
+      roomId: null,
+      profile: null,
+      joinedAt: null,
+    },
   });
   setAppState("profile", "clientId", "self");
   setAppState("options", "locale", "en-us");

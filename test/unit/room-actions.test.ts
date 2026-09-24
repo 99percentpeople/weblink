@@ -27,6 +27,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.error },
 }));
+vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 let dispose: () => void;
 const setup = () =>
   createRoot((cleanup) => {
@@ -36,6 +37,7 @@ const setup = () =>
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.spyOn(console, "error").mockImplementation(() => {});
   setAppState("profile", {
     name: "Alice",
     roomId: "room",
@@ -49,7 +51,10 @@ beforeEach(() => {
   fixture.open.mockResolvedValue({ cancel: false });
   fixture.join.mockResolvedValue(undefined);
 });
-afterEach(() => dispose?.());
+afterEach(() => {
+  dispose?.();
+  vi.restoreAllMocks();
+});
 
 describe("shared room actions", () => {
   it("keeps a closed settings dialog disconnected and joins a configured room directly", async () => {
@@ -99,9 +104,55 @@ describe("shared room actions", () => {
     fail(new Error("offline"));
     await joining;
     expect(actions.busy()).toBe(false);
-    expect(fixture.error).toHaveBeenCalledWith("offline");
+    expect(fixture.error).toHaveBeenCalledWith(
+      "errors.connection_failed",
+    );
     await actions.join();
     expect(fixture.join).toHaveBeenCalledTimes(2);
     expect(appState.profile.roomId).toBe("room");
+  });
+});
+
+describe("room connection notifications", () => {
+  it.each([
+    [
+      new Error(
+        "[WebSocketClientService] connection timeout",
+      ),
+      "errors.connection_timeout",
+    ],
+    [
+      new Error(
+        "[WebSocketClientService] incorrect password",
+      ),
+      "errors.incorrect_password",
+    ],
+    [
+      new Error(
+        "[WebSocketClientService] internal join failure",
+      ),
+      "errors.connection_failed",
+    ],
+  ])(
+    "shows a translated connection error for %s and allows retry",
+    async (error, key) => {
+      const actions = setup();
+      fixture.join.mockRejectedValueOnce(error);
+      await actions.join();
+      expect(fixture.error).toHaveBeenCalledOnce();
+      expect(fixture.error).toHaveBeenCalledWith(key);
+      expect(actions.busy()).toBe(false);
+      await actions.join();
+      expect(fixture.join).toHaveBeenCalledTimes(2);
+    },
+  );
+  it("does not notify when leaving or switching rooms cancels a pending join", async () => {
+    const actions = setup();
+    fixture.join.mockRejectedValueOnce(
+      new DOMException("Room changed", "AbortError"),
+    );
+    await actions.join();
+    expect(fixture.error).not.toHaveBeenCalled();
+    expect(actions.busy()).toBe(false);
   });
 });

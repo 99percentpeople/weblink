@@ -1,18 +1,19 @@
 @reference "../../global.css";
 
 /* Shared meeting controls and coordinated stage/sidebar/PiP layout.
-   Use @apply for shared primitives, keeping layout calculations and Motion
-   transforms/transitions explicit. One-off presentation lives in JSX. */
+   Use Tailwind spacing for dimensions, including calculated sizes. Keep
+   measured grid geometry and Motion transforms/transitions explicit.
+   One-off presentation lives in JSX. */
 .meeting {
   @apply text-foreground relative flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent;
   --meeting-surface: var(--card);
-  --meeting-controls-height: 82px;
+  --meeting-controls-height: --spacing(20.5);
   --meeting-controls-bottom: max(
-    16px,
+    --spacing(4),
     env(safe-area-inset-bottom)
   );
   --meeting-collapsed-controls-bottom: max(
-    8px,
+    --spacing(2),
     env(safe-area-inset-bottom)
   );
 }
@@ -39,7 +40,7 @@
   @apply bg-muted;
 }
 .meeting-icon-button svg {
-  @apply size-[17px];
+  @apply size-4.25;
 }
 .meeting-panel-toggle {
   transition:
@@ -50,18 +51,20 @@
   @apply bg-accent text-primary;
 }
 .meeting-member-count {
-  @apply w-auto gap-[7px] px-2 py-0 text-[12px];
+  @apply w-auto gap-1.75 px-2 py-0 text-[12px];
 }
 .meeting-workspace {
   @apply relative flex min-h-0 min-w-0 flex-1 gap-0;
   margin-bottom: calc(
     var(--meeting-controls-height) +
-      var(--meeting-controls-bottom) + 8px
+      var(--meeting-controls-bottom) + --spacing(2)
   );
 }
 .meeting.is-controls-collapsed .meeting-workspace {
   margin-bottom: calc(
-    28px + var(--meeting-collapsed-controls-bottom) + 4px
+    --spacing(7) +
+      var(--meeting-collapsed-controls-bottom) +
+      --spacing(1)
   );
 }
 .meeting-canvas {
@@ -98,7 +101,7 @@
     var(--meeting-grid-rows, 1),
     var(--meeting-tile-height, 0px)
   );
-  gap: var(--meeting-grid-gap, 12px);
+  gap: var(--meeting-grid-gap, --spacing(3));
   /* The observed box is allocated by the stage, never by its tile content. */
   contain: size layout;
 }
@@ -119,8 +122,7 @@
   container-type: inline-size;
 }
 .meeting-tile .meeting-video-avatar {
-  width: clamp(36px, 25cqw, 80px);
-  height: clamp(36px, 25cqw, 80px);
+  @apply size-[clamp(--spacing(9),25cqw,--spacing(20))];
   font-size: clamp(14px, 8cqw, 24px);
 }
 .meeting-tile-video {
@@ -137,13 +139,16 @@
   container-type: size;
 }
 .meeting-featured-frame .meeting-tile {
-  @apply aspect-video h-auto;
-  width: min(100cqw, calc(100cqh * 16 / 9));
+  @apply aspect-video h-auto w-[min(100cqw,calc(100cqh*16/9))];
 }
 .meeting-grid.has-featured {
   @apply grid content-stretch items-stretch overflow-hidden;
-  --meeting-rail-height: clamp(92px, 22%, 128px);
-  --meeting-rail-toggle-height: 1.75rem;
+  --meeting-rail-height: clamp(
+    --spacing(23),
+    22%,
+    --spacing(32)
+  );
+  --meeting-rail-toggle-height: --spacing(7);
   grid-template-columns: minmax(0, 1fr);
   /* Reserve the controls row while Motion temporarily positions its contents. */
   grid-template-rows:
@@ -177,7 +182,7 @@
 }
 .meeting-thumbnails {
   @apply flex min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain pb-1;
-  gap: var(--meeting-grid-gap, 12px);
+  gap: var(--meeting-grid-gap, --spacing(3));
   scrollbar-color: var(--muted-foreground) transparent;
   scrollbar-width: thin;
   scroll-snap-type: x proximity;
@@ -212,7 +217,7 @@
   @apply size-7;
 }
 .meeting-tile-actions {
-  @apply absolute right-2 bottom-2 flex gap-[3px] rounded-md bg-[#10151cd9] p-[3px] text-white opacity-0;
+  @apply absolute right-2 bottom-2 flex gap-0.75 rounded-lg bg-[#10151cd9] p-0.75 text-white opacity-0;
   transition: opacity 0.15s;
 }
 .meeting-tile-actions .meeting-icon-button:hover {
@@ -234,22 +239,21 @@
   @apply opacity-100;
 }
 .meeting-panel-slot {
-  @apply min-h-0 max-w-full min-w-0 flex-none;
-  width: min(379px, calc(100% - 280px));
+  /* Leave room for four tabs, both actions, padding and the outer margin. */
+  @apply min-h-0 w-[min(--spacing(100),calc(100%---spacing(70)))] max-w-full min-w-0 flex-none;
   transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .meeting-panel-slot.is-closing {
   @apply absolute top-0 right-0 bottom-0 z-33;
 }
 .meeting-panel-slot.is-expanded {
-  width: min(760px, 70%, calc(100% - 280px));
+  @apply w-[min(--spacing(190),70%,calc(100%---spacing(70)))];
 }
 .meeting-panel-slot.is-full {
   @apply w-full max-w-full;
 }
 .meeting-panel-slot.is-full .meeting-side-panel {
-  @apply mx-3.5 mt-3.5 mb-0;
-  width: calc(100% - 28px);
+  @apply mx-3.5 mt-3.5 mb-0 w-[calc(100%---spacing(7))];
 }
 .meeting-leave.meeting-join {
   @apply text-primary-foreground bg-primary;
@@ -262,10 +266,8 @@
   );
 }
 .meeting-side-panel {
-  @apply border-border bg-card text-foreground mt-3.5 mr-3.5 mb-0 ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid;
-  width: calc(100% - 14px);
   /* The workspace already reserves the gap above the floating controls. */
-  height: calc(100% - 14px);
+  @apply border-border bg-card text-foreground mt-3.5 mr-3.5 mb-0 ml-0 flex size-[calc(100%---spacing(3.5))] min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid;
   box-shadow: 0 8px 30px #0002;
 }
 .meeting-panel-content {
@@ -274,18 +276,6 @@
 .meeting-panel-content > :first-child {
   @apply min-h-0;
 }
-.meeting-member {
-  @apply flex items-center gap-3 px-0 py-3;
-}
-.meeting-member > div {
-  @apply min-w-0 flex-1;
-}
-.meeting-member strong {
-  @apply block truncate text-[13px] font-medium;
-}
-.meeting-member div > span {
-  @apply text-muted-foreground mt-0.5 block text-[11px];
-}
 .meeting-info-action {
   @apply h-auto min-h-10.5 justify-start px-3 py-2.5 text-left text-[12px] whitespace-normal;
 }
@@ -293,10 +283,8 @@
   @apply min-w-0 flex-1 wrap-anywhere;
 }
 .meeting-controls {
-  @apply border-input absolute left-1/2 z-45 flex w-max shrink-0 items-center justify-center gap-6.5 rounded-xl border border-solid bg-(--meeting-surface) p-3;
+  @apply border-input absolute left-1/2 z-45 flex min-h-(--meeting-controls-height) w-max max-w-[calc(100%---spacing(8))] shrink-0 items-center justify-center gap-6.5 rounded-xl border border-solid bg-(--meeting-surface) p-3;
   bottom: var(--meeting-controls-bottom);
-  max-width: calc(100% - 32px);
-  min-height: var(--meeting-controls-height);
   translate: -50% 0;
   filter: drop-shadow(0 12px 22px #0006);
 }
@@ -329,10 +317,7 @@
   transform: rotate(180deg);
 }
 .meeting-device-menu {
-  @apply border-input text-foreground absolute -left-px overflow-auto rounded-t-xl rounded-b-none border border-b-0 border-solid bg-(--meeting-surface) px-3.5 pt-2.5 pb-3.5;
-  bottom: calc(100% + 1px);
-  width: calc(100% + 2px);
-  max-height: min(360px, calc(100dvh - 180px));
+  @apply border-input text-foreground absolute bottom-[calc(100%+1px)] -left-px max-h-[min(--spacing(90),calc(100dvh---spacing(45)))] w-[calc(100%+2px)] overflow-auto rounded-t-xl rounded-b-none border border-b-0 border-solid bg-(--meeting-surface) px-3.5 pt-2.5 pb-3.5;
 }
 .meeting-device-menu-header
   .meeting-icon-button:not(.meeting-permission-button) {
@@ -385,9 +370,9 @@
     box-shadow: none;
   }
   .meeting {
-    --meeting-controls-height: 64px;
+    --meeting-controls-height: --spacing(16);
     --meeting-controls-bottom: max(
-      10px,
+      --spacing(2.5),
       env(safe-area-inset-bottom)
     );
   }
@@ -398,11 +383,10 @@
     @apply p-2.5;
   }
   .meeting-controls {
-    @apply gap-2.5 p-2;
-    max-width: calc(100% - 16px);
+    @apply max-w-[calc(100%---spacing(4))] gap-2.5 p-2;
   }
   .meeting-controls-group {
-    @apply min-w-0 gap-[5px] overflow-x-auto;
+    @apply min-w-0 gap-1.25 overflow-x-auto;
     scrollbar-width: none;
   }
   .meeting-device-toggle {
@@ -429,7 +413,7 @@
 }
 @media (max-width: 389px) {
   .meeting {
-    --meeting-controls-height: 60px;
+    --meeting-controls-height: --spacing(15);
   }
   .meeting-controls {
     @apply gap-1.5 px-1.5 py-2;
@@ -465,16 +449,20 @@ html[data-meeting-pip] body > div {
   @apply m-0 size-full min-h-0 min-w-0 overflow-hidden;
 }
 .meeting-pip {
-  --meeting-controls-height: 52px;
-  --meeting-controls-bottom: 0px;
+  --meeting-controls-height: --spacing(13);
+  --meeting-controls-bottom: --spacing(0);
 }
 .meeting-pip .meeting-stage {
   @apply p-1.5;
 }
 .meeting-pip .meeting-grid.has-featured {
   @apply gap-1.5;
-  --meeting-rail-height: clamp(48px, 24%, 88px);
-  --meeting-rail-toggle-height: 1.5rem;
+  --meeting-rail-height: clamp(
+    --spacing(12),
+    24%,
+    --spacing(22)
+  );
+  --meeting-rail-toggle-height: --spacing(6);
 }
 .meeting-pip .meeting-thumbnails {
   @apply gap-1.5;
@@ -483,9 +471,8 @@ html[data-meeting-pip] body > div {
   @apply rounded-md;
 }
 .meeting-pip .meeting-controls {
-  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 min-h-13 max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
+  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 min-h-13 w-[calc(100%---spacing(3))] max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
   translate: none;
-  width: calc(100% - 12px);
   filter: none;
 }
 .meeting-pip.is-controls-collapsed .meeting-controls {

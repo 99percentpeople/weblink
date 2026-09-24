@@ -40,6 +40,8 @@ export function MeetingDeviceField(props: {
         .list()
         .filter(
           (device) =>
+            (props.kind !== "audiooutput" ||
+              access() === "granted") &&
             device.kind === props.kind &&
             device.deviceId &&
             device.deviceId !== "default",
@@ -101,30 +103,37 @@ export function MeetingDeviceField(props: {
           : "flex min-w-0 flex-1 flex-col gap-[7px] text-[12px]"
       }
     >
-      <label
-        for={id}
-        class={
-          props.variant === "dialog"
-            ? "flex items-center gap-2 [&>svg]:size-4"
-            : `flex items-center gap-[7px] [&>svg]:size-[15px]
-              [&>svg]:shrink-0`
-        }
-      >
-        <Show
-          when={props.kind === "videoinput"}
-          fallback={
-            <Show
-              when={props.kind === "audioinput"}
-              fallback={<Volume2 />}
-            >
-              <Mic />
-            </Show>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <label
+          for={id}
+          class={
+            props.variant === "dialog"
+              ? "flex items-center gap-2 [&>svg]:size-4"
+              : `flex items-center gap-[7px] [&>svg]:size-[15px]
+                [&>svg]:shrink-0`
           }
         >
-          <Camera />
-        </Show>
-        {t(`meeting.${family()}_device`)}
-      </label>
+          <Show
+            when={props.kind === "videoinput"}
+            fallback={
+              <Show
+                when={props.kind === "audioinput"}
+                fallback={<Volume2 />}
+              >
+                <Mic />
+              </Show>
+            }
+          >
+            <Camera />
+          </Show>
+          {t(`meeting.${family()}_device`)}
+        </label>
+        <MeetingDevicePermissionButton
+          kind={props.kind}
+          devices={props.devices}
+          variant={props.variant}
+        />
+      </div>
       <Show when={access() !== "unsupported"}>
         <Select<DeviceOption>
           options={choices()}
@@ -143,9 +152,15 @@ export function MeetingDeviceField(props: {
           modal={props.variant === "dialog"}
           disabled={
             props.busy ||
-            access() !== "granted" ||
-            props.devices.refreshing() ||
-            (options().length === 0 && !props.selected)
+            (props.kind === "audiooutput"
+              ? choices().length === 1 ||
+                (access() !== "granted" &&
+                  !(
+                    access() === "default-only" &&
+                    props.selected
+                  ))
+              : access() !== "granted" ||
+                (options().length === 0 && !props.selected))
           }
           itemComponent={(itemProps) => (
             <SelectItem
@@ -188,8 +203,6 @@ export function MeetingDeviceField(props: {
               props.variant !== "dialog" ? "" : undefined
             }
             class={cn(
-              `max-h-[min(20rem,var(--kb-popper-content-available-height))]
-              overflow-y-auto`,
               props.variant !== "dialog" &&
                 "border-input bg-background text-foreground",
             )}
@@ -212,15 +225,17 @@ export function MeetingDeviceField(props: {
           {t(
             access() === "checking"
               ? "meeting.permission_checking"
-              : access() === "prompt"
-                ? "meeting.permission_needed"
-                : access() === "denied"
-                  ? "meeting.device_disabled"
-                  : access() === "unsupported"
-                    ? props.kind === "audiooutput"
-                      ? "meeting.output_unsupported"
-                      : "meeting.media_unavailable"
-                    : emptyKey(),
+              : access() === "default-only"
+                ? "meeting.output_default_only"
+                : access() === "prompt"
+                  ? "meeting.permission_needed"
+                  : access() === "denied"
+                    ? "meeting.device_disabled"
+                    : access() === "unsupported"
+                      ? props.kind === "audiooutput"
+                        ? "meeting.output_unsupported"
+                        : "meeting.media_unavailable"
+                      : emptyKey(),
           )}
         </span>
       </Show>
@@ -237,43 +252,76 @@ export function MeetingDeviceField(props: {
       </Show>
       <Show
         when={
+          props.kind === "audiooutput" &&
           access() === "prompt" &&
-          props.variant === "dialog"
+          props.devices.access.outputNeedsMicrophone()
         }
       >
-        <Show
-          when={
-            props.kind === "audiooutput" &&
-            props.devices.access.outputNeedsMicrophone()
+        <span
+          class={
+            props.variant === "dialog"
+              ? "text-muted-foreground text-xs"
+              : "meeting-device-hint"
           }
         >
-          <span class="text-muted-foreground text-xs">
-            {t("meeting.output_permission_hint")}
-          </span>
-        </Show>
-        <button
-          type="button"
-          class="border-input hover:bg-muted self-start rounded-md border
-            px-3 py-1.5 text-xs disabled:opacity-50"
-          disabled={
-            props.devices.access.requesting() !== null
-          }
-          aria-label={t(
-            "meeting.request_device_permission",
-            { device: t(`meeting.${family()}_device`) },
-          )}
-          onClick={() =>
-            void props.devices.access.request(props.kind)
-          }
-        >
-          {t(
-            props.devices.access.requesting() === props.kind
-              ? "meeting.permission_requesting"
-              : "meeting.get_permission",
-          )}
-        </button>
+          {t("meeting.output_permission_hint")}
+        </span>
       </Show>
     </div>
+  );
+}
+
+function MeetingDevicePermissionButton(props: {
+  kind: MediaDeviceKind;
+  devices: MeetingDeviceControls;
+  variant?: "meeting" | "dialog";
+}) {
+  const requestPermission = () => {
+    if (
+      props.devices.access.requesting() ||
+      props.devices.access.state(props.kind) !== "prompt"
+    )
+      return;
+    // Invoke the native speaker picker within the click's user activation.
+    void props.devices.access.request(props.kind);
+  };
+  return (
+    <Show
+      when={
+        props.devices.access.state(props.kind) === "prompt"
+      }
+    >
+      <button
+        type="button"
+        class={
+          props.variant === "dialog"
+            ? `border-input hover:bg-muted inline-flex shrink-0
+              items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs
+              disabled:opacity-50 [&_svg]:size-4`
+            : "meeting-icon-button meeting-permission-button"
+        }
+        aria-label={t("meeting.get_permission")}
+        title={t("meeting.request_device_permission", {
+          device: t(
+            props.kind === "audioinput"
+              ? "meeting.microphone_device"
+              : props.kind === "audiooutput"
+                ? "meeting.speaker_device"
+                : "meeting.camera_device",
+          ),
+        })}
+        disabled={
+          props.devices.access.requesting() !== null
+        }
+        aria-busy={
+          props.devices.access.requesting() === props.kind
+        }
+        onClick={requestPermission}
+      >
+        <ShieldAlert aria-hidden="true" />
+        <span>{t("meeting.get_permission")}</span>
+      </button>
+    </Show>
   );
 }
 
@@ -287,35 +335,6 @@ export function MeetingDeviceMenu(props: {
   onToggleAudio(): void;
   onClose(): void;
 }) {
-  const permissionTarget = () => {
-    const kinds: MediaDeviceKind[] =
-      props.mode === "camera"
-        ? ["videoinput"]
-        : [
-            "audioinput",
-            ...(props.devices.outputSupported()
-              ? ["audiooutput" as const]
-              : []),
-          ];
-    const requesting = props.devices.access.requesting();
-    if (requesting && kinds.includes(requesting))
-      return requesting;
-    return kinds.find(
-      (kind) =>
-        props.devices.access.state(kind) === "prompt",
-    );
-  };
-  const requestPermission = () => {
-    const kind = permissionTarget();
-    if (
-      !kind ||
-      props.devices.access.requesting() ||
-      props.devices.access.state(kind) !== "prompt"
-    )
-      return;
-    // Call directly from the click; a native speaker picker needs user activation.
-    void props.devices.access.request(kind);
-  };
   return (
     <Motion.section
       initial={{ opacity: 0, y: 8 }}
@@ -341,35 +360,6 @@ export function MeetingDeviceMenu(props: {
               : "meeting.camera_devices",
           )}
         </span>
-        <Show when={permissionTarget()}>
-          <button
-            class="meeting-icon-button meeting-permission-button"
-            type="button"
-            aria-label={t("meeting.get_permission")}
-            title={t("meeting.request_device_permission", {
-              device: t(
-                permissionTarget() === "audioinput"
-                  ? "meeting.microphone_device"
-                  : permissionTarget() === "audiooutput"
-                    ? "meeting.speaker_device"
-                    : "meeting.camera_device",
-              ),
-            })}
-            disabled={
-              props.devices.access.requesting() !== null
-            }
-            onClick={requestPermission}
-          >
-            <ShieldAlert />
-            <span>
-              {t(
-                props.devices.access.requesting()
-                  ? "meeting.permission_requesting"
-                  : "meeting.get_permission",
-              )}
-            </span>
-          </button>
-        </Show>
         <button
           class="meeting-icon-button"
           type="button"

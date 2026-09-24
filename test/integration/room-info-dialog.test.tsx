@@ -569,6 +569,225 @@ describe("room dialog and shared meeting device ownership", () => {
     expect(getDisplayMedia).not.toHaveBeenCalled();
   });
 
+  it("shows the default speaker without an interactive selector on a device with no microphone and no native output picker", async () => {
+    vi.mocked(
+      navigator.mediaDevices.enumerateDevices,
+    ).mockResolvedValue([
+      {
+        kind: "audiooutput",
+        deviceId: "",
+        groupId: "",
+        label: "",
+        toJSON: () => ({}),
+      },
+    ]);
+    const f = setup();
+    const dialog = await openDevices();
+    const speaker = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="audiooutput"]',
+      )!,
+    );
+    await waitFor(() =>
+      expect(speaker.getByRole("status")).toHaveTextContent(
+        "meeting.output_default_only",
+      ),
+    );
+    expect(speaker.queryByRole("button")).toBeNull();
+    expect(speaker.getByRole("combobox")).toBeDisabled();
+    expect(speaker.getByRole("combobox")).toHaveTextContent(
+      "meeting.default_device",
+    );
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(f.stream()).toBeNull();
+  });
+
+  it("keeps microphone, speaker and camera permission actions independent", async () => {
+    const enumerate = vi.mocked(
+      navigator.mediaDevices.enumerateDevices,
+    );
+    const available = await enumerate();
+    enumerate.mockResolvedValue(
+      available.map((device) => ({
+        ...device,
+        label: "",
+        deviceId: "",
+      })),
+    );
+    const selectAudioOutput = vi.fn();
+    Object.assign(navigator.mediaDevices, {
+      selectAudioOutput,
+    });
+    const f = setup();
+    const dialog = await openDevices();
+    const microphone = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="audioinput"]',
+      )!,
+    );
+    const speaker = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="audiooutput"]',
+      )!,
+    );
+    const camera = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="videoinput"]',
+      )!,
+    );
+    await waitFor(() =>
+      expect(microphone.getByRole("button")).toBeEnabled(),
+    );
+    expect(speaker.getByRole("button")).toBeEnabled();
+    expect(camera.getByRole("button")).toBeEnabled();
+    expect(speaker.getByRole("combobox")).toBeDisabled();
+    const probe = new Track();
+    getUserMedia.mockImplementationOnce(async () => {
+      enumerate.mockResolvedValue(
+        available.map((device) =>
+          device.kind === "audioinput"
+            ? device
+            : { ...device, label: "", deviceId: "" },
+        ),
+      );
+      return new Stream([
+        probe as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream;
+    });
+    fireEvent.click(microphone.getByRole("button"));
+    await waitFor(() =>
+      expect(
+        f.controls.devices.access.requesting(),
+      ).toBeNull(),
+    );
+    expect(microphone.queryByRole("button")).toBeNull();
+    expect(microphone.getByRole("combobox")).toBeEnabled();
+    expect(speaker.getByRole("button")).toBeEnabled();
+    expect(speaker.getByRole("combobox")).toBeDisabled();
+    expect(speaker.getByRole("combobox")).toHaveTextContent(
+      "meeting.default_device",
+    );
+    expect(camera.getByRole("button")).toBeEnabled();
+    expect(camera.getByRole("combobox")).toBeDisabled();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: true,
+      video: false,
+    });
+    expect(selectAudioOutput).not.toHaveBeenCalled();
+    expect(probe.stop).toHaveBeenCalledOnce();
+    expect(f.stream()).toBeNull();
+  });
+
+  it("requests speaker permission directly without first requesting microphone or camera access", async () => {
+    const enumerate = vi.mocked(
+      navigator.mediaDevices.enumerateDevices,
+    );
+    const available = await enumerate();
+    const selected = available.find(
+      (device) => device.kind === "audiooutput",
+    )!;
+    enumerate.mockResolvedValue(
+      available.map((device) => ({
+        ...device,
+        label: "",
+        deviceId: "",
+      })),
+    );
+    const selectAudioOutput = vi.fn(async () => selected);
+    Object.assign(navigator.mediaDevices, {
+      selectAudioOutput,
+    });
+    const f = setup();
+    const dialog = await openDevices();
+    const microphone = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="audioinput"]',
+      )!,
+    );
+    const speaker = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="audiooutput"]',
+      )!,
+    );
+    const camera = within(
+      dialog.querySelector<HTMLElement>(
+        '[data-device-kind="videoinput"]',
+      )!,
+    );
+    await waitFor(() =>
+      expect(speaker.getByRole("button")).toBeEnabled(),
+    );
+    expect(
+      speaker.queryByText("meeting.output_permission_hint"),
+    ).toBeNull();
+    expect(speaker.getByRole("combobox")).toBeDisabled();
+    fireEvent.click(speaker.getByRole("button"));
+    // Preserve the original click's user activation for the native picker.
+    expect(selectAudioOutput).toHaveBeenCalledOnce();
+    expect(speaker.getByRole("combobox")).toBeDisabled();
+    await waitFor(() =>
+      expect(
+        f.controls.devices.access.requesting(),
+      ).toBeNull(),
+    );
+    expect(speaker.queryByRole("button")).toBeNull();
+    expect(speaker.getByRole("combobox")).toBeEnabled();
+    expect(microphone.getByRole("button")).toBeEnabled();
+    expect(camera.getByRole("button")).toBeEnabled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(f.stream()).toBeNull();
+  });
+
+  it("keeps permission controls mounted while another entry point refreshes device access", async () => {
+    const enumerate = vi.mocked(
+      navigator.mediaDevices.enumerateDevices,
+    );
+    const available = await enumerate();
+    enumerate.mockResolvedValue(
+      available.map((device) => ({
+        ...device,
+        label: "",
+        deviceId: "",
+      })),
+    );
+    const f = setup();
+    const dialog = await openDevices();
+    const field = dialog.querySelector<HTMLElement>(
+      '[data-device-kind="videoinput"]',
+    )!;
+    await waitFor(() =>
+      expect(
+        within(field).getByRole("button"),
+      ).toBeEnabled(),
+    );
+    const permission = within(field).getByRole("button");
+    const pending = deferred<MediaDeviceInfo[]>();
+    enumerate.mockReturnValueOnce(pending.promise);
+    f.controls.devices.refresh();
+    await Promise.resolve();
+    expect(within(field).getByRole("button")).toBe(
+      permission,
+    );
+    expect(permission).toBeEnabled();
+    expect(permission).toHaveTextContent(
+      "meeting.get_permission",
+    );
+    expect(
+      within(field).getByRole("status"),
+    ).toHaveTextContent("meeting.permission_needed");
+    pending.resolve(available);
+    await waitFor(() =>
+      expect(
+        within(field).queryByRole("button"),
+      ).toBeNull(),
+    );
+    expect(
+      within(field).getByRole("combobox"),
+    ).toBeEnabled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
   it("requests device access without publishing or changing existing meeting tracks", async () => {
     const enumerate = vi.mocked(
       navigator.mediaDevices.enumerateDevices,
@@ -598,13 +817,27 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     expect(getUserMedia).not.toHaveBeenCalled();
     const probe = new Track("video", "cam-1");
+    const capture = deferred<MediaStream>();
     getUserMedia.mockImplementationOnce(async () => {
+      const stream = await capture.promise;
       enumerate.mockResolvedValue(available);
-      return new Stream([
-        probe as unknown as MediaStreamTrack,
-      ]) as unknown as MediaStream;
+      return stream;
     });
-    fireEvent.click(within(field).getByRole("button"));
+    const permission = within(field).getByRole("button");
+    fireEvent.click(permission);
+    expect(within(field).getByRole("button")).toBe(
+      permission,
+    );
+    expect(permission).toBeDisabled();
+    expect(permission).toHaveTextContent(
+      "meeting.get_permission",
+    );
+    expect(permission).toHaveAttribute("aria-busy", "true");
+    capture.resolve(
+      new Stream([
+        probe as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream,
+    );
     await waitFor(() =>
       expect(probe.stop).toHaveBeenCalledOnce(),
     );
@@ -667,6 +900,19 @@ describe("room dialog and shared meeting device ownership", () => {
     ).toBeTruthy();
     expect(
       screen.getByText("room_dialog.file_hint"),
+    ).toBeTruthy();
+    for (const key of [
+      "meeting.in_room",
+      "meeting.status_online",
+      "meeting.online_duration",
+      "room_dialog.online_members",
+      "meeting.chat_support",
+      "meeting.file_support",
+    ]) {
+      expect(screen.queryByText(key)).toBeNull();
+    }
+    expect(
+      screen.getByText("meeting.local_history"),
     ).toBeTruthy();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();

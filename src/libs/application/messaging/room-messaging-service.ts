@@ -29,6 +29,7 @@ export type RoomDeliveryStatus =
 
 export interface RoomMessagingServiceOptions {
   supportsFiles?: boolean;
+  onFileSending?(id: string): Promise<void>;
   supportsContent?(session: PeerSession): boolean;
   reuseFile?(
     message: FileTransferMessage,
@@ -747,6 +748,8 @@ export class RoomMessagingService {
       ),
     };
     await this.options.store.putRoomMessage(message);
+    if (message.type === "file" && message.fid)
+      await this.options.onFileSending?.(message.fid);
     await this.deliverAll(message, recipients);
   }
 

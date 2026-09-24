@@ -121,6 +121,13 @@ and absence of private-history projections. File caches use real, separately
 namespaced IndexedDB databases and real compression/decompression Workers.
 This fixture keeps message histories in memory and does not render the download
 button: UI interaction and durable message-store reloads have separate tests.
+The same transfer smoke covers shared-directory pulls between two peers, local
+content reuse without binary channels, pause/resume with byte comparison,
+cancellation that closes both peers' active channels and allows a new download,
+permission revocation, forged IDs, legacy request denial and absence of new chat
+messages. Sidebar integration tests cover member selection, 50-item pagination,
+search/sort, multi-select fetching, refresh retention, task cancellation,
+visibility cleanup and late responses.
 The room transfer fixture uses application-default transfer settings and
 negotiates a 32 KiB SCTP message limit. The complete binary packet, including its
 seven-byte header, must fit that budget; both manual recipients must receive

@@ -35,7 +35,6 @@ import {
   parseSignalingEnvelope,
   SIGNALING_MAX_CACHED_SIGNALS,
 } from "@/libs/domain/signaling-protocol";
-import { toast } from "solid-sonner";
 import { catchErrorSync } from "@/libs/catch";
 
 type PublicConnectionStatus =
@@ -105,12 +104,16 @@ export class WebSocketClientService implements ClientService {
     return this.client;
   }
 
+  private readonly onNotice: ClientServiceInitOptions["onNotice"];
+
   constructor({
+    onNotice,
     roomId,
     password,
     client,
     websocketUrl,
   }: ClientServiceInitOptions) {
+    this.onNotice = onNotice;
     this.roomId = roomId;
     this.password = password;
     this.client = { ...client, createdAt: Date.now() };
@@ -195,11 +198,12 @@ export class WebSocketClientService implements ClientService {
       this.passwordHashPromise = hashPassword(
         this.password,
       ).catch((error: unknown) => {
-        const normalized = toError(error);
-        this.password = null;
-        toast.error(
-          `failed to hash password: ${normalized.message}`,
+        console.error(
+          "Failed to hash room password",
+          error,
         );
+        this.password = null;
+        this.onNotice?.("password-hash-failed");
         return null;
       });
     }
@@ -248,7 +252,7 @@ export class WebSocketClientService implements ClientService {
     this.passwordHashPromise = null;
     if (!this.warnedUnprotectedRoom) {
       this.warnedUnprotectedRoom = true;
-      toast.warning("the room is not password protected");
+      this.onNotice?.("room-unprotected");
     }
   }
 

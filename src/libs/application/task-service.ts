@@ -56,7 +56,18 @@ export interface SpeedTask extends TaskBase {
 }
 
 import type { FilePreparation } from "./file-fingerprint-service";
+export interface SharedFileTask extends Omit<
+  FileTask,
+  "message"
+> {
+  message?: never;
+  shared: true;
+  pause(): void;
+  resume(): Promise<void>;
+  cancel(): Promise<void>;
+}
 export type AppTask =
+  | SharedFileTask
   | FileTask
   | SpeedTask
   | FilePreparation;
@@ -77,6 +88,8 @@ export const isFinishedTask = (task: AppTask): boolean =>
 
 export interface TaskSources {
   preparations?: Accessor<FilePreparation[]>;
+  sharedFiles?: Accessor<SharedFileTask[]>;
+  clearSharedFiles?(): void;
   clearPreparations?(): void;
   clientId: Accessor<string>;
   messages: Accessor<readonly StoreMessage[]>;
@@ -294,6 +307,7 @@ export function createTaskService(sources: TaskSources) {
   const tasks = createMemo<TaskListItem[]>(() => {
     const current: AppTask[] = [
       ...files(),
+      ...(sources.sharedFiles?.() ?? []),
       ...speedRuns().map(speedTask),
       ...(sources.preparations?.() ?? []),
     ];
@@ -368,6 +382,7 @@ export function createTaskService(sources: TaskSources) {
     speedRuns().find((run) => run.peerId === peerId);
   const clearFinished = () => {
     sources.clearPreparations?.();
+    sources.clearSharedFiles?.();
     setHiddenFiles(
       (previous) =>
         new Set([

@@ -15,6 +15,7 @@ const recipient = (id: string) => ({
   complete: vi.fn(async () => {}),
   paused: vi.fn(),
   release: vi.fn(async () => {}),
+  stop: vi.fn(),
 });
 function setup() {
   const controller = new AbortController();
@@ -80,6 +81,23 @@ describe("concurrent content receives", () => {
     );
     expect(
       f.coordinator.join(fingerprint, recipient("retry")),
+    ).toBe(true);
+  });
+  it("stops detached source preparation when the last waiter cancels before a run exists", () => {
+    const f = setup(),
+      first = recipient("source"),
+      second = recipient("second");
+    f.coordinator.join(fingerprint, first);
+    f.coordinator.join(fingerprint, second);
+    f.coordinator.cancel(first.fileId);
+    expect(first.stop).not.toHaveBeenCalled();
+    f.coordinator.cancel(second.fileId);
+    expect(first.stop).toHaveBeenCalledOnce();
+    expect(f.coordinator.ownsSource(first.fileId)).toBe(
+      false,
+    );
+    expect(
+      f.coordinator.join(fingerprint, recipient("new")),
     ).toBe(true);
   });
 });

@@ -78,7 +78,7 @@ export class FileTransferService {
   private readonly unsubscribe: Array<() => void>;
   private disposed = false;
   private readonly offers: FileOfferTransfers;
-  private readonly contentReceives: FileContentReceives;
+  readonly contentReceives: FileContentReceives;
 
   constructor(
     private readonly deps: FileTransferServiceOptions,
@@ -193,6 +193,19 @@ export class FileTransferService {
               `cache ${message.fid} info not found`,
             );
           this.assertPrivateCache(info);
+          if (
+            !deps.messages.messages.some(
+              (item) =>
+                item.type === "file" &&
+                !item.room &&
+                item.fid === message.fid &&
+                item.client === session.targetClientId &&
+                item.target === session.clientId,
+            )
+          )
+            throw new Error(
+              "This file was not received from this peer",
+            );
           await this.requestFile(session, info, true, {
             signal,
           });
@@ -435,6 +448,14 @@ export class FileTransferService {
     payload: MessagePayload<T>,
     metadata: MessageMetadata & { retry?: boolean } = {},
   ): Promise<void> {
+    if (
+      type === "send-file" &&
+      !metadata.retry &&
+      !op.session.isMessageChannelReady
+    )
+      throw new Error(
+        "The file recipient is not connected",
+      );
     const messageId = metadata.id ?? crypto.randomUUID();
     const mode =
       type === "send-file"
@@ -455,6 +476,14 @@ export class FileTransferService {
           id: messageId,
           signal: op.controller.signal,
           throwOnError: true,
+          onStored:
+            type === "send-file" && !metadata.retry
+              ? () =>
+                  this.deps.caches.library?.setShared(
+                    cache.id,
+                    true,
+                  )
+              : undefined,
         })
         .catch((error) => {
           // The protocol marks an aborted pending request as failed. File cancellation is
@@ -787,6 +816,10 @@ export class FileTransferService {
     file: FileSource,
     options: { signal?: AbortSignal } = {},
   ): Promise<void> {
+    if (!session.isMessageChannelReady)
+      return Promise.reject(
+        new Error("The file recipient is not connected"),
+      );
     const fid = crypto.randomUUID();
     return this.operation(
       session,
@@ -1379,6 +1412,27 @@ export class FileTransferService {
       message.fid,
       signal,
       async (op) => {
+        const offer = this.deps.messages.messages.findLast(
+          (item) =>
+            item.type === "file" &&
+            !item.room &&
+            item.fid === message.fid &&
+            item.client === session.clientId &&
+            item.target === session.targetClientId,
+        );
+        if (
+          !offer ||
+          offer.type !== "file" ||
+          offer.fileSize !== message.fileSize ||
+          offer.fileName !== message.fileName ||
+          offer.chunkSize !== message.chunkSize ||
+          offer.lastModified !== message.lastModified ||
+          (offer.mimeType ?? "") !==
+            (message.mimeType ?? "")
+        )
+          throw new Error(
+            "This file was not sent to this peer",
+          );
         const cache = this.cache(op, message.fid);
         const info = await this.step(op, cache.getInfo());
         this.assertPrivateCache(info);

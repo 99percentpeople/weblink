@@ -35,6 +35,8 @@ export function MeetingTile(props: {
   stream?: MediaStream | null;
   placeholder?: boolean;
   local?: boolean;
+  audioMuted?: boolean;
+  onToggleAudio?: () => void;
   pinned: boolean;
   onPin(): void;
   onStop?: () => void;
@@ -124,6 +126,8 @@ export function MeetingTile(props: {
           <TileActions
             fullscreen={fullscreen}
             local={props.local}
+            audioMuted={props.audioMuted}
+            onToggleAudio={props.onToggleAudio}
             pinned={props.pinned}
             onPin={props.onPin}
             onStop={props.onStop}
@@ -138,22 +142,16 @@ export function MeetingTile(props: {
 function TileActions(props: {
   fullscreen: ReturnType<typeof createFullscreen>;
   local?: boolean;
+  audioMuted?: boolean;
+  onToggleAudio?: () => void;
   pinned: boolean;
   onPin(): void;
   onStop?: () => void;
   name: string;
 }) {
   const { videoRef, audioTracks } = useVideoDisplay();
-  const [muted, setMuted] = createSignal(false);
+  const muted = () => props.audioMuted === true;
   const fullscreen = props.fullscreen;
-  createEffect(() => {
-    if (props.local) return;
-    const tracks = audioTracks();
-    setMuted(
-      tracks.length > 0 &&
-        tracks.every((track) => !track.enabled),
-    );
-  });
   return (
     <div class="meeting-tile-actions">
       <Show when={props.onStop}>
@@ -171,7 +169,13 @@ function TileActions(props: {
           <X />
         </button>
       </Show>
-      <Show when={!props.local && audioTracks().length}>
+      <Show
+        when={
+          !props.local &&
+          audioTracks().length &&
+          props.onToggleAudio
+        }
+      >
         <button
           type="button"
           class="meeting-icon-button"
@@ -186,13 +190,7 @@ function TileActions(props: {
               ? t("common.action.unmute")
               : t("common.action.mute")
           }
-          onClick={() => {
-            const next = !muted();
-            audioTracks().forEach((track) => {
-              track.enabled = !next;
-            });
-            setMuted(next);
-          }}
+          onClick={() => props.onToggleAudio?.()}
         >
           <Show when={muted()} fallback={<Volume2 />}>
             <VolumeX />

@@ -1,3 +1,4 @@
+import { sharedFilesHref } from "@/libs/application/home-navigation";
 import {
   createEffect,
   createMemo,
@@ -341,7 +342,7 @@ export function ConversationSidebar(
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         as={A}
-                        href={`/client/${encodeURIComponent(peer())}/sync`}
+                        href={sharedFilesHref(peer())}
                         class="gap-2"
                       >
                         <FolderSync class="size-4" />

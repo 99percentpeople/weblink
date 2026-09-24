@@ -61,6 +61,8 @@ vi.mock("@/libs/state/app-state-context", () => ({
     localStream: () => appState.session.localStream,
     activeRoomConversationId: () =>
       appState.roomStatus.roomId,
+    roomChatCapabilities: () => ({}),
+    roomFileCapabilities: () => ({}),
     leaveRoom: fixture.leave,
   }),
 }));
@@ -85,6 +87,9 @@ vi.mock("@/routes/home/components/audio-player", () => ({
     hasAudio: () => true,
     playState: () => true,
     setPlay: fixture.sound,
+    hasPeerAudio: () => false,
+    isPeerMuted: () => false,
+    setPeerMuted: vi.fn(),
   }),
 }));
 vi.mock("@/routes/home/components/video-display", () => ({
@@ -190,7 +195,7 @@ function setup(
         component={() => <div>Meeting page</div>}
       />
       <Route
-        path="/client/peer/sync"
+        path="/diagnostics"
         component={() => <div>Sync page</div>}
       />
     </MemoryRouter>
@@ -294,7 +299,7 @@ describe("meeting PiP across routes and documents", () => {
   it("returns to Home to join from an unjoined preview window", async () => {
     setAppState("roomStatus", "roomId", null);
     setup();
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     session.controls.toggle();
     await waitFor(() =>
       expect(session.pip.active()).toBe(true),
@@ -363,7 +368,7 @@ describe("meeting PiP across routes and documents", () => {
       document.dispatchEvent(new Event("visibilitychange"));
       mediaAction!();
     }
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Sync page",
@@ -463,7 +468,7 @@ describe("meeting PiP across routes and documents", () => {
       expect(
         current().window.document.body.contains(view),
       ).toBe(true);
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Sync page",
@@ -560,7 +565,7 @@ describe("meeting PiP across routes and documents", () => {
     session.controls.setAutomatic(true);
     navigate("/#details");
     expect(f.requestWindow).not.toHaveBeenCalled();
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     expect(f.requestWindow).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(session.pip.active()).toBe(true),
@@ -764,7 +769,7 @@ describe("meeting PiP across routes and documents", () => {
     expect(session.pip.active()).toBe(false);
     expect(f.requestWindow).toHaveBeenCalledTimes(2);
     session.controls.setAutomatic(false);
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Sync page",
@@ -830,7 +835,7 @@ describe("meeting PiP across routes and documents", () => {
     });
     const f = setup(denied);
     session.controls.setAutomatic(true);
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     await waitFor(() =>
       expect(fixture.error).toHaveBeenCalledOnce(),
     );
@@ -851,7 +856,7 @@ describe("meeting PiP across routes and documents", () => {
           resolve = done;
         }),
     );
-    navigate("/client/peer/sync");
+    navigate("/diagnostics");
     await waitFor(() =>
       expect(document.body.textContent).toContain(
         "Sync page",

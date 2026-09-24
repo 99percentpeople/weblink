@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { createMemo, createSignal, Show } from "solid-js";
 import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
@@ -92,9 +93,7 @@ export function DirectFileMessageCard(props: {
       }
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : String(error),
+        userErrorMessage(error, "errors.file_failed"),
       );
     } finally {
       setPending(false);

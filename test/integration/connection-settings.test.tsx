@@ -140,7 +140,7 @@ describe("connection settings", () => {
     });
     expect(appState.options.servers.turns).toEqual([turn]);
     expect(toast.error).toHaveBeenCalledWith(
-      expect.stringContaining("should be 4 parts"),
+      "errors.ice_config_line",
     );
   });
 
@@ -175,7 +175,7 @@ describe("connection settings", () => {
       report as () => JSX.Element,
     );
     expect(container.textContent).toContain(
-      "stun:example:available",
+      "stun:example:setting.connection.available",
     );
     fireEvent.click(turnCheck);
     await waitFor(() =>
@@ -196,7 +196,7 @@ describe("connection settings", () => {
     fireEvent.click(button);
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "diagnostics failed",
+        "errors.ice_unavailable",
       ),
     );
     expect(button).not.toBeDisabled();

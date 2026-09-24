@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createMemo,
   createSignal,
@@ -59,9 +60,7 @@ export function RoomDeliverySummary(props: {
       await state.retryMessage(props.message);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : String(error),
+        userErrorMessage(error, "errors.unexpected"),
       );
     } finally {
       setRetrying(false);

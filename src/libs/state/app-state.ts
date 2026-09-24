@@ -29,7 +29,9 @@ export type ClientServiceStatus =
 
 export type RoomStatus = {
   roomId: RoomID | null;
-  profile: ClientInfo | null;
+  profile: TransferClient | null;
+  /** Start of this local room session, independent of mounted views. */
+  joinedAt: number | null;
 };
 
 export interface ClientInfo extends TransferClient {
@@ -299,6 +301,7 @@ export const createInitialAppState = (): AppState => ({
   roomStatus: {
     roomId: null,
     profile: null,
+    joinedAt: null,
   },
   profile: {
     roomId: "",

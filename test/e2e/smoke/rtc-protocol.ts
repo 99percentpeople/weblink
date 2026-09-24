@@ -123,7 +123,18 @@ async function main() {
   });
   const catalog = new FileCatalogIndex();
   for (const file of files)
-    catalog.update(file.id, { ...file, isComplete: true });
+    catalog.update(file.id, {
+      ...file,
+      isComplete: true,
+      isShared: true,
+      sharedReference: true,
+      fingerprint: {
+        version: 1,
+        algorithm: "blake3-256",
+        digest: "0".repeat(64),
+        size: file.fileSize,
+      },
+    });
   b.protocol.handle("request-storage", ({ message }) =>
     catalog.query(message),
   );
@@ -220,6 +231,14 @@ async function main() {
         fileName: `${id}.txt`,
         fileSize: i + 1,
         isComplete: true,
+        isShared: true,
+        sharedReference: true,
+        fingerprint: {
+          version: 1,
+          algorithm: "blake3-256",
+          digest: i.toString(16).padStart(64, "0"),
+          size: i + 1,
+        },
       });
     }
     const view = new RemoteFileCatalog(

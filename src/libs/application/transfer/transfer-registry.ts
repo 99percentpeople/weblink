@@ -10,7 +10,12 @@ import type { ActiveFileTransfer } from "./file-transfer-state";
 
 export interface TransferRegistration {
   session: PeerSession;
-  messageId: string;
+  messageId?: string;
+  taskId?: string;
+  lifecycle?: Pick<
+    TransferRegistryOptions,
+    "bind" | "complete" | "failed"
+  >;
   cache: ChunkCache;
   mode: TransferMode;
   info?: FileMetaData;
@@ -42,6 +47,10 @@ export interface TransferRun extends ActiveFileTransfer {
 }
 type Entry = {
   run: TransferRun;
+  lifecycle: Pick<
+    TransferRegistryOptions,
+    "bind" | "complete" | "failed"
+  >;
   controller: AbortController;
   incomingChannel: boolean;
   initialized: boolean;
@@ -76,7 +85,7 @@ export class TransferRegistry {
     return JSON.stringify([
       run.session.clientId,
       run.session.targetClientId,
-      run.messageId,
+      run.messageId ?? run.taskId,
     ]);
   }
 
@@ -180,11 +189,13 @@ export class TransferRegistry {
       session: input.session,
       fileId: input.cache.id,
       messageId: input.messageId,
+      taskId: input.taskId,
       transferer,
       signal: controller.signal,
     };
     const entry: Entry = {
       run,
+      lifecycle: input.lifecycle ?? this.options,
       controller,
       incomingChannel: input.incomingChannel,
       initialized: false,
@@ -204,7 +215,7 @@ export class TransferRegistry {
     deliveries.add(this.deliveryKey(run));
     this.unfinishedDeliveries.set(input.cache, deliveries);
     // Bind message observers before cleanup listeners; final events must reach the correct message.
-    this.options.bind(run, controller.signal);
+    entry.lifecycle.bind(run, controller.signal);
     transferer.addEventListener(
       "ready",
       () => {
@@ -344,7 +355,7 @@ export class TransferRegistry {
     try {
       await entry.flushing;
       if (!this.isCurrent(run)) return;
-      await this.options.complete(run, run.signal);
+      await entry.lifecycle.complete(run, run.signal);
       if (!this.isCurrent(run)) return;
       const deliveries = this.unfinishedDeliveries.get(
         run.transferer.cache,
@@ -356,6 +367,7 @@ export class TransferRegistry {
         );
       if (
         run.transferer.mode === TransferMode.Send &&
+        !!run.messageId &&
         this.options.automaticCacheDeletion()
       ) {
         const info = await run.transferer.cache.getInfo();
@@ -379,7 +391,7 @@ export class TransferRegistry {
       error instanceof Error
         ? error
         : new Error(String(error));
-    this.options.failed(run, failure);
+    this.entry(run)!.lifecycle.failed(run, failure);
     this.destroy(run, failure);
   }
 

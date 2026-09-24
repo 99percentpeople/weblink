@@ -175,6 +175,46 @@ which peer completes first; a successful retry/resume of the same delivery
 releases that requirement. Explicit user cache deletion remains distinct
 from automatic deletion and stops affected active runs.
 
+## Local sharing and directory tasks
+
+Sharing belongs to a local content record, so identical bytes and all chat
+references project the same `isShared` value. Imports, newly received bytes and
+pre-upgrade caches default to private; duplicate imports or receives preserve
+existing local state. Remote metadata never controls this flag.
+
+A new private, room, forwarded or library-selected send enables sharing after
+file preparation and local message creation, before network delivery. Retry and
+resume preserve the current flag, and later network failure does not undo a new
+send's sharing choice. An independent retained reference keeps shared bytes alive
+through message deletion and automatic attachment cleanup. Unsharing retains
+local bytes; explicit deletion removes every reference and the directory item.
+The shared list is local and persists across rooms.
+
+The local shared-file header can add existing library files or import local files
+and folders. These explicit additions enable sharing only after a successful
+import; folder selection uses the application's existing ZIP packaging flow.
+Normal library imports remain private. Directory rows observe the same download
+tasks as the task list, including progress, pause/resume, cancellation and completion, so
+returning to a member's list restores the current transfer state.
+Refreshes keep the current rows and selection visible until the replacement page
+arrives; downloads from stale rows are disabled until permission is revalidated.
+Cancellation is terminal and removes that receive's partial cache and file reference.
+Pause retains partial data for resume. Cancelling one recipient keeps a source
+needed by another authorized recipient alive, then releases the cancelled reference
+once the remaining recipients finish or detach. Other local references remain intact.
+Getting a cancelled file again creates a new task. Completed local content is matched
+by fingerprint, including different remote IDs or names: rows show it as acquired,
+bulk selection skips it, and service calls create no additional task or reference.
+Deleting the local content makes it retrievable again.
+
+Directory fetches use `shared-files-v1` and the version-3 catalog described in
+[P2P_PROTOCOL.md](P2P_PROTOCOL.md). Their task lifecycle is independent of message
+bindings, while sharing the existing transfer registry, verification, range resume
+and content receive coordinator. Existing verified local content needs no remote
+request; a new or resumed transfer always checks current remote permission. Closing or switching the sidebar cancels directory requests
+without cancelling already started transfers. Directory tasks are kept for the
+application session; local completed files persist in IndexedDB.
+
 ## Testing
 
 File-transfer unit/integration coverage and the real-Chromium transfer smoke

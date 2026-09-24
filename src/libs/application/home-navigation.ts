@@ -14,8 +14,14 @@ export function isHomePath(path: string): boolean {
       "/setting",
     ].includes(normalized) ||
     /^\/(?:chat\/)?conversation\/[^/]+$/.test(normalized) ||
-    /^\/(?:chat\/)?client\/[^/]+\/chat$/.test(normalized)
+    /^\/(?:chat\/)?client\/[^/]+\/(?:chat|sync)$/.test(
+      normalized,
+    )
   );
+}
+
+export function sharedFilesHref(peerId: string): string {
+  return `/?panel=files&member=${encodeURIComponent(peerId)}`;
 }
 
 export function conversationHref(id: string): string {
@@ -36,11 +42,16 @@ export function legacyHomeHref(
   const conversation = path.match(
     /^\/(?:chat\/)?conversation\/([^/]+)$/,
   );
+  const shared = path.match(/^\/client\/([^/]+)\/sync$/);
   const client = path.match(
     /^\/(?:chat\/)?client\/([^/]+)\/chat$/,
   );
   try {
-    if (conversation)
+    if (shared) {
+      search.set("panel", "files");
+      search.set("member", decodeURIComponent(shared[1]));
+      search.delete("conversation");
+    } else if (conversation)
       search.set(
         "conversation",
         decodeURIComponent(conversation[1]),

@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { Match, Show, Switch } from "solid-js";
 import { Check, Download, Pause, Play } from "lucide-solid";
 import { t } from "@/i18n";
@@ -144,7 +145,14 @@ export function FileTransferDetails(props: {
     <span
       class="flex min-w-0 items-center gap-x-2 overflow-hidden text-xs
         whitespace-nowrap tabular-nums"
-      title={props.error}
+      title={
+        props.error
+          ? userErrorMessage(
+              props.error,
+              "errors.file_failed",
+            )
+          : undefined
+      }
       data-slot="file-transfer-details"
     >
       <span

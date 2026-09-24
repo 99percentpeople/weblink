@@ -40,6 +40,9 @@ export interface ClientServiceInitOptions {
   password: string | null;
   client: Client;
   websocketUrl?: string;
+  onNotice?(
+    notice: "room-unprotected" | "password-hash-failed",
+  ): void;
 }
 
 export interface ClientService {

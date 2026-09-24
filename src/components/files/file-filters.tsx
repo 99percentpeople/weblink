@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { Search } from "lucide-solid";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,13 @@ import type { FileKind } from "@/libs/application/files/library-query";
 import { t } from "@/i18n";
 
 export function FileFilters(props: {
+  sharing?: "all" | "shared" | "private";
+  onSharing?(value: "all" | "shared" | "private"): void;
   search: string;
   onSearch(value: string): void;
   kind: FileKind;
   onKind(value: FileKind): void;
-  status: "all" | "complete" | "incomplete";
+  status?: "all" | "complete" | "incomplete";
   onStatus(value: "all" | "complete" | "incomplete"): void;
   sort: "recent" | "name" | "size";
   onSort(value: "recent" | "name" | "size"): void;
@@ -40,36 +42,68 @@ export function FileFilters(props: {
             aria-label={t("file_library.search")}
           />
         </div>
-        <Select
-          options={
-            ["all", "complete", "incomplete"] as const
-          }
-          value={props.status}
-          onChange={(value) =>
-            value && props.onStatus(value)
-          }
-          itemComponent={(item) => (
-            <SelectItem item={item.item}>
-              {t(
-                `file_library.status_${item.item.rawValue}`,
-              )}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger
-            class="w-32"
-            aria-label={t("file_library.status")}
+        <Show when={props.sharing}>
+          <Select
+            options={["all", "shared", "private"] as const}
+            value={props.sharing}
+            onChange={(value) =>
+              value && props.onSharing?.(value)
+            }
+            itemComponent={(item) => (
+              <SelectItem item={item.item}>
+                {t(
+                  `shared_files.filter_${item.item.rawValue}`,
+                )}
+              </SelectItem>
+            )}
           >
-            <SelectValue<string>>
-              {(state) =>
-                t(
-                  `file_library.status_${state.selectedOption() as typeof props.status}`,
-                )
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
+            <SelectTrigger
+              class="w-32"
+              aria-label={t("shared_files.filter")}
+            >
+              <SelectValue<string>>
+                {(state) =>
+                  t(
+                    `shared_files.filter_${state.selectedOption()}`,
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+        </Show>
+        <Show when={props.status}>
+          <Select
+            options={
+              ["all", "complete", "incomplete"] as const
+            }
+            value={props.status}
+            onChange={(value) =>
+              value && props.onStatus(value)
+            }
+            itemComponent={(item) => (
+              <SelectItem item={item.item}>
+                {t(
+                  `file_library.status_${item.item.rawValue}`,
+                )}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger
+              class="w-32"
+              aria-label={t("file_library.status")}
+            >
+              <SelectValue<string>>
+                {(state) =>
+                  t(
+                    `file_library.status_${state.selectedOption() as typeof props.status}`,
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+        </Show>
         <Select
           options={["recent", "name", "size"] as const}
           value={props.sort}

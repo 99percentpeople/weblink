@@ -1,7 +1,6 @@
 {
   "tasks": {
     "title": "Tasks",
-    "description": "File transfers and peer speed tests in one place. Closing this list or changing pages does not stop a running task.",
     "retention_note": "Speed-test history keeps the latest 50 runs while this page is open. Refreshing or closing the browser page ends live connections. Clearing history does not delete files or chat messages.",
     "count": "{{active}} active · {{total}} total",
     "active_count": "{{count}} active tasks",
@@ -9,21 +8,9 @@
     "local": "This device",
     "filters_label": "Filter tasks",
     "filters": {
-      "all": "All",
-      "active": "Active",
-      "file": "Files",
-      "speed": "Speed tests",
-      "finished": "Finished",
       "status": "Status",
       "type": "Type",
       "no_results": "No matching options"
-    },
-    "columns": {
-      "task": "Task",
-      "status": "Status",
-      "detail": "Progress / result",
-      "time": "Time",
-      "actions": "Actions"
     },
     "kinds": {
       "file-send": "Send file",
@@ -85,7 +72,6 @@
     }
   },
   "setting": {
-    "title": "Setting",
     "appearance": {
       "title": "Appearance",
       "theme": {
@@ -120,8 +106,7 @@
         }
       },
       "background_image_opacity": {
-        "title": "Wallpaper Opacity",
-        "description": "Change the opacity of the background image"
+        "title": "Wallpaper Opacity"
       },
       "wake_lock": {
         "title": "Keep Screen On",
@@ -145,7 +130,8 @@
       "share_servers_with_others": {
         "title": "Share Servers with Others",
         "description": "Share the STUN and TURN servers with others when generating the join URL"
-      }
+      },
+      "available": "Available"
     },
     "sender": {
       "title": "File Sender Settings",
@@ -155,16 +141,13 @@
         "unsupported": "Clipboard is not supported, please use in a secure context"
       },
       "chunk_size": {
-        "title": "Chunk Size",
-        "description": "The size of each chunk of the sender"
+        "title": "Chunk Size"
       },
       "block_size": {
-        "title": "Block Size",
-        "description": "The size of each block of the sender"
+        "title": "Block Size"
       },
       "max_buffer_amount": {
-        "title": "Max Buffer Amount",
-        "description": "The max buffer amount of the sender"
+        "title": "Max Buffer Amount"
       },
       "ordered": {
         "title": "Ordered",
@@ -191,32 +174,7 @@
         "description": "Automatic download after receiving"
       }
     },
-    "media": {
-      "title": "Media Settings",
-      "description": "Change the media settings of the app",
-      "camera": {
-        "title": "Camera",
-        "description": "Change the camera of the media"
-      },
-      "microphone": {
-        "title": "Microphone",
-        "description": "Change the microphone of the media"
-      },
-      "speaker": {
-        "title": "Speaker",
-        "description": "Change the speaker of the media"
-      },
-      "request_permission": {
-        "camera_title": "Request Camera Permission",
-        "microphone_title": "Request Microphone Permission",
-        "camera_success": "Camera permission granted",
-        "microphone_success": "Microphone permission granted",
-        "description": "Request media permission to use the media settings, if you can't select the media devices after requesting permission, please try to refresh the page",
-        "fallback_description": "Please allow the browser to use the camera and microphone"
-      }
-    },
     "about": {
-      "title": "About",
       "reset_options": "Reset preferences",
       "clear_service_worker_cache": "Clear app cache",
       "copy_version": "Copy version info",
@@ -230,7 +188,6 @@
       "cache_description": "Remove cached page resources to resolve loading or update problems. Chat history, cached files and preferences are kept."
     },
     "advanced_settings": {
-      "title": "Advanced Settings",
       "advanced_connection": {
         "title": "Advanced Connection Settings",
         "relay_only": {
@@ -249,10 +206,6 @@
         "video_max_bitrate": {
           "title": "Video Max Bitrate",
           "description": "Max video bitrate of the stream"
-        },
-        "audio_max_bitrate": {
-          "title": "Audio Max Bitrate",
-          "description": "Max audio bitrate of the stream"
         },
         "degradation_preference": {
           "title": "Degradation Preference",
@@ -273,7 +226,6 @@
   },
   "cache": {
     "title": "File Cache",
-    "search_input": "Search for cached files...",
     "usage": "{{value}} used, {{max}} total, {{remaining}} remaining"
   },
   "404": {
@@ -283,24 +235,12 @@
   },
   "client": {
     "scroll_to_bottom": "Scroll to bottom",
-    "client_list": {
-      "context_menu": {
-        "chat": "Chat",
-        "sync": "File Sync"
-      }
-    },
     "menu": {
       "connect": "Connect",
-      "connection_status": "Connection Status",
-      "delete_client": "Delete Client",
-      "clipboard": "Clipboard",
-      "options": "Options",
-      "redirect": "Redirect after connection"
+      "clipboard": "Clipboard"
     },
     "config": {
       "open": "Client settings",
-      "title": "Client settings for {{name}}",
-      "description": "Manage connection behavior, sharing permissions, and common actions for this client.",
       "preferences": "Client settings",
       "preferences_description": "These settings apply only to this client.",
       "redirect": {
@@ -311,68 +251,31 @@
         "title": "Provide file list",
         "description": "Allow this client to enumerate completed files in the local cache. When disabled, file-list requests return an empty list; chat, direct file sends, and existing transfers are unaffected."
       },
-      "actions": "Client actions",
-      "actions_description": "Inspect the connection or perform actions for this client."
+      "actions": "Client actions"
     },
     "index": {
-      "setup_room": "Create or Join Room",
-      "edit_room": "Edit Room Info",
-      "join_room": "Join Room",
-      "share_room": "Share Room",
-      "leave_room": "Leave Room",
-      "mobile_tip": "Tip: Please tap on the avatar to share room profiles on mobile device",
-      "before_join": {
-        "title": "Create or connect to a room",
-        "description": "Please click the button to create a new room or connect to an existing room"
-      },
-      "connecting": {
-        "title": "Connecting...",
-        "description": "Please wait for the connection to be established"
-      },
-      "after_join": {
-        "title": "Joined Room {{room}}",
-        "description": "Share the room profile to invite others to join the room",
-        "tip": "tip: Tap the avatar to share the room profile on mobile device"
-      }
+      "edit_room": "Edit Room Info"
     },
     "message_editor": {
-      "placeholder": "Type a message…",
-      "mobile_placeholder": "Send message"
+      "placeholder": "Type a message…"
     },
     "message_error": "Error occurred",
     "sync": {
       "title": "File Sync",
       "menu": {
-        "refresh": "Refresh",
         "chat": "Chat"
-      },
-      "search_input": "Search remote filenames…",
-      "loading": "Loading directory…",
-      "load_failed": "Could not refresh the directory",
-      "sharing_disabled": "This client is not providing its file list.",
-      "disconnected": {
-        "title": "Client not connected",
-        "description": "Shared files will load automatically once this client connects."
       }
+    },
+    "chat": {
+      "compress_folder": "Compress folder"
     }
   },
   "video": {
-    "title": "Screen Sharing",
-    "device": {
-      "screen": "Screen",
-      "camera": "Camera"
-    },
-    "no_stream": "No Stream",
-    "float": "Float",
     "global_mute": "Global Mute",
     "global_unmute": "Global Unmute",
-    "reset_layout": "Reset Layout",
-    "compact_layout": "Compact Layout",
     "loading_state": {
       "initial": "Initializing...",
       "loading": "Loading...",
-      "canplay": "Ready to play",
-      "playing": "Playing",
       "waiting": "Buffering...",
       "stalled": "Connection interrupted, retrying...",
       "error": "Failed to load",
@@ -398,7 +301,6 @@
     },
     "join_form": {
       "title": "Connection Setup",
-      "description": "Set your profile and room information.",
       "profile_description": "Set the profile shown to other people in the room.",
       "room_description": "Set the room you want to create or join.",
       "autosave_hint": "Changes save automatically. Select Connect to join the room.",
@@ -411,8 +313,7 @@
         "description": "Generated automatically to identify this client"
       },
       "room_id": {
-        "title": "Room ID",
-        "description": "The room ID of the room"
+        "title": "Room ID"
       },
       "name": "Name",
       "avatar": "Avatar",
@@ -430,29 +331,14 @@
       "auto_join": "Auto Join Next Time"
     },
     "file_table": {
-      "columns": {
-        "name": "Name",
-        "size": "Size",
-        "last_modified": "Last Modified",
-        "status": "Status",
-        "created_at": "Created At",
-        "mime_type": "MIME Type",
-        "progress": "Progress"
-      },
       "status": {
-        "not_started": "Not Started",
-        "stopped": "Stopped",
-        "transferring": "Transferring",
-        "merging": "Merging",
-        "complete": "Complete",
-        "incomplete": "Incomplete"
+        "merging": "Merging"
       },
       "filter": {
         "clear_filters": "Clear Filters",
         "selected": "Selected"
       },
-      "toggle_columns": "Toggle Columns",
-      "no_data": "No Data"
+      "toggle_columns": "Toggle Columns"
     },
     "confirm_delete_files_dialog": {
       "title": "Delete Files",
@@ -513,8 +399,7 @@
     },
     "send_item_preview_dialog": {
       "title": "Send Item",
-      "description": "Are you sure you want to send file {{fileName}} to {{name}}?",
-      "unsupported_file_type": "Unsupported file type"
+      "description": "Are you sure you want to send file {{fileName}} to {{name}}?"
     },
     "status": {
       "online": "Online",
@@ -524,10 +409,7 @@
       "leave": "Leave"
     },
     "scan_qrcode_dialog": {
-      "title": "Share Room Profile",
       "description": "Scan the code or share the link to join this room.",
-      "tip": "Right-click or long press to copy the link",
-      "invite": "Invite you to join the room {{room}}",
       "link": "Invitation link",
       "shared_by": "Shared by {{name}}",
       "save": "Save QR code",
@@ -535,19 +417,15 @@
       "no_room": "Set up a room to share its QR code."
     },
     "action": {
-      "apply": "Apply",
       "copy": "Copy",
       "copy_link": "Copy Link",
       "copy_file_name": "Copy File Name",
       "copy_as_png": "Copy as PNG",
       "copy_as_svg": "Copy as SVG",
-      "paste": "Paste",
       "delete": "Delete",
       "download": "Download",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "actions": "Actions",
-      "open": "Open",
       "close": "Close",
       "change": "Change",
       "preview": "Preview",
@@ -557,29 +435,20 @@
       "asc": "Asc",
       "desc": "Desc",
       "hide": "Hide",
-      "set_as_background": "Set as Background",
-      "test": "Test",
       "share": "Share",
       "forward": "Forward",
-      "request_download": "Request Download",
-      "resume": "Resume",
       "add_folder": "Add Folder",
       "check_availability": "Check Availability",
       "reload": "Reload",
       "mute": "Mute",
       "unmute": "Unmute",
-      "select": "Select",
       "settings": "Settings",
       "fullscreen": "Fullscreen",
       "exit_fullscreen": "Exit Fullscreen",
-      "switch_fullscreen": "Switch Fullscreen",
       "picture_in_picture": "PIP Mode",
       "exit_picture_in_picture": "Exit PIP Mode",
-      "switch_picture_in_picture": "Switch PIP Mode",
-      "stop": "Stop",
-      "pause": "Pause",
       "continue": "Continue",
-      "restore": "Restore"
+      "retry": "Retry"
     },
     "notification": {
       "copy_success": "Copy success",
@@ -591,7 +460,9 @@
       "new_version_available": "New version available",
       "share_failed": "Share failed, error: {{error}}",
       "clear_cache_success": "App cache cleared",
-      "clear_cache_failed": "Could not clear app cache: {{error}}"
+      "clear_cache_failed": "Could not clear app cache: {{error}}",
+      "copy_failed": "Unable to copy. Check clipboard permissions and try again.",
+      "room_unprotected": "This room does not require a password."
     },
     "forward_dialog": {
       "title": "Forward items",
@@ -601,10 +472,7 @@
     "about_dialog": {
       "title": "About Weblink",
       "description1": "Weblink is a browser-based P2P chat, file transfer, file synchronization and screen sharing tool.",
-      "description2": "It provides progress display, resume, folder transfer, clipboard transfer, file cache, screen sharing, and other features.",
-      "description3": "This project is a pure Web application, no installation is required. If you encounter any instability, please try to refresh the page. Information will not be lost.",
       "disclaimer": "Disclaimer: This application uses P2P technology, all data is stored in the user's client (browser), the server does not store any user data, only responsible for forwarding signaling. Users should bear the risks of using it at their own risk, and the developers are not responsible for any data loss or privacy breaches.",
-      "star_repo": "If you like this project, please give me a ⭐ on GitHub!",
       "version": "Version",
       "author": "Author",
       "license": "License",
@@ -614,22 +482,13 @@
       "title": "Media Selection",
       "screen": "Screen",
       "media_device": "Media Device",
-      "camera": "Camera",
-      "microphone": "Microphone",
-      "speaker": "Speaker",
-      "enable_screen": "Enable Screen",
       "enable_camera": "Enable Camera",
       "enable_microphone": "Enable Microphone",
-      "enable_speaker": "Enable Speaker",
       "enable_system_audio": "Enable System Audio",
       "enable_program_audio": "Enable Program Audio",
       "obs_audio_setup_tip": "OBS + VB-CABLE setup:\n1. OBS Settings → Audio → Advanced → Monitoring Device: CABLE Input.\n2. OBS Edit → Advanced Audio Properties → Audio Monitoring: Monitor and Output.\n3. In Weblink, select CABLE Output for Program Audio.",
-      "no_camera_available": "No camera available",
-      "no_microphone_available": "No microphone available",
-      "no_speaker_available": "No speaker available",
       "request_camera_permission": "Request Camera Permission",
       "request_microphone_permission": "Request Microphone Permission",
-      "select_speaker": "Select Speaker (Auto)",
       "select_system_audio_source": "Select System Audio Source (Auto)",
       "select_program_audio": "Select Program Audio Input (Auto)",
       "select_microphone": "Select Microphone (Auto)",
@@ -640,7 +499,6 @@
       "preview": "Preview",
       "apply_constraints": "Apply Media Constraints",
       "apply_constraints_description": "Some constraints may not be supported to change dynamically, please select a new stream to apply",
-      "preset_constraints": "Preset Media Constraints",
       "microphone_constraints": "Microphone Constraints",
       "speaker_constraints": "System / Program Audio Constraints",
       "not_support_display_media": "Your browser does not support display media",
@@ -658,12 +516,7 @@
       }
     },
     "nav": {
-      "chat": "Chat",
-      "file_cache": "File Cache",
-      "screen_sharing": "Meeting",
       "settings": "Settings",
-      "join_room": "Join Room",
-      "leave_room": "Leave Room",
       "share_link": "Share Link"
     },
     "timeago": {
@@ -689,6 +542,10 @@
       "page": "{{page}} / {{count}}",
       "previous": "Previous page",
       "next": "Next page"
+    },
+    "show_more": "Show more",
+    "clipboard_history": {
+      "title": "Clipboard history"
     }
   },
   "conversations": {
@@ -729,10 +586,8 @@
     "members_online": "{{count}} members online",
     "local_history": "History in this browser",
     "load_earlier": "Load earlier messages",
-    "room_empty": "Messages are shared with online members and saved in your browser.",
     "room_inactive": "Join this room to send messages. Opening its history does not switch your current room.",
     "composer_offline": "Not connected. Connect to this peer to send messages.",
-    "room_alone": "Waiting for another member to connect…",
     "room_message": "Message this room",
     "send": "Send message",
     "previous_identity": "This history belongs to your previous local identity. Open the current direct conversation to send messages.",
@@ -806,7 +661,14 @@
     "members": "People",
     "info": "Info",
     "select_conversation": "Choose a conversation from the list, or join a room to chat.",
-    "members_hint": "People in this room and their connection status",
+    "members_hint": "Click a member to chat privately. Muting a peer or the room only affects playback on this device.",
+    "mute_local_audio": "Mute my outgoing audio",
+    "unmute_local_audio": "Unmute my outgoing audio",
+    "mute_room_audio": "Mute room audio",
+    "unmute_room_audio": "Unmute room audio",
+    "open_private_chat": "Chat with {{name}}",
+    "mute_member": "Mute {{name}} on this device",
+    "unmute_member": "Unmute {{name}} on this device",
     "status_online": "Online",
     "status_offline": "Offline",
     "status_connecting": "Connecting",
@@ -852,13 +714,15 @@
     "permission_needed": "Permission is needed to list devices.",
     "device_disabled": "Device access is blocked",
     "permission_disabled_hint": "Allow access in browser site permissions or system privacy settings, then refresh the device list.",
-    "permission_requesting": "Requesting access…",
     "output_permission_hint": "This browser needs microphone permission to list associated speakers.",
+    "output_default_only": "This browser needs an available microphone and microphone access to list more speakers. You can still use the system default speaker or change the output in system settings.",
     "expand_chat": "Expand sidebar",
     "collapse_chat": "Use compact sidebar",
-    "maximize_sidebar": "Maximize sidebar",
-    "restore_sidebar": "Restore sidebar",
-    "return_to_stage": "Return to meeting"
+    "return_to_stage": "Return to meeting",
+    "files": "Files",
+    "online_duration": "Time in this session",
+    "chat_support": "Members supporting group chat",
+    "file_support": "Members supporting file sharing"
   },
   "room_dialog": {
     "actions": "Room actions",
@@ -870,8 +734,6 @@
     "devices": "Meeting devices",
     "devices_hint": "Device selections apply the next time you enable them from the meeting toolbar. Granting access briefly opens and releases a device to list it, without publishing meeting audio or video.",
     "online_members": "Online members",
-    "chat_support": "Members supporting group chat",
-    "file_support": "Members supporting file sharing",
     "file_hint": "File offers go to online members. Files transfer when requested or when small-file auto-download is enabled. The sender must remain online and keep the local file.",
     "inactive_devices": "Join this room to configure its meeting devices.",
     "settings": "Room settings",
@@ -936,9 +798,77 @@
     "references": "Attachment references",
     "fingerprint": "Content fingerprint",
     "legacy": "Fingerprint calculated on first send",
-    "identifying": "Identifying file",
     "local_completion": "Already on this device; transfer skipped",
     "related_messages": "Related messages",
     "peer_unavailable": "The recipient is offline. Reconnect before sending files."
+  },
+  "shared_files": {
+    "add": "Add files",
+    "from_library": "Choose from library",
+    "upload_files": "Upload files",
+    "upload_folder": "Upload folder",
+    "added": "Files added to your shared list.",
+    "title": "Shared files",
+    "mine": "My shared files",
+    "shared": "Shared",
+    "share": "Share",
+    "unshare": "Stop sharing",
+    "filter": "Sharing status",
+    "filter_all": "All files",
+    "filter_shared": "Shared",
+    "filter_private": "Not shared",
+    "choose": "Share files from library",
+    "choose_hint": "Selected files will be available in your shared list in every room.",
+    "share_count": "Share {{count}} files",
+    "get": "Get",
+    "get_count": "Get selected ({{count}})",
+    "search": "Search shared files",
+    "refresh": "Refresh",
+    "asc": "Ascending",
+    "desc": "Descending",
+    "disconnected": "This member is not connected.",
+    "unsupported": "This member does not support shared files.",
+    "disabled": "This member has not enabled shared file access for you.",
+    "empty": "No shared files found.",
+    "loading": "Loading shared files…",
+    "error": "Could not load shared files.",
+    "select_all": "Select this page",
+    "previous": "Previous",
+    "next": "Next",
+    "page_size": "Files per page",
+    "select_member": "Select a member to browse shared files.",
+    "back": "Back to members"
+  },
+  "errors": {
+    "unexpected": "The action failed. Please try again.",
+    "connection_failed": "Unable to connect to the room server. Check your network and server settings, then try again.",
+    "connection_timeout": "Connecting to the room server timed out. Check your network and try again.",
+    "connection_closed": "The connection was interrupted. Reconnect and try again.",
+    "connection_config": "The room server address or configuration is invalid. Check the connection settings.",
+    "connection_response": "The server returned an invalid response. Check its address or update the app and server.",
+    "password_required": "This room requires a password. Enter it and try again.",
+    "incorrect_password": "The room password is incorrect. Check it and try again.",
+    "password_prepare": "Unable to process the room password. Refresh the page and try again.",
+    "request_timeout": "The request timed out. Keep both devices connected and try again.",
+    "member_offline": "This member is not connected. Wait for them to reconnect and try again.",
+    "sharing_disabled": "This member has disabled access to their shared files.",
+    "file_not_shared": "This file is no longer shared or has been deleted. Refresh the list.",
+    "shared_unsupported": "This member does not support shared-file downloads. Update both apps and try again.",
+    "file_unavailable": "The file was deleted or cannot be read. Select or get it again.",
+    "file_incomplete": "The file is not fully available yet. Wait for it to finish before trying again.",
+    "file_busy": "This file is already being processed or transferred. Wait for the current task to finish.",
+    "file_failed": "The file operation failed. Check the connection and local storage, then try again.",
+    "file_list_failed": "Unable to load the file list. Keep both devices connected and refresh the list.",
+    "verification_failed": "The received file failed verification. Get the file again.",
+    "storage_full": "Local storage is full. Delete files you no longer need and try again.",
+    "storage_unavailable": "Unable to access the local file library. Check browser storage permissions and try again.",
+    "permission_denied": "Permission was denied. Check the browser permissions and try again.",
+    "cancelled": "The operation was cancelled.",
+    "avatar_failed": "Unable to read this image. Choose another image and try again.",
+    "ice_unavailable": "The server is unavailable. Check its address, credentials and your network.",
+    "ice_credentials": "Unable to obtain relay credentials. Check the TURN service credentials.",
+    "ice_config": "The relay server configuration is invalid. Check the address and authentication method.",
+    "ice_config_line": "Line {{line}} must contain address, username, password and authentication method, separated by |.",
+    "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm, hmac or cloudflare."
   }
 }

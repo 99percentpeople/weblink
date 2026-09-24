@@ -172,7 +172,7 @@ export class P2PRequestManager<
       RequestType | "storage" | "file-offer-result"
     >,
     options: RequestOptions = {},
-    onPrepared?: () => void,
+    onPrepared?: () => void | Promise<void>,
   ): Promise<Reply> {
     return new Promise<Reply>((resolve, reject) => {
       validateSessionMessage(message);
@@ -279,7 +279,13 @@ export class P2PRequestManager<
         }
       };
       try {
-        onPrepared?.();
+        const prepared = onPrepared?.();
+        if (prepared) {
+          void prepared.then(sendAttempt, (error) =>
+            finish(protocolError(error)),
+          );
+          return;
+        }
       } catch (error) {
         finish(protocolError(error));
         return;

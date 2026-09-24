@@ -53,6 +53,7 @@ function deferred<T>() {
 const rooms: RoomService[] = [];
 afterEach(() => {
   for (const room of rooms.splice(0)) room.dispose();
+  vi.useRealTimers();
 });
 
 function createHarness(
@@ -131,10 +132,42 @@ beforeEach(() => {
   setAppState("roomStatus", {
     roomId: null,
     profile: null,
+    joinedAt: null,
   });
 });
 
 describe("RoomService", () => {
+  it("starts the room clock after a successful join and resets it only after leaving", async () => {
+    vi.useFakeTimers();
+    const service = createClientService();
+    const pending = deferred<void>();
+    vi.mocked(service.createClient).mockReturnValueOnce(
+      pending.promise,
+    );
+    const harness = createHarness(async () => service);
+    vi.setSystemTime(10_000);
+    const joining = harness.room.join();
+    await Promise.resolve();
+    expect(appState.roomStatus.joinedAt).toBeNull();
+    vi.setSystemTime(12_000);
+    pending.resolve();
+    await joining;
+    expect(appState.roomStatus.joinedAt).toBe(12_000);
+
+    vi.setSystemTime(20_000);
+    await harness.room.join();
+    expect(appState.roomStatus.joinedAt).toBe(12_000);
+    harness.room.leave();
+    expect(appState.roomStatus.joinedAt).toBeNull();
+
+    await harness.room.join();
+    expect(appState.roomStatus.joinedAt).toBe(20_000);
+    setAppState("profile", "roomId", "room-b");
+    vi.setSystemTime(30_000);
+    await harness.room.join();
+    expect(appState.roomStatus.joinedAt).toBe(30_000);
+  });
+
   it("records silent members against the joined room and ignores joins finishing after departure", async () => {
     const service = createClientService();
     const harness = createHarness(async () => service);

@@ -137,6 +137,47 @@ const cover = () =>
     name: "meeting.show_screen_preview",
   });
 
+it("reflects shared member mute state and delegates audio changes to its owner", () => {
+  const audio = new Track("remote-audio");
+  audio.kind = "audio";
+  const [muted, setMuted] = createSignal(false);
+  const toggle = vi.fn(() => setMuted((value) => !value));
+  render(() => (
+    <MeetingTile
+      name="Alice"
+      stream={
+        new Stream([
+          audio as unknown as MediaStreamTrack,
+        ]) as unknown as MediaStream
+      }
+      pinned={false}
+      onPin={() => {}}
+      audioMuted={muted()}
+      onToggleAudio={toggle}
+    />
+  ));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "common.action.mute",
+    }),
+  );
+  expect(toggle).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("button", {
+      name: "common.action.unmute",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // A member-list change updates the same control without remounting the tile.
+  setMuted(false);
+  expect(
+    screen.getByRole("button", {
+      name: "common.action.mute",
+    }),
+  ).toHaveAttribute("aria-pressed", "false");
+  expect(audio.enabled).toBe(true);
+  expect(audio.stop).not.toHaveBeenCalled();
+});
+
 describe("local screen preview cover", () => {
   it("covers only a local screen featured in the main view", () => {
     const view = setup();

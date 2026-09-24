@@ -21,6 +21,8 @@ export class ReferenceChunkCache
       reference: FileReference,
     ) => Promise<void>,
     private readonly release: () => Promise<void>,
+    private readonly shared: () => Promise<boolean> = async () =>
+      false,
   ) {
     super();
     this.id = reference.id;
@@ -50,6 +52,7 @@ export class ReferenceChunkCache
     const file = await this.getFile();
     return {
       ...this.reference,
+      isShared: await this.shared(),
       file: file ?? undefined,
       isComplete: !!file,
       chunkCount: 0,
@@ -78,6 +81,9 @@ export class ReferenceChunkCache
     this.reference = {
       ...this.reference,
       ...metadata,
+      isShared: undefined,
+      sharedReference: this.reference.sharedReference,
+      libraryPinned: this.reference.libraryPinned,
       id: this.id,
       contentKey: this.reference.contentKey,
       fingerprint: this.reference.fingerprint,

@@ -9,6 +9,7 @@ import {
 } from "vitest";
 import { createMediaDevices } from "@/libs/hooks/media-devices";
 import { createMediaDeviceAccess } from "@/libs/hooks/media-device-access";
+import { deferred } from "../support/rtc-transport";
 
 class Permission extends EventTarget {
   constructor(public state: PermissionState = "prompt") {
@@ -112,6 +113,124 @@ function setup(
 }
 
 describe("meeting device permissions", () => {
+  it("keeps default output available without probing a missing microphone", async () => {
+    const f = setup();
+    f.enumerateDevices.mockResolvedValue([
+      device("audiooutput", ""),
+    ]);
+    await f.refresh();
+    expect(f.state("audiooutput")).toBe("default-only");
+    await f.request("audiooutput");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+    expect(f.error()).toBeNull();
+
+    f.enumerateDevices.mockResolvedValue([
+      device("audioinput", ""),
+      device("audiooutput", ""),
+    ]);
+    await f.refresh();
+    expect(f.state("audiooutput")).toBe("prompt");
+  });
+
+  it("does not report a missing microphone as a missing speaker when a probe fails", async () => {
+    const f = setup();
+    await f.refresh();
+    f.getUserMedia.mockRejectedValue(
+      new DOMException(
+        "Requested device not found",
+        "NotFoundError",
+      ),
+    );
+    await f.request("audiooutput");
+    expect(f.state("audioinput")).toBe("unavailable");
+    expect(f.state("audiooutput")).toBe("default-only");
+    expect(f.error()).toBeNull();
+    expect(f.requesting()).toBeNull();
+    await f.request("audiooutput");
+    expect(f.getUserMedia).toHaveBeenCalledOnce();
+  });
+
+  it("can authorize speakers without any microphone when a native output picker exists", async () => {
+    const f = setup({ nativeOutput: true });
+    f.enumerateDevices.mockResolvedValue([
+      device("audiooutput", ""),
+    ]);
+    await f.refresh();
+    expect(f.state("audiooutput")).toBe("prompt");
+    const speaker = device("audiooutput");
+    f.selectAudioOutput.mockResolvedValue(speaker);
+    expect(await f.request("audiooutput")).toBe(speaker);
+    expect(f.state("audiooutput")).toBe("granted");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("still reports a missing speaker from the native output picker", async () => {
+    const f = setup({ nativeOutput: true });
+    await f.refresh();
+    f.selectAudioOutput.mockRejectedValue(
+      new DOMException("No speaker", "NotFoundError"),
+    );
+    await f.request("audiooutput");
+    expect(f.state("audiooutput")).toBe("unavailable");
+    expect(f.state("audioinput")).toBe("prompt");
+    expect(f.error()?.name).toBe("NotFoundError");
+  });
+
+  it("retains permission results during background discovery and applies the finished result", async () => {
+    const f = setup();
+    await f.refresh();
+    const pending = deferred<MediaDeviceInfo[]>();
+    f.enumerateDevices.mockReturnValueOnce(pending.promise);
+    const refreshing = f.refresh();
+    await Promise.resolve();
+    expect(f.state("audioinput")).toBe("prompt");
+    expect(f.state("videoinput")).toBe("prompt");
+    expect(f.state("audiooutput")).toBe("prompt");
+    expect(f.needsPermission()).toBe(true);
+    pending.resolve([
+      device("videoinput"),
+      device("audioinput", ""),
+    ]);
+    await refreshing;
+    expect(f.state("videoinput")).toBe("granted");
+    expect(f.state("audioinput")).toBe("prompt");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("keeps a known unavailable result until the refreshed device list arrives", async () => {
+    const f = setup();
+    f.statuses.camera.state = "granted";
+    f.enumerateDevices.mockResolvedValue([]);
+    await f.refresh();
+    expect(f.state("videoinput")).toBe("unavailable");
+    const pending = deferred<MediaDeviceInfo[]>();
+    f.enumerateDevices.mockReturnValueOnce(pending.promise);
+    const refreshing = f.refresh();
+    expect(f.state("videoinput")).toBe("unavailable");
+    pending.resolve([device("videoinput")]);
+    await refreshing;
+    expect(f.state("videoinput")).toBe("granted");
+  });
+
+  it("keeps the output picker result during refresh but respects revocation immediately", async () => {
+    const f = setup({ nativeOutput: true });
+    await f.refresh();
+    f.selectAudioOutput.mockResolvedValue(
+      device("audiooutput"),
+    );
+    await f.request("audiooutput");
+    expect(f.state("audiooutput")).toBe("granted");
+    const pending = deferred<MediaDeviceInfo[]>();
+    f.enumerateDevices.mockReturnValue(pending.promise);
+    const refreshing = f.refresh();
+    expect(f.state("audiooutput")).toBe("granted");
+    f.statuses["speaker-selection"].change("denied");
+    expect(f.state("audiooutput")).toBe("denied");
+    pending.resolve([]);
+    await refreshing;
+    expect(f.state("audiooutput")).toBe("denied");
+  });
+
   it("inspects permissions without starting capture and separates blocked, missing and unsupported devices", async () => {
     const f = setup();
     await f.refresh();

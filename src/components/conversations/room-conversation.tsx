@@ -13,6 +13,7 @@ import { IconSettings } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ChatComposer } from "./chat-composer";
 import { ChatScrollButton } from "./chat-scroll-button";
+import { ChatEmptyState } from "./chat-empty-state";
 import { createSendItemPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -251,14 +252,13 @@ export function RoomConversation(props: {
                 </Button>
               </li>
             </Show>
-            <Show when={!messages().length}>
-              <li
-                class="text-muted-foreground m-auto max-w-72 px-4 text-center
-                  text-sm"
-              >
-                <Users class="mx-auto mb-3 size-10 opacity-30" />
-                {t("conversations.room_empty")}
-              </li>
+            <Show
+              when={
+                appState.message.status === "ready" &&
+                !allMessages().length
+              }
+            >
+              <ChatEmptyState />
             </Show>
             <For each={messages()}>
               {(message, index) => (

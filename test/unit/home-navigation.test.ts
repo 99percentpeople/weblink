@@ -44,6 +44,14 @@ describe("Home navigation compatibility", () => {
         "conversation",
       ),
     ).toBe(directConversationId("uid_local", "peer"));
+    expect(
+      legacy("/client/peer/sync").searchParams.get("panel"),
+    ).toBe("files");
+    expect(
+      legacy("/client/peer/sync").searchParams.get(
+        "member",
+      ),
+    ).toBe("peer");
     expect(legacy("/file").searchParams.get("dialog")).toBe(
       "files",
     );
@@ -67,9 +75,10 @@ describe("Home navigation compatibility", () => {
       "/file",
       "/setting",
       "/conversation/room",
+      "/client/peer/sync",
     ])
       expect(isHomePath(path)).toBe(true);
-    for (const path of ["/client/peer/sync", "/home/other"])
+    for (const path of ["/home/other"])
       expect(isHomePath(path)).toBe(false);
   });
 });

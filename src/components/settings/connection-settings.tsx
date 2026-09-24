@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createEffect,
   createMemo,
@@ -57,7 +58,14 @@ function CheckAvailabilityButton(props: {
                     )}
                   >
                     <span>{result.server}:</span>
-                    <span>{result.msg}</span>
+                    <span>
+                      {result.msg === "available"
+                        ? t("setting.connection.available")
+                        : userErrorMessage(
+                            result.msg,
+                            "errors.ice_unavailable",
+                          )}
+                    </span>
                   </p>
                 )}
               </For>
@@ -65,9 +73,10 @@ function CheckAvailabilityButton(props: {
           ));
         } catch (error) {
           toast.error(
-            error instanceof Error
-              ? error.message
-              : "unknown error",
+            userErrorMessage(
+              error,
+              "errors.ice_unavailable",
+            ),
           );
         } finally {
           setChecking(false);
@@ -224,9 +233,10 @@ export function ConnectionSettings(
               );
             } catch (error) {
               toast.error(
-                error instanceof Error
-                  ? error.message
-                  : "unknown error",
+                userErrorMessage(
+                  error,
+                  "errors.ice_config",
+                ),
               );
             }
           }}

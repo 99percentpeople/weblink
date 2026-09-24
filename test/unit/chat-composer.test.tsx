@@ -440,7 +440,7 @@ describe("shared chat composer adapters", () => {
     });
     await waitFor(() =>
       expect(service.error).toHaveBeenCalledWith(
-        "Connection failed",
+        "errors.connection_failed",
       ),
     );
     expect(textbox.value).toBe("new draft while sending");

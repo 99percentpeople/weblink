@@ -1,4 +1,6 @@
 import {
+  batch,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -19,6 +21,10 @@ const permissionNames = {
 type OutputDevices = MediaDevices & {
   selectAudioOutput?: () => Promise<MediaDeviceInfo>;
 };
+type AccessResults = Record<
+  MediaDeviceKind,
+  MeetingDeviceAccessState
+>;
 
 /** Inspect access without capture. Only an explicit request acquires temporary tracks. */
 export function createMediaDeviceAccess(options: {
@@ -117,8 +123,9 @@ export function createMediaDeviceAccess(options: {
       setChecked(true);
   };
 
-  const state = (
+  const inspectState = (
     kind: MediaDeviceKind,
+    previous: AccessResults | undefined,
   ): MeetingDeviceAccessState => {
     const media = outputDevices();
     if (
@@ -146,31 +153,48 @@ export function createMediaDeviceAccess(options: {
     )
       return "granted";
     if (!checked() || options.refreshing())
-      return "checking";
+      return previous?.[kind] ?? "checking";
+    if (kind === "audiooutput" && outputNeedsMicrophone()) {
+      const input = inspectState("audioinput", previous);
+      if (
+        input === "denied" ||
+        input === "unsupported" ||
+        input === "unavailable" ||
+        !devices().some(
+          (device) => device.kind === "audioinput",
+        )
+      )
+        return "default-only";
+      if (input === "granted") return "unavailable";
+    }
     if (
       permissions()[kind] === "granted" &&
       !devices().some((device) => device.kind === kind)
     )
       return "unavailable";
-    if (kind === "audiooutput" && outputNeedsMicrophone()) {
-      const input = state("audioinput");
-      if (input === "denied" || input === "unsupported")
-        return input;
-      if (input === "granted" || input === "unavailable")
-        return "unavailable";
-    }
     return "prompt";
   };
 
+  // All permission entry points share these results. A background refresh
+  // must not replace a known result with a temporary loading state.
+  const results = createMemo<AccessResults>((previous) => ({
+    audioinput: inspectState("audioinput", previous),
+    videoinput: inspectState("videoinput", previous),
+    audiooutput: inspectState("audiooutput", previous),
+  }));
+  const state = (kind: MediaDeviceKind) => results()[kind];
+
   const refresh = async () => {
     if (disposed) return;
-    setFaults({});
-    // A past picker result must not hide a later revocation or unplugged output.
-    setSelectedOutput(undefined);
-    await Promise.all([
-      readPermissions(),
-      options.refresh(),
-    ]);
+    await batch(() => {
+      setFaults({});
+      // A past picker result must not hide a later revocation or unplugged output.
+      setSelectedOutput(undefined);
+      return Promise.all([
+        readPermissions(),
+        options.refresh(),
+      ]);
+    });
   };
 
   const captureForPermission = async (
@@ -195,7 +219,8 @@ export function createMediaDeviceAccess(options: {
     if (
       disposed ||
       requesting() ||
-      state(kind) === "unsupported"
+      state(kind) === "unsupported" ||
+      state(kind) === "default-only"
     )
       return;
     setRequesting(kind);
@@ -249,6 +274,9 @@ export function createMediaDeviceAccess(options: {
           ...previous,
           [affected]: "unavailable",
         }));
+        // Without a native output picker, the failed capture is a microphone
+        // probe, not evidence that the system's speaker is missing.
+        if (kind === "audiooutput" && !nativeOutput) return;
       }
       setError(failure);
     } finally {

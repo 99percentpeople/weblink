@@ -25,6 +25,9 @@ export interface ChunkMetaData {
   contentKey?: string;
   contentStorage?: boolean;
   libraryPinned?: boolean;
+  /** Local projection of content ownership; never trust wire metadata. */
+  isShared?: boolean;
+  sharedReference?: boolean;
   aliases?: string[];
 }
 

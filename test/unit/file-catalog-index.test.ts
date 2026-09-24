@@ -11,6 +11,14 @@ const file = (
   fileSize: 10,
   chunkSize: 4,
   isComplete: true,
+  isShared: true,
+  sharedReference: true,
+  fingerprint: {
+    version: 1,
+    algorithm: "blake3-256",
+    digest: "0".repeat(64),
+    size: 10,
+  },
   ...overrides,
 });
 const query = { pageIndex: 0, pageSize: 2 };
@@ -161,11 +169,12 @@ describe("file catalog metadata index", () => {
     });
   });
 
-  it("keeps room attachments out of the remote catalog without altering local metadata", () => {
+  it("lists only independent shared references, including content sourced from room attachments", () => {
     const index = new FileCatalogIndex();
     const changed = vi.fn();
     index.onChange(changed);
     const attachment = file("room", {
+      sharedReference: false,
       roomAttachment: true,
       roomOfferId: "offer",
       from: "sender",
@@ -179,12 +188,20 @@ describe("file catalog metadata index", () => {
 
     index.update(
       "public",
-      file("public", { roomAttachment: true }),
+      file("public", { isShared: false }),
     );
     expect(index.query(query).totalCount).toBe(0);
     expect(changed).toHaveBeenCalledTimes(2);
     expect(attachment).toMatchObject({
       isComplete: true,
+      isShared: true,
+      sharedReference: false,
+      fingerprint: {
+        version: 1,
+        algorithm: "blake3-256",
+        digest: "0".repeat(64),
+        size: 10,
+      },
       roomAttachment: true,
       roomOfferId: "offer",
     });

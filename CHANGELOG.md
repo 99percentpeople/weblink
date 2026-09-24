@@ -2,7 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [1.0.0] - 2026-09-24
+
+Weblink 1.0 is a major update with a complete interface redesign, online group
+chat, and a shared file library. Weblink 1.0 是一次重大更新，带来完整界面重构、在线群组聊天和共享文件库。
+
+### Major Changes
+
+- Completely redesign the interface around a unified meeting workspace, with chat, members, shared files, and live room information in a responsive sidebar; open the file library, settings, and transfer tasks in dialogs without leaving the meeting 完整重构界面，以统一会议工作区为中心，通过响应式侧栏查看聊天、成员、共享文件及在线房间信息，并在弹窗中管理文件库、设置和传输任务
+- Add online room group chat alongside private conversations, including text, file attachments, forwarding, per-member delivery status, and locally stored history 新增在线房间群组聊天，与私聊并行使用，支持文字、文件附件、转发、成员送达状态及本机历史记录
+- Introduce a content-deduplicated local file library and one shared file list across rooms; browse a member's shared files with search, sorting, pagination, previews, and batch downloads 新增按内容去重的本机文件库及跨房间共用的共享清单，支持浏览成员共享文件、搜索、排序、分页、预览及批量获取
+- Add explicit sharing controls, file and folder imports, and automatic sharing for newly sent files; shared content remains available independently of chat history 新增共享开关、文件及文件夹导入，新发送的文件自动开启共享，共享内容独立于聊天记录保留
+- Fetch shared files directly into the local library and task list without creating chat messages; support progress, pause, resume, cancellation, and reuse of already available content 获取共享文件直接进入本机文件库和任务列表，不产生聊天消息，支持进度、暂停、继续、取消及复用已有内容
+
+### Improvements
+
+- Refine meeting layouts, screen sharing, picture-in-picture, sidebar transitions, and mobile resizing behavior 优化会议布局、屏幕共享、画中画、侧栏过渡及移动端尺寸切换
+- Add member shortcuts for private chat and temporary audio muting, plus room-wide control of locally received audio 新增成员私聊与临时静音快捷操作，并支持统一控制本机接收的房间声音
+- Separate microphone, speaker, and camera permission controls; improve device discovery, default-output behavior, and permission feedback across browsers 分离麦克风、扬声器与摄像头权限控制，改善跨浏览器设备发现、默认输出及授权反馈
+- Unify empty chat states and user-facing error messages, complete translations, and improve file selection and preview behavior 统一聊天空状态与用户可见错误提示，补全翻译，并优化文件选择及预览体验
+
+### Upgrade Notes
+
+- Room messages are delivered to currently connected members; history remains in each browser, with no server-side message or file storage 房间消息仅发送给当前在线成员，历史记录保存在各自浏览器，服务器不保存聊天消息或文件
+- Existing cached files stay private after upgrading; importing or receiving a file does not automatically share it 升级前已有缓存默认不共享，仅导入或接收文件不会自动开启共享
+- Shared directories expose only complete, explicitly shared content; access is checked again when fetching, and peers must support the shared-file protocol 共享目录仅展示完整且已开启共享的内容，获取时会再次校验权限，双方需支持共享文件协议
 
 ### Privacy
 

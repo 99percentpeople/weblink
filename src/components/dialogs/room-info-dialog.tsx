@@ -1,5 +1,4 @@
 import {
-  createMemo,
   createSignal,
   onMount,
   Show,
@@ -80,18 +79,18 @@ export function RoomDeviceSettings() {
       <MeetingDeviceField
         variant="dialog"
         devices={devices}
-        kind="videoinput"
-        selected={devices.cameraId()}
-        busy={false}
-        onSelect={media.setCameraPreference}
-      />
-      <MeetingDeviceField
-        variant="dialog"
-        devices={devices}
         kind="audiooutput"
         selected={devices.outputId()}
         busy={devices.outputBusy()}
         onSelect={devices.selectOutput}
+      />
+      <MeetingDeviceField
+        variant="dialog"
+        devices={devices}
+        kind="videoinput"
+        selected={devices.cameraId()}
+        busy={false}
+        onSelect={media.setCameraPreference}
       />
     </div>
   );
@@ -119,25 +118,6 @@ export function RoomInfoPanel(props: {
   const preview = () =>
     !props.conversationId &&
     !state.activeRoomConversationId();
-  const peers = createMemo(() =>
-    active()
-      ? Object.values(
-          appState.session.clientViewData,
-        ).filter(
-          (peer) =>
-            peer?.onlineStatus === "online" &&
-            peer.messageChannel,
-        )
-      : [],
-  );
-  const supported = (kind: "text" | "file") =>
-    peers().filter(
-      (peer) =>
-        (kind === "text"
-          ? state.roomChatCapabilities()
-          : state.roomFileCapabilities())[peer.clientId] ===
-        "supported",
-    ).length;
   const roomId = () => {
     const room = conversation();
     return room?.kind === "room"
@@ -160,15 +140,6 @@ export function RoomInfoPanel(props: {
             roomId() ??
             t("meeting.title")}
         </p>
-        <span class="text-muted-foreground text-xs">
-          {t(
-            active()
-              ? "meeting.in_room"
-              : preview()
-                ? "meeting.preview"
-                : "conversations.local_history",
-          )}
-        </span>
       </div>
       <Tabs
         value={props.tab}
@@ -186,6 +157,13 @@ export function RoomInfoPanel(props: {
             {t("room_dialog.info")}
           </TabsTrigger>
           <TabsTrigger
+            value="members"
+            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
+              sm:text-sm"
+          >
+            {t("room_dialog.members")}
+          </TabsTrigger>
+          <TabsTrigger
             value="devices"
             class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
               sm:text-sm"
@@ -199,13 +177,6 @@ export function RoomInfoPanel(props: {
           >
             {t("room_dialog.settings")}
           </TabsTrigger>
-          <TabsTrigger
-            value="members"
-            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
-              sm:text-sm"
-          >
-            {t("room_dialog.members")}
-          </TabsTrigger>
           <TabsIndicator />
         </TabsList>
         <TabsContent value="info" class="space-y-4 pt-2">
@@ -216,21 +187,10 @@ export function RoomInfoPanel(props: {
               value={roomId() ?? t("meeting.not_joined")}
             />
           </label>
-          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <dl>
             <Metric label={t("meeting.message_history")}>
               {t("meeting.local_history")}
             </Metric>
-            <Metric label={t("room_dialog.online_members")}>
-              {active() ? peers().length + 1 : "—"}
-            </Metric>
-            <Show when={active()}>
-              <Metric label={t("room_dialog.chat_support")}>
-                {supported("text")} / {peers().length}
-              </Metric>
-              <Metric label={t("room_dialog.file_support")}>
-                {supported("file")} / {peers().length}
-              </Metric>
-            </Show>
           </dl>
           <p class="text-muted-foreground text-sm">
             {t("meeting.history_hint")}
@@ -238,6 +198,15 @@ export function RoomInfoPanel(props: {
           <p class="text-muted-foreground text-sm">
             {t("room_dialog.file_hint")}
           </p>
+          <p class="text-muted-foreground text-sm">
+            {t("meeting.leave_hint")}
+          </p>
+        </TabsContent>
+        <TabsContent value="members" class="pt-2">
+          <RoomMembersPanel
+            room={conversation()}
+            activeRoomId={state.activeRoomConversationId()}
+          />
         </TabsContent>
         <TabsContent value="devices" class="pt-2">
           <Show
@@ -268,12 +237,6 @@ export function RoomInfoPanel(props: {
               />
             )}
           </Show>
-        </TabsContent>
-        <TabsContent value="members" class="pt-2">
-          <RoomMembersPanel
-            room={conversation()}
-            activeRoomId={state.activeRoomConversationId()}
-          />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,20 +1,110 @@
-import { Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js";
 import {
   ChevronRight,
-  HardDrive,
-  MessageSquare,
   Settings,
   Users,
 } from "lucide-solid";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import { appState } from "@/libs/state/app-state";
+import { useAppState } from "@/libs/state/app-state-context";
+
+function Metric(props: {
+  label: string;
+  children: JSX.Element;
+  class?: string;
+}) {
+  return (
+    <div class={`min-w-0 ${props.class ?? ""}`}>
+      <dt class="text-muted-foreground mb-1.5 text-xs">
+        {props.label}
+      </dt>
+      <dd class="leading-relaxed [overflow-wrap:anywhere] tabular-nums">
+        {props.children}
+      </dd>
+    </div>
+  );
+}
 
 export function MeetingInfoPanel(props: {
   roomId?: string | null;
   active: boolean;
   onOpenSettings(): void;
-  onOpenChat(): void;
 }) {
+  const state = useAppState();
+  const [now, setNow] = createSignal(Date.now());
+  createEffect(() => {
+    if (
+      !props.active ||
+      appState.roomStatus.joinedAt == null
+    )
+      return;
+    setNow(Date.now());
+    const interval = window.setInterval(
+      () => setNow(Date.now()),
+      1000,
+    );
+    onCleanup(() => window.clearInterval(interval));
+  });
+  const elapsed = () => {
+    const joinedAt = appState.roomStatus.joinedAt;
+    if (!props.active || joinedAt == null) return "—";
+    const seconds = Math.max(
+      0,
+      Math.floor((now() - joinedAt) / 1000),
+    );
+    return [
+      Math.floor(seconds / 3600),
+      Math.floor((seconds % 3600) / 60),
+      seconds % 60,
+    ]
+      .map((value) => String(value).padStart(2, "0"))
+      .join(":");
+  };
+  const peers = createMemo(() =>
+    props.active
+      ? Object.values(
+          appState.session.clientViewData,
+        ).filter((peer) => peer?.onlineStatus === "online")
+      : [],
+  );
+  const messagePeers = createMemo(() =>
+    peers().filter((peer) => peer.messageChannel),
+  );
+  const supported = (kind: "text" | "file") => {
+    const capabilities =
+      kind === "text"
+        ? state.roomChatCapabilities()
+        : state.roomFileCapabilities();
+    return messagePeers().filter(
+      (peer) => capabilities[peer.clientId] === "supported",
+    ).length;
+  };
+  const connected = () =>
+    props.active &&
+    appState.session.clientServiceStatus === "connected";
+  const statusLabel = () => {
+    if (
+      appState.session.clientServiceStatus === "connecting"
+    )
+      return t(
+        props.active
+          ? "meeting.status_reconnecting"
+          : "meeting.status_connecting",
+      );
+    if (!props.active) return t("meeting.not_joined");
+    return t(
+      connected()
+        ? "meeting.status_online"
+        : "meeting.status_offline",
+    );
+  };
   return (
     <div
       class="flex min-h-0 min-w-0 flex-col gap-5 overflow-auto
@@ -36,50 +126,39 @@ export function MeetingInfoPanel(props: {
             class="text-muted-foreground data-[active]:text-primary mt-1
               inline-flex items-center gap-1.5 text-[11px] before:size-1.5
               before:rounded-full before:bg-current before:content-['']"
-            data-active={props.active ? "" : undefined}
+            data-active={connected() ? "" : undefined}
           >
-            {t(
-              props.active
-                ? "meeting.in_room"
-                : "meeting.preview",
-            )}
+            {statusLabel()}
           </span>
         </div>
       </header>
 
-      <dl class="bg-muted/55 flex min-w-0 flex-col gap-[18px] rounded-md p-4">
-        <div>
-          <dt class="text-muted-foreground mb-1.5 text-[11px]">
-            {t("meeting.room_name")}
-          </dt>
-          <dd class="leading-[1.6] [overflow-wrap:anywhere]">
-            {props.roomId || t("meeting.not_joined")}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-muted-foreground mb-1.5 text-[11px]">
-            {t("meeting.message_history")}
-          </dt>
-          <dd
-            class="flex items-center gap-2 leading-[1.6]
-              [overflow-wrap:anywhere]"
-          >
-            <HardDrive
-              class="text-muted-foreground size-[15px] shrink-0"
-              aria-hidden="true"
-            />
-            {t("meeting.local_history")}
-          </dd>
-        </div>
+      <dl class="bg-muted/55 grid min-w-0 grid-cols-2 gap-4.5 rounded-md p-4">
+        <Metric
+          class="col-span-2"
+          label={t("meeting.room_name")}
+        >
+          {props.roomId || t("meeting.not_joined")}
+        </Metric>
+        <Metric label={t("meeting.online_duration")}>
+          {elapsed()}
+        </Metric>
+        <Metric label={t("room_dialog.online_members")}>
+          {props.active
+            ? peers().length + Number(connected())
+            : "—"}
+        </Metric>
+        <Metric label={t("meeting.chat_support")}>
+          {props.active
+            ? `${supported("text")} / ${messagePeers().length}`
+            : "—"}
+        </Metric>
+        <Metric label={t("meeting.file_support")}>
+          {props.active
+            ? `${supported("file")} / ${messagePeers().length}`
+            : "—"}
+        </Metric>
       </dl>
-
-      <div
-        class="text-muted-foreground flex flex-col gap-2.5 text-xs
-          leading-[1.7]"
-      >
-        <p>{t("meeting.history_hint")}</p>
-        <p>{t("meeting.leave_hint")}</p>
-      </div>
 
       <div class="flex flex-col gap-2.5 border-t pt-4">
         <Button
@@ -95,21 +174,6 @@ export function MeetingInfoPanel(props: {
             aria-hidden="true"
           />
         </Button>
-        <Show when={props.active}>
-          <Button
-            type="button"
-            variant="secondary"
-            class="meeting-info-action"
-            onClick={props.onOpenChat}
-          >
-            <MessageSquare aria-hidden="true" />
-            <span>{t("meeting.open_room_chat")}</span>
-            <ChevronRight
-              class="text-muted-foreground"
-              aria-hidden="true"
-            />
-          </Button>
-        </Show>
       </div>
     </div>
   );

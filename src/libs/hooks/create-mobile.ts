@@ -1,39 +1,15 @@
-import {
-  createEffect,
-  createSignal,
-  onCleanup,
-} from "solid-js";
+import { createMemo } from "solid-js";
+import { createWindowSize } from "@solid-primitives/resize-observer";
 import { MOBILE_BREAKPOINT_PX } from "@/constants";
 
-export function createIsMobile() {
-  const [isMobile, setIsMobile] = createSignal<boolean>(
-    window.matchMedia(
-      `(max-width: ${MOBILE_BREAKPOINT_PX - 1}px)`,
-    ).matches,
+export function createIsMobile(
+  viewport: Readonly<{
+    width: number;
+  }> = createWindowSize(),
+) {
+  // Use the same resize snapshot as surrounding responsive layouts. A media-query
+  // or orientation event can arrive before innerWidth reflects the new viewport.
+  return createMemo(
+    () => viewport.width < MOBILE_BREAKPOINT_PX,
   );
-
-  createEffect(() => {
-    const mql = window.matchMedia(
-      `(max-width: ${MOBILE_BREAKPOINT_PX - 1}px)`,
-    );
-    
-    const onChange = () => {
-      setIsMobile(
-        window.innerWidth < MOBILE_BREAKPOINT_PX,
-      );
-    };
-
-    mql.addEventListener("change", onChange);
-    
-    window.addEventListener("orientationchange", onChange);
-    
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT_PX);
-
-    onCleanup(() => {
-      mql.removeEventListener("change", onChange);
-      window.removeEventListener("orientationchange", onChange);
-    });
-  }, []);
-
-  return isMobile;
 }

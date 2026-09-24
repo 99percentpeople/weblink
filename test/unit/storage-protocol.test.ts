@@ -17,7 +17,17 @@ const request = () =>
   createSessionMessage(peer, "request-storage", query);
 const page: StoragePage = {
   items: [
-    { id: "f", fileName: "report.txt", fileSize: 10 },
+    {
+      id: "f",
+      fileName: "report.txt",
+      fileSize: 10,
+      fingerprint: {
+        version: 1,
+        algorithm: "blake3-256",
+        digest: "0".repeat(64),
+        size: 10,
+      },
+    },
   ],
   pageIndex: 0,
   pageSize: 25,
@@ -25,16 +35,16 @@ const page: StoragePage = {
   sharingEnabled: true,
 };
 
-describe("paginated storage wire contract v2", () => {
+describe("paginated storage wire contract v3", () => {
   it("creates and round-trips versioned queries and page responses", () => {
-    expect(request().version).toBe(2);
+    expect(request().version).toBe(3);
     expect(
       parseSessionMessage(JSON.stringify(request())),
     ).toMatchObject(query);
     const response = createSessionMessage(peer, "storage", {
       data: page,
     });
-    expect(response.version).toBe(2);
+    expect(response.version).toBe(3);
     expect(
       parseSessionMessage(JSON.stringify(response)),
     ).toEqual(response);
@@ -43,7 +53,7 @@ describe("paginated storage wire contract v2", () => {
   it.each([
     { version: undefined },
     { version: 1 },
-    { version: 3 },
+    { version: 2 },
     { pageIndex: -1 },
     { pageIndex: 0.5 },
     { pageIndex: Number.MAX_SAFE_INTEGER },
@@ -120,4 +130,45 @@ describe("paginated storage wire contract v2", () => {
       }),
     ).toThrow();
   });
+});
+
+describe("shared download request", () => {
+  const shared = () =>
+    createSessionMessage(peer, "request-shared-file", {
+      fid: "shared-reference",
+      transferId: "shared-transfer_abc-123",
+      chunkSize: 4,
+      fingerprint: {
+        version: 1,
+        algorithm: "blake3-256",
+        digest: "0".repeat(64),
+        size: 10,
+      },
+      have: false,
+      ranges: [[0, 2]],
+    });
+  it("round trips an independent transfer ID and fingerprint without a chat message", () => {
+    const message = shared();
+    expect(
+      parseSessionMessage(JSON.stringify(message)),
+    ).toEqual(message);
+  });
+  it.each([
+    { version: 2 },
+    { transferId: "private-file" },
+    { have: undefined },
+    { ranges: [[0, 3]] },
+    { isShared: true },
+    { fingerprint: undefined },
+  ])(
+    "rejects malformed authorization input %j",
+    (overrides) => {
+      expect(() =>
+        validateSessionMessage({
+          ...shared(),
+          ...overrides,
+        }),
+      ).toThrow();
+    },
+  );
 });

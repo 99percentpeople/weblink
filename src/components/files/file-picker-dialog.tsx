@@ -27,6 +27,7 @@ export default function FilePickerDialog(props: {
   onCloseAutoFocus?(event: Event): void;
   onSelect(ids: string[]): void;
   disabled?: boolean;
+  sharing?: boolean;
 }) {
   const [selection, setSelection] = createSignal<string[]>(
     [],
@@ -45,7 +46,8 @@ export default function FilePickerDialog(props: {
       (file) =>
         selection().includes(file.id) &&
         file.isComplete &&
-        file.file,
+        file.file &&
+        (!props.sharing || !file.isShared),
     ),
   );
   return (
@@ -62,12 +64,17 @@ export default function FilePickerDialog(props: {
             {t("file_library.choose")}
           </DialogTitle>
           <DialogDescription>
-            {t("file_library.choose_hint")}
+            {t(
+              props.sharing
+                ? "shared_files.choose_hint"
+                : "file_library.choose_hint",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody class="flex min-h-0 flex-1 flex-col overflow-hidden">
           <FileBrowser
             picker
+            sharing={props.sharing ? "private" : undefined}
             selected={selection()}
             onSelection={setSelection}
           />
@@ -95,9 +102,14 @@ export default function FilePickerDialog(props: {
               )
             }
           >
-            {t("file_library.send_count", {
-              count: selected().length,
-            })}
+            {t(
+              props.sharing
+                ? "shared_files.share_count"
+                : "file_library.send_count",
+              {
+                count: selected().length,
+              },
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

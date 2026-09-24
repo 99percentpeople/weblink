@@ -40,14 +40,18 @@ the low-level `domain` layer.
     expand into a conversation-list/chat split view on wider screens; compact
     screens start on the conversation list; selecting a row enters chat, whose
     header has a back button to the list.
-    A single desktop control cycles compact, split and full-workspace panels,
-    then returns to compact. Maximizing hides the meeting canvas without
-    unmounting media; Escape returns to the previous docked width. Mobile panels replace the canvas and provide a return-to-meeting
+    A single desktop control toggles compact and expanded panels. Expanded
+    panels automatically fill the workspace when the window is too narrow to
+    retain the meeting canvas, and dock beside it again when widened. This hides
+    the canvas without unmounting media or changing the chosen expansion state;
+    Escape closes the panel. Mobile panels replace the canvas and provide a return-to-meeting
     action instead of a modal overlay. Expanding preserves the mounted chat, and
     the chosen panel width is retained when switching tabs. The fixed tab group stays anchored to the right while
     its indicator slides and newly selected content fades in. Width changes use
     CSS transitions and the stage's existing ResizeObserver; no text is scaled
     and no additional observer is introduced for the sidebar.
+    Mobile detection and expanded-panel docking share one viewport resize snapshot
+    so panel width and meeting-canvas visibility stay in sync while resizing.
     Selecting a conversation updates the `conversation` query parameter without
     changing rooms. The existing media-preview hash contract is preserved.
     The application media controller
@@ -344,8 +348,9 @@ may select concrete infrastructure implementations.
     `file-offer-transfers.ts` reuses run/channel ownership for room attachments
     without creating private messages. Upload progress is per recipient;
     delivery receipts describe offer delivery, not binary completion. Room
-    attachments remain cached after a recipient finishes and are excluded from
-    the remote file catalog and legacy private request/resume paths.
+    attachments remain cached after a recipient finishes. Their attachment IDs
+    remain excluded from legacy private request/resume paths. Shared content uses
+    a separate directory reference, including content sent in room chats.
     Explicit local forwarding creates a private attachment with a fresh ID backed by shared immutable content;
     it does not make the original room cache available through private requests.
   - `file-library-service.ts`: content-addressed storage ownership, independent
@@ -372,13 +377,18 @@ may select concrete infrastructure implementations.
     verify decompressed, assembled content before emitting completion. Corrupt
     bytes never enter the content index. Local completions carry
     `completionSource: "local"`, without fabricated throughput.
-  - `file-catalog-index.ts`: completed-file metadata projection and in-memory
-    search/sort/page queries, without File contents or storage reads during paging.
-  - `file-catalog-service.ts`: version-2 directory provider, privacy policy and
+  - `file-catalog-index.ts`: complete, explicitly shared content references and
+    in-memory search/sort/page queries, without File contents or storage reads during paging.
+  - `transfer/shared-file-transfers.ts`: authorized directory pulls, independent
+    task lifecycle and local library references, with no chat messages. It shares
+    the binary registry and fingerprint receive coordinator with chat attachments.
+    Closing the file panel cancels its directory view, not its transfers.
+  - `file-catalog-service.ts`: version-3 directory provider, privacy policy and
     payloadless P2P invalidation routing.
   - `remote-file-catalog.ts`: active-page refresh coalescing, cancellation and
     stale-response isolation. The Solid hook in `hooks/file-catalog.ts` binds it
-    to a view; TanStack Table owns UI query state, not the wire protocol.
+    to the currently selected member in the sidebar file tab. The view owns query
+    state and defaults to 50 files per page; hidden views release their subscriptions.
   - `cache-service.ts`, `speed-test-service.ts`, `task-service.ts`, etc:
     application-scoped coordinators.
 - `src/libs/domain/`: low-level models and P2P behavior. Domain must not

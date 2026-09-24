@@ -14,6 +14,9 @@ const AudioPlayerContext = createContext<{
   hasAudio: Accessor<boolean>;
   playState: Accessor<boolean>;
   setPlay: (state: boolean) => void;
+  hasPeerAudio(id: string): boolean;
+  isPeerMuted(id: string): boolean;
+  setPeerMuted(id: string, muted: boolean): void;
   outputDeviceId: Accessor<string>;
   outputSupported: Accessor<boolean>;
   outputBusy: Accessor<boolean>;
@@ -31,6 +34,21 @@ export const AudioPlayerProvider = (props: ParentProps) => {
   const [tracks, setTracks] = createSignal<
     MediaStreamTrack[]
   >([]);
+  const [peerTracks, setPeerTracks] = createSignal(
+    new Map<string, MediaStreamTrack[]>(),
+  );
+  const [mutedPeers, setMutedPeers] = createSignal(
+    new Set<string>(),
+  );
+  const isPeerMuted = (id: string) => mutedPeers().has(id);
+  const setPeerMuted = (id: string, muted: boolean) => {
+    setMutedPeers((previous) => {
+      const next = new Set(previous);
+      if (muted) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
   const [wantsAudio, setWantsAudio] = createSignal(true);
   const [playState, setPlayState] = createSignal(false);
   const [audioRef, setAudioRef] =
@@ -88,23 +106,32 @@ export const AudioPlayerProvider = (props: ParentProps) => {
   };
 
   createEffect(() => {
-    const streams = Object.values(
+    const peers = Object.values(
       appState.session.clientViewData,
     )
       .filter(Boolean)
       .flatMap((client) =>
-        client.stream ? [client.stream] : [],
+        client.stream
+          ? [{ id: client.clientId, stream: client.stream }]
+          : [],
       );
     const controller = new AbortController();
     const observed = new WeakSet<MediaStreamTrack>();
     const refresh = () => {
+      const byPeer = new Map(
+        peers.map(({ id, stream }) => [
+          id,
+          stream
+            .getAudioTracks()
+            .filter(
+              (track) => track.readyState !== "ended",
+            ),
+        ]),
+      );
+      setPeerTracks(byPeer);
       const next = [
-        ...new Set(
-          streams.flatMap((stream) =>
-            stream.getAudioTracks(),
-          ),
-        ),
-      ].filter((track) => track.readyState !== "ended");
+        ...new Set([...byPeer.values()].flat()),
+      ];
       next.forEach((track) => {
         if (observed.has(track)) return;
         observed.add(track);
@@ -121,7 +148,7 @@ export const AudioPlayerProvider = (props: ParentProps) => {
           : next,
       );
     };
-    streams.forEach((stream) => {
+    peers.forEach(({ stream }) => {
       stream.addEventListener("addtrack", refresh, {
         signal: controller.signal,
       });
@@ -131,6 +158,15 @@ export const AudioPlayerProvider = (props: ParentProps) => {
     });
     refresh();
     onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    const muted = mutedPeers();
+    for (const [id, tracks] of peerTracks()) {
+      // Received tracks only: this never changes the sender's capture state.
+      for (const track of tracks)
+        track.enabled = !muted.has(id);
+    }
   });
 
   const audioStream = createMemo(() =>
@@ -199,6 +235,10 @@ export const AudioPlayerProvider = (props: ParentProps) => {
         hasAudio: createMemo(() => tracks().length > 0),
         playState,
         setPlay,
+        hasPeerAudio: (id) =>
+          !!peerTracks().get(id)?.length,
+        isPeerMuted,
+        setPeerMuted,
         outputDeviceId,
         outputSupported,
         outputBusy,

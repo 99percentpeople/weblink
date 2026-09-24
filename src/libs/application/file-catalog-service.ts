@@ -20,6 +20,7 @@ export interface FileCatalogServiceOptions<
   getSessions(): Iterable<S>;
   isReady(session: S): boolean;
   canList(session: S): boolean;
+  supports?(session: S): boolean;
   onSessionClosed(
     handler: (session: S) => void,
   ): () => void;
@@ -40,8 +41,14 @@ export class FileCatalogService<S extends ProtocolSession> {
     this.stops = [
       protocol.handle(
         "request-storage",
-        ({ session, message }) =>
-          index.query(message, options.canList(session)),
+        ({ session, message }) => {
+          if (!options.isReady(session))
+            throw new Error("Member is not connected");
+          return index.query(
+            message,
+            options.canList(session),
+          );
+        },
       ),
       protocol.on("storage-changed", ({ session }) => {
         for (const [view, owner] of this.views)
@@ -65,13 +72,23 @@ export class FileCatalogService<S extends ProtocolSession> {
       throw new Error("File catalog service is disposed");
     const view = new RemoteFileCatalog(
       query,
-      (query, signal) =>
-        this.options.protocol.call(
+      (query, signal) => {
+        if (
+          this.options.supports &&
+          !this.options.supports(session)
+        )
+          return Promise.reject(
+            new Error(
+              "Member does not support shared files",
+            ),
+          );
+        return this.options.protocol.call(
           session,
           "request-storage",
           query,
           { signal },
-        ),
+        );
+      },
       onState,
       () => {
         this.views.delete(view);

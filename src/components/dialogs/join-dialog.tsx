@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import { setClientProfile } from "@/libs/state/profile-store";
 import { createDialog } from "./dialog";
 import { Input } from "@/components/ui/input";
@@ -272,9 +273,10 @@ export const createRoomDialog = () => {
                     setClientProfile("avatar", url);
                   } catch (error) {
                     toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : String(error),
+                      userErrorMessage(
+                        error,
+                        "errors.avatar_failed",
+                      ),
                     );
                   } finally {
                     input.value = "";

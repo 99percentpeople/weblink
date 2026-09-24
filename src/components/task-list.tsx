@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@/libs/user-error";
 import {
   createMemo,
   createSignal,
@@ -49,6 +50,7 @@ import {
   type AppTask,
   type TaskListItem,
   type FileTask,
+  type SharedFileTask,
   isFinishedTask,
   isActiveTask,
   type TaskStatus,
@@ -204,12 +206,16 @@ function TaskRow(props: {
   const [pending, setPending] = createSignal(false);
   const file = () =>
     ["file-send", "file-receive"].includes(props.task.kind)
-      ? (props.task as FileTask)
+      ? (props.task as FileTask | SharedFileTask)
       : undefined;
   const preparation = () =>
     props.task.kind === "file-prepare"
       ? props.task
       : undefined;
+  const sharedFile = () => {
+    const task = file();
+    return task && "shared" in task ? task : undefined;
+  };
   const speed = () =>
     props.task.kind === "speed-test"
       ? props.task.run
@@ -228,7 +234,8 @@ function TaskRow(props: {
 
   const resume = async () => {
     const task = file();
-    if (!task?.message.fid || task.canResume === false)
+    if (task && "shared" in task) return task.resume();
+    if (!task?.message?.fid || task.canResume === false)
       return;
     const message = task.message;
     const fid = message.fid!;
@@ -331,11 +338,15 @@ function TaskRow(props: {
             onAction={() =>
               void action(
                 fileAction() === "pause"
-                  ? () =>
-                      app.pauseFile(
-                        file()!.message.fid!,
-                        props.task.peerId,
-                      )
+                  ? () => {
+                      const task = file()!;
+                      if ("shared" in task) task.pause();
+                      else
+                        return app.pauseFile(
+                          task.message.fid!,
+                          props.task.peerId,
+                        );
+                    }
                   : resume,
               )
             }
@@ -492,8 +503,18 @@ function TaskRow(props: {
         </Show>
         <Show
           when={
-            file()?.error ??
-            preparation()?.error ??
+            (file()?.error
+              ? userErrorMessage(
+                  file()!.error,
+                  "errors.file_failed",
+                )
+              : undefined) ??
+            (preparation()?.error
+              ? userErrorMessage(
+                  preparation()!.error,
+                  "errors.file_failed",
+                )
+              : undefined) ??
             (speed()?.error
               ? t("speed_test.errors." + speed()!.error)
               : undefined)
@@ -510,6 +531,28 @@ function TaskRow(props: {
         </Show>
       </div>
       <div class="flex items-center gap-1">
+        <Show
+          when={
+            sharedFile() &&
+            !["completed", "cancelled"].includes(
+              props.task.status,
+            )
+          }
+        >
+          <Button
+            size="icon"
+            variant="ghost"
+            class="size-8"
+            aria-label={t("common.action.cancel")}
+            title={t("common.action.cancel")}
+            disabled={pending()}
+            onClick={() =>
+              void action(() => sharedFile()?.cancel())
+            }
+          >
+            <X class="size-4" />
+          </Button>
+        </Show>
         <Show
           when={preparation() && isActiveTask(props.task)}
         >

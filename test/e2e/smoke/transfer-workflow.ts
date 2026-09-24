@@ -36,6 +36,14 @@ import { RoomFileSharingService } from "../../../src/libs/application/messaging/
 import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
 import { getDefaultAppOptions } from "../../../src/libs/state/app-options";
 
+import { createRoot, createEffect } from "solid-js";
+import { SharedFileTransfers } from "../../../src/libs/application/transfer/shared-file-transfers";
+import {
+  FileCatalogIndex,
+  toCatalogMetadata,
+} from "../../../src/libs/application/file-catalog-index";
+import { FileCatalogService } from "../../../src/libs/application/file-catalog-service";
+
 const transferDefaults = getDefaultAppOptions();
 
 const assert: (
@@ -194,6 +202,8 @@ function makeNode(
     updateTransferMessage: update,
   };
   const rawCaches = new Map<string, ChunkCache>();
+  const index = new FileCatalogIndex();
+  let sharing = true;
   let library: FileLibraryService | undefined;
   const cacheApi = {
     get library() {
@@ -227,6 +237,10 @@ function makeNode(
         },
       });
       rawCaches.set(fid, scoped);
+      raw.addEventListener("cleanup", () => {
+        rawCaches.delete(fid);
+        if (caches.get(fid) === scoped) caches.delete(fid);
+      });
       if (contentEnabled) {
         let verified: Promise<File | null> | undefined;
         scoped.verifyFile = (signal) =>
@@ -253,6 +267,12 @@ function makeNode(
       getCache: (fid) => caches.get(fid) ?? null,
       publish: async (cache) => {
         caches.set(cache.id, cache);
+        cache.addEventListener("update", ({ detail }) =>
+          index.update(cache.id, detail),
+        );
+        cache.addEventListener("cleanup", () =>
+          index.update(cache.id, null),
+        );
         await cache.initialize();
       },
     });
@@ -277,7 +297,10 @@ function makeNode(
     bind: (run, signal) =>
       bindTransferMessage(run, store, signal),
     complete: async (run, signal) => {
-      if (run.transferer.mode === TransferMode.Receive)
+      if (
+        run.messageId &&
+        run.transferer.mode === TransferMode.Receive
+      )
         await finishReceivedFile(
           run.transferer.cache,
           run.messageId,
@@ -321,6 +344,8 @@ function makeNode(
   const rooms = roomEnabled
     ? new RoomMessagingService(protocol, {
         supportsFiles: true,
+        onFileSending: (id) =>
+          library?.setShared(id, true) ?? Promise.resolve(),
         supportsContent: (session) =>
           contentEnabled &&
           !session.targetClientId.includes("legacy"),
@@ -384,7 +409,37 @@ function makeNode(
         getLocalClientId: () => id,
       })
     : undefined;
+  const shared = library
+    ? new SharedFileTransfers({
+        protocol,
+        rtc: transport,
+        registry,
+        caches: { ...cacheApi, library },
+        receives: service.contentReceives,
+        getSession: (peer) => sessions.get(peer),
+        canShare: () => sharing,
+        supports: () => true,
+        reportError: (error) => errors.push(String(error)),
+      })
+    : undefined;
+  const catalog = new FileCatalogService({
+    protocol,
+    index,
+    getSessions: () => sessions.values(),
+    isReady: (session) => session.isMessageChannelReady,
+    canList: () => sharing,
+    onSessionClosed: (handler) =>
+      transport.onSessionClosed(handler),
+  });
   return {
+    shared,
+    catalog,
+    index,
+    setSharing(value: boolean) {
+      sharing = value;
+      shared?.syncPermissions();
+      catalog.syncSharing();
+    },
     id,
     transport,
     protocol,
@@ -406,6 +461,8 @@ function makeNode(
       progressCallback = handler;
     },
     async close() {
+      shared?.dispose();
+      catalog.dispose();
       roomFiles?.dispose();
       rooms?.dispose();
       service.dispose();
@@ -642,8 +699,8 @@ async function runRoomFileSmoke() {
       } catch (error) {
         assert(
           error instanceof Error &&
-            error.message.includes(
-              "authorized room request",
+            /authorized room request|not sent to this peer/.test(
+              error.message,
             ),
           `unexpected ${type} rejection: ${String(error)}`,
         );
@@ -931,6 +988,7 @@ async function main() {
     ...(report as Record<string, unknown>),
     roomFiles: await runRoomFileSmoke(),
     contentLibrary: await runContentLibrarySmoke(),
+    sharedFiles: await runSharedFilesSmoke(),
     productionLibrary: await runProductionLibrarySmoke(),
     fingerprintBenchmark: await fingerprintBenchmark(),
   };
@@ -1174,11 +1232,16 @@ async function runContentLibrarySmoke() {
           "supported",
       "room capabilities unavailable",
     );
+    await a.library!.setShared(first.fid!, false);
     await a.roomFiles!.sendFile({
       kind: "library",
       localFileId: first.fid!,
     });
     const room = a.messages.at(-1)!;
+    assert(
+      (await a.caches.get(room.fid!)?.getInfo())?.isShared,
+      "new room send did not share content",
+    );
     await until(
       () =>
         room.roomTransfers?.["content-b"]
@@ -1261,6 +1324,368 @@ async function runContentLibrarySmoke() {
       b.close(),
       legacy.close(),
     ]);
+  }
+}
+
+async function runSharedFilesSmoke() {
+  const a = makeNode("shared-a", false, true);
+  const b = makeNode("shared-b", false, true);
+  const ab = await connect(a, b);
+  let disposeEffect: (() => void) | undefined;
+  try {
+    const source = new File(
+      [
+        crypto.getRandomValues(new Uint8Array(64000)),
+        new Uint8Array(2 * 1024 * 1024).fill(42),
+      ],
+      "shared.bin",
+    );
+    const local = await a.library!.importFile(source);
+    assert(
+      !(await local.cache.getInfo())?.isShared,
+      "import unexpectedly shared content",
+    );
+    await a.library!.setShared(local.cache.id, true);
+    let page = await b.protocol.call(
+      ab.bSession,
+      "request-storage",
+      { pageIndex: 0, pageSize: 50 },
+    );
+    assert(
+      page.items.length === 1,
+      "shared catalog did not expose one content reference",
+    );
+    const info = page.items[0];
+    assert(
+      info.id !== local.cache.id && info.fingerprint,
+      "directory reused an attachment ID",
+    );
+    await b.shared!.download(a.id, info);
+    await until(
+      () => b.shared!.tasks()[0]?.status === "completed",
+      "shared pull did not complete",
+    );
+    assert(
+      a.messages.length === 0 && b.messages.length === 0,
+      "shared pull created chat messages",
+    );
+    const received = await Promise.all(
+      [...b.caches.values()].map((cache) =>
+        cache.getInfo(),
+      ),
+    );
+    const saved = received.find(
+      (item) =>
+        item?.libraryPinned &&
+        item.fingerprint?.digest ===
+          info.fingerprint!.digest,
+    );
+    assert(
+      saved?.file && !saved.isShared,
+      "download was not private in the local library",
+    );
+    assert(
+      (await hash(saved.file)) === (await hash(source)),
+      "shared pull bytes differ",
+    );
+    const channels = b.transport.fileChannels;
+    const localIds = [...b.caches.keys()];
+    await b.shared!.download(a.id, info);
+    assert(
+      b.shared!.tasks().length === 1,
+      "local hit created another task",
+    );
+    b.shared!.clearFinished();
+    await b.shared!.download(a.id, {
+      ...info,
+      id: "another-member-alias",
+    });
+    assert(
+      b.shared!.tasks().length === 0,
+      "clearing history defeated deduplication",
+    );
+    assert(
+      JSON.stringify([...b.caches.keys()]) ===
+        JSON.stringify(localIds),
+      "local hit created another file reference",
+    );
+    assert(
+      b.transport.fileChannels === channels,
+      "local hit opened a binary channel",
+    );
+    // Invalid IDs must fail in both the shared and historical generic APIs.
+    for (const fid of [local.cache.id, "forged-file-id"]) {
+      let denied = false;
+      try {
+        await b.protocol.call(
+          ab.bSession,
+          "request-shared-file",
+          {
+            fid,
+            transferId: `shared-transfer_${crypto.randomUUID()}`,
+            fingerprint: info.fingerprint!,
+            chunkSize: info.chunkSize!,
+            have: true,
+          },
+        );
+      } catch {
+        denied = true;
+      }
+      assert(denied, "forged shared ID was accepted");
+    }
+    let denied = false;
+    try {
+      await b.protocol.call(ab.bSession, "request-file", {
+        fid: local.cache.id,
+        fileName: source.name,
+        fileSize: source.size,
+        lastModified: source.lastModified,
+        mimeType: source.type,
+        chunkSize: info.chunkSize!,
+        resume: false,
+      });
+    } catch {
+      denied = true;
+    }
+    assert(
+      denied,
+      "legacy request exposed arbitrary cached content",
+    );
+    a.setSharing(false);
+    page = await b.protocol.call(
+      ab.bSession,
+      "request-storage",
+      { pageIndex: 0, pageSize: 50 },
+    );
+    assert(
+      !page.sharingEnabled && page.totalCount === 0,
+      "member permission did not hide the directory",
+    );
+    denied = false;
+    try {
+      await b.protocol.call(
+        ab.bSession,
+        "request-shared-file",
+        {
+          fid: info.id,
+          transferId: `shared-transfer_${crypto.randomUUID()}`,
+          fingerprint: info.fingerprint!,
+          chunkSize: info.chunkSize!,
+          have: true,
+        },
+      );
+    } catch {
+      denied = true;
+    }
+    assert(
+      denied,
+      "shared request bypassed revoked permission",
+    );
+    a.setSharing(true);
+    // Pause a real receive after chunks have arrived, then resume the same task.
+    const large = new File(
+      [
+        new Uint8Array(12 * 1024 * 1024).map(
+          (_, index) => (index * 31 + (index >> 9)) % 251,
+        ),
+      ],
+      "resume-shared.bin",
+    );
+    const second = await a.library!.importFile(large);
+    await a.library!.setShared(second.cache.id, true);
+    const secondInfo = toCatalogMetadata(
+      (await a.library!.sharedFiles()).find(
+        (item) => item.fileName === large.name,
+      )!,
+    );
+    let paused = false;
+    createRoot((dispose) => {
+      disposeEffect = dispose;
+      createEffect(() => {
+        const task = b
+          .shared!.tasks()
+          .find((item) => item.fileName === large.name);
+        if (
+          !paused &&
+          task &&
+          task.bytes > 0 &&
+          task.status === "running"
+        ) {
+          paused = true;
+          task.pause();
+        }
+      });
+    });
+    await b.shared!.download(a.id, secondInfo);
+    await until(
+      () =>
+        paused && !Object.values(b.active).some(Boolean),
+      "shared pause did not retire the receiver",
+    );
+    disposeEffect?.();
+    disposeEffect = undefined;
+    // The sender's close event is delivered over the real data channel asynchronously.
+    await until(
+      () => !Object.values(a.active).some(Boolean),
+      "shared sender did not observe pause",
+    );
+    await b
+      .shared!.tasks()
+      .find((task) => task.fileName === large.name)!
+      .resume();
+    await until(
+      () =>
+        b
+          .shared!.tasks()
+          .find((task) => task.fileName === large.name)
+          ?.status === "completed",
+      "shared resume did not complete",
+      30000,
+    );
+    const resumed = (
+      await Promise.all(
+        [...b.caches.values()].map((cache) =>
+          cache.getInfo(),
+        ),
+      )
+    ).find(
+      (item) =>
+        item?.libraryPinned && item.fileName === large.name,
+    );
+    assert(
+      resumed?.file &&
+        (await hash(resumed.file)) === (await hash(large)),
+      "resumed shared bytes differ",
+    );
+    const cancellable = new File(
+      [large, new Uint8Array([1])],
+      "cancel-shared.bin",
+    );
+    const third = await a.library!.importFile(cancellable);
+    await a.library!.setShared(third.cache.id, true);
+    const thirdInfo = toCatalogMetadata(
+      (await a.library!.sharedFiles()).find(
+        (item) => item.fileName === cancellable.name,
+      )!,
+    );
+    let cancelledId: string | undefined;
+    let cancelling: Promise<void> | undefined;
+    let cancelledFileId: string | undefined;
+    disposeEffect = createRoot((dispose) => {
+      createEffect(() => {
+        const task = b.shared!.downloadTask(
+          a.id,
+          thirdInfo.id,
+        );
+        if (
+          !cancelledId &&
+          task?.status === "running" &&
+          task.bytes > 0
+        ) {
+          cancelledId = task.id;
+          cancelledFileId = Object.values(b.active).find(
+            (entry) => entry?.taskId === task.id,
+          )?.transferer.cache.id;
+          cancelling = task.cancel();
+        }
+      });
+      return dispose;
+    });
+    await b.shared!.download(a.id, thirdInfo);
+    await until(
+      () =>
+        !!cancelledId &&
+        !Object.values(b.active).some(Boolean),
+      "cancelled shared receive remained active",
+    );
+    disposeEffect?.();
+    disposeEffect = undefined;
+    await until(
+      () => !Object.values(a.active).some(Boolean),
+      "shared sender did not observe cancellation",
+    );
+    assert(
+      b.shared!.downloadTask(a.id, thirdInfo.id)?.status ===
+        "cancelled",
+      "late events revived a cancelled task",
+    );
+    await cancelling;
+    assert(
+      cancelledFileId && !b.caches.has(cancelledFileId),
+      "cancelled file remains in the local library",
+    );
+    assert(
+      !(await indexedDB.databases()).some((db) =>
+        db.name?.endsWith(`shared-b-${cancelledFileId}`),
+      ),
+      "cancelled partial cache remains in IndexedDB",
+    );
+    await b.shared!.download(a.id, thirdInfo);
+    await until(
+      () =>
+        b.shared!.downloadTask(a.id, thirdInfo.id)
+          ?.status === "completed",
+      "new download after cancellation did not complete",
+      30000,
+    );
+    assert(
+      b.shared!.downloadTask(a.id, thirdInfo.id)?.id !==
+        cancelledId,
+      "cancelled task was resumed instead of starting a new download",
+    );
+    await a.library!.removeFile(third.cache.id);
+    await a.library!.setShared(local.cache.id, false);
+    denied = false;
+    try {
+      await b.protocol.call(
+        ab.bSession,
+        "request-shared-file",
+        {
+          fid: info.id,
+          transferId: `shared-transfer_${crypto.randomUUID()}`,
+          fingerprint: info.fingerprint!,
+          chunkSize: info.chunkSize!,
+          have: true,
+        },
+      );
+    } catch {
+      denied = true;
+    }
+    assert(denied, "unshared content remained authorized");
+    assert(
+      await local.cache.getFile(),
+      "unshare deleted local content",
+    );
+    await a.library!.removeFile(second.cache.id);
+    page = await b.protocol.call(
+      ab.bSession,
+      "request-storage",
+      { pageIndex: 0, pageSize: 50 },
+    );
+    assert(
+      page.items.length === 0,
+      "deleted content remained listed",
+    );
+    assert(
+      a.messages.length === 0 && b.messages.length === 0,
+      "shared resume added chat history",
+    );
+    return {
+      verifiedBytes: source.size + large.size,
+      localHitChannels: 0,
+      pausedAndResumed: true,
+      cancelledAndRetrievedAgain: true,
+      cancelledCacheDeleted: true,
+      completedGetsDeduplicated: true,
+      legacyBypassDenied: true,
+      permissionRevoked: true,
+      unsharedAndDeleted: true,
+      chatMessages: 0,
+    };
+  } finally {
+    disposeEffect?.();
+    ab.close();
+    await Promise.all([a.close(), b.close()]);
   }
 }
 

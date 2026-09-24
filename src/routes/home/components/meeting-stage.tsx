@@ -21,6 +21,7 @@ import {
   type MeetingSource,
 } from "./meeting-sources";
 import { createMeetingGridLayout } from "./meeting-grid-layout";
+import { useAudioPlayer } from "./audio-player";
 
 export type MeetingStageHandle = { measure(): void };
 
@@ -38,6 +39,7 @@ export function MeetingStage(
     transitionLayout(update: () => void): void;
   }>,
 ) {
+  const audio = useAudioPlayer();
   const [grid, setGrid] = createSignal<HTMLDivElement>();
   const [frame, setFrame] = createSignal<HTMLDivElement>();
   const [rail, setRail] = createSignal<HTMLDivElement>();
@@ -131,6 +133,15 @@ export function MeetingStage(
           avatar={source().avatar}
           stream={source().stream}
           local={source().local}
+          audioMuted={audio.isPeerMuted(
+            source().participantId,
+          )}
+          onToggleAudio={() =>
+            audio.setPeerMuted(
+              source().participantId,
+              !audio.isPeerMuted(source().participantId),
+            )
+          }
           pinned={source().id === featured()?.id}
           onPin={() => props.onPin(source().id)}
           onStop={

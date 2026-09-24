@@ -10,7 +10,8 @@ export interface ActiveFileTransfer {
   readonly id: string;
   readonly session: PeerSession;
   readonly fileId: string;
-  readonly messageId: string;
+  readonly messageId?: string;
+  readonly taskId?: string;
   readonly transferer: FileTransferer;
 }
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@solidjs/testing-library";
+import { reconcile } from "solid-js/store";
 import {
   afterEach,
   beforeEach,
@@ -27,6 +28,7 @@ vi.mock("@/libs/state/app-state", async () => {
 class Track extends EventTarget {
   kind = "audio";
   readyState = "live";
+  enabled = true;
   end() {
     this.readyState = "ended";
     this.dispatchEvent(new Event("ended"));
@@ -103,7 +105,7 @@ function setup() {
 beforeEach(() => {
   installSink(undefined);
   vi.stubGlobal("MediaStream", Stream);
-  setAppState("session", "clientViewData", {});
+  setAppState("session", "clientViewData", reconcile({}));
   vi.spyOn(
     HTMLMediaElement.prototype,
     "play",
@@ -321,6 +323,52 @@ describe("meeting audio output selection", () => {
 });
 
 describe("meeting audio playback", () => {
+  it("mutes only the chosen member, keeps new and reconnected tracks muted, and preserves global mute when unmuting", async () => {
+    const microphone = track(),
+      sharedAudio = track(),
+      other = track();
+    const stream = new Stream([microphone, sharedAudio]);
+    connect(stream);
+    setAppState("session", "clientViewData", "bob", {
+      clientId: "bob",
+      name: "Bob",
+      stream: new Stream([other]) as unknown as MediaStream,
+    } as ClientInfo);
+    const view = setup();
+    await flush();
+    const output =
+      view.container.querySelector("audio")!.srcObject;
+    expect(player.hasPeerAudio("alice")).toBe(true);
+    player.setPeerMuted("alice", true);
+    expect(microphone.enabled).toBe(false);
+    expect(sharedAudio.enabled).toBe(false);
+    expect(other.enabled).toBe(true);
+    expect(player.isPeerMuted("alice")).toBe(true);
+    expect(player.isPeerMuted("bob")).toBe(false);
+    expect(
+      view.container.querySelector("audio")!.srcObject,
+    ).toBe(output);
+    const added = track();
+    stream.add(added);
+    expect(added.enabled).toBe(false);
+    player.setPlay(false);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      undefined!,
+    );
+    expect(player.hasPeerAudio("alice")).toBe(false);
+    const replacement = track();
+    connect(new Stream([replacement]));
+    expect(replacement.enabled).toBe(false);
+    expect(player.hasPeerAudio("alice")).toBe(true);
+    player.setPeerMuted("alice", false);
+    expect(replacement.enabled).toBe(true);
+    expect(other.enabled).toBe(true);
+    expect(player.playState()).toBe(false);
+  });
+
   it("preserves global mute across remote track replacement and reconnect", async () => {
     connect(new Stream([track()]));
     const view = setup();

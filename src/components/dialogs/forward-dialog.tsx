@@ -31,6 +31,7 @@ import { useAppState } from "@/libs/state/app-state-context";
 import { toast } from "solid-sonner";
 import { FileMetaData } from "@/libs/domain/file";
 import { t } from "@/i18n";
+import { userErrorMessage } from "@/libs/user-error";
 import { appState } from "@/libs/state/app-state";
 import { mountModalRenderer } from "./base";
 
@@ -233,15 +234,11 @@ export const createForwardDialog = () => {
                     );
                   }
                 } catch (err) {
-                  if (err instanceof Error) {
-                    toast.error(
-                      `Failed to share ${item.type} to ${clientId}: ${err.message}`,
-                    );
-                  } else {
-                    toast.error(
-                      `Failed to share ${item.type} to ${clientId}`,
-                    );
-                  }
+                  console.error(
+                    "Unable to forward message",
+                    err,
+                  );
+                  toast.error(userErrorMessage(err));
                 }
               }
             }
