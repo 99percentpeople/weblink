@@ -25,13 +25,22 @@ export function ChatDropOverlay(props: {
         native
         data-slot="chat-drop-overlay"
         aria-hidden="true"
-        inert
+        inert={!props.state.active}
+        // Own hit testing during a file drag so native controls underneath
+        // cannot change the cursor. Release it immediately on exit, even
+        // while AnimatePresence keeps this node mounted for the fade-out.
+        style={{
+          "pointer-events": props.state.active
+            ? "auto"
+            : "none",
+          cursor: accepted() ? "copy" : "not-allowed",
+        }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        class="bg-background/70 pointer-events-none absolute inset-0 z-30
-          grid place-items-center p-4 select-none"
+        class="bg-background/70 absolute inset-0 z-30 grid
+          place-items-center p-4 select-none [&_*]:pointer-events-none"
       >
         <div
           class="text-muted-foreground flex flex-col items-center gap-3

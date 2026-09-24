@@ -39,7 +39,7 @@ export default function DropArea<T extends ValidComponent>(
     "as",
   ]);
   let element: HTMLElement | undefined;
-  const entered = new Set<EventTarget>();
+  let dragTarget: EventTarget | null = null;
   const [active, setActive] = createSignal(false);
   // Keep the overlay owner mounted across state changes so it can finish an
   // exit animation. Consumers read reactive getters, not a replaced snapshot.
@@ -52,7 +52,7 @@ export default function DropArea<T extends ValidComponent>(
     },
   };
   const reset = () => {
-    entered.clear();
+    dragTarget = null;
     setActive(false);
   };
   const hasFiles = (event: DragEvent) =>
@@ -61,34 +61,41 @@ export default function DropArea<T extends ValidComponent>(
     );
   const contains = (target: EventTarget | null) =>
     target instanceof Node && !!element?.contains(target);
-  const accept = (event: DragEvent) => {
+  const setDropEffect = (event: DragEvent) => {
+    if (!hasFiles(event)) return false;
     event.preventDefault();
-    event.stopPropagation();
     if (event.dataTransfer)
       event.dataTransfer.dropEffect = local.disabled
         ? "none"
         : "copy";
+    return true;
+  };
+  const accept = (event: DragEvent) => {
+    if (!setDropEffect(event)) return false;
+    event.stopPropagation();
+    return true;
   };
   const handleDragEnter = (event: DragEvent) => {
-    if (!hasFiles(event)) return;
-    accept(event);
-    if (event.target) entered.add(event.target);
+    if (!accept(event)) return;
+    dragTarget = event.target;
     setActive(true);
   };
   const handleDragOver = (event: DragEvent) => {
-    if (!hasFiles(event)) return;
-    accept(event);
+    if (!accept(event)) return;
     // Do not publish each DragEvent: that remounts overlays on every dragover.
+    dragTarget = event.target;
     setActive(true);
   };
   const handleDragLeave = (event: DragEvent) => {
     if (!active()) return;
     event.stopPropagation();
-    if (event.target) entered.delete(event.target);
-    // Child transitions bubble too. relatedTarget may be null for OS files,
-    // so keep entered targets until the final matching leave in that case.
     if (contains(event.relatedTarget)) return;
-    if (event.relatedTarget || entered.size === 0) reset();
+    // A new target enters before the previous target leaves, so ignore the
+    // old target's leave even when relatedTarget is missing. But a leave of
+    // the current target ends the drag: rejected OS drops emit only this
+    // event, not drop or a dragend in this document.
+    if (event.relatedTarget || event.target === dragTarget)
+      reset();
   };
   const handleDrop = (event: DragEvent) => {
     if (!hasFiles(event)) return;
@@ -103,6 +110,19 @@ export default function DropArea<T extends ValidComponent>(
       capture: true,
       signal: controller.signal,
     };
+    // Set the native drag cursor before the event reaches changing child
+    // targets. Waiting for the bubbling handler lets the browser briefly show
+    // its default/no-drop cursor while crossing nested chat elements.
+    element?.addEventListener(
+      "dragenter",
+      setDropEffect,
+      options,
+    );
+    element?.addEventListener(
+      "dragover",
+      setDropEffect,
+      options,
+    );
     window.addEventListener("drop", reset, options);
     window.addEventListener("dragend", reset, options);
     window.addEventListener("blur", reset, options);

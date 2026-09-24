@@ -112,12 +112,26 @@ describe("file drop area", () => {
     const { root } = setup();
     drag(root, "dragenter");
     drag(root, "dragenter");
-    drag(root, "dragleave");
+    drag(root, "dragleave", files(), document.body);
     expect(screen.queryByTestId("overlay")).toBeNull();
     drag(root, "dragover");
     expect(screen.getByTestId("overlay")).toBeTruthy();
-    drag(root, "dragleave");
+    drag(root, "dragleave", files(), document.body);
     expect(screen.queryByTestId("overlay")).toBeNull();
+  });
+
+  it("sets the file cursor during capture before child dragover handlers run", () => {
+    const { root } = setup();
+    const message = root.querySelector("span")!;
+    const transfer = files();
+    let observed = "";
+    message.addEventListener("dragover", (event) => {
+      observed = event.dataTransfer?.dropEffect ?? "";
+    });
+    transfer.dropEffect = "none";
+    drag(message, "dragover", transfer);
+    expect(observed).toBe("copy");
+    expect(transfer.dropEffect).toBe("copy");
   });
 
   it("rejects files while disabled, including a permission change during dragging", () => {
@@ -136,6 +150,44 @@ describe("file drop area", () => {
     ).toBe(true);
     expect(onDrop).not.toHaveBeenCalled();
     expect(screen.queryByTestId("overlay")).toBeNull();
+  });
+
+  it.each([false, true])(
+    "clears a terminal leave without drop or dragend (disabled=%s)",
+    (disabled) => {
+      const { root, setDisabled, onDrop } = setup();
+      setDisabled(disabled);
+      const input = root.querySelector("textarea")!;
+      drag(input, "dragenter");
+      const overlay = screen.getByTestId("overlay");
+      // The new hit target enters before the old control leaves. The old
+      // leave must not reset the new target, even without relatedTarget.
+      drag(overlay, "dragenter");
+      drag(input, "dragleave");
+      expect(screen.getByTestId("overlay")).toBe(overlay);
+      drag(overlay, "dragover");
+      // Rejection/cancellation may end with only this event and no file data.
+      drag(overlay, "dragleave", {
+        types: [],
+        dropEffect: "none",
+      });
+      expect(screen.queryByTestId("overlay")).toBeNull();
+      expect(onDrop).not.toHaveBeenCalled();
+      setDisabled(false);
+      drag(input, "dragenter");
+      drag(input, "drop");
+      expect(onDrop).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("clears a terminal leave when permission is lost during dragging", () => {
+    const { root, setDisabled, onDrop } = setup();
+    drag(root, "dragenter");
+    setDisabled(true);
+    drag(root, "dragover");
+    drag(root, "dragleave");
+    expect(screen.queryByTestId("overlay")).toBeNull();
+    expect(onDrop).not.toHaveBeenCalled();
   });
 
   it("leaves text and link dragging alone", () => {

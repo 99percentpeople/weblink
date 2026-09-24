@@ -91,6 +91,9 @@ function setup() {
   const drop = (
     files = [new File(["a"], "a.txt")],
     items: unknown[] = [{}],
+    target: EventTarget = view.container.querySelector(
+      "textarea",
+    )!,
   ) => {
     const event = new Event("drop", {
       bubbles: true,
@@ -105,22 +108,27 @@ function setup() {
     Object.defineProperty(event, "dataTransfer", {
       value: data,
     });
-    view.container
-      .querySelector("textarea")!
-      .dispatchEvent(event);
+    target.dispatchEvent(event);
     return event;
   };
-  const drag = (type: string) => {
+  const drag = (
+    type: string,
+    relatedTarget: EventTarget | null = null,
+    target: EventTarget = view.container.querySelector(
+      "textarea",
+    )!,
+  ) => {
     const event = new Event(type, {
       bubbles: true,
       cancelable: true,
     });
-    Object.defineProperty(event, "dataTransfer", {
-      value: { types: ["Files"], dropEffect: "none" },
+    Object.defineProperties(event, {
+      dataTransfer: {
+        value: { types: ["Files"], dropEffect: "none" },
+      },
+      relatedTarget: { value: relatedTarget },
     });
-    view.container
-      .querySelector("textarea")!
-      .dispatchEvent(event);
+    target.dispatchEvent(event);
   };
   const overlay = () =>
     view.container.querySelector(
@@ -161,6 +169,7 @@ describe("chat drop overlay transitions", () => {
     view.drag("dragenter");
     const overlay = view.overlay()!;
     expect(overlay).toBeTruthy();
+    expect(overlay).toHaveProperty("inert", false);
     const hint = overlay.textContent;
     view.drop();
     expect(mock.read).toHaveBeenCalledOnce();
@@ -177,7 +186,7 @@ describe("chat drop overlay transitions", () => {
     const view = setup();
     view.drag("dragenter");
     const overlay = view.overlay();
-    view.drag("dragleave");
+    view.drag("dragleave", document.body);
     const exit = mock.animations.at(-1)!;
     view.drag("dragenter");
     expect(exit.stop).toHaveBeenCalledOnce();
@@ -185,13 +194,39 @@ describe("chat drop overlay transitions", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(view.overlay()).toBe(overlay);
+    expect(overlay).toHaveProperty("inert", false);
     const count = mock.animations.length;
     view.drag("dragover");
     expect(mock.animations).toHaveLength(count);
-    view.drag("dragleave");
+    view.drag("dragleave", document.body);
     mock.animations.at(-1)!.complete();
     await waitFor(() => expect(view.overlay()).toBeNull());
   });
+
+  it.each([false, true])(
+    "releases a rejected overlay on terminal leave without drop (disabled at entry=%s)",
+    async (disabledAtEntry) => {
+      const view = setup();
+      view.setDisabled(disabledAtEntry);
+      view.drag("dragenter");
+      const overlay = view.overlay()!;
+      view.drag("dragenter", null, overlay);
+      view.drag("dragleave"); // old control, not the active overlay
+      expect(overlay).toHaveProperty("inert", false);
+      view.setDisabled(true);
+      view.drag("dragover", null, overlay);
+      view.drag("dragleave", null, overlay);
+      expect(view.overlay()).toBe(overlay);
+      expect(overlay).toHaveProperty("inert", true);
+      expect(mock.read).not.toHaveBeenCalled();
+      expect(mock.loading).not.toHaveBeenCalled();
+      expect(view.send).not.toHaveBeenCalled();
+      mock.animations.at(-1)!.complete();
+      await waitFor(() =>
+        expect(view.overlay()).toBeNull(),
+      );
+    },
+  );
 
   it("does not wait for an exit when reduced motion is requested", () => {
     vi.stubGlobal("matchMedia", () => ({
@@ -202,12 +237,34 @@ describe("chat drop overlay transitions", () => {
     const view = setup();
     view.drag("dragenter");
     expect(view.overlay()).toBeTruthy();
-    view.drag("dragleave");
+    view.drag("dragleave", document.body);
     expect(view.overlay()).toBeNull();
   });
 });
 
 describe("chat file drop processing", () => {
+  it("delivers a drop on the overlay once without invoking underlying controls", async () => {
+    const file = new File(["file"], "overlay.txt");
+    mock.read.mockResolvedValue([file]);
+    const view = setup();
+    const controlDrop = vi.fn();
+    view.container
+      .querySelector("textarea")!
+      .addEventListener("drop", controlDrop);
+    view.drag("dragenter");
+    const overlay = view.overlay()!;
+    expect(
+      view.drop([file], [{}], overlay).defaultPrevented,
+    ).toBe(true);
+    await waitFor(() =>
+      expect(view.sent).toHaveBeenCalledOnce(),
+    );
+    expect(view.send).toHaveBeenCalledOnce();
+    expect(view.send).toHaveBeenCalledWith(file);
+    expect(controlDrop).not.toHaveBeenCalled();
+    expect(overlay).toHaveProperty("inert", true);
+  });
+
   it("reads drop entries synchronously and sends all prepared files in order", async () => {
     const files = [
       new File(["one"], "one.txt"),

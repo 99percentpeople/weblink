@@ -20,10 +20,12 @@ const taskUi = process.argv.includes("--tasks");
 const chatUi = process.argv.includes("--chat");
 const meetingUi = process.argv.includes("--meeting");
 const playbackTest = process.argv.includes("--playback");
+const dropTest = process.argv.includes("--drop");
 const conversationStorage = process.argv.includes(
   "--conversations",
 );
-const ui = taskUi || chatUi || meetingUi || playbackTest;
+const ui =
+  taskUi || chatUi || meetingUi || playbackTest || dropTest;
 const protocolTest = process.argv.includes("--protocol");
 const recoveryTest = process.argv.includes("--recovery");
 const transferTest = process.argv.includes("--transfer");
@@ -31,27 +33,29 @@ const cacheBenchmark = process.argv.includes(
   "--cache-benchmark",
 );
 const cacheTest = process.argv.includes("--cache");
-const entry = playbackTest
-  ? "test/e2e/smoke/video-playback.html"
-  : recoveryTest
-    ? "test/e2e/smoke/session-recovery.html"
-    : meetingUi
-      ? "test/e2e/smoke/meeting.html"
-      : conversationStorage
-        ? "test/e2e/smoke/conversation-storage.html"
-        : chatUi
-          ? "test/e2e/smoke/chat-scroll.html"
-          : cacheBenchmark
-            ? "test/e2e/benchmark/cache-merge.html"
-            : cacheTest
-              ? "test/e2e/smoke/cache-merge.html"
-              : taskUi
-                ? "test/e2e/smoke/task-center.html"
-                : protocolTest
-                  ? "test/e2e/smoke/rtc-protocol.html"
-                  : transferTest
-                    ? "test/e2e/smoke/transfer-workflow.html"
-                    : "test/e2e/smoke/speed-test.html";
+const entry = dropTest
+  ? "test/e2e/smoke/chat-file-drop.html"
+  : playbackTest
+    ? "test/e2e/smoke/video-playback.html"
+    : recoveryTest
+      ? "test/e2e/smoke/session-recovery.html"
+      : meetingUi
+        ? "test/e2e/smoke/meeting.html"
+        : conversationStorage
+          ? "test/e2e/smoke/conversation-storage.html"
+          : chatUi
+            ? "test/e2e/smoke/chat-scroll.html"
+            : cacheBenchmark
+              ? "test/e2e/benchmark/cache-merge.html"
+              : cacheTest
+                ? "test/e2e/smoke/cache-merge.html"
+                : taskUi
+                  ? "test/e2e/smoke/task-center.html"
+                  : protocolTest
+                    ? "test/e2e/smoke/rtc-protocol.html"
+                    : transferTest
+                      ? "test/e2e/smoke/transfer-workflow.html"
+                      : "test/e2e/smoke/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
