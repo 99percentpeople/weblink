@@ -44,7 +44,8 @@ export interface ClientServiceInitOptions {
     notice:
       | "room-unprotected"
       | "password-hash-failed"
-      | "session-replaced",
+      | "session-replaced"
+      | "tab-replaced",
   ): void;
 }
 

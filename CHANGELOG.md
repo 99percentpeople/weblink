@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-09-24
+
+### Improvements
+
+- Automatically restore a waiting tab's room connection when the active tab closes or leaves; allow only one waiting tab to reconnect while preserving explicit takeover and keeping stopped capture devices off 当前使用的标签页关闭或退出房间后，自动恢复等待页面的房间连接；多个页面等待时只恢复一个，保留手动接管操作，已停止的采集设备保持关闭
+- Automatically feature a mobile video after native picture-in-picture entry succeeds, using the existing layout transition and retaining its selection on exit 移动端视频成功进入独立画中画后，自动切换为主画面并沿用现有过渡，退出画中画后保留主画面选择
+- Hide layout switching and pin controls when there is only one rendered source; use a single-row icon-and-label layout for mobile sidebar tabs and refine unread badge spacing 仅有一个画面时隐藏布局切换及固定按钮，移动端侧栏 tab 的图标与文字改为单行显示，并调整未读标记间距
+
+### Fixes
+
+- Recover paused live-video playback when the first frame becomes ready, a received track resumes, or the video becomes visible again, without replacing the received stream or stopping its tracks 在首帧就绪、接收轨道恢复或画面重新可见时恢复已暂停的视频播放，保留原接收流及轨道
+- Distinguish autoplay denial from generic video errors and retain a translated Play video action for manual recovery, with Simplified Chinese, Traditional Chinese, and English messages 区分自动播放被拦截与普通视频错误，保留可手动恢复的“播放画面”操作，并补齐简体中文、繁体中文和英文提示
+
+### Compatibility Notes
+
+- iPhone Safari device verification remains pending; the reported black screen on initial screen-share reception is not yet confirmed resolved iPhone Safari 真机验证仍待完成，尚未确认已解决反馈中的首次接收屏幕共享黑屏问题
+
 ## [1.0.1] - 2026-09-24
 
 ### Improvements

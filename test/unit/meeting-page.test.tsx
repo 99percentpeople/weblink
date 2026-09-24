@@ -186,8 +186,20 @@ vi.mock(
   }),
 );
 vi.mock("@/routes/home/components/meeting-tile", () => ({
-  MeetingTile: (props: { name: string }) => (
-    <article>{props.name}</article>
+  MeetingTile: (props: {
+    name: string;
+    pinned: boolean;
+    onVideoPipEnter?: () => void;
+  }) => (
+    <article aria-label={props.name}>
+      {props.name}
+      <button
+        aria-pressed={props.pinned}
+        onClick={props.onVideoPipEnter}
+      >
+        Native video PiP
+      </button>
+    </article>
   ),
 }));
 vi.mock("@/routes/home/components/video-display", () => ({
@@ -1079,6 +1091,59 @@ describe("meeting page navigation and panels", () => {
       key: "Escape",
     });
     expect(screen.queryByRole("tabpanel")).toBeNull();
+  });
+
+  it("features the source entering native video PiP and retains it on repeated entry", async () => {
+    window.innerWidth = 390;
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    const bob = screen.getByRole("article", {
+      name: "Bob",
+    });
+    const chris = screen.getByRole("article", {
+      name: "Chris",
+    });
+    const enterBob = within(bob).getByRole("button", {
+      name: "Native video PiP",
+    });
+    const enterChris = within(chris).getByRole("button", {
+      name: "Native video PiP",
+    });
+    expect(enterBob).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    fireEvent.click(enterBob);
+    await waitFor(() =>
+      expect(enterBob).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    fireEvent.click(enterChris);
+    await waitFor(() =>
+      expect(enterChris).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(enterBob).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    fireEvent.click(enterChris);
+    expect(enterChris).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(bob).toBeInTheDocument();
+    expect(chris).toBeInTheDocument();
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
   });
 
   it("retains views across layout switches and thumbnail visibility changes without stopping media", () => {

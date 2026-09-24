@@ -127,6 +127,31 @@ describe("shared room actions", () => {
     expect(fixture.join).toHaveBeenCalledTimes(2);
     expect(appState.profile.roomId).toBe("room");
   });
+
+  it("shows automatic recovery as busy and prevents concurrent manual connections", async () => {
+    const actions = setup();
+    setAppState(
+      "session",
+      "clientServiceStatus",
+      "connecting",
+    );
+    expect(actions.busy()).toBe(true);
+    await actions.join();
+    await actions.edit();
+    await actions.takeover();
+    expect(fixture.open).not.toHaveBeenCalled();
+    expect(fixture.join).not.toHaveBeenCalled();
+    setAppState(
+      "session",
+      "clientServiceStatus",
+      "disconnected",
+    );
+    expect(actions.busy()).toBe(false);
+    await actions.takeover();
+    expect(fixture.join).toHaveBeenCalledWith({
+      takeover: true,
+    });
+  });
 });
 
 describe("room connection notifications", () => {

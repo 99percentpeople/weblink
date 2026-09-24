@@ -15,6 +15,7 @@ import {
 } from "solid-js";
 import { ClientAvatar } from "../../../components/common/client-avatar";
 import { createMediaTracks } from "@/libs/hooks/tracks";
+import { createVideoPlaybackRecovery } from "@/libs/hooks/video-playback-recovery";
 import { Spinner } from "../../../components/common/spinner";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
@@ -43,6 +44,7 @@ export const VideoDisplay = (
     stream: MediaStream | null | undefined;
     name: string;
     muted?: boolean;
+    playbackActive?: boolean;
     avatar?: string;
     isPlaceholderStream?: boolean;
     onLoadingStateChange?: (
@@ -120,6 +122,7 @@ export const VideoDisplay = (
     createSignal<HTMLVideoElement | null>(null);
 
   let playbackAttempt = 0;
+  let playPending = false;
   let errorReported = false;
   let disposed = false;
   let errorToast: string | number | undefined;
@@ -130,6 +133,7 @@ export const VideoDisplay = (
   const reportError = (
     video: HTMLVideoElement,
     track: MediaStreamTrack,
+    error?: unknown,
   ) => {
     if (
       disposed ||
@@ -141,12 +145,22 @@ export const VideoDisplay = (
     setLoadingState("error");
     if (errorReported) return;
     errorReported = true;
+    const blocked =
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      error.name === "NotAllowedError";
     errorToast = toast.error(
-      `${props.name}: ${t("video.loading_state.error")}`,
+      `${props.name}: ${t(blocked ? "video.loading_state.autoplay_blocked" : "video.loading_state.error")}`,
       {
         id: `video-playback-${track.id}`,
+        ...(blocked ? { duration: Infinity } : {}),
         action: {
-          label: t("video.loading_state.retry"),
+          label: t(
+            blocked
+              ? "video.loading_state.play"
+              : "video.loading_state.retry",
+          ),
           onClick: () => {
             if (
               disposed ||
@@ -165,16 +179,23 @@ export const VideoDisplay = (
     track: MediaStreamTrack,
   ) => {
     const attempt = ++playbackAttempt;
-    void video.play().catch((error: unknown) => {
-      if (attempt !== playbackAttempt) return;
-      // Source changes and explicit retries abort earlier play requests.
-      if (
-        error instanceof DOMException &&
-        error.name === "AbortError"
-      )
-        return;
-      reportError(video, track);
-    });
+    playPending = true;
+    void video
+      .play()
+      .catch((error: unknown) => {
+        if (attempt !== playbackAttempt) return;
+        // Source changes and explicit retries abort earlier play requests.
+        if (
+          error instanceof DOMException &&
+          error.name === "AbortError"
+        )
+          return;
+        reportError(video, track, error);
+      })
+      .finally(() => {
+        if (attempt === playbackAttempt)
+          playPending = false;
+      });
   };
 
   createEffect(() => {
@@ -190,24 +211,24 @@ export const VideoDisplay = (
     video.srcObject = currentStream;
     if (!currentStream || !track) return;
 
-    const controller = new AbortController();
     onCleanup(() => {
-      controller.abort();
       ++playbackAttempt;
+      playPending = false;
       // Presentation borrows the track: release the media element's decoder,
       // while capture and RTC retain ownership of the live source.
       video.pause();
       video.srcObject = null;
     });
-    track.addEventListener(
-      "unmute",
-      () => play(video, track),
-      {
-        once: true,
-        signal: controller.signal,
-      },
-    );
     play(video, track);
+  });
+
+  createVideoPlaybackRecovery({
+    video: videoRef,
+    track: videoTrack,
+    active: () => props.playbackActive !== false,
+    resume: (video, track) => {
+      if (!playPending) play(video, track);
+    },
   });
 
   createEffect(() => {

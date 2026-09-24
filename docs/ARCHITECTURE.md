@@ -145,11 +145,21 @@ the low-level `domain` layer.
     handles pending requests, native close and disposal without owning tracks.
     The child document receives app styles, theme updates and its own Solid
     delegated event handlers, all cleaned up when the window closes.
+    Video playback recovery follows metadata/readiness, repeated track unmute,
+    document foreground and viewport visibility events. The stage also exposes
+    canvas/thumbnail visibility explicitly because CSS visibility changes need
+    not change intersection. Recovery retries paused live video without replacing
+    its stream or stopping borrowed tracks. Autoplay denial keeps a translated
+    toast action available for a user-initiated play request; browser policies
+    and codec support are not overridden or inferred from the user agent.
     In the mobile layout, each playable video tile independently exposes native
     video PiP when its standard or WebKit presentation API supports it. Its
     original video element stays mounted under a notice and restore action;
     closing PiP never stops borrowed media tracks. Video PiP has no automatic
     entry setting and is owned by the tile, so removing its source closes it.
+    Confirmed mobile video PiP entry selects that source as the main view through
+    the existing layout transition; repeated entry is idempotent and exit retains
+    the selection. Failed or cancelled requests do not change the layout.
     Fullscreen video uses decoded dimensions to request landscape or portrait
     orientation when the Screen Orientation API allows it, follows video resize,
     and releases only its own lock on exit. Missing or rejected orientation

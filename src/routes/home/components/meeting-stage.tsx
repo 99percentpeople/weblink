@@ -29,12 +29,14 @@ export function MeetingStage(
   props: ParentProps<{
     ref?: (stage: MeetingStageHandle | undefined) => void;
     compact?: boolean;
+    active?: boolean;
     sources: readonly MeetingSource[];
     pinnedId: string | null;
     hideRailToggle?: boolean;
     railCollapsed: boolean;
     onRailCollapsedChange(collapsed: boolean): void;
     onPin(id: string): void;
+    onVideoPipEnter?(id: string): void;
     onStop(trackId: string): void;
     transitionLayout(update: () => void): void;
   }>,
@@ -120,6 +122,13 @@ export function MeetingStage(
       {(source) => (
         <MeetingTile
           compact={props.compact}
+          playbackActive={
+            props.active !== false &&
+            layout().tileWidth > 0 &&
+            (!featured() ||
+              source().id === featured()?.id ||
+              !railCollapsed())
+          }
           onSelect={
             props.compact && source().id !== featured()?.id
               ? () => props.onPin(source().id)
@@ -143,7 +152,14 @@ export function MeetingStage(
             )
           }
           pinned={source().id === featured()?.id}
-          onPin={() => props.onPin(source().id)}
+          onPin={
+            sources().length > 1
+              ? () => props.onPin(source().id)
+              : undefined
+          }
+          onVideoPipEnter={() =>
+            props.onVideoPipEnter?.(source().id)
+          }
           onStop={
             source().local && source().track
               ? () => props.onStop(source().track!.id)

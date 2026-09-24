@@ -132,6 +132,19 @@ lock before the new page connects. The previous page then shows the same
 overlay. If it does not respond within five seconds, the switch fails without
 stealing its lock and can be retried after closing the unresponsive page.
 
+Blocked pages observe the local lock's availability and attempt a normal join
+when the owner closes its tab or leaves the room. Availability checks also resume
+on focus/pageshow, and never enqueue ahead of an explicit takeover. The ordinary
+exclusive lock still decides the winner when several pages try to recover;
+losers keep waiting without opening a WebSocket. Temporary network disconnections
+do not release ownership. Manual takeover, leaving, credential changes and app
+disposal cancel pending automatic recovery. Restoring the room does not reopen
+camera/microphone capture that was stopped by the previous takeover.
+
+Local tab replacement is distinct from server-reported session replacement;
+only a verified local conflict enables automatic recovery. Browsers without lock
+query support retain the manual switch action.
+
 For older clients or browsers without Web Locks, explicit server close reasons
 `Session resumed elsewhere`, `Session replaced` (1000), or `Stale client session`
 (1008) stop automatic reconnects. Ordinary network closures still reconnect.

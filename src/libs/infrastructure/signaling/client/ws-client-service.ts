@@ -37,7 +37,10 @@ import {
   SIGNALING_MAX_CACHED_SIGNALS,
 } from "@/libs/domain/signaling-protocol";
 import { catchErrorSync } from "@/libs/catch";
-import { acquireRoomConnectionLock } from "./room-connection-lock";
+import {
+  acquireRoomConnectionLock,
+  roomConnectionLockName,
+} from "./room-connection-lock";
 
 type PublicConnectionStatus =
   | "connecting"
@@ -903,10 +906,12 @@ export class WebSocketClientService implements ClientService {
     this.on("leave", callback);
   }
 
-  private handleSessionReplaced(): void {
+  private handleSessionReplaced(local = false): void {
     if (this.closed) return;
     this.close();
-    this.onNotice?.("session-replaced");
+    this.onNotice?.(
+      local ? "tab-replaced" : "session-replaced",
+    );
   }
 
   createClient(
@@ -916,21 +921,18 @@ export class WebSocketClientService implements ClientService {
     const promise = (async () => {
       try {
         if (!this.releaseRoomLock) {
-          const url = new URL(this.websocketUrl);
           this.releaseRoomLock =
             await acquireRoomConnectionLock(
-              JSON.stringify([
-                "weblink:signaling",
-                url.origin,
-                url.pathname,
-                this.roomId.trim(),
+              roomConnectionLockName(
+                this.websocketUrl,
+                this.roomId,
                 this.client.clientId,
-              ]),
+              ),
               this.lifecycleController.signal,
               {
                 takeover: options.takeover,
                 onReplaced: () =>
-                  this.handleSessionReplaced(),
+                  this.handleSessionReplaced(true),
               },
             );
         }

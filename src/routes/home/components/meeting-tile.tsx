@@ -4,6 +4,7 @@ import {
   createMemo,
   createSignal,
   on,
+  onCleanup,
   Show,
 } from "solid-js";
 import {
@@ -30,6 +31,7 @@ import {
 
 export function MeetingTile(props: {
   compact?: boolean;
+  playbackActive?: boolean;
   onSelect?: () => void;
   sourceId?: string;
   order?: number;
@@ -43,7 +45,8 @@ export function MeetingTile(props: {
   audioMuted?: boolean;
   onToggleAudio?: () => void;
   pinned: boolean;
-  onPin(): void;
+  onPin?(): void;
+  onVideoPipEnter?(): void;
   onStop?: () => void;
 }) {
   const [displayRef, setDisplayRef] =
@@ -90,6 +93,7 @@ export function MeetingTile(props: {
         name={props.name}
         avatar={props.avatar}
         isPlaceholderStream={props.placeholder}
+        playbackActive={props.playbackActive}
         muted
       >
         <Show when={props.onSelect}>
@@ -135,6 +139,7 @@ export function MeetingTile(props: {
             onToggleAudio={props.onToggleAudio}
             pinned={props.pinned}
             onPin={props.onPin}
+            onVideoPipEnter={props.onVideoPipEnter}
             onStop={props.onStop}
             name={props.name}
           />
@@ -150,7 +155,8 @@ function TileActions(props: {
   audioMuted?: boolean;
   onToggleAudio?: () => void;
   pinned: boolean;
-  onPin(): void;
+  onPin?(): void;
+  onVideoPipEnter?(): void;
   onStop?: () => void;
   name: string;
 }) {
@@ -165,6 +171,22 @@ function TileActions(props: {
   const pip = createPictureInPicture(videoRef, {
     onError: reportMeetingPipError,
   });
+  createEffect(
+    on(
+      () => isMobile() && pip.isThisElementInPip(),
+      (active) => {
+        if (!active) return;
+        let cancelled = false;
+        // Leave the reactive batch before measuring the main-view transition.
+        queueMicrotask(() => {
+          if (!cancelled) props.onVideoPipEnter?.();
+        });
+        onCleanup(() => {
+          cancelled = true;
+        });
+      },
+    ),
+  );
   return (
     <>
       <Show when={pip.isThisElementInPip()}>
@@ -290,26 +312,28 @@ function TileActions(props: {
             </Show>
           </button>
         </Show>
-        <button
-          type="button"
-          class="meeting-icon-button"
-          aria-pressed={props.pinned}
-          aria-label={
-            props.pinned
-              ? t("meeting.unpin")
-              : t("meeting.pin")
-          }
-          title={
-            props.pinned
-              ? t("meeting.unpin")
-              : t("meeting.pin")
-          }
-          onClick={props.onPin}
-        >
-          <Show when={props.pinned} fallback={<Pin />}>
-            <PinOff />
-          </Show>
-        </button>
+        <Show when={props.onPin}>
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-pressed={props.pinned}
+            aria-label={
+              props.pinned
+                ? t("meeting.unpin")
+                : t("meeting.pin")
+            }
+            title={
+              props.pinned
+                ? t("meeting.unpin")
+                : t("meeting.pin")
+            }
+            onClick={props.onPin}
+          >
+            <Show when={props.pinned} fallback={<Pin />}>
+              <PinOff />
+            </Show>
+          </button>
+        </Show>
       </div>
     </>
   );

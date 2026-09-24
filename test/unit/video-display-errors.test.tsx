@@ -63,7 +63,7 @@ const track = (id: string) =>
 const stream = (source: MediaStreamTrack) =>
   new Stream([source]) as unknown as MediaStream;
 const flush = async () => {
-  for (let i = 0; i < 4; i++) await Promise.resolve();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 let play: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -83,21 +83,71 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 function setup(source = track("camera")) {
+  const [active, setActive] = createSignal(true);
   const [current, setCurrent] = createSignal<MediaStream>(
     stream(source),
   );
   const view = render(() => (
-    <VideoDisplay stream={current()} name="Alice" muted />
+    <VideoDisplay
+      stream={current()}
+      name="Alice"
+      muted
+      playbackActive={active()}
+    />
   ));
   return {
     ...view,
     setCurrent,
+    setActive,
     video: view.container.querySelector("video")!,
     source,
   };
 }
 
 describe("VideoDisplay playback error notifications", () => {
+  it("prepares muted inline video before the first playback request", () => {
+    play.mockImplementation(function (
+      this: HTMLVideoElement,
+    ) {
+      expect(this.muted).toBe(true);
+      expect(this.playsInline).toBe(true);
+      expect(this.srcObject).not.toBeNull();
+      return Promise.resolve();
+    });
+    setup();
+    expect(play).toHaveBeenCalledOnce();
+  });
+
+  it("recovers an aborted first play on metadata and later unmute without rebinding the borrowed source", async () => {
+    play.mockRejectedValueOnce(
+      new DOMException(
+        "Interrupted while mounting",
+        "AbortError",
+      ),
+    );
+    const { video, source, setActive } = setup();
+    const attached = video.srcObject;
+    await flush();
+    fireEvent.loadedMetadata(video);
+    expect(play).toHaveBeenCalledTimes(2);
+    // Deduplicate readiness signals while this play request is pending.
+    fireEvent.canPlay(video);
+    source.dispatchEvent(new Event("unmute"));
+    expect(play).toHaveBeenCalledTimes(2);
+    await flush();
+    source.dispatchEvent(new Event("unmute"));
+    expect(play).toHaveBeenCalledTimes(3);
+    await flush();
+    setActive(false);
+    source.dispatchEvent(new Event("unmute"));
+    expect(play).toHaveBeenCalledTimes(3);
+    setActive(true);
+    expect(play).toHaveBeenCalledTimes(4);
+    expect(video.srcObject).toBe(attached);
+    expect(source.stop).not.toHaveBeenCalled();
+    expect(notification.error).not.toHaveBeenCalled();
+  });
+
   it("shows one retryable toast instead of a persistent error overlay and retains normal loading indicators", () => {
     const { video } = setup();
     expect(
@@ -179,8 +229,21 @@ describe("VideoDisplay playback error notifications", () => {
     const first = setup();
     await flush();
     expect(notification.error).toHaveBeenCalledOnce();
+    expect(notification.error).toHaveBeenCalledWith(
+      "Alice: video.loading_state.autoplay_blocked",
+      expect.objectContaining({
+        duration: Infinity,
+        action: {
+          label: "video.loading_state.play",
+          onClick: expect.any(Function),
+        },
+      }),
+    );
     fireEvent.error(first.video);
     expect(notification.error).toHaveBeenCalledOnce();
+    notification.error.mock.calls[0][1].action.onClick();
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(first.source.stop).not.toHaveBeenCalled();
     first.unmount();
     notification.error.mockClear();
     play.mockRejectedValueOnce(

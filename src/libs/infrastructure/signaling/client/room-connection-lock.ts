@@ -86,3 +86,94 @@ export function acquireRoomConnectionLock(
       });
   });
 }
+
+export function roomConnectionLockName(
+  websocketUrl: string,
+  roomId: string,
+  clientId: string,
+): string {
+  const url = new URL(websocketUrl);
+  return JSON.stringify([
+    "weblink:signaling",
+    url.origin,
+    url.pathname,
+    roomId.trim(),
+    clientId,
+  ]);
+}
+
+/** Observe availability without queuing ahead of an explicit takeover request. */
+export function waitForRoomConnectionAvailability(
+  name: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const cancelled = () =>
+    new DOMException(
+      "Room recovery cancelled",
+      "AbortError",
+    );
+  if (signal.aborted) return Promise.reject(cancelled());
+  const locks = navigator.locks;
+  if (
+    typeof locks?.request !== "function" ||
+    typeof locks.query !== "function"
+  )
+    return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let checking = false;
+    let settled = false;
+    const events = new AbortController();
+    const cleanup = () => {
+      settled = true;
+      clearTimeout(timer);
+      events.abort();
+      signal.removeEventListener("abort", abort);
+    };
+    const abort = () => {
+      cleanup();
+      reject(cancelled());
+    };
+    const finish = (available: boolean) => {
+      cleanup();
+      resolve(available);
+    };
+    const check = async () => {
+      if (settled || checking) return;
+      clearTimeout(timer);
+      checking = true;
+      try {
+        const snapshot = await locks.query();
+        if (settled) return;
+        if (
+          ![
+            ...(snapshot.held ?? []),
+            ...(snapshot.pending ?? []),
+          ].some((lock) => lock.name === name)
+        )
+          finish(true);
+      } catch {
+        // If querying is unavailable, keep the explicit switch action working.
+        if (!settled) finish(false);
+      } finally {
+        checking = false;
+        if (!settled)
+          timer = setTimeout(() => void check(), 1_000);
+      }
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", check, {
+        signal: events.signal,
+      });
+      window.addEventListener("pageshow", check, {
+        signal: events.signal,
+      });
+    }
+    if (typeof document !== "undefined")
+      document.addEventListener("visibilitychange", check, {
+        signal: events.signal,
+      });
+    void check();
+  });
+}

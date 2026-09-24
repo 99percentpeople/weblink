@@ -114,6 +114,7 @@ function setup() {
     new Track("screen-1"),
   );
   const onStop = vi.fn();
+  const onVideoPipEnter = vi.fn(() => setPinned(true));
   const view = render(() => (
     <MeetingTile
       name="Alice"
@@ -128,6 +129,7 @@ function setup() {
       local={local()}
       pinned={pinned()}
       onPin={() => setPinned((value) => !value)}
+      onVideoPipEnter={onVideoPipEnter}
       onStop={onStop}
     />
   ));
@@ -145,6 +147,8 @@ function setup() {
     setLocal,
     setKind,
     setPinned,
+    pinned,
+    onVideoPipEnter,
     onStop,
   };
 }
@@ -314,6 +318,56 @@ function nativeVideoPip(view: ReturnType<typeof setup>) {
 }
 
 describe("native PiP on a meeting tile", () => {
+  it.each([false, true])(
+    "features the mobile video after confirmed PiP entry without toggling an existing pin (%s)",
+    async (alreadyPinned) => {
+      const view = setup();
+      view.setPinned(alreadyPinned);
+      const { enter, exit } = nativeVideoPip(view);
+      expect(view.onVideoPipEnter).not.toHaveBeenCalled();
+      await enter();
+      await waitFor(() =>
+        expect(view.onVideoPipEnter).toHaveBeenCalledOnce(),
+      );
+      expect(view.pinned()).toBe(true);
+      fireEvent.loadedMetadata(view.video);
+      view.video.dispatchEvent(
+        new Event("enterpictureinpicture"),
+      );
+      await Promise.resolve();
+      expect(view.onVideoPipEnter).toHaveBeenCalledOnce();
+      await exit();
+      expect(view.pinned()).toBe(true);
+      expect(view.onVideoPipEnter).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not feature native PiP in the desktop layout, but does when returning to mobile", async () => {
+    vi.stubGlobal("innerWidth", 1440);
+    window.dispatchEvent(new Event("resize"));
+    const view = setup();
+    const { enter } = nativeVideoPip(view);
+    await enter();
+    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
+    expect(view.pinned()).toBe(false);
+    vi.stubGlobal("innerWidth", 390);
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(view.onVideoPipEnter).toHaveBeenCalledOnce(),
+    );
+    expect(view.pinned()).toBe(true);
+  });
+
+  it("cancels a queued main-view change when the video is removed", async () => {
+    const view = setup();
+    const { enter } = nativeVideoPip(view);
+    const entering = enter();
+    view.unmount();
+    await entering;
+    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
+    expect(view.track().stop).not.toHaveBeenCalled();
+  });
+
   it("offers the button only for a supported video, keeps the actual element alive under its placeholder, and restores it", async () => {
     const view = setup();
     expect(
@@ -442,6 +496,8 @@ describe("native PiP on a meeting tile", () => {
     expect(
       screen.queryByText("meeting.pip_video_elsewhere"),
     ).toBeNull();
+    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
+    expect(view.pinned()).toBe(false);
   });
 
   it("requests fullscreen before locking to the actual video ratio and releases orientation on exit", async () => {

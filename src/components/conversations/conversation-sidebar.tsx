@@ -219,7 +219,7 @@ export function ConversationSidebar(
                 </span>
                 <Show when={row.summary.unread}>
                   <span
-                    class="bg-primary text-primary-foreground rounded-full px-1.5
+                    class="bg-primary text-primary-foreground rounded-full px-2
                       text-[10px] leading-5"
                     aria-label={t(
                       "conversations.unread_count",

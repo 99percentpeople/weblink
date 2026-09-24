@@ -446,6 +446,7 @@ export default function Home() {
               }}
             >
               <MeetingStage
+                active={!fullPanel()}
                 ref={(value) => {
                   stage = value;
                 }}
@@ -456,6 +457,10 @@ export default function Home() {
                 railCollapsed={railCollapsed()}
                 onRailCollapsedChange={setRailCollapsed}
                 onPin={togglePin}
+                onVideoPipEnter={(id) => {
+                  if (pinnedId() === id) return;
+                  transitionLayout(() => setPinnedId(id));
+                }}
                 onStop={media.stopVideoTrack}
               >
                 <Show when={!appState.roomStatus.roomId}>
@@ -557,16 +562,19 @@ export default function Home() {
                   gap-1 border-b p-2"
               >
                 <TabsList
-                  class="w-auto min-w-0 flex-[0_1_auto] gap-0.5 bg-transparent p-0"
+                  class="w-full min-w-0 flex-1 gap-0.5 bg-transparent p-0 md:w-auto
+                    md:flex-[0_1_auto]"
                   aria-label={t("meeting.side_panel")}
                 >
                   <For each={tabs}>
                     {(value) => (
                       <TabsTrigger
                         value={value}
-                        class="text-muted-foreground data-selected:text-foreground h-11.5
-                          w-17 min-w-0 grow-0 basis-17 flex-col gap-1 px-1.25 py-1.5
-                          text-[11px] font-normal [&>svg]:size-3.75 [&>svg]:shrink-0"
+                        class="text-muted-foreground data-selected:text-foreground h-9
+                          min-w-0 flex-1 flex-row gap-1.5 px-2 py-1.5 text-xs
+                          font-normal md:h-11.5 md:w-17 md:grow-0 md:basis-17
+                          md:flex-col md:gap-1 md:px-1.25 md:text-[11px]
+                          [&>svg]:size-3.75 [&>svg]:shrink-0"
                         id={`meeting-tab-${value}`}
                         aria-label={t(`meeting.${value}`)}
                         title={t(`meeting.${value}`)}
@@ -748,20 +756,25 @@ export default function Home() {
           audio.setPlay(!audio.playState())
         }
         spotlight={Boolean(pinnedId())}
-        onToggleLayout={() =>
-          transitionLayout(() =>
-            setPinnedId((current) =>
-              current
-                ? null
-                : (sources().find(
-                    (source) => source.kind === "screen",
-                  )?.id ??
-                  sources().find((source) => !source.local)
-                    ?.id ??
-                  sources()[0]?.id ??
-                  null),
-            ),
-          )
+        onToggleLayout={
+          sources().length > 1
+            ? () =>
+                transitionLayout(() =>
+                  setPinnedId((current) =>
+                    current
+                      ? null
+                      : (sources().find(
+                          (source) =>
+                            source.kind === "screen",
+                        )?.id ??
+                        sources().find(
+                          (source) => !source.local,
+                        )?.id ??
+                        sources()[0]?.id ??
+                        null),
+                  ),
+                )
+            : undefined
         }
         joined={Boolean(appState.roomStatus.roomId)}
         onLeave={meeting.leave}

@@ -62,7 +62,9 @@ export function createRoomActions() {
     join: () => connect(false),
     edit: () => connect(true),
     takeover: () => connect(false, true),
-    busy,
+    busy: () =>
+      busy() ||
+      appState.session.clientServiceStatus === "connecting",
   };
 }
 

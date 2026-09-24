@@ -279,6 +279,8 @@
       "waiting": "Buffering...",
       "stalled": "Connection interrupted, retrying...",
       "error": "Failed to load",
+      "autoplay_blocked": "Your browser blocked autoplay. Select Play video to continue.",
+      "play": "Play video",
       "retry": "Retry"
     }
   },

@@ -60,7 +60,11 @@ import {
   createTaskService,
   type TaskService,
 } from "@/libs/application/task-service";
-import { createClientService } from "@/libs/application/client-service-factory";
+import {
+  createClientService,
+  waitForRoomAvailability,
+} from "@/libs/application/client-service-factory";
+import { RoomConflictRecovery } from "@/libs/application/room-conflict-recovery";
 import { RoomService } from "@/libs/application/room-service";
 import type { ClientJoinOptions } from "@/libs/domain/client";
 import { FileCatalogService } from "@/libs/application/file-catalog-service";
@@ -419,6 +423,12 @@ export const AppStateProvider: Component<
 
   const [roomConflict, setRoomConflict] =
     createSignal(false);
+  const [recoverLocalConflict, setRecoverLocalConflict] =
+    createSignal(false);
+  const [manualJoin, setManualJoin] = createSignal(false);
+  const [recoveryRevision, setRecoveryRevision] =
+    createSignal(0);
+  let recovery: RoomConflictRecovery | undefined;
   const room = new RoomService({
     sessions: sessionService,
     rtc,
@@ -432,9 +442,17 @@ export const AppStateProvider: Component<
             toast.warning(
               t("common.notification.room_unprotected"),
             );
-          else if (notice === "session-replaced") {
+          else if (
+            notice === "session-replaced" ||
+            notice === "tab-replaced"
+          ) {
+            recovery?.stop();
             room.leave();
+            setRecoverLocalConflict(
+              notice === "tab-replaced",
+            );
             setRoomConflict(true);
+            setRecoveryRevision((revision) => revision + 1);
           } else toast.error(t("errors.password_prepare"));
         },
       }),
@@ -455,6 +473,8 @@ export const AppStateProvider: Component<
     },
   });
   const joinRoom = async (options?: ClientJoinOptions) => {
+    recovery?.stop();
+    setManualJoin(true);
     try {
       await room.join(options);
       setRoomConflict(false);
@@ -463,12 +483,57 @@ export const AppStateProvider: Component<
         error instanceof Error &&
         error.message ===
           "Room is already open in another tab"
-      )
+      ) {
+        setRecoverLocalConflict(true);
         setRoomConflict(true);
+      }
       throw error;
+    } finally {
+      setManualJoin(false);
     }
   };
-  const leaveRoom = () => room.leave();
+  const leaveRoom = () => {
+    recovery?.stop();
+    setRoomConflict(false);
+    room.leave();
+  };
+  createEffect(() => {
+    if (
+      !roomConflict() ||
+      !recoverLocalConflict() ||
+      manualJoin()
+    )
+      return;
+    recoveryRevision();
+    const { roomId, clientId, password } = appState.profile;
+    // Changing room credentials retires the old observer and any in-flight join.
+    void password;
+    const current = new RoomConflictRecovery({
+      waitUntilAvailable: (signal) =>
+        waitForRoomAvailability(roomId, clientId, signal),
+      join: () => room.join(),
+      cancelJoin: () => room.leave(),
+      onRestored: () => setRoomConflict(false),
+      onError: (error) => {
+        console.error(
+          "Unable to restore room connection",
+          error,
+        );
+        toast.error(
+          userErrorMessage(
+            error,
+            "errors.connection_failed",
+          ),
+        );
+      },
+    });
+    recovery = current;
+    current.start();
+    onCleanup(() => {
+      current.stop();
+      if (recovery === current) recovery = undefined;
+    });
+  });
 
   createEffect(() => {
     saveMediaConstraintsToSession({
@@ -635,6 +700,7 @@ export const AppStateProvider: Component<
   });
 
   onCleanup(() => {
+    recovery?.stop();
     room.dispose();
     peerProfiles.dispose();
     clipboardCacheData = [];

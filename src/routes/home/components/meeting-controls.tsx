@@ -65,7 +65,7 @@ export function MeetingControls(props: {
   hasAudio: boolean;
   onToggleAudio(): void;
   spotlight: boolean;
-  onToggleLayout(): void;
+  onToggleLayout?(): void;
   joined: boolean;
   onLeave(): void;
   onJoin?(): void;
@@ -420,7 +420,9 @@ export function MeetingControls(props: {
                 <span>{t("meeting.sound")}</span>
               </button>
             </Show>
-            <Show when={!props.compact}>
+            <Show
+              when={!props.compact && props.onToggleLayout}
+            >
               <button
                 type="button"
                 class="meeting-control"

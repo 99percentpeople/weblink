@@ -299,7 +299,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     await flushMicrotasks(32);
     expect(first.readyState).toBe(FakeWebSocket.CLOSED);
     expect(sender.status).toBe("closed");
-    expect(notice).toHaveBeenCalledWith("session-replaced");
+    expect(notice).toHaveBeenCalledWith("tab-replaced");
     expect(FakeWebSocket.instances).toHaveLength(2);
     FakeWebSocket.instances[1].accept();
     await joined;

@@ -25,3 +25,25 @@ export async function createClientService(
       throw new Error("invalid backend type");
   }
 }
+
+export async function waitForRoomAvailability(
+  roomId: string,
+  clientId: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (import.meta.env.VITE_BACKEND !== "WEBSOCKET")
+    return false;
+  const {
+    roomConnectionLockName,
+    waitForRoomConnectionAvailability,
+  } =
+    await import("@/libs/infrastructure/signaling/client/room-connection-lock");
+  return waitForRoomConnectionAvailability(
+    roomConnectionLockName(
+      signalingWebSocketUrl,
+      roomId,
+      clientId,
+    ),
+    signal,
+  );
+}
