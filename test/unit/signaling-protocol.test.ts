@@ -13,6 +13,7 @@ import {
   parseSignalingClientPresence,
   parseSignalingEnvelope,
   parseSignalingPeerMessage,
+  parseSignalingPeerOnline,
 } from "@/libs/domain/signaling-protocol";
 
 describe("portable signaling contract", () => {
@@ -100,6 +101,44 @@ describe("portable signaling contract", () => {
     expect(parseSignalingPeerMessage(payload)).toEqual(
       payload,
     );
+  });
+
+  it("parses peer availability without a per-message version", () => {
+    const data = {
+      clientId: "  alice  ",
+      connectionId: "  socket-2  ",
+    };
+    const parsed = parseSignalingPeerOnline(data);
+    expect(parsed).toEqual({
+      clientId: "alice",
+      connectionId: "socket-2",
+    });
+    expect(parsed).not.toHaveProperty("version");
+    expect(SIGNALING_PROTOCOL_VERSION).toBe(2);
+  });
+
+  it.each([
+    null,
+    [],
+    {},
+    { clientId: "alice" },
+    { clientId: "", connectionId: "socket-2" },
+    { clientId: "alice", connectionId: "   " },
+    { clientId: "alice", connectionId: 2 },
+    {
+      clientId: "x".repeat(
+        SIGNALING_MAX_CLIENT_ID_LENGTH + 1,
+      ),
+      connectionId: "socket-2",
+    },
+    {
+      clientId: "alice",
+      connectionId: "x".repeat(
+        SIGNALING_MAX_CLIENT_ID_LENGTH + 1,
+      ),
+    },
+  ])("rejects invalid peer availability: %j", (data) => {
+    expect(parseSignalingPeerOnline(data)).toBeNull();
   });
 
   it("accepts current-or-newer join acknowledgements", () => {

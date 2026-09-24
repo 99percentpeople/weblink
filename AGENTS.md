@@ -41,7 +41,9 @@ This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
 - Avoid “god modules”: split by responsibility (sender/receiver/protocol/state).
 - Add tests for new protocol/state-machine logic (Vitest) and keep existing flows working.
 - Prefer dependency injection (pass services in) over adding new global singletons.
-- If a protocol/message shape changes, version it and keep backward compatibility where possible.
+- Use the existing shared protocol version; do not add per-message versions for
+  compatible additions. Upgrade only for necessary breaking changes that conflict
+  with deployed clients, and update all affected endpoints together.
 
 ## Testing and visual acceptance
 

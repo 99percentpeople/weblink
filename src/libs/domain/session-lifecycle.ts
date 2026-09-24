@@ -1,10 +1,4 @@
-import {
-  PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS,
-  PEER_SESSION_AUTO_RECONNECT_MAX_DELAY_MS,
-  PEER_SESSION_DISCONNECTED_GRACE_MS,
-  SIGNALING_CONNECTION_TIMEOUT_MS,
-} from "@/constants";
-import { catchError } from "@/libs/catch";
+import { PEER_SESSION_DISCONNECTED_GRACE_MS } from "@/constants";
 import type { SignalingService } from "./signaling";
 
 export type PeerSessionStatus =
@@ -19,11 +13,9 @@ export type PeerSessionStatus =
 export interface PeerSessionLifecycleOptions {
   sender: SignalingService;
   polite: boolean;
-  clientId(): string;
   getStatus(): PeerSessionStatus;
   setStatus(status: PeerSessionStatus): void;
   getPeerConnection(): RTCPeerConnection | null;
-  resetSession(): void;
   disconnect(): void;
   close(): void;
   reconnect(options: { initiate?: boolean }): Promise<void>;
@@ -35,8 +27,8 @@ export interface PeerSessionLifecycleOptions {
 export class PeerSessionLifecycleController {
   private readonly browserController =
     new AbortController();
-  private autoReconnectController: AbortController | null =
-    null;
+  private recoveryController: AbortController | null = null;
+  private pendingAvailability: string | null = null;
   private disconnectionTimer: number | null = null;
   private suspended = false;
   private connectable = false;
@@ -46,17 +38,23 @@ export class PeerSessionLifecycleController {
     private readonly options: PeerSessionLifecycleOptions,
   ) {
     this.bindBrowserLifecycle();
+    let signalingStatus = options.sender.status;
     options.sender.addEventListener(
       "statuschange",
-      (event) => {
-        if (event.detail !== "connected") return;
-        // A signaling outage can interrupt the very first negotiation, before
-        // WebRTC has ever connected. Recover it as well as established sessions.
-        queueMicrotask(() => {
-          if (!this.browserController.signal.aborted)
-            this.resume("signaling-connected");
-        });
+      ({ detail }) => {
+        if (detail === signalingStatus) return;
+        signalingStatus = detail;
+        if (detail !== "connected") return;
+        // Room acknowledgement/replay completes before evaluating availability.
+        queueMicrotask(() =>
+          this.resume("signaling-connected"),
+        );
       },
+      { signal: this.browserController.signal },
+    );
+    options.sender.addEventListener(
+      "peeravailable",
+      () => this.resume("peer-online"),
       { signal: this.browserController.signal },
     );
   }
@@ -79,52 +77,45 @@ export class PeerSessionLifecycleController {
 
   private bindBrowserLifecycle(): void {
     const { signal } = this.browserController;
-
     window.addEventListener(
       "beforeunload",
       () => this.options.close(),
       { signal },
     );
-
-    document.addEventListener(
-      "resume",
-      () => this.resume("resume"),
-      { signal },
-    );
-
+    // Focus/tab switches are not evidence of renewed network availability.
+    // Only a real page suspension/resume, network-online or signaling event
+    // can request another attempt after failure.
+    const resumePage = () => {
+      if (!this.suspended) return;
+      this.suspended = false;
+      this.resume("resume");
+    };
+    document.addEventListener("resume", resumePage, {
+      signal,
+    });
+    window.addEventListener("pageshow", resumePage, {
+      signal,
+    });
     document.addEventListener(
       "visibilitychange",
       () => {
-        if (document.visibilityState !== "visible") return;
-        this.resume("visibilitychange");
+        if (document.visibilityState === "visible")
+          resumePage();
       },
       { signal },
     );
-
-    window.addEventListener(
-      "pageshow",
-      () => this.resume("pageshow"),
-      { signal },
-    );
-
-    window.addEventListener(
-      "focus",
-      () => this.resume("focus"),
-      { signal },
-    );
-
     window.addEventListener(
       "online",
       () => this.resume("online"),
       { signal },
     );
-
     document.addEventListener(
       "freeze",
       () => {
         if (this.options.getStatus() === "closed") return;
         this.suspended = true;
-        this.stopAutoReconnect();
+        this.stopRecovery();
+        this.clearDisconnectionTimer();
         this.options.disconnect();
       },
       { signal },
@@ -132,68 +123,55 @@ export class PeerSessionLifecycleController {
   }
 
   private resume(reason: string): void {
-    if (this.options.getStatus() === "closed") return;
-    const wasSuspended = this.suspended;
-    this.suspended = false;
     if (
-      !this.connectable &&
-      !(
-        this.listening &&
-        (wasSuspended ||
-          reason === "signaling-connected" ||
-          this.options.getStatus() === "disconnected")
-      )
+      this.browserController.signal.aborted ||
+      this.suspended ||
+      this.options.getStatus() === "closed" ||
+      (!this.connectable && !this.listening)
     )
       return;
 
     const pc = this.options.getPeerConnection();
-    if (!pc) {
-      void this.handleDisconnection(
-        `resume:${reason}:missing-peerconnection`,
-      );
-      return;
-    }
-
-    this.options.updateMessageChannelOpenState();
-
-    if (pc.connectionState !== "connected") {
-      void this.handleDisconnection(`resume:${reason}`);
-      return;
-    }
-
     if (
-      pc.iceConnectionState === "disconnected" ||
-      pc.iceConnectionState === "failed"
+      pc?.connectionState === "connected" &&
+      pc.iceConnectionState !== "disconnected" &&
+      pc.iceConnectionState !== "failed"
     ) {
-      void this.handleDisconnection(
-        `resume:${reason}:ice-${pc.iceConnectionState}`,
-      );
+      this.options.updateMessageChannelOpenState();
+      if (this.options.isMessageChannelReady()) return;
+      void this.options
+        .ensureMessageChannelReady(`resume:${reason}`)
+        .then(() => {
+          if (
+            this.browserController.signal.aborted ||
+            this.options.getPeerConnection() !== pc ||
+            pc.connectionState !== "connected" ||
+            this.options.isMessageChannelReady()
+          )
+            return;
+          void this.handleDisconnection(
+            `resume:${reason}:messagechannel-not-ready`,
+          );
+        });
       return;
     }
 
-    if (this.options.isMessageChannelReady()) return;
-
-    void this.options
-      .ensureMessageChannelReady(`resume:${reason}`)
-      .then(() => {
-        if (this.options.getStatus() === "closed") return;
-        if (
-          this.options.getPeerConnection()
-            ?.connectionState !== "connected"
-        ) {
-          return;
-        }
-        if (this.options.isMessageChannelReady()) return;
-        void this.handleDisconnection(
-          `resume:${reason}:messagechannel-not-ready`,
-        );
-      });
+    // A genuinely new availability event must not get lost behind a timed-out
+    // attempt. Coalesce these events, not failure callbacks; no retry timer.
+    if (this.recoveryController) {
+      this.pendingAvailability = reason;
+      return;
+    }
+    // An incoming offer/initial connection already owns the current attempt.
+    if (pc?.connectionState === "connecting") return;
+    void this.handleDisconnection(
+      `resume:${reason}${pc ? "" : ":missing-peerconnection"}`,
+    );
   }
 
   handleConnectionStateChange(pc: RTCPeerConnection): void {
+    if (pc !== this.options.getPeerConnection()) return;
     switch (pc.connectionState) {
-      case "new":
-        break;
       case "connecting":
         this.options.setStatus("connecting");
         break;
@@ -209,7 +187,11 @@ export class PeerSessionLifecycleController {
         if (this.disconnectionTimer !== null) return;
         this.disconnectionTimer = window.setTimeout(() => {
           this.disconnectionTimer = null;
-          if (pc.connectionState !== "disconnected") return;
+          if (
+            pc !== this.options.getPeerConnection() ||
+            pc.connectionState !== "disconnected"
+          )
+            return;
           void this.handleDisconnection(
             "connectionstatechange:disconnected",
           );
@@ -221,8 +203,6 @@ export class PeerSessionLifecycleController {
           `connectionstatechange:${pc.connectionState}`,
         );
         break;
-      default:
-        break;
     }
   }
 
@@ -232,160 +212,75 @@ export class PeerSessionLifecycleController {
     this.disconnectionTimer = null;
   }
 
-  stopAutoReconnect(): void {
-    const controller = this.autoReconnectController;
-    controller?.abort();
-    if (this.autoReconnectController === controller) {
-      this.autoReconnectController = null;
-    }
+  stopRecovery(): void {
+    this.recoveryController?.abort();
+    this.recoveryController = null;
+    this.pendingAvailability = null;
   }
 
   async handleDisconnection(
     reason = "unknown",
   ): Promise<void> {
-    if (this.options.getStatus() === "closed") {
-      console.debug(
-        `[PeerSession] session ${this.options.clientId()} is closed, skip handle disconnection`,
-      );
+    if (
+      this.browserController.signal.aborted ||
+      this.options.getStatus() === "closed" ||
+      this.suspended ||
+      this.recoveryController
+    )
+      return;
+    this.clearDisconnectionTimer();
+    if (this.options.sender.status === "closed") {
+      this.options.close();
       return;
     }
-
-    if (this.suspended) {
-      console.debug(
-        `[PeerSession] session ${this.options.clientId()} is suspended, defer reconnect: ${reason}`,
-      );
-      return;
-    }
-
-    if (this.autoReconnectController) {
-      console.debug(
-        `[PeerSession] auto reconnect already running, skip: ${reason}`,
-      );
-      return;
-    }
-
-    if (!this.connectable && !this.listening) {
-      console.debug(
-        `[PeerSession] session ${this.options.clientId()} is not connectable, disconnect`,
-      );
+    if (
+      (!this.connectable && !this.listening) ||
+      this.options.sender.status !== "connected"
+    ) {
+      // Passive while signaling is unavailable: its connected event wakes us.
+      // Do not allocate a PC or repeatedly wait on signaling with timeouts.
       this.options.disconnect();
       return;
     }
 
     const controller = new AbortController();
-    this.autoReconnectController = controller;
-    this.clearDisconnectionTimer();
-
-    this.options.resetSession();
+    this.recoveryController = controller;
     this.options.setStatus("reconnecting");
-
     console.info("[PeerSession] recovery started", {
       clientId: this.options.sender.clientId,
       peerId: this.options.sender.targetClientId,
-      signalingStatus: this.options.sender.status,
       reason,
     });
-    let attempts = 0;
-    let lastError: Error | undefined;
-
-    while (
-      !controller.signal.aborted &&
-      attempts < PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS
-    ) {
-      // The peer can complete negotiation while our retry is backing off.
-      // Do not replace that recovered connection with another attempt.
+    try {
+      // Automatic recovery keeps one deterministic offer owner. The impolite
+      // peer initiates; the polite peer rebuilds and waits for that offer.
+      await this.options.reconnect({
+        initiate: !this.options.polite,
+      });
+    } catch (error) {
       if (
-        this.options.getPeerConnection()
-          ?.connectionState === "connected"
+        controller.signal.aborted ||
+        this.recoveryController !== controller
       )
-        break;
-      if (this.options.sender.status === "closed") {
-        console.debug(
-          "[PeerSession] signaling service is closed, stop reconnect",
-        );
-        this.options.close();
         return;
-      }
-
-      const initiate = !this.options.polite || attempts > 0;
-      console.debug(
-        `[PeerSession] auto reconnect attempt ${attempts + 1}/${PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS} (initiate=${initiate})`,
-      );
-
-      if (this.options.sender.status !== "connected") {
-        const [signalError] = await catchError(
-          this.waitForSignalingConnected(
-            controller.signal,
-            SIGNALING_CONNECTION_TIMEOUT_MS,
-          ),
-        );
-        if (signalError) {
-          console.debug(
-            `[PeerSession] wait signaling connected failed: ${signalError.message}`,
-          );
-          // Waiting for room signaling is not a failed WebRTC attempt. Keep
-          // the recovery alive while the room client reconnects.
-          if (controller.signal.aborted) break;
-          continue;
-        }
-      }
-
-      if (controller.signal.aborted) break;
-      if (
-        this.options.getPeerConnection()
-          ?.connectionState === "connected"
-      )
-        break;
-
-      const [error] = await catchError(
-        this.options.reconnect({ initiate }),
-      );
-      if (!error) break;
-
-      attempts++;
-      lastError = error;
-      console.debug(
-        `[PeerSession] auto reconnect attempt ${attempts} failed:`,
-        error,
-      );
-
-      if (
-        attempts >= PEER_SESSION_AUTO_RECONNECT_MAX_ATTEMPTS
-      ) {
-        break;
-      }
-
-      await this.delay(
-        this.getAutoReconnectDelayMs(attempts),
-        controller.signal,
-      );
-    }
-
-    const ownsReconnect =
-      this.autoReconnectController === controller;
-    if (ownsReconnect) {
-      this.autoReconnectController = null;
-    }
-
-    if (controller.signal.aborted || !ownsReconnect) {
-      return;
-    }
-
-    if (
-      this.options.getPeerConnection()?.connectionState !==
-      "connected"
-    ) {
-      console.error(
-        "[PeerSession] recovery exhausted",
+      console.warn(
+        "[PeerSession] recovery failed; waiting for an availability event",
         {
           clientId: this.options.sender.clientId,
           peerId: this.options.sender.targetClientId,
-          attempts,
           reason,
         },
-        lastError,
+        error,
       );
       this.options.disconnect();
+    } finally {
+      if (this.recoveryController === controller) {
+        this.recoveryController = null;
+        const pending = this.pendingAvailability;
+        this.pendingAvailability = null;
+        if (pending && !controller.signal.aborted)
+          this.resume(pending);
+      }
     }
   }
 
@@ -394,19 +289,16 @@ export class PeerSessionLifecycleController {
     timeoutMs: number,
   ): Promise<void> {
     const { sender } = this.options;
-
     if (signal.aborted)
       throw new DOMException(
         "Signaling wait aborted",
         "AbortError",
       );
     if (sender.status === "connected") return;
-    if (sender.status === "closed") {
+    if (sender.status === "closed")
       throw new Error(
         "[PeerSession] signaling service is closed",
       );
-    }
-
     return new Promise<void>((resolve, reject) => {
       const controller = new AbortController();
       const timer = window.setTimeout(() => {
@@ -417,12 +309,10 @@ export class PeerSessionLifecycleController {
           ),
         );
       }, timeoutMs);
-
       const cleanup = () => {
         window.clearTimeout(timer);
         controller.abort();
       };
-
       signal.addEventListener(
         "abort",
         () => {
@@ -431,17 +321,13 @@ export class PeerSessionLifecycleController {
         },
         { once: true, signal: controller.signal },
       );
-
       sender.addEventListener(
         "statuschange",
-        (event) => {
-          if (event.detail === "connected") {
+        ({ detail }) => {
+          if (detail === "connected") {
             cleanup();
             resolve();
-            return;
-          }
-
-          if (event.detail === "closed") {
+          } else if (detail === "closed") {
             cleanup();
             reject(
               new Error(
@@ -455,39 +341,9 @@ export class PeerSessionLifecycleController {
     });
   }
 
-  private getAutoReconnectDelayMs(attempt: number): number {
-    const base = 500;
-    const exp = Math.round(base * Math.pow(1.7, attempt));
-    const capped = Math.min(
-      PEER_SESSION_AUTO_RECONNECT_MAX_DELAY_MS,
-      exp,
-    );
-    const jitter = Math.round(Math.random() * 250);
-    return capped + jitter;
-  }
-
-  private async delay(
-    ms: number,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (ms <= 0 || signal.aborted) return;
-
-    return new Promise<void>((resolve) => {
-      const finish = () => {
-        window.clearTimeout(timer);
-        signal.removeEventListener("abort", finish);
-        resolve();
-      };
-      const timer = window.setTimeout(finish, ms);
-      signal.addEventListener("abort", finish, {
-        once: true,
-      });
-    });
-  }
-
   dispose(): void {
     this.browserController.abort();
-    this.stopAutoReconnect();
+    this.stopRecovery();
     this.clearDisconnectionTimer();
   }
 }

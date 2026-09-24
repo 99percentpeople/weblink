@@ -18,6 +18,8 @@ export type SignalingServiceStatus =
 export type SignalingServiceEventMap = {
   signal: ClientSignal;
   statuschange: Exclude<SignalingServiceStatus, "init">;
+  // Server-confirmed remote socket availability, not WebRTC readiness.
+  peeravailable: undefined;
 };
 
 export interface SignalingService {

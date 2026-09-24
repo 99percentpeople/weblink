@@ -40,8 +40,13 @@ in `src/libs/domain/signaling-protocol.ts`. Browser reconnect timers and
 WebSocket lifecycle state remain infrastructure concerns and are intentionally
 not part of this contract.
 
-The deployed WebSocket signaling contract currently uses protocol version **2**
-and these limits:
+The WebSocket signaling contract uses the shared `SIGNALING_PROTOCOL_VERSION`,
+reported by `joined.protocolVersion`. Compatible additions reuse that version;
+individual notification payloads do not carry their own versions. Upgrade only
+when a necessary change conflicts with deployed clients, and update the frontend
+and both signaling servers together.
+
+The current version remains **2**, with these limits:
 
 | Limit                               |            Value |
 | ----------------------------------- | ---------------: |
@@ -218,9 +223,11 @@ timeout.
 When a reconnect acknowledgment reports `resumed: false`, the client retires
 its old peer sessions before accepting the fresh roster. A peer that left while
 ICE configuration was loading cannot be installed by the old pending join.
-Restored signaling retries interrupted peer negotiation, including the first
-connection, while preserving healthy WebRTC connections. Waiting for signaling
-does not consume WebRTC retry attempts; leaving cancels that wait.
+Restored signaling requests one recovery of interrupted peer negotiation,
+including the first connection, while preserving healthy WebRTC connections.
+While signaling is disconnected, peer recovery is passive: it allocates no peer
+connection and starts no repeated signaling-wait timers. Leaving cancels pending
+connection work.
 
 The older presence timestamp selects the polite negotiation role; equal
 timestamps are resolved using a lexical client-ID comparison. Peers therefore
@@ -228,13 +235,60 @@ have opposite roles even when they join in the same millisecond. A simultaneous
 offer collision uses polite rollback/answer behavior. Only the impolite side
 offers the initial data channel, so colliding offers with different track counts
 cannot leave competing SCTP media sections. A polite-only initiation establishes
-media first and negotiates the data channel after connection. Each peer
-owns at most one automatic recovery loop, and a retired connection's asynchronous
-failure cannot disconnect its replacement. Rebuilt peers reuse live local
-capture tracks without requesting device permission again. An already-started
-incoming negotiation remains pending until WebRTC reports `connected`; the
-`connecting` state is not a successful recovery. If the remote peer completes
-connection during retry backoff, the next retry preserves that connection.
+media first and negotiates the data channel after connection. Each peer owns
+at most one event-triggered recovery attempt, and a retired connection's
+asynchronous failure cannot disconnect its replacement. Rebuilt peers reuse live
+local capture tracks without requesting device permission again. An
+already-started incoming negotiation remains pending until WebRTC reports
+`connected`; the `connecting` state is not a successful recovery.
+
+### Event-driven peer recovery
+
+After acknowledging a retained client's WebSocket resume and replaying its
+cached SDP/ICE, both WebSocket backends notify the other currently online members:
+
+```json
+{
+  "type": "peer-online",
+  "data": {
+    "clientId": "returning-client",
+    "connectionId": "server-assigned-socket-id"
+  }
+}
+```
+
+This server-originated notification is distinct from membership `join`/`leave`
+and from encrypted peer messages. It reports signaling availability, not ICE
+readiness. It is never stored in an offline member's signal cache. Repeating
+`join` on the same socket does not broadcast another notification. Bun also
+forwards the notification to other instances through the existing Redis channel.
+The frontend validates the identifiers, ignores its own and unknown peers,
+deduplicates repeated connection IDs, and delivers `peeravailable` to the existing
+peer session only after local room acknowledgement. Old socket events are ignored.
+
+A local acknowledged signaling return, remote `peer-online`, browser `online`,
+or return from an actual page freeze can request one connection attempt. A real
+P2P transport failure also allows one attempt even when WebSocket stayed connected:
+servers cannot infer a peer-to-peer transport failure from signaling presence.
+If an attempt fails, the session waits for a fresh availability event, incoming
+offer or explicit manual reconnect. There is no peer retry loop, exponential
+backoff, attempt-count limit or periodic polling. A fresh availability event during
+an attempt is coalesced for handling after it finishes; failure callbacks alone
+never request another attempt. Ordinary focus/tab switches do not retry.
+
+WebSocket reconnect/backoff remains: an offline browser must first regain its
+server connection to receive availability notifications. The one-shot transient
+ICE-disconnection grace period and connection deadlines also remain; they are not
+retry schedules. Healthy WebRTC/media connections are preserved across both local
+and remote signaling-only outages. A local SDP rejection alone does not trigger
+peer recovery.
+
+Roll out the new WebSocket servers before the frontend to enable peer-online
+wakeup. Join acknowledgement stays at protocol version 2; this additive event
+uses the same shared version, has no payload version, and older clients ignore it.
+Older servers still support local
+signaling-return and incoming-offer recovery, but cannot wake the unchanged-socket
+peer with this new notification.
 
 ### WebRTC connection generations
 

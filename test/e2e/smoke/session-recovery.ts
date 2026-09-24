@@ -456,6 +456,49 @@ async function main() {
       "after simultaneous recovery",
     );
 
+    // Only B loses its room socket. A must not need a focus/online/local socket
+    // event or a retry timer to wake when the server announces B's return.
+    sb.setStatus("disconnected");
+    const offlineA = a.peerConnection!,
+      offlineB = b.peerConnection!;
+    offlineB.close();
+    offlineB.dispatchEvent(
+      new Event("connectionstatechange"),
+    );
+    offlineA.close();
+    offlineA.dispatchEvent(
+      new Event("connectionstatechange"),
+    );
+    await until(
+      () =>
+        a.peerConnection === null &&
+        b.peerConnection === null,
+      "both peers wait after the failed single attempt",
+    );
+    assert(
+      sa.status === "connected",
+      "online peer keeps its signaling socket",
+    );
+    sb.setStatus("connected");
+    sa.events.dispatchEvent("peeravailable", undefined);
+    await until(
+      () => mediaReady(),
+      "server peer-online restores media and messages",
+    );
+    const availableA = a.peerConnection,
+      availableB = b.peerConnection;
+    sa.events.dispatchEvent("peeravailable", undefined);
+    sb.events.dispatchEvent("peeravailable", undefined);
+    await Promise.resolve();
+    assert(
+      a.peerConnection === availableA &&
+        b.peerConnection === availableB,
+      "availability notices preserve healthy connections",
+    );
+    await exerciseMediaChanges(
+      "after server-notified recovery",
+    );
+
     // Force both SDP offers to exist before either is delivered. This verifies
     // polite rollback rather than merely relying on different retry timings.
     sa.holdOffers = sb.holdOffers = true;
@@ -529,6 +572,7 @@ async function main() {
       mediaChangesAfterRecovery: true,
       mediaChangesWhileAwaitingAnswer: true,
       oneSidedRecoveryBothRoles: true,
+      serverNotifiedRecoveryWithLocalSignalingUnchanged: true,
       initialInterruptedJoinRecovered: true,
       signalingOnlyOutagePreservedMedia: true,
       simultaneousRecoveryCycles: 3,

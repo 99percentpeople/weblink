@@ -34,6 +34,7 @@ import {
   encodeSignalingEnvelope,
   isSignalingJoinAcknowledgement,
   parseSignalingEnvelope,
+  parseSignalingPeerOnline,
   SIGNALING_MAX_CACHED_SIGNALS,
 } from "@/libs/domain/signaling-protocol";
 import { catchErrorSync } from "@/libs/catch";
@@ -358,6 +359,20 @@ export class WebSocketClientService implements ClientService {
     signal: RawSignal,
   ): void {
     switch (signal.type) {
+      case "peer-online": {
+        const availability = parseSignalingPeerOnline(
+          signal.data,
+        );
+        if (
+          !availability ||
+          availability.clientId === this.client.clientId
+        )
+          return;
+        this.signalingServices
+          .get(availability.clientId)
+          ?.notifyPeerOnline(availability.connectionId);
+        break;
+      }
       case "join": {
         const client = hydrateClientPresence(
           signal.data as ClientPresence,

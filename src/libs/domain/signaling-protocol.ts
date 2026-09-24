@@ -24,6 +24,23 @@ export interface SignalingPeerMessage extends SignalingEnvelope {
   targetClientId: string;
 }
 
+export interface SignalingPeerOnline {
+  clientId: string;
+  connectionId: string;
+}
+
+export function parseSignalingPeerOnline(
+  value: unknown,
+): SignalingPeerOnline | null {
+  if (!isRecord(value)) return null;
+  const clientId = normalizeClientId(value.clientId);
+  const connectionId = normalizeClientId(
+    value.connectionId,
+  );
+  if (!clientId || !connectionId) return null;
+  return { clientId, connectionId };
+}
+
 export interface SignalingJoinAcknowledgement {
   protocolVersion: number;
   resumed: boolean;

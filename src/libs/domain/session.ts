@@ -139,11 +139,9 @@ export class PeerSession {
     this.lifecycle = new PeerSessionLifecycleController({
       sender,
       polite,
-      clientId: () => this.clientId,
       getStatus: () => this.status,
       setStatus: (status) => this.setStatus(status),
       getPeerConnection: () => this.peerConnection,
-      resetSession: () => this.resetSession(),
       disconnect: () => this.disconnect(),
       close: () => this.close(),
       reconnect: (options) => this.reconnect(options),
@@ -230,10 +228,10 @@ export class PeerSession {
         `[PeerSession] can not replace connection, session ${this.clientId} is closed`,
       );
     }
-    // A valid incoming restart supersedes our recovery attempt, not its
-    // signaling subscription. Local retry loops keep their cancellation owner.
+    // A valid incoming restart supersedes our single recovery attempt, not
+    // its signaling subscription or the other peer sessions.
     if (reason === "remote-restart")
-      this.lifecycle.stopAutoReconnect();
+      this.lifecycle.stopRecovery();
     this.resetSession();
     if (reason !== "initial")
       this.setStatus("reconnecting");

@@ -202,6 +202,71 @@ afterEach(() => {
 });
 
 describe("WebSocketClientService reconnect lifecycle", () => {
+  it("routes peer-online notices without a payload version once without leave/join or signaling status churn", async () => {
+    const service = createService();
+    const socket = await connectService(service);
+    const peer = service.createSender("remote")!;
+    const available = vi.fn();
+    const status = vi.fn();
+    const joined = vi.fn();
+    const left = vi.fn();
+    peer.addEventListener("peeravailable", available);
+    peer.addEventListener("statuschange", status);
+    service.listenForJoin(joined);
+    service.listenForLeave(left);
+    const notice = (
+      clientId = "remote",
+      connectionId = "socket-2",
+    ) => ({
+      type: "peer-online",
+      data: { clientId, connectionId },
+    });
+    socket.receive(notice());
+    socket.receive(notice());
+    socket.receive(notice("remote", "socket-3"));
+    socket.receive({ type: "peer-online", data: null });
+    socket.receive(notice("remote", ""));
+    socket.receive(notice("unknown"));
+    socket.receive(notice("local"));
+    expect(available).toHaveBeenCalledTimes(2);
+    expect(status).not.toHaveBeenCalled();
+    expect(joined).not.toHaveBeenCalled();
+    expect(left).not.toHaveBeenCalled();
+    service.close();
+    socket.receive(notice("remote", "closed-socket"));
+    expect(available).toHaveBeenCalledTimes(2);
+  });
+
+  it("buffers peer-online until room resume is acknowledged and ignores retired socket notices", async () => {
+    const service = createService();
+    const old = await connectService(service);
+    const peer = service.createSender("remote")!;
+    const available = vi.fn();
+    peer.addEventListener("peeravailable", available);
+    FakeWebSocket.acknowledgeJoins = false;
+    old.serverClose();
+    await flushMicrotasks();
+    const replacement = FakeWebSocket.instances.at(-1)!;
+    replacement.accept();
+    await flushMicrotasks();
+    const signal = {
+      type: "peer-online",
+      data: {
+        clientId: "remote",
+        connectionId: "remote-2",
+      },
+    };
+    replacement.receive(signal);
+    old.receive(signal);
+    expect(available).not.toHaveBeenCalled();
+    replacement.receive({
+      type: "joined",
+      data: { protocolVersion: 2, resumed: true },
+    });
+    await flushMicrotasks();
+    expect(available).toHaveBeenCalledOnce();
+  });
+
   it("replaces a silent half-open socket without waiting for its close event", async () => {
     vi.useFakeTimers();
     const service = createService();

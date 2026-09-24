@@ -28,6 +28,7 @@ export class WebSocketSignalingService implements SignalingService {
   private signalListenerReady = false;
   private pendingSignals: ClientSignal[] = [];
   private incomingTail: Promise<void> = Promise.resolve();
+  private peerConnectionId: string | null = null;
   constructor(
     socket: WebSocket,
     clientId: string,
@@ -116,6 +117,16 @@ export class WebSocketSignalingService implements SignalingService {
     data: SignalingServiceEventMap[K],
   ): boolean {
     return this.eventEmitter.dispatchEvent(event, data);
+  }
+
+  notifyPeerOnline(connectionId: string): void {
+    if (
+      this.isClosed() ||
+      this.peerConnectionId === connectionId
+    )
+      return;
+    this.peerConnectionId = connectionId;
+    this.dispatchEvent("peeravailable", undefined);
   }
 
   resetSocket(socket: WebSocket) {
