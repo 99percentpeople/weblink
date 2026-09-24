@@ -149,6 +149,83 @@ VITE_WEBSOCKET_URL=wss://ws.webl.ink
 Use HTTPS in production. Browser media APIs, PWA behavior, clipboard features,
 and secure WebSocket deployment all work most reliably in a secure context.
 
+### Cloudflare Pages releases from Git tags
+
+The [Pages release workflow](../.github/workflows/deploy-pages.yml) deploys the
+existing `weblink` Pages project when a stable version tag such as `v1.0.0` is
+pushed. Ordinary branch pushes and pull requests continue to run
+[CI](../.github/workflows/ci.yml), but do not trigger this deployment workflow.
+Prerelease tags such as `v1.1.0-beta.1` do not publish to production.
+
+The workflow checks out the tagged commit, verifies that its tag matches
+`package.json` and has dated notes in `CHANGELOG.md`, then runs type-checking,
+unit tests, integration tests, and the production build. Only a successful run
+uploads `dist/`. Bun, Node's major version, and Wrangler are explicitly selected;
+application dependencies use the frozen lockfile. Production runs are serialized.
+
+The workflow reads the existing project's `production_branch` through the
+Cloudflare API and supplies it to `wrangler pages deploy --branch`. This preserves
+the production domain even though the source checkout is a tag, and avoids
+mistaking the tag name for a preview branch. The deployed commit hash and message
+identify the release.
+
+#### One-time setup
+
+1. Keep the existing `weblink` Pages project and its custom domains. For a
+   Git-integrated project, open its branch deployment controls and disable
+   **automatic production branch deployments**. Set preview branch deployments
+   to **None** if all deployments should happen only through release tags.
+2. Create a Cloudflare API token scoped to the project's account with
+   **Account → Cloudflare Pages → Edit** permission.
+3. Configure the following GitHub Actions secrets, either on the repository or
+   in its `production` environment:
+
+   | Secret                  | Value                                                          |
+   | ----------------------- | -------------------------------------------------------------- |
+   | `CLOUDFLARE_ACCOUNT_ID` | Account ID containing the existing Pages project               |
+   | `CLOUDFLARE_API_TOKEN`  | Pages API token                                                |
+   | `PAGES_BUILD_ENV`       | Complete production `VITE_*` settings in multiline dotenv form |
+
+   A minimal `PAGES_BUILD_ENV` value is:
+
+   ```dotenv
+   VITE_BACKEND=WEBSOCKET
+   VITE_WEBSOCKET_URL=wss://ws.webl.ink
+   ```
+
+   Copy any existing production STUN, TURN, or Firebase settings into the same
+   value. Preserve the variable names documented above. The workflow writes this
+   secret into the ignored `.env.production.local` file before building. The
+   build runs on GitHub, so variables configured only in the Pages build settings
+   are not supplied to it. `VITE_*` values become part of the public frontend;
+   keep the deployment API token in its separate secret.
+
+4. If the GitHub `production` environment restricts allowed deployment refs,
+   permit the release tags. Keep any existing approval policy for that environment.
+
+Cloudflare supports Wrangler uploads to an existing Git-integrated Pages project
+after automatic deployments are disabled; recreating the project is unnecessary.
+See [Git integration controls](https://developers.cloudflare.com/pages/configuration/git-integration/)
+and [Direct Upload from CI](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/).
+
+#### Publish a release
+
+Commit the version bump and changelog, and ensure the release commit includes the
+Pages workflow. After completing the setup above:
+
+```sh
+git push origin public
+git tag -a v1.0.0 -m "Weblink 1.0.0"
+git push origin v1.0.0
+```
+
+For subsequent releases, replace `v1.0.0` with the matching version. Inspect the
+**Deploy Cloudflare Pages** Actions run and the production deployment in Pages
+before treating the release as deployed. A failed check prevents the upload. A
+failed deployment can be retried through the existing Actions run; do not move a
+published tag to another commit. To roll back, select a previous successful
+production deployment in the Pages dashboard.
+
 ## Docker
 
 The repository includes a frontend `Dockerfile` and

@@ -34,6 +34,7 @@ chat, and a shared file library. Weblink 1.0 是一次重大更新，带来完�
 
 ### Infrastructure
 
+- Add a GitHub Actions workflow for Cloudflare Pages deployments from stable version tags, with version checks, tests, and production builds before upload 新增基于正式版本 tag 的 Cloudflare Pages 部署工作流，上传前执行版本校验、测试及生产构建
 - Document the Cloudflare Durable Object signaling service, fixed deployment endpoint, validation, and rollback workflow 补充 Cloudflare Durable Object 信令服务、固定部署地址、验证及回滚流程文档
 
 ## [0.13.0] - 2026-08-31
