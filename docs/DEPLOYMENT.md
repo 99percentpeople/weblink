@@ -38,21 +38,20 @@ The static production output is written to `dist/`.
 
 ## Signaling backend
 
-Choose the frontend signaling implementation with `VITE_BACKEND`.
+Weblink uses WebSocket signaling for all builds. Configure the endpoint with
+`VITE_WEBSOCKET_URL`; no backend selector or separate frontend variant is needed.
 
 ### WebSocket
 
 Recommended configuration:
 
 ```env
-VITE_BACKEND=WEBSOCKET
 VITE_WEBSOCKET_URL=wss://ws.webl.ink
 ```
 
 For a local Bun signaling server:
 
 ```env
-VITE_BACKEND=WEBSOCKET
 VITE_WEBSOCKET_URL=ws://127.0.0.1:9000
 ```
 
@@ -68,28 +67,6 @@ The WebSocket URL is a deployment setting, not an end-user setting.
 The frontend normally reads `VITE_WEBSOCKET_URL` at build time. The included
 Docker image also supports replacing that value at container startup through
 `window.env.VITE_WEBSOCKET_URL` in `index.html`.
-
-### Firebase
-
-Firebase Realtime Database remains available as an alternative signaling
-backend:
-
-```env
-VITE_BACKEND=FIREBASE
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=...
-VITE_FIREBASE_PROJECT_ID=...
-VITE_FIREBASE_SOTRAGE_BUCKET=...
-VITE_FIREBASE_MESSAGEING_SENDER_ID=...
-VITE_FIREBASE_APP_ID=...
-VITE_FIREBASE_MEASUREMENT_ID=...
-VITE_FIREBASE_DATABASE_URL=...
-```
-
-The `SOTRAGE` and `MESSAGEING` spellings above intentionally match the
-current environment-variable names used by the code. Do not silently replace
-them with differently spelled variables unless the application code is migrated
-at the same time.
 
 ## STUN and TURN
 
@@ -142,7 +119,6 @@ For Vercel, Cloudflare Pages, Netlify, or another static host:
 A minimal public WebSocket deployment needs:
 
 ```env
-VITE_BACKEND=WEBSOCKET
 VITE_WEBSOCKET_URL=wss://ws.webl.ink
 ```
 
@@ -190,11 +166,10 @@ identify the release.
    A minimal `PAGES_BUILD_ENV` value is:
 
    ```dotenv
-   VITE_BACKEND=WEBSOCKET
    VITE_WEBSOCKET_URL=wss://ws.webl.ink
    ```
 
-   Copy any existing production STUN, TURN, or Firebase settings into the same
+   Copy any existing production STUN or TURN settings into the same
    value. Preserve the variable names documented above. The workflow writes this
    secret into the ignored `.env.production.local` file before building. The
    build runs on GitHub, so variables configured only in the Pages build settings
@@ -275,7 +250,7 @@ Committed `.env.dev` provides public WebSocket and STUN defaults. Optional
 to ignored `.env.dev.local` before building.
 
 Production environment secrets are not automatically available in Preview.
-Keep any TURN/Firebase settings that the development frontend needs in its own
+Keep any TURN settings that the development frontend needs in its own
 `PAGES_BUILD_ENV`. These `VITE_*` values are public frontend configuration, not
 deployment credentials. Regular deployments need no DNS-edit permission.
 
@@ -314,7 +289,7 @@ The current frontend Dockerfile declares build arguments for:
 - `VITE_WEBSOCKET_URL`
 - `VITE_STUN_SERVERS`
 
-`VITE_BACKEND` defaults to `WEBSOCKET` in the image.
+The image always uses WebSocket signaling.
 
 If additional build-time variables such as `VITE_TURN_SERVERS` are required,
 ensure they are exposed to the Docker build stage as well as supplied by the
@@ -380,7 +355,6 @@ Point the frontend at the reachable server URL before building or through the
 Docker runtime WebSocket URL:
 
 ```env
-VITE_BACKEND=WEBSOCKET
 VITE_WEBSOCKET_URL=ws://192.168.1.20:9000
 ```
 

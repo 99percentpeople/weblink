@@ -185,11 +185,7 @@ export const AppStateProvider: Component<
   );
   const namespace = getRoomNamespace();
   const desiredRoom = createMemo(() => {
-    const rawRoomId = appState.roomStatus.roomId;
-    const roomId =
-      import.meta.env.VITE_BACKEND === "WEBSOCKET"
-        ? rawRoomId?.trim()
-        : rawRoomId;
+    const roomId = appState.roomStatus.roomId?.trim();
     return roomId
       ? {
           roomId,
@@ -458,10 +454,7 @@ export const AppStateProvider: Component<
       }),
     getLocalStream: () => localStream(),
     onMemberJoined: (roomId, client) => {
-      const id =
-        import.meta.env.VITE_BACKEND === "WEBSOCKET"
-          ? roomId.trim()
-          : roomId;
+      const id = roomId.trim();
       messageStores.recordRoomMember(
         roomConversationId(namespace, id),
         client.clientId,

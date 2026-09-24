@@ -448,7 +448,7 @@ may select concrete infrastructure implementations.
     DTO/parser/limits; `speed-test.ts` owns the WebRTC diagnostic state machine.
   - `transfer/`: chunked file sender/receiver and transfer-owned workers.
 - `src/libs/infrastructure/`: concrete browser/backend adapters.
-  - `signaling/`: WebSocket and Firebase client/transport implementations.
+  - `signaling/`: WebSocket client/transport implementations.
   - `storage/`: IndexedDB chunk cache, transactional assembly, merge worker
     and the IndexedDB message-history repository adapter.
     `indexeddb-message-repository.ts` owns the explicit version-2 message schema,
@@ -499,7 +499,7 @@ message transport:
 - The display name and avatar are sent in the versioned
   `client-profile` message after the WebRTC message DataChannel is
   ready. They are sent again when that channel reconnects.
-- WebSocket and Firebase clients ignore profile fields from legacy
+- WebSocket clients ignore profile fields from legacy
   presence records and create an anonymous placeholder locally until
   the WebRTC profile arrives.
 - SDP offers/answers and ICE candidates must still use signaling

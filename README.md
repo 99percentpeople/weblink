@@ -112,12 +112,9 @@ clients.
 
 ## Try Weblink
 
-| Deployment   | Signaling backend                    | Open                             |
-| ------------ | ------------------------------------ | -------------------------------- |
-| **Primary**  | Cloudflare Workers + Durable Objects | [webl.ink](https://webl.ink)     |
-| **Firebase** | Firebase Realtime Database           | [v.webl.ink](https://v.webl.ink) |
+Open **[webl.ink](https://webl.ink)** in your browser.
 
-The primary deployment uses the open-source
+Weblink uses the open-source
 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)
 signaling backend.
 

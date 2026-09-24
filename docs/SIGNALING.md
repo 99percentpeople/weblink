@@ -10,7 +10,6 @@ peer-to-peer after WebRTC is ready.
 | ----------------- | --------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
 | Cloudflare Worker | [`weblink-ws-worker`](https://github.com/99percentpeople/weblink-ws-worker) | Cloudflare Workers + Durable Objects | Recommended serverless WebSocket deployment |
 | Bun server        | [`weblink-ws-server`](https://github.com/99percentpeople/weblink-ws-server) | Bun, optionally Redis                | Self-hosted or rollback deployment          |
-| Firebase          | This repository                                                             | Firebase Realtime Database           | Alternative managed backend                 |
 
 The deployed Cloudflare candidate endpoints are:
 

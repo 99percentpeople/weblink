@@ -64,7 +64,6 @@
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "fflate": "^0.8.2",
-    "firebase": "^10.14.1",
     "gridstack": "^11.5.1",
     "hash-wasm": "4.12.0",
     "lucide-solid": "^0.523.0",

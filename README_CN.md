@@ -108,12 +108,9 @@ Weblink 将 P2P 协议定义与浏览器 UI 实现分开维护。
 
 ## 在线体验
 
-| 版本              | 信令后端                             | 地址                             |
-| ----------------- | ------------------------------------ | -------------------------------- |
-| **主要版本**      | Cloudflare Workers + Durable Objects | [webl.ink](https://webl.ink)     |
-| **Firebase 版本** | Firebase Realtime Database           | [v.webl.ink](https://v.webl.ink) |
+在浏览器打开 **[webl.ink](https://webl.ink)** 即可使用。
 
-主要版本使用开源的
+Weblink 使用开源的
 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)
 作为信令后端。
 
