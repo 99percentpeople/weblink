@@ -9,6 +9,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { webLinkBranding } from "./scripts/brand-plugin";
 import { getBuildLoggingOptions } from "./scripts/build-logging";
 import {
+  buildInfoPlugin,
+  createBuildInfo,
+  getBuildCommit,
+} from "./scripts/build-info";
+import {
   BRAND_ASSETS,
   BRAND_MANIFEST_ICONS,
   BRAND_REVISION,
@@ -70,62 +75,81 @@ const pwaOptions: Partial<VitePWAOptions> = {
   },
 };
 
-export default defineConfig(({ mode }) => ({
-  resolve: {
-    alias: {
-      "@": "/src",
-    },
-  },
-  server: {},
-  optimizeDeps: {
-    // Pre-bundle worker dependencies before their first use.
-    include: ["hash-wasm", "fflate"],
-  },
-  build: {
-    rollupOptions: {
-      treeshake: true,
-    },
-    minify: true,
-  },
-  plugins: [
-    webLinkBranding(),
-    solidPlugin(),
-    solidSvg({
-      svgo: {
-        enabled: true, // optional, by default is true
-        svgoConfig: {
-          plugins: ["preset-default", "removeDimensions"],
-        },
+export default defineConfig(({ mode }) => {
+  const buildInfo = createBuildInfo(
+    packageJson.version,
+    mode,
+    getBuildCommit(),
+  );
+  return {
+    resolve: {
+      alias: {
+        "@": "/src",
       },
-    }),
-    VitePWA({
-      ...pwaOptions,
-      integration: {
-        // injectManifest runs its own Vite build instead of inheriting esbuild.
-        configureCustomSWViteBuild(config) {
-          config.esbuild = {
-            ...(config.esbuild || {}),
-            ...getBuildLoggingOptions(mode),
-          };
-        },
+    },
+    server: {},
+    optimizeDeps: {
+      // Pre-bundle worker dependencies before their first use.
+      include: ["hash-wasm", "fflate"],
+    },
+    build: {
+      rollupOptions: {
+        treeshake: true,
       },
-    }),
-    compression(),
-    tailwindcss(),
-  ],
-  esbuild: getBuildLoggingOptions(mode),
-  define: {
-    __APP_VERSION__: JSON.stringify(packageJson.version),
-    __APP_LICENSE__: JSON.stringify(packageJson.license),
-    __APP_AUTHOR_NAME__: JSON.stringify(
-      packageJson.author.name,
-    ),
-    __APP_AUTHOR_EMAIL__: JSON.stringify(
-      packageJson.author.email,
-    ),
-    __APP_AUTHOR_URL__: JSON.stringify(
-      packageJson.author.url,
-    ),
-    __APP_BUILD_TIME__: Date.now(),
-  },
-}));
+      minify: true,
+    },
+    plugins: [
+      webLinkBranding(),
+      buildInfoPlugin(buildInfo),
+      solidPlugin(),
+      solidSvg({
+        svgo: {
+          enabled: true, // optional, by default is true
+          svgoConfig: {
+            plugins: ["preset-default", "removeDimensions"],
+          },
+        },
+      }),
+      VitePWA({
+        ...pwaOptions,
+        manifest: {
+          ...(pwaOptions.manifest || {}),
+          name:
+            buildInfo.channel === "dev"
+              ? "Weblink Dev"
+              : "Weblink",
+          short_name:
+            buildInfo.channel === "dev"
+              ? "Weblink Dev"
+              : "Weblink",
+        },
+        integration: {
+          // injectManifest runs its own Vite build instead of inheriting esbuild.
+          configureCustomSWViteBuild(config) {
+            config.esbuild = {
+              ...(config.esbuild || {}),
+              ...getBuildLoggingOptions(mode),
+            };
+          },
+        },
+      }),
+      compression(),
+      tailwindcss(),
+    ],
+    esbuild: getBuildLoggingOptions(mode),
+    define: {
+      __APP_VERSION__: JSON.stringify(buildInfo.version),
+      __APP_LICENSE__: JSON.stringify(packageJson.license),
+      __APP_AUTHOR_NAME__: JSON.stringify(
+        packageJson.author.name,
+      ),
+      __APP_AUTHOR_EMAIL__: JSON.stringify(
+        packageJson.author.email,
+      ),
+      __APP_AUTHOR_URL__: JSON.stringify(
+        packageJson.author.url,
+      ),
+      __APP_BUILD_TIME__: Date.parse(buildInfo.builtAt),
+    },
+  };
+});

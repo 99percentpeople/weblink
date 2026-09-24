@@ -154,7 +154,8 @@ and secure WebSocket deployment all work most reliably in a secure context.
 The [Pages release workflow](../.github/workflows/deploy-pages.yml) deploys the
 existing `weblink` Pages project when a stable version tag such as `v1.0.0` is
 pushed. Ordinary branch pushes and pull requests continue to run
-[CI](../.github/workflows/ci.yml), but do not trigger this deployment workflow.
+[CI](../.github/workflows/ci.yml), but do not trigger this release workflow.
+Successful `public` branch pushes deploy the development channel described below.
 Prerelease tags such as `v1.1.0-beta.1` do not publish to production.
 
 The workflow checks out the tagged commit, verifies that its tag matches
@@ -225,6 +226,75 @@ before treating the release as deployed. A failed check prevents the upload. A
 failed deployment can be retried through the existing Actions run; do not move a
 published tag to another commit. To roll back, select a previous successful
 production deployment in the Pages dashboard.
+
+### Continuous development channel
+
+`https://dev.webl.ink` follows the latest successful push to `public`. The
+[CI workflow](../.github/workflows/ci.yml) runs type-checking, unit tests,
+integration tests and a production build before its separate `deploy-dev` job
+builds and uploads the development bundle. Pull requests, other branches and
+release tags cannot publish to this hostname. Local commits take effect only
+after a push; when several commits are pushed together, the branch tip is built.
+New pushes cancel superseded CI runs.
+
+The development job uploads to the **`dev` preview branch** of the existing
+`weblink` Pages project. It reads the project configuration and refuses to run
+if `dev` is its production branch. The release workflow and production domains
+remain unchanged. The actual preview alias is `dev.weblink-main.pages.dev`;
+do not assume that a Pages project's name equals its pages.dev subdomain.
+
+#### Build identity and debugging
+
+```sh
+bun run build:dev
+```
+
+This runs `vite build --mode dev`, not a publicly exposed Vite development
+server. It retains optimized production runtime code and PWA support, but keeps
+debug logs. The displayed version becomes `1.0.4-dev.<short-commit>` (using the
+current package version); `package.json` itself is not rewritten. The document
+and installed PWA are named **Weblink Dev**. Dev builds include robots exclusions
+and an `X-Robots-Tag` header to discourage search indexing; this is not access
+control.
+
+Every build exposes `/version.json` containing its channel, full commit hash,
+version and build timestamp, with `Cache-Control: no-store`. The CI job checks
+this endpoint on the preview alias and only succeeds when it serves the tested
+commit. Browser application data and PWA installations belong to the separate
+hostname; signaling and ICE settings can still be shared with the stable site.
+
+#### Preview environment
+
+The GitHub **Preview** environment uses the repository's existing
+`CLOUDFLARE_API_TOKEN` secret (Pages Edit). The workflow supplies the public
+account ID; an environment/repository `CLOUDFLARE_ACCOUNT_ID` variable can
+override it. No new credential is needed for ordinary preview uploads.
+
+Committed `.env.dev` provides public WebSocket and STUN defaults. Optional
+`PAGES_BUILD_ENV` in Preview supplies additional `VITE_*` settings and is written
+to ignored `.env.dev.local` before building.
+
+Production environment secrets are not automatically available in Preview.
+Keep any TURN/Firebase settings that the development frontend needs in its own
+`PAGES_BUILD_ENV`. These `VITE_*` values are public frontend configuration, not
+deployment credentials. Regular deployments need no DNS-edit permission.
+
+#### One-time custom domain setup
+
+After the workflow has been pushed, manually run **CI** on `public` with
+`configure_dev_domain: true`. This first validates and deploys the preview, then
+runs `scripts/pages-dev.mjs configure-domain` to attach **only** `dev.webl.ink`
+and set its proxied CNAME to `dev.weblink-main.pages.dev`. This one-time action
+additionally requires Zone Read and DNS Edit for `webl.ink`; it fails explicitly
+rather than altering conflicting or unrelated records. Repeated setup is
+idempotent. The final step verifies the dev commit through the custom hostname.
+
+Alternatively, attach `dev.webl.ink` under the project's Custom domains, then
+set the **proxied** CNAME `dev` to `dev.weblink-main.pages.dev`. Cloudflare requires
+proxying for [custom branch aliases](https://developers.cloudflare.com/pages/how-to/custom-branch-aliases/);
+an unproxied record can serve the production branch instead. Do not point it to
+`weblink-main.pages.dev`, and do not change the DNS records for `webl.ink` or
+`v.webl.ink`. Subsequent pushes only upload the dev preview and do not edit DNS.
 
 ## Docker
 

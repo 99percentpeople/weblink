@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:dev": "vite build --mode dev",
     "preview": "vite preview",
     "test": "vitest run",
     "clean": "node scripts/clean.js",

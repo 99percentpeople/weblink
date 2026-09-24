@@ -6,6 +6,11 @@ on:
     branches:
       - public
   workflow_dispatch:
+    inputs:
+      configure_dev_domain:
+        description: "One-time setup of dev.webl.ink (requires Zone Read and DNS Edit permissions)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,3 +50,85 @@ jobs:
 
       - name: Build production bundle
         run: bun run build
+
+  deploy-dev:
+    name: Deploy development site
+    needs: checks
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.ref == 'refs/heads/public' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Preview
+      url: https://dev.webl.ink
+    env:
+      PAGES_PROJECT_NAME: weblink
+      # An account ID is public routing metadata, not an API credential.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || 'e002f14aaa5aa851c9def226a6005a40' }}
+
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node for Wrangler
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Verify isolated Pages preview target
+        id: pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/pages-dev.mjs check
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build development channel
+        env:
+          PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
+        run: |
+          if [[ -n "$PAGES_BUILD_ENV" ]]; then
+            printf '%s\n' "$PAGES_BUILD_ENV" > .env.dev.local
+          fi
+          bun run build:dev
+
+      - name: Deploy dev preview, never production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bunx wrangler@4.137.0 pages deploy dist \
+            --project-name "$PAGES_PROJECT_NAME" \
+            --branch dev \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Dev $GITHUB_SHA"
+
+      - name: Verify published commit
+        env:
+          PAGES_DEV_ALIAS: ${{ steps.pages.outputs.alias }}
+        run: node scripts/pages-dev.mjs verify "$PAGES_DEV_ALIAS"
+
+      - name: Configure development custom domain
+        if: github.event_name == 'workflow_dispatch' && inputs.configure_dev_domain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          node scripts/pages-dev.mjs configure-domain
+          node scripts/pages-dev.mjs verify dev.webl.ink
+
+      - name: Summarize development deployment
+        env:
+          PAGES_DEV_ALIAS: ${{ steps.pages.outputs.alias }}
+        run: |
+          printf '### Weblink Dev\n\nCommit: `%s`\n\nSite: https://dev.webl.ink\n\nVerified preview: https://%s\n' \
+            "$GITHUB_SHA" "$PAGES_DEV_ALIAS" >> "$GITHUB_STEP_SUMMARY"
