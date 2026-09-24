@@ -14,12 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   IconAttachFile,
-  IconCamera,
   IconFolder,
   IconImage,
   IconSend,
 } from "@/components/icons";
-import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import {
   handleDropItems,
@@ -86,7 +84,6 @@ export function ChatComposer(props: ChatComposerProps) {
     "footer",
   ]);
   const formId = createUniqueId();
-  const mobile = createIsMobile();
   const [sendingText, setSendingText] = createSignal(false);
   const [sendingFiles, setSendingFiles] =
     createSignal(false);
@@ -334,32 +331,6 @@ export function ChatComposer(props: ChatComposerProps) {
               }
             />
           </Button>
-          <Show when={mobile()}>
-            <Button
-              as="label"
-              variant="ghost"
-              size="icon"
-              aria-label={t("conversations.capture_media")}
-              title={t("conversations.capture_media")}
-              disabled={busy() || filesDisabled()}
-            >
-              <IconCamera class="size-6" />
-              <Input
-                type="file"
-                accept="image/*,video/*"
-                capture="environment"
-                class="hidden"
-                data-attachment="capture"
-                aria-label={t(
-                  "conversations.capture_media",
-                )}
-                disabled={busy() || filesDisabled()}
-                onChange={(event) =>
-                  void selected(event.currentTarget)
-                }
-              />
-            </Button>
-          </Show>
           <Button
             type="button"
             variant="ghost"

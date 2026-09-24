@@ -596,7 +596,6 @@
     "attach_folder": "傳送資料夾",
     "attach_media": "傳送圖片或影片",
     "attach_file": "傳送檔案",
-    "capture_media": "拍攝圖片或影片",
     "file_drop": {
       "title": "放開以傳送檔案",
       "unavailable_title": "暫時無法傳送檔案"

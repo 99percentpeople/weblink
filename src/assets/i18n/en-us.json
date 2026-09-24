@@ -596,7 +596,6 @@
     "attach_folder": "Send folder",
     "attach_media": "Send photos or videos",
     "attach_file": "Send file",
-    "capture_media": "Take photo or video",
     "file_drop": {
       "title": "Drop to send files",
       "unavailable_title": "Files cannot be sent yet"

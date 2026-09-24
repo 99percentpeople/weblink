@@ -596,7 +596,6 @@
     "attach_folder": "发送文件夹",
     "attach_media": "发送图片或视频",
     "attach_file": "发送文件",
-    "capture_media": "拍摄图片或视频",
     "file_drop": {
       "title": "松开以发送文件",
       "unavailable_title": "暂时无法发送文件"

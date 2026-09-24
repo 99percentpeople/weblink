@@ -26,7 +26,6 @@ const service = vi.hoisted(() => ({
   folder: vi.fn(),
   drop: vi.fn(),
   error: vi.fn(),
-  mobile: false,
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
@@ -57,9 +56,6 @@ vi.mock("@/components/files/file-picker-dialog", () => ({
       </div>
     </Show>
   ),
-}));
-vi.mock("@/libs/hooks/create-mobile", () => ({
-  createIsMobile: () => () => service.mobile,
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/components/dialogs/preview-dialog", () => ({
@@ -93,7 +89,6 @@ const alice = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  service.mobile = false;
   service.sendText.mockReset();
   service.sendText.mockResolvedValue(undefined);
   service.sendFile.mockReset();
@@ -278,8 +273,7 @@ describe("shared chat composer adapters", () => {
     expect(service.error).not.toHaveBeenCalled();
   });
 
-  it("routes file, media, phone capture and zipped folders to the private peer without submitting the text draft", async () => {
-    service.mobile = true;
+  it("routes file, media and zipped folders to the private peer without submitting the text draft", async () => {
     const { container } = render(() => (
       <ChatBar client={alice} />
     ));
@@ -289,7 +283,7 @@ describe("shared chat composer adapters", () => {
     fireEvent.input(textbox, {
       target: { value: "a draft for later" },
     });
-    for (const kind of ["file", "media", "capture"]) {
+    for (const kind of ["file", "media"]) {
       const input =
         container.querySelector<HTMLInputElement>(
           `input[data-attachment="${kind}"]`,
