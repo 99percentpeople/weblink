@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2026-09-24
+
+### Improvements
+
+- Expand file drag-and-drop to the full private and room chat surface, add room file uploads, and keep the drop overlay minimal with a stable fade transition 将文件拖放范围扩展到整个私聊和群聊界面，新增群聊文件上传，并以稳定的淡入淡出保持拖放提示简洁
+- Pre-bundle `hash-wasm` and `fflate` during Vite development startup and isolate browser smoke-test dependency caches to avoid invalidating the active development server 在 Vite 开发启动时预构建 `hash-wasm` 与 `fflate`，并隔离浏览器冒烟测试的依赖缓存，避免使正在运行的开发服务器缓存失效
+
+### Fixes
+
+- Snapshot nested reactive file metadata before IndexedDB writes so Solid store proxies cannot trigger `DataCloneError` when caching fingerprints, aliases, content records, or references 在写入 IndexedDB 前快照嵌套的响应式文件元数据，避免 Solid store 代理在缓存指纹、别名、内容记录或引用时触发 `DataCloneError`
+- Make fingerprint worker failures actionable, preserve native worker errors and source locations, handle deserialization failures, and allow retries with a fresh worker 改进文件指纹 Worker 错误处理，保留原始异常与脚本位置，处理反序列化失败，并允许使用新的 Worker 重试
+- Stabilize drag enter/leave handling across nested chat elements so the upload background and native drag cursor no longer flicker when moving through the interface 稳定嵌套聊天元素间的拖入拖出状态，避免拖动文件经过界面时上传背景和原生拖拽光标反复闪动
+
 ## [1.0.3] - 2026-09-24
 
 ### Improvements
