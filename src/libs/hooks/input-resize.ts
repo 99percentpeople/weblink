@@ -14,21 +14,94 @@ declare module "solid-js" {
   }
 }
 
+// Copy resolved text metrics: the measuring textarea lives outside the editor
+// and must not depend on its ancestor styles or change the surrounding layout.
+const textareaSizingProperties = [
+  "boxSizing",
+  "width",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontWeight",
+  "fontStretch",
+  "fontVariant",
+  "fontFeatureSettings",
+  "fontVariationSettings",
+  "lineHeight",
+  "letterSpacing",
+  "wordSpacing",
+  "textIndent",
+  "textTransform",
+  "textRendering",
+  "tabSize",
+  "direction",
+  "whiteSpace",
+  "wordBreak",
+  "overflowWrap",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "borderStyle",
+] as const;
+
 export const textareaAutoResize = (
   el: HTMLTextAreaElement,
   signal?: Accessor<string>,
 ) => {
-  const view = el.ownerDocument.defaultView;
+  let view = el.ownerDocument.defaultView;
+  let initialHeight = el.style.height;
   let frame: number | undefined;
   let observer: ResizeObserver | undefined;
   let width: number | undefined;
+  let measurement: HTMLTextAreaElement | undefined;
   const resizeTextarea = () => {
-    el.style.height = "";
-    // scrollHeight includes wrapped placeholder text, even while an entering
-    // chat pane has zero width. Empty inputs should retain their native rows.
-    if (!el.value || el.clientWidth === 0) return;
-    const borderHeight = el.offsetHeight - el.clientHeight;
-    el.style.height = el.scrollHeight + borderHeight + "px";
+    if (!view || !el.isConnected || el.clientWidth === 0)
+      return;
+    // Empty inputs retain their native rows, not wrapped placeholder height.
+    if (!el.value) {
+      if (el.style.height !== initialHeight)
+        el.style.height = initialHeight;
+      return;
+    }
+    if (!measurement) {
+      measurement =
+        el.ownerDocument.createElement("textarea");
+      measurement.tabIndex = -1;
+      measurement.setAttribute("aria-hidden", "true");
+      measurement.style.cssText =
+        "position:fixed;top:0;left:0;display:block;visibility:hidden;" +
+        "pointer-events:none;overflow:hidden;resize:none;height:auto;" +
+        "min-height:0;max-height:none;min-width:0;max-width:none;margin:0;";
+      el.ownerDocument.body.append(measurement);
+    }
+    const style = view.getComputedStyle(el);
+    for (const property of textareaSizingProperties)
+      measurement.style[property] = style[property];
+    measurement.rows = el.rows;
+    measurement.wrap = el.wrap;
+    measurement.value = el.value;
+    const padding =
+      parseFloat(style.paddingTop) +
+      parseFloat(style.paddingBottom);
+    const border =
+      parseFloat(style.borderTopWidth) +
+      parseFloat(style.borderBottomWidth);
+    const height =
+      measurement.scrollHeight +
+      (style.boxSizing === "border-box"
+        ? border
+        : -padding);
+    const nextHeight = `${height}px`;
+    // Never collapse the live textarea to measure it: that intermediate layout
+    // expands the chat viewport and clamps scrollTop, even if the final height
+    // is unchanged (so ResizeObserver cannot detect the lost scroll position).
+    if (el.style.height !== nextHeight)
+      el.style.height = nextHeight;
   };
   const scheduleResize = () => {
     if (frame !== undefined) return;
@@ -48,6 +121,9 @@ export const textareaAutoResize = (
   });
 
   onMount(() => {
+    // Template-created nodes can belong to an inert document until mounted.
+    view = el.ownerDocument.defaultView;
+    initialHeight = el.style.height;
     el.addEventListener("input", scheduleResize);
     el.addEventListener("change", scheduleResize);
     el.addEventListener("focus", scheduleResize);
@@ -67,6 +143,7 @@ export const textareaAutoResize = (
 
   onCleanup(() => {
     observer?.disconnect();
+    measurement?.remove();
     if (frame !== undefined)
       view?.cancelAnimationFrame(frame);
     el.removeEventListener("input", scheduleResize);

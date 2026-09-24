@@ -438,6 +438,34 @@ async function main() {
       new Event("input", { bubbles: true }),
     );
     await checkBottom("composer grows");
+    input.focus({ preventScroll: true });
+    input.value += "Keep typing";
+    input.dispatchEvent(
+      new Event("input", { bubbles: true }),
+    );
+    await checkBottom(
+      "typing in an already expanded composer",
+    );
+    for (const value of [
+      "First line\nSecond line",
+      "First line\nSecond line\nThird line",
+      "First line\nSecond line\nThird line with more text",
+      "First line",
+    ]) {
+      input.value = value;
+      input.dispatchEvent(
+        new Event("input", { bubbles: true }),
+      );
+      await checkBottom(
+        "continued typing, line breaks and deletion",
+      );
+      assert(
+        !document.querySelector(
+          `button[aria-label="${t("client.scroll_to_bottom")}"]`,
+        ),
+        "editing the composer stopped following the conversation",
+      );
+    }
     input.value = "";
     input.dispatchEvent(
       new Event("input", { bubbles: true }),
@@ -449,6 +477,26 @@ async function main() {
     await frame();
     const anchor = firstVisible();
     const before = offset(anchor);
+    for (const value of [
+      "Draft\nwhile reading",
+      "Draft\nwhile reading more",
+      "",
+    ]) {
+      input.value = value;
+      input.dispatchEvent(
+        new Event("input", { bubbles: true }),
+      );
+      await frame();
+      await frame();
+      assert(
+        Math.abs(offset(anchor) - before) <= 1,
+        "editing the composer moved the reader's visible message",
+      );
+      assert(
+        gap() > 2,
+        "editing the composer pulled the reader to the bottom",
+      );
+    }
     rows()[0].style.paddingTop = "180px";
     await frame();
     await frame();
