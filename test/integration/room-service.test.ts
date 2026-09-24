@@ -137,6 +137,36 @@ beforeEach(() => {
 });
 
 describe("RoomService", () => {
+  it("keeps room signaling alive when an interrupted peer attempt fails", async () => {
+    const service = createClientService();
+    const h = createHarness(async () => service);
+    await h.room.join();
+    const failure = deferred<void>();
+    const session = {
+      polite: false,
+      setStream: vi.fn(),
+      listen: vi.fn(async () => {}),
+      connect: vi.fn(() => failure.promise),
+      close: vi.fn(),
+    } as unknown as PeerSession;
+    h.sessions.addClient.mockResolvedValue(session);
+    const joined = vi.mocked(service.listenForJoin).mock
+      .calls[0][0];
+    joined({
+      clientId: "remote",
+      createdAt: 2,
+      name: "Remote",
+      avatar: null,
+    });
+    await vi.waitFor(() =>
+      expect(session.connect).toHaveBeenCalled(),
+    );
+    failure.reject(new Error("signaling disconnected"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(service.close).not.toHaveBeenCalled();
+    expect(appState.roomStatus.roomId).toBe("room-a");
+  });
+
   it("starts the room clock after a successful join and resets it only after leaving", async () => {
     vi.useFakeTimers();
     const service = createClientService();

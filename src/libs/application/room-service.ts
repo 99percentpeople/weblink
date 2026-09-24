@@ -179,12 +179,6 @@ export class RoomService {
 
     if (this.isServiceCurrent(service, generation)) {
       console.error(connectError);
-      if (
-        Object.values(this.options.sessions.sessions)
-          .length === 0
-      ) {
-        this.leave();
-      }
     }
   }
 

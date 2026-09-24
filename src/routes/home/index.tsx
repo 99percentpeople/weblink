@@ -466,40 +466,42 @@ export default function Home() {
                 <Show when={!appState.roomStatus.roomId}>
                   <div
                     class="text-muted-foreground bg-accent mb-3.5 flex flex-wrap
-                      items-center justify-between gap-2.5 rounded-md px-3.5
-                      py-2.5 text-xs leading-[1.6]"
+                      items-center justify-between gap-2 rounded-md px-3.5 py-2.5
+                      text-xs leading-[1.6]"
                   >
                     <span>{t("meeting.preview_hint")}</span>
-                    <button
-                      type="button"
-                      class="text-primary ml-auto underline underline-offset-[3px]"
-                      disabled={
-                        roomActions.busy() ||
-                        appState.session
-                          .clientServiceStatus ===
-                          "connecting"
-                      }
-                      onClick={() =>
-                        void roomActions.join()
-                      }
-                    >
-                      {t("meeting.join_room")}
-                    </button>
-                    <button
-                      type="button"
-                      class="text-primary underline underline-offset-[3px]"
-                      disabled={
-                        roomActions.busy() ||
-                        appState.session
-                          .clientServiceStatus ===
-                          "connecting"
-                      }
-                      onClick={() =>
-                        void roomActions.edit()
-                      }
-                    >
-                      {t("client.index.edit_room")}
-                    </button>
+                    <div class="ml-auto flex flex-nowrap gap-2">
+                      <button
+                        type="button"
+                        class="text-primary underline underline-offset-[3px]"
+                        disabled={
+                          roomActions.busy() ||
+                          appState.session
+                            .clientServiceStatus ===
+                            "connecting"
+                        }
+                        onClick={() =>
+                          void roomActions.join()
+                        }
+                      >
+                        {t("meeting.join_room")}
+                      </button>
+                      <button
+                        type="button"
+                        class="text-primary underline underline-offset-[3px]"
+                        disabled={
+                          roomActions.busy() ||
+                          appState.session
+                            .clientServiceStatus ===
+                            "connecting"
+                        }
+                        onClick={() =>
+                          void roomActions.edit()
+                        }
+                      >
+                        {t("client.index.edit_room")}
+                      </button>
+                    </div>
                   </div>
                 </Show>
               </MeetingStage>

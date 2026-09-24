@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-09-24
+
+### Improvements
+
+- Keep local camera, microphone, and screen capture running when leaving a room, and reuse live tracks when rejoining without reopening sources that were explicitly stopped 离开房间时保留本地摄像头、麦克风及屏幕采集，重新加入时复用仍在运行的轨道，不重新打开已明确停止的来源
+- Keep the Join room and Edit room actions together in the local preview notice 优化本地预览提示中的按钮排列，让“加入房间”和“编辑房间”保持成组显示
+
+### Fixes
+
+- Restore room and peer connections after temporary signaling interruptions, publish socket readiness before replaying membership events, and discard stale sessions after server resume expiry 修复短暂信令断开后的房间与成员连接恢复，在回放成员事件前更新连接状态，并在服务端会话恢复失效后清理旧会话
+- Resolve simultaneous reconnect negotiation collisions and restore camera, screen, audio, and messaging channels while preventing retired asynchronous work from disconnecting a replacement connection 修复双方同时重连时的协商冲突，恢复摄像头、屏幕、声音和消息通道，避免旧异步任务破坏新连接
+- Defer initial video attachment until the meeting view is visible, and refresh inline playback after visibility, native picture-in-picture, fullscreen, or decoded-size changes without replacing the received stream 将视频首次绑定延后到会议画面可见时，并在可见性、原生画中画、全屏或解码尺寸变化后恢复页面内播放，保留原接收流
+
+### Compatibility Notes
+
+- iPhone Safari device verification remains pending; the inline-playback changes target the reported case where screen sharing plays in native picture-in-picture but appears black in the page iPhone Safari 真机验证仍待完成；本次页面内播放修复针对屏幕共享在原生画中画中正常、但在页面中黑屏的反馈
+
 ## [1.0.2] - 2026-09-24
 
 ### Improvements

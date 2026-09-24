@@ -208,8 +208,10 @@ export const VideoDisplay = (
     setLoadingState("initial");
     if (!video) return;
 
-    video.srcObject = currentStream;
-    if (!currentStream || !track) return;
+    if (!currentStream || !track) {
+      video.srcObject = null;
+      return;
+    }
 
     onCleanup(() => {
       ++playbackAttempt;
@@ -219,7 +221,6 @@ export const VideoDisplay = (
       video.pause();
       video.srcObject = null;
     });
-    play(video, track);
   });
 
   createVideoPlaybackRecovery({
@@ -227,6 +228,10 @@ export const VideoDisplay = (
     track: videoTrack,
     active: () => props.playbackActive !== false,
     resume: (video, track) => {
+      const currentStream = videoStream();
+      if (!currentStream || videoTrack() !== track) return;
+      if (video.srcObject !== currentStream)
+        video.srcObject = currentStream;
       if (!playPending) play(video, track);
     },
   });

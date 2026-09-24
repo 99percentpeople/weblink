@@ -49,6 +49,11 @@ type PublicConnectionStatus =
 
 const MAX_BUFFERED_SIGNALS = SIGNALING_MAX_CACHED_SIGNALS;
 
+interface JoinedSocket {
+  socket: WebSocket;
+  resumed?: boolean;
+}
+
 function abortError(message: string): Error {
   const error = new Error(message);
   error.name = "AbortError";
@@ -95,6 +100,7 @@ export class WebSocketClientService implements ClientService {
     string,
     RawSignal[]
   >();
+  private peers = new Map<string, TransferClient>();
 
   private signalingServices: Map<
     string,
@@ -350,22 +356,22 @@ export class WebSocketClientService implements ClientService {
     signal: RawSignal,
   ): void {
     switch (signal.type) {
-      case "join":
-        this.emit(
-          "join",
-          hydrateClientPresence(
-            signal.data as ClientPresence,
-          ),
+      case "join": {
+        const client = hydrateClientPresence(
+          signal.data as ClientPresence,
         );
+        this.peers.set(client.clientId, client);
+        this.emit("join", client);
         break;
-      case "leave":
-        this.emit(
-          "leave",
-          hydrateClientPresence(
-            signal.data as ClientPresence,
-          ),
+      }
+      case "leave": {
+        const client = hydrateClientPresence(
+          signal.data as ClientPresence,
         );
+        this.peers.delete(client.clientId);
+        this.emit("leave", client);
         break;
+      }
       case "message": {
         const message = signal.data as ClientSignal;
         if (
@@ -423,8 +429,24 @@ export class WebSocketClientService implements ClientService {
     }
   }
 
-  private completeRoomJoin(socket: WebSocket): void {
+  private completeRoomJoin(
+    socket: WebSocket,
+    resetPeers: boolean,
+  ): void {
     if (this.joiningSocket !== socket) return;
+
+    // An expired server session is a fresh membership. Retire the old peer
+    // sessions before the new roster creates senders for the same client IDs.
+    if (resetPeers) {
+      const peers = [...this.peers.values()];
+      this.peers.clear();
+      peers.forEach((client) => this.emit("leave", client));
+      this.signalingServices.forEach((service) =>
+        service.close(),
+      );
+      this.signalingServices.clear();
+      this.pendingPeerSignals.clear();
+    }
 
     this.signalingServices.forEach((service) => {
       service.resetSocket(socket);
@@ -433,6 +455,8 @@ export class WebSocketClientService implements ClientService {
 
     const buffered = this.bufferedSignals.splice(0);
     buffered.forEach((signal) => {
+      if (this.closed || this.activeSocket !== socket)
+        return;
       this.routeSocketSignal(socket, signal);
     });
   }
@@ -535,7 +559,7 @@ export class WebSocketClientService implements ClientService {
     resume: boolean,
     generation: number,
     signal: AbortSignal,
-  ): Promise<WebSocket> {
+  ): Promise<JoinedSocket> {
     const wsUrl = await this.createWebSocketUrl(signal);
     if (signal.aborted || this.closed) {
       throw abortError(
@@ -555,7 +579,7 @@ export class WebSocketClientService implements ClientService {
     }
     this.socket = socket;
 
-    return new Promise<WebSocket>((resolve, reject) => {
+    return new Promise<JoinedSocket>((resolve, reject) => {
       let settled = false;
       let handlingConnected = false;
       let joinStarted = false;
@@ -578,12 +602,11 @@ export class WebSocketClientService implements ClientService {
         }
         signal.removeEventListener("abort", handleAbort);
       };
-      const succeed = () => {
+      const succeed = (resumed?: boolean) => {
         if (settled) return;
         settled = true;
         cleanup();
-        this.completeRoomJoin(socket);
-        resolve(socket);
+        resolve({ socket, resumed });
       };
       const fail = (error: Error) => {
         if (settled) return;
@@ -659,7 +682,7 @@ export class WebSocketClientService implements ClientService {
               );
               return;
             }
-            succeed();
+            succeed(message.data.resumed);
             return;
           }
           if (
@@ -741,14 +764,28 @@ export class WebSocketClientService implements ClientService {
       generation,
       controller.signal,
     )
-      .then((socket) => {
-        if (!this.isCurrentConnection(socket, generation)) {
+      .then(({ socket, resumed }) => {
+        if (
+          !this.isCurrentConnection(socket, generation) ||
+          socket.readyState !== WebSocket.OPEN
+        ) {
           throw abortError(
             "[WebSocketClientService] stale connection",
           );
         }
         this.hasConnected = true;
         this.setStatus("connected");
+        if (!this.isCurrentConnection(socket, generation)) {
+          throw abortError(
+            "[WebSocketClientService] stale connection",
+          );
+        }
+        // Membership callbacks may synchronously create senders. Publish
+        // readiness before rebinding existing senders or replaying any joins.
+        this.completeRoomJoin(
+          socket,
+          resume && resumed === false,
+        );
         return socket;
       })
       .catch((error: unknown) => {
@@ -965,6 +1002,7 @@ export class WebSocketClientService implements ClientService {
     );
     this.signalingServices.clear();
     this.pendingPeerSignals.clear();
+    this.peers.clear();
     this.releaseSocket(this.socket, true);
     this.releaseRoomLock?.();
     this.releaseRoomLock = null;

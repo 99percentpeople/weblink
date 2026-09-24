@@ -644,6 +644,84 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     });
   });
 
+  it.each([false, true])(
+    "can create senders while replaying membership after join (resume=%s)",
+    async (resume) => {
+      const service = createService();
+      let joining: Promise<void> | undefined;
+      if (resume) {
+        const first = await connectService(service);
+        first.serverClose();
+      } else joining = service.createClient();
+      FakeWebSocket.acknowledgeJoins = false;
+      await flushMicrotasks();
+      const socket = FakeWebSocket.instances.at(-1)!;
+      socket.accept();
+      await flushMicrotasks();
+      const errors: unknown[] = [];
+      const senders: unknown[] = [];
+      service.listenForJoin((client) => {
+        try {
+          senders.push(
+            service.createSender(client.clientId),
+          );
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+      socket.receive({
+        type: "join",
+        data: { clientId: "remote", createdAt: 1 },
+      });
+      expect(senders).toHaveLength(0);
+      socket.receive({
+        type: "joined",
+        data: { protocolVersion: 2, resumed: resume },
+      });
+      await joining;
+      await flushMicrotasks();
+      expect(errors).toEqual([]);
+      expect(senders).toHaveLength(1);
+      expect(senders[0]).toMatchObject({
+        status: "connected",
+      });
+    },
+  );
+
+  it("retires old membership when the server cannot resume the room session", async () => {
+    const service = createService();
+    const first = await connectService(service);
+    const peer = { clientId: "remote", createdAt: 1 };
+    first.receive({ type: "join", data: peer });
+    const oldSender = service.createSender("remote")!;
+    const onLeave = vi.fn(() =>
+      service.removeSender("remote"),
+    );
+    service.listenForLeave(onLeave);
+    first.serverClose();
+    FakeWebSocket.acknowledgeJoins = false;
+    await flushMicrotasks();
+    const second = FakeWebSocket.instances.at(-1)!;
+    second.accept();
+    await flushMicrotasks();
+    second.receive({
+      type: "joined",
+      data: { protocolVersion: 2, resumed: false },
+    });
+    await flushMicrotasks();
+    expect(onLeave).toHaveBeenCalledOnce();
+    expect(oldSender.status).toBe("closed");
+    const onJoin = vi.fn((client) =>
+      service.createSender(client.clientId),
+    );
+    service.listenForJoin(onJoin);
+    second.receive({ type: "join", data: peer });
+    expect(onJoin).toHaveBeenCalledOnce();
+    expect(onJoin.mock.results[0].value).toMatchObject({
+      status: "connected",
+    });
+  });
+
   it("falls back when a legacy server does not acknowledge joins", async () => {
     vi.useFakeTimers();
     FakeWebSocket.acknowledgeJoins = false;

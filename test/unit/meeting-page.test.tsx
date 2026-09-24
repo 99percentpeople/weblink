@@ -1197,7 +1197,7 @@ describe("meeting page navigation and panels", () => {
     ).not.toHaveBeenCalled();
   });
 
-  it("stops local media before leaving the room and returning home", () => {
+  it("keeps local media when leaving the room and returning home", () => {
     render(() => (
       <MeetingMediaProvider>
         <MeetingSessionProvider>
@@ -1210,14 +1210,12 @@ describe("meeting page navigation and panels", () => {
         name: "meeting.leave_room",
       }),
     );
-    expect(fixture.clearLocalStream).toHaveBeenCalledOnce();
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(
+      fixture.replaceLocalStream,
+    ).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).toHaveBeenCalledOnce();
     expect(fixture.navigate).toHaveBeenCalledWith("/");
-    expect(
-      fixture.clearLocalStream.mock.invocationCallOrder[0],
-    ).toBeLessThan(
-      fixture.leaveRoom.mock.invocationCallOrder[0],
-    );
   });
 
   it("does not disconnect or stop published media when navigating away", () => {

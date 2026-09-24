@@ -280,6 +280,18 @@ export class PeerSession {
       { signal: controller.signal },
     );
 
+    pc.addEventListener(
+      "negotiationneeded",
+      () => {
+        // Room/session recovery drives the first offer. Once an SDP exchange
+        // exists, extra local tracks and recovered data channels can require an
+        // offer even while ICE/DTLS is still connecting.
+        if (pc.localDescription && pc.remoteDescription)
+          void this.renegotiate();
+      },
+      { signal: controller.signal },
+    );
+
     this.media.bindConnection(pc, controller.signal);
 
     this.dispatchEvent("peerconnectioninit", pc);
@@ -340,18 +352,6 @@ export class PeerSession {
       {
         signal: controller.signal,
       },
-    );
-
-    pc.addEventListener(
-      "negotiationneeded",
-      async () => {
-        console.log(
-          `[PeerSession] client ${this.clientId} onNegotiationneeded`,
-        );
-
-        await this.renegotiate();
-      },
-      { signal: controller.signal },
     );
   }
 
@@ -441,7 +441,8 @@ export class PeerSession {
     listenController.signal.addEventListener(
       "abort",
       () => {
-        this.listenController = null;
+        if (this.listenController === listenController)
+          this.listenController = null;
       },
     );
 
@@ -503,6 +504,16 @@ export class PeerSession {
       listenController.abort();
       throw waitErr;
     }
+    if (
+      listenController.signal.aborted ||
+      this.listenController !== listenController
+    ) {
+      throw new DOMException(
+        "Session listen aborted",
+        "AbortError",
+      );
+    }
+    this.lifecycle.markListening();
     this.setStatus("created");
   }
 
@@ -598,6 +609,12 @@ export class PeerSession {
     );
     if (err) throw err;
 
+    if (this.peerConnection !== pc) {
+      throw new DOMException(
+        "Peer connection replaced",
+        "AbortError",
+      );
+    }
     this.setupAfterConnectedListeners();
     this.setStatus("connected");
   }
@@ -726,10 +743,26 @@ export class PeerSession {
         },
       );
 
-      const channelGuard = this.createChannel(
-        "message",
-        "message",
-      ).then(() => connectionPromise);
+      // Only the impolite peer offers the initial SCTP transport. On a polite
+      // rollback, browsers can reject that transport when the two offers use
+      // different media-section indices (e.g. screen + camera vs receive-only).
+      // The answering side accepts it; a polite-only initiation recovers the
+      // channel after connection through ensureMessageChannelReady.
+      if (!this.polite)
+        void this.createChannel("message", "message").catch(
+          (error: unknown) => {
+            if (this.peerConnection !== pc) return;
+            // Recover a closed channel independently; a data-channel failure
+            // must not tear down an otherwise healthy media connection.
+            console.warn(
+              "[PeerSession] initial message channel interrupted",
+              error,
+            );
+            void this.dataChannels.ensureMessageChannelReady(
+              "connect:channel-interrupted",
+            );
+          },
+        );
       const offerPromise = this.negotiation
         .sendOffer(pc)
         .catch((err: unknown) => {
@@ -742,15 +775,21 @@ export class PeerSession {
           );
         });
 
-      await Promise.all([
-        offerPromise,
-        Promise.race([connectionPromise, channelGuard]),
-      ]);
+      await Promise.all([offerPromise, connectionPromise]);
 
+      if (this.peerConnection !== pc) {
+        throw new DOMException(
+          "Peer connection replaced",
+          "AbortError",
+        );
+      }
       this.setupAfterConnectedListeners();
       this.setStatus("connected");
     } catch (err) {
-      this.disconnect();
+      // A resumed signaling channel may already have started a new connection.
+      // The retired attempt must not tear down its replacement (or reopen a
+      // session that was explicitly closed).
+      if (this.peerConnection === pc) this.disconnect();
       throw err;
     } finally {
       connectAbortController.abort();
@@ -780,6 +819,7 @@ export class PeerSession {
 
   close() {
     this.lifecycle.dispose();
+    this.listenController?.abort();
     this.resetSession();
     this.media.dispose();
     this.dataChannels.close();

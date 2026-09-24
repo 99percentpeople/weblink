@@ -82,8 +82,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-function setup(source = track("camera")) {
-  const [active, setActive] = createSignal(true);
+async function setup(
+  source = track("camera"),
+  initialActive = true,
+) {
+  const [active, setActive] = createSignal(initialActive);
   const [current, setCurrent] = createSignal<MediaStream>(
     stream(source),
   );
@@ -95,6 +98,7 @@ function setup(source = track("camera")) {
       playbackActive={active()}
     />
   ));
+  await flush();
   return {
     ...view,
     setCurrent,
@@ -105,7 +109,30 @@ function setup(source = track("camera")) {
 }
 
 describe("VideoDisplay playback error notifications", () => {
-  it("prepares muted inline video before the first playback request", () => {
+  it("waits for the stage to be visible before attaching, and retains the source when hidden again", async () => {
+    const { video, source, setActive } = await setup(
+      track("screen"),
+      false,
+    );
+    expect(video.srcObject).toBeFalsy();
+    expect(play).not.toHaveBeenCalled();
+    setActive(true);
+    await flush();
+    const attached = video.srcObject;
+    expect((attached as MediaStream).getTracks()).toEqual([
+      source,
+    ]);
+    expect(play).toHaveBeenCalledOnce();
+    setActive(false);
+    await flush();
+    expect(video.srcObject).toBe(attached);
+    expect(
+      HTMLMediaElement.prototype.pause,
+    ).not.toHaveBeenCalled();
+    expect(source.stop).not.toHaveBeenCalled();
+  });
+
+  it("prepares muted inline video before the first playback request", async () => {
     play.mockImplementation(function (
       this: HTMLVideoElement,
     ) {
@@ -114,7 +141,7 @@ describe("VideoDisplay playback error notifications", () => {
       expect(this.srcObject).not.toBeNull();
       return Promise.resolve();
     });
-    setup();
+    await setup();
     expect(play).toHaveBeenCalledOnce();
   });
 
@@ -125,7 +152,7 @@ describe("VideoDisplay playback error notifications", () => {
         "AbortError",
       ),
     );
-    const { video, source, setActive } = setup();
+    const { video, source, setActive } = await setup();
     const attached = video.srcObject;
     await flush();
     fireEvent.loadedMetadata(video);
@@ -142,14 +169,15 @@ describe("VideoDisplay playback error notifications", () => {
     source.dispatchEvent(new Event("unmute"));
     expect(play).toHaveBeenCalledTimes(3);
     setActive(true);
+    await flush();
     expect(play).toHaveBeenCalledTimes(4);
     expect(video.srcObject).toBe(attached);
     expect(source.stop).not.toHaveBeenCalled();
     expect(notification.error).not.toHaveBeenCalled();
   });
 
-  it("shows one retryable toast instead of a persistent error overlay and retains normal loading indicators", () => {
-    const { video } = setup();
+  it("shows one retryable toast instead of a persistent error overlay and retains normal loading indicators", async () => {
+    const { video } = await setup();
     expect(
       screen.getByTestId("loading-spinner"),
     ).toBeTruthy();
@@ -191,8 +219,8 @@ describe("VideoDisplay playback error notifications", () => {
     expect(notification.error).toHaveBeenCalledOnce();
   });
 
-  it("retries the same borrowed track from the toast and allows a later failure after recovery", () => {
-    const { video, source } = setup();
+  it("retries the same borrowed track from the toast and allows a later failure after recovery", async () => {
+    const { video, source } = await setup();
     fireEvent.error(video);
     const retry =
       notification.error.mock.calls[0][1].action.onClick;
@@ -226,7 +254,7 @@ describe("VideoDisplay playback error notifications", () => {
         "NotAllowedError",
       ),
     );
-    const first = setup();
+    const first = await setup();
     await flush();
     expect(notification.error).toHaveBeenCalledOnce();
     expect(notification.error).toHaveBeenCalledWith(
@@ -249,7 +277,7 @@ describe("VideoDisplay playback error notifications", () => {
     play.mockRejectedValueOnce(
       new DOMException("Source changed", "AbortError"),
     );
-    setup(track("screen"));
+    await setup(track("screen"));
     await flush();
     expect(notification.error).not.toHaveBeenCalled();
   });
@@ -261,12 +289,13 @@ describe("VideoDisplay playback error notifications", () => {
         reject = onReject;
       }),
     );
-    const { video, setCurrent, unmount } = setup();
+    const { video, setCurrent, unmount } = await setup();
     fireEvent.error(video);
     const oldRetry =
       notification.error.mock.calls[0][1].action.onClick;
     const next = track("screen");
     setCurrent(stream(next));
+    await flush();
     const calls = play.mock.calls.length;
     oldRetry();
     expect(play).toHaveBeenCalledTimes(calls);

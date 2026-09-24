@@ -40,11 +40,25 @@ export class PeerSessionLifecycleController {
   private disconnectionTimer: number | null = null;
   private suspended = false;
   private connectable = false;
+  private listening = false;
 
   constructor(
     private readonly options: PeerSessionLifecycleOptions,
   ) {
     this.bindBrowserLifecycle();
+    options.sender.addEventListener(
+      "statuschange",
+      (event) => {
+        if (event.detail !== "connected") return;
+        // A signaling outage can interrupt the very first negotiation, before
+        // WebRTC has ever connected. Recover it as well as established sessions.
+        queueMicrotask(() => {
+          if (!this.browserController.signal.aborted)
+            this.resume("signaling-connected");
+        });
+      },
+      { signal: this.browserController.signal },
+    );
   }
 
   get isSuspended(): boolean {
@@ -57,6 +71,10 @@ export class PeerSessionLifecycleController {
 
   markConnectable(): void {
     this.connectable = true;
+  }
+
+  markListening(): void {
+    this.listening = true;
   }
 
   private bindBrowserLifecycle(): void {
@@ -115,8 +133,18 @@ export class PeerSessionLifecycleController {
 
   private resume(reason: string): void {
     if (this.options.getStatus() === "closed") return;
+    const wasSuspended = this.suspended;
     this.suspended = false;
-    if (!this.connectable) return;
+    if (
+      !this.connectable &&
+      !(
+        this.listening &&
+        (wasSuspended ||
+          reason === "signaling-connected" ||
+          this.options.getStatus() === "disconnected")
+      )
+    )
+      return;
 
     const pc = this.options.getPeerConnection();
     if (!pc) {
@@ -236,7 +264,7 @@ export class PeerSessionLifecycleController {
       return;
     }
 
-    if (!this.connectable) {
+    if (!this.connectable && !this.listening) {
       console.warn(
         `[PeerSession] session ${this.options.clientId()} is not connectable, disconnect`,
       );
@@ -281,8 +309,14 @@ export class PeerSessionLifecycleController {
           console.warn(
             `[PeerSession] wait signaling connected failed: ${signalError.message}`,
           );
+          // Waiting for room signaling is not a failed WebRTC attempt. Keep
+          // the recovery alive while the room client reconnects.
+          if (controller.signal.aborted) break;
+          continue;
         }
       }
+
+      if (controller.signal.aborted) break;
 
       const [error] = await catchError(
         this.options.reconnect({ initiate }),
@@ -339,6 +373,11 @@ export class PeerSessionLifecycleController {
   ): Promise<void> {
     const { sender } = this.options;
 
+    if (signal.aborted)
+      throw new DOMException(
+        "Signaling wait aborted",
+        "AbortError",
+      );
     if (sender.status === "connected") return;
     if (sender.status === "closed") {
       throw new Error(
@@ -368,7 +407,7 @@ export class PeerSessionLifecycleController {
           cleanup();
           reject(new Error("[PeerSession] aborted"));
         },
-        { once: true },
+        { once: true, signal: controller.signal },
       );
 
       sender.addEventListener(
@@ -409,18 +448,18 @@ export class PeerSessionLifecycleController {
     ms: number,
     signal: AbortSignal,
   ): Promise<void> {
-    if (ms <= 0) return;
+    if (ms <= 0 || signal.aborted) return;
 
     return new Promise<void>((resolve) => {
-      const timer = window.setTimeout(resolve, ms);
-      signal.addEventListener(
-        "abort",
-        () => {
-          window.clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      const finish = () => {
+        window.clearTimeout(timer);
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, ms);
+      signal.addEventListener("abort", finish, {
+        once: true,
+      });
     });
   }
 

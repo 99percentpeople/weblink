@@ -94,6 +94,8 @@ describe("live video playback recovery", () => {
   it("resumes the first visible frame and later track interruptions without restarting playing video", () => {
     const f = setup();
     f.video.dispatchEvent(new Event("loadedmetadata"));
+    expect(f.resume).not.toHaveBeenCalled();
+    observers[0].visible(f.video, true);
     expect(f.resume).toHaveBeenCalledOnce();
     f.video.dispatchEvent(new Event("canplay"));
     observers[0].visible(f.video, true);
@@ -115,7 +117,7 @@ describe("live video playback recovery", () => {
     expect(f.resume).toHaveBeenCalledOnce();
   });
 
-  it("resumes when the sidebar or collapsed thumbnail rail reveals a retained video", () => {
+  it("resumes when the sidebar or collapsed thumbnail rail reveals a retained video", async () => {
     const f = setup();
     f.setActive(false);
     observers[0].visible(f.video, true);
@@ -123,6 +125,7 @@ describe("live video playback recovery", () => {
     expect(f.resume).not.toHaveBeenCalled();
     const stream = f.video.srcObject;
     f.setActive(true);
+    await Promise.resolve();
     expect(f.resume).toHaveBeenCalledOnce();
     expect(f.video.srcObject).toBe(stream);
   });
@@ -134,6 +137,7 @@ describe("live video playback recovery", () => {
       const target =
         event === "visibilitychange" ? document : window;
       visibility = "hidden";
+      observers[0].visible(f.video, true);
       target.dispatchEvent(new Event(event));
       expect(f.resume).not.toHaveBeenCalled();
       visibility = "visible";
@@ -141,6 +145,42 @@ describe("live video playback recovery", () => {
       expect(f.resume).toHaveBeenCalledOnce();
     },
   );
+
+  it("starts an unattached stream only after the first visible layout", async () => {
+    const f = setup();
+    f.video.srcObject = null;
+    f.video.dispatchEvent(new Event("canplay"));
+    expect(f.resume).not.toHaveBeenCalled();
+    f.setActive(false);
+    observers[0].visible(f.video, true);
+    expect(f.resume).not.toHaveBeenCalled();
+    f.setActive(true);
+    await Promise.resolve();
+    expect(f.resume).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes a revealed inline presentation even if WebKit still reports playing", async () => {
+    const f = setup();
+    observers[0].visible(f.video, true);
+    const stream = f.video.srcObject;
+    observers[0].visible(f.video, false);
+    observers[0].visible(f.video, true);
+    expect(f.resume).toHaveBeenCalledTimes(2);
+    f.video.dispatchEvent(new Event("canplay"));
+    expect(f.resume).toHaveBeenCalledTimes(2);
+    for (const event of [
+      "leavepictureinpicture",
+      "webkitpresentationmodechanged",
+      "webkitendfullscreen",
+      "resize",
+    ]) {
+      const count = f.resume.mock.calls.length;
+      f.video.dispatchEvent(new Event(event));
+      await Promise.resolve();
+      expect(f.resume).toHaveBeenCalledTimes(count + 1);
+    }
+    expect(f.video.srcObject).toBe(stream);
+  });
 
   it("ignores removed sources, stale callbacks and cleanup events", () => {
     const f = setup();

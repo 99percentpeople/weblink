@@ -68,7 +68,9 @@ export class PeerSessionChannelController {
       "close",
       () => {
         const index = this.channels.findIndex(
-          (candidate) => candidate.id === channel.id,
+          // SCTP IDs are reused by the replacement RTCPeerConnection. A late
+          // close event from the old channel must not remove the new one.
+          (candidate) => candidate === channel,
         );
         if (index !== -1) {
           this.channels.splice(index, 1);
@@ -176,55 +178,60 @@ export class PeerSessionChannelController {
     const signal = this.options.getSessionSignal();
     if (!pc || !signal) return Promise.resolve();
 
-    this.ensureMessageChannelPromise = (async () => {
-      try {
-        if (this.options.getStatus() === "closed") return;
-        if (pc.connectionState !== "connected") return;
+    const isCurrent = () =>
+      !signal.aborted &&
+      this.options.getPeerConnection() === pc;
+    const promise = (async () => {
+      if (!isCurrent()) return;
+      if (this.options.getStatus() === "closed") return;
+      if (pc.connectionState !== "connected") return;
 
-        if (this.getOpenMessageChannel()) {
+      if (this.getOpenMessageChannel()) {
+        this.flushOutgoingQueue();
+        return;
+      }
+
+      if (
+        this.hasConnectingMessageChannel() ||
+        this.messageChannel
+      ) {
+        const [waitError] = await catchError(
+          this.waitForMessageChannelReady(signal, 3500),
+        );
+        if (!waitError) {
           this.flushOutgoingQueue();
           return;
         }
-
-        if (
-          this.hasConnectingMessageChannel() ||
-          this.messageChannel
-        ) {
-          const [waitError] = await catchError(
-            this.waitForMessageChannelReady(signal, 3500),
-          );
-          if (!waitError) {
-            this.flushOutgoingQueue();
-            return;
-          }
-        } else if (this.options.polite) {
-          const [waitError] = await catchError(
-            this.waitForMessageChannelReady(signal, 5000),
-          );
-          if (!waitError) {
-            this.flushOutgoingQueue();
-            return;
-          }
-        }
-
-        const [createError] = await catchError(
-          this.options.createChannel("message", "message"),
+      } else if (this.options.polite) {
+        const [waitError] = await catchError(
+          this.waitForMessageChannelReady(signal, 5000),
         );
-        if (createError) {
-          console.warn(
-            `[PeerSession] ensure message channel failed (${reason})`,
-            createError,
-          );
+        if (!waitError) {
+          this.flushOutgoingQueue();
           return;
         }
-
-        this.flushOutgoingQueue();
-      } finally {
-        this.ensureMessageChannelPromise = null;
       }
-    })();
 
-    return this.ensureMessageChannelPromise;
+      if (!isCurrent()) return;
+      const [createError] = await catchError(
+        this.options.createChannel("message", "message"),
+      );
+      if (createError) {
+        console.warn(
+          `[PeerSession] ensure message channel failed (${reason})`,
+          createError,
+        );
+        return;
+      }
+
+      if (isCurrent()) this.flushOutgoingQueue();
+    })().finally(() => {
+      if (this.ensureMessageChannelPromise === promise)
+        this.ensureMessageChannelPromise = null;
+    });
+    this.ensureMessageChannelPromise = promise;
+
+    return promise;
   }
 
   async createChannel(

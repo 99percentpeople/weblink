@@ -65,7 +65,11 @@ the low-level `domain` layer.
     the microphone and video. Newly added displays inherit that mute until all
     displays stop. Without a captured display audio track, the switch is disabled.
     The application service owns capture tracks and preserves retained tracks when their stream
-    container changes. The stage renders each video track as a separate view;
+    container changes. Leaving a room disconnects peers but keeps local capture
+    and preview alive; joining again reuses those live tracks. Network recovery
+    also rebinds live tracks, without reopening captures that the user or browser
+    stopped. Explicit tab takeover still stops capture in the previous page.
+    The stage renders each video track as a separate view;
     pinning chooses a view rather than a participant. Remote views use numbered
     labels because the transport does not claim camera/screen source metadata.
     All stage views use 16:9 frames and contain the source video. One stage-owned
@@ -145,11 +149,17 @@ the low-level `domain` layer.
     handles pending requests, native close and disposal without owning tracks.
     The child document receives app styles, theme updates and its own Solid
     delegated event handlers, all cleaned up when the window closes.
-    Video playback recovery follows metadata/readiness, repeated track unmute,
-    document foreground and viewport visibility events. The stage also exposes
+    New video sources are attached only after the stage is active and the video
+    first intersects the viewport; this avoids starting a muted inline video
+    while its initial layout is hidden. Playback recovery follows metadata/readiness,
+    repeated track unmute, document foreground and viewport visibility events.
+    The stage also exposes
     canvas/thumbnail visibility explicitly because CSS visibility changes need
-    not change intersection. Recovery retries paused live video without replacing
-    its stream or stopping borrowed tracks. Autoplay denial keeps a translated
+    not change intersection. Recovery retries paused live video and refreshes
+    inline playback on reveal, decoded-size changes and native PiP/fullscreen
+    presentation events, even if the browser still reports playing. Hiding a
+    bound view retains its source for PiP; recovery never replaces a healthy
+    stream or stops borrowed tracks. Autoplay denial keeps a translated
     toast action available for a user-initiated play request; browser policies
     and codec support are not overridden or inferred from the user agent.
     In the mobile layout, each playable video tile independently exposes native

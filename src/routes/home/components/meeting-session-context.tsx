@@ -286,7 +286,6 @@ function createMeetingSession() {
   const leave = () => {
     setEngaged(false);
     pip.close();
-    media.clear();
     state.leaveRoom();
     navigate("/");
   };

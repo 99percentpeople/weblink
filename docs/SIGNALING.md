@@ -168,10 +168,28 @@ reply only after room membership has been installed:
 `resumed` is `true` only when the server recovered the retained session. The
 server sends this acknowledgment before existing-client presence or cached
 SDP/ICE signals. The frontend buffers room and peer signals until the
-acknowledgment arrives, then rebinds every peer signaling channel and replays
+acknowledgment arrives, publishes connection readiness, then rebinds every peer signaling channel and replays
 the buffer in order. For compatibility with older self-hosted servers, the
 frontend falls back to the legacy behavior after a short acknowledgment
 timeout.
+
+When a reconnect acknowledgment reports `resumed: false`, the client retires
+its old peer sessions before accepting the fresh roster. A peer that left while
+ICE configuration was loading cannot be installed by the old pending join.
+Restored signaling retries interrupted peer negotiation, including the first
+connection, while preserving healthy WebRTC connections. Waiting for signaling
+does not consume WebRTC retry attempts; leaving cancels that wait.
+
+The older presence timestamp selects the polite negotiation role; equal
+timestamps are resolved using a lexical client-ID comparison. Peers therefore
+have opposite roles even when they join in the same millisecond. A simultaneous
+offer collision uses polite rollback/answer behavior. Only the impolite side
+offers the initial data channel, so colliding offers with different track counts
+cannot leave competing SCTP media sections. A polite-only initiation establishes
+media first and negotiates the data channel after connection. Each peer
+owns at most one automatic recovery loop, and a retired connection's asynchronous
+failure cannot disconnect its replacement. Rebuilt peers reuse live local
+capture tracks without requesting device permission again.
 
 ### WebRTC connection generations
 

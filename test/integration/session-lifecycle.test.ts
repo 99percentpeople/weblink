@@ -15,6 +15,11 @@ import type {
 import type { SignalingService } from "@/libs/domain/signaling";
 import { SessionService } from "@/libs/application/session-service";
 import { setAppState } from "@/libs/state/app-state";
+import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import type {
+  SignalingServiceEventMap,
+  SignalingServiceStatus,
+} from "@/libs/domain/signaling";
 
 if (typeof window === "undefined") {
   (globalThis as any).window = {
@@ -90,6 +95,129 @@ afterEach(() => {
 });
 
 describe("PeerSession lifecycle", () => {
+  it("does not let a retired offer unlock negotiation on the new connection", async () => {
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      { polite: false },
+    );
+    let rejectOld!: (error: Error) => void;
+    let rejectNew!: (error: Error) => void;
+    const old = makePeerConnection(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    );
+    attachPeerConnection(session, old);
+    const oldOffer = session.renegotiate();
+    const current = makePeerConnection(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectNew = reject;
+        }),
+    );
+    attachPeerConnection(session, current);
+    const newOffer = session.renegotiate();
+    rejectOld(new Error("old offer failed"));
+    await oldOffer;
+    expect(isMakingOffer(session)).toBe(true);
+    rejectNew(new Error("new offer failed"));
+    await newOffer;
+    expect(isMakingOffer(session)).toBe(false);
+    session.close();
+  });
+
+  it("recovers the first interrupted negotiation when signaling returns", async () => {
+    const events =
+      new MultiEventEmitter<SignalingServiceEventMap>();
+    let status: SignalingServiceStatus = "connected";
+    const sender: SignalingService = {
+      ...makeSender("local", "remote"),
+      get status() {
+        return status;
+      },
+      addEventListener:
+        events.addEventListener.bind(events),
+      removeEventListener:
+        events.removeEventListener.bind(events),
+    };
+    const pc = Object.assign(new EventTarget(), {
+      connectionState: "new",
+      signalingState: "stable",
+      getSenders: () => [],
+      addTransceiver: vi.fn(),
+      close: vi.fn(),
+    }) as unknown as RTCPeerConnection;
+    vi.stubGlobal(
+      "RTCPeerConnection",
+      vi.fn(() => pc),
+    );
+    const session = new PeerSession(sender, {
+      polite: false,
+    });
+    await session.listen();
+    const offer = new Promise<RTCSessionDescriptionInit>(
+      () => {},
+    );
+    Object.assign(pc, { createOffer: () => offer });
+    vi.spyOn(session, "createChannel").mockImplementation(
+      () => new Promise(() => {}),
+    );
+    const connecting = session.connect();
+    const failed = expect(connecting).rejects.toThrow(
+      "signaling service is disconnected",
+    );
+    status = "disconnected";
+    events.dispatchEvent("statuschange", status);
+    await failed;
+    const reconnect = vi
+      .spyOn(session, "reconnect")
+      .mockImplementation(async () => {
+        session.peerConnection = {
+          connectionState: "connected",
+          close: vi.fn(),
+        } as unknown as RTCPeerConnection;
+      });
+    status = "connected";
+    events.dispatchEvent("statuschange", status);
+    await vi.waitFor(() =>
+      expect(reconnect).toHaveBeenCalledOnce(),
+    );
+    session.close();
+  });
+
+  it("does not let an old failed offer tear down a replacement connection", async () => {
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      { polite: false },
+    );
+    let rejectOffer!: (error: Error) => void;
+    const pc = makePeerConnection(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOffer = reject;
+        }),
+    );
+    attachPeerConnection(session, pc);
+    (session as any).controller = new AbortController();
+    (session as any).listenController =
+      new AbortController();
+    vi.spyOn(session, "createChannel").mockImplementation(
+      () => new Promise(() => {}),
+    );
+    const pending = session.connect();
+    const replacement = {
+      connectionState: "connected",
+      close: vi.fn(),
+    } as unknown as RTCPeerConnection;
+    session.peerConnection = replacement;
+    rejectOffer(new Error("retired offer"));
+    await expect(pending).rejects.toThrow("retired offer");
+    expect(session.peerConnection).toBe(replacement);
+    expect(replacement.close).not.toHaveBeenCalled();
+    session.close();
+  });
+
   it("resets makingOffer after renegotiation fails", async () => {
     const sender = makeSender("local", "remote");
     const session = new PeerSession(sender, {
@@ -136,53 +264,63 @@ describe("PeerSession lifecycle", () => {
     session.close();
   });
 
-  it("connects after the offer and peer connection are ready", async () => {
-    const session = new PeerSession(
-      makeSender("local", "remote"),
-      { polite: false },
-    );
-    let connectionState: RTCPeerConnectionState = "new";
-    let onConnectionStateChange: (() => void) | undefined;
-    const close = vi.fn();
-    const pc = {
-      signalingState: "stable",
-      get connectionState() {
-        return connectionState;
-      },
-      createOffer: vi.fn(async () => ({
-        type: "offer" as const,
-        sdp: "offer-sdp",
-      })),
-      setLocalDescription: vi.fn(async () => {
-        connectionState = "connected";
-        onConnectionStateChange?.();
-      }),
-      addEventListener: vi.fn(
-        (type: string, listener: EventListener) => {
-          if (type === "connectionstatechange") {
-            onConnectionStateChange =
-              listener as () => void;
-          }
+  it.each([false, true])(
+    "connects after the offer and peer connection are ready (local channel interrupted=%s)",
+    async (interrupted) => {
+      const session = new PeerSession(
+        makeSender("local", "remote"),
+        { polite: false },
+      );
+      let connectionState: RTCPeerConnectionState = "new";
+      let onConnectionStateChange: (() => void) | undefined;
+      const close = vi.fn();
+      const pc = {
+        signalingState: "stable",
+        get connectionState() {
+          return connectionState;
         },
-      ),
-      close,
-      getSenders: () => [],
-    } as unknown as RTCPeerConnection;
-    attachPeerConnection(session, pc);
-    (session as any).controller = new AbortController();
-    (session as any).listenController =
-      new AbortController();
-    vi.spyOn(session, "createChannel").mockResolvedValue(
-      {} as RTCDataChannel,
-    );
+        createOffer: vi.fn(async () => ({
+          type: "offer" as const,
+          sdp: "offer-sdp",
+        })),
+        setLocalDescription: vi.fn(async () => {
+          connectionState = "connected";
+          onConnectionStateChange?.();
+        }),
+        addEventListener: vi.fn(
+          (type: string, listener: EventListener) => {
+            if (type === "connectionstatechange") {
+              onConnectionStateChange =
+                listener as () => void;
+            }
+          },
+        ),
+        close,
+        getSenders: () => [],
+      } as unknown as RTCPeerConnection;
+      attachPeerConnection(session, pc);
+      (session as any).controller = new AbortController();
+      (session as any).listenController =
+        new AbortController();
+      vi.spyOn(session, "createChannel").mockImplementation(
+        () =>
+          interrupted
+            ? Promise.reject(
+                new Error(
+                  "Channel retired during rollback",
+                ),
+              )
+            : Promise.resolve({} as RTCDataChannel),
+      );
 
-    await session.connect();
+      await session.connect();
 
-    expect((session as any).status).toBe("connected");
-    expect(isMakingOffer(session)).toBe(false);
-    session.close();
-    expect(close).toHaveBeenCalledTimes(1);
-  });
+      expect((session as any).status).toBe("connected");
+      expect(isMakingOffer(session)).toBe(false);
+      session.close();
+      expect(close).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("aborts connect while offer creation is pending", async () => {
     const session = new PeerSession(
@@ -431,6 +569,81 @@ describe("PeerSession lifecycle", () => {
 });
 
 describe("SessionService lifecycle", () => {
+  it("assigns opposite negotiation roles even when both clients joined in the same millisecond", async () => {
+    const create = async (
+      local: string,
+      remote: string,
+    ) => {
+      const service = new SessionService({
+        loadIceServers: async () => [],
+      });
+      service.setClientService({
+        info: { clientId: local, createdAt: 1 },
+        addEventListener: vi.fn(),
+        close: vi.fn(),
+        removeSender: vi.fn(),
+        createSender: () => makeSender(local, remote),
+      } as unknown as ClientService);
+      const session = await service.addClient({
+        clientId: remote,
+        createdAt: 1,
+        name: remote,
+        avatar: null,
+      });
+      const role = session.polite;
+      session.close();
+      service.removeService();
+      return role;
+    };
+    expect(await create("a", "b")).toBe(true);
+    expect(await create("b", "a")).toBe(false);
+  });
+
+  it("does not resurrect a departed peer while ICE configuration is still loading", async () => {
+    let resolveIce!: (value: RTCIceServer[]) => void;
+    const service = new SessionService({
+      loadIceServers: () =>
+        new Promise((resolve) => {
+          resolveIce = resolve;
+        }),
+    });
+    const oldSender = makeSender("local", "remote");
+    const newSender = makeSender("local", "remote");
+    const clientService = {
+      info: { clientId: "local", createdAt: 1 },
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+      removeSender: vi.fn(),
+      createSender: vi
+        .fn()
+        .mockReturnValueOnce(oldSender)
+        .mockReturnValueOnce(newSender),
+    } as unknown as ClientService;
+    service.setClientService(clientService);
+    const client = {
+      clientId: "remote",
+      createdAt: 2,
+      name: "Remote",
+      avatar: null,
+    };
+    const oldJoin = service.addClient(client);
+    const rejected = expect(oldJoin).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    service.removeSession("remote");
+    const newJoin = service.addClient({
+      ...client,
+      createdAt: 3,
+    });
+    resolveIce([]);
+    await rejected;
+    const session = await newJoin;
+    expect(service.sessions.remote).toBe(session);
+    expect(service.clientViewData.remote.createdAt).toBe(3);
+    session.close();
+    service.removeService();
+  });
+
   it("removes a remotely keyed session when it closes itself", async () => {
     const removeSender = vi.fn();
     const localClient: TransferClient = {

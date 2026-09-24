@@ -579,7 +579,7 @@ describe("meeting PiP across routes and documents", () => {
     expect(fixture.clear).not.toHaveBeenCalled();
     expect(fixture.leave).not.toHaveBeenCalled();
   });
-  it("opens during navigation when enabled, returns to the meeting, and never reopens while leaving the room", async () => {
+  it("opens during navigation, returns to the meeting, and preserves capture without reopening PiP when leaving the room", async () => {
     const f = setup();
     expect(session.controls.automatic()).toBe(false);
     session.controls.setAutomatic(true);
@@ -613,7 +613,7 @@ describe("meeting PiP across routes and documents", () => {
       ),
     );
     expect(session.pip.active()).toBe(false);
-    expect(fixture.clear).toHaveBeenCalledOnce();
+    expect(fixture.clear).not.toHaveBeenCalled();
     expect(fixture.leave).toHaveBeenCalledOnce();
     expect(f.requestWindow).toHaveBeenCalledTimes(2);
     expect(mediaAction).toBeNull();

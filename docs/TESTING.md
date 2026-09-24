@@ -93,6 +93,8 @@ Commands:
 
 ```sh
 bun run test:e2e:protocol
+bun run test:e2e:recovery
+bun run test:e2e:playback
 bun run test:e2e:transfer
 bun run test:e2e:cache
 bun run test:e2e:tasks
@@ -101,6 +103,18 @@ bun run test:e2e:conversations
 bun run test:e2e:meeting
 bun run test:e2e:speed
 ```
+
+`test:e2e:recovery` uses Node 22+ and Chromium to exercise interrupted initial
+negotiation, repeated simultaneous peer recovery, forced colliding SDP offers,
+and camera/screen/audio RTP after reconnect. Signaling outages are controlled
+in-process; SDP, ICE, decoded video frames, audio packets and data channels are
+real browser transports. It also verifies that leaving/rejoining reuses local
+capture without reopening a stopped camera.
+
+`test:e2e:playback` uses Node 22+ and Chromium with the actual video component
+and received RTP. It checks deferred source attachment, interrupted playback,
+visibility/presentation recovery and borrowed-track cleanup. Native PiP return
+events are simulated; it does not establish iPhone Safari rendering correctness.
 
 `test:e2e:protocol` also covers three independent room-chat protocol instances
 over real unordered mesh DataChannels, including partial delivery, connection

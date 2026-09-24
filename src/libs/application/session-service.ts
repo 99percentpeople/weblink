@@ -11,6 +11,7 @@ import { Accessor, createEffect } from "solid-js";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import { getIceServers } from "@/libs/domain/ice-server";
 import { catchError, catchErrorSync } from "@/libs/catch";
+import type { SignalingService } from "../domain/signaling";
 import {
   appState,
   setAppState,
@@ -26,6 +27,10 @@ export class SessionService {
   readonly clientViewData: Record<ClientID, ClientInfo> =
     appState.session.clientViewData;
   private service?: ClientService;
+  private pendingClients = new Map<
+    ClientID,
+    SignalingService
+  >();
 
   get clientService() {
     return this.service;
@@ -100,6 +105,7 @@ export class SessionService {
   }
 
   removeService() {
+    this.pendingClients.clear();
     this.service?.close();
     this.service = undefined;
     setAppState(
@@ -126,6 +132,8 @@ export class SessionService {
   }
 
   removeSession(target: ClientID) {
+    if (this.pendingClients.delete(target))
+      this.service?.removeSender(target);
     const session = this.sessions[target];
     if (!session) {
       console.log(
@@ -145,13 +153,18 @@ export class SessionService {
         `can not add client: ${client.clientId}, client service not found`,
       );
     }
-    if (this.sessions[client.clientId]) {
+    if (
+      this.sessions[client.clientId] ||
+      this.pendingClients.has(client.clientId)
+    ) {
       throw new Error(
         `client ${client.clientId} has already created`,
       );
     }
     const polite =
-      service.info.createdAt < client.createdAt;
+      service.info.createdAt < client.createdAt ||
+      (service.info.createdAt === client.createdAt &&
+        service.info.clientId < client.clientId);
     const sender = service.createSender(client.clientId);
     if (!sender) {
       throw new Error(
@@ -159,9 +172,27 @@ export class SessionService {
       );
     }
 
-    const iceServers = await this.iceServers;
+    this.pendingClients.set(client.clientId, sender);
+    let iceServers: RTCIceServer[];
+    try {
+      iceServers = await this.iceServers;
+    } catch (error) {
+      if (
+        this.pendingClients.get(client.clientId) === sender
+      ) {
+        this.pendingClients.delete(client.clientId);
+        service.removeSender(client.clientId);
+      }
+      throw error;
+    }
+    const ownsPending =
+      this.pendingClients.get(client.clientId) === sender;
+    if (ownsPending)
+      this.pendingClients.delete(client.clientId);
     if (
       this.service !== service ||
+      !ownsPending ||
+      sender.status === "closed" ||
       this.sessions[client.clientId]
     ) {
       sender.close();
@@ -383,6 +414,7 @@ export class SessionService {
   }
 
   destoryAllSession() {
+    this.pendingClients.clear();
     Object.values(this.sessions).forEach((session) =>
       session.close(),
     );

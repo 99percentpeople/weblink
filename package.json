@@ -2,7 +2,7 @@
   "name": "weblink",
   "type": "module",
   "description": "A P2P web chat and file transfer, file synchronization application using WebRTC",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "license": "MIT",
   "author": {
     "name": "99percentpeople",
@@ -23,6 +23,8 @@
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
     "test:e2e:protocol": "bun scripts/run-browser-check.mjs --protocol",
+    "test:e2e:recovery": "node scripts/run-browser-check.mjs --recovery",
+    "test:e2e:playback": "node scripts/run-browser-check.mjs --playback",
     "test:e2e:transfer": "bun scripts/run-browser-check.mjs --transfer",
     "test:e2e:cache": "bun scripts/run-browser-check.mjs --cache",
     "test:e2e:tasks": "bun scripts/run-browser-check.mjs --tasks",
@@ -30,7 +32,7 @@
     "test:e2e:conversations": "bun scripts/run-browser-check.mjs --conversations",
     "test:e2e:meeting": "bun scripts/run-browser-check.mjs --meeting",
     "test:e2e:speed": "bun scripts/run-browser-check.mjs",
-    "test:e2e": "bun run test:e2e:protocol && bun run test:e2e:transfer && bun run test:e2e:cache && bun run test:e2e:tasks && bun run test:e2e:speed && bun run test:e2e:chat && bun run test:e2e:conversations && bun run test:e2e:meeting",
+    "test:e2e": "bun run test:e2e:protocol && bun run test:e2e:recovery && bun run test:e2e:playback && bun run test:e2e:transfer && bun run test:e2e:cache && bun run test:e2e:tasks && bun run test:e2e:speed && bun run test:e2e:chat && bun run test:e2e:conversations && bun run test:e2e:meeting",
     "bench:browser:cache": "bun scripts/run-browser-check.mjs --cache-benchmark"
   },
   "lint-staged": {

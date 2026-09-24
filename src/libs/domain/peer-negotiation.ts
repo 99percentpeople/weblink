@@ -102,6 +102,7 @@ export class PeerNegotiationController {
     options?: RTCOfferOptions,
   ) {
     const generation = this.connectionGeneration;
+    const epoch = this.connectionEpoch;
     if (!generation || pc !== this.getPeerConnection()) {
       throw new Error(
         "[PeerNegotiation] peer connection generation is unavailable",
@@ -125,7 +126,8 @@ export class PeerNegotiationController {
           generation === this.connectionGeneration,
       );
     } finally {
-      this.makingOffer = false;
+      if (epoch === this.connectionEpoch)
+        this.makingOffer = false;
     }
   }
 
@@ -214,19 +216,7 @@ export class PeerNegotiationController {
         );
         return;
       }
-      if (offerCollision) {
-        const [rollbackError] = await catchError(
-          pc.setLocalDescription({ type: "rollback" }),
-        );
-        if (rollbackError) {
-          console.warn(
-            `[PeerNegotiation] rollback failed, signalingState: ${pc.signalingState}`,
-            rollbackError,
-          );
-        }
-        if (pc !== this.getPeerConnection()) return;
-      }
-
+      // Apply the accepted offer and implicit polite rollback as one operation.
       [err] = await catchError(
         pc.setRemoteDescription(
           new RTCSessionDescription({
