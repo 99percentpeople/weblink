@@ -1,5 +1,6 @@
 import type {
   Client,
+  ClientJoinOptions,
   ClientService,
   ClientServiceInitOptions,
   TransferClient,
@@ -187,7 +188,7 @@ export class RoomService {
     }
   }
 
-  join(): Promise<void> {
+  join(options: ClientJoinOptions = {}): Promise<void> {
     if (this.disposed) {
       return Promise.reject(
         abortError("Room service is disposed"),
@@ -223,6 +224,7 @@ export class RoomService {
     const promise = this.joinProfile(
       generation,
       profile,
+      options,
     ).finally(() => {
       if (this.pendingJoin === promise)
         this.pendingJoin = null;
@@ -234,6 +236,7 @@ export class RoomService {
   private async joinProfile(
     generation: number,
     profile: ClientServiceInitOptions,
+    options: ClientJoinOptions,
   ): Promise<void> {
     try {
       let service = this.options.sessions.clientService;
@@ -254,7 +257,7 @@ export class RoomService {
         generation,
         profile.roomId,
       );
-      await service.createClient();
+      await service.createClient(options);
       if (!this.isServiceCurrent(service, generation)) {
         throw abortError("Room changed while joining");
       }

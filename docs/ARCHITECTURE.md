@@ -145,7 +145,16 @@ the low-level `domain` layer.
     handles pending requests, native close and disposal without owning tracks.
     The child document receives app styles, theme updates and its own Solid
     delegated event handlers, all cleaned up when the window closes.
-    Automatic PiP is an opt-in app preference, available only while at least one
+    In the mobile layout, each playable video tile independently exposes native
+    video PiP when its standard or WebKit presentation API supports it. Its
+    original video element stays mounted under a notice and restore action;
+    closing PiP never stops borrowed media tracks. Video PiP has no automatic
+    entry setting and is owned by the tile, so removing its source closes it.
+    Fullscreen video uses decoded dimensions to request landscape or portrait
+    orientation when the Screen Orientation API allows it, follows video resize,
+    and releases only its own lock on exit. Missing or rejected orientation
+    support never prevents fullscreen.
+    Automatic Document PiP is an opt-in app preference, available only while at least one
     local or remote video track is live, enabled and unmuted. Audio-only and
     placeholder sources do not qualify; manual entry remains available. The video
     condition is rechecked after a pending request. Internal route exits request

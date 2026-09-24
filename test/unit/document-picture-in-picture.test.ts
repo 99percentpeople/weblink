@@ -7,7 +7,10 @@ import {
   it,
   vi,
 } from "vitest";
-import { createDocumentPictureInPicture } from "@/libs/hooks/document-picture-in-picture";
+import {
+  createDocumentPictureInPicture,
+  type DocumentPictureInPictureAPI,
+} from "@/libs/hooks/document-picture-in-picture";
 
 const cleanups: (() => void)[] = [];
 afterEach(() =>
@@ -54,6 +57,26 @@ function setup() {
 }
 
 describe("document picture-in-picture window ownership", () => {
+  it.each([undefined, {}, { requestWindow: false }])(
+    "ignores unavailable or non-callable window APIs: %j",
+    async (api) => {
+      const onError = vi.fn();
+      const controller = createRoot((dispose) => {
+        cleanups.push(dispose);
+        return createDocumentPictureInPicture({
+          api: api as
+            | DocumentPictureInPictureAPI
+            | undefined,
+          onError,
+        });
+      });
+      expect(controller.supported()).toBe(false);
+      await controller.open();
+      expect(controller.busy()).toBe(false);
+      expect(controller.active()).toBe(false);
+      expect(onError).not.toHaveBeenCalled();
+    },
+  );
   it("requests synchronously, coalesces concurrent requests, and tracks native close", async () => {
     const f = setup();
     const first = f.controller.open();

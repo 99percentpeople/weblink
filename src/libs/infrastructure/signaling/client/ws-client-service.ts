@@ -9,6 +9,7 @@ import {
 import { WebSocketSignalingService } from "../transport/ws-signaling-service";
 import type {
   ClientPresence,
+  ClientJoinOptions,
   ClientService,
   ClientServiceEventMap,
   ClientServiceInitOptions,
@@ -36,6 +37,7 @@ import {
   SIGNALING_MAX_CACHED_SIGNALS,
 } from "@/libs/domain/signaling-protocol";
 import { catchErrorSync } from "@/libs/catch";
+import { acquireRoomConnectionLock } from "./room-connection-lock";
 
 type PublicConnectionStatus =
   | "connecting"
@@ -76,6 +78,8 @@ export class WebSocketClientService implements ClientService {
   private connectionGeneration = 0;
   private reconnectAttempts = 0;
   private hasConnected = false;
+  private createPromise: Promise<void> | null = null;
+  private releaseRoomLock: (() => void) | null = null;
   private closed = false;
   private passwordHashPromise: Promise<
     string | null
@@ -294,7 +298,8 @@ export class WebSocketClientService implements ClientService {
     );
     socket.addEventListener(
       "close",
-      () => this.handleSocketClose(socket, generation),
+      (event) =>
+        this.handleSocketClose(socket, generation, event),
       { once: true, signal: controller.signal },
     );
   }
@@ -432,8 +437,27 @@ export class WebSocketClientService implements ClientService {
   private handleSocketClose(
     socket: WebSocket,
     generation: number,
+    event: CloseEvent,
   ): void {
     if (!this.isCurrentConnection(socket, generation)) {
+      return;
+    }
+
+    console.warn("[WebSocketClientService] socket closed", {
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean,
+    });
+    if (
+      (event.code === 1000 || event.code === 1008) &&
+      [
+        "Session resumed elsewhere",
+        "Session replaced",
+        "Stale client session",
+      ].includes(event.reason)
+    ) {
+      // Reconnecting here would evict the new owner and start a takeover loop.
+      this.handleSessionReplaced();
       return;
     }
 
@@ -879,8 +903,49 @@ export class WebSocketClientService implements ClientService {
     this.on("leave", callback);
   }
 
-  async createClient() {
-    await this.initialize();
+  private handleSessionReplaced(): void {
+    if (this.closed) return;
+    this.close();
+    this.onNotice?.("session-replaced");
+  }
+
+  createClient(
+    options: ClientJoinOptions = {},
+  ): Promise<void> {
+    if (this.createPromise) return this.createPromise;
+    const promise = (async () => {
+      try {
+        if (!this.releaseRoomLock) {
+          const url = new URL(this.websocketUrl);
+          this.releaseRoomLock =
+            await acquireRoomConnectionLock(
+              JSON.stringify([
+                "weblink:signaling",
+                url.origin,
+                url.pathname,
+                this.roomId.trim(),
+                this.client.clientId,
+              ]),
+              this.lifecycleController.signal,
+              {
+                takeover: options.takeover,
+                onReplaced: () =>
+                  this.handleSessionReplaced(),
+              },
+            );
+        }
+        await this.initialize();
+      } catch (error) {
+        this.releaseRoomLock?.();
+        this.releaseRoomLock = null;
+        throw error;
+      }
+    })().finally(() => {
+      if (this.createPromise === promise)
+        this.createPromise = null;
+    });
+    this.createPromise = promise;
+    return promise;
   }
 
   close() {
@@ -899,6 +964,8 @@ export class WebSocketClientService implements ClientService {
     this.signalingServices.clear();
     this.pendingPeerSignals.clear();
     this.releaseSocket(this.socket, true);
+    this.releaseRoomLock?.();
+    this.releaseRoomLock = null;
     this.eventListeners.clear();
     this.setStatus("disconnected");
   }

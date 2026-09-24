@@ -62,6 +62,7 @@ import {
 } from "@/libs/application/task-service";
 import { createClientService } from "@/libs/application/client-service-factory";
 import { RoomService } from "@/libs/application/room-service";
+import type { ClientJoinOptions } from "@/libs/domain/client";
 import { FileCatalogService } from "@/libs/application/file-catalog-service";
 import type { LocalStreamService } from "@/libs/application/local-stream-service";
 import { RoomMessagingService } from "@/libs/application/messaging/room-messaging-service";
@@ -74,7 +75,8 @@ export interface AppStateContextProps {
     ConversationHistoryService,
     "cacheLocalTextBatch"
   >;
-  joinRoom: () => Promise<void>;
+  joinRoom: (options?: ClientJoinOptions) => Promise<void>;
+  roomConflict: Accessor<boolean>;
   leaveRoom: () => void;
   activeRoomConversationId: Accessor<string | null>;
   roomChatCapabilities: Accessor<
@@ -415,6 +417,8 @@ export const AppStateProvider: Component<
   });
   onCleanup(() => speedTests.dispose());
 
+  const [roomConflict, setRoomConflict] =
+    createSignal(false);
   const room = new RoomService({
     sessions: sessionService,
     rtc,
@@ -428,7 +432,10 @@ export const AppStateProvider: Component<
             toast.warning(
               t("common.notification.room_unprotected"),
             );
-          else toast.error(t("errors.password_prepare"));
+          else if (notice === "session-replaced") {
+            room.leave();
+            setRoomConflict(true);
+          } else toast.error(t("errors.password_prepare"));
         },
       }),
     getLocalStream: () => localStream(),
@@ -447,7 +454,20 @@ export const AppStateProvider: Component<
       speedTests.cancel();
     },
   });
-  const joinRoom = () => room.join();
+  const joinRoom = async (options?: ClientJoinOptions) => {
+    try {
+      await room.join(options);
+      setRoomConflict(false);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message ===
+          "Room is already open in another tab"
+      )
+        setRoomConflict(true);
+      throw error;
+    }
+  };
   const leaveRoom = () => room.leave();
 
   createEffect(() => {
@@ -770,6 +790,7 @@ export const AppStateProvider: Component<
       value={{
         conversationHistory,
         joinRoom,
+        roomConflict,
         leaveRoom,
         activeRoomConversationId: () =>
           currentRoom()?.conversationId ?? null,

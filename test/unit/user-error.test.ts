@@ -38,6 +38,16 @@ describe.each(Object.keys(dictionaries))(
   (locale) => {
     it.each([
       [
+        new Error("Room is already open in another tab"),
+        "room_in_use",
+      ],
+      [
+        new Error(
+          "[WebSocketSignalingService] socket is not open",
+        ),
+        "connection_closed",
+      ],
+      [
         new Error(
           "[WebSocketClientService] connection timeout",
         ),

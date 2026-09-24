@@ -37,7 +37,10 @@ export const CompatibilityView = (props: {
 
   return (
     <>
-      <div class="bg-background/80 flex h-screen flex-col p-2 backdrop-blur">
+      <div
+        class="bg-background/80 flex h-full min-h-0 flex-col
+          overflow-y-auto p-2 backdrop-blur"
+      >
         <div class="flex items-center justify-between">
           <h2 class="p-2 font-mono text-xl font-bold">
             {APP_NAME}
@@ -46,8 +49,8 @@ export const CompatibilityView = (props: {
         </div>
 
         <div
-          class="flex h-screen flex-1 flex-col items-center justify-center
-            gap-4 text-center"
+          class="flex flex-1 flex-col items-center justify-center gap-4
+            text-center"
         >
           <h1 class="text-4xl font-bold">
             {t("browser_unsupported.title")}

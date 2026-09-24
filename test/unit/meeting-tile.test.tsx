@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import {
@@ -22,6 +23,11 @@ vi.hoisted(() => {
     value: true,
   });
 });
+
+const fixture = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock("solid-sonner", () => ({
+  toast: { error: fixture.error },
+}));
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/components/icons", () => ({
@@ -62,6 +68,9 @@ const activateFullscreen = (element: Element | null) => {
 };
 
 beforeEach(() => {
+  vi.stubGlobal("innerWidth", 390);
+  window.dispatchEvent(new Event("resize"));
+  fixture.error.mockClear();
   fullscreenElement = null;
   Object.defineProperties(document, {
     fullscreenEnabled: { configurable: true, value: true },
@@ -88,6 +97,13 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  for (const key of [
+    "pictureInPictureEnabled",
+    "pictureInPictureElement",
+    "exitPictureInPicture",
+  ])
+    Reflect.deleteProperty(document, key);
+  Reflect.deleteProperty(window.screen, "orientation");
 });
 
 function setup() {
@@ -254,5 +270,208 @@ describe("local screen preview cover", () => {
       HTMLMediaElement.prototype.pause,
     ).not.toHaveBeenCalled();
     expect(view.onStop).not.toHaveBeenCalled();
+  });
+});
+
+function nativeVideoPip(view: ReturnType<typeof setup>) {
+  let current: HTMLVideoElement | null = null;
+  const exit = vi.fn(async () => {
+    const previous = current;
+    current = null;
+    previous?.dispatchEvent(
+      new Event("leavepictureinpicture"),
+    );
+  });
+  Object.defineProperties(document, {
+    pictureInPictureEnabled: {
+      configurable: true,
+      value: true,
+    },
+    pictureInPictureElement: {
+      configurable: true,
+      get: () => current,
+    },
+    exitPictureInPicture: {
+      configurable: true,
+      value: exit,
+    },
+  });
+  const enter = vi.fn(async () => {
+    current = view.video;
+    view.video.dispatchEvent(
+      new Event("enterpictureinpicture"),
+    );
+    return {} as PictureInPictureWindow;
+  });
+  view.video.requestPictureInPicture = enter;
+  Object.defineProperties(view.video, {
+    readyState: { configurable: true, value: 4 },
+    videoWidth: { configurable: true, value: 1920 },
+    videoHeight: { configurable: true, value: 1080 },
+  });
+  fireEvent.loadedMetadata(view.video);
+  return { enter, exit };
+}
+
+describe("native PiP on a meeting tile", () => {
+  it("offers the button only for a supported video, keeps the actual element alive under its placeholder, and restores it", async () => {
+    const view = setup();
+    expect(
+      screen.queryByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    ).toBeNull();
+    const { enter, exit } = nativeVideoPip(view);
+    const stream = view.video.srcObject;
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    );
+    expect(enter).toHaveBeenCalledOnce();
+    expect(
+      screen.getByText("meeting.pip_video_elsewhere"),
+    ).toBeInTheDocument();
+    expect(view.container.querySelector("video")).toBe(
+      view.video,
+    );
+    expect(view.video.srcObject).toBe(stream);
+    expect(view.track().stop).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.pip_video_restore",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText("meeting.pip_video_elsewhere"),
+      ).toBeNull(),
+    );
+    expect(exit).toHaveBeenCalledOnce();
+    expect(view.video.srcObject).toBe(stream);
+  });
+
+  it("keeps mobile video PiP independent when document PiP also exists", () => {
+    vi.stubGlobal("documentPictureInPicture", {
+      requestWindow: vi.fn(),
+    });
+    const view = setup();
+    nativeVideoPip(view);
+    expect(
+      screen.queryByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    ).not.toBeNull();
+  });
+
+  it("shows the native video entry only in the mobile layout", () => {
+    vi.stubGlobal("innerWidth", 1440);
+    window.dispatchEvent(new Event("resize"));
+    const view = setup();
+    nativeVideoPip(view);
+    expect(
+      screen.queryByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    ).toBeNull();
+    vi.stubGlobal("innerWidth", 390);
+    window.dispatchEvent(new Event("resize"));
+    expect(
+      screen.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("follows a browser close and exits on removal without stopping the source track", async () => {
+    const view = setup();
+    const { exit } = nativeVideoPip(view);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    );
+    await exit();
+    expect(
+      screen.queryByText("meeting.pip_video_elsewhere"),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "common.action.picture_in_picture",
+        }),
+      ).not.toBeDisabled(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("meeting.pip_video_elsewhere"),
+      ).toBeInTheDocument(),
+    );
+    view.unmount();
+    await waitFor(() =>
+      expect(exit).toHaveBeenCalledTimes(2),
+    );
+    expect(view.track().stop).not.toHaveBeenCalled();
+  });
+
+  it("translates browser denial without exposing internal error text", async () => {
+    const view = setup();
+    const { enter } = nativeVideoPip(view);
+    enter.mockRejectedValue(
+      new DOMException(
+        "Internal renderer detail",
+        "NotAllowedError",
+      ),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      }),
+    );
+    await waitFor(() =>
+      expect(fixture.error).toHaveBeenCalledWith(
+        "meeting.pip_permission_denied",
+      ),
+    );
+    expect(
+      screen.queryByText("meeting.pip_video_elsewhere"),
+    ).toBeNull();
+  });
+
+  it("requests fullscreen before locking to the actual video ratio and releases orientation on exit", async () => {
+    const lock = vi.fn(async () => {
+      expect(document.fullscreenElement).not.toBeNull();
+    });
+    const unlock = vi.fn();
+    Object.defineProperty(window.screen, "orientation", {
+      configurable: true,
+      value: { lock, unlock },
+    });
+    const view = setup();
+    Object.defineProperties(view.video, {
+      videoWidth: { value: 720 },
+      videoHeight: { value: 1280 },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.fullscreen",
+      }),
+    );
+    await waitFor(() =>
+      expect(lock).toHaveBeenCalledWith("portrait"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.exit_fullscreen",
+      }),
+    );
+    expect(unlock).toHaveBeenCalledOnce();
+    expect(document.fullscreenElement).toBeNull();
   });
 });

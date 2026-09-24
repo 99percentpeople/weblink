@@ -19,7 +19,6 @@ import {
   isHomePath,
 } from "@/libs/application/home-navigation";
 import { makePersisted } from "@solid-primitives/storage";
-import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
@@ -32,6 +31,7 @@ import {
   createMeetingSources,
   selectMeetingPipSource,
 } from "./meeting-sources";
+import { reportMeetingPipError } from "./meeting-pip-error";
 import { MeetingPipWindow } from "./meeting-pip-window";
 import type { MeetingPipControls } from "./meeting-controls";
 import "../index.css";
@@ -104,15 +104,7 @@ function createMeetingSession() {
         documentPictureInPicture?: DocumentPictureInPictureAPI;
       }
     ).documentPictureInPicture,
-    onError: (error) =>
-      toast.error(
-        t("meeting.pip_failed", {
-          error:
-            error instanceof Error
-              ? error.message
-              : String(error),
-        }),
-      ),
+    onError: reportMeetingPipError,
     onClose: () => {
       // Suppress repeated background requests after a native dismissal, but a
       // browser close on return must not suppress the next departure.
@@ -126,6 +118,7 @@ function createMeetingSession() {
   ) => {
     if (
       !automatic() ||
+      state.roomConflict() ||
       !engaged() ||
       !hasSharedVideo() ||
       (reason === "background" &&
@@ -153,6 +146,20 @@ function createMeetingSession() {
       }
     });
   };
+  createEffect(
+    on(state.roomConflict, (conflict) => {
+      if (!conflict) {
+        if (onMeetingPage()) setEngaged(true);
+        return;
+      }
+      setEngaged(false);
+      automaticReason = undefined;
+      dismissed = true;
+      pip.close();
+      // Also cancel capture requests that may finish after the page is blocked.
+      media.clear();
+    }),
+  );
   useBeforeLeave((event) => {
     if (!onMeetingPage() || event.defaultPrevented) return;
     if (

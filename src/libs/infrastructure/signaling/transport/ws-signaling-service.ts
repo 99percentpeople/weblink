@@ -53,12 +53,15 @@ export class WebSocketSignalingService implements SignalingService {
   private setSocket(socket: WebSocket) {
     this.controller?.abort();
     const controller = new AbortController();
+    this.controller = controller;
+    this.socket = socket;
     const handleOpen = async () => {
       this.setStatus("connected");
     };
     if (socket.readyState === WebSocket.OPEN) {
       handleOpen();
     } else {
+      this.setStatus("disconnected");
       socket.addEventListener("open", handleOpen, {
         once: true,
         signal: controller.signal,
@@ -74,8 +77,6 @@ export class WebSocketSignalingService implements SignalingService {
         signal: controller.signal,
       },
     );
-    this.controller = controller;
-    this.socket = socket;
   }
 
   addEventListener<
@@ -139,7 +140,10 @@ export class WebSocketSignalingService implements SignalingService {
   }
 
   async sendSignal(signal: RawSignal): Promise<void> {
-    if (this.socket.readyState !== WebSocket.OPEN) {
+    if (
+      this.isClosed() ||
+      this.socket.readyState !== WebSocket.OPEN
+    ) {
       throw new Error(
         `[WebSocketSignalingService] socket is not open`,
       );
@@ -148,6 +152,16 @@ export class WebSocketSignalingService implements SignalingService {
     const data = this.password
       ? await encryptData(this.password, signal.data)
       : signal.data;
+
+    // Encryption yields: the socket or the sender may close in the meantime.
+    if (
+      this.isClosed() ||
+      this.socket.readyState !== WebSocket.OPEN
+    ) {
+      throw new Error(
+        "[WebSocketSignalingService] socket is not open",
+      );
+    }
 
     const message = {
       type: "message",

@@ -19,6 +19,8 @@ vi.mock("@/libs/domain/utils/encrypt/e2e", () => ({
 }));
 
 import { WebSocketClientService } from "@/libs/infrastructure/signaling/client/ws-client-service";
+import { encryptData } from "@/libs/domain/utils/encrypt/e2e";
+import type { ClientServiceInitOptions } from "@/libs/domain/client";
 import {
   getReconnectDelayMs,
   WEBSOCKET_CONNECTION_TIMEOUT_MS,
@@ -131,7 +133,9 @@ const notice = vi.fn();
 let browserWindow: EventTarget;
 let online = true;
 
-function createService(): WebSocketClientService {
+function createService(
+  options: Partial<ClientServiceInitOptions> = {},
+): WebSocketClientService {
   const service = new WebSocketClientService({
     onNotice: notice,
     roomId: "room-a",
@@ -142,6 +146,7 @@ function createService(): WebSocketClientService {
       name: "Local",
       avatar: null,
     },
+    ...options,
   });
   services.push(service);
   return service;
@@ -155,12 +160,13 @@ async function flushMicrotasks(count = 8): Promise<void> {
 
 async function connectService(
   service: WebSocketClientService,
+  passwordHash: string | null = null,
 ): Promise<FakeWebSocket> {
   const connected = service.createClient();
   await flushMicrotasks();
   const socket = FakeWebSocket.instances.at(-1);
   if (!socket) throw new Error("socket was not created");
-  socket.accept();
+  socket.accept(passwordHash);
   await connected;
   return socket;
 }
@@ -194,6 +200,291 @@ afterEach(() => {
 });
 
 describe("WebSocketClientService reconnect lifecycle", () => {
+  const installLocks = () => {
+    const held = new Map<string, Promise<void>>();
+    const channels = new Set<BroadcastChannel>();
+    vi.stubGlobal(
+      "BroadcastChannel",
+      class extends EventTarget {
+        constructor(readonly name: string) {
+          super();
+          channels.add(this as unknown as BroadcastChannel);
+        }
+        postMessage(data: unknown) {
+          for (const channel of channels) {
+            if (
+              channel === (this as unknown) ||
+              channel.name !== this.name
+            )
+              continue;
+            queueMicrotask(() =>
+              channel.dispatchEvent(
+                new MessageEvent("message", { data }),
+              ),
+            );
+          }
+        }
+        close() {
+          channels.delete(
+            this as unknown as BroadcastChannel,
+          );
+        }
+      },
+    );
+    const request = vi.fn(
+      async (
+        name: string,
+        options: LockOptions,
+        callback: LockGrantedCallback<unknown>,
+      ) => {
+        await Promise.resolve();
+        while (held.has(name)) {
+          if (options.ifAvailable) return callback(null);
+          await new Promise<void>((resolve, reject) => {
+            const abort = () =>
+              reject(
+                new DOMException("Aborted", "AbortError"),
+              );
+            if (options.signal?.aborted) {
+              abort();
+              return;
+            }
+            options.signal?.addEventListener(
+              "abort",
+              abort,
+              { once: true },
+            );
+            void held
+              .get(name)!
+              .then(resolve)
+              .finally(() =>
+                options.signal?.removeEventListener(
+                  "abort",
+                  abort,
+                ),
+              );
+          });
+        }
+        if (options.signal?.aborted)
+          throw new DOMException("Aborted", "AbortError");
+        let release!: () => void;
+        held.set(
+          name,
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+        );
+        try {
+          return await callback({
+            name,
+            mode: "exclusive",
+          });
+        } finally {
+          held.delete(name);
+          release();
+        }
+      },
+    );
+    Object.assign(navigator, { locks: { request } });
+    return { held, request };
+  };
+
+  it("hands ownership to the requested tab only after the previous connection exits", async () => {
+    installLocks();
+    const previous = createService();
+    const first = await connectService(previous);
+    const sender = previous.createSender("remote")!;
+    const current = createService();
+    const joined = current.createClient({ takeover: true });
+    await flushMicrotasks(32);
+    expect(first.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(sender.status).toBe("closed");
+    expect(notice).toHaveBeenCalledWith("session-replaced");
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    FakeWebSocket.instances[1].accept();
+    await joined;
+    browserWindow.dispatchEvent(new Event("online"));
+    await flushMicrotasks();
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("times out without stealing from an unresponsive page", async () => {
+    vi.useFakeTimers();
+    const { held } = installLocks();
+    const first = await connectService(createService());
+    vi.spyOn(
+      BroadcastChannel.prototype,
+      "postMessage",
+    ).mockImplementation(() => {});
+    const joined = createService().createClient({
+      takeover: true,
+    });
+    const failed = expect(joined).rejects.toThrow(
+      "Room takeover timed out",
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    await failed;
+    expect(first.readyState).toBe(FakeWebSocket.OPEN);
+    expect(held.size).toBe(1);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("rejects a concurrent tab before opening a socket, retains ownership during reconnect and releases on leave", async () => {
+    const { held } = installLocks();
+    const firstService = createService();
+    const duplicate = createService();
+    const connected = firstService.createClient();
+    expect(firstService.createClient()).toBe(connected);
+    await expect(duplicate.createClient()).rejects.toThrow(
+      "Room is already open in another tab",
+    );
+    await flushMicrotasks();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const first = FakeWebSocket.instances[0];
+    first.accept();
+    await connected;
+    first.serverClose();
+    await flushMicrotasks();
+    await expect(duplicate.createClient()).rejects.toThrow(
+      "Room is already open in another tab",
+    );
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    firstService.close();
+    await flushMicrotasks();
+    expect(held.size).toBe(0);
+    await connectService(duplicate);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    duplicate.close();
+    await flushMicrotasks();
+    expect(held.size).toBe(0);
+  });
+
+  it("allows different rooms and identities to connect independently", async () => {
+    const { held } = installLocks();
+    await connectService(createService());
+    await connectService(
+      createService({ roomId: "room-b" }),
+    );
+    await connectService(
+      createService({
+        client: {
+          clientId: "other",
+          name: "Other",
+          avatar: null,
+        },
+      }),
+    );
+    expect(held.size).toBe(3);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+  });
+
+  it("does not open a socket or retain a lock when closed during acquisition", async () => {
+    const { held } = installLocks();
+    const service = createService();
+    const pending = service.createClient();
+    service.close();
+    await expect(pending).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    await flushMicrotasks();
+    expect(held.size).toBe(0);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
+  it("releases ownership after a failed initial connection", async () => {
+    const { held } = installLocks();
+    const service = createService();
+    const connected = service.createClient();
+    const failed =
+      expect(connected).rejects.toThrow("socket closed");
+    await flushMicrotasks();
+    FakeWebSocket.instances[0].serverClose();
+    await failed;
+    await flushMicrotasks();
+    expect(held.size).toBe(0);
+    await connectService(createService());
+  });
+
+  it.each([
+    [1000, "Session resumed elsewhere"],
+    [1000, "Session replaced"],
+    [1008, "Stale client session"],
+  ] as const)(
+    "stops reconnecting after replacement: %i %s",
+    async (code, reason) => {
+      vi.useFakeTimers();
+      const service = createService();
+      const socket = await connectService(service);
+      const sender = service.createSender("remote")!;
+      socket.serverClose(code, reason);
+      await vi.advanceTimersByTimeAsync(60_000);
+      browserWindow.dispatchEvent(new Event("online"));
+      await flushMicrotasks();
+      expect(FakeWebSocket.instances).toHaveLength(1);
+      expect(sender.status).toBe("closed");
+      expect(notice).toHaveBeenCalledWith(
+        "session-replaced",
+      );
+    },
+  );
+
+  it("installs the replacement socket before notifying connected listeners", async () => {
+    const service = createService();
+    const first = await connectService(service);
+    const sender = service.createSender("remote")!;
+    let sent: Promise<void> | undefined;
+    sender.addEventListener("statuschange", (event) => {
+      if (event.detail === "connected")
+        sent = sender.sendSignal({
+          type: "candidate",
+          data: "candidate",
+        });
+    });
+    first.serverClose();
+    await flushMicrotasks();
+    FakeWebSocket.instances[1].accept();
+    await flushMicrotasks();
+    await sent;
+    expect(
+      FakeWebSocket.instances[1].parsedMessages(),
+    ).toContainEqual(
+      expect.objectContaining({ type: "message" }),
+    );
+  });
+
+  it.each(["socket", "sender"] as const)(
+    "does not send after the %s closes during encryption",
+    async (closed) => {
+      const service = createService({
+        password: "password",
+      });
+      const socket = await connectService(
+        service,
+        "server-password-hash",
+      );
+      const sender = service.createSender("remote")!;
+      let encrypted!: (data: string) => void;
+      vi.mocked(encryptData).mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            encrypted = resolve;
+          }),
+      );
+      const send = vi.spyOn(socket, "send");
+      const pending = sender.sendSignal({
+        type: "candidate",
+        data: "candidate",
+      });
+      if (closed === "socket") socket.serverClose();
+      else sender.close();
+      encrypted("encrypted");
+      await expect(pending).rejects.toThrow(
+        "socket is not open",
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
   it("delegates room notices to presentation without English UI strings", async () => {
     await connectService(createService());
     expect(notice).toHaveBeenCalledOnce();

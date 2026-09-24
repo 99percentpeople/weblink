@@ -4,6 +4,14 @@ import type en from "@/assets/i18n/en-us.json";
 type ErrorKey = `errors.${keyof typeof en.errors}`;
 
 const messages: readonly [RegExp, ErrorKey][] = [
+  [
+    /^Room is already open in another tab$/i,
+    "errors.room_in_use",
+  ],
+  [
+    /^Room takeover timed out$/i,
+    "errors.room_takeover_timeout",
+  ],
   [/^password required$/i, "errors.password_required"],
   [
     /^(incorrect|invalid) password$/i,
@@ -15,7 +23,7 @@ const messages: readonly [RegExp, ErrorKey][] = [
     "errors.connection_failed",
   ],
   [
-    /^(disconnected$|socket closed\b|socket is not connected|service is closed|.*session .* is closed)/i,
+    /^(disconnected$|socket closed\b|socket is not (connected|open)|service is closed|.*session .* is closed)/i,
     "errors.connection_closed",
   ],
   [

@@ -617,8 +617,7 @@
     "pip_automatic": "自動開啟子母畫面",
     "pip_automatic_hint": "有人正在分享攝影機或螢幕畫面時，離開會議頁面或頁面進入背景隱藏時會自動開啟。選擇分享畫面或僅失去焦點時不會觸發。背景自動開啟取決於瀏覽器與網站權限；Chrome 通常需要正在使用麥克風、攝影機或播放有聲媒體，僅分享螢幕無法保證每次都自動開啟。關閉原分頁或在該分頁開啟其他網站會結束小視窗。",
     "pip_return": "返回會議",
-    "pip_unsupported": "目前瀏覽器不支援自訂子母畫面",
-    "pip_failed": "無法開啟子母畫面：{{error}}",
+    "pip_failed": "無法開啟子母畫面，請重試。",
     "controls": "會議控制",
     "microphone": "麥克風",
     "camera": "攝影機",
@@ -654,7 +653,6 @@
     "join_room": "加入房間",
     "media_error": "無法更新媒體",
     "media_unavailable": "目前瀏覽器無法使用攝影機或麥克風，請使用 HTTPS 或 localhost。",
-    "sharing_unavailable": "目前瀏覽器不支援螢幕分享。",
     "you": "你",
     "side_panel": "會議側欄",
     "chat": "聊天",
@@ -722,7 +720,12 @@
     "files": "檔案",
     "online_duration": "本次上線時長",
     "chat_support": "支援群組聊天的成員",
-    "file_support": "支援檔案分享的成員"
+    "file_support": "支援檔案分享的成員",
+    "pip_permission_denied": "瀏覽器未允許開啟子母畫面，請返回頁面點擊子母畫面按鈕重試。",
+    "pip_not_supported": "目前的瀏覽器或影片不支援子母畫面。",
+    "pip_video_required": "等待可播放的影片畫面",
+    "pip_video_elsewhere": "此畫面正在以子母畫面模式執行",
+    "pip_video_restore": "將畫面移回此處"
   },
   "room_dialog": {
     "actions": "房間操作",
@@ -839,7 +842,15 @@
     "select_member": "選擇成員以瀏覽其共享檔案。",
     "back": "返回成員列表"
   },
+  "room_connection": {
+    "title": "此房間正在另一個頁面使用",
+    "description": "同一身分只能在一個頁面連線到此房間。切換後，之前的頁面將離開房間，並停止會議和傳輸。",
+    "switch_here": "切換到此頁面",
+    "switching": "正在切換…"
+  },
   "errors": {
+    "room_in_use": "此身分已在另一個分頁或視窗連線到此房間，請先在那邊離開房間，再從這裡加入。",
+    "room_takeover_timeout": "之前的頁面未回應，請關閉它後重試。",
     "unexpected": "操作失敗，請稍後重試。",
     "connection_failed": "無法連線至房間伺服器，請檢查網路及伺服器設定後重試。",
     "connection_timeout": "連線至房間伺服器逾時，請檢查網路後重試。",

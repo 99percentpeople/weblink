@@ -207,9 +207,12 @@
 
 html,
 body {
-  height: 100%;
-  width: 100%;
-  @apply flex flex-col;
+  @apply flex size-full min-h-0 flex-col overflow-hidden;
+}
+
+html {
+  /* Follow mobile browser toolbars; routes own their scrolling areas. */
+  @apply h-dvh;
 }
 
 body::after {
@@ -243,12 +246,7 @@ body::before {
 }
 
 body {
-  @apply overflow-y-auto overscroll-none;
-
-  min-height: calc(
-    100vh - constant(safe-area-inset-bottom)
-  );
-  min-height: calc(100vh - env(safe-area-inset-bottom));
+  @apply overscroll-none;
 }
 
 #root {

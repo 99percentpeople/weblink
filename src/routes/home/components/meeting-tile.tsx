@@ -12,12 +12,17 @@ import {
   Minimize2,
   Pin,
   PinOff,
+  PictureInPicture2,
   Volume2,
   VolumeX,
   X,
 } from "lucide-solid";
 import { t } from "@/i18n";
 import { createFullscreen } from "@/libs/hooks/fullscreen";
+import { createFullscreenVideoOrientation } from "@/libs/hooks/fullscreen-video-orientation";
+import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
+import { createIsMobile } from "@/libs/hooks/create-mobile";
+import { reportMeetingPipError } from "./meeting-pip-error";
 import {
   useVideoDisplay,
   VideoDisplay,
@@ -152,95 +157,160 @@ function TileActions(props: {
   const { videoRef, audioTracks } = useVideoDisplay();
   const muted = () => props.audioMuted === true;
   const fullscreen = props.fullscreen;
+  createFullscreenVideoOrientation(
+    fullscreen.isThisElementFullscreen,
+    videoRef,
+  );
+  const isMobile = createIsMobile();
+  const pip = createPictureInPicture(videoRef, {
+    onError: reportMeetingPipError,
+  });
   return (
-    <div class="meeting-tile-actions">
-      <Show when={props.onStop}>
-        <button
-          type="button"
-          class="meeting-icon-button"
-          aria-label={t("meeting.stop_source", {
-            name: props.name,
-          })}
-          title={t("meeting.stop_source", {
-            name: props.name,
-          })}
-          onClick={() => props.onStop?.()}
+    <>
+      <Show when={pip.isThisElementInPip()}>
+        <div
+          class="absolute inset-0 flex flex-col items-center justify-center
+            gap-3 bg-black p-4 text-center text-white"
+          role="status"
         >
-          <X />
-        </button>
+          <PictureInPicture2
+            class="size-8 shrink-0"
+            aria-hidden="true"
+          />
+          <span class="text-sm font-medium">
+            {t("meeting.pip_video_elsewhere")}
+          </span>
+          <button
+            type="button"
+            class="rounded-md border border-white/30 px-3 py-2 text-sm
+              hover:bg-white/10 focus-visible:outline
+              focus-visible:outline-2 focus-visible:outline-white"
+            onClick={() => void pip.exitPictureInPicture()}
+          >
+            {t("meeting.pip_video_restore")}
+          </button>
+        </div>
       </Show>
-      <Show
-        when={
-          !props.local &&
-          audioTracks().length &&
-          props.onToggleAudio
-        }
-      >
+      <div class="meeting-tile-actions">
+        <Show when={props.onStop}>
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-label={t("meeting.stop_source", {
+              name: props.name,
+            })}
+            title={t("meeting.stop_source", {
+              name: props.name,
+            })}
+            onClick={() => props.onStop?.()}
+          >
+            <X />
+          </button>
+        </Show>
+        <Show
+          when={
+            !props.local &&
+            audioTracks().length &&
+            props.onToggleAudio
+          }
+        >
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-pressed={muted()}
+            aria-label={
+              muted()
+                ? t("common.action.unmute")
+                : t("common.action.mute")
+            }
+            title={
+              muted()
+                ? t("common.action.unmute")
+                : t("common.action.mute")
+            }
+            onClick={() => props.onToggleAudio?.()}
+          >
+            <Show when={muted()} fallback={<Volume2 />}>
+              <VolumeX />
+            </Show>
+          </button>
+        </Show>
+        <Show when={isMobile() && pip.isSupported()}>
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-label={t(
+              pip.isThisElementInPip()
+                ? "common.action.exit_picture_in_picture"
+                : "common.action.picture_in_picture",
+            )}
+            title={t(
+              !pip.isReady()
+                ? "meeting.pip_video_required"
+                : pip.isThisElementInPip()
+                  ? "common.action.exit_picture_in_picture"
+                  : "common.action.picture_in_picture",
+            )}
+            aria-pressed={pip.isThisElementInPip()}
+            disabled={
+              !pip.isThisElementInPip() &&
+              (pip.isBusy() || !pip.isReady())
+            }
+            onClick={() =>
+              void (pip.isThisElementInPip()
+                ? pip.exitPictureInPicture()
+                : pip.requestPictureInPicture())
+            }
+          >
+            <PictureInPicture2 />
+          </button>
+        </Show>
+        <Show when={videoRef() && fullscreen.isSupported()}>
+          <button
+            type="button"
+            class="meeting-icon-button"
+            aria-label={
+              fullscreen.isThisElementFullscreen()
+                ? t("common.action.exit_fullscreen")
+                : t("common.action.fullscreen")
+            }
+            title={t("common.action.fullscreen")}
+            disabled={pip.isThisElementInPip()}
+            onClick={() =>
+              void (fullscreen.isThisElementFullscreen()
+                ? fullscreen.exitFullscreen()
+                : fullscreen.requestFullscreen())
+            }
+          >
+            <Show
+              when={fullscreen.isThisElementFullscreen()}
+              fallback={<Maximize2 />}
+            >
+              <Minimize2 />
+            </Show>
+          </button>
+        </Show>
         <button
           type="button"
           class="meeting-icon-button"
-          aria-pressed={muted()}
+          aria-pressed={props.pinned}
           aria-label={
-            muted()
-              ? t("common.action.unmute")
-              : t("common.action.mute")
+            props.pinned
+              ? t("meeting.unpin")
+              : t("meeting.pin")
           }
           title={
-            muted()
-              ? t("common.action.unmute")
-              : t("common.action.mute")
+            props.pinned
+              ? t("meeting.unpin")
+              : t("meeting.pin")
           }
-          onClick={() => props.onToggleAudio?.()}
+          onClick={props.onPin}
         >
-          <Show when={muted()} fallback={<Volume2 />}>
-            <VolumeX />
+          <Show when={props.pinned} fallback={<Pin />}>
+            <PinOff />
           </Show>
         </button>
-      </Show>
-      <Show when={videoRef() && fullscreen.isSupported()}>
-        <button
-          type="button"
-          class="meeting-icon-button"
-          aria-label={
-            fullscreen.isThisElementFullscreen()
-              ? t("common.action.exit_fullscreen")
-              : t("common.action.fullscreen")
-          }
-          title={t("common.action.fullscreen")}
-          onClick={() =>
-            void (fullscreen.isThisElementFullscreen()
-              ? fullscreen.exitFullscreen()
-              : fullscreen.requestFullscreen())
-          }
-        >
-          <Show
-            when={fullscreen.isThisElementFullscreen()}
-            fallback={<Maximize2 />}
-          >
-            <Minimize2 />
-          </Show>
-        </button>
-      </Show>
-      <button
-        type="button"
-        class="meeting-icon-button"
-        aria-pressed={props.pinned}
-        aria-label={
-          props.pinned
-            ? t("meeting.unpin")
-            : t("meeting.pin")
-        }
-        title={
-          props.pinned
-            ? t("meeting.unpin")
-            : t("meeting.pin")
-        }
-        onClick={props.onPin}
-      >
-        <Show when={props.pinned} fallback={<Pin />}>
-          <PinOff />
-        </Show>
-      </button>
-    </div>
+      </div>
+    </>
   );
 }

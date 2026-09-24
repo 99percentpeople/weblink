@@ -617,8 +617,7 @@
     "pip_automatic": "Automatic picture-in-picture",
     "pip_automatic_hint": "Opens when leaving the meeting page or when the page becomes hidden while someone is sharing a camera or screen. Choosing a screen to share or losing focus alone does not trigger it. Background opening depends on the browser and site permission. Chrome generally requires microphone/camera capture or audible media playback; screen sharing alone cannot guarantee automatic entry every time. Closing the original tab or navigating it to another website ends the mini window.",
     "pip_return": "Return to meeting",
-    "pip_unsupported": "This browser does not support custom picture-in-picture",
-    "pip_failed": "Could not open picture-in-picture: {{error}}",
+    "pip_failed": "Unable to open picture-in-picture. Please try again.",
     "controls": "Meeting controls",
     "microphone": "Microphone",
     "camera": "Camera",
@@ -654,7 +653,6 @@
     "join_room": "Join a room",
     "media_error": "Could not update media",
     "media_unavailable": "Camera and microphone are unavailable. Use HTTPS or localhost in a supported browser.",
-    "sharing_unavailable": "Screen sharing is unavailable in this browser.",
     "you": "You",
     "side_panel": "Meeting side panel",
     "chat": "Chat",
@@ -722,7 +720,12 @@
     "files": "Files",
     "online_duration": "Time in this session",
     "chat_support": "Members supporting group chat",
-    "file_support": "Members supporting file sharing"
+    "file_support": "Members supporting file sharing",
+    "pip_permission_denied": "The browser did not allow picture-in-picture. Return to this page and click the picture-in-picture button to try again.",
+    "pip_not_supported": "Picture-in-picture is unavailable for this browser or video.",
+    "pip_video_required": "Waiting for playable video",
+    "pip_video_elsewhere": "This video is playing in picture-in-picture",
+    "pip_video_restore": "Bring video back here"
   },
   "room_dialog": {
     "actions": "Room actions",
@@ -839,7 +842,15 @@
     "select_member": "Select a member to browse shared files.",
     "back": "Back to members"
   },
+  "room_connection": {
+    "title": "This room is active in another page",
+    "description": "This identity can connect to this room from one page at a time. Switching here will leave the room in the previous page and stop its meeting and transfers.",
+    "switch_here": "Switch to this page",
+    "switching": "Switching…"
+  },
   "errors": {
+    "room_in_use": "This identity is already connected to this room in another tab or window. Leave there before joining here.",
+    "room_takeover_timeout": "The previous page did not respond. Close it and try again.",
     "unexpected": "The action failed. Please try again.",
     "connection_failed": "Unable to connect to the room server. Check your network and server settings, then try again.",
     "connection_timeout": "Connecting to the room server timed out. Check your network and try again.",

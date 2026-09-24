@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-09-24
+
+### Improvements
+
+- Add independent native video picture-in-picture controls to supported videos in the mobile layout, with an in-place notice and restore action; retain document picture-in-picture as a separate meeting feature 在移动端布局中为支持的视频添加独立画中画按钮，进入后显示原位提示及恢复操作，文档画中画继续作为独立会议功能
+- Request landscape or portrait orientation from the actual video aspect ratio in fullscreen, follow video rotation, and release the orientation lock on exit when the browser supports it 全屏时根据实际画面比例请求横屏或竖屏，跟随视频方向变化，并在退出时释放浏览器支持的方向锁定
+- Detect screen-sharing and picture-in-picture capabilities from available APIs and localize browser error feedback 根据实际 API 检测屏幕共享与画中画能力，并本地化浏览器错误提示
+
+### Fixes
+
+- Fix mobile page height overflow when browser address bars or the keyboard change the visible viewport 修复移动端浏览器地址栏或键盘改变可视区域时的页面高度溢出
+- Prevent repeated WebSocket reconnects caused by competing tabs for the same room identity; show a full-page notice with an explicit switch-to-this-page action that releases the previous page's meeting and capture resources 修复相同房间身份在多个标签页之间争抢连接导致的反复重连，新增整页提示及“切换到此页面”操作，并释放原页面的会议与采集资源
+- Correct signaling socket replacement order and recheck connection state after asynchronous encryption to avoid sending through a closed socket 修正信令连接替换顺序，并在异步加密后重新检查连接状态，避免向已关闭的 WebSocket 发送数据
+
 ## [1.0.0] - 2026-09-24
 
 Weblink 1.0 is a major update with a complete interface redesign, online group

@@ -54,22 +54,22 @@ export function MeetingMediaProvider(props: ParentProps) {
         constraints,
       );
     },
-    getDisplayMedia: () => {
-      if (!navigator.mediaDevices?.getDisplayMedia)
-        return Promise.reject(
-          new Error(t("meeting.sharing_unavailable")),
-        );
-      const options: DisplayMediaStreamOptions & {
-        systemAudio: "include";
-      } = {
-        video: true,
-        audio: true,
-        systemAudio: "include",
-      };
-      return navigator.mediaDevices.getDisplayMedia(
-        options,
-      );
-    },
+    getDisplayMedia:
+      typeof navigator.mediaDevices?.getDisplayMedia ===
+      "function"
+        ? () => {
+            const options: DisplayMediaStreamOptions & {
+              systemAudio: "include";
+            } = {
+              video: true,
+              audio: true,
+              systemAudio: "include",
+            };
+            return navigator.mediaDevices.getDisplayMedia(
+              options,
+            );
+          }
+        : undefined,
   });
   createEffect(media.sync);
   // A capture approved after leaving must not publish into the next room.

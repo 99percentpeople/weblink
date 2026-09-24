@@ -201,7 +201,10 @@ export function MeetingControls(props: {
             />
           </AnimatePresence>
           <AnimatePresence
-            when={menu() === "pip" && Boolean(props.pip)}
+            when={
+              menu() === "pip" &&
+              Boolean(props.pip?.supported())
+            }
           >
             <Motion.section
               id="meeting-pip-settings"
@@ -327,42 +330,53 @@ export function MeetingControls(props: {
                 <span>{t("meeting.camera")}</span>
               </button>
             </div>
-            <button
-              type="button"
-              class="meeting-control"
-              classList={{
-                "is-active": props.media.sharing(),
-              }}
-              disabled={props.media.sharingBusy()}
-              aria-pressed={props.media.sharing()}
-              aria-label={
+            <Show
+              when={
+                props.media.sharingSupported() ||
                 props.media.sharing()
-                  ? t("meeting.stop_sharing")
-                  : t("meeting.share_screen")
-              }
-              title={
-                props.media.sharing()
-                  ? t("meeting.stop_sharing")
-                  : t("meeting.share_screen")
-              }
-              onClick={() =>
-                void props.media.toggleSharing()
               }
             >
-              <Show
-                when={props.media.sharing()}
-                fallback={<MonitorUp />}
+              <button
+                type="button"
+                class="meeting-control"
+                classList={{
+                  "is-active": props.media.sharing(),
+                }}
+                disabled={props.media.sharingBusy()}
+                aria-pressed={props.media.sharing()}
+                aria-label={
+                  props.media.sharing()
+                    ? t("meeting.stop_sharing")
+                    : t("meeting.share_screen")
+                }
+                title={
+                  props.media.sharing()
+                    ? t("meeting.stop_sharing")
+                    : t("meeting.share_screen")
+                }
+                onClick={() =>
+                  void props.media.toggleSharing()
+                }
               >
-                <ScreenShareOff />
-              </Show>
-              <span>
-                {props.media.sharing()
-                  ? t("meeting.stop_sharing")
-                  : t("meeting.share_screen")}
-              </span>
-            </button>
+                <Show
+                  when={props.media.sharing()}
+                  fallback={<MonitorUp />}
+                >
+                  <ScreenShareOff />
+                </Show>
+                <span>
+                  {props.media.sharing()
+                    ? t("meeting.stop_sharing")
+                    : t("meeting.share_screen")}
+                </span>
+              </button>
+            </Show>
             <Show
-              when={props.media.sharing() && !props.compact}
+              when={
+                props.media.sharingSupported() &&
+                props.media.sharing() &&
+                !props.compact
+              }
             >
               <button
                 type="button"
@@ -432,7 +446,9 @@ export function MeetingControls(props: {
                 <span>{t("meeting.layout")}</span>
               </button>
             </Show>
-            <Show when={props.pip}>
+            <Show
+              when={props.pip?.supported() && props.pip}
+            >
               {(pip) => (
                 <div class="meeting-device-control">
                   <Show when={!props.compact}>
@@ -440,7 +456,6 @@ export function MeetingControls(props: {
                       ref={pipToggle}
                       type="button"
                       class="meeting-device-toggle"
-                      disabled={!pip().supported()}
                       aria-label={t("meeting.pip_settings")}
                       title={t("meeting.pip_settings")}
                       aria-expanded={menu() === "pip"}
@@ -457,8 +472,7 @@ export function MeetingControls(props: {
                       "is-active": pip().active(),
                     }}
                     disabled={
-                      !pip().supported() ||
-                      (pip().busy() && !pip().active())
+                      pip().busy() && !pip().active()
                     }
                     aria-pressed={
                       props.compact
@@ -473,13 +487,11 @@ export function MeetingControls(props: {
                           : "common.action.picture_in_picture",
                     )}
                     title={t(
-                      !pip().supported()
-                        ? "meeting.pip_unsupported"
-                        : props.compact
-                          ? "meeting.pip_return"
-                          : pip().active()
-                            ? "common.action.exit_picture_in_picture"
-                            : "common.action.picture_in_picture",
+                      props.compact
+                        ? "meeting.pip_return"
+                        : pip().active()
+                          ? "common.action.exit_picture_in_picture"
+                          : "common.action.picture_in_picture",
                     )}
                     onClick={() => {
                       closeMenu();

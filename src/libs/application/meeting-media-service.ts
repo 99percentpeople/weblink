@@ -7,7 +7,7 @@ export interface MeetingMediaPort {
   getUserMedia(
     constraints: MediaStreamConstraints,
   ): Promise<MediaStream>;
-  getDisplayMedia(): Promise<MediaStream>;
+  getDisplayMedia?(): Promise<MediaStream>;
 }
 
 // Capture identity survives route disposal without cloning the source track.
@@ -405,7 +405,12 @@ export function createMeetingMediaController(
   };
 
   const addSharing = async () => {
-    if (disposed || sharingBusy()) return;
+    if (
+      disposed ||
+      sharingBusy() ||
+      typeof port.getDisplayMedia !== "function"
+    )
+      return;
     setError(null);
     const request = ++sharingRequest;
     setSharingBusy(true);
@@ -511,6 +516,8 @@ export function createMeetingMediaController(
     setAudioEnabled,
     cameraOn,
     sharing,
+    sharingSupported: () =>
+      typeof port.getDisplayMedia === "function",
     sharingAudioAvailable,
     sharingAudioOn,
     setSharingAudioEnabled,

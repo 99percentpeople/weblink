@@ -955,6 +955,7 @@ async function main() {
     replaceLocalStream: local.replace,
     clearLocalStream: local.clear,
     joinRoom: unexpected,
+    roomConflict: () => false,
     leaveRoom: () => {
       leftCount++;
     },

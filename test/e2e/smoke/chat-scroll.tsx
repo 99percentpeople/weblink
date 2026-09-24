@@ -238,6 +238,7 @@ async function main() {
     replaceLocalStream: () => {},
     clearLocalStream: () => {},
     joinRoom: unexpected,
+    roomConflict: () => false,
     leaveRoom: () => {},
     activeRoomConversationId: () => null,
     roomChatCapabilities: () => ({}),

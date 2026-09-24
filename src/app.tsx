@@ -16,6 +16,7 @@ import {
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
 import { AccountMenu } from "@/components/app/account-menu";
+import { RoomConnectionOverlay } from "@/components/app/room-connection-overlay";
 import {
   AppDialogsProvider,
   useAppDialogs,
@@ -261,6 +262,7 @@ const InnerApp = (props: ParentProps) => {
   return (
     <>
       <AppWakeLock enabled={appState.options.wakeLock} />
+      <RoomConnectionOverlay />
       <div class="app-shell">
         <Show when={!isHomePath(route.pathname)}>
           <header class="app-page-header">

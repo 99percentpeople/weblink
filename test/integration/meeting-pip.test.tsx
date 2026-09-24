@@ -12,7 +12,7 @@ import {
   createMemoryHistory,
   useNavigate,
 } from "@solidjs/router";
-import { type ParentProps } from "solid-js";
+import { createSignal, type ParentProps } from "solid-js";
 import { reconcile } from "solid-js/store";
 import {
   afterEach,
@@ -43,6 +43,7 @@ const fixture = vi.hoisted(() => ({
   sound: vi.fn(),
   error: vi.fn(),
 }));
+const [roomConflict, setRoomConflict] = createSignal(false);
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.error },
@@ -58,6 +59,7 @@ vi.mock("@/components/app/room-actions", () => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    roomConflict,
     localStream: () => appState.session.localStream,
     activeRoomConversationId: () =>
       appState.roomStatus.roomId,
@@ -72,6 +74,7 @@ vi.mock("@/libs/hooks/meeting-media-context", () => ({
       microphoneOn: () => false,
       cameraOn: () => false,
       sharing: () => false,
+      sharingSupported: () => true,
       microphoneBusy: () => false,
       cameraBusy: () => false,
       sharingBusy: fixture.sharingBusy,
@@ -223,6 +226,7 @@ const setVisibility = (value: DocumentVisibilityState) => {
   document.dispatchEvent(new Event("visibilitychange"));
 };
 beforeEach(() => {
+  setRoomConflict(false);
   localStorage.removeItem("meeting-toolbar-follows-rail");
   localStorage.removeItem(
     "meeting-auto-picture-in-picture",
@@ -296,6 +300,22 @@ afterEach(() => {
 });
 
 describe("meeting PiP across routes and documents", () => {
+  it("closes PiP and capture when another page takes over, and cannot reopen automatically while blocked", async () => {
+    const { requestWindow } = setup();
+    session.controls.setAutomatic(true);
+    session.controls.toggle();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(true),
+    );
+    const child = current();
+    setRoomConflict(true);
+    expect(child.close).toHaveBeenCalledOnce();
+    expect(fixture.clear).toHaveBeenCalledOnce();
+    expect(session.pip.active()).toBe(false);
+    setVisibility("hidden");
+    await Promise.resolve();
+    expect(requestWindow).toHaveBeenCalledOnce();
+  });
   it("returns to Home to join from an unjoined preview window", async () => {
     setAppState("roomStatus", "roomId", null);
     setup();

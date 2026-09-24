@@ -41,8 +41,15 @@ export interface ClientServiceInitOptions {
   client: Client;
   websocketUrl?: string;
   onNotice?(
-    notice: "room-unprotected" | "password-hash-failed",
+    notice:
+      | "room-unprotected"
+      | "password-hash-failed"
+      | "session-replaced",
   ): void;
+}
+
+export interface ClientJoinOptions {
+  takeover?: boolean;
 }
 
 export interface ClientService {
@@ -72,7 +79,7 @@ export interface ClientService {
     callback: (client: TransferClient) => void,
   ): void;
 
-  createClient(): Promise<void>;
+  createClient(options?: ClientJoinOptions): Promise<void>;
   updateClient(options: UpdateClientOptions): Promise<void>;
 
   close(): void;

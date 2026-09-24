@@ -118,6 +118,25 @@ contract tests currently execute in each repository. A future shared fixture
 must be distributed through a CI-consumable package/spec source rather than a
 local sibling-repository path.
 
+### Browser tab ownership
+
+The WebSocket client uses Web Locks, when available, to keep one connection
+per signaling endpoint, room and client ID across same-origin tabs. Ownership
+survives temporary network reconnects and is released on leave or a failed
+initial join. Other rooms and identities remain independent.
+
+A duplicate join shows a page-wide overlay. Only **Switch to this page** sends
+a BroadcastChannel takeover request. The previous page leaves the room,
+cancels transfers and capture, closes its meeting PiP window, and releases the
+lock before the new page connects. The previous page then shows the same
+overlay. If it does not respond within five seconds, the switch fails without
+stealing its lock and can be retried after closing the unresponsive page.
+
+For older clients or browsers without Web Locks, explicit server close reasons
+`Session resumed elsewhere`, `Session replaced` (1000), or `Stale client session`
+(1008) stop automatic reconnects. Ordinary network closures still reconnect.
+These checks do not change the signaling wire format.
+
 ### Room join acknowledgment
 
 After password validation, the client sends `join`. Protocol version 2 servers

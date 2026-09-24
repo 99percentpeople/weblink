@@ -19,6 +19,8 @@ export function createDocumentPictureInPicture(options: {
   let generation = 0;
   let disposed = false;
   let detach: (() => void) | undefined;
+  const supported = () =>
+    typeof options.api?.requestWindow === "function";
 
   const close = () => {
     generation++;
@@ -30,7 +32,8 @@ export function createDocumentPictureInPicture(options: {
     current?.close();
   };
   const open = (): Promise<void> => {
-    if (disposed || !options.api) return Promise.resolve();
+    if (disposed || !supported() || !options.api)
+      return Promise.resolve();
     if (pipWindow() && !pipWindow()!.closed)
       return Promise.resolve();
     if (pending) return pending;
@@ -86,7 +89,7 @@ export function createDocumentPictureInPicture(options: {
   });
   return {
     window: pipWindow,
-    supported: () => Boolean(options.api),
+    supported,
     active: () => Boolean(pipWindow()),
     busy,
     open,

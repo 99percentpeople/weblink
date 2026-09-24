@@ -109,6 +109,7 @@ vi.mock("@/libs/state/app-state", () => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    roomConflict: () => false,
     localStream: () => null,
     replaceLocalStream: fixture.replaceLocalStream,
     clearLocalStream: fixture.clearLocalStream,
@@ -250,6 +251,64 @@ afterEach(() => {
 });
 
 describe("meeting page navigation and panels", () => {
+  it.each([
+    { width: 390, screen: false, pip: false },
+    { width: 390, screen: true, pip: false },
+    { width: 390, screen: false, pip: true },
+    { width: 390, screen: true, pip: true },
+    { width: 1440, screen: false, pip: false },
+  ])(
+    "uses actual APIs for capture and PiP at $width: screen=$screen, pip=$pip",
+    (capabilities) => {
+      window.innerWidth = capabilities.width;
+      const getDisplayMedia = vi.fn();
+      const requestWindow = vi.fn();
+      const mediaDevices = new EventTarget();
+      Object.assign(mediaDevices, {
+        enumerateDevices: async () => [],
+        getDisplayMedia: capabilities.screen
+          ? getDisplayMedia
+          : undefined,
+      });
+      vi.stubGlobal("navigator", {
+        mediaDevices,
+        userAgent: "Android Chrome",
+      });
+      vi.stubGlobal(
+        "documentPictureInPicture",
+        capabilities.pip ? { requestWindow } : {},
+      );
+      render(() => (
+        <MeetingMediaProvider>
+          <MeetingSessionProvider>
+            <Video />
+          </MeetingSessionProvider>
+        </MeetingMediaProvider>
+      ));
+      expect(
+        Boolean(
+          screen.queryByRole("button", {
+            name: "meeting.share_screen",
+          }),
+        ),
+      ).toBe(capabilities.screen);
+      for (const name of [
+        "common.action.picture_in_picture",
+        "meeting.pip_settings",
+      ])
+        expect(
+          Boolean(screen.queryByRole("button", { name })),
+        ).toBe(capabilities.pip);
+      expect(
+        screen.getByRole("button", {
+          name: "meeting.enable_camera",
+        }),
+      ).toBeInTheDocument();
+      expect(getDisplayMedia).not.toHaveBeenCalled();
+      expect(requestWindow).not.toHaveBeenCalled();
+    },
+  );
+
   it("opens member private chats and moves the room chat entry from info to members", () => {
     render(() => (
       <MeetingMediaProvider>

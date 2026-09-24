@@ -57,6 +57,22 @@ afterEach(() => {
 });
 
 describe("shared room actions", () => {
+  it("only takes over on the explicit switch action and does not reopen room settings", async () => {
+    const actions = setup();
+    fixture.join.mockRejectedValueOnce(
+      new Error("Room is already open in another tab"),
+    );
+    await actions.join();
+    expect(fixture.join).toHaveBeenLastCalledWith(
+      undefined,
+    );
+    expect(fixture.error).not.toHaveBeenCalled();
+    await actions.takeover();
+    expect(fixture.join).toHaveBeenLastCalledWith({
+      takeover: true,
+    });
+    expect(fixture.open).not.toHaveBeenCalled();
+  });
   it("keeps a closed settings dialog disconnected and joins a configured room directly", async () => {
     const actions = setup();
     fixture.open.mockResolvedValueOnce({ cancel: true });

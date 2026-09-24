@@ -617,8 +617,7 @@
     "pip_automatic": "自动开启画中画",
     "pip_automatic_hint": "有人正在分享摄像头或屏幕画面时，离开会议页面或页面进入后台隐藏时会自动开启。选择分享画面或仅失去焦点时不会触发。后台自动开启取决于浏览器与网站权限；Chrome 通常需要正在使用麦克风、摄像头或播放有声媒体，仅分享屏幕无法保证每次都自动开启。关闭原标签页或在该标签页打开其他网站会结束小窗。",
     "pip_return": "返回会议",
-    "pip_unsupported": "当前浏览器不支持自定义画中画",
-    "pip_failed": "无法开启画中画：{{error}}",
+    "pip_failed": "无法开启画中画，请重试。",
     "controls": "会议控制",
     "microphone": "麦克风",
     "camera": "摄像头",
@@ -654,7 +653,6 @@
     "join_room": "加入房间",
     "media_error": "无法更新媒体",
     "media_unavailable": "当前浏览器无法使用摄像头或麦克风，请使用 HTTPS 或 localhost。",
-    "sharing_unavailable": "当前浏览器不支持屏幕共享。",
     "you": "你",
     "side_panel": "会议侧栏",
     "chat": "聊天",
@@ -722,7 +720,12 @@
     "files": "文件",
     "online_duration": "本次在线时长",
     "chat_support": "支持群聊的成员",
-    "file_support": "支持文件分享的成员"
+    "file_support": "支持文件分享的成员",
+    "pip_permission_denied": "浏览器未允许开启画中画，请返回页面点击画中画按钮重试。",
+    "pip_not_supported": "当前浏览器或视频不支持画中画。",
+    "pip_video_required": "等待可播放的视频画面",
+    "pip_video_elsewhere": "此画面正在以画中画模式运行",
+    "pip_video_restore": "将画面移回此处"
   },
   "room_dialog": {
     "actions": "房间操作",
@@ -839,7 +842,15 @@
     "select_member": "选择成员以浏览其共享文件。",
     "back": "返回成员列表"
   },
+  "room_connection": {
+    "title": "此房间正在另一个页面使用",
+    "description": "同一身份只能在一个页面连接此房间。切换后，之前的页面将退出房间，并停止会议和传输。",
+    "switch_here": "切换到此页面",
+    "switching": "正在切换…"
+  },
   "errors": {
+    "room_in_use": "此身份已在另一个标签页或窗口连接该房间，请先在那边退出房间，再从这里加入。",
+    "room_takeover_timeout": "之前的页面未响应，请关闭它后重试。",
     "unexpected": "操作失败，请稍后重试。",
     "connection_failed": "无法连接房间服务器，请检查网络和服务器设置后重试。",
     "connection_timeout": "连接房间服务器超时，请检查网络后重试。",

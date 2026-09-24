@@ -139,6 +139,7 @@ function setup(withDevices = false) {
     setAudioEnabled: setMicrophoneOn,
     cameraOn,
     sharing,
+    sharingSupported: () => true,
     sharingAudioAvailable: () => false,
     sharingAudioOn: () => false,
     setSharingAudioEnabled: vi.fn(),
