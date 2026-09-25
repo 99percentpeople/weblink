@@ -14,6 +14,7 @@ import {
 import type { PeerProfileService } from "./peer-profile-service";
 import type { RtcService } from "./rtc/rtc-service";
 import type { SessionService } from "./session-service";
+import { createAnonymousPeerProfile } from "@/libs/domain/profile";
 
 type SessionCoordinator = Pick<
   SessionService,
@@ -36,6 +37,7 @@ type ProfileCoordinator = Pick<
 >;
 
 type MessageContacts = {
+  getClient(clientId: string): Client | undefined;
   setClient(client: Client): void;
 };
 
@@ -129,11 +131,29 @@ export class RoomService {
   ): Promise<void> {
     if (!this.isServiceCurrent(service, generation)) return;
 
+    const anonymous = createAnonymousPeerProfile(
+      targetClient.clientId,
+    );
+    const previous =
+      targetClient.name === anonymous.name &&
+      targetClient.avatar === anonymous.avatar
+        ? this.options.messages.getClient(
+            targetClient.clientId,
+          )
+        : undefined;
+    const displayClient = previous
+      ? {
+          ...targetClient,
+          name: previous.name,
+          avatar: previous.avatar,
+        }
+      : targetClient;
+
     console.debug("[RoomService] peer joined", {
       peerId: targetClient.clientId,
     });
     const [error, session] = await catchError(
-      this.options.sessions.addClient(targetClient),
+      this.options.sessions.addClient(displayClient),
     );
 
     if (error) {
@@ -179,8 +199,8 @@ export class RoomService {
       return;
     }
 
-    this.options.messages.setClient(targetClient);
-    this.options.onMemberJoined?.(roomId, targetClient);
+    this.options.messages.setClient(displayClient);
+    this.options.onMemberJoined?.(roomId, displayClient);
 
     if (session.polite) return;
 

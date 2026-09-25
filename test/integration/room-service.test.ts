@@ -7,6 +7,7 @@ import {
   vi,
 } from "vitest";
 import type {
+  Client,
   ClientService,
   ClientServiceInitOptions,
   TransferClient,
@@ -92,6 +93,8 @@ function createHarness(
     unbindAllSessions: vi.fn(),
   };
   const messages = {
+    getClient:
+      vi.fn<(clientId: string) => Client | undefined>(),
     setClient: vi.fn(),
   };
   const onLeaving = vi.fn();
@@ -137,6 +140,58 @@ beforeEach(() => {
 });
 
 describe("RoomService", () => {
+  it("reuses the last known profile while an anonymous peer profile is pending", async () => {
+    const service = createClientService();
+    const h = createHarness(async () => service);
+    h.messages.getClient.mockReturnValue({
+      clientId: "remote",
+      name: "Saved Bob",
+      avatar: "data:image/png;base64,saved",
+    });
+    await h.room.join();
+
+    const session = {
+      polite: true,
+      setStream: vi.fn(),
+      listen: vi.fn(async () => {}),
+      close: vi.fn(),
+    } as unknown as PeerSession;
+    h.sessions.addClient.mockResolvedValue(session);
+    const joined = vi.mocked(service.listenForJoin).mock
+      .calls[0][0];
+
+    joined({
+      clientId: "remote",
+      createdAt: 42,
+      name: "Peer-remote",
+      avatar: null,
+      resume: true,
+    });
+
+    await vi.waitFor(() =>
+      expect(h.sessions.addClient).toHaveBeenCalledWith({
+        clientId: "remote",
+        createdAt: 42,
+        name: "Saved Bob",
+        avatar: "data:image/png;base64,saved",
+        resume: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(h.messages.setClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientId: "remote",
+          name: "Saved Bob",
+          avatar: "data:image/png;base64,saved",
+        }),
+      ),
+    );
+    expect(h.onMemberJoined).toHaveBeenCalledWith(
+      "room-a",
+      expect.objectContaining({ name: "Saved Bob" }),
+    );
+  });
+
   it("keeps room signaling alive when an interrupted peer attempt fails", async () => {
     const service = createClientService();
     const h = createHarness(async () => service);

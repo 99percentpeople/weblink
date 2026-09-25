@@ -576,6 +576,12 @@ export class MessageStores {
       await this.repository.removeMessage(message.id);
   }
 
+  getClient(clientId: ClientID): Client | undefined {
+    return this.clients.find(
+      (client) => client.clientId === clientId,
+    );
+  }
+
   setClient(client: Client): Promise<void> {
     if (!this.hydrated) {
       const snapshot = snapshotClient(client);
