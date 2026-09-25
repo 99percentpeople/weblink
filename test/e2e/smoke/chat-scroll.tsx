@@ -410,6 +410,8 @@ async function main() {
       document.querySelector<HTMLAnchorElement>(
         "a[data-message-media]",
       )!,
+      false,
+      true,
     );
     await checkGalleryHistory(
       document.querySelector<HTMLAnchorElement>(

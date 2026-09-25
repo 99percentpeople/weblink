@@ -16,6 +16,7 @@ async function until(
 export async function checkMessageGallery(
   link: HTMLAnchorElement,
   video = false,
+  checkEarlyClose = false,
 ) {
   const previousHash = location.hash;
   const viewport = link.closest<HTMLElement>(
@@ -160,6 +161,34 @@ export async function checkMessageGallery(
     throw new Error(
       `Thumbnail preview changed the conversation scroll position: ${link.dataset.messageMedia}, ${scrollTop} -> ${viewport.scrollTop}, viewport ${viewport.clientHeight}/${viewport.scrollHeight}, focus ${document.activeElement?.tagName}`,
     );
+
+  if (checkEarlyClose) {
+    link.click();
+    await until(
+      () =>
+        !!(
+          window as Window & {
+            pswp?: import("photoswipe").default;
+          }
+        ).pswp?.opener.isOpening &&
+        !!document.querySelector(".pswp__button--close"),
+      "rapid close did not enter the opening animation",
+    );
+    document
+      .querySelector<HTMLButtonElement>(
+        ".pswp__button--close",
+      )!
+      .click();
+    await until(
+      () =>
+        !(
+          window as Window & {
+            pswp?: import("photoswipe").default;
+          }
+        ).pswp && location.hash === previousHash,
+      "close during the opening animation was ignored",
+    );
+  }
 }
 
 export async function createGalleryVideo() {

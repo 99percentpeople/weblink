@@ -42,6 +42,30 @@ export function createMessageGallery(
       pswpModule: () => import("photoswipe"),
     });
     new PhotoSwipeVideoPlugin(lightbox, {});
+    lightbox.on("afterInit", () => {
+      const pswp = lightbox.pswp;
+      if (!pswp) return;
+
+      const close = pswp.close.bind(pswp);
+      let closeRequested = false;
+      pswp.close = () => {
+        // PhotoSwipe 5.4 ignores close() while its opening animation is
+        // running. Remember the user's intent so a quick close-button/Escape
+        // action cannot leave the viewer stuck open after the animation.
+        if (pswp.opener.isOpening && !pswp.isDestroying) {
+          closeRequested = true;
+          return;
+        }
+        closeRequested = false;
+        close();
+      };
+      pswp.on("openingAnimationEnd", () => {
+        if (closeRequested && !pswp.isDestroying) {
+          closeRequested = false;
+          close();
+        }
+      });
+    });
     lightbox.on("uiRegister", () => {
       lightbox.pswp?.ui?.registerElement({
         name: "download-button",
