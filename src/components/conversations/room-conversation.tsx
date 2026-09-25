@@ -20,7 +20,7 @@ import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import type { Conversation } from "@/libs/domain/conversation";
-import type { StoreMessage } from "@/libs/domain/message";
+
 import { ROOM_CHAT_MAX_TEXT_LENGTH } from "@/libs/domain/protocol/messages";
 import { createBottomScroll } from "@/libs/hooks/create-bottom-scroll";
 import { createConversationReadTracking } from "@/libs/hooks/conversation-read";
@@ -30,6 +30,8 @@ import { ChatTimeSeparator } from "@/routes/client/[id]/components/chat-time-sep
 import { createMessageGallery } from "./message-gallery";
 import { cn } from "@/libs/cn";
 import { t } from "@/i18n";
+import { ChatMoreMessageButton } from "@/routes/client/[id]/components/chat-more-message-button";
+import { createConversationMessageWindow } from "./conversation-message-window";
 
 export function RoomConversation(props: {
   conversation: Conversation & { kind: "room" };
@@ -81,57 +83,32 @@ export function RoomConversation(props: {
         capability === "supported"
       );
     });
-  const [historyCount, setHistoryCount] = createSignal(40);
   const allMessages = createMemo(() =>
     appState.message.messages.filter(
       (message) =>
         message.conversationId === props.conversation.id,
     ),
   );
-  const windowed = createMemo<{
-    messages: StoreMessage[];
-    count: number;
-    history: number;
-    lastId?: string;
-    revision: number;
-  }>((previous) => {
-    const all = allMessages();
-    const lastIndex = previous?.lastId
-      ? all.findIndex(
-          (message) => message.id === previous.lastId,
-        )
-      : -1;
-    const added =
-      previous && lastIndex >= 0
-        ? all.length - lastIndex - 1
-        : 0;
-    const count = previous
-      ? previous.count +
-        added +
-        historyCount() -
-        previous.history
-      : historyCount();
-    return {
-      messages: all.slice(-count),
-      count,
-      history: historyCount(),
-      lastId: all.at(-1)?.id,
-      revision:
-        (previous?.revision ?? 0) +
-        (added > 0 || (!previous?.lastId && all.length > 0)
-          ? 1
-          : 0),
-    };
+  const ready = () => appState.message.status === "ready";
+  const messageWindow = createConversationMessageWindow({
+    ready,
+    messages: allMessages,
   });
-  const messages = () => windowed().messages;
+  const messages = messageWindow.messages;
   const layout = createMemo(() =>
     createMessageLayout(messages()),
   );
   const scroll = createBottomScroll({
-    ready: () => appState.message.status === "ready",
+    ready,
     revision: messages,
-    appendRevision: () => windowed().revision,
+    appendRevision: messageWindow.appendRevision,
   });
+  const loadMore = () => {
+    if (!scroll.positioned()) return;
+    scroll.preservePosition(() => {
+      messageWindow.loadEarlier();
+    });
+  };
   createConversationReadTracking(
     () => props.conversation.id,
     allMessages,
@@ -219,14 +196,10 @@ export function RoomConversation(props: {
                   );
                   if (index < 0) return;
                   const missing =
-                    allMessages().length -
-                    index -
-                    windowed().count;
+                    messageWindow.missingFor(id);
                   if (missing > 0)
                     scroll.preservePosition(() =>
-                      setHistoryCount(
-                        (count) => count + missing,
-                      ),
+                      messageWindow.loadEarlier(missing),
                     );
                 },
                 scrollTo: (target) =>
@@ -238,25 +211,16 @@ export function RoomConversation(props: {
             classList={{ invisible: !scroll.positioned() }}
             aria-busy={!scroll.positioned()}
           >
-            <Show
-              when={
-                messages().length < allMessages().length
-              }
-            >
+            <Show when={messageWindow.hasEarlier()}>
               <li class="flex justify-center">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    scroll.preservePosition(() =>
-                      setHistoryCount(
-                        (count) => count + 40,
-                      ),
-                    )
+                <ChatMoreMessageButton
+                  viewport={scroll.viewport()}
+                  enabled={
+                    scroll.positioned() &&
+                    !scroll.following()
                   }
-                >
-                  {t("conversations.load_earlier")}
-                </Button>
+                  onIntersect={loadMore}
+                />
               </li>
             </Show>
             <Show

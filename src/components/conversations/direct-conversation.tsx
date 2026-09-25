@@ -4,7 +4,6 @@ import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-s
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   createMemo,
-  createSignal,
   For,
   onCleanup,
   onMount,
@@ -38,16 +37,7 @@ import { cacheManager } from "@/libs/application/cache-service";
 import { createDeleteFileMessageDialog } from "@/components/dialogs/delete-file-message-dialog";
 import { directConversationId } from "@/libs/domain/conversation";
 import { createConversationReadTracking } from "@/libs/hooks/conversation-read";
-
-interface MessageWindow {
-  ready: boolean;
-  messages: StoreMessage[];
-  visibleCount: number;
-  historyRevision: number;
-  lastId: string | undefined;
-  animatedIds: ReadonlySet<string>;
-  appendRevision: number;
-}
+import { createConversationMessageWindow } from "./conversation-message-window";
 
 export function ChatConversation(props: {
   clientId: string;
@@ -90,8 +80,6 @@ export function ChatConversation(props: {
     currentIdentity() &&
     clientInfo()?.onlineStatus === "online" &&
     !!clientInfo()?.messageChannel;
-  const [historyRevision, setHistoryRevision] =
-    createSignal(0);
   const ready = () => appState.message.status === "ready";
   const allMessages = createMemo(() =>
     appState.message.messages.filter((message) =>
@@ -103,67 +91,23 @@ export function ChatConversation(props: {
     ),
   );
 
-  // Project the message slice and append intent atomically. Updating the slice
-  // first and its count in an effect briefly removes old rows on every batch,
-  // which makes scroll anchoring compensate in both directions.
-  const messageWindow = createMemo<MessageWindow>(
-    (previous) => {
-      const loaded = ready();
-      const next = allMessages();
-      const history = historyRevision();
-      if (!loaded || !previous?.ready) {
-        return {
-          ready: loaded,
-          messages: loaded ? next.slice(-20) : [],
-          visibleCount: 20,
-          historyRevision: history,
-          lastId: next.at(-1)?.id,
-          animatedIds: new Set<string>(),
-          appendRevision: 0,
-        };
-      }
-
-      const index = previous.lastId
-        ? next.findIndex(
-            (message) => message.id === previous.lastId,
-          )
-        : -1;
-      const added =
-        previous.lastId && index === -1
-          ? []
-          : next.slice(index + 1);
-      const count =
-        previous.visibleCount +
-        added.length +
-        history -
-        previous.historyRevision;
-      return {
-        ready: true,
-        messages: next.slice(-count),
-        visibleCount: count,
-        historyRevision: history,
-        lastId: next.at(-1)?.id,
-        animatedIds: added.length
-          ? new Set(added.map((message) => message.id))
-          : previous.animatedIds,
-        appendRevision:
-          previous.appendRevision + (added.length ? 1 : 0),
-      };
-    },
-  );
-  const messages = () => messageWindow().messages;
+  const messageWindow = createConversationMessageWindow({
+    ready,
+    messages: allMessages,
+  });
+  const messages = messageWindow.messages;
   const messageLayout = createMemo(() =>
     createMessageLayout(messages()),
   );
   const scroll = createBottomScroll({
     ready,
     revision: messages,
-    appendRevision: () => messageWindow().appendRevision,
+    appendRevision: messageWindow.appendRevision,
   });
   const loadMore = () => {
     if (!scroll.positioned()) return;
     scroll.preservePosition(() => {
-      setHistoryRevision((count) => count + 5);
+      messageWindow.loadEarlier();
     });
   };
   createConversationReadTracking(
@@ -341,13 +285,11 @@ export function ChatConversation(props: {
                           );
                         if (index < 0) return;
                         const missing =
-                          allMessages().length -
-                          index -
-                          messageWindow().visibleCount;
+                          messageWindow.missingFor(id);
                         if (missing > 0)
                           scroll.preservePosition(() =>
-                            setHistoryRevision(
-                              (count) => count + missing,
+                            messageWindow.loadEarlier(
+                              missing,
                             ),
                           );
                       },
@@ -356,12 +298,7 @@ export function ChatConversation(props: {
                     });
                   }}
                 >
-                  <Show
-                    when={
-                      messages().length !==
-                      allMessages().length
-                    }
-                  >
+                  <Show when={messageWindow.hasEarlier()}>
                     <li class="flex justify-center">
                       <ChatMoreMessageButton
                         viewport={scroll.viewport()}
@@ -405,9 +342,10 @@ export function ChatConversation(props: {
                               !layout().joinedPrevious &&
                                 !layout().timeSeparator &&
                                 "mt-2",
-                              messageWindow().animatedIds.has(
-                                message.id,
-                              ) && "animate-message",
+                              messageWindow
+                                .animatedIds()
+                                .has(message.id) &&
+                                "animate-message",
                             )}
                           />
                         </>

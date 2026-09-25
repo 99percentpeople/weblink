@@ -280,7 +280,7 @@ beforeEach(() => {
     { clientId: "other", name: "Other", avatar: null },
   ]);
   setAppState("message", "messages", [
-    ...Array.from({ length: 40 }, (_, i) =>
+    ...Array.from({ length: 80 }, (_, i) =>
       message("peer", i),
     ),
     ...Array.from({ length: 30 }, (_, i) =>
@@ -386,7 +386,7 @@ describe("Chat scrollport and layout-driven following", () => {
       "data-joined-next",
       "false",
     );
-    append(40, 41);
+    append(80, 81);
     expect(rows().slice(0, oldRows.length)).toEqual(
       oldRows,
     );
@@ -443,7 +443,7 @@ describe("Chat scrollport and layout-driven following", () => {
     fireEvent.click(
       screen.getByLabelText("common.show_more"),
     );
-    expect(rows()[5]).toBe(first);
+    expect(rows()[20]).toBe(first);
     expect(first).toHaveAttribute(
       "data-joined-previous",
       "true",
@@ -492,7 +492,7 @@ describe("Chat scrollport and layout-driven following", () => {
       this: HTMLElement,
       options: ScrollToOptions,
     ) {
-      expect(rows()).toHaveLength(20);
+      expect(rows()).toHaveLength(40);
       expect(
         this.querySelector("ul")?.getAttribute("aria-busy"),
       ).toBe("true");
@@ -521,7 +521,7 @@ describe("Chat scrollport and layout-driven following", () => {
     expect(list().getAttribute("aria-busy")).toBe("true");
     expect(scrollTo).not.toHaveBeenCalled();
     setAppState("message", "status", "ready");
-    expect(rows()).toHaveLength(20);
+    expect(rows()).toHaveLength(40);
     expect(viewport().scrollTop).toBe(bottom());
     expect(list().getAttribute("aria-busy")).toBe("false");
   });
@@ -542,7 +542,7 @@ describe("Chat scrollport and layout-driven following", () => {
       renderChat();
       fireEvent.scroll(viewport()); // A previously queued programmatic scroll event.
       for (const height of [320, 740, 460]) {
-        rowHeights.set("peer-20", height);
+        rowHeights.set("peer-40", height);
         if (order === "scroll-first")
           fireEvent.scroll(viewport());
         resize();
@@ -569,7 +569,7 @@ describe("Chat scrollport and layout-driven following", () => {
       resize(viewport());
       expect(viewport().scrollTop).toBe(bottom());
     }
-    rowHeights.set("peer-20", 700);
+    rowHeights.set("peer-40", 700);
     resize();
     expect(viewport().scrollTop).toBe(bottom());
   });
@@ -581,11 +581,11 @@ describe("Chat scrollport and layout-driven following", () => {
       (row) => row.getBoundingClientRect().bottom > 100,
     )!;
     const offset = anchor.getBoundingClientRect().top;
-    rowHeights.set("peer-20", 400);
+    rowHeights.set("peer-40", 400);
     resize();
     expect(viewport().scrollTop).toBe(520);
     expect(anchor.getBoundingClientRect().top).toBe(offset);
-    append(40, 41);
+    append(80, 81);
     resize();
     expect(viewport().scrollTop).toBe(520);
     expect(
@@ -597,16 +597,16 @@ describe("Chat scrollport and layout-driven following", () => {
 
   it("includes every message in a received batch and retains already loaded history", () => {
     renderChat();
-    append(40, 41, 42);
-    expect(rows()).toHaveLength(23);
-    for (const index of [20, 40, 41, 42])
+    append(80, 81, 82);
+    expect(rows()).toHaveLength(43);
+    for (const index of [40, 80, 81, 82])
       expect(
         screen.queryByText(`peer-${index}`),
       ).not.toBeNull();
     expect(viewport().scrollTop).toBe(bottom());
     expect(
       screen
-        .getByText("peer-42")
+        .getByText("peer-82")
         .closest("li")!
         .classList.contains("animate-message"),
     ).toBe(true);
@@ -619,12 +619,12 @@ describe("Chat scrollport and layout-driven following", () => {
       TestIntersectionObserver.instances.at(-1)!;
     expect(observer.options.root).toBe(viewport());
     observer.deliver(false);
-    expect(rows()).toHaveLength(20);
+    expect(rows()).toHaveLength(40);
     observer.deliver(true);
-    expect(rows()).toHaveLength(25);
-    expect(viewport().scrollTop).toBe(600);
+    expect(rows()).toHaveLength(60);
+    expect(viewport().scrollTop).toBe(1800);
     resize();
-    expect(viewport().scrollTop).toBe(600);
+    expect(viewport().scrollTop).toBe(1800);
     // The callback still cannot load anything after this observer is retired.
     fireEvent.click(
       screen.getByRole("button", {
@@ -632,7 +632,7 @@ describe("Chat scrollport and layout-driven following", () => {
       }),
     );
     observer.deliver(true);
-    expect(rows()).toHaveLength(25);
+    expect(rows()).toHaveLength(60);
   });
 
   it("allows explicit loading and return-to-bottom without observer delays", () => {
@@ -640,7 +640,7 @@ describe("Chat scrollport and layout-driven following", () => {
     fireEvent.click(
       screen.getByLabelText("common.show_more"),
     );
-    expect(rows()).toHaveLength(25);
+    expect(rows()).toHaveLength(60);
     readHistory();
     fireEvent.click(
       screen.getByRole("button", {
@@ -648,7 +648,7 @@ describe("Chat scrollport and layout-driven following", () => {
       }),
     );
     expect(viewport().scrollTop).toBe(bottom());
-    rowHeights.set("peer-20", 500);
+    rowHeights.set("peer-40", 500);
     resize();
     expect(viewport().scrollTop).toBe(bottom());
   });
@@ -698,9 +698,9 @@ describe("Chat scrollport and layout-driven following", () => {
 
   it("projects deletion from the message store without maintaining a second stale list", () => {
     renderChat();
-    fireEvent.click(screen.getByText("Delete peer-39"));
-    expect(screen.queryByText("peer-39")).toBeNull();
-    expect(rows()).toHaveLength(20);
+    fireEvent.click(screen.getByText("Delete peer-79"));
+    expect(screen.queryByText("peer-79")).toBeNull();
+    expect(rows()).toHaveLength(40);
     resize();
     expect(viewport().scrollTop).toBe(bottom());
   });
@@ -740,7 +740,7 @@ describe("Chat scrollport and layout-driven following", () => {
 
     viewport().scrollTop = bottom();
     fireEvent.scroll(viewport());
-    rowHeights.set("peer-20", 300);
+    rowHeights.set("peer-40", 300);
     resize();
     expect(scrollTo).toHaveBeenLastCalledWith({
       top: bottom(),
@@ -754,7 +754,7 @@ describe("Chat scrollport and layout-driven following", () => {
     renderChat();
     const initialTop = viewport().scrollTop;
     scrollTo.mockClear();
-    append(40, 41);
+    append(80, 81);
     expect(scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollTo).toHaveBeenLastCalledWith({
       top: bottom(),
@@ -767,13 +767,13 @@ describe("Chat scrollport and layout-driven following", () => {
 
     viewport().scrollTop += 20;
     fireEvent.scroll(viewport());
-    append(42);
+    append(82);
     expect(scrollTo).toHaveBeenCalledTimes(2);
     expect(scrollTo).toHaveBeenLastCalledWith({
       top: bottom(),
       behavior: "smooth",
     });
-    rowHeights.set("peer-40", 300);
+    rowHeights.set("peer-80", 300);
     resize();
     expect(scrollTo).toHaveBeenCalledTimes(3);
     expect(
@@ -826,7 +826,7 @@ describe("Chat scrollport and layout-driven following", () => {
         }),
       ).not.toBeNull();
       scrollTo.mockClear();
-      append(40, 41);
+      append(80, 81);
       resize();
       fireEvent.scroll(viewport());
       expect(viewport().scrollTop).toBe(400);
@@ -837,7 +837,7 @@ describe("Chat scrollport and layout-driven following", () => {
   it("ignores scrolling keys inside form controls and modified keyboard shortcuts", () => {
     deferSmoothScroll = true;
     renderChat();
-    append(40);
+    append(80);
     const input = document.createElement("input");
     viewport().append(input);
     scrollTo.mockClear();
@@ -859,7 +859,7 @@ describe("Chat scrollport and layout-driven following", () => {
     deferSmoothScroll = true;
     Object.assign(motionQuery, { matches: true });
     renderChat();
-    append(40);
+    append(80);
     expect(scrollTo).toHaveBeenLastCalledWith({
       top: bottom(),
       behavior: "instant",
@@ -882,7 +882,7 @@ describe("Chat scrollport and layout-driven following", () => {
   it("finishes an active animation when reduced motion is enabled", () => {
     deferSmoothScroll = true;
     renderChat();
-    append(40);
+    append(80);
     expect(viewport().scrollTop).toBeLessThan(bottom());
     Object.assign(motionQuery, { matches: true });
     motionQuery.dispatchEvent(new Event("change"));
@@ -896,7 +896,7 @@ describe("Chat scrollport and layout-driven following", () => {
   it("cancels a native animation and its input listeners when switching conversations", async () => {
     deferSmoothScroll = true;
     const { navigate } = renderChat();
-    append(40);
+    append(80);
     const old = viewport();
     await navigate("/client/other/chat");
     await waitFor(() =>
