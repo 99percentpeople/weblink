@@ -99,6 +99,7 @@ describe("PeerSession stream management", () => {
     const pc = {
       addTrack,
       removeTrack,
+      getTransceivers: () => [],
       close: () => {},
     } as unknown as RTCPeerConnection;
 
@@ -123,6 +124,8 @@ describe("PeerSession stream management", () => {
         }
       },
       getTracks: () => tracks,
+      getVideoTracks: () =>
+        tracks.filter((track) => track.kind === "video"),
     } as unknown as MediaStream;
 
     (session as any).peerConnection = pc;
