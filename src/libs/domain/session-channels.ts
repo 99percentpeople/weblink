@@ -217,10 +217,17 @@ export class PeerSessionChannelController {
         this.options.createChannel("message", "message"),
       );
       if (createError) {
-        console.warn(
-          `[PeerSession] ensure message channel failed (${reason})`,
-          createError,
-        );
+        if (!isCurrent()) {
+          console.debug(
+            `[PeerSession] message channel recovery interrupted (${reason})`,
+            createError,
+          );
+        } else {
+          console.warn(
+            `[PeerSession] ensure message channel failed (${reason})`,
+            createError,
+          );
+        }
         return;
       }
 
@@ -345,7 +352,11 @@ export class PeerSessionChannelController {
           parseSessionMessage(event.data),
         );
         if (error) {
-          console.error(error);
+          console.warn(
+            "[PeerSession] invalid message received; ignoring",
+            { channelId: channel.id },
+            error,
+          );
           return;
         }
         this.options.onMessage(message);
@@ -365,7 +376,17 @@ export class PeerSessionChannelController {
 
     channel.addEventListener(
       "error",
-      (event) => console.error(event),
+      (event) => {
+        if (signal?.aborted) return;
+        console.warn(
+          "[PeerSession] message channel error",
+          {
+            channelId: channel.id,
+            state: channel.readyState,
+          },
+          event,
+        );
+      },
       { signal },
     );
 

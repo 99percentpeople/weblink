@@ -72,7 +72,6 @@ export async function parseTurnServer(
       .json()
       .then((data) => data.iceServers)) as RTCIceServer;
 
-    console.log("cloudflare iceServers:", iceServers);
     return iceServers;
   }
 
@@ -96,7 +95,11 @@ export async function getIceServers(
       parseTurnServer(turn),
     );
     if (error) {
-      console.error(error);
+      console.warn(
+        "[IceServers] failed to load TURN server; skipping endpoint",
+        { authMethod: turn.authMethod },
+        error,
+      );
       continue;
     }
     servers.push(server);

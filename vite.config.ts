@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ESBuildOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import solidPlugin from "vite-plugin-solid";
 import type { VitePWAOptions } from "vite-plugin-pwa";
@@ -7,7 +7,6 @@ import { compression } from "vite-plugin-compression2";
 import { readFileSync } from "fs";
 import tailwindcss from "@tailwindcss/vite";
 import { webLinkBranding } from "./scripts/brand-plugin";
-import { getBuildLoggingOptions } from "./scripts/build-logging";
 import {
   buildInfoPlugin,
   createBuildInfo,
@@ -21,6 +20,16 @@ import {
 const packageJson = JSON.parse(
   readFileSync("./package.json", "utf-8"),
 );
+
+function getBuildLoggingOptions(
+  mode: string,
+): ESBuildOptions {
+  if (mode !== "production") return {};
+  return {
+    pure: ["console.log", "console.debug", "console.trace"],
+    drop: ["debugger"],
+  };
+}
 
 const pwaOptions: Partial<VitePWAOptions> = {
   mode:

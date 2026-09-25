@@ -180,22 +180,30 @@ Connection code uses native console levels rather than a runtime logger:
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `info`  | Room signaling ready, WebRTC connected, recovery started, session ownership replaced, explicit room exit.                                                     |
 | `warn`  | Socket loss, heartbeat timeout, the first failed WebSocket reconnect, malformed signals, compatibility fallbacks and recoverable failures.                    |
-| `error` | SDP processing failures, failed session initialization, unexpected reconnect-loop failures and exhausted peer recovery (including its last error).            |
+| `error` | SDP processing failures, failed session initialization and unexpected WebSocket reconnect-loop failures.                                                      |
 | `debug` | Individual signals (type and peer ID only), intermediate states, expected offer collisions, stale signals, repeated retries and cancellation/cleanup details. |
 
-Do not log full SDP, ICE candidates, room passwords or peer profile payloads.
-Key events include client/peer identifiers where needed to distinguish peers.
+Do not log full SDP, ICE candidates, room passwords, TURN credentials or peer
+profile payloads. Key events include client/peer identifiers where needed to
+distinguish peers. SDP failures include the operation, signaling state and
+connection generation, not the exchanged payload.
 The peer session owns connection-state logging; application/UI listeners do not
-repeat it. Per-attempt peer failures stay at debug level, while final exhaustion
-retains the last failure for production diagnosis.
+repeat it. A failed event-triggered peer recovery warns once with its cause,
+then waits for a fresh availability event rather than exhausting a retry loop. Pending SDP operations and
+channel recovery rejected by connection replacement are cleanup (`debug`), not
+new connection failures. Repeated WebSocket handshake closures within one retry
+loop also use `debug`; the next outage after successful recovery warns again.
 
-`vite build` defaults to production mode. In that mode,
-`scripts/build-logging.ts` removes `console.log`, `console.debug`,
-`console.trace` and `debugger` while retaining `info`, `warn` and `error`.
+`vite build` defaults to production mode. In that mode, the production
+esbuild options in `vite.config.ts` remove direct `console.log`, `console.debug`
+and `console.trace` calls and `debugger` statements while retaining `info`,
+`warn` and `error`.
 The main app and Web Workers use Vite's esbuild options; the PWA service-worker
 build receives the same options explicitly. Other modes retain verbose logs.
 The configuration uses selective `pure` calls, not `drop: ["console"]`, so
 argument side effects are preserved and important diagnostics are not removed.
+It does not replace the global console or rewrite third-party SDKs' dynamic
+logging dispatch; those retain their own log-level controls.
 
 ### Room join acknowledgment
 
