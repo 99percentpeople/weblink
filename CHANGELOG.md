@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-09-25
+
+### Improvements
+
+- Rework meeting panel navigation around routed sidebar state, shared-file views, and stable wide-panel behavior so chat, files, people, and room information transition consistently 重构会议侧栏路由状态、共享文件视图及宽面板状态，使聊天、文件、成员和房间信息之间的切换保持一致
+- Refine meeting source presentation, picture-in-picture behavior, responsive media layouts, and layout transitions while preserving scroll position during size and route changes 优化会议画面呈现、画中画、响应式媒体布局及布局过渡，并在尺寸和路由变化时保持滚动位置
+- Unify private and room conversation history rendering, stabilize chat composer auto-resize, and present file-transfer progress consistently across messages and the task list 统一私聊和群聊的历史消息窗口，稳定聊天输入框自动尺寸调整，并统一消息与任务列表中的文件传输进度显示
+- Simplify peer negotiation and connection ownership, move recovery to signaling-driven peer-online events, and retain peer profile information while connections are being restored 简化 P2P 协商与连接所有权，以信令驱动的 peer-online 事件恢复连接，并在重连过程中保留对端资料
+
+### Fixes
+
+- Restore Safari file-transfer compatibility, including safer abort handling and cache merging during transfer completion 恢复 Safari 文件传输兼容性，包括更可靠的取消处理和传输完成时的缓存合并
+- Stabilize file drag-and-drop state across nested controls and prevent stale forbidden-drop state from remaining after leaving the target area 稳定嵌套控件中的文件拖放状态，避免离开不可拖放区域后错误状态残留
+- Prevent message galleries and media previews from reopening after close animations, and cancel interrupted native layout animations safely 修复消息图片预览和媒体预览在关闭动画后再次打开的问题，并安全处理被中断的原生布局动画
+- Improve reconnect behavior, connection logging, and session replacement so stale asynchronous work cannot disrupt the active peer connection 改进重连、连接日志及会话替换流程，避免过期异步任务影响当前有效的 P2P 连接
+
+### Compatibility Notes
+
+- Remove Firebase signaling support and keep WebSocket signaling as the single supported signaling path 移除 Firebase 信令支持，仅保留 WebSocket 作为统一信令通道
+- Remove the unreliable chat capture action from the composer 移除稳定性不足的聊天拍照入口
+
+### Infrastructure
+
+- Add continuously deployed development builds at `dev.webl.ink`, gate development and production deployments on the shared CI checks, and simplify Cloudflare Pages production deployment 新增持续部署到 `dev.webl.ink` 的开发构建，让开发及正式部署统一依赖 CI 检查，并简化 Cloudflare Pages 正式部署流程
+- Pass `VITE_TURN_SERVERS` through Docker builds and keep development/production Pages builds supplied through their environment-specific build configuration Docker 构建支持传入 `VITE_TURN_SERVERS`，开发及正式 Pages 构建继续通过各自环境配置注入前端构建变量
+
 ## [1.0.4] - 2026-09-24
 
 ### Improvements
