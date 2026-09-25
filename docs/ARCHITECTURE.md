@@ -69,9 +69,16 @@ the low-level `domain` layer.
     and preview alive; joining again reuses those live tracks. Network recovery
     also rebinds live tracks, without reopening captures that the user or browser
     stopped. Explicit tab takeover still stops capture in the previous page.
-    The stage renders each video track as a separate view;
-    pinning chooses a view rather than a participant. Remote views use numbered
-    labels because the transport does not claim camera/screen source metadata.
+    The stage keeps the participant identity view (avatar or camera with
+    microphone ownership) separate from shared-screen views; pinning chooses a
+    view rather than a participant. The first shared screen that appears is
+    featured automatically; later shared screens do not override a manual pin.
+    Removed sources finish a short exit fade before their view is released.
+    `stream-state` advertises each negotiated video transceiver MID as camera
+    or screen. Received tracks keep their local track IDs only inside the
+    session runtime and are joined to source semantics through
+    `RTCTrackEvent.transceiver.mid`, so UI identity does not depend on a
+    cross-peer `MediaStreamTrack.id`.
     All stage views use 16:9 frames and contain the source video. One stage-owned
     ResizeObserver measures the grid's allotted content box and coalesces updates
     per animation frame. Grid columns, centering offsets and tile dimensions use

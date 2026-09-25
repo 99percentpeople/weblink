@@ -189,10 +189,26 @@ vi.mock("@/routes/home/components/meeting-tile", () => ({
   MeetingTile: (props: {
     name: string;
     pinned: boolean;
+    onSelect?: () => void;
+    onPin?: () => void;
     onVideoPipEnter?: () => void;
   }) => (
     <article aria-label={props.name}>
       {props.name}
+      <Show when={props.onSelect}>
+        <button
+          aria-label="Select source"
+          onClick={props.onSelect}
+        />
+      </Show>
+      <Show when={props.onPin}>
+        <button
+          aria-label={
+            props.pinned ? "Unpin source" : "Pin source"
+          }
+          onClick={props.onPin}
+        />
+      </Show>
       <button
         aria-pressed={props.pinned}
         onClick={props.onVideoPipEnter}
@@ -510,11 +526,13 @@ describe("meeting page navigation and panels", () => {
           name: "meeting.focus_layout",
         }),
       );
-      fireEvent.click(
-        screen.getByRole("button", {
+      const hideSources = await screen.findByRole(
+        "button",
+        {
           name: "meeting.hide_sources",
-        }),
+        },
       );
+      fireEvent.click(hideSources);
       const chat = screen.getByTestId("chat-view");
       expect(
         screen.getByLabelText("meeting.controls"),
@@ -1146,7 +1164,53 @@ describe("meeting page navigation and panels", () => {
     expect(fixture.clearLocalStream).not.toHaveBeenCalled();
   });
 
-  it("retains views across layout switches and thumbnail visibility changes without stopping media", () => {
+  it("selects a focused secondary view directly without showing a pin action", async () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.focus_layout",
+      }),
+    );
+    const rail = await screen.findByLabelText(
+      "meeting.other_sources",
+    );
+    const chris = within(rail).getByRole("article", {
+      name: "Chris",
+    });
+    expect(
+      within(chris).queryByRole("button", {
+        name: "Pin source",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(chris).getByRole("button", {
+        name: "Select source",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector(
+          '.meeting-featured-frame article[aria-label="Chris"]',
+        ),
+      ).not.toBeNull(),
+    );
+    const featured = screen.getByRole("article", {
+      name: "Chris",
+    });
+    expect(
+      within(featured).getByRole("button", {
+        name: "Unpin source",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("retains views across layout switches and thumbnail visibility changes without stopping media", async () => {
     render(() => (
       <MeetingMediaProvider>
         <MeetingSessionProvider>
@@ -1160,7 +1224,7 @@ describe("meeting page navigation and panels", () => {
         name: "meeting.focus_layout",
       }),
     );
-    const rail = screen.getByLabelText(
+    const rail = await screen.findByLabelText(
       "meeting.other_sources",
     );
     const tile = rail.querySelector("article");

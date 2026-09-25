@@ -87,26 +87,37 @@ export async function runSessionMediaSmoke() {
     },
     { signal: lifetime.signal },
   );
-  const options = {
-    getCodecOptions: () => ({
-      preferredVideoCodec: null,
-      preferredAudioCodec: null,
-    }),
-    notifyStreamState: () => {},
-  };
+  const sourceNotifications: Array<
+    Array<{ mid: string; kind: "camera" | "screen" }>
+  > = [];
+  const receivedBindings: Array<
+    Array<{ trackId: string; mid: string }>
+  > = [];
+  const codecOptions = () => ({
+    preferredVideoCodec: null,
+    preferredAudioCodec: null,
+  });
   const sending = new PeerSessionMediaController({
-    ...options,
+    getCodecOptions: codecOptions,
+    getVideoSourceKind: (track) =>
+      track === screen.track ? "screen" : "camera",
+    notifyStreamState: (videoSources) =>
+      sourceNotifications.push([...videoSources]),
     targetClientId: () => "receiver",
     getPeerConnection: () => sender,
     onRemoteStreamChange: () => {},
+    onRemoteVideoTracksChange: () => {},
   });
   const receiving = new PeerSessionMediaController({
-    ...options,
+    getCodecOptions: codecOptions,
+    notifyStreamState: () => {},
     targetClientId: () => "sender",
     getPeerConnection: () => receiver,
     onRemoteStreamChange: (stream) => {
       remote = stream;
     },
+    onRemoteVideoTracksChange: (bindings) =>
+      receivedBindings.push([...bindings]),
   });
   const negotiate = async () => {
     await sender.setLocalDescription(
@@ -130,7 +141,7 @@ export async function runSessionMediaSmoke() {
       receiver.localDescription!,
     );
   };
-  const remoteReceiver = (track: MediaStreamTrack) => {
+  const senderMid = (track: MediaStreamTrack) => {
     const mid = sender
       .getTransceivers()
       .find((item) => item.sender.track === track)?.mid;
@@ -138,6 +149,10 @@ export async function runSessionMediaSmoke() {
       mid !== undefined && mid !== null,
       "sender has no negotiated media section",
     );
+    return mid;
+  };
+  const remoteReceiver = (track: MediaStreamTrack) => {
+    const mid = senderMid(track);
     const result = receiver
       .getTransceivers()
       .find((item) => item.mid === mid)?.receiver;
@@ -177,6 +192,32 @@ export async function runSessionMediaSmoke() {
     );
     const cameraReceiver = remoteReceiver(camera.track);
     const screenReceiver = remoteReceiver(screen.track);
+    const cameraMid = senderMid(camera.track);
+    const screenMid = senderMid(screen.track);
+    await waitUntil(
+      () =>
+        JSON.stringify(sourceNotifications.at(-1)) ===
+        JSON.stringify([
+          { mid: cameraMid, kind: "camera" },
+          { mid: screenMid, kind: "screen" },
+        ]),
+      "local camera/screen MID metadata",
+    );
+    await waitUntil(() => {
+      const latest = receivedBindings.at(-1) ?? [];
+      return (
+        latest.some(
+          (binding) =>
+            binding.trackId === cameraReceiver.track.id &&
+            binding.mid === cameraMid,
+        ) &&
+        latest.some(
+          (binding) =>
+            binding.trackId === screenReceiver.track.id &&
+            binding.mid === screenMid,
+        )
+      );
+    }, "receiver track-to-MID bindings");
     const microphoneReceiver = remoteReceiver(microphone);
     const screenAudioReceiver = remoteReceiver(screenAudio);
     await waitUntil(
@@ -308,6 +349,7 @@ export async function runSessionMediaSmoke() {
       replacementCameraReceivedRtp: true,
       receiverTrackReused:
         replacementReceiver.track === cameraReceiver.track,
+      sourceMetadataMatchedByMid: true,
       emptyRemoteStreamCleared: true,
       borrowedCapturePreserved: true,
       renegotiationsRequested,

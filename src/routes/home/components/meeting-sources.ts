@@ -1,12 +1,16 @@
 import { createMemo, type Accessor } from "solid-js";
 import { t } from "@/i18n";
 import { getMeetingVideoSourceKind } from "./meeting-media";
+import type { StreamVideoSource } from "@/libs/domain/protocol/messages";
+import type { RemoteVideoTrackBinding } from "@/libs/domain/session-media";
 
 export interface MeetingParticipant {
   id: string;
   name: string;
   avatar?: string;
   stream?: MediaStream | null;
+  videoSources?: readonly StreamVideoSource[];
+  videoTracks?: readonly RemoteVideoTrackBinding[];
   local?: boolean;
   placeholder?: boolean;
 }
@@ -35,17 +39,23 @@ export function selectMeetingFeaturedSource(
   return sources.length === 1 ? sources[0] : undefined;
 }
 
+export function selectMeetingVideoSource(
+  sources: readonly MeetingSource[],
+): MeetingSource | undefined {
+  return sources.find(
+    (source) =>
+      source.track?.kind === "video" &&
+      source.track.readyState !== "ended",
+  );
+}
+
 export function selectMeetingPipSource(
   sources: readonly MeetingSource[],
   pinnedId: string | null,
 ): MeetingSource | undefined {
   return (
     sources.find((source) => source.id === pinnedId) ??
-    sources.find(
-      (source) =>
-        source.track?.kind === "video" &&
-        source.track.readyState !== "ended",
-    ) ??
+    selectMeetingVideoSource(sources) ??
     sources[0]
   );
 }
@@ -73,60 +83,112 @@ export function createMeetingSources(
           : tracks.filter(
               (track) => track.kind === "video",
             );
-        let screenIndex = 0;
-        return (video.length ? video : [undefined]).map(
-          (track, index) => {
-            const id = JSON.stringify([
-              participant.id,
-              track?.id ?? null,
-            ]);
-            const kind = track
-              ? participant.local
-                ? getMeetingVideoSourceKind(track)
-                : "video"
-              : "participant";
-            const selected = [
-              ...(track ? [track] : []),
-              ...(index === 0 ? audio : []),
-            ];
-            const previous = cache.get(id);
-            const previousTracks = previous?.getTracks();
-            const stream = selected.length
-              ? previousTracks?.length ===
-                  selected.length &&
-                previousTracks.every(
-                  (item, i) => item === selected[i],
-                )
-                ? previous!
-                : new MediaStream(selected)
-              : null;
-            if (stream) nextCache.set(id, stream);
-            const label =
-              kind === "camera"
-                ? t("meeting.camera")
-                : kind === "screen"
-                  ? t("meeting.screen_source", {
-                      count: ++screenIndex,
-                    })
-                  : kind === "video" && video.length > 1
+        const kindByMid = new Map(
+          participant.videoSources?.map((source) => [
+            source.mid,
+            source.kind,
+          ]) ?? [],
+        );
+        const midByTrackId = new Map(
+          participant.videoTracks?.map((binding) => [
+            binding.trackId,
+            binding.mid,
+          ]) ?? [],
+        );
+        const classified: Array<{
+          track: MediaStreamTrack;
+          kind: Exclude<
+            MeetingSource["kind"],
+            "participant"
+          >;
+        }> = video.map((track) => {
+          if (participant.local)
+            return {
+              track,
+              kind: getMeetingVideoSourceKind(track),
+            };
+          const mid = midByTrackId.get(track.id);
+          return {
+            track,
+            kind: mid
+              ? (kindByMid.get(mid) ?? "video")
+              : "video",
+          };
+        });
+        const primary = classified.filter(
+          ({ kind }) => kind !== "screen",
+        );
+        const screens = classified.filter(
+          ({ kind }) => kind === "screen",
+        );
+        const build = (
+          track: MediaStreamTrack | undefined,
+          kind: MeetingSource["kind"],
+          includeAudio: boolean,
+          label = "",
+        ): MeetingSource => {
+          const id = JSON.stringify([
+            participant.id,
+            track?.id ?? null,
+          ]);
+          const selected = [
+            ...(track ? [track] : []),
+            ...(includeAudio ? audio : []),
+          ];
+          const previous = cache.get(id);
+          const previousTracks = previous?.getTracks();
+          const stream = selected.length
+            ? previousTracks?.length === selected.length &&
+              previousTracks.every(
+                (item, i) => item === selected[i],
+              )
+              ? previous!
+              : new MediaStream(selected)
+            : null;
+          if (stream) nextCache.set(id, stream);
+          return {
+            id,
+            participantId: participant.id,
+            name: label
+              ? `${participant.name} · ${label}`
+              : participant.name,
+            avatar: participant.avatar,
+            stream,
+            local: participant.local === true,
+            kind,
+            track,
+          };
+        };
+
+        // The participant owns microphone/avatar/camera presentation. Shared
+        // screens are always additional tiles and never consume that identity.
+        const main = primary.length
+          ? primary.map(({ track, kind }, index) =>
+              build(
+                track,
+                kind,
+                index === 0,
+                kind === "camera"
+                  ? t("meeting.camera")
+                  : primary.length > 1
                     ? t("meeting.video_source", {
                         count: index + 1,
                       })
-                    : "";
-            return {
-              id,
-              participantId: participant.id,
-              name: label
-                ? `${participant.name} · ${label}`
-                : participant.name,
-              avatar: participant.avatar,
-              stream,
-              local: participant.local === true,
-              kind,
-              track,
-            } satisfies MeetingSource;
-          },
+                    : "",
+              ),
+            )
+          : [build(undefined, "participant", true)];
+        const shared = screens.map(({ track }, index) =>
+          build(
+            track,
+            "screen",
+            false,
+            t("meeting.screen_source", {
+              count: index + 1,
+            }),
+          ),
         );
+        return [...main, ...shared];
       },
     );
     cache = nextCache;

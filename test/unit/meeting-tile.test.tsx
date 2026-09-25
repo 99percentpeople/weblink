@@ -157,6 +157,15 @@ const cover = () =>
     name: "meeting.show_screen_preview",
   });
 
+it("omits the tile action container when no actions are available", () => {
+  const view = render(() => (
+    <MeetingTile name="Alice" pinned={false} />
+  ));
+  expect(
+    view.container.querySelector(".meeting-tile-actions"),
+  ).toBeNull();
+});
+
 it("reflects shared member mute state and delegates audio changes to its owner", () => {
   const audio = new Track("remote-audio");
   audio.kind = "audio";

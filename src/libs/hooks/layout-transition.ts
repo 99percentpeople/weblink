@@ -263,6 +263,14 @@ export function createLayoutTransition(
       end: Box;
     }[] = [];
     for (const [id, end] of after) {
+      // Presence owns leaving views. Still snapshot them above so an interrupted
+      // exit can resume from the visible frame instead of fading in from zero.
+      if (
+        end.element.hasAttribute(
+          "data-motion-layout-exiting",
+        )
+      )
+        continue;
       const start = before.get(id) ?? {
         ...end,
         opacity: 0,

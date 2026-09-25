@@ -87,15 +87,19 @@ describe("meeting source presentation", () => {
       expect(
         selectMeetingFeaturedSource(sources(), null),
       ).toBeUndefined();
+      const shared = track("screen-only", "video", true);
       setParticipants([
         {
           ...mine,
-          stream: stream(track("screen", "video", true)),
+          stream: stream(shared),
         },
       ]);
       expect(
+        sources().map((source) => source.kind),
+      ).toEqual(["participant", "screen"]);
+      expect(
         selectMeetingFeaturedSource(sources(), null),
-      ).toBe(sources()[0]);
+      ).toBeUndefined();
       setParticipants([
         { id: "peer", name: "Peer", stream: mine.stream },
       ]);
@@ -192,6 +196,126 @@ describe("meeting source presentation", () => {
       dispose();
       expect(camera.stop).not.toHaveBeenCalled();
       expect(remote1.stop).not.toHaveBeenCalled();
+    });
+  });
+
+  it("keeps the local participant tile stable when microphone joins a screen-only share", () => {
+    createRoot((dispose) => {
+      const shared = track("screen-only", "video", true);
+      const microphone = track("microphone", "audio");
+      const [participants, setParticipants] = createSignal<
+        MeetingParticipant[]
+      >([
+        {
+          id: "me",
+          name: "Me",
+          local: true,
+          stream: stream(shared),
+        },
+      ]);
+      const sources = createMeetingSources(participants);
+      const participantId = sources()[0].id;
+      const screenId = sources()[1].id;
+      expect(
+        sources().map((source) => source.kind),
+      ).toEqual(["participant", "screen"]);
+      expect(sources()[0].stream).toBeNull();
+      expect(sources()[1].stream?.getTracks()).toEqual([
+        shared,
+      ]);
+
+      setParticipants([
+        {
+          id: "me",
+          name: "Me",
+          local: true,
+          stream: stream(shared, microphone),
+        },
+      ]);
+      expect(
+        sources().map((source) => source.kind),
+      ).toEqual(["participant", "screen"]);
+      expect(sources()[0].id).toBe(participantId);
+      expect(sources()[1].id).toBe(screenId);
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        microphone,
+      ]);
+      expect(sources()[1].stream?.getTracks()).toEqual([
+        shared,
+      ]);
+      dispose();
+    });
+  });
+
+  it("keeps a remote participant tile beside a separately described shared screen", () => {
+    createRoot((dispose) => {
+      const microphone = track("remote-audio", "audio");
+      const screen = track("remote-screen", "video");
+      const sources = createMeetingSources(() => [
+        {
+          id: "peer",
+          name: "Peer",
+          stream: stream(screen, microphone),
+          videoSources: [{ mid: "2", kind: "screen" }],
+          videoTracks: [{ trackId: screen.id, mid: "2" }],
+        },
+      ]);
+      expect(
+        sources().map((source) => source.kind),
+      ).toEqual(["participant", "screen"]);
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        microphone,
+      ]);
+      expect(sources()[1].stream?.getTracks()).toEqual([
+        screen,
+      ]);
+      expect(sources()[0].participantId).toBe("peer");
+      expect(sources()[1].participantId).toBe("peer");
+      dispose();
+    });
+  });
+
+  it("joins remote source semantics to rewritten track IDs through MID", () => {
+    createRoot((dispose) => {
+      const microphone = track("remote-audio", "audio");
+      const remoteCamera = track(
+        "rewritten-camera",
+        "video",
+      );
+      const remoteScreen = track(
+        "rewritten-screen",
+        "video",
+      );
+      const sources = createMeetingSources(() => [
+        {
+          id: "peer",
+          name: "Peer",
+          stream: stream(
+            remoteCamera,
+            remoteScreen,
+            microphone,
+          ),
+          videoSources: [
+            { mid: "0", kind: "camera" },
+            { mid: "2", kind: "screen" },
+          ],
+          videoTracks: [
+            { trackId: remoteCamera.id, mid: "0" },
+            { trackId: remoteScreen.id, mid: "2" },
+          ],
+        },
+      ]);
+      expect(
+        sources().map((source) => source.kind),
+      ).toEqual(["camera", "screen"]);
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        remoteCamera,
+        microphone,
+      ]);
+      expect(sources()[1].stream?.getTracks()).toEqual([
+        remoteScreen,
+      ]);
+      dispose();
     });
   });
 

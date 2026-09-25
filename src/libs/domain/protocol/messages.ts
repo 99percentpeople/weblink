@@ -194,9 +194,16 @@ export type StorageChangedMessage = BaseExchangeMessage & {
   type: "storage-changed";
 };
 
+export type StreamVideoSource = {
+  mid: string;
+  kind: "camera" | "screen";
+};
+
 export type StreamStateMessage = BaseExchangeMessage & {
   type: "stream-state";
   mode: "placeholder" | "media";
+  /** Complete negotiated video-source snapshot, keyed by RTP MID. */
+  videoSources: StreamVideoSource[];
 };
 
 export type ClientProfileMessage = BaseExchangeMessage & {

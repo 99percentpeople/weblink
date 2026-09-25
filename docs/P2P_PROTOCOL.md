@@ -422,17 +422,26 @@ await protocol.notify(session, "client-profile", {
 
 await protocol.notify(session, "stream-state", {
   mode: "media",
+  videoSources: [
+    { mid: "0", kind: "camera" },
+    { mid: "2", kind: "screen" },
+  ],
 });
 ```
 
-`stream-state` describes the media mode, not a list of capture sources. Video and
-audio tracks travel over negotiated RTP transceivers. A participant may publish
-several video tracks at once; receivers aggregate tracks from all signaled
-streams, including streamless tracks. Removing one source renegotiates only the
-changed senders. Local capture tracks are borrowed by each peer connection and
-are stopped only by the application's capture owner, so closing a peer or a
-screen does not stop the remaining publications. Camera/screen labels are not
-advertised by this notification; remote views use participant names and numbers.
+`stream-state` carries a complete video-source snapshot. `videoSources` maps the
+negotiated RTP `mid` of each published video transceiver to `camera` or `screen`.
+The receiver independently records `RTCTrackEvent.transceiver.mid` for each
+local received track and joins the two views by MID; `MediaStreamTrack.id` is not
+used as a wire identity. This keeps the participant/avatar (and microphone
+ownership) separate from shared-screen tiles without depending on track labels
+or event ordering. Video and audio tracks themselves still travel over negotiated
+RTP transceivers. A participant may publish several video tracks at once; receivers
+aggregate tracks from all signaled streams, including streamless tracks.
+Removing one source renegotiates only the changed senders. Local capture tracks
+are borrowed by each peer connection and are stopped only by the application's
+capture owner, so closing a peer or a screen does not stop the remaining
+publications.
 
 The `client-profile` notification carries
 `P2P_PROFILE_PROTOCOL_VERSION` (currently 1). The historical

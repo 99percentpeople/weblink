@@ -334,6 +334,7 @@ async function main() {
     );
     await a.protocol.notify(a.session, "stream-state", {
       mode: "media",
+      videoSources: [],
     });
     await waitUntil(() => notifications.length === 1);
     const interrupted = outcome(

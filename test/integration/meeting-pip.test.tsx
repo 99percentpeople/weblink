@@ -114,12 +114,14 @@ let mediaAction:
 let windowFocused = true;
 let userActivation = false;
 class FakeTrack extends EventTarget {
-  id = "shared-video";
   kind = "video";
   enabled = true;
   muted = false;
   readyState: MediaStreamTrackState = "live";
-  constructor(private screen = false) {
+  constructor(
+    private screen = false,
+    readonly id = "shared-video",
+  ) {
     super();
   }
   getSettings() {
@@ -300,6 +302,169 @@ afterEach(() => {
 });
 
 describe("meeting PiP across routes and documents", () => {
+  it("features the first shared screen automatically without letting later screens steal a manual pin", async () => {
+    setup();
+    expect(session.pinnedId()).toBeNull();
+
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "videoSources",
+      [{ mid: "screen-mid", kind: "screen" }],
+    );
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "videoTracks",
+      [{ trackId: "shared-video", mid: "screen-mid" }],
+    );
+    await waitFor(() =>
+      expect(
+        session
+          .sources()
+          .some(
+            (source) =>
+              source.participantId === "bob" &&
+              source.kind === "screen",
+          ),
+      ).toBe(true),
+    );
+    const remoteScreen = session
+      .sources()
+      .find(
+        (source) =>
+          source.participantId === "bob" &&
+          source.kind === "screen",
+      )!;
+    expect(session.pinnedId()).toBe(remoteScreen.id);
+
+    session.setPinnedId(null);
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "videoSources",
+      undefined!,
+    );
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "videoTracks",
+      undefined!,
+    );
+    await waitFor(() =>
+      expect(
+        session
+          .sources()
+          .some(
+            (source) =>
+              source.participantId === "bob" &&
+              source.kind === "screen",
+          ),
+      ).toBe(false),
+    );
+
+    const first = new FakeTrack(true, "screen-1");
+    setAppState(
+      "session",
+      "localStream",
+      sharedStream(first),
+    );
+    await waitFor(() =>
+      expect(
+        session
+          .sources()
+          .filter((source) => source.kind === "screen"),
+      ).toHaveLength(1),
+    );
+    const firstScreen = session
+      .sources()
+      .find((source) => source.kind === "screen")!;
+    expect(session.pinnedId()).toBe(firstScreen.id);
+
+    const bob = session
+      .sources()
+      .find((source) => source.participantId === "bob")!;
+    session.setPinnedId(bob.id);
+    const second = new FakeTrack(true, "screen-2");
+    setAppState(
+      "session",
+      "localStream",
+      new FakeStream([
+        first as unknown as MediaStreamTrack,
+        second as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream,
+    );
+    await waitFor(() =>
+      expect(
+        session
+          .sources()
+          .filter((source) => source.kind === "screen"),
+      ).toHaveLength(2),
+    );
+    expect(session.pinnedId()).toBe(bob.id);
+  });
+
+  it("replaces a vanished featured video with another live video and exits focus after the last video disappears", async () => {
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "stream",
+      undefined,
+    );
+    setup();
+
+    const camera = new FakeTrack(false, "camera");
+    const shared = new FakeTrack(true, "screen");
+    setAppState(
+      "session",
+      "localStream",
+      new FakeStream([
+        camera as unknown as MediaStreamTrack,
+        shared as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream,
+    );
+    await waitFor(() =>
+      expect(
+        session
+          .sources()
+          .filter(
+            (source) => source.track?.kind === "video",
+          ),
+      ).toHaveLength(2),
+    );
+    const screenSource = session
+      .sources()
+      .find((source) => source.kind === "screen")!;
+    const cameraSource = session
+      .sources()
+      .find((source) => source.kind === "camera")!;
+    expect(session.pinnedId()).toBe(screenSource.id);
+
+    setAppState(
+      "session",
+      "localStream",
+      sharedStream(camera),
+    );
+    await waitFor(() =>
+      expect(session.pinnedId()).toBe(cameraSource.id),
+    );
+
+    setAppState("session", "localStream", null);
+    await waitFor(() =>
+      expect(session.pinnedId()).toBeNull(),
+    );
+    expect(
+      session
+        .sources()
+        .some((source) => source.track?.kind === "video"),
+    ).toBe(false);
+  });
+
   it("closes PiP and capture when another page takes over, and cannot reopen automatically while blocked", async () => {
     const { requestWindow } = setup();
     session.controls.setAutomatic(true);
@@ -480,10 +645,12 @@ describe("meeting PiP across routes and documents", () => {
       ),
     ).toBeNull();
     click("meeting.feature_source");
-    expect(source()).toBe("Me (meeting.you)");
+    await waitFor(() =>
+      expect(source()).toBe("Me (meeting.you)"),
+    );
     expect(session.selected()?.participantId).toBe("me");
     click("meeting.feature_source");
-    expect(source()).toBe("Bob");
+    await waitFor(() => expect(source()).toBe("Bob"));
     for (const view of views)
       expect(
         current().window.document.body.contains(view),

@@ -16,7 +16,10 @@ import {
   PeerSessionLifecycleController,
   type PeerSessionStatus,
 } from "./session-lifecycle";
-import { PeerSessionMediaController } from "./session-media";
+import {
+  PeerSessionMediaController,
+  type RemoteVideoTrackBinding,
+} from "./session-media";
 import { PeerSessionChannelController } from "./session-channels";
 import { catchError } from "@/libs/catch";
 import {
@@ -42,6 +45,9 @@ export interface PeerSessionOptions {
   iceServers?: RTCIceServer[];
   relayOnly?: boolean;
   getRuntimeOptions?: () => PeerSessionRuntimeOptions;
+  getVideoSourceKind?: (
+    track: MediaStreamTrack,
+  ) => "camera" | "screen" | undefined;
 }
 
 export type PeerSessionEventMap = {
@@ -50,6 +56,7 @@ export type PeerSessionEventMap = {
   error: Error;
   messagechannelchange: "ready" | "closed";
   remotestreamchange: MediaStream | null;
+  remotevideotrackschange: readonly RemoteVideoTrackBinding[];
   statuschange: Exclude<PeerSessionStatus, "init">;
   peerconnectioninit: RTCPeerConnection;
 };
@@ -80,6 +87,7 @@ export class PeerSession {
       relayOnly = false,
       getRuntimeOptions = () =>
         DEFAULT_PEER_SESSION_RUNTIME_OPTIONS,
+      getVideoSourceKind,
     }: PeerSessionOptions = {},
   ) {
     this.sender = sender;
@@ -120,11 +128,15 @@ export class PeerSession {
           preferredAudioCodec,
         };
       },
-      notifyStreamState: () => {
+      getVideoSourceKind,
+      notifyStreamState: (videoSources) => {
         const message = createSessionMessage(
           this,
           "stream-state",
-          { mode: "media" },
+          {
+            mode: "media",
+            videoSources: [...videoSources],
+          },
         );
         void this.sendMessage(message).catch((error) => {
           console.warn(
@@ -135,6 +147,11 @@ export class PeerSession {
       },
       onRemoteStreamChange: (stream) =>
         this.dispatchEvent("remotestreamchange", stream),
+      onRemoteVideoTracksChange: (bindings) =>
+        this.dispatchEvent(
+          "remotevideotrackschange",
+          bindings,
+        ),
     });
     this.lifecycle = new PeerSessionLifecycleController({
       sender,

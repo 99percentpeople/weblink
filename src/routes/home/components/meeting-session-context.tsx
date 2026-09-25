@@ -30,6 +30,7 @@ import { t } from "@/i18n";
 import {
   createMeetingSources,
   selectMeetingPipSource,
+  selectMeetingVideoSource,
 } from "./meeting-sources";
 import { reportMeetingPipError } from "./meeting-pip-error";
 import { MeetingPipWindow } from "./meeting-pip-window";
@@ -82,6 +83,8 @@ function createMeetingSession() {
       name: client.name,
       avatar: client.avatar ?? undefined,
       stream: client.stream,
+      videoSources: client.videoSources,
+      videoTracks: client.videoTracks,
       placeholder: client.streamState === "placeholder",
     })),
   ]);
@@ -255,14 +258,24 @@ function createMeetingSession() {
     );
     window.removeEventListener("focus", foreground);
   });
+  let hadSharedScreen = false;
   createEffect(() => {
+    const next = sources();
+    const firstScreen = next.find(
+      (source) => source.kind === "screen",
+    );
+    const hasSharedScreen = Boolean(firstScreen);
+    const appeared = !hadSharedScreen && hasSharedScreen;
+    hadSharedScreen = hasSharedScreen;
+    if (appeared && firstScreen) {
+      setPinnedId(firstScreen.id);
+      return;
+    }
+
     const id = pinnedId();
-    if (
-      id &&
-      !sources().some((source) => source.id === id)
-    ) {
+    if (id && !next.some((source) => source.id === id)) {
       setPinnedId(
-        selectMeetingPipSource(sources(), null)?.id ?? null,
+        selectMeetingVideoSource(next)?.id ?? null,
       );
     }
   });

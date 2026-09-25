@@ -31,7 +31,10 @@ const PresenceContext = createContext<{
 
 /** Solid needs an explicit condition so children remain owned until exit ends. */
 export function AnimatePresence(
-  props: ParentProps<{ when: boolean }>,
+  props: ParentProps<{
+    when: boolean;
+    onExitComplete?: () => void;
+  }>,
 ) {
   const reduced = createReducedMotion();
   const [mounted, setMounted] = createSignal(props.when);
@@ -48,17 +51,26 @@ export function AnimatePresence(
   };
   createEffect(() => {
     const current = ++version;
+    const finishExit = () => {
+      if (
+        current !== version ||
+        props.when ||
+        !untrack(mounted)
+      )
+        return;
+      props.onExitComplete?.();
+      if (current === version) setMounted(false);
+    };
     if (props.when) setMounted(true);
-    else if (reduced()) setMounted(false);
+    else if (!untrack(mounted)) return;
+    else if (reduced()) finishExit();
     else {
       const pending = untrack(() =>
         [...exits].map((exit) => exit()),
       );
-      if (!pending.length) setMounted(false);
+      if (!pending.length) finishExit();
       else
-        void Promise.allSettled(pending).then(() => {
-          if (current === version) setMounted(false);
-        });
+        void Promise.allSettled(pending).then(finishExit);
     }
   });
   onCleanup(() => {

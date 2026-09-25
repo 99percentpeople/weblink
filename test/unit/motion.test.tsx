@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
   afterEach,
   beforeEach,
@@ -140,6 +140,37 @@ describe("Motion component lifecycle", () => {
       engine.animations.at(-1)!.cancel,
     ).toHaveBeenCalledOnce();
   });
+  it("runs exit completion while the leaving child is still available to its owner", async () => {
+    const [present, setPresent] = createSignal(true);
+    const [owned, setOwned] = createSignal(true);
+    const complete = vi.fn(() => {
+      expect(
+        screen.getByTestId("panel"),
+      ).toBeInTheDocument();
+      setOwned(false);
+    });
+    render(() => (
+      <Show when={owned()}>
+        <AnimatePresence
+          when={present()}
+          onExitComplete={complete}
+        >
+          <Motion.div
+            data-testid="panel"
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          />
+        </AnimatePresence>
+      </Show>
+    ));
+    setPresent(false);
+    engine.animations.at(-1)!.complete();
+    await waitFor(() =>
+      expect(complete).toHaveBeenCalledOnce(),
+    );
+    expect(screen.queryByTestId("panel")).toBeNull();
+  });
+
   it("does not delay removal when reduced motion is preferred", () => {
     vi.stubGlobal("matchMedia", () => ({
       matches: true,

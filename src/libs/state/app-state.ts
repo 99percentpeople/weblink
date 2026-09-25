@@ -11,13 +11,17 @@ import type {
   RoomID,
 } from "@/libs/domain/ids";
 import type { PeerSession } from "@/libs/domain/session";
+import type { RemoteVideoTrackBinding } from "@/libs/domain/session-media";
 import type { ClientProfile } from "@/libs/domain/profile";
 import type { StoreMessage } from "@/libs/domain/message";
 import type {
   Conversation,
   ConversationLabel,
 } from "@/libs/domain/conversation";
-import type { SendClipboardMessage } from "@/libs/domain/protocol/messages";
+import type {
+  SendClipboardMessage,
+  StreamVideoSource,
+} from "@/libs/domain/protocol/messages";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { AppOption } from "@/libs/state/app-options";
 import { getDefaultAppOptions } from "@/libs/state/app-options";
@@ -42,6 +46,8 @@ export interface ClientInfo extends TransferClient {
     | "connecting"
     | "reconnecting";
   streamState?: "placeholder" | "media";
+  videoSources?: StreamVideoSource[];
+  videoTracks?: RemoteVideoTrackBinding[];
   clipboard?: SendClipboardMessage[];
   messageChannel: boolean;
   stream?: MediaStream;

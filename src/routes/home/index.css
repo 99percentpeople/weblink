@@ -118,8 +118,12 @@
     var(--meeting-grid-offset-y, 0px);
 }
 .meeting-tile {
-  @apply border-border relative aspect-video min-h-0 w-full min-w-0 self-center overflow-hidden rounded-lg border border-solid bg-(--meeting-surface);
+  @apply relative aspect-video min-h-0 w-full min-w-0 self-center overflow-hidden rounded-lg;
   container-type: inline-size;
+}
+.meeting-tile-surface {
+  /* Fade the background and border with the content, not the layout frame. */
+  @apply border-border absolute inset-0 overflow-hidden rounded-[inherit] border border-solid bg-(--meeting-surface);
 }
 .meeting-tile .meeting-video-avatar {
   @apply size-[clamp(--spacing(9),25cqw,--spacing(20))];

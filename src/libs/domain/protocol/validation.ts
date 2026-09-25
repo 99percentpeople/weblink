@@ -436,8 +436,38 @@ export function validateSessionMessage(
       break;
     case "stream-state":
       valid =
-        value.mode === "placeholder" ||
-        value.mode === "media";
+        (value.mode === "placeholder" ||
+          value.mode === "media") &&
+        Array.isArray(value.videoSources) &&
+        value.videoSources.length <= 16 &&
+        value.videoSources.every(
+          (source) =>
+            record(source) &&
+            text(source.mid) &&
+            source.mid.length > 0 &&
+            source.mid.length <= 256 &&
+            (source.kind === "camera" ||
+              source.kind === "screen") &&
+            Object.keys(source).every((key) =>
+              ["mid", "kind"].includes(key),
+            ),
+        ) &&
+        new Set(
+          value.videoSources.map(
+            (source) => (source as { mid: string }).mid,
+          ),
+        ).size === value.videoSources.length &&
+        Object.keys(value).every((key) =>
+          [
+            "id",
+            "type",
+            "createdAt",
+            "client",
+            "target",
+            "mode",
+            "videoSources",
+          ].includes(key),
+        );
       break;
     case "file-offer-result":
       valid =

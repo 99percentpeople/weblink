@@ -65,7 +65,13 @@ class Stream extends EventTarget {
 }
 class PeerConnection extends EventTarget {
   connectionState = "connected";
+  signalingState: RTCSignalingState = "stable";
   senders: { track: MediaStreamTrack | null }[] = [];
+  transceivers: Array<{
+    mid: string | null;
+    sender: { track: MediaStreamTrack | null };
+    receiver: { track: MediaStreamTrack | null };
+  }> = [];
   readonly addTrack = vi.fn(
     (track: MediaStreamTrack, _stream: MediaStream) => {
       if (
@@ -76,6 +82,11 @@ class PeerConnection extends EventTarget {
         throw new Error("duplicate sender");
       const sender = { track };
       this.senders.push(sender);
+      this.transceivers.push({
+        mid: null,
+        sender,
+        receiver: { track: null },
+      });
       return sender as RTCRtpSender;
     },
   );
@@ -87,14 +98,31 @@ class PeerConnection extends EventTarget {
     return this.senders;
   }
   getTransceivers() {
-    return [];
+    return this
+      .transceivers as unknown as RTCRtpTransceiver[];
   }
-  receive(track: Track, streams: Stream[] = []) {
+  settleMids() {
+    this.transceivers.forEach((transceiver, index) => {
+      transceiver.mid ??= String(index);
+    });
+    this.dispatchEvent(new Event("signalingstatechange"));
+  }
+  receive(
+    track: Track,
+    streams: Stream[] = [],
+    mid = `remote-${track.id}`,
+  ) {
+    const transceiver = {
+      mid,
+      sender: { track: null },
+      receiver: { track: asTrack(track) },
+    };
     this.dispatchEvent(
       Object.assign(new Event("track"), {
         track,
         streams,
-        receiver: {},
+        receiver: transceiver.receiver,
+        transceiver,
       }),
     );
   }
@@ -108,10 +136,15 @@ const asStream = (stream: Stream) =>
 const asPc = (pc: PeerConnection) =>
   pc as unknown as RTCPeerConnection;
 
-function setup() {
+function setup(
+  getVideoSourceKind?: (
+    track: MediaStreamTrack,
+  ) => "camera" | "screen" | undefined,
+) {
   const state = { pc: null as PeerConnection | null };
   const remote =
     vi.fn<(stream: MediaStream | null) => void>();
+  const remoteBindings = vi.fn();
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
     targetClientId: () => "peer",
@@ -121,8 +154,10 @@ function setup() {
       preferredVideoCodec: null,
       preferredAudioCodec: null,
     }),
+    getVideoSourceKind,
     notifyStreamState: notify,
     onRemoteStreamChange: remote,
+    onRemoteVideoTracksChange: remoteBindings,
   });
   const bind = (pc = new PeerConnection()) => {
     state.pc = pc;
@@ -134,6 +169,7 @@ function setup() {
     state,
     controller,
     remote,
+    remoteBindings,
     notify,
     bind,
   };
@@ -146,6 +182,41 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("multiple video sources in a peer session", () => {
+  it("publishes camera/screen identities by negotiated MID as sources change", () => {
+    const camera = new Track("video", "camera"),
+      screen = new Track("video", "screen"),
+      mic = new Track("audio", "mic");
+    const { controller, notify, bind } = setup((track) =>
+      track.id === "screen" ? "screen" : "camera",
+    );
+    const { pc } = bind();
+    const first = media(camera, mic);
+    controller.setStream(asStream(first));
+    pc.settleMids();
+    expect(notify).toHaveBeenLastCalledWith([
+      { mid: "0", kind: "camera" },
+    ]);
+
+    first.addTrack(asTrack(screen));
+    controller.setStream(asStream(first));
+    pc.settleMids();
+    expect(notify).toHaveBeenLastCalledWith([
+      { mid: "0", kind: "camera" },
+      { mid: "2", kind: "screen" },
+    ]);
+
+    controller.setStream(asStream(first));
+    expect(notify).toHaveBeenCalledTimes(3);
+
+    first.removeTrack(asTrack(screen));
+    controller.setStream(asStream(first));
+    expect(notify).toHaveBeenLastCalledWith([
+      { mid: "0", kind: "camera" },
+    ]);
+    expect(notify).toHaveBeenCalledTimes(4);
+    controller.dispose();
+  });
+
   it("binds camera, screen and microphone and removes only a screen that ends", () => {
     const camera = new Track("video", "camera"),
       screen = new Track("video", "screen"),
@@ -237,6 +308,27 @@ describe("multiple video sources in a peer session", () => {
     for (const track of [camera, screen, mic])
       expect(track.stop).not.toHaveBeenCalled();
     second.controller.dispose();
+  });
+
+  it("binds received video tracks to negotiated MIDs without using sender track IDs", () => {
+    const camera = new Track("video", "rewritten-camera"),
+      screen = new Track("video", "rewritten-screen");
+    const { controller, bind, remoteBindings } = setup();
+    const { pc } = bind();
+    pc.receive(camera, [media(camera)], "0");
+    expect(remoteBindings).toHaveBeenLastCalledWith([
+      { trackId: "rewritten-camera", mid: "0" },
+    ]);
+    pc.receive(screen, [media(screen)], "2");
+    expect(remoteBindings).toHaveBeenLastCalledWith([
+      { trackId: "rewritten-camera", mid: "0" },
+      { trackId: "rewritten-screen", mid: "2" },
+    ]);
+    screen.end();
+    expect(remoteBindings).toHaveBeenLastCalledWith([
+      { trackId: "rewritten-camera", mid: "0" },
+    ]);
+    controller.dispose();
   });
 
   it("aggregates different remote source streams and publishes new snapshots", () => {

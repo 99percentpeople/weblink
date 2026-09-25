@@ -1,20 +1,36 @@
+import type { StreamVideoSource } from "./protocol/messages";
+
 export interface SessionMediaCodecOptions {
   preferredVideoCodec: string | null;
   preferredAudioCodec: string | null;
 }
 
+export type RemoteVideoTrackBinding = {
+  trackId: string;
+  mid: string;
+};
+
 export interface PeerSessionMediaOptions {
   targetClientId(): string;
   getPeerConnection(): RTCPeerConnection | null;
   getCodecOptions(): SessionMediaCodecOptions;
-  notifyStreamState(): void;
+  getVideoSourceKind?(
+    track: MediaStreamTrack,
+  ): StreamVideoSource["kind"] | undefined;
+  notifyStreamState(
+    videoSources: readonly StreamVideoSource[],
+  ): void;
   onRemoteStreamChange(stream: MediaStream | null): void;
+  onRemoteVideoTracksChange(
+    bindings: readonly RemoteVideoTrackBinding[],
+  ): void;
 }
 
 export class PeerSessionMediaController {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private streamStateNotified = false;
+  private videoSourcesSignature = "";
   private localListeners: AbortController | null = null;
   private readonly localTrackListeners = new Map<
     MediaStreamTrack,
@@ -32,6 +48,7 @@ export class PeerSessionMediaController {
     {
       controller: AbortController;
       streams: Set<MediaStream>;
+      transceiver: RTCRtpTransceiver;
     }
   >();
   private readonly remoteStreams = new Map<
@@ -51,11 +68,35 @@ export class PeerSessionMediaController {
   ): void {
     if (!stream) {
       this.streamStateNotified = false;
+      this.videoSourcesSignature = "";
       return;
     }
-    if (this.streamStateNotified) return;
+    const pc = this.options.getPeerConnection();
+    const transceivers = pc?.getTransceivers() ?? [];
+    const videoSources = stream
+      .getVideoTracks()
+      .filter((track) => track.readyState !== "ended")
+      .flatMap((track) => {
+        const kind =
+          this.options.getVideoSourceKind?.(track);
+        if (!kind) return [];
+        const sender = this.senders.get(track);
+        const mid = transceivers.find(
+          (transceiver) =>
+            transceiver.sender === sender ||
+            transceiver.sender.track === track,
+        )?.mid;
+        return mid ? [{ mid, kind }] : [];
+      });
+    const signature = JSON.stringify(videoSources);
+    if (
+      this.streamStateNotified &&
+      this.videoSourcesSignature === signature
+    )
+      return;
     this.streamStateNotified = true;
-    this.options.notifyStreamState();
+    this.videoSourcesSignature = signature;
+    this.options.notifyStreamState(videoSources);
   }
 
   private applyPreferredCodecPreferences(
@@ -190,7 +231,11 @@ export class PeerSessionMediaController {
       },
     );
     const streams = new Set(event.streams);
-    this.remoteTracks.set(track, { controller, streams });
+    this.remoteTracks.set(track, {
+      controller,
+      streams,
+      transceiver: event.transceiver,
+    });
     for (const stream of streams) {
       let observed = this.remoteStreams.get(stream);
       if (!observed) {
@@ -267,15 +312,28 @@ export class PeerSessionMediaController {
   }
 
   private publishRemoteStream(): void {
-    const tracks = [...this.remoteTracks.keys()].filter(
-      (track) => track.readyState !== "ended",
+    const entries = [...this.remoteTracks.entries()].filter(
+      ([track]) => track.readyState !== "ended",
     );
+    const tracks = entries.map(([track]) => track);
     // MediaStream.addTrack/removeTrack called by application code do not emit
     // addtrack/removetrack. New containers notify reactive consumers reliably.
     this.remoteStream = tracks.length
       ? new MediaStream(tracks)
       : null;
     this.options.onRemoteStreamChange(this.remoteStream);
+    this.options.onRemoteVideoTracksChange(
+      entries.flatMap(([track, record]) =>
+        track.kind === "video" && record.transceiver.mid
+          ? [
+              {
+                trackId: track.id,
+                mid: record.transceiver.mid,
+              },
+            ]
+          : [],
+      ),
+    );
   }
 
   bindConnection(
@@ -311,14 +369,23 @@ export class PeerSessionMediaController {
         this.handleRemoteTrack(event, controller.signal),
       { signal: controller.signal },
     );
+    pc.addEventListener(
+      "signalingstatechange",
+      () => {
+        if (pc.signalingState !== "stable") return;
+        this.notifyLocalStreamState(this.localStream);
+        this.publishRemoteStream();
+      },
+      { signal: controller.signal },
+    );
     this.senderConnection = pc;
     if (
       this.localStream
         ?.getTracks()
         .some((track) => track.readyState !== "ended")
     ) {
-      this.notifyLocalStreamState(this.localStream);
       this.syncLocalTracks();
+      this.notifyLocalStreamState(this.localStream);
     } else {
       pc.addTransceiver("video", {
         direction: "recvonly",
@@ -358,10 +425,10 @@ export class PeerSessionMediaController {
           );
       }
     }
-    this.notifyLocalStreamState(stream);
     // Explicit calls reconcile even the same MediaStream object: application
     // mutations of its track list do not dispatch MediaStream track events.
     this.syncLocalTracks();
+    this.notifyLocalStreamState(stream);
   }
 
   private syncLocalTracks(): void {
@@ -410,7 +477,10 @@ export class PeerSessionMediaController {
       }
     // addTrack/removeTrack request native negotiationneeded. Do not also
     // start offers here: it duplicates the browser's coalescing/state handling.
-    if (changed) this.applyPreferredCodecPreferences(pc);
+    if (changed) {
+      this.applyPreferredCodecPreferences(pc);
+      this.notifyLocalStreamState(stream);
+    }
   }
 
   resetConnection(): void {
@@ -428,6 +498,7 @@ export class PeerSessionMediaController {
     this.remoteStream = null;
     if (hadRemoteStream)
       this.options.onRemoteStreamChange(null);
+    this.options.onRemoteVideoTracksChange([]);
   }
 
   dispose(): void {

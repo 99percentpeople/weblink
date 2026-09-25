@@ -50,6 +50,20 @@ describe("session message validation", () => {
         ranges: [],
       }),
     ).toBeTruthy();
+    const media = createSessionMessage(
+      peer,
+      "stream-state",
+      {
+        mode: "media",
+        videoSources: [
+          { mid: "0", kind: "camera" },
+          { mid: "2", kind: "screen" },
+        ],
+      },
+    );
+    expect(
+      parseSessionMessage(JSON.stringify(media)),
+    ).toEqual(media);
   });
 
   it.each([
@@ -68,6 +82,27 @@ describe("session message validation", () => {
     [
       "bad state",
       { ...base, type: "stream-state", mode: "unknown" },
+    ],
+    [
+      "bad video source",
+      {
+        ...base,
+        type: "stream-state",
+        mode: "media",
+        videoSources: [{ mid: "2", kind: "desktop" }],
+      },
+    ],
+    [
+      "duplicate video source",
+      {
+        ...base,
+        type: "stream-state",
+        mode: "media",
+        videoSources: [
+          { mid: "same", kind: "camera" },
+          { mid: "same", kind: "screen" },
+        ],
+      },
     ],
     ["missing file ID", { ...file, fid: undefined }],
     [

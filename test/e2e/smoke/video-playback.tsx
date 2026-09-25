@@ -57,6 +57,7 @@ async function main() {
       preferredAudioCodec: null,
     }),
     notifyStreamState: () => {},
+    onRemoteVideoTracksChange: () => {},
   };
   const sending = new PeerSessionMediaController({
     ...defaults,

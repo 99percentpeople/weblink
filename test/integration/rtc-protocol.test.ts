@@ -498,10 +498,13 @@ describe("typed RTC calls", () => {
     const { protocol, transport } = create();
     await protocol.notify(local, "stream-state", {
       mode: "media",
+      videoSources: [{ mid: "2", kind: "screen" }],
     });
-    expect(transport.sendCalls[0]!.message.type).toBe(
-      "stream-state",
-    );
+    expect(transport.sendCalls[0]!.message).toMatchObject({
+      type: "stream-state",
+      mode: "media",
+      videoSources: [{ mid: "2", kind: "screen" }],
+    });
     expect(vi.getTimerCount()).toBe(0);
     const handler = vi.fn();
     protocol.on("stream-state", handler);
@@ -509,9 +512,15 @@ describe("typed RTC calls", () => {
       local,
       createSessionMessage(remote, "stream-state", {
         mode: "media",
+        videoSources: [{ mid: "0", kind: "camera" }],
       }),
     );
     expect(handler).toHaveBeenCalledTimes(1);
+    expect(
+      handler.mock.calls[0]?.[0].message,
+    ).toMatchObject({
+      videoSources: [{ mid: "0", kind: "camera" }],
+    });
     expect(transport.sendCalls).toHaveLength(1);
   });
 
