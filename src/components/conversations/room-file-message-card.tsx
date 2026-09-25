@@ -301,7 +301,7 @@ export function RoomFileMessageCard(props: {
               <DialogTitle>
                 {t("conversations.room_file_details")}
               </DialogTitle>
-              <DialogDescription class="[overflow-wrap:anywhere]">
+              <DialogDescription class="wrap-anywhere">
                 {props.message.fileName}
               </DialogDescription>
             </DialogHeader>

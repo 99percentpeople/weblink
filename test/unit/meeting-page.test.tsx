@@ -31,6 +31,9 @@ const fixture = vi.hoisted(() => ({
   joinRoom: vi.fn(),
   editRoom: vi.fn(),
   setSearch: vi.fn(),
+  routeState: undefined as
+    | { panelDetail?: true }
+    | undefined,
   leaveRoom: vi.fn(),
   clearLocalStream: vi.fn(),
   replaceLocalStream: vi.fn(),
@@ -73,13 +76,32 @@ vi.mock("@/components/dialogs/room-info-dialog", () => ({
   }),
 }));
 vi.mock("@solidjs/router", () => ({
-  useNavigate: () => fixture.navigate,
-  useSearchParams: () => [{}, fixture.setSearch],
+  useNavigate: () => (to: number | string) => {
+    fixture.navigate(to);
+    if (to === -1) fixture.routeState = undefined;
+  },
+  useSearchParams: () => [
+    {},
+    (
+      value: Record<string, unknown>,
+      options?: {
+        replace?: boolean;
+        state?: { panelDetail?: true };
+      },
+    ) => {
+      fixture.routeState = options?.state;
+      if (options) fixture.setSearch(value, options);
+      else fixture.setSearch(value);
+    },
+  ],
   useBeforeLeave: () => {},
   useLocation: () => ({
     pathname: "/",
     get hash() {
       return window.location.hash;
+    },
+    get state() {
+      return fixture.routeState;
     },
   }),
   A: (
@@ -185,6 +207,34 @@ vi.mock(
     },
   }),
 );
+vi.mock("@/components/files/shared-files-panel", () => ({
+  SharedFilesPanel: (props: {
+    member?: string;
+    browsing: boolean;
+    onBack(): void;
+    onSelect(id: string): void;
+  }) => (
+    <div data-testid="shared-files-panel">
+      <span data-testid="shared-files-member">
+        {props.member}
+      </span>
+      <Show when={props.browsing}>
+        <button onClick={() => props.onSelect("bob")}>
+          Bob files
+        </button>
+      </Show>
+      <Show when={!props.browsing && props.member}>
+        <button
+          aria-label="shared_files.back"
+          onClick={props.onBack}
+        />
+        <div data-testid="shared-files-view">
+          {props.member}
+        </div>
+      </Show>
+    </div>
+  ),
+}));
 vi.mock("@/routes/home/components/meeting-tile", () => ({
   MeetingTile: (props: {
     name: string;
@@ -238,6 +288,7 @@ beforeEach(() => {
   document.head.append(animationStyle);
   history.replaceState(null, "", "/");
   vi.clearAllMocks();
+  fixture.routeState = undefined;
   setMutedMembers([]);
   setAudibleMembers(["bob"]);
   setPlayingAudio(false);
@@ -353,9 +404,13 @@ describe("meeting page navigation and panels", () => {
         name: "meeting.open_room_chat",
       }),
     ).toBeNull();
+    fixture.setSearch.mockClear();
     fireEvent.click(
       screen.getByRole("tab", { name: "meeting.members" }),
     );
+    expect(fixture.setSearch).toHaveBeenLastCalledWith({
+      panel: "members",
+    });
     const members = within(
       screen.getByRole("list", { name: "meeting.members" }),
     );
@@ -852,7 +907,12 @@ describe("meeting page navigation and panels", () => {
     expect(conversations()).toBeInTheDocument();
     expect(
       screen.getByTestId("chat-view").textContent,
-    ).toBe("private-alice");
+    ).toBe("current-room-id");
+    expect(fixture.setSearch).toHaveBeenLastCalledWith({
+      panel: "chat",
+      conversation: undefined,
+      member: undefined,
+    });
     expect(
       screen
         .getAllByRole("tab")
@@ -884,8 +944,19 @@ describe("meeting page navigation and panels", () => {
         name: "test conversations",
       }),
     );
+    fixture.setSearch.mockClear();
     fireEvent.click(
       screen.getByRole("button", { name: "Private Alice" }),
+    );
+    expect(fixture.setSearch).toHaveBeenLastCalledWith(
+      {
+        panel: "chat",
+        conversation: "private-alice",
+        member: undefined,
+      },
+      {
+        state: { panelDetail: true },
+      },
     );
     expect(
       screen.getByTestId("chat-view").textContent,
@@ -903,10 +974,7 @@ describe("meeting page navigation and panels", () => {
         name: "conversations.back_to_list",
       }),
     );
-    expect(fixture.setSearch).toHaveBeenLastCalledWith(
-      { conversation: undefined, panel: "conversations" },
-      { replace: true },
-    );
+    expect(fixture.navigate).toHaveBeenLastCalledWith(-1);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Historical room",
@@ -919,9 +987,78 @@ describe("meeting page navigation and panels", () => {
     expect(
       screen.getByRole("heading", { name: "Current room" }),
     ).toBeTruthy();
-    expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(fixture.navigate).toHaveBeenCalledTimes(1);
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
   });
+  it("returns direct detail views to their panel lists instead of leaving the app", () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Private Alice" }),
+    );
+    fixture.routeState = undefined;
+    fixture.navigate.mockClear();
+    fixture.setSearch.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.back_to_list",
+      }),
+    );
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(fixture.setSearch).toHaveBeenLastCalledWith(
+      {
+        panel: "chat",
+        conversation: undefined,
+        member: undefined,
+      },
+      { replace: true },
+    );
+    expect(
+      screen.getByRole("navigation", {
+        name: "test conversations",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: "meeting.files" }),
+    );
+    expect(
+      screen.getByTestId("shared-files-member"),
+    ).toHaveTextContent("me");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Bob files" }),
+    );
+    expect(
+      screen.getByTestId("shared-files-view"),
+    ).toHaveTextContent("bob");
+    fixture.routeState = undefined;
+    fixture.navigate.mockClear();
+    fixture.setSearch.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "shared_files.back",
+      }),
+    );
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(fixture.setSearch).toHaveBeenLastCalledWith(
+      {
+        panel: "files",
+        member: undefined,
+        conversation: undefined,
+      },
+      { replace: true },
+    );
+    expect(
+      screen.getByRole("button", { name: "Bob files" }),
+    ).toBeInTheDocument();
+  });
+
   it.each([false, true])(
     "keeps canvas visibility in sync through mobile resizing when the panel is closed=%s",
     async (closed) => {
@@ -967,23 +1104,36 @@ describe("meeting page navigation and panels", () => {
           }),
         ).toBeNull(),
       );
-      expect(
-        screen.queryByRole("navigation", {
-          name: "test conversations",
-        }),
-      ).toBeNull();
-      expect(
-        screen.getByTestId("chat-view"),
-      ).toHaveTextContent("private-alice");
+      if (closed) {
+        expect(
+          screen.getByRole("navigation", {
+            name: "test conversations",
+          }),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("chat-view"),
+        ).toBeNull();
+      } else {
+        expect(
+          screen.queryByRole("navigation", {
+            name: "test conversations",
+          }),
+        ).toBeNull();
+        expect(
+          screen.getByTestId("chat-view"),
+        ).toHaveTextContent("private-alice");
+      }
       expect(
         stage.closest('[aria-hidden="true"]'),
       ).not.toBeNull();
 
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "conversations.back_to_list",
-        }),
-      );
+      if (!closed) {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "conversations.back_to_list",
+          }),
+        );
+      }
       expect(
         screen.getByRole("navigation", {
           name: "test conversations",
@@ -1006,10 +1156,11 @@ describe("meeting page navigation and panels", () => {
         }),
       );
       expect(
-        screen.queryByRole("navigation", {
+        screen.getByRole("navigation", {
           name: "test conversations",
         }),
-      ).toBeNull();
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("chat-view")).toBeNull();
 
       // Returning to the meeting closes the full panel before gradually widening.
       fireEvent.click(
@@ -1050,7 +1201,7 @@ describe("meeting page navigation and panels", () => {
       ).toBeInTheDocument();
       expect(
         screen.getByTestId("chat-view"),
-      ).toHaveTextContent("private-alice");
+      ).toHaveTextContent("current-room-id");
       expect(
         stage.closest('[aria-hidden="true"]'),
       ).toBeNull();
@@ -1061,7 +1212,7 @@ describe("meeting page navigation and panels", () => {
     },
   );
 
-  it("unmounts hidden chat, supports keyboard tabs, and reopens the selected conversation", () => {
+  it("unmounts hidden chat, supports keyboard tabs, and opens the chat list as its own route", () => {
     render(() => (
       <MeetingMediaProvider>
         <MeetingSessionProvider>
@@ -1102,9 +1253,17 @@ describe("meeting page navigation and panels", () => {
     fireEvent.click(
       screen.getByRole("tab", { name: "meeting.chat" }),
     );
+    expect(screen.queryByTestId("chat-view")).toBeNull();
     expect(
-      screen.getByTestId("chat-view").textContent,
-    ).toBe("private-alice");
+      screen.getByRole("navigation", {
+        name: "test conversations",
+      }),
+    ).toBeInTheDocument();
+    expect(fixture.setSearch).toHaveBeenLastCalledWith({
+      panel: "chat",
+      conversation: undefined,
+      member: undefined,
+    });
     fireEvent.keyDown(screen.getByTestId("meeting-page"), {
       key: "Escape",
     });
@@ -1317,6 +1476,37 @@ describe("meeting page navigation and panels", () => {
     ).toHaveAttribute("aria-selected", "true");
     expect(fixture.navigate).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
+  });
+
+  it("keeps a desktop panel closed after the default panel route is initialized", async () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    fixture.setSearch.mockClear();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "meeting.hide_panel",
+      }),
+    );
+    expect(fixture.setSearch).toHaveBeenCalledTimes(1);
+    expect(fixture.setSearch).toHaveBeenLastCalledWith({
+      panel: undefined,
+      conversation: undefined,
+      member: undefined,
+    });
+
+    await Promise.resolve();
+    expect(fixture.setSearch).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", {
+        name: "meeting.show_panel",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("replaces the mobile canvas with chat and returns without disposing media", () => {

@@ -1,4 +1,9 @@
-import { Show, type JSX, type ParentProps } from "solid-js";
+import {
+  createSignal,
+  onMount,
+  type JSX,
+  type ParentProps,
+} from "solid-js";
 import {
   AnimatePresence,
   Motion,
@@ -11,17 +16,34 @@ export function SidebarBrowser(
     split: boolean;
     browsing: boolean;
     list: JSX.Element;
+    onDetailExitComplete?: () => void;
   }>,
 ) {
+  const [navigationReady, setNavigationReady] =
+    createSignal(false);
+  onMount(() =>
+    queueMicrotask(() => setNavigationReady(true)),
+  );
+
   const listOnly = () => props.browsing && !props.split;
+  const showList = () => props.split || props.browsing;
+  const showDetail = () => props.split || !props.browsing;
+  const listExitingToDetail = () =>
+    !props.browsing && !props.split;
+  const detailExitingToList = () =>
+    props.browsing && !props.split;
+
   return (
     <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <div
           class={cn(
-            `flex min-h-0 flex-none overflow-hidden transition-[width]
-            duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)]
+            `flex min-h-0 flex-none transition-[width] duration-[280ms]
+            ease-[cubic-bezier(0.22,1,0.36,1)]
             motion-reduce:transition-none`,
+            listExitingToDetail()
+              ? "overflow-visible"
+              : "overflow-hidden",
             props.split
               ? "w-60"
               : listOnly()
@@ -29,31 +51,56 @@ export function SidebarBrowser(
                 : "w-0",
           )}
         >
-          <AnimatePresence when={props.split || listOnly()}>
+          <AnimatePresence when={showList()}>
             <Motion.div
               class={cn(
                 "flex min-h-0 w-full min-w-0 overflow-hidden",
-                !listOnly() && "border-r",
+                props.split && "border-r",
+                listExitingToDetail() &&
+                  "absolute inset-0 z-10",
               )}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
+              initial={
+                navigationReady()
+                  ? { opacity: 0, x: -12 }
+                  : false
+              }
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{
+                duration: 0.2,
+                ease: [0.22, 1, 0.36, 1],
+              }}
             >
               {props.list}
             </Motion.div>
           </AnimatePresence>
         </div>
-        <Show when={!listOnly()}>
+
+        <AnimatePresence
+          when={showDetail()}
+          onExitComplete={props.onDetailExitComplete}
+        >
           <Motion.div
-            class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.18 }}
+            class={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+              detailExitingToList() &&
+                "absolute inset-0 z-10 w-full",
+            )}
+            initial={
+              navigationReady()
+                ? { opacity: 0, x: 12 }
+                : false
+            }
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
+            transition={{
+              duration: 0.2,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             {props.children}
           </Motion.div>
-        </Show>
+        </AnimatePresence>
       </div>
     </div>
   );

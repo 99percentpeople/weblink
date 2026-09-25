@@ -8,6 +8,7 @@ import {
 import {
   useSearchParams,
   useLocation,
+  useNavigate,
 } from "@solidjs/router";
 import {
   createEffect,
@@ -15,6 +16,7 @@ import {
   createSignal,
   For,
   on,
+  onMount,
   Show,
 } from "solid-js";
 import {
@@ -69,6 +71,9 @@ const tabs = ["chat", "files", "members", "info"] as const;
 type PanelTab = (typeof tabs)[number];
 type DockedPanelMode = "compact" | "wide";
 type PanelMode = "closed" | DockedPanelMode;
+type HomeRouteState = {
+  panelDetail?: true;
+};
 
 export default function Home() {
   let page: HTMLElement | undefined;
@@ -81,6 +86,8 @@ export default function Home() {
   const state = useAppState();
   const roomActions = useRoomActions();
   const [search, setSearch] = useSearchParams();
+  const navigate = useNavigate();
+  const routeLocation = useLocation<HomeRouteState>();
   const audio = useAudioPlayer();
   const { media, devices } = useMeetingMedia();
   const { open: openRoomInfo } = createRoomInfoDialog();
@@ -102,9 +109,21 @@ export default function Home() {
   const viewport = createWindowSize();
   const isMobile = createIsMobile(viewport);
   const canDockExpanded = () => viewport.width >= 1280;
-  const [panelMode, setPanelMode] = createSignal<PanelMode>(
-    !isMobile() && canDockExpanded() ? "compact" : "closed",
-  );
+  const param = (value: unknown) =>
+    typeof value === "string" && value ? value : undefined;
+  const routePanel = () => {
+    const value = param(search.panel);
+    return tabs.includes(value as PanelTab)
+      ? (value as PanelTab)
+      : undefined;
+  };
+  const initialPanel = routePanel();
+  const initialMode =
+    initialPanel || (!isMobile() && canDockExpanded())
+      ? "compact"
+      : "closed";
+  const [panelMode, setPanelMode] =
+    createSignal<PanelMode>(initialMode);
   let dockedMode: DockedPanelMode = "compact";
   const rightOpen = () => panelMode() !== "closed";
   // Preserve the exiting panel's width until its fade-out finishes.
@@ -113,32 +132,176 @@ export default function Home() {
   >((previous) => {
     const mode = panelMode();
     return mode === "closed" ? previous : mode;
-  }, "compact");
+  }, dockedMode);
   const panelFillsWorkspace = () =>
     isMobile() ||
     (displayedPanelMode() === "wide" && !canDockExpanded());
   const fullPanel = () =>
     rightOpen() && panelFillsWorkspace();
-  const [fileMember, setFileMember] =
-    createSignal<string>();
-  const [fileBrowsing, setFileBrowsing] =
-    createSignal(true);
-  const selectFileMember = (id?: string) => {
-    if (id) setFileMember(id);
+  const initialFileMember =
+    initialPanel === "files"
+      ? param(search.member)
+      : undefined;
+  const [fileMember, setFileMember] = createSignal<
+    string | undefined
+  >(initialFileMember);
+  const [fileBrowsing, setFileBrowsing] = createSignal(
+    !initialFileMember,
+  );
+  const [tab, setTab] = createSignal<PanelTab>(
+    initialPanel ?? "chat",
+  );
+  const expanded = () => displayedPanelMode() !== "compact";
+  const initialConversation =
+    initialPanel === "chat"
+      ? param(search.conversation)
+      : undefined;
+  const [browsing, setBrowsing] = createSignal(
+    !initialConversation,
+  );
+  const splitChat = () => expanded() && !isMobile();
+  const [selectedId, setSelectedId] = createSignal<
+    string | undefined
+  >(initialConversation);
+  const activeConversationId = () =>
+    selectedId() ??
+    state.activeRoomConversationId() ??
+    undefined;
+  const activeFileMember = () =>
+    fileMember() ?? appState.profile.clientId;
+  const finishChatDetailExit = () => {
+    if (browsing()) setSelectedId(undefined);
+  };
+  const finishFileDetailExit = () => {
+    if (fileBrowsing()) setFileMember(undefined);
+  };
+
+  const applyPanelOpen = (open: boolean) => {
+    if ((panelMode() !== "closed") === open) return;
+    transitionLayout(() =>
+      setPanelMode(open ? dockedMode : "closed"),
+    );
+  };
+  const setPanelOpen = (open: boolean) => {
+    if (rightOpen() === open) return;
+    applyPanelOpen(open);
+    if (open) {
+      setSelectedId(undefined);
+      setBrowsing(true);
+      setFileMember(undefined);
+      setFileBrowsing(true);
+    }
+    setSearch(
+      open
+        ? {
+            panel: param(search.panel) ?? tab(),
+            conversation: undefined,
+            member: undefined,
+          }
+        : {
+            panel: undefined,
+            conversation: undefined,
+            member: undefined,
+          },
+    );
+  };
+  const closePanel = () => setPanelOpen(false);
+  const popPanelDetail = () => {
+    if (routeLocation.state?.panelDetail) {
+      if (tab() === "chat") setBrowsing(true);
+      if (tab() === "files") setFileBrowsing(true);
+      navigate(-1);
+      return;
+    }
+    if (tab() === "files") {
+      setFileBrowsing(true);
+      setSearch(
+        {
+          panel: "files",
+          member: undefined,
+          conversation: undefined,
+        },
+        { replace: true },
+      );
+      return;
+    }
+    setBrowsing(true);
+    setSearch(
+      {
+        panel: "chat",
+        conversation: undefined,
+        member: undefined,
+      },
+      { replace: true },
+    );
+  };
+  const selectConversation = (
+    id: string,
+    options?: { replace?: boolean },
+  ) => {
+    setSelectedId(id);
+    setBrowsing(false);
+    setFileMember(undefined);
+    setFileBrowsing(true);
+    setTab("chat");
+    applyPanelOpen(true);
+    setSearch(
+      {
+        panel: "chat",
+        conversation: id,
+        member: undefined,
+      },
+      {
+        ...options,
+        state: options?.replace
+          ? undefined
+          : ({
+              panelDetail: true,
+            } satisfies HomeRouteState),
+      },
+    );
+  };
+  const selectFileMember = (
+    id?: string,
+    options?: { replace?: boolean },
+  ) => {
+    setFileMember(id);
     setFileBrowsing(!id);
+    setSelectedId(undefined);
+    setBrowsing(true);
+    setTab("files");
+    applyPanelOpen(true);
     setSearch(
       {
         panel: "files",
         member: id,
         conversation: undefined,
       },
-      { replace: true },
+      {
+        ...options,
+        state:
+          id && !options?.replace
+            ? ({
+                panelDetail: true,
+              } satisfies HomeRouteState)
+            : undefined,
+      },
     );
   };
-  const [tab, setTab] = createSignal<PanelTab>("chat");
-  const expanded = () => displayedPanelMode() !== "compact";
-  const [browsing, setBrowsing] = createSignal(true);
-  const splitChat = () => expanded() && !isMobile();
+  const openTab = (value: PanelTab) => {
+    if (tab() === value && rightOpen()) return;
+    setTab(value);
+    setSelectedId(undefined);
+    setBrowsing(true);
+    setFileMember(undefined);
+    setFileBrowsing(true);
+    applyPanelOpen(true);
+    setSearch({
+      panel: value,
+      conversation: undefined,
+      member: undefined,
+    });
+  };
   // Width transitions feed the stage's existing ResizeObserver. An explicit
   // FLIP here would measure before the CSS width has reached its destination.
   const togglePanelSize = () => {
@@ -152,62 +315,78 @@ export default function Home() {
     expanded()
       ? "meeting.collapse_chat"
       : "meeting.expand_chat";
-  const [selectedId, setSelectedId] =
-    createSignal<string>();
-  const activeConversationId = () =>
-    selectedId() ??
-    state.activeRoomConversationId() ??
-    undefined;
-  const setPanelOpen = (open: boolean) => {
-    if (rightOpen() === open) return;
-    transitionLayout(() =>
-      setPanelMode(open ? dockedMode : "closed"),
-    );
-  };
-  const closePanel = () => setPanelOpen(false);
-  const browseConversations = () => {
-    setBrowsing(true);
-    setTab("chat");
-    setPanelOpen(true);
+
+  onMount(() => {
+    if (initialPanel || isMobile() || !canDockExpanded())
+      return;
     setSearch(
-      { conversation: undefined, panel: "conversations" },
+      {
+        panel: "chat",
+        conversation: undefined,
+        member: undefined,
+      },
       { replace: true },
     );
-  };
-  const selectConversation = (id: string) => {
-    setSelectedId(id);
-    setBrowsing(false);
-    if (search.conversation !== id)
-      setSearch(
-        { conversation: id, panel: undefined },
-        { replace: true },
-      );
-    setTab("chat");
-    setPanelOpen(true);
-  };
+  });
+  createEffect(
+    on(
+      () => search.panel,
+      () => {
+        const panel = routePanel();
+        if (!panel) {
+          applyPanelOpen(false);
+          return;
+        }
+        setTab(panel);
+        if (panel === "chat") {
+          const id = param(search.conversation);
+          setBrowsing(!id);
+          if (id) setSelectedId(id);
+          else if (splitChat()) setSelectedId(undefined);
+        } else if (panel === "files") {
+          const id = param(search.member);
+          setFileBrowsing(!id);
+          if (id) setFileMember(id);
+          else if (splitChat()) setFileMember(undefined);
+        }
+        applyPanelOpen(true);
+      },
+      { defer: true },
+    ),
+  );
+
   createEffect(
     on(
       () => search.conversation,
-      (id) => {
-        if (typeof id === "string" && id)
-          selectConversation(id);
+      (value) => {
+        if (routePanel() !== "chat") return;
+        const id = param(value);
+        setBrowsing(!id);
+        if (id) {
+          setSelectedId(id);
+          applyPanelOpen(true);
+        } else if (splitChat()) {
+          setSelectedId(undefined);
+        }
       },
+      { defer: true },
     ),
   );
   createEffect(
     on(
-      () => [search.panel, search.member] as const,
-      ([panel, member]) => {
-        if (panel !== "files") return;
-        const id =
-          typeof member === "string" && member
-            ? member
-            : undefined;
-        if (id) setFileMember(id);
+      () => search.member,
+      (value) => {
+        if (routePanel() !== "files") return;
+        const id = param(value);
         setFileBrowsing(!id);
-        setTab("files");
-        setPanelOpen(true);
+        if (id) {
+          setFileMember(id);
+          applyPanelOpen(true);
+        } else if (splitChat()) {
+          setFileMember(undefined);
+        }
       },
+      { defer: true },
     ),
   );
   createEffect(
@@ -227,18 +406,6 @@ export default function Home() {
   );
   createEffect(
     on(
-      () => search.panel,
-      (panel) => {
-        if (panel === "conversations") {
-          setBrowsing(true);
-          setTab("chat");
-          setPanelOpen(true);
-        }
-      },
-    ),
-  );
-  createEffect(
-    on(
       () => {
         const id = appState.options.redirectToClient;
         return id && appState.session.clientViewData[id]
@@ -252,17 +419,20 @@ export default function Home() {
               appState.profile.clientId,
               id,
             ),
+            { replace: true },
           );
       },
     ),
   );
-  const routeLocation = useLocation();
   const mediaRoute = createMediaHashRoute(
     () => routeLocation.hash,
   );
   createEffect(
     on(mediaRoute, (route) => {
-      if (route) selectConversation(route.conversationId);
+      if (route)
+        selectConversation(route.conversationId, {
+          replace: true,
+        });
     }),
   );
   const togglePin = (id: string) =>
@@ -288,11 +458,6 @@ export default function Home() {
         ),
       );
   };
-  const openTab = (value: PanelTab) => {
-    setTab(value);
-    setPanelOpen(true);
-  };
-
   return (
     <main
       ref={page}
@@ -556,7 +721,7 @@ export default function Home() {
               aria-label={t("meeting.side_panel")}
               value={tab()}
               onChange={(value) =>
-                setTab(value as PanelTab)
+                openTab(value as PanelTab)
               }
             >
               <div
@@ -659,8 +824,11 @@ export default function Home() {
                   conversationId={activeConversationId()}
                   split={splitChat()}
                   browsing={browsing()}
-                  onBack={browseConversations}
+                  onBack={popPanelDetail}
                   onSelect={selectConversation}
+                  onDetailExitComplete={
+                    finishChatDetailExit
+                  }
                 />
               </TabsContent>
               <TabsContent
@@ -675,10 +843,13 @@ export default function Home() {
                 <SharedFilesPanel
                   active={rightOpen() && tab() === "files"}
                   split={splitChat()}
-                  member={fileMember()}
+                  member={activeFileMember()}
                   browsing={fileBrowsing()}
-                  onBack={() => selectFileMember()}
+                  onBack={popPanelDetail}
                   onSelect={selectFileMember}
+                  onDetailExitComplete={
+                    finishFileDetailExit
+                  }
                 />
               </TabsContent>
               <TabsContent
@@ -710,10 +881,7 @@ export default function Home() {
                       ),
                     )
                   }
-                  onOpenFiles={(id) => {
-                    selectFileMember(id);
-                    openTab("files");
-                  }}
+                  onOpenFiles={selectFileMember}
                   isPinned={participantPinned}
                   onPin={pinParticipant}
                 />

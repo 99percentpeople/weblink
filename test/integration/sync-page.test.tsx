@@ -24,7 +24,6 @@ import {
   createMemoryHistory,
 } from "@solidjs/router";
 import { SharedFilesPanel } from "@/components/files/shared-files-panel";
-import Sync from "@/routes/client/[id]/sync";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   createInitialAppState,
@@ -783,28 +782,4 @@ describe("sidebar shared directory", () => {
     view.select("b");
     await screen.findByTitle("file-00.txt");
   });
-  it.each([
-    ["/client/b/sync", "/?panel=files&member=b"],
-    [
-      "/client/b/sync?room=meeting&conversation=old#video",
-      "/?room=meeting&panel=files&member=b#video",
-    ],
-  ])(
-    "redirects the old sync address %s to the file tab while preserving invitations",
-    async (address, target) => {
-      setAppState("profile", "clientId", "a");
-      const history = createMemoryHistory();
-      history.set({ value: address });
-      render(() => (
-        <MemoryRouter history={history}>
-          <Route path="/client/:id/sync" component={Sync} />
-          <Route path="/" component={() => <p>home</p>} />
-        </MemoryRouter>
-      ));
-      await waitFor(() =>
-        expect(history.get()).toBe(target),
-      );
-      expect(queries()).toHaveLength(0);
-    },
-  );
 });

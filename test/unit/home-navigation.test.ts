@@ -2,83 +2,47 @@ import { describe, expect, it } from "vitest";
 import {
   conversationHref,
   isHomePath,
-  legacyHomeHref,
+  sharedFilesHref,
 } from "@/libs/application/home-navigation";
-import { directConversationId } from "@/libs/domain/conversation";
 
-describe("Home navigation compatibility", () => {
-  it("keeps conversation identity, invite parameters and media hashes", () => {
-    const id = 'room:["local","team/a b"]';
-    const target = legacyHomeHref(
-      {
-        pathname: `/conversation/${encodeURIComponent(id)}`,
-        search: "?id=team&pwd=secret",
-        hash: "#/media/room/photo",
-      },
-      "self",
+describe("Home navigation", () => {
+  it("builds canonical panel URLs", () => {
+    const conversation = new URL(
+      conversationHref('room:["local","team/a b"]'),
+      "https://example.test",
     );
-    const url = new URL(target, "https://example.test");
-    expect(url.pathname).toBe("/");
-    expect(url.searchParams.get("conversation")).toBe(id);
-    expect(url.searchParams.get("id")).toBe("team");
-    expect(url.searchParams.get("pwd")).toBe("secret");
-    expect(url.hash).toBe("#/media/room/photo");
+    expect(conversation.pathname).toBe("/");
+    expect(conversation.searchParams.get("panel")).toBe(
+      "chat",
+    );
     expect(
-      new URL(conversationHref(id), url).searchParams.get(
-        "conversation",
-      ),
-    ).toBe(id);
+      conversation.searchParams.get("conversation"),
+    ).toBe('room:["local","team/a b"]');
+
+    const files = new URL(
+      sharedFilesHref("peer/a b"),
+      "https://example.test",
+    );
+    expect(files.pathname).toBe("/");
+    expect(files.searchParams.get("panel")).toBe("files");
+    expect(files.searchParams.get("member")).toBe(
+      "peer/a b",
+    );
   });
 
-  it("routes old private chats and page entries into Home", () => {
-    const legacy = (pathname: string) =>
-      new URL(
-        legacyHomeHref(
-          { pathname, search: "", hash: "" },
-          "uid_local",
-        ),
-        "https://example.test",
-      );
-    expect(
-      legacy("/client/peer/chat").searchParams.get(
-        "conversation",
-      ),
-    ).toBe(directConversationId("uid_local", "peer"));
-    expect(
-      legacy("/client/peer/sync").searchParams.get("panel"),
-    ).toBe("files");
-    expect(
-      legacy("/client/peer/sync").searchParams.get(
-        "member",
-      ),
-    ).toBe("peer");
-    expect(legacy("/file").searchParams.get("dialog")).toBe(
-      "files",
-    );
-    expect(
-      legacy("/setting").searchParams.get("dialog"),
-    ).toBe("settings");
-    expect(legacy("/chat").searchParams.get("panel")).toBe(
-      "conversations",
-    );
-    expect(() =>
-      legacy("/conversation/%bad"),
-    ).not.toThrow();
-  });
-
-  it("treats only Home and its aliases as the meeting page", () => {
+  it("treats only the root route as the meeting page", () => {
+    expect(isHomePath("/")).toBe(true);
+    expect(isHomePath("//")).toBe(true);
     for (const path of [
-      "/",
       "/home",
-      "/home/",
       "/video",
+      "/chat",
       "/file",
       "/setting",
       "/conversation/room",
       "/client/peer/sync",
+      "/share",
     ])
-      expect(isHomePath(path)).toBe(true);
-    for (const path of ["/home/other"])
       expect(isHomePath(path)).toBe(false);
   });
 });

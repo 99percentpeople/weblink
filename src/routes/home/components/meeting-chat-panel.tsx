@@ -11,11 +11,13 @@ export function MeetingChatPanel(props: {
   browsing: boolean;
   onBack(): void;
   onSelect(id: string): void;
+  onDetailExitComplete?: () => void;
 }) {
   return (
     <SidebarBrowser
       split={props.split}
       browsing={props.browsing}
+      onDetailExitComplete={props.onDetailExitComplete}
       list={
         <ConversationSidebar
           selectedId={props.conversationId}

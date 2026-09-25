@@ -516,6 +516,7 @@ export function SharedFilesPanel(props: {
   browsing: boolean;
   onBack(): void;
   onSelect(id: string): void;
+  onDetailExitComplete?: () => void;
 }) {
   const peers = createMemo(() =>
     Object.values(appState.session.clientViewData).filter(
@@ -539,6 +540,7 @@ export function SharedFilesPanel(props: {
     <SidebarBrowser
       split={props.split}
       browsing={props.browsing}
+      onDetailExitComplete={props.onDetailExitComplete}
       list={
         <aside class="flex h-full min-h-0 w-full flex-col overflow-hidden">
           <header class="flex shrink-0 items-center gap-2 border-b p-3">
