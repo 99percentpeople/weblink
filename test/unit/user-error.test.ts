@@ -105,6 +105,17 @@ describe.each(Object.keys(dictionaries))(
         "storage_full",
       ],
       [
+        new DOMException(
+          "Error preparing Blob/File data to be stored in object store",
+          "UnknownError",
+        ),
+        "storage_unavailable",
+      ],
+      [
+        "UnknownError: Error preparing Blob/File data to be stored in object store",
+        "storage_unavailable",
+      ],
+      [
         new Error("Member is not connected"),
         "member_offline",
       ],

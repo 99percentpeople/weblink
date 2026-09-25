@@ -326,7 +326,9 @@ export class IDBChunkCache implements ChunkCache {
         /* Already committed/aborted. */
       }
       await done.catch(() => {});
-      throw error;
+      // Later requests report AbortError when the write fails. Keep the actual
+      // storage failure so callers do not mistake it for user cancellation.
+      throw transaction.error ?? error;
     }
   }
 
@@ -431,7 +433,7 @@ export class IDBChunkCache implements ChunkCache {
           if (!this.memoryCache.has(index))
             this.memoryCache.set(index, data);
       }
-      throw error;
+      throw transaction?.error ?? error;
     } finally {
       if (this.flushTransaction === transaction)
         this.flushTransaction = null;

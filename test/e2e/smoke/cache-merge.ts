@@ -544,6 +544,61 @@ async function main() {
       );
       await verifyFile(await value.getFile());
     });
+    await test("metadata write failures retain their cause instead of a later request's AbortError", async () => {
+      const value = await cache();
+      const original = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (record) {
+        // The metadata key already exists. Fail asynchronously, then let the
+        // following count/cursor requests abort as they do for Safari Blob errors.
+        return this.add(record);
+      };
+      let failure: unknown;
+      try {
+        await value.setInfo({
+          id: value.id,
+          fileName: "replacement",
+          fileSize: 19,
+        });
+      } catch (error) {
+        failure = error;
+      } finally {
+        IDBObjectStore.prototype.put = original;
+      }
+      assert(
+        failure instanceof DOMException &&
+          failure.name === "ConstraintError",
+        `Lost write error: ${String(failure)}`,
+      );
+      equal((await value.getInfo())?.fileName, "cache.bin");
+    });
+    await test("chunk write failures preserve their cause and buffered replacements", async () => {
+      const value = await cache();
+      await value.storeChunk(0, bytes(0, 8).buffer);
+      await value.flush();
+      await value.storeChunk(0, bytes(8, 8).buffer);
+      const original = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (record) {
+        return this.add(record);
+      };
+      let failure: unknown;
+      try {
+        await value.flush();
+      } catch (error) {
+        failure = error;
+      } finally {
+        IDBObjectStore.prototype.put = original;
+      }
+      assert(
+        failure instanceof DOMException &&
+          failure.name === "ConstraintError",
+        `Lost write error: ${String(failure)}`,
+      );
+      await value.flush();
+      equal(
+        [...new Uint8Array((await value.getChunk(0))!)],
+        [...bytes(8, 8)],
+      );
+    });
     await test("failed flush restores the buffered batch for retry", async () => {
       const value = await cache();
       await value.storeChunk(0, bytes(0, 8).buffer);

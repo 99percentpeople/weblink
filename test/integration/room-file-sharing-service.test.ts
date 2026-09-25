@@ -75,6 +75,9 @@ function setup(outgoing = false) {
     get currentScopeKey() {
       return scopeKey;
     },
+    get scopeSignal() {
+      return epoch.signal;
+    },
     sendFile: vi.fn(
       async (
         _info: ChunkMetaData,
@@ -105,6 +108,7 @@ function setup(outgoing = false) {
       async (
         _file: File,
         _origin?: { messageId: string; clientId: string },
+        _signal?: AbortSignal,
       ) => info,
     ),
     receiveFileOffer: vi.fn(
@@ -182,6 +186,35 @@ function setup(outgoing = false) {
 }
 
 describe("room file authorization and explicit pulls", () => {
+  it("publishes a selected file without requiring AbortSignal.any", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      AbortSignal,
+      "any",
+    );
+    Object.defineProperty(AbortSignal, "any", {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const f = setup(true);
+      await f.service.sendFile(
+        new File(["photo"], "photo.jpg"),
+      );
+      expect(
+        f.files.prepareRoomFile,
+      ).toHaveBeenCalledOnce();
+      expect(f.rooms.sendFile).toHaveBeenCalledOnce();
+    } finally {
+      if (descriptor)
+        Object.defineProperty(
+          AbortSignal,
+          "any",
+          descriptor,
+        );
+      else Reflect.deleteProperty(AbortSignal, "any");
+    }
+  });
+
   it("leaves auto-download off by default and reads the original offer's room and size", async () => {
     const f = setup();
     await f.service.autoDownloadFile(f.offer);
@@ -316,6 +349,35 @@ describe("room file authorization and explicit pulls", () => {
     await expect(pending).rejects.toThrow("Room changed");
     expect(f.files.serveFileOffer).not.toHaveBeenCalled();
   });
+
+  it.each(["room", "service"])(
+    "cancels file preparation when its %s closes",
+    async (source) => {
+      const f = setup(true);
+      const wait = deferred<ChunkMetaData>();
+      f.files.prepareRoomFile.mockReturnValueOnce(
+        wait.promise,
+      );
+      const pending = f.service.sendFile(
+        new File(["x"], "x.bin"),
+      );
+      const signal =
+        f.files.prepareRoomFile.mock.calls[0][2]!;
+      if (source === "room") f.epoch.abort();
+      else f.service.dispose();
+      expect(signal.aborted).toBe(true);
+      const rejection = expect(pending).rejects.toBe(
+        signal.reason,
+      );
+      wait.resolve({
+        id: "cached",
+        fileName: "x.bin",
+        fileSize: 1,
+      });
+      await rejection;
+      expect(f.rooms.sendFile).not.toHaveBeenCalled();
+    },
+  );
 
   it("waits for an explicit request and uses stored metadata with a fresh request id on resume", async () => {
     const f = setup();

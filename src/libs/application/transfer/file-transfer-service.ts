@@ -1,4 +1,5 @@
 import { FileContentReceives } from "./file-content-receives";
+import { combineAbortSignals } from "@/libs/utils/abort-signals";
 import { completeLocalFile } from "./file-content-completion";
 import { contentKey } from "@/libs/domain/protocol/file-fingerprint";
 import type {
@@ -674,65 +675,67 @@ export class FileTransferService {
         id: message.id,
         fileId: message.fid,
         complete: async (waitingSignal) => {
-          const activeSignal = AbortSignal.any([
-            signal,
-            waitingSignal,
-          ]);
-          if (!current() || activeSignal.aborted) return;
-          if (message.room) {
-            if (
-              !(await this.reuseRoomOffer(
-                message,
-                activeSignal,
-              ))
-            )
-              throw new Error(
-                "Shared content is unavailable",
+          const { signal: activeSignal, dispose } =
+            combineAbortSignals([signal, waitingSignal]);
+          try {
+            if (!current() || activeSignal.aborted) return;
+            if (message.room) {
+              if (
+                !(await this.reuseRoomOffer(
+                  message,
+                  activeSignal,
+                ))
+              )
+                throw new Error(
+                  "Shared content is unavailable",
+                );
+              if (current() && !activeSignal.aborted)
+                await ready?.();
+            } else {
+              const cache =
+                await this.deps.caches.library!.reuse(
+                  message.fingerprint!,
+                  {
+                    id: message.fid!,
+                    fileName: message.fileName,
+                    fileSize: message.fileSize,
+                    chunkSize: message.chunkSize,
+                    lastModified: message.lastModified,
+                    mimetype: message.mimeType,
+                    from: message.client,
+                    createdAt: message.createdAt,
+                  },
+                  activeSignal,
+                );
+              if (!current() || activeSignal.aborted) {
+                await cache?.cleanup();
+                return;
+              }
+              if (!cache)
+                throw new Error(
+                  "Shared content is unavailable",
+                );
+              completeLocalFile(
+                this.deps.messages,
+                message.id,
               );
-            if (current() && !activeSignal.aborted)
-              await ready?.();
-          } else {
-            const cache =
-              await this.deps.caches.library!.reuse(
-                message.fingerprint!,
-                {
-                  id: message.fid!,
-                  fileName: message.fileName,
-                  fileSize: message.fileSize,
-                  chunkSize: message.chunkSize,
-                  lastModified: message.lastModified,
-                  mimetype: message.mimeType,
-                  from: message.client,
-                  createdAt: message.createdAt,
-                },
-                activeSignal,
+              await this.deps.messages.flushMessage?.(
+                message.id,
               );
-            if (!current() || activeSignal.aborted) {
-              await cache?.cleanup();
-              return;
+              if (current() && !activeSignal.aborted)
+                await this.deps.protocol.call(
+                  session,
+                  "file-content-ready",
+                  {
+                    offerId: message.id,
+                    fid: message.fid!,
+                    fingerprint: message.fingerprint!,
+                  },
+                  { signal: activeSignal, retries: 2 },
+                );
             }
-            if (!cache)
-              throw new Error(
-                "Shared content is unavailable",
-              );
-            completeLocalFile(
-              this.deps.messages,
-              message.id,
-            );
-            await this.deps.messages.flushMessage?.(
-              message.id,
-            );
-            if (current() && !activeSignal.aborted)
-              await this.deps.protocol.call(
-                session,
-                "file-content-ready",
-                {
-                  offerId: message.id,
-                  fid: message.fid!,
-                  fingerprint: message.fingerprint!,
-                },
-                { signal: activeSignal, retries: 2 },
-              );
+          } finally {
+            dispose();
           }
         },
         paused: (error) =>

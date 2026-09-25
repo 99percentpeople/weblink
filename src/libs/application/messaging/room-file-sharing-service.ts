@@ -10,6 +10,7 @@ import type { PeerSession } from "@/libs/domain/session";
 import type { WebRtcProtocol } from "../rtc/rtc-protocol";
 import type { FileTransferService } from "../transfer/file-transfer-service";
 import type { RoomMessagingService } from "./room-messaging-service";
+import { combineAbortSignals } from "@/libs/utils/abort-signals";
 
 export interface RoomFileSharingOptions {
   rooms: Pick<
@@ -105,9 +106,10 @@ export class RoomFileSharingService {
     const controller = new AbortController();
     this.preparing.add(controller);
     const scopeSignal = this.options.rooms.scopeSignal;
-    const signal = scopeSignal
-      ? AbortSignal.any([scopeSignal, controller.signal])
-      : controller.signal;
+    const { signal, dispose } = combineAbortSignals([
+      scopeSignal,
+      controller.signal,
+    ]);
     let preparedId: string | undefined;
     try {
       const info = await this.options.files.prepareRoomFile(
@@ -141,6 +143,7 @@ export class RoomFileSharingService {
         );
       throw error;
     } finally {
+      dispose();
       this.preparing.delete(controller);
     }
   }

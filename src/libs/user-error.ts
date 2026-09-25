@@ -71,6 +71,10 @@ const messages: readonly [RegExp, ErrorKey][] = [
     "errors.storage_unavailable",
   ],
   [
+    /^(?:UnknownError: )?Error preparing Blob\/File data to be stored in object store$/i,
+    "errors.storage_unavailable",
+  ],
+  [
     /^(Storage full|.*quota.*exceeded)$/i,
     "errors.storage_full",
   ],

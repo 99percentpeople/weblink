@@ -89,6 +89,10 @@ Vite server. They exercise real browser primitives that jsdom/fakes cannot prove
 They are **smoke tests**, not the primary exhaustive regression suite. Each one
 covers a high-value end-to-end subsystem path with a small number of scenarios.
 
+`node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
+workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This
+checks the API compatibility path; it does not substitute for iPhone testing.
+
 Commands:
 
 ```sh

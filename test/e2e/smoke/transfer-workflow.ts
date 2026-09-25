@@ -44,6 +44,17 @@ import {
 } from "../../../src/libs/application/file-catalog-index";
 import { FileCatalogService } from "../../../src/libs/application/file-catalog-service";
 
+// Exercise the supported Safari 16 / 17.0-17.3 API surface in real transfers.
+if (
+  new URLSearchParams(location.search).has(
+    "without-abort-any",
+  )
+)
+  Object.defineProperty(AbortSignal, "any", {
+    configurable: true,
+    value: undefined,
+  });
+
 const transferDefaults = getDefaultAppOptions();
 
 const assert: (
@@ -965,7 +976,7 @@ async function main() {
     );
     report = {
       ok: true,
-      transport: "real Chromium RTCDataChannel",
+      transport: "real RTCDataChannel",
       cache: "real IndexedDB",
       compression: "real compression/decompression Workers",
       sharedFileBytes: source.size,
@@ -986,6 +997,9 @@ async function main() {
   }
   window.__SPEED_TEST_REPORT__ = {
     ...(report as Record<string, unknown>),
+    browser: navigator.userAgent,
+    abortSignalAnyAvailable:
+      typeof AbortSignal.any === "function",
     roomFiles: await runRoomFileSmoke(),
     contentLibrary: await runContentLibrarySmoke(),
     sharedFiles: await runSharedFilesSmoke(),
@@ -1131,7 +1145,7 @@ async function fingerprintBenchmark() {
     renderedFramesDuringWorker: frames,
     maxFrameGapMs: Math.round(maxFrameGapMs),
     environment:
-      "headless Chromium; synthetic file, no active camera",
+      "headless browser; synthetic file, no active camera",
   };
 }
 

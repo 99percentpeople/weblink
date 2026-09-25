@@ -168,12 +168,15 @@ async function main() {
     await vite.listen();
     const address = vite.httpServer.address();
     const query =
-      chatUi && process.env.CHAT_TEST_SCREENSHOT
-        ? "?snapshot=1"
-        : cacheBenchmark &&
-            process.argv.includes("--repeating")
-          ? "?repeating=1"
-          : "";
+      transferTest &&
+      process.argv.includes("--legacy-abort")
+        ? "?without-abort-any=1"
+        : chatUi && process.env.CHAT_TEST_SCREENSHOT
+          ? "?snapshot=1"
+          : cacheBenchmark &&
+              process.argv.includes("--repeating")
+            ? "?repeating=1"
+            : "";
     const url = `http://127.0.0.1:${address.port}/${entry}${query}`;
     const probe = await fetch(url);
     if (!probe.ok)
