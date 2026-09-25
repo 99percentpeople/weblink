@@ -169,10 +169,6 @@ describe("meeting source exit ownership", () => {
       commitLayout();
       expect(f.peerTile.style.position).toBe("fixed");
       expect(f.peerTile.inert).toBe(true);
-      expect(f.peerTile).toHaveAttribute(
-        "data-motion-layout",
-        "meeting-source:peer",
-      );
       const exit = fixture.animations.findLast(
         (animation) => animation.opacity === 0,
       )!;

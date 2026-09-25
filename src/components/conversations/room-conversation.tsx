@@ -1,3 +1,4 @@
+import { layoutScroll } from "@/components/ui/motion-layout";
 import {
   createMemo,
   createSignal,
@@ -175,6 +176,7 @@ export function RoomConversation(props: {
         <div
           ref={scroll.viewportRef}
           data-slot="chat-viewport"
+          use:layoutScroll
           tabIndex={0}
           class="scrollbar-thin h-full overflow-y-auto overscroll-contain
             outline-none"

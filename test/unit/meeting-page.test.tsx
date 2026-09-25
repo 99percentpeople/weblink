@@ -25,6 +25,7 @@ import Video from "@/routes/home";
 import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 import { directConversationId } from "@/libs/domain/conversation";
+import { openMediaRoute } from "@/components/conversations/media-hash-route";
 
 const fixture = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -1476,6 +1477,44 @@ describe("meeting page navigation and panels", () => {
     ).toHaveAttribute("aria-selected", "true");
     expect(fixture.navigate).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).not.toHaveBeenCalled();
+    expect(fixture.setSearch).not.toHaveBeenCalled();
+  });
+
+  it("reveals a gallery's conversation without overwriting its media history entry", () => {
+    window.innerWidth = 390;
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    openMediaRoute({
+      conversationId: "historical-room",
+      messageId: "photo",
+    });
+    expect(
+      screen.getByTestId("chat-view"),
+    ).toHaveTextContent("historical-room");
+    expect(location.hash).toBe(
+      "#/media/historical-room/photo",
+    );
+    expect(history.state.weblinkMedia).toEqual({
+      path: "/",
+      returnHash: "",
+    });
+    openMediaRoute(
+      {
+        conversationId: "historical-room",
+        messageId: "next-photo",
+      },
+      true,
+    );
+    expect(location.hash).toBe(
+      "#/media/historical-room/next-photo",
+    );
+    expect(fixture.setSearch).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
   });
 
   it("keeps a desktop panel closed after the default panel route is initialized", async () => {

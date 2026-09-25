@@ -1,3 +1,4 @@
+import { layoutScroll } from "@/components/ui/motion-layout";
 import { userErrorMessage } from "@/libs/user-error";
 import { useLocation } from "@solidjs/router";
 import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
@@ -257,6 +258,7 @@ export function ChatConversation(props: {
               <div
                 ref={scroll.viewportRef}
                 data-slot="chat-viewport"
+                use:layoutScroll
                 tabIndex={0}
                 class="scrollbar-thin scrollbar-thumb-border
                   scrollbar-track-transparent h-full overflow-y-auto

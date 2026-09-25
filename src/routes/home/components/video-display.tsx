@@ -1,3 +1,5 @@
+import { Motion } from "@/components/ui/motion";
+import { layoutOverlay } from "@/components/ui/motion-layout";
 import { IconVolumeUpFilled } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libs/cn";
@@ -275,7 +277,8 @@ export const VideoDisplay = (
           when={props.stream}
           fallback={
             <ClientAvatar
-              data-motion-layout-size="avatar"
+              as={Motion.span}
+              layoutSize="avatar"
               class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
                 -translate-x-1/2 -translate-y-1/2 text-2xl"
               avatar={props.avatar}
@@ -287,7 +290,8 @@ export const VideoDisplay = (
             when={videoStream()}
             fallback={
               <ClientAvatar
-                data-motion-layout-size="avatar"
+                as={Motion.span}
+                layoutSize="avatar"
                 class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
                   -translate-x-1/2 -translate-y-1/2 text-2xl"
                 avatar={props.avatar}
@@ -370,7 +374,7 @@ export const VideoDisplay = (
           </Show>
         </Show>
         <div
-          data-motion-layout-overlay="name"
+          use:layoutOverlay={"name"}
           class="absolute top-1 right-1 left-1 flex gap-1"
         >
           <Badge

@@ -1,3 +1,4 @@
+import { layoutSize } from "@/components/ui/motion-layout";
 import { t } from "@/i18n";
 
 export function MeetingPipPlaceholder(props: {
@@ -5,14 +6,14 @@ export function MeetingPipPlaceholder(props: {
 }) {
   return (
     <section
-      class="[container-type:size] flex min-h-0 min-w-0 flex-1 flex-col
+      class="@container-[size] flex min-h-0 min-w-0 flex-1 flex-col
         items-center justify-center overflow-auto p-6 text-center"
       aria-label={t("meeting.pip_elsewhere")}
     >
       <div
         class="flex w-full max-w-[32em] shrink-0 flex-col items-center
           gap-3"
-        data-motion-layout-size="placeholder-content"
+        use:layoutSize={"placeholder-content"}
       >
         <svg
           class="text-ring h-auto max-h-[32cqh] w-[min(240px,70%)] shrink-0"

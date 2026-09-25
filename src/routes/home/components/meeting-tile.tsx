@@ -33,7 +33,6 @@ export function MeetingTile(props: {
   ref?: (element: HTMLElement) => void;
   compact?: boolean;
   playbackActive?: boolean;
-  exiting?: boolean;
   exitRect?: DOMRect;
   onSelect?: () => void;
   sourceId?: string;
@@ -97,9 +96,6 @@ export function MeetingTile(props: {
         props.sourceId
           ? `meeting-source:${props.sourceId}`
           : undefined
-      }
-      data-motion-layout-exiting={
-        props.exiting ? "" : undefined
       }
       data-source-kind={props.sourceKind}
       data-source-local={props.local === true}

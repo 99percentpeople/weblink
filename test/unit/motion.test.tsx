@@ -84,6 +84,61 @@ function Example() {
 }
 
 describe("Motion component lifecycle", () => {
+  it("cancels unrendered animations and still applies updates and completes exit", async () => {
+    const [opacity, setOpacity] = createSignal(1);
+    const [present, setPresent] = createSignal(true);
+    let parent!: HTMLDivElement;
+    render(() => (
+      <div ref={parent}>
+        <AnimatePresence when={present()}>
+          <Motion.div
+            data-testid="panel"
+            animate={{ opacity: opacity() }}
+            exit={{ opacity: 0 }}
+          />
+        </AnimatePresence>
+      </div>
+    ));
+    const panel = screen.getByTestId("panel");
+    const failCommit = () => {
+      throw new DOMException(
+        "Target element is not rendered",
+        "InvalidStateError",
+      );
+    };
+    const entering = engine.animations.at(-1)!;
+    entering.stop.mockImplementation(failCommit);
+    parent.style.display = "none";
+    expect(() => setOpacity(0.5)).not.toThrow();
+    expect(entering.cancel).toHaveBeenCalledOnce();
+    expect(engine.animations).toHaveLength(2);
+    expect(screen.getByTestId("panel")).toBe(panel);
+    const updated = engine.animations.at(-1)!;
+    updated.stop.mockImplementation(failCommit);
+    expect(() => setPresent(false)).not.toThrow();
+    expect(updated.cancel).toHaveBeenCalledOnce();
+    expect(panel).toBeInTheDocument();
+    engine.animations.at(-1)!.complete();
+    await waitFor(() =>
+      expect(panel).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not suppress unrelated animation failures", () => {
+    const [opacity, setOpacity] = createSignal(1);
+    render(() => (
+      <Motion.div animate={{ opacity: opacity() }} />
+    ));
+    const error = new TypeError("Invalid animation target");
+    engine.animations
+      .at(-1)!
+      .stop.mockImplementation(() => {
+        throw error;
+      });
+    expect(() => setOpacity(0.5)).toThrow(error);
+    expect(engine.animations).toHaveLength(1);
+  });
+
   it("composes the chat button with UI Button, disabling exit and retaining rapid reopen", async () => {
     const [visible, setVisible] = createSignal(true);
     const onClick = vi.fn(() => setVisible(false));

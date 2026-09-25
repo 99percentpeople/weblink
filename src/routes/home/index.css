@@ -186,17 +186,19 @@
 }
 .meeting-thumbnails {
   @apply flex min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain pb-1;
+  /* The controls leave grid flow while animating; keep the rail in its own row. */
+  grid-column: 1;
+  grid-row: -2 / -1;
   gap: var(--meeting-grid-gap, --spacing(3));
   scrollbar-color: var(--muted-foreground) transparent;
   scrollbar-width: thin;
-  scroll-snap-type: x proximity;
 }
 .meeting-thumbnails.is-collapsed {
   @apply hidden;
 }
-.meeting-thumbnails[data-motion-layout-active] {
+.meeting-thumbnails.motion-layout-active {
   /* Views cross this boundary on their way between the grid and the rail. */
-  @apply snap-none overflow-visible;
+  @apply overflow-visible;
 }
 .meeting-thumbnails-toolbar {
   @apply flex min-h-6 min-w-0 shrink-0 items-center justify-center;
@@ -215,7 +217,7 @@
   @apply size-3.5;
 }
 .meeting-thumbnails .meeting-tile {
-  @apply aspect-video h-full min-h-0 w-auto flex-none snap-start;
+  @apply aspect-video h-full min-h-0 w-auto flex-none;
 }
 .meeting-thumbnails .meeting-icon-button {
   @apply size-7;

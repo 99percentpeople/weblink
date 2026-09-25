@@ -17,9 +17,9 @@ import {
   type MeetingStageHandle,
 } from "./meeting-stage";
 import {
-  createLayoutTransition,
-  createLayoutValue,
-} from "@/libs/hooks/layout-transition";
+  createMotionLayout,
+  MotionLayout,
+} from "@/components/ui/motion-layout";
 
 export function MeetingPipWindow(props: {
   window: Window;
@@ -35,14 +35,13 @@ export function MeetingPipWindow(props: {
 }) {
   let page: HTMLElement | undefined;
   let stage: MeetingStageHandle | undefined;
-  const transitionLayout = createLayoutTransition(
-    () => page,
-    ".meeting-stage [data-motion-layout]",
-    () => stage?.measure(),
-  );
-  const displayedToolbarCollapsed = createLayoutValue(
+  const layout = createMotionLayout({
+    root: () => page,
+    afterUpdate: () => stage?.measure(),
+  });
+  const transitionLayout = layout.transition;
+  const displayedToolbarCollapsed = layout.value(
     () => props.toolbarCollapsed,
-    transitionLayout,
   );
   const { media } = useMeetingMedia();
   const roomActions = useRoomActions();
@@ -57,60 +56,64 @@ export function MeetingPipWindow(props: {
   });
   return (
     <Portal mount={target.body}>
-      <main
-        ref={page}
-        class="meeting meeting-pip"
-        classList={{
-          "is-controls-collapsed":
-            displayedToolbarCollapsed(),
-        }}
-        aria-label={t("meeting.pip_title")}
-      >
-        <MeetingStage
-          compact
-          ref={(value) => {
-            stage = value;
+      <MotionLayout value={layout}>
+        <main
+          ref={page}
+          class="meeting meeting-pip"
+          classList={{
+            "is-controls-collapsed":
+              displayedToolbarCollapsed(),
           }}
-          transitionLayout={transitionLayout}
-          sources={props.sources}
-          pinnedId={props.featuredId}
-          hideRailToggle={displayedToolbarCollapsed()}
-          railCollapsed={props.railCollapsed}
-          onRailCollapsedChange={
-            props.onRailCollapsedChange
-          }
-          onPin={(id) =>
-            transitionLayout(() => props.onSelect(id))
-          }
-          onStop={media.stopVideoTrack}
-        />
-        <MeetingControls
-          collapsed={displayedToolbarCollapsed()}
-          onCollapsedChange={props.onToolbarCollapsedChange}
-          compact
-          media={media}
-          hasAudio={audio.hasAudio()}
-          playingAudio={audio.playState()}
-          onToggleAudio={() =>
-            audio.setPlay(!audio.playState())
-          }
-          spotlight
-          onToggleLayout={() => {}}
-          joined={Boolean(appState.roomStatus.roomId)}
-          onJoin={() => {
-            props.controls.returnToMeeting();
-            void roomActions.join();
-          }}
-          joining={
-            roomActions.busy() ||
-            appState.session.clientServiceStatus ===
-              "connecting"
-          }
-          onLeave={props.onLeave}
-          pip={props.controls}
-        />
-        <Toaster position="top-center" />
-      </main>
+          aria-label={t("meeting.pip_title")}
+        >
+          <MeetingStage
+            compact
+            ref={(value) => {
+              stage = value;
+            }}
+            transitionLayout={transitionLayout}
+            sources={props.sources}
+            pinnedId={props.featuredId}
+            hideRailToggle={displayedToolbarCollapsed()}
+            railCollapsed={props.railCollapsed}
+            onRailCollapsedChange={
+              props.onRailCollapsedChange
+            }
+            onPin={(id) =>
+              transitionLayout(() => props.onSelect(id))
+            }
+            onStop={media.stopVideoTrack}
+          />
+          <MeetingControls
+            collapsed={displayedToolbarCollapsed()}
+            onCollapsedChange={
+              props.onToolbarCollapsedChange
+            }
+            compact
+            media={media}
+            hasAudio={audio.hasAudio()}
+            playingAudio={audio.playState()}
+            onToggleAudio={() =>
+              audio.setPlay(!audio.playState())
+            }
+            spotlight
+            onToggleLayout={() => {}}
+            joined={Boolean(appState.roomStatus.roomId)}
+            onJoin={() => {
+              props.controls.returnToMeeting();
+              void roomActions.join();
+            }}
+            joining={
+              roomActions.busy() ||
+              appState.session.clientServiceStatus ===
+                "connecting"
+            }
+            onLeave={props.onLeave}
+            pip={props.controls}
+          />
+          <Toaster position="top-center" />
+        </main>
+      </MotionLayout>
     </Portal>
   );
 }

@@ -1,4 +1,5 @@
 import {
+  createMemo,
   createSignal,
   onMount,
   type JSX,
@@ -27,6 +28,12 @@ export function SidebarBrowser(
 
   const listOnly = () => props.browsing && !props.split;
   const showList = () => props.split || props.browsing;
+  // Presence keeps the list mounted after split mode ends. Retain the last
+  // visible width mode so its exit layer cannot expand across the detail pane.
+  const listSplit = createMemo<boolean>(
+    (previous) => (showList() ? props.split : previous),
+    props.split,
+  );
   const showDetail = () => props.split || !props.browsing;
   const listExitingToDetail = () =>
     !props.browsing && !props.split;
@@ -54,10 +61,13 @@ export function SidebarBrowser(
           <AnimatePresence when={showList()}>
             <Motion.div
               class={cn(
-                "flex min-h-0 w-full min-w-0 overflow-hidden",
-                props.split && "border-r",
+                "flex min-h-0 min-w-0 overflow-hidden",
+                listSplit() && "border-r",
+                listExitingToDetail() && listSplit()
+                  ? "w-60"
+                  : "w-full",
                 listExitingToDetail() &&
-                  "absolute inset-0 z-10",
+                  "absolute inset-y-0 left-0 z-10",
               )}
               initial={
                 navigationReady()

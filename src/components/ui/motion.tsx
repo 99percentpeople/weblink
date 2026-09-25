@@ -2,7 +2,6 @@ import {
   createContext,
   createEffect,
   createSignal,
-  createUniqueId,
   onCleanup,
   Show,
   splitProps,
@@ -20,6 +19,10 @@ import {
 } from "motion";
 import { animate as animateNative } from "motion/mini";
 import { createReducedMotion } from "@/libs/hooks/reduced-motion";
+import {
+  createMotionLayoutRef,
+  type MotionLayoutOptions,
+} from "@/libs/hooks/motion-layout-registry";
 
 export type MotionTarget = DOMKeyframesDefinition;
 export type MotionTransition = AnimationOptions;
@@ -84,16 +87,13 @@ export function AnimatePresence(
   );
 }
 
-type MotionOptions = {
+type MotionOptions = MotionLayoutOptions & {
   /** CSS keyframes with synchronous WAAPI startup, independent of the opener's RAF. */
   native?: boolean;
   initial?: MotionTarget | false;
   animate?: MotionTarget;
   exit?: MotionTarget;
   transition?: MotionTransition;
-  /** Opt into the enclosing createLayoutTransition scope. */
-  layout?: boolean;
-  layoutId?: string;
 };
 type HTMLTag = keyof HTMLElementTagNameMap &
   keyof JSX.IntrinsicElements;
@@ -112,11 +112,18 @@ function createMotionComponent(tag: HTMLTag) {
       "transition",
       "layout",
       "layoutId",
+      "layoutScroll",
+      "layoutContainer",
+      "layoutSize",
+      "layoutOverlay",
       "ref",
     ]);
-    const id = createUniqueId();
     const reduced = createReducedMotion();
     const presence = useContext(PresenceContext);
+    const layoutRef = createMotionLayoutRef(
+      () => local,
+      () => presence?.present() ?? true,
+    );
     let element: HTMLElement | undefined;
     let controls: AnimationPlaybackControls | undefined;
     let first = true;
@@ -125,7 +132,21 @@ function createMotionComponent(tag: HTMLTag) {
       typeof element?.animate === "function";
     const play = (target: MotionTarget) => {
       if (!element) return Promise.resolve();
-      controls?.stop();
+      try {
+        controls?.stop();
+      } catch (error) {
+        // stop() commits WAAPI styles. A connected element inside a hidden
+        // subtree cannot commit them; cancel the whole old group instead.
+        // Check the name because PiP can supply a DOMException from another realm.
+        if (
+          typeof error !== "object" ||
+          error === null ||
+          !("name" in error) ||
+          error.name !== "InvalidStateError"
+        )
+          throw error;
+        controls?.cancel();
+      }
       const run = useNative() ? animateNative : animate;
       controls = run(element, target, {
         duration: 0.2,
@@ -190,12 +211,10 @@ function createMotionComponent(tag: HTMLTag) {
         {...rest}
         ref={(node: HTMLElement) => {
           element = node;
+          layoutRef(node);
           if (typeof local.ref === "function")
             local.ref(node);
         }}
-        data-motion-layout={
-          local.layout ? (local.layoutId ?? id) : undefined
-        }
         inert={
           presence && !presence.present()
             ? true

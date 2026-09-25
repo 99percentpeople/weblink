@@ -1,3 +1,4 @@
+import { layoutContainer } from "@/components/ui/motion-layout";
 import {
   AnimatePresence,
   Motion,
@@ -218,7 +219,6 @@ export function MeetingStage(
               tileElements.set(source().id, element)
             }
             compact={props.compact}
-            exiting={!activeIds().has(source().id)}
             exitRect={exitRects().get(source().id)}
             playbackActive={
               activeIds().has(source().id) &&
@@ -318,7 +318,7 @@ export function MeetingStage(
                 classList={{
                   "is-collapsed": railCollapsed(),
                 }}
-                data-motion-layout-container="meeting-thumbnail-rail"
+                use:layoutContainer
                 inert={railCollapsed()}
                 aria-hidden={railCollapsed()}
                 aria-label={t("meeting.other_sources")}
