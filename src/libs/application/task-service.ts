@@ -62,6 +62,7 @@ export interface SharedFileTask extends Omit<
 > {
   message?: never;
   shared: true;
+  fileId: string;
   pause(): void;
   resume(): Promise<void>;
   cancel(): Promise<void>;
@@ -304,12 +305,51 @@ export function createTaskService(sources: TaskSources) {
   >();
   let sequence = 0;
   let lastChangeAt = 0;
+  // Once handed off, clearing/deleting a transfer must not resurrect its hash job.
+  const absorbedPreparations = new Set<string>();
   const tasks = createMemo<TaskListItem[]>(() => {
+    const shared = sources.sharedFiles?.() ?? [];
+    const preparations = sources.preparations?.() ?? [];
+    const preparationIds = new Set(
+      preparations.map((task) => task.id),
+    );
+    for (const id of absorbedPreparations)
+      if (!preparationIds.has(id))
+        absorbedPreparations.delete(id);
+    const self = sources.clientId();
+    const ownedFiles = new Set([
+      ...sources
+        .messages()
+        .flatMap((message) =>
+          message.type === "file" &&
+          message.fid &&
+          (message.client === self ||
+            message.target === self)
+            ? [message.fid]
+            : [],
+        ),
+      ...shared.map((task) => task.fileId),
+    ]);
+    const standalonePreparations = preparations.filter(
+      (task) => {
+        const owned = task.fileIds?.some((id) =>
+          ownedFiles.has(id),
+        );
+        if (owned && task.status === "completed")
+          absorbedPreparations.add(task.id);
+        // Receive verification is already represented by the transfer's finalizing
+        // state. Keep independent imports and unsuccessful identification attempts.
+        return (
+          !absorbedPreparations.has(task.id) &&
+          !(owned && isActiveTask(task))
+        );
+      },
+    );
     const current: AppTask[] = [
       ...files(),
-      ...(sources.sharedFiles?.() ?? []),
+      ...shared,
       ...speedRuns().map(speedTask),
-      ...(sources.preparations?.() ?? []),
+      ...standalonePreparations,
     ];
     const ids = new Set(current.map((task) => task.id));
     for (const id of statusChanges.keys()) {

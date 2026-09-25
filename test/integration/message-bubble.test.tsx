@@ -888,8 +888,15 @@ describe("room file offers", () => {
     },
   );
 
-  it("waits for an explicit request even with no cache, then offers preview and save after completion", async () => {
+  it("keeps the download control stable until real room-file progress exists", async () => {
     onlineSender();
+    let finishRequest!: () => void;
+    requestRoomFile.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRequest = resolve;
+        }),
+    );
     const offer = roomFileMessage();
     const view = bubble(offer);
     expect(
@@ -906,10 +913,32 @@ describe("room file offers", () => {
       name: "conversations.room_file_request",
     });
     expect(request).toBeEnabled();
+    const indicator = request.closest(
+      '[data-slot="file-transfer-indicator"]',
+    );
+    expect(indicator).toBeInTheDocument();
+    expect(
+      screen.queryByRole("progressbar", {
+        name: "tasks.progress",
+      }),
+    ).toBeNull();
     fireEvent.click(request);
     await waitFor(() =>
       expect(requestRoomFile).toHaveBeenCalledWith(offer),
     );
+    expect(request).toBeDisabled();
+    expect(
+      screen.queryByRole("progressbar", {
+        name: "tasks.progress",
+      }),
+    ).toBeNull();
+    expect(
+      request.closest(
+        '[data-slot="file-transfer-indicator"]',
+      ),
+    ).toBe(indicator);
+    finishRequest();
+    await waitFor(() => expect(request).toBeEnabled());
     expect(requestRoomFile).toHaveBeenCalledTimes(1);
 
     const file = new File(
@@ -1171,7 +1200,6 @@ describe("shared attachment bubbles and transfer controls", () => {
         client: sender ? "self" : "peer",
         target: sender ? "peer" : "self",
         transferStatus: "transfering",
-        progress: { received: 512, total: 1024 },
       });
       const [message, setMessage] = createSignal(initial);
       setAppState("cache", "cacheInfo", "binary", {
@@ -1200,10 +1228,33 @@ describe("shared attachment bubbles and transfer controls", () => {
           <MessageContent message={message()} />
         </ul>
       ));
+      const pause = screen.getByRole("button", {
+        name: "tasks.pause",
+      });
+      const indicator = pause.closest(
+        '[data-slot="file-transfer-indicator"]',
+      );
+      expect(
+        screen.queryByRole("progressbar", {
+          name: "tasks.progress",
+        }),
+      ).toBeNull();
+
+      setMessage({
+        ...initial,
+        progress: { received: 0, total: 1024 },
+      });
       const ring = screen.getByRole("progressbar", {
         name: "tasks.progress",
       });
       expect(ring.tagName.toLowerCase()).toBe("svg");
+      expect(ring).toHaveAttribute("aria-valuenow", "0");
+      expect(ring.parentElement).toBe(indicator);
+
+      setMessage({
+        ...initial,
+        progress: { received: 512, total: 1024 },
+      });
       expect(ring).toHaveAttribute("aria-valuenow", "50");
       const status = document.querySelector(
         '[data-slot="file-transfer-status"]',
@@ -1212,10 +1263,6 @@ describe("shared attachment bubbles and transfer controls", () => {
       expect(status).not.toHaveTextContent(
         "tasks.status.running",
       );
-      const pause = screen.getByRole("button", {
-        name: "tasks.pause",
-      });
-      expect(pause.parentElement).toBe(ring.parentElement);
       fireEvent.click(pause);
       await waitFor(() =>
         expect(pauseFile).toHaveBeenCalledWith(
@@ -1229,7 +1276,11 @@ describe("shared attachment bubbles and transfer controls", () => {
         "active",
         undefined,
       );
-      setMessage({ ...initial, transferStatus: "paused" });
+      setMessage({
+        ...initial,
+        transferStatus: "paused",
+        progress: { received: 512, total: 1024 },
+      });
       expect(status).toHaveTextContent(
         "tasks.status.paused",
       );

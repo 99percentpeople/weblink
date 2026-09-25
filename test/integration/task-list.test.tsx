@@ -13,6 +13,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { TaskList } from "@/components/task-list";
@@ -23,6 +24,7 @@ import {
 import { useAppState } from "@/libs/state/app-state-context";
 import type { FileTransferMessage } from "@/libs/domain/message";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
+import type { FilePreparation } from "@/libs/application/file-fingerprint-service";
 import type { FileTransferer } from "@/libs/domain/transfer/file-transferer";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import type { PeerSession } from "@/libs/domain/session";
@@ -61,6 +63,9 @@ let current: SpeedTestState;
 let setMessages: (messages: FileTransferMessage[]) => void;
 let setTransfers: (transfers: FileTransferStates) => void;
 let setShared: (shared: SharedFileTask[]) => void;
+let setPreparations: (
+  preparations: FilePreparation[],
+) => void;
 const message = (
   props: Partial<FileTransferMessage> = {},
 ): FileTransferMessage => ({
@@ -120,8 +125,13 @@ beforeEach(() => {
       SharedFileTask[]
     >([]);
     setShared = writeShared;
+    const [preparations, writePreparations] = createSignal<
+      FilePreparation[]
+    >([]);
+    setPreparations = writePreparations;
     tasks = createTaskService({
       sharedFiles,
+      preparations,
       clientId: () => "self",
       messages,
       transfers,
@@ -149,6 +159,85 @@ afterEach(() => {
 });
 
 describe("unified task list controls", () => {
+  it("uses one circular indicator for identification and reflects completion instead of leaving an active task at 100%", () => {
+    const preparation: FilePreparation = {
+      id: "hash",
+      kind: "file-prepare",
+      peerId: "",
+      fileName: "prepare.bin",
+      createdAt: 30,
+      status: "running",
+      bytes: 0,
+      total: 1024,
+      cancel: vi.fn(),
+    };
+    setPreparations([preparation]);
+    render(() => <TaskList onInspect={inspect} />);
+    const row = within(
+      screen.getByText("prepare.bin").closest("li")!,
+    );
+    const ring = row.getByRole("progressbar", {
+      name: "tasks.progress",
+    });
+    expect(ring.tagName.toLowerCase()).toBe("svg");
+    expect(row.getAllByRole("progressbar")).toHaveLength(1);
+    expect(ring).toHaveAttribute("aria-valuenow", "0");
+    setPreparations([{ ...preparation, bytes: 512 }]);
+    expect(ring).toHaveAttribute("aria-valuenow", "50");
+    setPreparations([
+      { ...preparation, status: "completed", bytes: 1024 },
+    ]);
+    expect(row.getByRole("progressbar")).toBe(ring);
+    expect(ring).toHaveAttribute("aria-valuenow", "100");
+    expect(
+      row.getByText("tasks.status.completed"),
+    ).toBeInTheDocument();
+    expect(
+      row.queryByRole("button", {
+        name: "common.action.cancel",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps identification cancellable with the circular indicator", async () => {
+    const preparation: FilePreparation = {
+      id: "hash",
+      kind: "file-prepare",
+      peerId: "",
+      fileName: "prepare.bin",
+      createdAt: 30,
+      status: "running",
+      bytes: 512,
+      total: 1024,
+      cancel: vi.fn(() => {
+        setPreparations([
+          { ...preparation, status: "cancelled" },
+        ]);
+      }),
+    };
+    setPreparations([preparation]);
+    render(() => <TaskList onInspect={inspect} />);
+    const row = within(
+      screen.getByText("prepare.bin").closest("li")!,
+    );
+    fireEvent.click(
+      row.getByRole("button", {
+        name: "common.action.cancel",
+      }),
+    );
+    expect(preparation.cancel).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(
+        row.getByText("tasks.status.cancelled"),
+      ).toBeInTheDocument(),
+    );
+    expect(row.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "50",
+    );
+    expect(pause).not.toHaveBeenCalled();
+  });
+
   it("searches file names and members without changing the underlying tasks", () => {
     render(() => <TaskList onInspect={inspect} />);
     const search = screen.getByRole("searchbox", {
@@ -449,6 +538,7 @@ describe("unified task list controls", () => {
       });
       const shared: SharedFileTask = {
         id: "shared-task",
+        fileId: "shared-file",
         shared: true,
         peerId: "peer",
         fileName: "shared.bin",

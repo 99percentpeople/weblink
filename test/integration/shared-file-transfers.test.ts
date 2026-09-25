@@ -181,6 +181,7 @@ describe("shared file authorization and independent jobs", () => {
       await b.shared.download("a", info);
       const transfer = b.created[0];
       const task = b.shared.tasks()[0];
+      expect(task.fileId).toBe(transfer.cache.id);
       transfer.dispatchEvent("progress", {
         received: 7,
         total: info.fileSize,

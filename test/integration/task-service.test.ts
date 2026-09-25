@@ -27,6 +27,7 @@ import type {
 import type { PeerSession } from "@/libs/domain/session";
 import type { FileMetaData } from "@/libs/domain/file";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
+import type { FilePreparation } from "@/libs/application/file-fingerprint-service";
 
 const disposers: Array<() => void> = [];
 afterEach(() => {
@@ -86,12 +87,17 @@ function setup(initial: StoreMessage[] = []) {
     const [preparations, setPreparations] = createSignal<
       ReturnType<NonNullable<TaskSources["preparations"]>>
     >([]);
+    const [sharedFiles, setSharedFiles] = createSignal<
+      ReturnType<NonNullable<TaskSources["sharedFiles"]>>
+    >([]);
     const sources: TaskSources = {
       clientId: () => "self",
       messages,
       caches,
       transfers,
       preparations,
+      sharedFiles,
+      clearSharedFiles: () => setSharedFiles([]),
     };
     return {
       service: createTaskService(sources),
@@ -99,6 +105,7 @@ function setup(initial: StoreMessage[] = []) {
       setCaches,
       setTransfers,
       setPreparations,
+      setSharedFiles,
       messages,
     };
   });
@@ -200,6 +207,182 @@ describe("application task list", () => {
       "file:b",
       "file:a",
     ]);
+  });
+
+  it.each([
+    "private-send",
+    "private-receive",
+    "room-send",
+    "room-receive",
+  ])(
+    "absorbs completed identification into its %s task without restoring it after clearing history",
+    (kind) => {
+      const f = setup();
+      const preparation: FilePreparation = {
+        id: "hash",
+        kind: "file-prepare",
+        fileIds: ["file-1"],
+        peerId: "",
+        fileName: "sample.bin",
+        createdAt: 50,
+        status: "running",
+        bytes: 1024,
+        total: 1024,
+        cancel: vi.fn(),
+      };
+      f.setPreparations([preparation]);
+      expect(f.service.activeCount()).toBe(1);
+      f.setPreparations([
+        { ...preparation, status: "completed" },
+      ]);
+      expect(f.service.tasks()).toHaveLength(1);
+      expect(f.service.activeCount()).toBe(0);
+      const room = kind.startsWith("room");
+      const outgoing = kind.endsWith("send");
+      f.setMessages([
+        file({
+          client: outgoing ? "self" : "peer",
+          target: outgoing ? "peer" : "self",
+          transferStatus: "complete",
+          ...(room
+            ? {
+                room: {
+                  roomId: "room",
+                  senderName: "Sender",
+                  senderAvatar: null,
+                },
+                roomTransfers: outgoing
+                  ? { peer: { status: "complete" } }
+                  : undefined,
+              }
+            : {}),
+        }),
+      ]);
+      expect(f.service.tasks()).toHaveLength(1);
+      expect(f.service.tasks()[0]).toMatchObject({
+        kind: outgoing ? "file-send" : "file-receive",
+        status: "completed",
+      });
+      f.service.clearFinished();
+      expect(f.service.tasks()).toEqual([]);
+      f.setMessages([]);
+      expect(f.service.tasks()).toEqual([]);
+    },
+  );
+
+  it("counts receive verification as part of the transfer, not another active task", () => {
+    const f = setup([
+      file({
+        client: "peer",
+        target: "self",
+        transferStatus: "transfering",
+      }),
+    ]);
+    f.setCaches({
+      "file-1": {
+        id: "file-1",
+        fileName: "sample.bin",
+        fileSize: 1024,
+        chunkSize: 512,
+        isMerging: true,
+        cachedBytes: 1024,
+      },
+    });
+    f.setPreparations([
+      {
+        id: "hash",
+        kind: "file-prepare",
+        fileIds: ["file-1"],
+        peerId: "",
+        fileName: "sample.bin",
+        createdAt: 50,
+        status: "running",
+        bytes: 512,
+        total: 1024,
+        cancel: vi.fn(),
+      },
+    ]);
+    expect(f.service.tasks()).toHaveLength(1);
+    expect(f.service.tasks()[0].status).toBe("finalizing");
+    expect(f.service.activeCount()).toBe(1);
+  });
+
+  it("retains standalone identification, different file IDs, and failed or cancelled attempts", () => {
+    const f = setup([file({ transferStatus: "complete" })]);
+    const base: FilePreparation = {
+      id: "hash",
+      kind: "file-prepare",
+      peerId: "",
+      fileName: "sample.bin",
+      createdAt: 50,
+      status: "completed",
+      bytes: 1024,
+      total: 1024,
+      cancel: vi.fn(),
+    };
+    f.setPreparations([
+      { ...base, id: "standalone" },
+      { ...base, id: "different", fileIds: ["other-file"] },
+      {
+        ...base,
+        id: "failed",
+        fileIds: ["file-1"],
+        status: "failed",
+        error: "Worker failed",
+      },
+      {
+        ...base,
+        id: "cancelled",
+        fileIds: ["file-1"],
+        status: "cancelled",
+      },
+    ]);
+    expect(f.service.tasks()).toHaveLength(5);
+    expect(
+      f.service
+        .tasks()
+        .filter((task) => task.kind === "file-prepare"),
+    ).toHaveLength(4);
+  });
+
+  it("absorbs directory-download verification using its local file ID", () => {
+    const f = setup();
+    f.setSharedFiles([
+      {
+        id: "download",
+        fileId: "local-reference",
+        shared: true,
+        kind: "file-receive",
+        peerId: "peer",
+        fileName: "sample.bin",
+        createdAt: 50,
+        status: "completed",
+        bytes: 1024,
+        total: 1024,
+        canPause: false,
+        pause: vi.fn(),
+        resume: vi.fn(),
+        cancel: vi.fn(),
+      },
+    ]);
+    f.setPreparations([
+      {
+        id: "hash",
+        kind: "file-prepare",
+        fileIds: ["local-reference"],
+        peerId: "",
+        fileName: "sample.bin",
+        createdAt: 50,
+        status: "completed",
+        bytes: 1024,
+        total: 1024,
+        cancel: vi.fn(),
+      },
+    ]);
+    expect(f.service.tasks()).toHaveLength(1);
+    expect(f.service.tasks()[0].id).toBe("download");
+    f.service.clearFinished();
+    expect(f.service.tasks()).toEqual([]);
   });
 
   it("uses the same status ordering for file preparation and retains it when other history is cleared", () => {

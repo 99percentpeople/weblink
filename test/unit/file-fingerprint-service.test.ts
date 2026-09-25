@@ -64,6 +64,36 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("file fingerprint worker lifecycle", () => {
+  it("associates a shared hash job with every local file reference, including reuse after completion", async () => {
+    const f = setup();
+    const first = f.service.hash(f.file, {
+      fileId: "first",
+    });
+    const second = f.service.hash(f.file, {
+      fileId: "second",
+    });
+    const worker = await started(f.workers);
+    worker.reply({ bytes: f.file.size });
+    expect(f.service.tasks()).toHaveLength(1);
+    expect(f.service.tasks()[0]).toMatchObject({
+      fileIds: ["first", "second"],
+      bytes: f.file.size,
+      status: "running",
+    });
+    worker.reply({ fingerprint: f.fingerprint });
+    await Promise.all([first, second]);
+    expect(f.service.tasks()[0].status).toBe("completed");
+    await f.service.hash(f.file, { fileId: "third" });
+    await f.service.hash(f.file, { fileId: "third" });
+    expect(f.service.tasks()[0].fileIds).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
+    expect(f.service.tasks()).toHaveLength(1);
+    expect(worker.postMessage).toHaveBeenCalledOnce();
+  });
+
   it("reports an actionable error when worker loading emits a plain Event", async () => {
     const f = setup();
     const pending = f.service.hash(f.file);

@@ -1,5 +1,5 @@
 import { userErrorMessage } from "@/libs/user-error";
-import { Match, Show, Switch } from "solid-js";
+import { Match, Show, Switch, type JSX } from "solid-js";
 import { Check, Download, Pause, Play } from "lucide-solid";
 import { t } from "@/i18n";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
@@ -14,9 +14,11 @@ export function FileTransferIndicator(props: {
   complete?: boolean;
   busy?: boolean;
   action?: TransferAction;
+  showProgress?: boolean;
   label?: string;
   disabled?: boolean;
   onAction?: () => void;
+  children?: JSX.Element;
 }) {
   const percent = () =>
     props.complete
@@ -39,56 +41,62 @@ export function FileTransferIndicator(props: {
           ? "tasks.pause"
           : "tasks.resume",
     );
+  const indeterminate = () =>
+    !!props.busy &&
+    props.received === undefined &&
+    !props.complete &&
+    props.action === undefined;
+  const showRing = () =>
+    props.showProgress !== false &&
+    (props.complete ||
+      props.received !== undefined ||
+      indeterminate());
   return (
     <div
       class="relative size-11 shrink-0"
       data-slot="file-transfer-indicator"
     >
-      <svg
-        class="pointer-events-none absolute inset-0 size-full -rotate-90"
-        classList={{
-          "animate-spin":
-            !!props.busy && props.received === undefined,
-        }}
-        viewBox="0 0 44 44"
-        role="progressbar"
-        aria-label={t("tasks.progress")}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={
-          props.busy && props.received === undefined
-            ? undefined
-            : percent()
-        }
-      >
-        <circle
-          cx="22"
-          cy="22"
-          r="19"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3"
-          class="opacity-15"
-        />
-        <circle
-          cx="22"
-          cy="22"
-          r="19"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3"
-          stroke-linecap="round"
-          pathLength="100"
-          stroke-dasharray="100"
-          stroke-dashoffset={
-            100 -
-            (props.busy && props.received === undefined
-              ? 25
-              : percent())
+      <Show when={showRing()}>
+        <svg
+          class="pointer-events-none absolute inset-0 size-full -rotate-90"
+          classList={{
+            "animate-spin": indeterminate(),
+          }}
+          viewBox="0 0 44 44"
+          role="progressbar"
+          aria-label={t("tasks.progress")}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={
+            indeterminate() ? undefined : percent()
           }
-          class="transition-[stroke-dashoffset] duration-200"
-        />
-      </svg>
+        >
+          <circle
+            cx="22"
+            cy="22"
+            r="19"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            class="opacity-15"
+          />
+          <circle
+            cx="22"
+            cy="22"
+            r="19"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            pathLength="100"
+            stroke-dasharray="100"
+            stroke-dashoffset={
+              100 - (indeterminate() ? 25 : percent())
+            }
+            class="transition-[stroke-dashoffset] duration-200"
+          />
+        </svg>
+      </Show>
       <Show
         when={props.action}
         fallback={
@@ -99,9 +107,11 @@ export function FileTransferIndicator(props: {
             <Show
               when={props.complete}
               fallback={
-                <Show when={!props.busy}>
-                  <Pause class="size-4 opacity-50" />
-                </Show>
+                props.children ?? (
+                  <Show when={!props.busy}>
+                    <Pause class="size-4 opacity-50" />
+                  </Show>
+                )
               }
             >
               <Check class="size-4" />
@@ -114,6 +124,9 @@ export function FileTransferIndicator(props: {
           class="hover:bg-foreground/10 focus-visible:ring-ring absolute
             inset-1 flex items-center justify-center rounded-full
             outline-none focus-visible:ring-2 disabled:opacity-40"
+          classList={{
+            "bg-foreground/5": !showRing(),
+          }}
           aria-label={label()}
           title={label()}
           disabled={props.disabled}

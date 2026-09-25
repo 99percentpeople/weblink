@@ -6,12 +6,16 @@ import {
 } from "@/libs/domain/protocol/file-fingerprint";
 
 export interface FingerprintOptions {
+  /** Local reference whose transfer owns this identification/verification phase. */
+  fileId?: string;
   signal?: AbortSignal;
   onProgress?(bytes: number): void;
 }
 export interface FilePreparation {
   id: string;
   kind: "file-prepare";
+  /** A deduplicated hash job can prepare references for several recipients. */
+  fileIds?: readonly string[];
   peerId: string;
   fileName: string;
   createdAt: number;
@@ -27,6 +31,7 @@ export interface FilePreparation {
   error?: string;
 }
 interface Job {
+  id: string;
   promise: Promise<FileFingerprint>;
   controller: AbortController;
   listeners: Set<(bytes: number) => void>;
@@ -65,14 +70,15 @@ export class FileFingerprintService {
     if (!job) {
       const controller = new AbortController();
       const listeners = new Set<(bytes: number) => void>();
+      const id = crypto.randomUUID();
       const next: Job = {
+        id,
         controller,
         listeners,
         users: 0,
         done: false,
         promise: Promise.resolve(null!),
       };
-      const id = crypto.randomUUID();
       const update = (patch: Partial<FilePreparation>) =>
         this.state[1]((items) =>
           items.map((item) =>
@@ -89,6 +95,7 @@ export class FileFingerprintService {
         {
           id,
           kind: "file-prepare",
+          fileIds: options.fileId ? [options.fileId] : [],
           peerId: "",
           fileName: file instanceof File ? file.name : "",
           createdAt: Date.now(),
@@ -140,6 +147,19 @@ export class FileFingerprintService {
       job = next;
     }
     const current = job;
+    const fileId = options.fileId;
+    if (fileId)
+      this.state[1]((items) =>
+        items.map((item) =>
+          item.id === current.id &&
+          !item.fileIds?.includes(fileId)
+            ? {
+                ...item,
+                fileIds: [...(item.fileIds ?? []), fileId],
+              }
+            : item,
+        ),
+      );
     current.users++;
     if (options.onProgress)
       current.listeners.add(options.onProgress);

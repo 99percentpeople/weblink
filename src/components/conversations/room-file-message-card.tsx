@@ -223,6 +223,13 @@ export function RoomFileMessageCard(props: {
                   pending() ||
                   merging()
                 }
+                showProgress={
+                  !!incomingTransfer() ||
+                  !!props.message.localContentPending ||
+                  pending() ||
+                  merging() ||
+                  !!props.message.transferStatus
+                }
                 action={
                   merging()
                     ? undefined

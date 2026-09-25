@@ -435,6 +435,7 @@ describe("sidebar shared directory", () => {
     download.mockImplementationOnce(async () => {
       setDownloadProgress({
         id: "task",
+        fileId: "local-file",
         peerId: "b",
         kind: "file-receive",
         shared: true,
@@ -457,7 +458,20 @@ describe("sidebar shared directory", () => {
         name: "shared_files.get",
       }),
     );
-    expect(screen.getByRole("progressbar")).toBeDefined();
+    // Waiting must not revive the old 25% indeterminate download arc.
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "tasks.pause" }),
+    ).toBeDefined();
+    setDownloadProgress((task) => ({
+      ...task!,
+      status: "running",
+      bytes: 0,
+    }));
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "0",
+    );
     setDownloadProgress((task) => ({
       ...task!,
       status: "running",
@@ -642,6 +656,7 @@ describe("sidebar shared directory", () => {
       });
       setDownloadProgress({
         id: "task",
+        fileId: "local-file",
         peerId: "b",
         kind: "file-receive",
         shared: true,

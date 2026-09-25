@@ -16,6 +16,57 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared file library", () => {
+  it.each(["send-reference", undefined])(
+    "associates send identification with the published reference (%s)",
+    async (id) => {
+      const f = setup();
+      const file = new File(["abc"], "sample.bin");
+      const controller = new AbortController();
+      const onProgress = vi.fn();
+      const cache = await f.library.prepare(
+        file,
+        { id, chunkSize: 2 },
+        {
+          signal: controller.signal,
+          onProgress,
+        },
+      );
+      expect(f.hash).toHaveBeenCalledWith(file, {
+        fileId: cache.id,
+        signal: controller.signal,
+        onProgress,
+      });
+    },
+  );
+
+  it("associates receive verification with its cache ID rather than its filename", async () => {
+    const f = setup();
+    const cache = await f.storage("receive-reference");
+    const file = new File(["abc"], "sample.bin");
+    await cache.setInfo({
+      fileName: file.name,
+      fileSize: file.size,
+      chunkSize: 2,
+      file,
+    });
+    const controller = new AbortController();
+    await f.library.verifyReceived(
+      cache,
+      controller.signal,
+    );
+    expect(f.hash).toHaveBeenCalledWith(file, {
+      signal: controller.signal,
+      fileId: "receive-reference",
+    });
+  });
+
+  it("keeps standalone library imports independent from transfers", async () => {
+    const f = setup();
+    const file = new File(["abc"], "sample.bin");
+    await f.library.importFile(file);
+    expect(f.hash).toHaveBeenCalledWith(file, {});
+  });
+
   it("imports equal bytes once, retains aliases, and distinguishes same-sized different content", async () => {
     const f = setup();
     const first = await f.library.importFile(

@@ -1,7 +1,6 @@
 {
   "tasks": {
     "title": "Tasks",
-    "retention_note": "Speed-test history keeps the latest 50 runs while this page is open. Refreshing or closing the browser page ends live connections. Clearing history does not delete files or chat messages.",
     "count": "{{active}} active · {{total}} total",
     "active_count": "{{count}} active tasks",
     "search": "Search files or members…",
@@ -16,7 +15,7 @@
       "file-send": "Send file",
       "file-receive": "Receive file",
       "speed-test": "Peer speed test",
-      "file-prepare": "Identifying file"
+      "file-prepare": "File identification"
     },
     "status": {
       "waiting": "Waiting",

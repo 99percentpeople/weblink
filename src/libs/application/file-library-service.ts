@@ -331,6 +331,8 @@ export class FileLibraryService {
     info: Partial<ChunkMetaData> = {},
     options: FingerprintOptions = {},
   ): Promise<ChunkCache> {
+    const id = info.id ?? crypto.randomUUID();
+    const fingerprintOptions = { ...options, fileId: id };
     const isLibrary = !(source instanceof File);
     let file: File;
     let fingerprint: FileFingerprint;
@@ -350,7 +352,7 @@ export class FileLibraryService {
       else {
         fingerprint = await this.options.fingerprint(
           file,
-          options,
+          fingerprintOptions,
         );
         if (
           stored.fingerprint &&
@@ -376,7 +378,7 @@ export class FileLibraryService {
       file = source;
       fingerprint = await this.options.fingerprint(
         file,
-        options,
+        fingerprintOptions,
       );
     }
     options.signal?.throwIfAborted();
@@ -387,7 +389,7 @@ export class FileLibraryService {
         {
           ...metadata(file),
           ...info,
-          id: info.id ?? crypto.randomUUID(),
+          id,
         },
         options,
         storageId,
@@ -611,7 +613,7 @@ export class FileLibraryService {
     if (!info || !file) return null;
     const fingerprint = await this.options.fingerprint(
       file,
-      { signal },
+      { signal, fileId: cache.id },
     );
     signal?.throwIfAborted();
     if (

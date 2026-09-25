@@ -7,7 +7,6 @@ import {
 } from "solid-js";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import {
   ArrowUpRight,
@@ -307,17 +306,28 @@ function TaskRow(props: {
       <Show
         when={file()}
         fallback={
-          <div
-            class="bg-muted text-muted-foreground flex size-11 items-center
-              justify-center rounded-xl"
+          <Show
+            when={preparation()}
+            fallback={
+              <div
+                class="bg-muted text-muted-foreground flex size-11 items-center
+                  justify-center rounded-xl"
+              >
+                <Gauge class="size-5" />
+              </div>
+            }
           >
-            <Show
-              when={preparation()}
-              fallback={<Gauge class="size-5" />}
-            >
-              <FileScan class="size-5" />
-            </Show>
-          </div>
+            {(task) => (
+              <FileTransferIndicator
+                received={task().bytes}
+                total={task().total}
+                complete={task().status === "completed"}
+                busy={isActiveTask(task())}
+              >
+                <FileScan class="size-4" />
+              </FileTransferIndicator>
+            )}
+          </Show>
         }
       >
         {(task) => (
@@ -424,28 +434,17 @@ function TaskRow(props: {
         </Show>
         <Show when={preparation()}>
           {(task) => (
-            <div class="space-y-1.5">
-              <div
-                class="text-muted-foreground flex justify-between gap-2 text-xs
-                  tabular-nums"
-              >
-                <span>
-                  {formatBtyeSize(task().bytes)} /{" "}
-                  {formatBtyeSize(task().total)}
-                </span>
-                <span>
-                  {percent(task().bytes, task().total)}
-                </span>
-              </div>
-              <Progress
-                aria-label={t("tasks.progress")}
-                maxValue={task().total || 1}
-                value={
-                  task().status === "completed"
-                    ? task().total || 1
-                    : task().bytes
-                }
-              />
+            <div
+              class="text-muted-foreground flex min-w-0 items-center gap-3
+                text-xs tabular-nums"
+            >
+              <span class="min-w-0 flex-1 truncate">
+                {formatBtyeSize(task().bytes)} /{" "}
+                {formatBtyeSize(task().total)}
+              </span>
+              <span class="w-9 shrink-0 text-right">
+                {percent(task().bytes, task().total)}
+              </span>
             </div>
           )}
         </Show>
@@ -837,9 +836,6 @@ export function TaskList(props: {
           {t("tasks.clear_finished")}
         </Button>
       </div>
-      <p class="text-muted-foreground shrink-0 text-xs">
-        {t("tasks.retention_note")}
-      </p>
     </section>
   );
 }

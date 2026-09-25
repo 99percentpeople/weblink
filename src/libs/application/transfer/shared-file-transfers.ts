@@ -132,6 +132,7 @@ export class SharedFileTransfers {
       task: {
         id: crypto.randomUUID(),
         shared: true,
+        fileId,
         peerId,
         fileName: info.fileName,
         total: info.fileSize,

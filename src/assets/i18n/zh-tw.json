@@ -1,7 +1,6 @@
 {
   "tasks": {
     "title": "任務列表",
-    "retention_note": "本次開啟頁面期間保留最近 50 次測速記錄。重新整理或關閉瀏覽器頁面會結束即時連線；清除記錄不會刪除檔案或聊天訊息。",
     "count": "{{active}} 項進行中 · 共 {{total}} 項",
     "active_count": "{{count}} 項進行中的任務",
     "search": "搜尋檔案或成員…",
@@ -16,7 +15,7 @@
       "file-send": "傳送檔案",
       "file-receive": "接收檔案",
       "speed-test": "客戶端測速",
-      "file-prepare": "正在識別檔案"
+      "file-prepare": "檔案識別"
     },
     "status": {
       "waiting": "等待中",
