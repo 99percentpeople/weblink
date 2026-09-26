@@ -190,7 +190,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("multiple video sources in a peer session", () => {
-  it("sends audio owners by MID only after capability negotiation and refreshes audio-only changes", () => {
+  it("sends audio owners by MID and refreshes audio-only changes", () => {
     const screen1 = new Track("video", "screen-1"),
       screen2 = new Track("video", "screen-2");
     const mic = new Track("audio", "mic"),
@@ -219,8 +219,6 @@ describe("multiple video sources in a peer session", () => {
       { mid: "0", kind: "screen" },
       { mid: "2", kind: "screen" },
     ];
-    expect(notify).toHaveBeenLastCalledWith(videos);
-    controller.setAudioSourcesSupported(true);
     const audioSources = [
       { mid: "1", kind: "screen", videoMid: "0" },
       { mid: "3", kind: "screen", videoMid: "2" },
@@ -230,16 +228,11 @@ describe("multiple video sources in a peer session", () => {
       videos,
       audioSources,
     );
-    const calls = notify.mock.calls.length;
-    controller.setAudioSourcesSupported(true);
-    expect(notify).toHaveBeenCalledTimes(calls);
     audio1.end();
     expect(notify).toHaveBeenLastCalledWith(
       videos,
       audioSources.slice(1),
     );
-    controller.setAudioSourcesSupported(false);
-    expect(notify).toHaveBeenLastCalledWith(videos);
     controller.dispose();
     expect(mic.stop).not.toHaveBeenCalled();
   });
@@ -283,26 +276,31 @@ describe("multiple video sources in a peer session", () => {
     const first = media(camera, mic);
     controller.setStream(asStream(first));
     pc.settleMids();
-    expect(notify).toHaveBeenLastCalledWith([
-      { mid: "0", kind: "camera" },
-    ]);
+    expect(notify).toHaveBeenLastCalledWith(
+      [{ mid: "0", kind: "camera" }],
+      [],
+    );
 
     first.addTrack(asTrack(screen));
     controller.setStream(asStream(first));
     pc.settleMids();
-    expect(notify).toHaveBeenLastCalledWith([
-      { mid: "0", kind: "camera" },
-      { mid: "2", kind: "screen" },
-    ]);
+    expect(notify).toHaveBeenLastCalledWith(
+      [
+        { mid: "0", kind: "camera" },
+        { mid: "2", kind: "screen" },
+      ],
+      [],
+    );
 
     controller.setStream(asStream(first));
     expect(notify).toHaveBeenCalledTimes(3);
 
     first.removeTrack(asTrack(screen));
     controller.setStream(asStream(first));
-    expect(notify).toHaveBeenLastCalledWith([
-      { mid: "0", kind: "camera" },
-    ]);
+    expect(notify).toHaveBeenLastCalledWith(
+      [{ mid: "0", kind: "camera" }],
+      [],
+    );
     expect(notify).toHaveBeenCalledTimes(4);
     controller.dispose();
   });

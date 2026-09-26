@@ -499,6 +499,7 @@ describe("typed RTC calls", () => {
     await protocol.notify(local, "stream-state", {
       mode: "media",
       videoSources: [{ mid: "2", kind: "screen" }],
+      audioSources: [],
     });
     expect(transport.sendCalls[0]!.message).toMatchObject({
       type: "stream-state",
@@ -513,6 +514,7 @@ describe("typed RTC calls", () => {
       createSessionMessage(remote, "stream-state", {
         mode: "media",
         videoSources: [{ mid: "0", kind: "camera" }],
+        audioSources: [],
       }),
     );
     expect(handler).toHaveBeenCalledTimes(1);

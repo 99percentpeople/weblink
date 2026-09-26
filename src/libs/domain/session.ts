@@ -7,7 +7,6 @@ import {
   MultiEventEmitter,
 } from "../utils/event-emitter";
 import {
-  AUDIO_SOURCES_FEATURE,
   createSessionMessage,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
@@ -138,19 +137,8 @@ export class PeerSession {
         this.createChannel(label, protocol),
       onChannel: (channel) =>
         this.dispatchEvent("channel", channel),
-      onMessage: (message) => {
-        if (
-          message.type === "client-profile" &&
-          message.client === this.targetClientId &&
-          message.target === this.clientId
-        )
-          this.media.setAudioSourcesSupported(
-            message.features?.includes(
-              AUDIO_SOURCES_FEATURE,
-            ) === true,
-          );
-        this.dispatchEvent("message", message);
-      },
+      onMessage: (message) =>
+        this.dispatchEvent("message", message),
       onMessageChannelChange: (state) =>
         this.dispatchEvent("messagechannelchange", state),
     });
@@ -174,9 +162,7 @@ export class PeerSession {
           {
             mode: "media",
             videoSources: [...videoSources],
-            ...(audioSources
-              ? { audioSources: [...audioSources] }
-              : {}),
+            audioSources: [...audioSources],
           },
         );
         void this.sendMessage(message).catch((error) => {

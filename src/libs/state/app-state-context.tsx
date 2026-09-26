@@ -637,7 +637,7 @@ export const AppStateProvider: Component<
             videoSources: message.videoSources.map(
               (source) => ({ ...source }),
             ),
-            audioSources: message.audioSources?.map(
+            audioSources: message.audioSources.map(
               (source) => ({ ...source }),
             ),
           },

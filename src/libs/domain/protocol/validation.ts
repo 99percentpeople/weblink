@@ -457,42 +457,39 @@ export function validateSessionMessage(
             (source) => (source as { mid: string }).mid,
           ),
         ).size === value.videoSources.length &&
-        optional(
-          value.audioSources,
-          (sources) =>
-            Array.isArray(sources) &&
-            sources.length <= 32 &&
-            sources.every(
-              (source) =>
-                record(source) &&
-                text(source.mid) &&
-                source.mid.length > 0 &&
-                source.mid.length <= 256 &&
-                (source.kind === "microphone"
-                  ? source.videoMid === undefined
-                  : source.kind === "screen" &&
-                    (
-                      value.videoSources as {
-                        mid: string;
-                        kind: string;
-                      }[]
-                    ).some(
-                      (video) =>
-                        video.mid === source.videoMid &&
-                        video.kind === "screen",
-                    )) &&
-                !(
-                  value.videoSources as { mid: string }[]
+        Array.isArray(value.audioSources) &&
+        value.audioSources.length <= 32 &&
+        value.audioSources.every(
+          (source) =>
+            record(source) &&
+            text(source.mid) &&
+            source.mid.length > 0 &&
+            source.mid.length <= 256 &&
+            (source.kind === "microphone"
+              ? source.videoMid === undefined
+              : source.kind === "screen" &&
+                (
+                  value.videoSources as {
+                    mid: string;
+                    kind: string;
+                  }[]
                 ).some(
-                  (video) => video.mid === source.mid,
-                ) &&
-                Object.keys(source).every((key) =>
-                  ["mid", "kind", "videoMid"].includes(key),
-                ),
+                  (video) =>
+                    video.mid === source.videoMid &&
+                    video.kind === "screen",
+                )) &&
+            !(value.videoSources as { mid: string }[]).some(
+              (video) => video.mid === source.mid,
             ) &&
-            new Set(sources.map((source) => source.mid))
-              .size === sources.length,
+            Object.keys(source).every((key) =>
+              ["mid", "kind", "videoMid"].includes(key),
+            ),
         ) &&
+        new Set(
+          value.audioSources.map(
+            (source) => (source as { mid: string }).mid,
+          ),
+        ).size === value.audioSources.length &&
         Object.keys(value).every((key) =>
           [
             "id",

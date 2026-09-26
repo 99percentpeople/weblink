@@ -1,5 +1,4 @@
 import {
-  AUDIO_SOURCES_FEATURE,
   FILE_CONTENT_FEATURE,
   SHARED_FILES_FEATURE,
 } from "@/libs/domain/protocol/messages";
@@ -158,7 +157,6 @@ export class PeerProfileService {
         {
           profile,
           features: [
-            AUDIO_SOURCES_FEATURE,
             FILE_CONTENT_FEATURE,
             SHARED_FILES_FEATURE,
           ],

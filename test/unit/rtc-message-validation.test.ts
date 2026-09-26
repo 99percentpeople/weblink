@@ -25,7 +25,7 @@ const file = createSessionMessage(peer, "request-file", {
 });
 
 describe("session message validation", () => {
-  it("accepts optional audio source snapshots and rejects ambiguous or malformed associations", () => {
+  it("requires audio source snapshots and rejects ambiguous or malformed associations", () => {
     const message = createSessionMessage(
       peer,
       "stream-state",
@@ -44,6 +44,12 @@ describe("session message validation", () => {
     expect(
       parseSessionMessage(JSON.stringify(message)),
     ).toEqual(message);
+    expect(() =>
+      validateSessionMessage({
+        ...message,
+        audioSources: undefined,
+      }),
+    ).toThrow(/Invalid P2P protocol message/);
     for (const audioSources of [
       [{ mid: "", kind: "microphone" }],
       [{ mid: "1", kind: "unknown" }],
@@ -109,6 +115,7 @@ describe("session message validation", () => {
           { mid: "0", kind: "camera" },
           { mid: "2", kind: "screen" },
         ],
+        audioSources: [],
       },
     );
     expect(
@@ -140,6 +147,7 @@ describe("session message validation", () => {
         type: "stream-state",
         mode: "media",
         videoSources: [{ mid: "2", kind: "desktop" }],
+        audioSources: [],
       },
     ],
     [
@@ -152,6 +160,7 @@ describe("session message validation", () => {
           { mid: "same", kind: "camera" },
           { mid: "same", kind: "screen" },
         ],
+        audioSources: [],
       },
     ],
     ["missing file ID", { ...file, fid: undefined }],

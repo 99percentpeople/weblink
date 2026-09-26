@@ -27,7 +27,7 @@ export interface PeerSessionMediaOptions {
     | { kind: "screen"; videoTrack: MediaStreamTrack };
   notifyStreamState(
     videoSources: readonly StreamVideoSource[],
-    audioSources?: readonly StreamAudioSource[],
+    audioSources: readonly StreamAudioSource[],
   ): void;
   onRemoteStreamChange(stream: MediaStream | null): void;
   onRemoteVideoTracksChange(
@@ -43,7 +43,6 @@ export class PeerSessionMediaController {
   private remoteStream: MediaStream | null = null;
   private streamStateNotified = false;
   private sourcesSignature = "";
-  private audioSourcesSupported = false;
   private localListeners: AbortController | null = null;
   private readonly localTrackListeners = new Map<
     MediaStreamTrack,
@@ -76,12 +75,6 @@ export class PeerSessionMediaController {
     private readonly options: PeerSessionMediaOptions,
   ) {}
 
-  setAudioSourcesSupported(supported: boolean): void {
-    if (this.audioSourcesSupported === supported) return;
-    this.audioSourcesSupported = supported;
-    this.notifyLocalStreamState(this.localStream);
-  }
-
   private notifyLocalStreamState(
     stream: MediaStream | null,
   ): void {
@@ -100,9 +93,11 @@ export class PeerSessionMediaController {
           transceiver.sender.track === track,
       )?.mid;
     };
-    const videoSources = stream
-      .getVideoTracks()
-      .filter((track) => track.readyState !== "ended")
+    const liveTracks = stream
+      .getTracks()
+      .filter((track) => track.readyState !== "ended");
+    const videoSources = liveTracks
+      .filter((track) => track.kind === "video")
       .flatMap((track) => {
         const kind =
           this.options.getVideoSourceKind?.(track);
@@ -110,28 +105,24 @@ export class PeerSessionMediaController {
         const mid = midOf(track);
         return mid ? [{ mid, kind }] : [];
       });
-    const audioSources = this.audioSourcesSupported
-      ? stream
-          .getAudioTracks()
-          .filter((track) => track.readyState !== "ended")
-          .flatMap<StreamAudioSource>((track) => {
-            const mid = midOf(track);
-            const source =
-              this.options.getAudioSource?.(track);
-            if (!mid || !source) return [];
-            if (source.kind === "microphone")
-              return [{ mid, kind: source.kind }];
-            const videoMid = midOf(source.videoTrack);
-            return videoMid &&
-              videoSources.some(
-                (video) =>
-                  video.mid === videoMid &&
-                  video.kind === "screen",
-              )
-              ? [{ mid, kind: source.kind, videoMid }]
-              : [];
-          })
-      : undefined;
+    const audioSources = liveTracks
+      .filter((track) => track.kind === "audio")
+      .flatMap<StreamAudioSource>((track) => {
+        const mid = midOf(track);
+        const source = this.options.getAudioSource?.(track);
+        if (!mid || !source) return [];
+        if (source.kind === "microphone")
+          return [{ mid, kind: source.kind }];
+        const videoMid = midOf(source.videoTrack);
+        return videoMid &&
+          videoSources.some(
+            (video) =>
+              video.mid === videoMid &&
+              video.kind === "screen",
+          )
+          ? [{ mid, kind: source.kind, videoMid }]
+          : [];
+      });
     const signature = JSON.stringify([
       videoSources,
       audioSources,
@@ -143,12 +134,10 @@ export class PeerSessionMediaController {
       return;
     this.streamStateNotified = true;
     this.sourcesSignature = signature;
-    if (audioSources)
-      this.options.notifyStreamState(
-        videoSources,
-        audioSources,
-      );
-    else this.options.notifyStreamState(videoSources);
+    this.options.notifyStreamState(
+      videoSources,
+      audioSources,
+    );
   }
 
   private applyPreferredCodecPreferences(
@@ -549,7 +538,6 @@ export class PeerSessionMediaController {
 
   resetConnection(): void {
     this.streamStateNotified = false;
-    this.audioSourcesSupported = false;
     this.connectionListeners?.abort();
     this.connectionListeners = null;
     this.senders.clear();
