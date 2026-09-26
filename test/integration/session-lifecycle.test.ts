@@ -109,6 +109,63 @@ afterEach(() => {
 });
 
 describe("PeerSession lifecycle", () => {
+  it("refreshes ICE configuration before negotiating a replacement connection and preserves relay-only", async () => {
+    let credentials: RTCIceServer[] = [
+      {
+        urls: "turn:first",
+        username: "u",
+        credential: "first",
+      },
+    ];
+    const loadIceServers = vi.fn(async () => credentials);
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      {
+        polite: false,
+        relayOnly: true,
+        loadIceServers,
+      },
+    );
+    for (const value of ["first", "refreshed"]) {
+      credentials = [
+        {
+          urls: "turn:relay",
+          username: "u",
+          credential: value,
+        },
+      ];
+      const configuration = {
+        bundlePolicy: "max-bundle" as RTCBundlePolicy,
+        iceServers: [],
+      };
+      const pc = Object.assign(
+        makePeerConnection(async () => ({
+          type: "offer",
+          sdp: "sdp",
+        })),
+        {
+          getConfiguration: vi.fn(() => configuration),
+          setConfiguration: vi.fn(),
+        },
+      );
+      attachPeerConnection(session, pc);
+      await sendOffer(session);
+      expect(pc.setConfiguration).toHaveBeenCalledWith({
+        ...configuration,
+        iceServers: credentials,
+        iceTransportPolicy: "relay",
+      });
+      expect(
+        pc.setConfiguration.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        vi.mocked(pc.setLocalDescription).mock
+          .invocationCallOrder[0],
+      );
+    }
+    expect(loadIceServers).toHaveBeenCalledTimes(2);
+    session.close();
+  });
+
   it("waits for an incoming negotiation instead of treating connecting as connected", async () => {
     const session = new PeerSession(
       makeSender("local", "remote"),
@@ -676,13 +733,16 @@ describe("SessionService lifecycle", () => {
   });
 
   it("does not resurrect a departed peer while ICE configuration is still loading", async () => {
-    let resolveIce!: (value: RTCIceServer[]) => void;
+    const resolveIce: Array<
+      (value: RTCIceServer[]) => void
+    > = [];
     const service = new SessionService({
       loadIceServers: () =>
         new Promise((resolve) => {
-          resolveIce = resolve;
+          resolveIce.push(resolve);
         }),
     });
+    expect(resolveIce).toHaveLength(0);
     const oldSender = makeSender("local", "remote");
     const newSender = makeSender("local", "remote");
     const clientService = {
@@ -711,9 +771,11 @@ describe("SessionService lifecycle", () => {
       ...client,
       createdAt: 3,
     });
-    resolveIce([]);
-    await rejected;
+    expect(resolveIce).toHaveLength(2);
+    resolveIce[1]([]);
     const session = await newJoin;
+    resolveIce[0]([]);
+    await rejected;
     expect(service.sessions.remote).toBe(session);
     expect(service.clientViewData.remote.createdAt).toBe(3);
     session.close();

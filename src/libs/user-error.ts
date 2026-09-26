@@ -83,7 +83,7 @@ const messages: readonly [RegExp, ErrorKey][] = [
     "errors.cancelled",
   ],
   [
-    /^parseTurnServer: cloudflare error response:/i,
+    /^TURN credentials request failed:/i,
     "errors.ice_credentials",
   ],
   [

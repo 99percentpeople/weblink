@@ -1,3 +1,4 @@
+import { serverTurnCredentialsUrl } from "@/libs/application/ice-server-service";
 import { createMemo } from "solid-js";
 import {
   Switch,
@@ -98,6 +99,7 @@ export default function AdvancedSettings() {
           class="flex items-center justify-between"
           checked={appState.options.relayOnly}
           disabled={
+            !serverTurnCredentialsUrl &&
             appState.options.servers.turns.length === 0
           }
           onChange={(isChecked) =>

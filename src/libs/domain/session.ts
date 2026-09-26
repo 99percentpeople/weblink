@@ -43,6 +43,7 @@ const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
 export interface PeerSessionOptions {
   polite?: boolean;
   iceServers?: RTCIceServer[];
+  loadIceServers?: () => Promise<RTCIceServer[]>;
   relayOnly?: boolean;
   getRuntimeOptions?: () => PeerSessionRuntimeOptions;
   getVideoSourceKind?: (
@@ -84,6 +85,7 @@ export class PeerSession {
     {
       polite = true,
       iceServers,
+      loadIceServers,
       relayOnly = false,
       getRuntimeOptions = () =>
         DEFAULT_PEER_SESSION_RUNTIME_OPTIONS,
@@ -101,6 +103,25 @@ export class PeerSession {
       getPeerConnection: () => this.peerConnection,
       replacePeerConnection: () =>
         this.replaceConnection("remote-restart"),
+      prepareConnection: loadIceServers
+        ? async (pc) => {
+            const servers = await loadIceServers();
+            // Credential completion cannot update a replaced/closed connection.
+            if (
+              pc !== this.peerConnection ||
+              this.status === "closed"
+            )
+              return;
+            this.iceServers = servers;
+            pc.setConfiguration({
+              ...pc.getConfiguration(),
+              iceServers: servers,
+              iceTransportPolicy: this.relayOnly
+                ? "relay"
+                : "all",
+            });
+          }
+        : undefined,
     });
     this.dataChannels = new PeerSessionChannelController({
       polite,

@@ -9,7 +9,7 @@ import type {
 } from "../domain/client";
 import { Accessor, createEffect } from "solid-js";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
-import { getIceServers } from "@/libs/domain/ice-server";
+import { loadSessionIceServers } from "./ice-server-service";
 import { catchError, catchErrorSync } from "@/libs/catch";
 import { getMeetingVideoSourceKind } from "./meeting-media-service";
 import type { SignalingService } from "../domain/signaling";
@@ -41,7 +41,6 @@ export class SessionService {
     "connecting" | "connected" | "disconnected"
   > = () => appState.session.clientServiceStatus;
 
-  iceServers: Promise<RTCIceServer[]>;
   private readonly loadIceServers: () => Promise<
     RTCIceServer[]
   >;
@@ -49,12 +48,8 @@ export class SessionService {
   constructor(options: SessionServiceOptions = {}) {
     this.loadIceServers =
       options.loadIceServers ??
-      (() => getIceServers(appState.options.servers));
-    this.iceServers = this.loadIceServers();
-  }
-
-  updateIceServers() {
-    this.iceServers = this.loadIceServers();
+      (() =>
+        loadSessionIceServers(appState.options.servers));
   }
 
   setClipboard(message: SendClipboardMessage) {
@@ -176,7 +171,7 @@ export class SessionService {
     this.pendingClients.set(client.clientId, sender);
     let iceServers: RTCIceServer[];
     try {
-      iceServers = await this.iceServers;
+      iceServers = await this.loadIceServers();
     } catch (error) {
       if (
         this.pendingClients.get(client.clientId) === sender
@@ -206,9 +201,8 @@ export class SessionService {
     const session = new PeerSession(sender, {
       polite,
       iceServers,
-      relayOnly:
-        appState.options.servers.turns.length > 0 &&
-        appState.options.relayOnly,
+      loadIceServers: this.loadIceServers,
+      relayOnly: appState.options.relayOnly,
       getRuntimeOptions: () => ({
         ordered: appState.options.ordered,
         preferredVideoCodec:
@@ -451,11 +445,6 @@ export let sessionService: SessionService;
 export function createSessionService() {
   if (!sessionService) {
     sessionService = new SessionService();
-
-    createEffect(() => {
-      appState.options.servers.turns.length;
-      sessionService.updateIceServers();
-    });
 
     createEffect(() => {
       appState.options.videoMaxBitrate;

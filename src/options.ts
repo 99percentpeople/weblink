@@ -1,3 +1,4 @@
+import { sanitizeTurnServers } from "@/libs/domain/ice-server";
 import { makePersisted } from "@solid-primitives/storage";
 import {
   createEffect,
@@ -105,6 +106,9 @@ export function initializeAppOptions() {
         servers: {
           ...defaults.servers,
           ...(parsed.servers ?? {}),
+          turns: sanitizeTurnServers(
+            parsed.servers?.turns ?? defaults.servers.turns,
+          ),
         },
       } satisfies AppOption;
     } catch (err) {

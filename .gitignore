@@ -7,8 +7,8 @@ dev-dist
 .vinxi
 
 # Environment
-.env
-.env*.local
+.env*
+!.env.example
 
 # dependencies
 node_modules

@@ -112,11 +112,7 @@ export function parseTurnServers(
         );
       const [url, username, password, authMethod] =
         parts.map((part) => part.trim());
-      const validAuthMethods = [
-        "longterm",
-        "hmac",
-        "cloudflare",
-      ];
+      const validAuthMethods = ["longterm", "hmac"];
       if (!validAuthMethods.includes(authMethod)) {
         throw Error(
           `auth method error, line ${index + 1} given ${authMethod} expected ${validAuthMethods.join(

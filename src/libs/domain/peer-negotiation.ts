@@ -26,6 +26,9 @@ export type PeerNegotiationOptions = {
   polite: boolean;
   getPeerConnection: () => RTCPeerConnection | null;
   createGeneration?: () => string;
+  prepareConnection?: (
+    pc: RTCPeerConnection,
+  ) => Promise<void>;
   // Rebuild transport/media resources and call startConnection for the new PC.
   replacePeerConnection?: () => RTCPeerConnection;
 };
@@ -45,6 +48,9 @@ export class PeerNegotiationController {
   private readonly polite: boolean;
   private readonly getPeerConnection: () => RTCPeerConnection | null;
   private readonly createGeneration: () => string;
+  private readonly prepareConnection?: (
+    pc: RTCPeerConnection,
+  ) => Promise<void>;
   private readonly replacePeerConnection?: () => RTCPeerConnection;
   private readonly queuedSignals = new Set<{
     signal: ClientSignal;
@@ -65,6 +71,7 @@ export class PeerNegotiationController {
 
   constructor(options: PeerNegotiationOptions) {
     this.sender = options.sender;
+    this.prepareConnection = options.prepareConnection;
     this.polite = options.polite;
     this.getPeerConnection = options.getPeerConnection;
     this.createGeneration =
@@ -163,6 +170,14 @@ export class PeerNegotiationController {
           pc.signalingState !== "stable"
         )
           return;
+        if (this.prepareConnection) {
+          await this.prepareConnection(pc);
+          if (
+            epoch !== this.connectionEpoch ||
+            pc !== this.getPeerConnection()
+          )
+            return;
+        }
         // Let the browser generate AND apply SDP atomically. Do not edit SDP
         // or keep a createOffer snapshot across asynchronous media changes.
         await pc.setLocalDescription();
@@ -324,6 +339,10 @@ export class PeerNegotiationController {
           `[PeerNegotiation] offer ignored due to collision, signalingState: ${pc.signalingState}`,
         );
         return;
+      }
+      if (this.prepareConnection) {
+        await this.prepareConnection(pc);
+        if (pc !== this.getPeerConnection()) return;
       }
       // Apply the accepted offer and implicit polite rollback as one operation.
       [err] = await catchError(

@@ -1,3 +1,4 @@
+import { sanitizeTurnServers } from "@/libs/domain/ice-server";
 import {
   RouteSectionProps,
   useSearchParams,
@@ -45,7 +46,6 @@ import {
   setAppOptions,
   setStarterMessageSent,
   starterMessageSent,
-  TurnServerOptions,
 } from "./options";
 import { MetaProvider, Style } from "@solidjs/meta";
 import { produce } from "solid-js/store";
@@ -143,9 +143,9 @@ const InnerApp = (props: ParentProps) => {
       );
     }
     if (search.turn) {
-      const turnServers = JSON.parse(
-        search.turn as string,
-      ) as TurnServerOptions[];
+      const turnServers = JSON.parse(search.turn as string);
+      const supportedTurnServers =
+        sanitizeTurnServers(turnServers);
 
       if (!appState.options.servers.turns) {
         setAppOptions("servers", "turns", []);
@@ -155,7 +155,7 @@ const InnerApp = (props: ParentProps) => {
         "servers",
         "turns",
         produce((state) => {
-          turnServers.forEach((server) => {
+          supportedTurnServers.forEach((server) => {
             if (
               state?.findIndex(
                 (s) => s.url === server.url,

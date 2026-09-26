@@ -211,11 +211,16 @@ describe("connection settings", () => {
     render(() => (
       <ConnectionSettings diagnostics={diagnostics} />
     ));
-    expect(
-      screen.queryByRole("button", {
-        name: "common.action.check_availability",
-      }),
-    ).toBeNull();
+    for (const field of Object.values(fields())) {
+      expect(
+        within(field.closest("label")!).queryByRole(
+          "button",
+          {
+            name: "common.action.check_availability",
+          },
+        ),
+      ).toBeNull();
+    }
   });
 
   it("retains auto-join and server-sharing switches and the initial-join restriction", () => {

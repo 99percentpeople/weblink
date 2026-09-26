@@ -93,16 +93,63 @@ Supported authentication methods:
 ```text
 turn:turn.example.com:3478|user|password|longterm
 turns:turn.example.com:5349|user|secret|hmac
-name|TURN_TOKEN_ID|API_TOKEN|cloudflare
 ```
 
 A TURN relay may be required when NAT or firewall policy prevents a direct P2P
-path.
+path. The browser supports only `longterm` and `hmac` user-configured endpoints.
+
+### Server-provided Cloudflare TURN
+
+Both signaling backends provide the same optional, public
+`POST /turn-credentials` endpoint. No room membership, authentication, or rate
+limiter is required by this implementation. Configure the **existing** Cloudflare
+TURN key on the backend, not in the frontend:
+
+```dotenv
+TURN_KEY_ID=<existing TURN key ID>
+TURN_KEY_API_TOKEN=<existing TURN key API token>
+```
+
+For the Bun server, copy `.env.example` to an ignored `.env.local` file or
+supply process/container environment variables. For Worker development copy
+`.env.example` values into ignored `.dev.vars`. In production, configure
+`TURN_KEY_ID` and `TURN_KEY_API_TOKEN` as Secrets in the Cloudflare Worker's
+**Settings → Variables and Secrets** page. The existing values can be reused;
+this migration does not require creating or rotating a Cloudflare TURN key. The credential API uses Cloudflare's
+`/credentials/generate-ice-servers` endpoint with a fixed 86,400-second lifetime.
+It returns `{ iceServers: RTCIceServer[], expiresAt: number }`, where `expiresAt`
+is a Unix timestamp in **milliseconds**. All responses use `Cache-Control:
+no-store` and allow cross-origin access; `OPTIONS` returns 204, unsupported
+methods return 405, missing backend configuration returns 503, upstream errors
+return 502, and upstream timeout returns 504. Provider error bodies and long-term
+API keys are never returned.
+
+The frontend derives the URL from `VITE_WEBSOCKET_URL`: `wss://host/ws` becomes
+`https://host/turn-credentials` (`ws` becomes `http`). It clears the signaling
+query, fragment, and URL user information. Reverse proxies must forward this
+root HTTP path as well as WebSocket upgrades; no extra `VITE_*` URL is needed.
+
+Credentials are requested only when connecting. The browser coalesces concurrent
+requests and keeps a memory-only cache. It checks freshness on new peer connections
+and before local/remote SDP negotiation, including connection replacement.
+Credentials are refreshed on demand when less than five minutes remain; there is
+no polling timer. Temporary credentials are not saved to settings, localStorage,
+or invite URLs. Backend failure preserves custom STUN/TURN and direct-connect
+behavior, but never silently disables an explicit relay-only policy.
+
+Before publishing the new frontend, configure and deploy the backend endpoint,
+then remove all `|cloudflare` entries from `VITE_TURN_SERVERS` in local settings,
+Docker build arguments, and the Preview/production `PAGES_BUILD_ENV` secrets.
+Keep any `longterm`/`hmac` entries that users still need. Vite rejects builds with
+obsolete Cloudflare entries rather than embedding provider keys in public JS.
+Old Cloudflare entries already stored in browser settings or invite payloads are
+discarded; other user settings are retained. Old published bundles are not changed
+by this refactor, and existing keys are not revoked or rotated automatically.
 
 References:
 
 - [coturn](https://github.com/coturn/coturn)
-- [Cloudflare TURN](https://developers.cloudflare.com/calls/turn/)
+- [Cloudflare TURN](https://developers.cloudflare.com/realtime/turn/generate-credentials/)
 - [Public STUN list](https://gist.github.com/mondain/b0ec1cf5f60ae726202e)
 
 ## Static hosting
@@ -245,14 +292,14 @@ The GitHub **Preview** environment uses the repository's existing
 `CLOUDFLARE_API_TOKEN` secret (Pages Edit). No account lookup or DNS permission
 is needed for ordinary preview uploads.
 
-Committed `.env.dev` provides public WebSocket and STUN defaults. Optional
-`PAGES_BUILD_ENV` in Preview supplies additional `VITE_*` settings and is written
+The repository commits only `.env.example`. The Preview environment's required
+`PAGES_BUILD_ENV` secret supplies the development `VITE_*` settings and is written
 to ignored `.env.dev.local` before building.
 
 Production environment secrets are not automatically available in Preview.
-Keep any TURN settings that the development frontend needs in its own
-`PAGES_BUILD_ENV`. These `VITE_*` values are public frontend configuration, not
-deployment credentials. Regular deployments need no DNS-edit permission.
+Keep only browser-visible WebSocket/STUN settings and optional additional
+`longterm`/`hmac` TURN endpoints in `PAGES_BUILD_ENV`; Cloudflare TURN keys belong
+to the signaling backend. Regular deployments need no DNS-edit permission.
 
 #### Development custom domain
 
@@ -288,12 +335,11 @@ The current frontend Dockerfile declares build arguments for:
 
 - `VITE_WEBSOCKET_URL`
 - `VITE_STUN_SERVERS`
+- `VITE_TURN_SERVERS` (optional user-configured `longterm`/`hmac` endpoints only)
 
-The image always uses WebSocket signaling.
-
-If additional build-time variables such as `VITE_TURN_SERVERS` are required,
-ensure they are exposed to the Docker build stage as well as supplied by the
-compose/CI environment.
+The image always uses WebSocket signaling. Cloudflare provider keys must be
+supplied as runtime environment variables to the signaling backend, never as
+frontend build arguments.
 
 ### HTTPS with the included nginx image
 

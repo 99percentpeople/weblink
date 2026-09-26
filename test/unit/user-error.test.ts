@@ -144,7 +144,7 @@ describe.each(Object.keys(dictionaries))(
     it("keeps the actionable TURN line number without exposing input credentials", () => {
       language.current = locale;
       const result = userErrorMessage(
-        "auth method error, line 4 given secret expected longterm or hmac or cloudflare",
+        "auth method error, line 4 given secret expected longterm or hmac",
       );
       expect(result).toContain("4");
       expect(result).not.toContain("secret");

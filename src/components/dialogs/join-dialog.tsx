@@ -560,13 +560,8 @@ export const joinUrl = createMemo(() => {
       );
     }
     if (
-      appState.options.servers.turns.length !==
-        defaultAppOptions.servers.turns.length &&
-      appState.options.servers.turns.some(
-        (server, index) =>
-          server.url !==
-          defaultAppOptions.servers.turns[index].url,
-      )
+      JSON.stringify(appState.options.servers.turns) !==
+      JSON.stringify(defaultAppOptions.servers.turns)
     ) {
       url.searchParams.append(
         "turn",

@@ -100,9 +100,11 @@ jobs:
         env:
           PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
         run: |
-          if [[ -n "$PAGES_BUILD_ENV" ]]; then
-            printf '%s\n' "$PAGES_BUILD_ENV" > .env.dev.local
+          if [[ -z "$PAGES_BUILD_ENV" ]]; then
+            echo "::error::Configure PAGES_BUILD_ENV with the development VITE_* settings."
+            exit 1
           fi
+          printf '%s\n' "$PAGES_BUILD_ENV" > .env.dev.local
           bun run build:dev
 
       - name: Deploy dev preview, never production

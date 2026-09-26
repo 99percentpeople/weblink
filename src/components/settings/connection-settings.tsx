@@ -215,7 +215,7 @@ export function ConnectionSettings(
             });
           }}
           placeholder={
-            "turn:turn1.example.com:3478|user1|pass1|longterm\nturns:turn2.example.com:5349|user2|pass2|hmac\nname|TURN_TOKEN_ID|API_TOKEN|cloudflare"
+            "turn:turn1.example.com:3478|user1|pass1|longterm\nturns:turn2.example.com:5349|user2|pass2|hmac"
           }
           value={
             turnServersValue() +

@@ -8,6 +8,29 @@ export type TurnServerOptions = {
   authMethod: string;
 };
 
+/** Drop removed/invalid methods when loading old persisted options or invite links. */
+export function isTurnServerOptions(
+  value: unknown,
+): value is TurnServerOptions {
+  if (!value || typeof value !== "object") return false;
+  const turn = value as Partial<TurnServerOptions>;
+  return (
+    typeof turn.url === "string" &&
+    typeof turn.username === "string" &&
+    typeof turn.password === "string" &&
+    (turn.authMethod === "longterm" ||
+      turn.authMethod === "hmac")
+  );
+}
+
+export function sanitizeTurnServers(
+  value: unknown,
+): TurnServerOptions[] {
+  return Array.isArray(value)
+    ? value.filter(isTurnServerOptions)
+    : [];
+}
+
 export type IceServerOptions = {
   stuns: string[];
   turns: TurnServerOptions[];
@@ -45,34 +68,6 @@ export async function parseTurnServer(
       username,
       credential: password,
     } satisfies RTCIceServer;
-  }
-
-  if (authMethod === "cloudflare") {
-    const response = await fetch(
-      `https://rtc.live.cloudflare.com/v1/turn/keys/${username}/credentials/generate`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${password}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ttl: 86400,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `parseTurnServer: cloudflare error response: ${response.status}`,
-      );
-    }
-
-    const iceServers = (await response
-      .json()
-      .then((data) => data.iceServers)) as RTCIceServer;
-
-    return iceServers;
   }
 
   throw new Error(

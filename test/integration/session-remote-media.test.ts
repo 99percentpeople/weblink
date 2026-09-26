@@ -70,6 +70,13 @@ const stream = (...tracks: Track[]) =>
 // covers the real PeerSession -> SessionService -> store -> meeting projection
 // path, independently of whether a browser produces a conflicting local offer.
 class PeerConnection extends EventTarget {
+  private configuration: RTCConfiguration = {};
+  readonly getConfiguration = () => this.configuration;
+  readonly setConfiguration = vi.fn(
+    (configuration: RTCConfiguration) => {
+      this.configuration = configuration;
+    },
+  );
   connectionState: RTCPeerConnectionState = "connected";
   signalingState: RTCSignalingState = "stable";
   localDescription: RTCSessionDescriptionInit | null = {

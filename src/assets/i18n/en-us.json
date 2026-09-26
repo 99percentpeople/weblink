@@ -124,7 +124,7 @@
       },
       "turn_servers": {
         "title": "TURN Servers",
-        "description": "If you want to use this app in a NAT environment, you may need to set up TURN servers, and set the same TURN servers on the other client"
+        "description": "Configure additional TURN relay servers."
       },
       "share_servers_with_others": {
         "title": "Share Servers with Others",
@@ -884,6 +884,6 @@
     "ice_credentials": "Unable to obtain relay credentials. Check the TURN service credentials.",
     "ice_config": "The relay server configuration is invalid. Check the address and authentication method.",
     "ice_config_line": "Line {{line}} must contain address, username, password and authentication method, separated by |.",
-    "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm, hmac or cloudflare."
+    "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm or hmac."
   }
 }

@@ -124,7 +124,7 @@
       },
       "turn_servers": {
         "title": "TURN 服务器",
-        "description": "用于中继，如果你希望在 NAT 环境下使用此应用程序，你可能需要设置 TURN 服务器，并在对方客户端中设置相同的 TURN 服务器"
+        "description": "用于设置额外的 TURN 中继服务器。"
       },
       "share_servers_with_others": {
         "title": "分享服务器给其他人",
@@ -884,6 +884,6 @@
     "ice_credentials": "无法获取中继凭据，请检查 TURN 服务的认证配置。",
     "ice_config": "中继服务器配置无效，请检查地址和认证方式。",
     "ice_config_line": "第 {{line}} 行需包含地址、用户名、密码和认证方式，使用 | 分隔。",
-    "ice_auth_line": "第 {{line}} 行的认证方式不受支持，请使用 longterm、hmac 或 cloudflare。"
+    "ice_auth_line": "第 {{line}} 行的认证方式不受支持，请使用 longterm 或 hmac。"
   }
 }
