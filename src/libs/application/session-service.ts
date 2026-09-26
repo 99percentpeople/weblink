@@ -11,7 +11,10 @@ import { Accessor, createEffect } from "solid-js";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import { loadSessionIceServers } from "./ice-server-service";
 import { catchError, catchErrorSync } from "@/libs/catch";
-import { getMeetingVideoSourceKind } from "./meeting-media-service";
+import {
+  getMeetingAudioSource,
+  getMeetingVideoSourceKind,
+} from "./meeting-media-service";
 import type { SignalingService } from "../domain/signaling";
 import {
   appState,
@@ -211,6 +214,7 @@ export class SessionService {
           appState.options.preferredAudioCodec,
       }),
       getVideoSourceKind: getMeetingVideoSourceKind,
+      getAudioSource: getMeetingAudioSource,
     });
 
     setAppState(
@@ -368,6 +372,20 @@ export class SessionService {
           "clientViewData",
           client.clientId,
           "videoTracks",
+          ev.detail.map((binding) => ({ ...binding })),
+        );
+      },
+      { signal: controller.signal },
+    );
+
+    session.addEventListener(
+      "remoteaudiotrackschange",
+      (ev) => {
+        setAppState(
+          "session",
+          "clientViewData",
+          client.clientId,
+          "audioTracks",
           ev.detail.map((binding) => ({ ...binding })),
         );
       },

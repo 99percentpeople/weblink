@@ -242,13 +242,18 @@ export function MeetingStage(
             avatar={source().avatar}
             stream={source().stream}
             local={source().local}
-            audioMuted={audio.isPeerMuted(
+            audioMuted={audio.isSourceMuted(
               source().participantId,
+              source().audioId,
             )}
             onToggleAudio={() =>
-              audio.setPeerMuted(
+              audio.setSourceMuted(
                 source().participantId,
-                !audio.isPeerMuted(source().participantId),
+                source().audioId,
+                !audio.isSourceMuted(
+                  source().participantId,
+                  source().audioId,
+                ),
               )
             }
             pinned={source().id === featured()?.id}

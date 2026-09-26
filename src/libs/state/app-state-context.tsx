@@ -632,17 +632,15 @@ export const AppStateProvider: Component<
           "session",
           "clientViewData",
           message.client,
-          "streamState",
-          message.mode,
-        );
-        setAppState(
-          "session",
-          "clientViewData",
-          message.client,
-          "videoSources",
-          message.videoSources.map((source) => ({
-            ...source,
-          })),
+          {
+            streamState: message.mode,
+            videoSources: message.videoSources.map(
+              (source) => ({ ...source }),
+            ),
+            audioSources: message.audioSources?.map(
+              (source) => ({ ...source }),
+            ),
+          },
         );
       },
     );

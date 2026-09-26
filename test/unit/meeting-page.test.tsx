@@ -149,6 +149,8 @@ vi.mock("@/routes/home/components/audio-player", () => ({
     setPlay: fixture.setPlay,
     hasPeerAudio: (id: string) =>
       audibleMembers().includes(id),
+    isSourceMuted: () => false,
+    setSourceMuted: vi.fn(),
     isPeerMuted: (id: string) =>
       mutedMembers().includes(id),
     setPeerMuted: fixture.setPeerMuted,

@@ -1,6 +1,7 @@
 import { appState } from "@/libs/state/app-state";
 import {
   type Accessor,
+  batch,
   createContext,
   createEffect,
   createMemo,
@@ -9,6 +10,10 @@ import {
   type ParentProps,
   useContext,
 } from "solid-js";
+import {
+  getRemoteAudioVideoTrackId,
+  meetingAudioSourceId,
+} from "./meeting-audio-sources";
 
 const AudioPlayerContext = createContext<{
   hasAudio: Accessor<boolean>;
@@ -17,6 +22,12 @@ const AudioPlayerContext = createContext<{
   hasPeerAudio(id: string): boolean;
   isPeerMuted(id: string): boolean;
   setPeerMuted(id: string, muted: boolean): void;
+  isSourceMuted(peerId: string, sourceId: string): boolean;
+  setSourceMuted(
+    peerId: string,
+    sourceId: string,
+    muted: boolean,
+  ): void;
   outputDeviceId: Accessor<string>;
   outputSupported: Accessor<boolean>;
   outputBusy: Accessor<boolean>;
@@ -40,13 +51,60 @@ export const AudioPlayerProvider = (props: ParentProps) => {
   const [mutedPeers, setMutedPeers] = createSignal(
     new Set<string>(),
   );
-  const isPeerMuted = (id: string) => mutedPeers().has(id);
+  const [sourceMutes, setSourceMutes] = createSignal(
+    new Map<string, { peerId: string; muted: boolean }>(),
+  );
+  const audioSourceId = (
+    peerId: string,
+    track: MediaStreamTrack,
+  ) =>
+    meetingAudioSourceId(
+      peerId,
+      getRemoteAudioVideoTrackId(
+        track.id,
+        appState.session.clientViewData[peerId] ?? {},
+      ),
+    );
+  const isSourceMuted = (
+    peerId: string,
+    sourceId: string,
+  ) =>
+    sourceMutes().get(sourceId)?.muted ??
+    mutedPeers().has(peerId);
+  const setSourceMuted = (
+    peerId: string,
+    sourceId: string,
+    muted: boolean,
+  ) => {
+    setSourceMutes((previous) =>
+      new Map(previous).set(sourceId, { peerId, muted }),
+    );
+  };
+  const isPeerMuted = (id: string) => {
+    const current = peerTracks().get(id);
+    return current?.length
+      ? current.every((track) =>
+          isSourceMuted(id, audioSourceId(id, track)),
+        )
+      : mutedPeers().has(id);
+  };
   const setPeerMuted = (id: string, muted: boolean) => {
-    setMutedPeers((previous) => {
-      const next = new Set(previous);
-      if (muted) next.add(id);
-      else next.delete(id);
-      return next;
+    batch(() => {
+      setMutedPeers((previous) => {
+        const next = new Set(previous);
+        if (muted) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      // The member action applies to all sources, including ones added later.
+      setSourceMutes(
+        (previous) =>
+          new Map(
+            [...previous].filter(
+              ([, value]) => value.peerId !== id,
+            ),
+          ),
+      );
     });
   };
   const [wantsAudio, setWantsAudio] = createSignal(true);
@@ -161,11 +219,13 @@ export const AudioPlayerProvider = (props: ParentProps) => {
   });
 
   createEffect(() => {
-    const muted = mutedPeers();
     for (const [id, tracks] of peerTracks()) {
       // Received tracks only: this never changes the sender's capture state.
       for (const track of tracks)
-        track.enabled = !muted.has(id);
+        track.enabled = !isSourceMuted(
+          id,
+          audioSourceId(id, track),
+        );
     }
   });
 
@@ -239,6 +299,8 @@ export const AudioPlayerProvider = (props: ParentProps) => {
           !!peerTracks().get(id)?.length,
         isPeerMuted,
         setPeerMuted,
+        isSourceMuted,
+        setSourceMuted,
         outputDeviceId,
         outputSupported,
         outputBusy,

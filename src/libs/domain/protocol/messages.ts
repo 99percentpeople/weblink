@@ -12,6 +12,8 @@ export const FILE_CONTENT_FEATURE =
 export const SHARED_FILES_FEATURE =
   "shared-files-v1" as const;
 export const ROOM_FILE_FEATURE = "room-file-v1" as const;
+export const AUDIO_SOURCES_FEATURE =
+  "audio-sources-v1" as const;
 export const ROOM_CHAT_MAX_TEXT_LENGTH = 64 * 1024;
 export const RTC_PROFILE_PROTOCOL_VERSION =
   P2P_PROFILE_PROTOCOL_VERSION;
@@ -199,11 +201,17 @@ export type StreamVideoSource = {
   kind: "camera" | "screen";
 };
 
+export type StreamAudioSource =
+  | { mid: string; kind: "microphone" }
+  | { mid: string; kind: "screen"; videoMid: string };
+
 export type StreamStateMessage = BaseExchangeMessage & {
   type: "stream-state";
   mode: "placeholder" | "media";
   /** Complete negotiated video-source snapshot, keyed by RTP MID. */
   videoSources: StreamVideoSource[];
+  /** Sent only to peers advertising AUDIO_SOURCES_FEATURE. */
+  audioSources?: StreamAudioSource[];
 };
 
 export type ClientProfileMessage = BaseExchangeMessage & {

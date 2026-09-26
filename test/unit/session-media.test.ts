@@ -7,7 +7,10 @@ import {
   it,
   vi,
 } from "vitest";
-import { PeerSessionMediaController } from "@/libs/domain/session-media";
+import {
+  PeerSessionMediaController,
+  type PeerSessionMediaOptions,
+} from "@/libs/domain/session-media";
 
 class Track extends EventTarget {
   readyState: MediaStreamTrackState = "live";
@@ -140,11 +143,13 @@ function setup(
   getVideoSourceKind?: (
     track: MediaStreamTrack,
   ) => "camera" | "screen" | undefined,
+  getAudioSource?: PeerSessionMediaOptions["getAudioSource"],
 ) {
   const state = { pc: null as PeerConnection | null };
   const remote =
     vi.fn<(stream: MediaStream | null) => void>();
   const remoteBindings = vi.fn();
+  const remoteAudioBindings = vi.fn();
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
     targetClientId: () => "peer",
@@ -155,9 +160,11 @@ function setup(
       preferredAudioCodec: null,
     }),
     getVideoSourceKind,
+    getAudioSource,
     notifyStreamState: notify,
     onRemoteStreamChange: remote,
     onRemoteVideoTracksChange: remoteBindings,
+    onRemoteAudioTracksChange: remoteAudioBindings,
   });
   const bind = (pc = new PeerConnection()) => {
     state.pc = pc;
@@ -170,6 +177,7 @@ function setup(
     controller,
     remote,
     remoteBindings,
+    remoteAudioBindings,
     notify,
     bind,
   };
@@ -182,6 +190,88 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("multiple video sources in a peer session", () => {
+  it("sends audio owners by MID only after capability negotiation and refreshes audio-only changes", () => {
+    const screen1 = new Track("video", "screen-1"),
+      screen2 = new Track("video", "screen-2");
+    const mic = new Track("audio", "mic"),
+      audio1 = new Track("audio", "shared-1"),
+      audio2 = new Track("audio", "shared-2");
+    const { controller, notify, bind } = setup(
+      () => "screen",
+      (track) =>
+        track.id === "mic"
+          ? { kind: "microphone" }
+          : {
+              kind: "screen",
+              videoTrack: asTrack(
+                track.id === "shared-1" ? screen1 : screen2,
+              ),
+            },
+    );
+    const { pc } = bind();
+    controller.setStream(
+      asStream(
+        media(screen1, audio1, screen2, audio2, mic),
+      ),
+    );
+    pc.settleMids();
+    const videos = [
+      { mid: "0", kind: "screen" },
+      { mid: "2", kind: "screen" },
+    ];
+    expect(notify).toHaveBeenLastCalledWith(videos);
+    controller.setAudioSourcesSupported(true);
+    const audioSources = [
+      { mid: "1", kind: "screen", videoMid: "0" },
+      { mid: "3", kind: "screen", videoMid: "2" },
+      { mid: "4", kind: "microphone" },
+    ];
+    expect(notify).toHaveBeenLastCalledWith(
+      videos,
+      audioSources,
+    );
+    const calls = notify.mock.calls.length;
+    controller.setAudioSourcesSupported(true);
+    expect(notify).toHaveBeenCalledTimes(calls);
+    audio1.end();
+    expect(notify).toHaveBeenLastCalledWith(
+      videos,
+      audioSources.slice(1),
+    );
+    controller.setAudioSourcesSupported(false);
+    expect(notify).toHaveBeenLastCalledWith(videos);
+    controller.dispose();
+    expect(mic.stop).not.toHaveBeenCalled();
+  });
+
+  it("publishes received audio MID bindings and clears them when tracks end or the connection resets", () => {
+    const audio = new Track(
+      "audio",
+      "rewritten-shared-audio",
+    );
+    const { controller, bind, remoteAudioBindings } =
+      setup();
+    const { pc } = bind();
+    pc.receive(audio, [media(audio)], "3");
+    expect(remoteAudioBindings).toHaveBeenLastCalledWith([
+      { trackId: audio.id, mid: "3" },
+    ]);
+    audio.end();
+    expect(remoteAudioBindings).toHaveBeenLastCalledWith(
+      [],
+    );
+    const replacement = new Track("audio", "replacement");
+    pc.receive(replacement, [media(replacement)], "3");
+    expect(remoteAudioBindings).toHaveBeenLastCalledWith([
+      { trackId: replacement.id, mid: "3" },
+    ]);
+    controller.resetConnection();
+    expect(remoteAudioBindings).toHaveBeenLastCalledWith(
+      [],
+    );
+    controller.dispose();
+  });
+
   it("publishes camera/screen identities by negotiated MID as sources change", () => {
     const camera = new Track("video", "camera"),
       screen = new Track("video", "screen"),

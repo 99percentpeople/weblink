@@ -25,6 +25,56 @@ const file = createSessionMessage(peer, "request-file", {
 });
 
 describe("session message validation", () => {
+  it("accepts optional audio source snapshots and rejects ambiguous or malformed associations", () => {
+    const message = createSessionMessage(
+      peer,
+      "stream-state",
+      {
+        mode: "media",
+        videoSources: [
+          { mid: "0", kind: "camera" },
+          { mid: "2", kind: "screen" },
+        ],
+        audioSources: [
+          { mid: "1", kind: "microphone" },
+          { mid: "3", kind: "screen", videoMid: "2" },
+        ],
+      },
+    );
+    expect(
+      parseSessionMessage(JSON.stringify(message)),
+    ).toEqual(message);
+    for (const audioSources of [
+      [{ mid: "", kind: "microphone" }],
+      [{ mid: "1", kind: "unknown" }],
+      [{ mid: "1", kind: "microphone", videoMid: "2" }],
+      [{ mid: "0", kind: "microphone" }],
+      [{ mid: "3", kind: "screen" }],
+      [{ mid: "3", kind: "screen", videoMid: "0" }],
+      [{ mid: "3", kind: "screen", videoMid: "missing" }],
+      [{ mid: "1", kind: "microphone", extra: true }],
+      [
+        { mid: "1", kind: "microphone" },
+        { mid: "1", kind: "microphone" },
+      ],
+      Array.from({ length: 33 }, (_, i) => ({
+        mid: String(i + 4),
+        kind: "microphone",
+      })),
+    ])
+      expect(() =>
+        validateSessionMessage({
+          ...message,
+          audioSources,
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          name: "P2PProtocolError",
+          code: "invalid-message",
+        }),
+      );
+  });
+
   it("snapshots nested payloads and prevents mutation of the pending envelope", () => {
     const ranges: [number, number][] = [[0, 2]];
     const message = { ...file, ranges };

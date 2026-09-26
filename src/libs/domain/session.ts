@@ -7,6 +7,7 @@ import {
   MultiEventEmitter,
 } from "../utils/event-emitter";
 import {
+  AUDIO_SOURCES_FEATURE,
   createSessionMessage,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
@@ -18,7 +19,8 @@ import {
 } from "./session-lifecycle";
 import {
   PeerSessionMediaController,
-  type RemoteVideoTrackBinding,
+  type RemoteMediaTrackBinding,
+  type PeerSessionMediaOptions,
 } from "./session-media";
 import { PeerSessionChannelController } from "./session-channels";
 import { catchError } from "@/libs/catch";
@@ -49,6 +51,7 @@ export interface PeerSessionOptions {
   getVideoSourceKind?: (
     track: MediaStreamTrack,
   ) => "camera" | "screen" | undefined;
+  getAudioSource?: PeerSessionMediaOptions["getAudioSource"];
 }
 
 export type PeerSessionEventMap = {
@@ -57,7 +60,8 @@ export type PeerSessionEventMap = {
   error: Error;
   messagechannelchange: "ready" | "closed";
   remotestreamchange: MediaStream | null;
-  remotevideotrackschange: readonly RemoteVideoTrackBinding[];
+  remotevideotrackschange: readonly RemoteMediaTrackBinding[];
+  remoteaudiotrackschange: readonly RemoteMediaTrackBinding[];
   statuschange: Exclude<PeerSessionStatus, "init">;
   peerconnectioninit: RTCPeerConnection;
 };
@@ -90,6 +94,7 @@ export class PeerSession {
       getRuntimeOptions = () =>
         DEFAULT_PEER_SESSION_RUNTIME_OPTIONS,
       getVideoSourceKind,
+      getAudioSource,
     }: PeerSessionOptions = {},
   ) {
     this.sender = sender;
@@ -133,8 +138,19 @@ export class PeerSession {
         this.createChannel(label, protocol),
       onChannel: (channel) =>
         this.dispatchEvent("channel", channel),
-      onMessage: (message) =>
-        this.dispatchEvent("message", message),
+      onMessage: (message) => {
+        if (
+          message.type === "client-profile" &&
+          message.client === this.targetClientId &&
+          message.target === this.clientId
+        )
+          this.media.setAudioSourcesSupported(
+            message.features?.includes(
+              AUDIO_SOURCES_FEATURE,
+            ) === true,
+          );
+        this.dispatchEvent("message", message);
+      },
       onMessageChannelChange: (state) =>
         this.dispatchEvent("messagechannelchange", state),
     });
@@ -150,13 +166,17 @@ export class PeerSession {
         };
       },
       getVideoSourceKind,
-      notifyStreamState: (videoSources) => {
+      getAudioSource,
+      notifyStreamState: (videoSources, audioSources) => {
         const message = createSessionMessage(
           this,
           "stream-state",
           {
             mode: "media",
             videoSources: [...videoSources],
+            ...(audioSources
+              ? { audioSources: [...audioSources] }
+              : {}),
           },
         );
         void this.sendMessage(message).catch((error) => {
@@ -171,6 +191,11 @@ export class PeerSession {
       onRemoteVideoTracksChange: (bindings) =>
         this.dispatchEvent(
           "remotevideotrackschange",
+          bindings,
+        ),
+      onRemoteAudioTracksChange: (bindings) =>
+        this.dispatchEvent(
+          "remoteaudiotrackschange",
           bindings,
         ),
     });

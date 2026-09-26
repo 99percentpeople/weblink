@@ -85,6 +85,8 @@ function createMeetingSession() {
       stream: client.stream,
       videoSources: client.videoSources,
       videoTracks: client.videoTracks,
+      audioSources: client.audioSources,
+      audioTracks: client.audioTracks,
       placeholder: client.streamState === "placeholder",
     })),
   ]);

@@ -25,7 +25,9 @@ vi.mock("@/libs/state/app-state", async () => {
   });
   return { appState, setAppState };
 });
+let nextTrackId = 0;
 class Track extends EventTarget {
+  id = `audio-${++nextTrackId}`;
   kind = "audio";
   readyState = "live";
   enabled = true;
@@ -323,6 +325,133 @@ describe("meeting audio output selection", () => {
 });
 
 describe("meeting audio playback", () => {
+  it("controls microphone and screen groups independently while member mute still applies to every source", async () => {
+    const mic = track(),
+      shared1 = track(),
+      shared2 = track();
+    connect(new Stream([mic, shared1, shared2]));
+    setAppState("session", "clientViewData", "alice", {
+      audioSources: [
+        { mid: "1", kind: "microphone" },
+        { mid: "3", kind: "screen", videoMid: "2" },
+        { mid: "5", kind: "screen", videoMid: "4" },
+      ],
+      audioTracks: [
+        { mid: "1", trackId: mic.id },
+        { mid: "3", trackId: shared1.id },
+        { mid: "5", trackId: shared2.id },
+      ],
+      videoTracks: [
+        { mid: "2", trackId: "screen-1" },
+        { mid: "4", trackId: "screen-2" },
+      ],
+    });
+    const view = setup();
+    await flush();
+    const output =
+      view.container.querySelector("audio")!.srcObject;
+    const microphoneId = JSON.stringify(["alice", null]);
+    const firstScreenId = JSON.stringify([
+      "alice",
+      "screen-1",
+    ]);
+    player.setSourceMuted("alice", firstScreenId, true);
+    expect([
+      mic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([true, false, true]);
+    expect(player.isPeerMuted("alice")).toBe(false);
+    player.setSourceMuted("alice", microphoneId, true);
+    expect([
+      mic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([false, false, true]);
+    player.setPeerMuted("alice", true);
+    expect([
+      mic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([false, false, false]);
+    player.setSourceMuted("alice", firstScreenId, false);
+    expect([
+      mic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([false, true, false]);
+    expect(player.isPeerMuted("alice")).toBe(false);
+    player.setPlay(false);
+    player.setPeerMuted("alice", false);
+    expect([
+      mic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([true, true, true]);
+    expect(player.playState()).toBe(false);
+    expect(
+      view.container.querySelector("audio")!.srcObject,
+    ).toBe(output);
+    player.setSourceMuted("alice", microphoneId, true);
+    const replacementMic = track();
+    // SessionService updates the stream without replacing peer metadata.
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "stream",
+      new Stream([
+        replacementMic,
+        shared1,
+        shared2,
+      ]) as unknown as MediaStream,
+    );
+    expect([
+      replacementMic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([false, true, true]);
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "audioTracks",
+      [
+        { mid: "1", trackId: replacementMic.id },
+        { mid: "3", trackId: shared1.id },
+        { mid: "5", trackId: shared2.id },
+      ],
+    );
+    expect([
+      replacementMic.enabled,
+      shared1.enabled,
+      shared2.enabled,
+    ]).toEqual([false, true, true]);
+    expect(player.playState()).toBe(false);
+  });
+
+  it("reapplies source mute when audio metadata arrives after its received track", () => {
+    const mic = track(),
+      shared = track();
+    connect(new Stream([mic, shared]));
+    setup();
+    player.setSourceMuted(
+      "alice",
+      JSON.stringify(["alice", "screen"]),
+      true,
+    );
+    expect(shared.enabled).toBe(true);
+    setAppState("session", "clientViewData", "alice", {
+      audioSources: [
+        { mid: "3", kind: "screen", videoMid: "2" },
+      ],
+      audioTracks: [{ mid: "3", trackId: shared.id }],
+      videoTracks: [{ mid: "2", trackId: "screen" }],
+    });
+    expect(shared.enabled).toBe(false);
+    expect(mic.enabled).toBe(true);
+  });
+
   it("mutes only the chosen member, keeps new and reconnected tracks muted, and preserves global mute when unmuting", async () => {
     const microphone = track(),
       sharedAudio = track(),

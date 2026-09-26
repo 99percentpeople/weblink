@@ -45,6 +45,106 @@ beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("meeting source presentation", () => {
+  it("moves shared audio onto its matching screen when MID metadata arrives, without duplicating tracks", () => {
+    createRoot((dispose) => {
+      const camera = track("receiver-camera", "video");
+      const screen1 = track("receiver-screen-1", "video");
+      const screen2 = track("receiver-screen-2", "video");
+      const mic = track("receiver-mic", "audio");
+      const audio1 = track("receiver-audio-1", "audio");
+      const audio2 = track("receiver-audio-2", "audio");
+      const participant: MeetingParticipant = {
+        id: "peer",
+        name: "Peer",
+        stream: stream(
+          camera,
+          screen1,
+          screen2,
+          audio2,
+          mic,
+          audio1,
+        ),
+        videoSources: [
+          { mid: "0", kind: "camera" },
+          { mid: "2", kind: "screen" },
+          { mid: "4", kind: "screen" },
+        ],
+        videoTracks: [
+          { mid: "0", trackId: camera.id },
+          { mid: "2", trackId: screen1.id },
+          { mid: "4", trackId: screen2.id },
+        ],
+      };
+      const [participants, setParticipants] = createSignal([
+        participant,
+      ]);
+      const sources = createMeetingSources(participants);
+      const ids = sources().map((source) => source.id);
+      // An older peer or not-yet-described audio retains the existing fallback.
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        camera,
+        audio2,
+        mic,
+        audio1,
+      ]);
+      const described: MeetingParticipant = {
+        ...participant,
+        audioSources: [
+          { mid: "1", kind: "microphone" },
+          { mid: "3", kind: "screen", videoMid: "2" },
+          { mid: "5", kind: "screen", videoMid: "4" },
+        ],
+        audioTracks: [
+          { mid: "5", trackId: audio2.id },
+          { mid: "1", trackId: mic.id },
+          { mid: "3", trackId: audio1.id },
+        ],
+      };
+      setParticipants([described]);
+      expect(sources().map((source) => source.id)).toEqual(
+        ids,
+      );
+      expect(
+        sources().map((source) =>
+          source.stream?.getTracks(),
+        ),
+      ).toEqual([
+        [camera, mic],
+        [screen1, audio1],
+        [screen2, audio2],
+      ]);
+      const microphoneId = sources()[0].audioId;
+      const screenStreams = sources()
+        .slice(1)
+        .map((source) => source.stream);
+      setParticipants([
+        {
+          ...described,
+          stream: stream(
+            screen1,
+            screen2,
+            audio2,
+            mic,
+            audio1,
+          ),
+        },
+      ]);
+      expect(sources()[0].kind).toBe("participant");
+      expect(sources()[0].audioId).toBe(microphoneId);
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        mic,
+      ]);
+      expect(
+        sources()
+          .slice(1)
+          .map((source) => source.stream),
+      ).toEqual(screenStreams);
+      dispose();
+      for (const audio of [mic, audio1, audio2])
+        expect(audio.stop).not.toHaveBeenCalled();
+    });
+  });
+
   it("uses the large view only for a single source, regardless of its owner", () => {
     createRoot((dispose) => {
       const [participants, setParticipants] = createSignal<

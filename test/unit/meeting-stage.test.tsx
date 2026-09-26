@@ -28,6 +28,8 @@ const fixture = vi.hoisted(() => ({
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
+    isSourceMuted: () => false,
+    setSourceMuted: vi.fn(),
     isPeerMuted: () => false,
     setPeerMuted() {},
   }),
@@ -108,6 +110,7 @@ function commitLayout() {
 const source = (id: string): MeetingSource => ({
   id,
   participantId: id,
+  audioId: JSON.stringify([id, null]),
   name: id,
   kind: "participant",
   stream: null,

@@ -1,11 +1,14 @@
-import type { StreamVideoSource } from "./protocol/messages";
+import type {
+  StreamAudioSource,
+  StreamVideoSource,
+} from "./protocol/messages";
 
 export interface SessionMediaCodecOptions {
   preferredVideoCodec: string | null;
   preferredAudioCodec: string | null;
 }
 
-export type RemoteVideoTrackBinding = {
+export type RemoteMediaTrackBinding = {
   trackId: string;
   mid: string;
 };
@@ -17,12 +20,21 @@ export interface PeerSessionMediaOptions {
   getVideoSourceKind?(
     track: MediaStreamTrack,
   ): StreamVideoSource["kind"] | undefined;
+  getAudioSource?(
+    track: MediaStreamTrack,
+  ):
+    | { kind: "microphone" }
+    | { kind: "screen"; videoTrack: MediaStreamTrack };
   notifyStreamState(
     videoSources: readonly StreamVideoSource[],
+    audioSources?: readonly StreamAudioSource[],
   ): void;
   onRemoteStreamChange(stream: MediaStream | null): void;
   onRemoteVideoTracksChange(
-    bindings: readonly RemoteVideoTrackBinding[],
+    bindings: readonly RemoteMediaTrackBinding[],
+  ): void;
+  onRemoteAudioTracksChange?(
+    bindings: readonly RemoteMediaTrackBinding[],
   ): void;
 }
 
@@ -30,7 +42,8 @@ export class PeerSessionMediaController {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private streamStateNotified = false;
-  private videoSourcesSignature = "";
+  private sourcesSignature = "";
+  private audioSourcesSupported = false;
   private localListeners: AbortController | null = null;
   private readonly localTrackListeners = new Map<
     MediaStreamTrack,
@@ -63,16 +76,30 @@ export class PeerSessionMediaController {
     private readonly options: PeerSessionMediaOptions,
   ) {}
 
+  setAudioSourcesSupported(supported: boolean): void {
+    if (this.audioSourcesSupported === supported) return;
+    this.audioSourcesSupported = supported;
+    this.notifyLocalStreamState(this.localStream);
+  }
+
   private notifyLocalStreamState(
     stream: MediaStream | null,
   ): void {
     if (!stream) {
       this.streamStateNotified = false;
-      this.videoSourcesSignature = "";
+      this.sourcesSignature = "";
       return;
     }
     const pc = this.options.getPeerConnection();
     const transceivers = pc?.getTransceivers() ?? [];
+    const midOf = (track: MediaStreamTrack) => {
+      const sender = this.senders.get(track);
+      return transceivers.find(
+        (transceiver) =>
+          (sender && transceiver.sender === sender) ||
+          transceiver.sender.track === track,
+      )?.mid;
+    };
     const videoSources = stream
       .getVideoTracks()
       .filter((track) => track.readyState !== "ended")
@@ -80,23 +107,48 @@ export class PeerSessionMediaController {
         const kind =
           this.options.getVideoSourceKind?.(track);
         if (!kind) return [];
-        const sender = this.senders.get(track);
-        const mid = transceivers.find(
-          (transceiver) =>
-            transceiver.sender === sender ||
-            transceiver.sender.track === track,
-        )?.mid;
+        const mid = midOf(track);
         return mid ? [{ mid, kind }] : [];
       });
-    const signature = JSON.stringify(videoSources);
+    const audioSources = this.audioSourcesSupported
+      ? stream
+          .getAudioTracks()
+          .filter((track) => track.readyState !== "ended")
+          .flatMap<StreamAudioSource>((track) => {
+            const mid = midOf(track);
+            const source =
+              this.options.getAudioSource?.(track);
+            if (!mid || !source) return [];
+            if (source.kind === "microphone")
+              return [{ mid, kind: source.kind }];
+            const videoMid = midOf(source.videoTrack);
+            return videoMid &&
+              videoSources.some(
+                (video) =>
+                  video.mid === videoMid &&
+                  video.kind === "screen",
+              )
+              ? [{ mid, kind: source.kind, videoMid }]
+              : [];
+          })
+      : undefined;
+    const signature = JSON.stringify([
+      videoSources,
+      audioSources,
+    ]);
     if (
       this.streamStateNotified &&
-      this.videoSourcesSignature === signature
+      this.sourcesSignature === signature
     )
       return;
     this.streamStateNotified = true;
-    this.videoSourcesSignature = signature;
-    this.options.notifyStreamState(videoSources);
+    this.sourcesSignature = signature;
+    if (audioSources)
+      this.options.notifyStreamState(
+        videoSources,
+        audioSources,
+      );
+    else this.options.notifyStreamState(videoSources);
   }
 
   private applyPreferredCodecPreferences(
@@ -334,6 +386,18 @@ export class PeerSessionMediaController {
           : [],
       ),
     );
+    this.options.onRemoteAudioTracksChange?.(
+      entries.flatMap(([track, record]) =>
+        track.kind === "audio" && record.transceiver.mid
+          ? [
+              {
+                trackId: track.id,
+                mid: record.transceiver.mid,
+              },
+            ]
+          : [],
+      ),
+    );
   }
 
   bindConnection(
@@ -485,6 +549,7 @@ export class PeerSessionMediaController {
 
   resetConnection(): void {
     this.streamStateNotified = false;
+    this.audioSourcesSupported = false;
     this.connectionListeners?.abort();
     this.connectionListeners = null;
     this.senders.clear();
@@ -499,6 +564,7 @@ export class PeerSessionMediaController {
     if (hadRemoteStream)
       this.options.onRemoteStreamChange(null);
     this.options.onRemoteVideoTracksChange([]);
+    this.options.onRemoteAudioTracksChange?.([]);
   }
 
   dispose(): void {

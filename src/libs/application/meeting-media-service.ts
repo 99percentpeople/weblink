@@ -27,6 +27,18 @@ const microphone = (track: MediaStreamTrack) =>
   !screenAudioOwners.has(track) &&
   track.contentHint !== "music";
 
+/** The capture owner is retained across presentation and peer connections. */
+export function getMeetingAudioSource(
+  track: MediaStreamTrack,
+):
+  | { kind: "microphone" }
+  | { kind: "screen"; videoTrack: MediaStreamTrack } {
+  const owner = screenAudioOwners.get(track);
+  return owner
+    ? { kind: "screen", videoTrack: owner }
+    : { kind: "microphone" };
+}
+
 export function getMeetingVideoSourceKind(
   track: MediaStreamTrack,
 ): "camera" | "screen" {

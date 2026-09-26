@@ -8,6 +8,8 @@ import {
 } from "vitest";
 import { createEffect, createRoot } from "solid-js";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
+import { createMeetingSources } from "@/routes/home/components/meeting-sources";
+import { getMeetingAudioSource } from "@/libs/application/meeting-media-service";
 import {
   createMeetingMediaController,
   getMeetingVideoSourceKind,
@@ -643,6 +645,25 @@ describe("meeting media controls", () => {
       systemAudio,
     ]);
     expect(systemAudio.contentHint).toBe("music");
+    expect(
+      getMeetingAudioSource(asTrack(systemAudio)),
+    ).toEqual({ kind: "screen", videoTrack: video });
+    createRoot((dispose) => {
+      const sources = createMeetingSources(() => [
+        {
+          id: "me",
+          name: "Me",
+          local: true,
+          stream: service.stream(),
+        },
+      ]);
+      expect(
+        sources().map((source) =>
+          source.stream?.getTracks(),
+        ),
+      ).toEqual([[mic], [video, systemAudio]]);
+      dispose();
+    });
     expect(systemAudio.stop).not.toHaveBeenCalled();
     expect(unusedVideo.stop).toHaveBeenCalledOnce();
     expect(mic.stop).not.toHaveBeenCalled();

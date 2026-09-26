@@ -1,16 +1,22 @@
 import { createMemo, type Accessor } from "solid-js";
 import { t } from "@/i18n";
 import { getMeetingVideoSourceKind } from "./meeting-media";
+import { getMeetingAudioSource } from "@/libs/application/meeting-media-service";
+import {
+  getRemoteAudioVideoTrackId,
+  meetingAudioSourceId,
+  type RemoteAudioSources,
+} from "./meeting-audio-sources";
 import type { StreamVideoSource } from "@/libs/domain/protocol/messages";
-import type { RemoteVideoTrackBinding } from "@/libs/domain/session-media";
+import type { RemoteMediaTrackBinding } from "@/libs/domain/session-media";
 
-export interface MeetingParticipant {
+export interface MeetingParticipant extends RemoteAudioSources {
   id: string;
   name: string;
   avatar?: string;
   stream?: MediaStream | null;
   videoSources?: readonly StreamVideoSource[];
-  videoTracks?: readonly RemoteVideoTrackBinding[];
+  videoTracks?: readonly RemoteMediaTrackBinding[];
   local?: boolean;
   placeholder?: boolean;
 }
@@ -18,6 +24,7 @@ export interface MeetingParticipant {
 export interface MeetingSource {
   id: string;
   participantId: string;
+  audioId: string;
   name: string;
   avatar?: string;
   stream: MediaStream | null;
@@ -121,6 +128,34 @@ export function createMeetingSources(
         const screens = classified.filter(
           ({ kind }) => kind === "screen",
         );
+        const audioByVideo = new Map<
+          string,
+          MediaStreamTrack[]
+        >();
+        const microphone: MediaStreamTrack[] = [];
+        for (const track of audio) {
+          const local = participant.local
+            ? getMeetingAudioSource(track)
+            : undefined;
+          const owner = participant.local
+            ? local?.kind === "screen"
+              ? local.videoTrack.id
+              : undefined
+            : getRemoteAudioVideoTrackId(
+                track.id,
+                participant,
+              );
+          if (
+            owner &&
+            classified.some(
+              ({ track }) => track.id === owner,
+            )
+          ) {
+            const group = audioByVideo.get(owner) ?? [];
+            group.push(track);
+            audioByVideo.set(owner, group);
+          } else microphone.push(track);
+        }
         const build = (
           track: MediaStreamTrack | undefined,
           kind: MeetingSource["kind"],
@@ -133,7 +168,10 @@ export function createMeetingSources(
           ]);
           const selected = [
             ...(track ? [track] : []),
-            ...(includeAudio ? audio : []),
+            ...(track
+              ? (audioByVideo.get(track.id) ?? [])
+              : []),
+            ...(includeAudio ? microphone : []),
           ];
           const previous = cache.get(id);
           const previousTracks = previous?.getTracks();
@@ -149,6 +187,13 @@ export function createMeetingSources(
           return {
             id,
             participantId: participant.id,
+            audioId: meetingAudioSourceId(
+              participant.id,
+              kind === "screen" ||
+                (track && audioByVideo.has(track.id))
+                ? track?.id
+                : undefined,
+            ),
             name: label
               ? `${participant.name} · ${label}`
               : participant.name,
