@@ -1,0 +1,44 @@
+name: Desktop
+
+on:
+  pull_request:
+  push:
+    branches: [public]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows desktop
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run --cwd apps/desktop lint
+      - run: bun run --cwd apps/desktop test
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked
+      - name: Build Windows installer
+        run: bun run build:desktop --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weblink-windows-x64
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error

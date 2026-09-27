@@ -10,6 +10,11 @@ the low-level `domain` layer.
 
 - `apps/web/`: Frontend application, Vite configuration, assets, tests and
   application build/browser scripts. It is a Bun workspace.
+- `apps/desktop/`: Tauri shell and desktop platform adapter. It builds the same
+  frontend in desktop mode, with separate output, version and native permissions.
+- `packages/platform/`: Platform capability and adapter contracts used by both
+  applications. Vite selects the runtime adapter at build time; browser bundles
+  do not import Tauri APIs.
 - `servers/weblink-ws-server/` and `servers/weblink-ws-worker/`: independent
   Git submodules that also participate in the Bun workspace install.
 - `package.json` and `bun.lock`: root tooling, shared dependency installation
@@ -19,9 +24,9 @@ the low-level `domain` layer.
   the Docker image.
 - `scripts/`: repository-level helpers; application scripts live in `apps/web/scripts/`.
 
-Desktop, shared-package and native-crate directories will be introduced as their
-implementations are added.
-See [WORKSPACE.md](WORKSPACE.md) for dependency and submodule workflows.
+Native capture and remote input crates will be introduced in later phases.
+See [WORKSPACE.md](WORKSPACE.md) for dependency and submodule workflows and
+[DESKTOP.md](DESKTOP.md) for the desktop boundary.
 
 Application source paths in the sections below are relative to `apps/web/`.
 

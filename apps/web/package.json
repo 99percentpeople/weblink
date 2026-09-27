@@ -32,7 +32,9 @@
     "test:e2e:meeting": "bun scripts/run-browser-check.mjs --meeting",
     "test:e2e:speed": "bun scripts/run-browser-check.mjs",
     "test:e2e": "bun run test:e2e:protocol && bun run test:e2e:recovery && bun run test:e2e:playback && bun run test:e2e:transfer && bun run test:e2e:cache && bun run test:e2e:tasks && bun run test:e2e:speed && bun run test:e2e:chat && bun run test:e2e:conversations && bun run test:e2e:meeting",
-    "bench:browser:cache": "bun scripts/run-browser-check.mjs --cache-benchmark"
+    "bench:browser:cache": "bun scripts/run-browser-check.mjs --cache-benchmark",
+    "dev:desktop": "vite --mode desktop --host 127.0.0.1 --port 1420",
+    "build:desktop": "vite build --mode desktop"
   },
   "dependencies": {
     "@corvu/drawer": "^0.2.4",
@@ -70,7 +72,8 @@
     "uuid": "^11.1.0",
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",
-    "workbox-window": "^7.3.0"
+    "workbox-window": "^7.3.0",
+    "@weblink/platform": "workspace:*"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",

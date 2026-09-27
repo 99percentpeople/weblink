@@ -8,6 +8,7 @@ notes, refactor checklists and one-off test logs should not be committed under
 
 - [WORKSPACE.md](WORKSPACE.md) — repository layout, Bun workspace commands and
   Git submodule installation/update/commit boundaries.
+- [DESKTOP.md](DESKTOP.md) — Tauri development, Windows builds and native boundaries.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — module boundaries, dependency direction
   and ownership rules.
 - [DEPLOYMENT.md](DEPLOYMENT.md) — local setup, build configuration, hosting,

@@ -1,4 +1,9 @@
-import { defineConfig, type ESBuildOptions } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type ESBuildOptions,
+} from "vite";
+import { fileURLToPath } from "node:url";
 import { VitePWA } from "vite-plugin-pwa";
 import solidPlugin from "vite-plugin-solid";
 import type { VitePWAOptions } from "vite-plugin-pwa";
@@ -85,14 +90,45 @@ const pwaOptions: Partial<VitePWAOptions> = {
 };
 
 export default defineConfig(({ command, mode }) => {
+  const desktop = mode === "desktop";
+  const desktopEnv = desktop
+    ? loadEnv(mode, process.cwd(), "VITE_")
+    : {};
+  const version = desktop
+    ? JSON.parse(
+        readFileSync(
+          new URL(
+            "../desktop/package.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ).version
+    : packageJson.version;
   const buildInfo = createBuildInfo(
-    packageJson.version,
+    version,
     mode,
     getBuildCommit(),
   );
   return {
     resolve: {
       alias: {
+        ...(desktop
+          ? {
+              "@/libs/platform/runtime": fileURLToPath(
+                new URL(
+                  "../desktop/src/platform.ts",
+                  import.meta.url,
+                ),
+              ),
+              "virtual:pwa-register": fileURLToPath(
+                new URL(
+                  "./src/libs/platform/no-service-worker.ts",
+                  import.meta.url,
+                ),
+              ),
+            }
+          : {}),
         "@": "/src",
       },
     },
@@ -105,12 +141,24 @@ export default defineConfig(({ command, mode }) => {
       include: ["hash-wasm", "fflate"],
     },
     build: {
+      outDir: desktop ? "../desktop/dist" : "dist",
+      emptyOutDir: true,
+      target: desktop ? "chrome120" : undefined,
       rollupOptions: {
         treeshake: true,
       },
       minify: true,
     },
     plugins: [
+      desktop && {
+        name: "weblink-desktop-html",
+        transformIndexHtml(html) {
+          return html.replace(
+            /<script>\s*window\.env\s*=[\s\S]*?<\/script>/,
+            "",
+          );
+        },
+      },
       webLinkBranding(),
       buildInfoPlugin(buildInfo),
       solidPlugin(),
@@ -122,34 +170,44 @@ export default defineConfig(({ command, mode }) => {
           },
         },
       }),
-      VitePWA({
-        ...pwaOptions,
-        manifest: {
-          ...(pwaOptions.manifest || {}),
-          name:
-            buildInfo.channel === "dev"
-              ? "Weblink Dev"
-              : "Weblink",
-          short_name:
-            buildInfo.channel === "dev"
-              ? "Weblink Dev"
-              : "Weblink",
-        },
-        integration: {
-          // injectManifest runs its own Vite build instead of inheriting esbuild.
-          configureCustomSWViteBuild(config) {
-            config.esbuild = {
-              ...(config.esbuild || {}),
-              ...getBuildLoggingOptions(mode),
-            };
+      !desktop &&
+        VitePWA({
+          ...pwaOptions,
+          manifest: {
+            ...(pwaOptions.manifest || {}),
+            name:
+              buildInfo.channel === "dev"
+                ? "Weblink Dev"
+                : "Weblink",
+            short_name:
+              buildInfo.channel === "dev"
+                ? "Weblink Dev"
+                : "Weblink",
           },
-        },
-      }),
-      compression(),
+          integration: {
+            // injectManifest runs its own Vite build instead of inheriting esbuild.
+            configureCustomSWViteBuild(config) {
+              config.esbuild = {
+                ...(config.esbuild || {}),
+                ...getBuildLoggingOptions(mode),
+              };
+            },
+          },
+        }),
+      !desktop && compression(),
       tailwindcss(),
     ],
     esbuild: getBuildLoggingOptions(mode),
     define: {
+      ...(desktop
+        ? {
+            "import.meta.env.VITE_WEBSOCKET_URL":
+              JSON.stringify(
+                desktopEnv.VITE_WEBSOCKET_URL ||
+                  "wss://ws.webl.ink",
+              ),
+          }
+        : {}),
       // Root .env configures local development without overriding builds.
       ...(command === "serve" &&
       process.env.WEBLINK_WEBSOCKET_URL

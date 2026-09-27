@@ -14,6 +14,7 @@ import {
   getDefaultAppOptions,
 } from "@/options";
 import { t } from "@/i18n";
+import { platform } from "@/libs/platform/runtime";
 
 export default function AboutSettings() {
   const resetDialog = createResetOptionsDialog();
@@ -22,6 +23,7 @@ export default function AboutSettings() {
     "reset" | "cache" | null
   >(null);
   const cacheSupported = () =>
+    platform.supportsServiceWorker &&
     typeof window !== "undefined" &&
     "caches" in window &&
     "serviceWorker" in navigator;

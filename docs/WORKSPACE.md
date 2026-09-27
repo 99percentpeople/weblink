@@ -2,7 +2,7 @@
 
 Weblink's original Git repository owns the applications, shared documentation
 and root tooling. The two signaling servers are Git submodules. The current
-application is `apps/web`; desktop integration will reuse its frontend.
+web application is `apps/web`; the Tauri shell in `apps/desktop` reuses its frontend.
 
 ## Checkout and dependencies
 
@@ -26,7 +26,7 @@ in `apps/web/package.json`.
 Isolation keeps the frontend's and Worker's different TypeScript/Vitest versions
 from interfering with each other.
 
-Use Bun **1.3.14**, matching `packageManager`, CI and the frontend Docker image.
+Use Bun **1.4.2**, matching `packageManager`, CI and the frontend Docker image.
 The combined development command uses Bun's built-in parallel script runner
 (introduced in Bun 1.3.9).
 The root override also pins the server's npm `bun` dependency to this version,
@@ -91,6 +91,13 @@ development settings described above. Keep frontend build-time `VITE_*` values
 in the application env files. Production and dev artifacts are written to `apps/web/dist`.
 Root `bun run clean` removes workspace dependencies, including the server
 dependencies, and frontend output. It does not remove env files.
+
+## Desktop
+
+`bun run dev:desktop` starts Tauri, its Vite server and local signaling using
+root `.env`. `bun run build:desktop` creates a native build for the host platform.
+Desktop prerequisites, Windows installer commands and current capability limits
+are documented in [DESKTOP.md](DESKTOP.md).
 
 ## Signaling servers
 

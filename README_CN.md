@@ -129,6 +129,7 @@ bun dev
 
 同时启动 Vite 和本地信令服务，端口在 `.env` 中配置。
 更多说明见[工作区文档](docs/WORKSPACE.md)。
+Tauri 桌面端见[桌面开发说明](docs/DESKTOP.md)。
 
 ## 了解更多
 

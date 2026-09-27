@@ -18,7 +18,7 @@ for standalone clones; see
 
 ## Required checks
 
-The `CI / Checks` job uses Bun 1.3.14 and runs the frontend type-check, unit tests
+The `CI / Checks` job uses Bun 1.4.2 and runs the frontend type-check, unit tests
 and integration tests. Tagged releases additionally validate the version in
 `apps/web/package.json` against the tag and root `CHANGELOG.md`.
 

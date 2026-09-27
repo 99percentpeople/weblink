@@ -23,13 +23,15 @@ lives in `apps/web`. Run the commands below from the repository root.
   `apps/web`. Root `.env` configures combined local development; its
   `WEBLINK_WEBSOCKET_URL` override applies only to the Vite dev server.
   Never commit local env files or generated artifacts.
-- See `docs/WORKSPACE.md` for commands. `IMPLEMENTATION_PLAN.md`, when present,
-  is a local roadmap: keep it untracked and do not include it in commits.
+- See `docs/WORKSPACE.md` for commands. `.tmp/IMPLEMENTATION_PLAN.md` is a local
+  roadmap: keep it there, do not add ignore rules for it or include it in commits.
 
 ## Quick commands
 
 - Local frontend + Bun signaling: `bun dev` (configure root `.env` first)
 - Frontend only: `bun run dev:web`
+- Desktop + local signaling: `bun run dev:desktop`
+- Desktop checks/build: `bun run check:desktop`, `bun run build:desktop`
 - Unit tests: `bun run test:unit`
 - Integration tests: `bun run test:integration`
 - All Vitest correctness tests: `bun run test`
@@ -61,6 +63,9 @@ Application paths below are relative to `apps/web/`.
 - UI should talk to services/state via stable interfaces; keep WebRTC details
   inside domain and concrete persistence behind repository/cache contracts.
 - See `docs/ARCHITECTURE.md` for the current directory and ownership guide.
+- Desktop uses the same frontend with a build-time platform adapter. Keep Tauri
+  imports in `apps/desktop`, runtime contracts in `packages/platform`, and native
+  permissions limited to implemented features. See `docs/DESKTOP.md`.
 
 ## Refactor guidelines (stability-first)
 

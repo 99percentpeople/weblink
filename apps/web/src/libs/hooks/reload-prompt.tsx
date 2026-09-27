@@ -3,8 +3,10 @@ import { makePersisted } from "@solid-primitives/storage";
 import { createSignal, onMount } from "solid-js";
 import { toast } from "solid-sonner";
 import { registerSW } from "virtual:pwa-register";
+import { platform } from "@/libs/platform/runtime";
 
 export const createReloadPrompt = () => {
+  if (!platform.supportsServiceWorker) return;
   onMount(() => {
     let toastId: string | number | undefined;
     const [prompted, setPrompted] = makePersisted(

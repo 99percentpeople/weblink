@@ -1,4 +1,5 @@
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
+import { platform } from "@/libs/platform/runtime";
 import {
   RouteSectionProps,
   useSearchParams,
@@ -239,7 +240,10 @@ const InnerApp = (props: ParentProps) => {
   const { forwardTarget: shareTarget } =
     createForwardDialog();
 
-  if (navigator.serviceWorker) {
+  if (
+    platform.supportsServiceWorker &&
+    navigator.serviceWorker
+  ) {
     onMount(() => {
       const onMessage = (ev: MessageEvent) => {
         if (ev.data.action === "share-target") {
@@ -307,8 +311,8 @@ const ErrorComponent = (props: {
         {/* Print stack trace */}
         <Textarea
           readOnly
-          class="scrollbar-thin flex-1 overflow-x-auto text-xs text-nowrap
-            whitespace-pre-wrap"
+          class="scrollbar-thin flex-1 overflow-x-auto whitespace-pre-wrap
+            text-nowrap text-xs"
           value={props.error.stack}
         />
       </div>
@@ -354,6 +358,10 @@ const ErrorComponent = (props: {
 };
 
 export default function App(props: RouteSectionProps) {
+  onMount(() => {
+    const dispose = platform.initialize();
+    onCleanup(dispose);
+  });
   const localStreamService = createLocalStreamService();
   onCleanup(() => localStreamService.dispose());
   if (window.location.pathname === "/close-window") {

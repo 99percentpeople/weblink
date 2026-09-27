@@ -130,6 +130,7 @@ bun dev
 
 This starts Vite and local signaling. Configure ports in `.env`;
 see [workspace development](docs/WORKSPACE.md) for more.
+Tauri desktop setup is in [desktop development](docs/DESKTOP.md).
 
 ## Learn more
 
