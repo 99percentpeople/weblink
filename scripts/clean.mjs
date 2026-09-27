@@ -6,6 +6,8 @@ for (const path of [
   "apps/web/node_modules/",
   "apps/web/dist/",
   "apps/web/dev-dist/",
+  "servers/weblink-ws-server/node_modules/",
+  "servers/weblink-ws-worker/node_modules/",
 ]) {
   await rm(new URL(path, root), {
     recursive: true,

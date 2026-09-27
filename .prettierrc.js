@@ -3,7 +3,7 @@ export default {
   printWidth: 60,
   tailwindAttributes: ["class"],
   tailwindFunctions: ["clsx"],
-  tailwindConfig: "tailwind.config.ts",
+  tailwindStylesheet: "./apps/web/src/global.css",
   customAttributes: ["class"],
   plugins: [
     "prettier-plugin-tailwindcss",

@@ -84,7 +84,7 @@ const pwaOptions: Partial<VitePWAOptions> = {
   },
 };
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const buildInfo = createBuildInfo(
     packageJson.version,
     mode,
@@ -96,7 +96,10 @@ export default defineConfig(({ mode }) => {
         "@": "/src",
       },
     },
-    server: {},
+    server: {
+      port: Number(process.env.WEBLINK_WEB_PORT || 5173),
+      strictPort: true,
+    },
     optimizeDeps: {
       // Pre-bundle worker dependencies before their first use.
       include: ["hash-wasm", "fflate"],
@@ -147,6 +150,16 @@ export default defineConfig(({ mode }) => {
     ],
     esbuild: getBuildLoggingOptions(mode),
     define: {
+      // Root .env configures local development without overriding builds.
+      ...(command === "serve" &&
+      process.env.WEBLINK_WEBSOCKET_URL
+        ? {
+            "import.meta.env.VITE_WEBSOCKET_URL":
+              JSON.stringify(
+                process.env.WEBLINK_WEBSOCKET_URL,
+              ),
+          }
+        : {}),
       __APP_VERSION__: JSON.stringify(buildInfo.version),
       __APP_LICENSE__: JSON.stringify(packageJson.license),
       __APP_AUTHOR_NAME__: JSON.stringify(

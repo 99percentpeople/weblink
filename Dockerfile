@@ -1,14 +1,16 @@
-FROM oven/bun:1.3.8 AS base
+FROM oven/bun:1.3.14 AS base
 
 WORKDIR /app
 
 FROM base AS install
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/web/package.json apps/web/package.json
-RUN HUSKY=0 bun install --frozen-lockfile
+COPY servers/weblink-ws-server/package.json servers/weblink-ws-server/package.json
+COPY servers/weblink-ws-worker/package.json servers/weblink-ws-worker/package.json
+RUN HUSKY=0 bun install --frozen-lockfile --filter weblink-workspace --filter @weblink/web
 
 FROM base AS build
-COPY --from=install /app/node_modules node_modules
+COPY --from=install /app/ ./
 COPY . .
 
 ARG VITE_WEBSOCKET_URL

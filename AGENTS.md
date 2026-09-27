@@ -5,21 +5,31 @@ lives in `apps/web`. Run the commands below from the repository root.
 
 ## Workspace and Git boundaries
 
-- `apps/*` and `packages/*` are Bun workspaces with the root `bun.lock`.
+- `apps/*`, `packages/*` and `servers/*` are Bun workspaces. Run `bun install`
+  at the root after initializing submodules; the root `bun.lock` pins all of them.
+  Use the isolated linker in `bunfig.toml` to keep frontend and Worker toolchains
+  separate. The root Bun override matches `packageManager` so server scripts use
+  the same runtime as the workspace.
 - `servers/weblink-ws-server` and `servers/weblink-ws-worker` are Git submodules,
-  with independent dependencies, lockfiles and release workflows. Do not add
-  them to Bun workspaces or import files from outside their own repositories.
+  with independent release workflows. Their own lockfiles remain for standalone
+  checkouts; workspace installs use the root lockfile. Keep server code portable:
+  do not import files from outside their own repositories. After changing server
+  dependencies, update the standalone lock in a standalone checkout and refresh
+  the root lock after updating the submodule pointer.
 - Commit and publish submodule changes in the server repository before updating
   its gitlink in the parent. Normal builds use the pinned commit, not remote HEAD.
 - Application version lives in `apps/web/package.json`; root package metadata
   is tooling-only. Build output is `apps/web/dist` and Vite env files belong in
-  `apps/web`. Never commit local env files or generated artifacts.
-- See `docs/WORKSPACE.md` for commands and `IMPLEMENTATION_PLAN.md` for the
-  requested desktop roadmap. Tauri/native implementation belongs to later phases.
+  `apps/web`. Root `.env` configures combined local development; its
+  `WEBLINK_WEBSOCKET_URL` override applies only to the Vite dev server.
+  Never commit local env files or generated artifacts.
+- See `docs/WORKSPACE.md` for commands. `IMPLEMENTATION_PLAN.md`, when present,
+  is a local roadmap: keep it untracked and do not include it in commits.
 
 ## Quick commands
 
-- Dev: `bun dev`
+- Local frontend + Bun signaling: `bun dev` (configure root `.env` first)
+- Frontend only: `bun run dev:web`
 - Unit tests: `bun run test:unit`
 - Integration tests: `bun run test:integration`
 - All Vitest correctness tests: `bun run test`

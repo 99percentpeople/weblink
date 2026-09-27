@@ -11,7 +11,7 @@ the low-level `domain` layer.
 - `apps/web/`: Frontend application, Vite configuration, assets, tests and
   application build/browser scripts. It is a Bun workspace.
 - `servers/weblink-ws-server/` and `servers/weblink-ws-worker/`: independent
-  Git submodules, installed and checked separately from the Bun workspace.
+  Git submodules that also participate in the Bun workspace install.
 - `package.json` and `bun.lock`: root tooling, shared dependency installation
   and command entrypoints. Application version belongs to `apps/web/package.json`.
 - `docs/`: shared architecture, protocol, development and deployment documentation.
@@ -20,7 +20,7 @@ the low-level `domain` layer.
 - `scripts/`: repository-level helpers; application scripts live in `apps/web/scripts/`.
 
 Desktop, shared-package and native-crate directories will be introduced as their
-implementations are added; see [the implementation plan](../IMPLEMENTATION_PLAN.md).
+implementations are added.
 See [WORKSPACE.md](WORKSPACE.md) for dependency and submodule workflows.
 
 Application source paths in the sections below are relative to `apps/web/`.

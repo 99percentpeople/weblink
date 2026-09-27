@@ -1,7 +1,8 @@
 **/node_modules
 **/dist
 **/dev-dist
-servers
+servers/*/*
+!servers/*/package.json
 .tmp
 target
 Dockerfile*

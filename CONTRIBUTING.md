@@ -11,13 +11,14 @@ cd weblink
 bun install --frozen-lockfile
 ```
 
-The frontend lives in `apps/web`. Root scripts run in that application directory.
-The server submodules keep their own dependencies and locks; see
+The frontend lives in `apps/web`. One root install covers the frontend and both
+server submodules through the root lockfile. Server lockfiles remain available
+for standalone clones; see
 [workspace development](docs/WORKSPACE.md) for their setup and update workflow.
 
 ## Required checks
 
-The `CI / Checks` job uses Bun 1.3.8 and runs the frontend type-check, unit tests
+The `CI / Checks` job uses Bun 1.3.14 and runs the frontend type-check, unit tests
 and integration tests. Tagged releases additionally validate the version in
 `apps/web/package.json` against the tag and root `CHANGELOG.md`.
 
@@ -29,8 +30,8 @@ bun run build
 ```
 
 The separate `Signaling servers` workflow checks the pinned Bun server and
-Cloudflare Worker. Run the relevant checks when updating a submodule; the Worker
-uses its own Bun version and toolchain. Do not add deployment credentials to pull
+Cloudflare Worker using the root workspace install. Run the relevant checks when
+updating a submodule. Do not add deployment credentials to pull
 request workflows. CI must remain usable for contributions from forks.
 
 ## Code changes

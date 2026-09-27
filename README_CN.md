@@ -119,19 +119,16 @@ Weblink 使用开源的
 
 ## 本地开发
 
-网页应用位于 `apps/web`，两个信令服务器以 Git submodule 固定在 `servers/`，
-分别维护依赖和发布流程。可以继续在仓库根目录启动、检查和构建网页应用。
+使用 Bun，在已初始化子模块的仓库根目录运行：
 
 ```sh
-git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
-cd weblink
 bun install --frozen-lockfile
+cp .env.example .env
 bun dev
 ```
 
-服务器安装与子模块更新见[工作区说明](docs/WORKSPACE.md)。
-Windows 优先的 Tauri 桌面端与远程控制见[完整实施计划](IMPLEMENTATION_PLAN.md)，
-桌面功能尚未实现。
+同时启动 Vite 和本地信令服务，端口在 `.env` 中配置。
+更多说明见[工作区文档](docs/WORKSPACE.md)。
 
 ## 了解更多
 

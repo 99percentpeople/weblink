@@ -120,20 +120,16 @@ signaling backend.
 
 ## Development
 
-The frontend lives in `apps/web`. The two signaling implementations are pinned
-Git submodules under `servers/`, with independent dependencies and releases.
-Root commands continue to start, check and build the web application.
+Use Bun. From a checkout with submodules initialized:
 
 ```sh
-git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
-cd weblink
 bun install --frozen-lockfile
+cp .env.example .env
 bun dev
 ```
 
-See [workspace development](docs/WORKSPACE.md) for server setup and submodule
-updates, and [the implementation plan](IMPLEMENTATION_PLAN.md) for the planned
-Windows-first Tauri desktop client. Desktop functionality is not implemented yet.
+This starts Vite and local signaling. Configure ports in `.env`;
+see [workspace development](docs/WORKSPACE.md) for more.
 
 ## Learn more
 

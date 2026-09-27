@@ -22,11 +22,14 @@ cd weblink
 bun install --frozen-lockfile
 ```
 
-Start the development server:
+Start the frontend against the configured signaling endpoint:
 
 ```sh
-bun dev
+bun run dev:web
 ```
+
+To run both Vite and local signaling, configure root `.env` and run `bun dev`;
+see [WORKSPACE.md](WORKSPACE.md).
 
 Build the production frontend:
 
@@ -162,7 +165,8 @@ Weblink's frontend is a static Vite build.
 For Vercel, Cloudflare Pages, Netlify, or another static host:
 
 1. configure the required `VITE_*` variables;
-2. install dependencies with Bun;
+2. initialize submodules (`git submodule update --init --recursive`) and install
+   dependencies with Bun;
 3. run `bun run build`;
 4. publish `apps/web/dist/`.
 

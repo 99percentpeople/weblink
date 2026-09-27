@@ -15,10 +15,6 @@ notes, refactor checklists and one-off test logs should not be committed under
 - [TESTING.md](TESTING.md) — unit, integration, browser E2E smoke and benchmark
   boundaries plus commands.
 
-The requested Windows desktop roadmap is maintained separately in the root
-[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). It describes planned
-phases; the feature documents here describe implemented behavior.
-
 ## P2P and signaling contracts
 
 - [P2P_PROTOCOL.md](P2P_PROTOCOL.md) — portable control protocol and
