@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2026-09-27
+
+### Improvements
+
+- Load managed TURN credentials from the signaling service instead of embedding managed TURN secrets in the web build, while preserving user-configured STUN and additional TURN servers 改为从信令服务获取托管 TURN 临时凭据，不再将托管 TURN 密钥嵌入前端构建，同时保留用户自定义 STUN 与额外 TURN 服务器
+- Separate meeting audio sources from video presentation and simplify the media protocol so microphone, screen audio, and other remote audio sources are tracked and rendered independently 将会议音频源与视频展示分离，并简化媒体协议，使麦克风、屏幕音频及其他远端音频源可独立跟踪和播放
+- Unify private and room conversation messaging around shared submission, delivery, retry, draft, and projection services for more consistent chat behavior 统一私聊与群聊的消息提交、送达、重试、草稿和投影服务，使不同会话的聊天行为保持一致
+- Unify file drag-and-drop imports across chat, shared files, and the local library, including shared import handling and consistent drop feedback 统一聊天、共享文件及本地文件库的拖放导入流程，共用导入处理并保持一致的拖放反馈
+- Refine toast presentation with dedicated icons and styling for clearer application feedback 优化 Toast 的图标与样式，使应用反馈更清晰
+
+### Infrastructure
+
+- Reorganize Weblink as a workspace with the web app under `apps/web` and signaling implementations tracked as server submodules 将 Weblink 重组为 workspace，Web 前端迁移至 `apps/web`，并以 server submodule 管理信令实现
+- Unify workspace dependency installation, local development commands, CI paths, Docker builds, and deployment documentation around the new repository layout 统一新仓库结构下的依赖安装、本地开发命令、CI 路径、Docker 构建及部署文档
+
 ## [1.0.5] - 2026-09-25
 
 ### Improvements
