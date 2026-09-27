@@ -1,5 +1,5 @@
 import { userErrorMessage } from "@/libs/user-error";
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
   ChevronDown,
   FolderUp,
@@ -19,6 +19,10 @@ import { cacheManager } from "@/libs/application/cache-service";
 import { handleSelectFolder } from "@/libs/utils/process-file";
 import { t } from "@/i18n";
 import FilePickerDialog from "./file-picker-dialog";
+import {
+  createLibraryImport,
+  type LibraryImport,
+} from "@/libs/hooks/create-library-import";
 
 const report = (error: unknown) =>
   toast.error(
@@ -26,57 +30,15 @@ const report = (error: unknown) =>
   );
 
 /** Explicit additions to the shared list, independent of chat sends. */
-export function SharedFileMenu() {
+export function SharedFileMenu(props: {
+  importer?: LibraryImport;
+}) {
   const [picking, setPicking] = createSignal(false);
-  const [importing, setImporting] = createSignal(false);
+  const { importing, importFiles } =
+    props.importer ?? createLibraryImport({ shared: true });
   let fileInput!: HTMLInputElement;
   let folderInput!: HTMLInputElement;
   let trigger!: HTMLButtonElement;
-  let currentImport: AbortController | undefined;
-  onCleanup(() => currentImport?.abort());
-
-  const importFiles = async (
-    read: (signal: AbortSignal) => Promise<File[]>,
-  ) => {
-    if (importing()) return;
-    const controller = new AbortController();
-    currentImport = controller;
-    setImporting(true);
-    const toastId = toast.loading(
-      t("common.notification.processing_files"),
-      {
-        duration: Infinity,
-        action: {
-          label: t("common.action.cancel"),
-          onClick: () => controller.abort(),
-        },
-      },
-    );
-    try {
-      const files = await read(controller.signal);
-      for (const file of files) {
-        controller.signal.throwIfAborted();
-        const { cache } =
-          await cacheManager.library.importFile(file, {
-            signal: controller.signal,
-          });
-        controller.signal.throwIfAborted();
-        await cacheManager.library.setShared(
-          cache.id,
-          true,
-        );
-      }
-      if (files.length)
-        toast.success(t("shared_files.added"));
-    } catch (error) {
-      if (!controller.signal.aborted) report(error);
-    } finally {
-      toast.dismiss(toastId);
-      currentImport = undefined;
-      setImporting(false);
-    }
-  };
-
   return (
     <div class="flex shrink-0 items-center">
       <input

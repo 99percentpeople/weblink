@@ -10,6 +10,7 @@ import {
   MemoryRouter,
   Route,
   createMemoryHistory,
+  useIsRouting,
   useNavigate,
 } from "@solidjs/router";
 import { createSignal, type ParentProps } from "solid-js";
@@ -108,6 +109,7 @@ vi.mock("@/routes/home/components/video-display", () => ({
 
 let session!: ReturnType<typeof useMeetingSession>;
 let navigate!: ReturnType<typeof useNavigate>;
+let isRouting!: ReturnType<typeof useIsRouting>;
 let mediaAction:
   | ((details?: {
       enterPictureInPictureReason?: string;
@@ -185,6 +187,7 @@ function setup(
   function Capture() {
     session = useMeetingSession();
     navigate = useNavigate();
+    isRouting = useIsRouting();
     return null;
   }
   function Shell(props: ParentProps) {
@@ -747,6 +750,53 @@ describe("meeting PiP across routes and documents", () => {
     ).toHaveLength(0);
     expect(fixture.clear).not.toHaveBeenCalled();
     expect(fixture.leave).not.toHaveBeenCalled();
+  });
+  it.each([
+    "/?panel=chat&conversation=private-alice",
+    "/?panel=files&member=me",
+    "/?panel=members",
+    "/?panel=info",
+  ])(
+    "preserves the Home sidebar URL %s when leaving the room",
+    async (url) => {
+      const f = setup();
+      navigate(url);
+      await waitFor(() =>
+        expect(f.history.get()).toBe(url),
+      );
+      fixture.leave.mockImplementationOnce(() =>
+        setAppState("roomStatus", "roomId", null),
+      );
+
+      session.leave();
+      await waitFor(() => expect(isRouting()).toBe(false));
+
+      expect(fixture.leave).toHaveBeenCalledOnce();
+      expect(appState.roomStatus.roomId).toBeNull();
+      expect(f.history.get()).toBe(url);
+      expect(fixture.clear).not.toHaveBeenCalled();
+    },
+  );
+  it("returns to Home when leaving the room from another page", async () => {
+    const f = setup();
+    navigate("/diagnostics");
+    await waitFor(() =>
+      expect(f.history.get()).toBe("/diagnostics"),
+    );
+    session.controls.toggle();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(true),
+    );
+    fixture.leave.mockImplementationOnce(() =>
+      setAppState("roomStatus", "roomId", null),
+    );
+
+    click("meeting.leave_room");
+    await waitFor(() => expect(f.history.get()).toBe("/"));
+
+    expect(fixture.leave).toHaveBeenCalledOnce();
+    expect(session.pip.active()).toBe(false);
+    expect(fixture.clear).not.toHaveBeenCalled();
   });
   it("opens during navigation, returns to the meeting, and preserves capture without reopening PiP when leaving the room", async () => {
     const f = setup();

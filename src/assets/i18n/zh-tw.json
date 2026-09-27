@@ -337,7 +337,8 @@
         "hide": "隱藏密碼",
         "generate": "生成"
       },
-      "auto_join": "下次自動加入"
+      "auto_join": "下次自動加入",
+      "drop_avatar": "放開以設定頭像"
     },
     "confirm_delete_files_dialog": {
       "title": "確認刪除",
@@ -547,7 +548,10 @@
       "previous": "上一頁",
       "next": "下一頁"
     },
-    "show_more": "顯示更多"
+    "show_more": "顯示更多",
+    "file_drop": {
+      "busy": "正在處理檔案，請稍候"
+    }
   },
   "conversations": {
     "title": "對話",
@@ -807,7 +811,8 @@
     "legacy": "首次傳送時計算指紋",
     "local_completion": "本機已有，已略過傳輸",
     "related_messages": "關聯訊息",
-    "peer_unavailable": "對方已離線，請連線後再傳送檔案。"
+    "peer_unavailable": "對方已離線，請連線後再傳送檔案。",
+    "drop_files": "放開以儲存至檔案快取"
   },
   "shared_files": {
     "add": "選擇檔案",
@@ -844,7 +849,8 @@
     "next": "下一頁",
     "page_size": "每頁檔案數",
     "select_member": "選擇成員以瀏覽其共享檔案。",
-    "back": "返回成員列表"
+    "back": "返回成員列表",
+    "drop_files": "放開以新增至我的共用檔案"
   },
   "room_connection": {
     "title": "此房間正在另一個頁面使用",

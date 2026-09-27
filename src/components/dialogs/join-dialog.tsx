@@ -2,6 +2,8 @@ import { userErrorMessage } from "@/libs/user-error";
 import { setClientProfile } from "@/libs/state/profile-store";
 import { createDialog } from "./dialog";
 import { Input } from "@/components/ui/input";
+import DropArea from "@/components/drop-area";
+import { FileDropOverlay } from "@/components/file-drop-overlay";
 import {
   InputGroup,
   InputGroupButton,
@@ -59,6 +61,24 @@ export const createRoomDialog = () => {
   let profileForm: HTMLFormElement | undefined;
   let roomForm: HTMLFormElement | undefined;
   let avatarFileInput: HTMLInputElement | undefined;
+
+  const uploadAvatar = async (file?: File) => {
+    if (!file || uploadingAvatar()) return;
+    setUploadingAvatar(true);
+    try {
+      const url = await imageFileToFilledSquareAvatar(
+        file,
+        128,
+      );
+      setClientProfile("avatar", url);
+    } catch (error) {
+      toast.error(
+        userErrorMessage(error, "errors.avatar_failed"),
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const goToRoomStep = () => {
     profileForm?.requestSubmit();
@@ -185,7 +205,30 @@ export const createRoomDialog = () => {
             />
           </label>
 
-          <div class="flex flex-col gap-2">
+          <DropArea
+            class="relative flex flex-col gap-2"
+            disabled={uploadingAvatar()}
+            onDrop={(event) => {
+              const files = Array.from(
+                event.dataTransfer?.files ?? [],
+              );
+              void uploadAvatar(
+                files.find((file) =>
+                  file.type.startsWith("image/"),
+                ) ?? files[0],
+              );
+            }}
+            overlay={(state) => (
+              <FileDropOverlay
+                compact
+                state={state}
+                title={t("common.join_form.drop_avatar")}
+                unavailableTitle={t(
+                  "common.file_drop.busy",
+                )}
+              />
+            )}
+          >
             <label for={avatarInputId} class="input-label">
               {t("common.join_form.avatar")}
             </label>
@@ -259,33 +302,15 @@ export const createRoomDialog = () => {
                 multiple={false}
                 accept="image/*"
                 class="hidden"
-                onChange={async (ev) => {
+                onChange={(ev) => {
                   const input = ev.currentTarget;
-                  const file = input.files?.item(0);
-                  if (!file) return;
-                  setUploadingAvatar(true);
-                  try {
-                    const url =
-                      await imageFileToFilledSquareAvatar(
-                        file,
-                        128,
-                      );
-                    setClientProfile("avatar", url);
-                  } catch (error) {
-                    toast.error(
-                      userErrorMessage(
-                        error,
-                        "errors.avatar_failed",
-                      ),
-                    );
-                  } finally {
-                    input.value = "";
-                    setUploadingAvatar(false);
-                  }
+                  const file = input.files?.[0];
+                  input.value = "";
+                  void uploadAvatar(file);
                 }}
               />
             </div>
-          </div>
+          </DropArea>
 
           <div class="bg-muted/40 flex items-center gap-3 rounded-lg px-3 py-2.5">
             <div class="min-w-0 flex-1">

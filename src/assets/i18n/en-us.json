@@ -329,7 +329,8 @@
         "hide": "Hide password",
         "generate": "Generate"
       },
-      "auto_join": "Auto Join Next Time"
+      "auto_join": "Auto Join Next Time",
+      "drop_avatar": "Drop to set your avatar"
     },
     "file_table": {
       "status": {
@@ -547,6 +548,9 @@
     "show_more": "Show more",
     "clipboard_history": {
       "title": "Clipboard history"
+    },
+    "file_drop": {
+      "busy": "Processing files, please wait"
     }
   },
   "conversations": {
@@ -807,7 +811,8 @@
     "legacy": "Fingerprint calculated on first send",
     "local_completion": "Already on this device; transfer skipped",
     "related_messages": "Related messages",
-    "peer_unavailable": "The recipient is offline. Reconnect before sending files."
+    "peer_unavailable": "The recipient is offline. Reconnect before sending files.",
+    "drop_files": "Drop to save to your file cache"
   },
   "shared_files": {
     "add": "Add files",
@@ -844,7 +849,8 @@
     "next": "Next",
     "page_size": "Files per page",
     "select_member": "Select a member to browse shared files.",
-    "back": "Back to members"
+    "back": "Back to members",
+    "drop_files": "Drop to add to your shared files"
   },
   "room_connection": {
     "title": "This room is active in another page",

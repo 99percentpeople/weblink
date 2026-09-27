@@ -51,6 +51,9 @@ const [audibleMembers, setAudibleMembers] = createSignal([
   "bob",
 ]);
 const [playingAudio, setPlayingAudio] = createSignal(false);
+const [currentRoomId, setCurrentRoomId] = createSignal<
+  string | undefined
+>("Current room");
 vi.mock("@/i18n", () => ({
   t: (key: string, values?: { error: string }) =>
     values?.error ?? key,
@@ -113,7 +116,11 @@ vi.mock("@/libs/state/app-state", () => ({
   appState: {
     profile: { clientId: "me", name: "Me" },
     options: {},
-    roomStatus: { roomId: "Current room" },
+    roomStatus: {
+      get roomId() {
+        return currentRoomId();
+      },
+    },
     session: {
       clientViewData: {
         bob: {
@@ -295,6 +302,7 @@ beforeEach(() => {
   setMutedMembers([]);
   setAudibleMembers(["bob"]);
   setPlayingAudio(false);
+  setCurrentRoomId("Current room");
   fixture.setPlay.mockImplementation(setPlayingAudio);
   fixture.setPeerMuted.mockImplementation(
     (id: string, muted: boolean) =>
@@ -333,6 +341,53 @@ afterEach(() => {
 });
 
 describe("meeting page navigation and panels", () => {
+  it("shows and hides the local preview hint without replacing media views", async () => {
+    render(() => (
+      <MeetingMediaProvider>
+        <MeetingSessionProvider>
+          <Video />
+        </MeetingSessionProvider>
+      </MeetingMediaProvider>
+    ));
+    const stage = screen.getByLabelText("meeting.stage");
+    const views = [...screen.getAllByRole("article")];
+    expect(
+      screen.queryByText("meeting.preview_hint"),
+    ).toBeNull();
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      setCurrentRoomId(undefined);
+      await screen.findByText("meeting.preview_hint");
+      fireEvent.click(
+        within(stage).getByRole("button", {
+          name: "meeting.join_room",
+        }),
+      );
+      fireEvent.click(
+        within(stage).getByRole("button", {
+          name: "client.index.edit_room",
+        }),
+      );
+      setCurrentRoomId("Current room");
+      await waitFor(() =>
+        expect(
+          screen.queryByText("meeting.preview_hint"),
+        ).toBeNull(),
+      );
+      expect(screen.getByLabelText("meeting.stage")).toBe(
+        stage,
+      );
+      for (const view of views)
+        expect(view).toBeInTheDocument();
+    }
+    expect(fixture.joinRoom).toHaveBeenCalledTimes(2);
+    expect(fixture.editRoom).toHaveBeenCalledTimes(2);
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(
+      fixture.replaceLocalStream,
+    ).not.toHaveBeenCalled();
+  });
+
   it.each([
     { width: 390, screen: false, pip: false },
     { width: 390, screen: true, pip: false },
@@ -1423,7 +1478,7 @@ describe("meeting page navigation and panels", () => {
     ).not.toHaveBeenCalled();
   });
 
-  it("keeps local media when leaving the room and returning home", () => {
+  it("keeps local media without navigating when leaving the room on Home", () => {
     render(() => (
       <MeetingMediaProvider>
         <MeetingSessionProvider>
@@ -1441,7 +1496,7 @@ describe("meeting page navigation and panels", () => {
       fixture.replaceLocalStream,
     ).not.toHaveBeenCalled();
     expect(fixture.leaveRoom).toHaveBeenCalledOnce();
-    expect(fixture.navigate).toHaveBeenCalledWith("/");
+    expect(fixture.navigate).not.toHaveBeenCalled();
   });
 
   it("does not disconnect or stop published media when navigating away", () => {

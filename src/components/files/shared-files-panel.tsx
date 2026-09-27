@@ -40,6 +40,9 @@ import { t } from "@/i18n";
 import { cn } from "@/libs/cn";
 import { FileBrowser } from "./file-browser";
 import { SharedFileMenu } from "./shared-file-menu";
+import DropArea from "@/components/drop-area";
+import { FileDropOverlay } from "@/components/file-drop-overlay";
+import { createLibraryImport } from "@/libs/hooks/create-library-import";
 import { SharedFileRow } from "./shared-file-row";
 import { contentKey } from "@/libs/domain/protocol/file-fingerprint";
 import { isActiveTask } from "@/libs/application/task-service";
@@ -60,7 +63,7 @@ function MySharedFiles() {
   );
   const preview = createPreviewDialog();
   return (
-    <div class="flex min-h-0 flex-1 flex-col gap-3 p-3">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">
       <FileBrowser
         sharing="shared"
         selected={selected()}
@@ -662,76 +665,103 @@ export function SharedFilesPanel(props: {
           </div>
         }
       >
-        {(member) => (
-          <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <header
-              class="border-border bg-background/80 flex w-full shrink-0
-                items-center gap-2 border-b p-3 backdrop-blur"
+        {(member) => {
+          const importer = createLibraryImport({
+            shared: true,
+          });
+          return (
+            <DropArea
+              as="section"
+              class="relative flex min-h-0 min-w-0 flex-1 flex-col
+                overflow-hidden"
+              disabled={
+                !local() ||
+                !props.active ||
+                (!props.split && props.browsing) ||
+                importer.importing()
+              }
+              onDrop={importer.onDrop}
+              overlay={(state) => (
+                <Show when={local()}>
+                  <FileDropOverlay
+                    state={state}
+                    title={t("shared_files.drop_files")}
+                    unavailableTitle={t(
+                      "common.file_drop.busy",
+                    )}
+                  />
+                </Show>
+              )}
             >
-              <Show when={!props.split}>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="shrink-0"
-                  aria-label={t("shared_files.back")}
-                  title={t("shared_files.back")}
-                  onClick={props.onBack}
+              <header
+                class="border-border bg-background/80 flex w-full shrink-0
+                  items-center gap-2 border-b p-3 backdrop-blur"
+              >
+                <Show when={!props.split}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="shrink-0"
+                    aria-label={t("shared_files.back")}
+                    title={t("shared_files.back")}
+                    onClick={props.onBack}
+                  >
+                    <ChevronLeft class="size-5" />
+                  </Button>
+                </Show>
+                <Show
+                  when={local()}
+                  fallback={
+                    <ClientAvatar
+                      class="size-9 shrink-0"
+                      name={name()}
+                      avatar={
+                        selectedPeer()?.avatar ?? undefined
+                      }
+                    />
+                  }
                 >
-                  <ChevronLeft class="size-5" />
-                </Button>
-              </Show>
+                  <span
+                    class="bg-primary/10 text-primary flex size-9 shrink-0 items-center
+                      justify-center rounded-full"
+                    aria-hidden="true"
+                  >
+                    <FolderOpen class="size-5" />
+                  </span>
+                </Show>
+                <div class="min-w-0 flex-1">
+                  <h2
+                    class="truncate text-sm font-semibold"
+                    title={name()}
+                  >
+                    {name()}
+                  </h2>
+                  <p class="text-muted-foreground truncate text-xs">
+                    {local()
+                      ? t("shared_files.choose")
+                      : t(
+                          `common.status.${selectedPeer()?.onlineStatus ?? "leave"}`,
+                        )}
+                  </p>
+                </div>
+                <Show when={local()}>
+                  <SharedFileMenu importer={importer} />
+                </Show>
+              </header>
               <Show
                 when={local()}
                 fallback={
-                  <ClientAvatar
-                    class="size-9 shrink-0"
-                    name={name()}
-                    avatar={
-                      selectedPeer()?.avatar ?? undefined
-                    }
+                  <RemoteSharedFiles
+                    peerId={member}
+                    active={props.active}
                   />
                 }
               >
-                <span
-                  class="bg-primary/10 text-primary flex size-9 shrink-0 items-center
-                    justify-center rounded-full"
-                  aria-hidden="true"
-                >
-                  <FolderOpen class="size-5" />
-                </span>
+                <MySharedFiles />
               </Show>
-              <div class="min-w-0 flex-1">
-                <h2
-                  class="truncate text-sm font-semibold"
-                  title={name()}
-                >
-                  {name()}
-                </h2>
-                <p class="text-muted-foreground truncate text-xs">
-                  {local()
-                    ? t("shared_files.choose")
-                    : t(
-                        `common.status.${selectedPeer()?.onlineStatus ?? "leave"}`,
-                      )}
-                </p>
-              </div>
-              <Show when={local()}>
-                <SharedFileMenu />
-              </Show>
-            </header>
-            <Show
-              when={local()}
-              fallback={
-                <RemoteSharedFiles
-                  peerId={member}
-                  active={props.active}
-                />
-              }
-            >
-              <MySharedFiles />
-            </Show>
-          </section>
-        )}
+            </DropArea>
+          );
+        }}
       </Show>
     </SidebarBrowser>
   );

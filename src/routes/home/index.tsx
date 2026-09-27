@@ -105,6 +105,9 @@ export default function Home() {
   const displayedToolbarCollapsed = layout.value(
     toolbarCollapsed,
   );
+  const showPreviewHint = layout.value(
+    () => !appState.roomStatus.roomId,
+  );
   const viewport = createWindowSize();
   const isMobile = createIsMobile(viewport);
   const canDockExpanded = () => viewport.width >= 1280;
@@ -634,49 +637,76 @@ export default function Home() {
                   }}
                   onStop={media.stopVideoTrack}
                 >
-                  <Show when={!appState.roomStatus.roomId}>
-                    <div
-                      class="text-muted-foreground bg-accent mb-3.5 flex flex-wrap
-                        items-center justify-between gap-2 rounded-md px-3.5 py-2.5
-                        text-xs leading-[1.6]"
+                  <div class="relative shrink-0">
+                    <AnimatePresence
+                      when={showPreviewHint()}
                     >
-                      <span>
-                        {t("meeting.preview_hint")}
-                      </span>
-                      <div class="ml-auto flex flex-nowrap gap-2">
-                        <button
-                          type="button"
-                          class="text-primary underline underline-offset-[3px]"
-                          disabled={
-                            roomActions.busy() ||
-                            appState.session
-                              .clientServiceStatus ===
-                              "connecting"
-                          }
-                          onClick={() =>
-                            void roomActions.join()
-                          }
-                        >
-                          {t("meeting.join_room")}
-                        </button>
-                        <button
-                          type="button"
-                          class="text-primary underline underline-offset-[3px]"
-                          disabled={
-                            roomActions.busy() ||
-                            appState.session
-                              .clientServiceStatus ===
-                              "connecting"
-                          }
-                          onClick={() =>
-                            void roomActions.edit()
-                          }
-                        >
-                          {t("client.index.edit_room")}
-                        </button>
-                      </div>
-                    </div>
-                  </Show>
+                      <Motion.div
+                        native
+                        initial={{
+                          opacity: 0,
+                          transform: "translateY(-6px)",
+                        }}
+                        animate={{
+                          opacity: 1,
+                          transform: "translateY(0px)",
+                        }}
+                        exit={{
+                          opacity: 0,
+                          transform: "translateY(-6px)",
+                        }}
+                        transition={{
+                          duration: 0.28,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
+                        // Release its space at the start of the shared layout
+                        // transition, while presence keeps the fading hint visible.
+                        classList={{
+                          "absolute inset-x-0 top-0 z-10":
+                            !showPreviewHint(),
+                        }}
+                        class="text-muted-foreground bg-accent mb-3.5 flex flex-wrap
+                          items-center justify-between gap-2 rounded-md px-3.5 py-2.5
+                          text-xs leading-[1.6]"
+                      >
+                        <span>
+                          {t("meeting.preview_hint")}
+                        </span>
+                        <div class="ml-auto flex flex-nowrap gap-2">
+                          <button
+                            type="button"
+                            class="text-primary underline underline-offset-[3px]"
+                            disabled={
+                              roomActions.busy() ||
+                              appState.session
+                                .clientServiceStatus ===
+                                "connecting"
+                            }
+                            onClick={() =>
+                              void roomActions.join()
+                            }
+                          >
+                            {t("meeting.join_room")}
+                          </button>
+                          <button
+                            type="button"
+                            class="text-primary underline underline-offset-[3px]"
+                            disabled={
+                              roomActions.busy() ||
+                              appState.session
+                                .clientServiceStatus ===
+                                "connecting"
+                            }
+                            onClick={() =>
+                              void roomActions.edit()
+                            }
+                          >
+                            {t("client.index.edit_room")}
+                          </button>
+                        </div>
+                      </Motion.div>
+                    </AnimatePresence>
+                  </div>
                 </MeetingStage>
               </Motion.div>
             </AnimatePresence>

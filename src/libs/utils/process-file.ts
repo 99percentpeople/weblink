@@ -58,7 +58,7 @@ export const handleDropItems = async (
     const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const entry = item.webkitGetAsEntry();
+      const entry = item.webkitGetAsEntry?.();
 
       if (entry) {
         entries.push(entry);

@@ -16,12 +16,16 @@ import {
 } from "@solidjs/testing-library";
 import { createRoomDialog } from "@/components/dialogs/join-dialog";
 import { ModalProvider } from "@/components/dialogs/base";
+import { toast } from "solid-sonner";
 import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("solid-sonner", () => ({
+  toast: { error: vi.fn() },
+}));
 vi.mock("@/components/icons", () => ({
   IconCasino: () => null,
   IconContentCopy: () => null,
@@ -52,6 +56,7 @@ afterEach(() => {
   cleanup();
   animationStyle.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function setup() {
@@ -77,6 +82,101 @@ function setup() {
 }
 
 describe("room settings autosave", () => {
+  it("accepts a dropped avatar image through the existing crop and save flow", async () => {
+    const drawImage = vi.fn();
+    vi.spyOn(
+      HTMLCanvasElement.prototype,
+      "getContext",
+    ).mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(
+      HTMLCanvasElement.prototype,
+      "toDataURL",
+    ).mockReturnValue("data:image/png;base64,avatar");
+    let image!: HTMLImageElement;
+    vi.stubGlobal(
+      "Image",
+      class {
+        constructor() {
+          image = document.createElement("img");
+          image.width = 256;
+          image.height = 128;
+          return image;
+        }
+      },
+    );
+    setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.profile/,
+      }),
+    );
+    const avatar = screen.getAllByRole("button", {
+      name: "common.join_form.upload_avatar",
+    })[0];
+    const file = new File(["image"], "avatar.png", {
+      type: "image/png",
+    });
+    const read = vi.spyOn(
+      FileReader.prototype,
+      "readAsDataURL",
+    );
+    expect(
+      fireEvent.drop(avatar, {
+        dataTransfer: {
+          types: ["Files"],
+          files: [new File(["text"], "note.txt"), file],
+        },
+      }),
+    ).toBe(false);
+    expect(read).toHaveBeenCalledWith(file);
+    expect(avatar).toBeDisabled();
+    fireEvent.drop(avatar, {
+      dataTransfer: { types: ["Files"], files: [file] },
+    });
+    expect(read).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(image?.onload).toBeTypeOf("function"),
+    );
+    fireEvent.load(image);
+    await waitFor(() =>
+      expect(appState.profile.avatar).toBe(
+        "data:image/png;base64,avatar",
+      ),
+    );
+    expect(drawImage).toHaveBeenCalledOnce();
+    expect(avatar).not.toBeDisabled();
+  });
+
+  it("rejects a dropped non-image without replacing the avatar", async () => {
+    vi.mocked(toast.error).mockClear();
+    setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /common.join_form.steps.profile/,
+      }),
+    );
+    const avatar = screen.getAllByRole("button", {
+      name: "common.join_form.upload_avatar",
+    })[0];
+    fireEvent.drop(avatar, {
+      dataTransfer: {
+        types: ["Files"],
+        files: [
+          new File(["text"], "note.txt", {
+            type: "text/plain",
+          }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledOnce(),
+    );
+    expect(appState.profile.avatar).toBeNull();
+    expect(avatar).not.toBeDisabled();
+  });
+
   it("saves edits immediately and preserves them when closed without connecting", async () => {
     const { completed } = setup();
     const input = await screen.findByLabelText(

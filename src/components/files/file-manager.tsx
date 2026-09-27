@@ -4,7 +4,6 @@ import {
   createMemo,
   createSignal,
   For,
-  onCleanup,
   Show,
 } from "solid-js";
 import { ChevronDown, Upload } from "lucide-solid";
@@ -27,14 +26,13 @@ import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { createForwardDialog } from "@/components/dialogs/forward-dialog";
 import { createDialog } from "@/components/dialogs/dialog";
 import { downloadFile } from "@/libs/utils/download-file";
-import {
-  handleDropItems,
-  handleSelectFolder,
-} from "@/libs/utils/process-file";
+import { handleSelectFolder } from "@/libs/utils/process-file";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import DropArea from "@/components/drop-area";
+import { FileDropOverlay } from "@/components/file-drop-overlay";
+import { createLibraryImport } from "@/libs/hooks/create-library-import";
 
 export default function FileManager() {
   const files = useLibraryFiles();
@@ -46,7 +44,8 @@ export default function FileManager() {
   );
   const [storage, setStorage] =
     createSignal<StorageEstimate>();
-  const [importing, setImporting] = createSignal(false);
+  const { importing, importFiles, onDrop } =
+    createLibraryImport();
   const [detail, setDetail] = createSignal<LibraryFile>();
   const [deleting, setDeleting] = createSignal<
     LibraryFile[]
@@ -55,10 +54,6 @@ export default function FileManager() {
   const forward = createForwardDialog();
   let fileInput!: HTMLInputElement;
   let folderInput!: HTMLInputElement;
-  const controllers = new Set<AbortController>();
-  onCleanup(() =>
-    controllers.forEach((controller) => controller.abort()),
-  );
   createEffect(() => {
     files();
     void navigator.storage
@@ -219,73 +214,17 @@ export default function FileManager() {
       downloadFile(current.file);
     else await forward.forwardCache(current);
   };
-  const importFiles = async (
-    read: (signal: AbortSignal) => Promise<File[]>,
-  ) => {
-    if (importing()) return;
-    const controller = new AbortController();
-    controllers.add(controller);
-    setImporting(true);
-    const toastId = toast.loading(
-      t("common.notification.processing_files"),
-      {
-        duration: Infinity,
-        action: {
-          label: t("common.action.cancel"),
-          onClick: () => controller.abort(),
-        },
-      },
-    );
-    try {
-      const incoming = await read(controller.signal);
-      let reused = false;
-      for (const file of incoming) {
-        controller.signal.throwIfAborted();
-        const result =
-          await cacheManager.library.importFile(file, {
-            signal: controller.signal,
-          });
-        reused ||= result.reused;
-      }
-      if (incoming.length)
-        toast.success(
-          t(
-            reused
-              ? "file_library.reused"
-              : "file_library.imported",
-          ),
-        );
-    } catch (error) {
-      if (!controller.signal.aborted) report(error);
-    } finally {
-      toast.dismiss(toastId);
-      controllers.delete(controller);
-      setImporting(false);
-    }
-  };
   return (
     <DropArea
       class="relative flex min-h-0 min-w-0 flex-1 flex-col gap-4"
       disabled={importing()}
-      onDrop={(event) => {
-        if (event.dataTransfer?.items)
-          void importFiles((signal) =>
-            handleDropItems(
-              event.dataTransfer!.items,
-              signal,
-            ),
-          );
-      }}
+      onDrop={onDrop}
       overlay={(state) => (
-        <Show when={state.active && state.accepted}>
-          <div
-            class="bg-background/90 pointer-events-none absolute inset-0 z-20
-              flex items-center justify-center rounded-lg border-2
-              border-dashed"
-          >
-            {t("file_library.import")}
-          </div>
-        </Show>
+        <FileDropOverlay
+          state={state}
+          title={t("file_library.drop_files")}
+          unavailableTitle={t("common.file_drop.busy")}
+        />
       )}
     >
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -308,6 +247,7 @@ export default function FileManager() {
           class="hidden"
           type="file"
           multiple
+          aria-label={t("shared_files.upload_files")}
           onChange={(event) => {
             const input = event.currentTarget;
             const files = Array.from(input.files ?? []);
@@ -321,6 +261,7 @@ export default function FileManager() {
           type="file"
           // @ts-expect-error Browser directory picker attribute.
           webkitdirectory=""
+          aria-label={t("shared_files.upload_folder")}
           onChange={(event) => {
             const input = event.currentTarget;
             const files = input.files;

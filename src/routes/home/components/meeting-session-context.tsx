@@ -302,7 +302,7 @@ function createMeetingSession() {
     setEngaged(false);
     pip.close();
     state.leaveRoom();
-    navigate("/");
+    if (!onMeetingPage()) navigate(HOME_PATH);
   };
   const controls: MeetingPipControls = {
     supported: pip.supported,
