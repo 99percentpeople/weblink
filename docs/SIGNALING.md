@@ -36,7 +36,7 @@ The Worker supports the existing Weblink WebSocket protocol:
 ## Portable signaling contract
 
 The frontend's transport-neutral signaling DTOs, parser and deployed limits live
-in `src/libs/domain/signaling-protocol.ts`. Browser reconnect timers and
+in `apps/web/src/libs/domain/signaling-protocol.ts`. Browser reconnect timers and
 WebSocket lifecycle state remain infrastructure concerns and are intentionally
 not part of this contract.
 
@@ -117,10 +117,12 @@ That token is not part of the public wire format. It prevents late
 message/leave/close events from an old socket from mutating the replacement
 session; the Worker also persists the token through Durable Object hibernation.
 
-The Bun server and Worker still live in independent Git repositories, so their
-contract tests currently execute in each repository. A future shared fixture
-must be distributed through a CI-consumable package/spec source rather than a
-local sibling-repository path.
+The Bun server and Worker are pinned Git submodules under `servers/`, retaining
+independent repositories, dependencies and contract tests. The root signaling
+CI workflow initializes both and runs each repository's checks. A future shared
+fixture must be distributed through an independently consumable package/spec
+source rather than an import from outside the server's repository. See
+[WORKSPACE.md](WORKSPACE.md) for checkout and update commands.
 
 ### Browser tab ownership
 

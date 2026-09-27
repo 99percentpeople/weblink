@@ -6,12 +6,18 @@ notes, refactor checklists and one-off test logs should not be committed under
 
 ## Architecture and development
 
+- [WORKSPACE.md](WORKSPACE.md) — repository layout, Bun workspace commands and
+  Git submodule installation/update/commit boundaries.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — module boundaries, dependency direction
   and ownership rules.
 - [DEPLOYMENT.md](DEPLOYMENT.md) — local setup, build configuration, hosting,
   signaling backends, Docker, ICE and LAN deployment.
 - [TESTING.md](TESTING.md) — unit, integration, browser E2E smoke and benchmark
   boundaries plus commands.
+
+The requested Windows desktop roadmap is maintained separately in the root
+[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md). It describes planned
+phases; the feature documents here describe implemented behavior.
 
 ## P2P and signaling contracts
 

@@ -37,11 +37,11 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           bun -e '
-            const { version } = await Bun.file("package.json").json();
+            const { version } = await Bun.file("apps/web/package.json").json();
             const tag = process.env.GITHUB_REF_NAME;
             if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag ?? "") ||
                 tag !== `v${version}`) {
-              throw new Error("The release tag must match the stable version in package.json");
+              throw new Error("The release tag must match the stable version in apps/web/package.json");
             }
             const notes = await Bun.file("CHANGELOG.md").text();
             if (!notes.includes(`## [${version}] - `)) {
@@ -104,14 +104,14 @@ jobs:
             echo "::error::Configure PAGES_BUILD_ENV with the development VITE_* settings."
             exit 1
           fi
-          printf '%s\n' "$PAGES_BUILD_ENV" > .env.dev.local
+          printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.dev.local
           bun run build:dev
 
       - name: Deploy dev preview, never production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          bunx wrangler@4.137.0 pages deploy dist \
+          bunx wrangler@4.137.0 pages deploy apps/web/dist \
             --project-name "$PAGES_PROJECT_NAME" \
             --branch dev \
             --commit-hash "$GITHUB_SHA" \
@@ -189,14 +189,14 @@ jobs:
             echo "::error::Configure PAGES_BUILD_ENV with the production VITE_* settings."
             exit 1
           fi
-          printf '%s\n' "$PAGES_BUILD_ENV" > .env.production.local
+          printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.production.local
           bun run build
 
       - name: Deploy release to Pages production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          bunx wrangler@4.137.0 pages deploy dist \
+          bunx wrangler@4.137.0 pages deploy apps/web/dist \
             --project-name "$PAGES_PROJECT_NAME" \
             --branch public \
             --commit-hash "$GITHUB_SHA" \

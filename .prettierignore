@@ -1,0 +1,6 @@
+node_modules/
+apps/*/dist/
+apps/*/dev-dist/
+servers/
+.tmp/
+bun.lock

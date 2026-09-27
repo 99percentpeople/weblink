@@ -17,9 +17,9 @@ For local development or building from source:
 Install dependencies:
 
 ```sh
-git clone https://github.com/99percentpeople/weblink.git
+git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
 cd weblink
-bun install
+bun install --frozen-lockfile
 ```
 
 Start the development server:
@@ -34,7 +34,10 @@ Build the production frontend:
 bun run build
 ```
 
-The static production output is written to `dist/`.
+The static production output is written to `apps/web/dist/`. Root scripts
+delegate to the `apps/web` workspace. Copy `apps/web/.env.example` to
+`apps/web/.env.local` for local frontend settings. See [WORKSPACE.md](WORKSPACE.md)
+for independent server dependency installation and submodule updates.
 
 ## Signaling backend
 
@@ -161,7 +164,11 @@ For Vercel, Cloudflare Pages, Netlify, or another static host:
 1. configure the required `VITE_*` variables;
 2. install dependencies with Bun;
 3. run `bun run build`;
-4. publish `dist/`.
+4. publish `apps/web/dist/`.
+
+Keep the hosting project root at the repository root so Bun can read the root
+workspace and lockfile. The root `vercel.json` specifies the install command,
+build command and output directory. Frontend dotenv files belong in `apps/web`.
 
 A minimal public WebSocket deployment needs:
 
@@ -176,9 +183,9 @@ and secure WebSocket deployment all work most reliably in a secure context.
 
 The [CI workflow](../.github/workflows/ci.yml) is the single gate for both
 development and production publishing. Stable tags such as `v1.0.0` run the same
-`Checks` job as branch pushes: release metadata validation, type-checking, unit
+`Checks` job as branch pushes: release metadata validation against `apps/web/package.json`, type-checking, unit
 tests and integration tests. Only after `Checks` succeeds does the
-`deploy-production` job build the production bundle and upload `dist/`.
+`deploy-production` job build the production bundle and upload `apps/web/dist/`.
 Prerelease tags such as `v1.1.0-beta.1` do not match the workflow trigger and
 therefore do not publish to production.
 
@@ -218,7 +225,7 @@ identify the release.
 
    Copy any existing production STUN or TURN settings into the same
    value. Preserve the variable names documented above. The workflow writes this
-   secret into the ignored `.env.production.local` file before building. The
+   secret into the ignored `apps/web/.env.production.local` file before building. The
    build runs on GitHub, so variables configured only in the Pages build settings
    are not supplied to it. `VITE_*` values become part of the public frontend;
    keep the deployment API token in its separate secret.
@@ -274,7 +281,7 @@ bun run build:dev
 This runs `vite build --mode dev`, not a publicly exposed Vite development
 server. It retains optimized production runtime code and PWA support, but keeps
 debug logs. The displayed version becomes `1.0.4-dev.<short-commit>` (using the
-current package version); `package.json` itself is not rewritten. The document
+current package version); `apps/web/package.json` itself is not rewritten. The document
 and installed PWA are named **Weblink Dev**. Dev builds include robots exclusions
 and an `X-Robots-Tag` header to discourage search indexing; this is not access
 control.
@@ -292,9 +299,9 @@ The GitHub **Preview** environment uses the repository's existing
 `CLOUDFLARE_API_TOKEN` secret (Pages Edit). No account lookup or DNS permission
 is needed for ordinary preview uploads.
 
-The repository commits only `.env.example`. The Preview environment's required
+The frontend commits only `apps/web/.env.example`. The Preview environment's required
 `PAGES_BUILD_ENV` secret supplies the development `VITE_*` settings and is written
-to ignored `.env.dev.local` before building.
+to ignored `apps/web/.env.dev.local` before building.
 
 Production environment secrets are not automatically available in Preview.
 Keep only browser-visible WebSocket/STUN settings and optional additional
@@ -321,6 +328,11 @@ The repository includes a frontend `Dockerfile` and
 
 The compose file builds the frontend and starts
 [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server).
+
+The Compose server build uses the pinned local submodule at
+`servers/weblink-ws-server`; initialize it with
+`git submodule update --init --recursive`. Run Docker builds and Compose from
+the repository root.
 
 Before starting it, set the public WebSocket address in
 `docker-compose.yaml` to an address browsers can actually reach.
@@ -375,7 +387,7 @@ repository.
 Typical verification before deployment:
 
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run typegen
 bun run format:check
 bun run typecheck

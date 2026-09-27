@@ -34,3 +34,9 @@ Thumbs.db
 
 # Vite
 *.timestamp-*.mjs
+
+# Local migration backups and development logs
+/.tmp/
+
+# Native build outputs (desktop modules are added in later phases)
+target/

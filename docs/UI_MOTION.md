@@ -1,7 +1,7 @@
 # UI motion
 
 Use the native JavaScript API from `motion`; the application does not load React.
-The local Solid wrapper lives in `src/components/ui/motion.tsx`.
+The local Solid wrapper lives in `apps/web/src/components/ui/motion.tsx`.
 
 ## Entrance, updates and exit
 

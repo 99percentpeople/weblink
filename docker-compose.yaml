@@ -19,7 +19,7 @@ services:
 
   ws-server:
     build:
-      context: https://github.com/99percentpeople/weblink-ws-server.git
+      context: ./servers/weblink-ws-server
     environment:
       - LOG_LEVEL=info
     ports:

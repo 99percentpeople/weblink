@@ -13,7 +13,7 @@ There are three distinct concerns:
    own channels/state machines and are not encoded as control messages.
 
 A future desktop, mobile or native client should implement the wire contract in
-`src/libs/domain/protocol/` and provide its own transport/session adapter. It
+`apps/web/src/libs/domain/protocol/` and provide its own transport/session adapter. It
 does not need Weblink's `PeerSession`, Solid state, IndexedDB or UI services.
 
 ## Portable client boundary

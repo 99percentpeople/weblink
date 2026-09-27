@@ -1,0 +1,59 @@
+name: Signaling servers
+
+on:
+  pull_request:
+  push:
+    branches:
+      - public
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: servers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bun-server:
+    name: Bun server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: servers/weblink-ws-server
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: bun run build
+
+  worker:
+    name: Cloudflare Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: servers/weblink-ws-worker
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run typegen
+      - run: bun run format:check
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bunx wrangler deploy --dry-run

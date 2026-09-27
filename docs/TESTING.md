@@ -4,6 +4,12 @@ Weblink separates correctness tests by **test boundary**, not by implementation
 feature. The goal is to keep fast deterministic feedback separate from real-browser
 smoke coverage and from performance measurements.
 
+Run the commands below from the repository root; they delegate to `apps/web`
+so existing test/configuration-relative paths retain their meaning. Application
+test and script paths in this document are relative to `apps/web/`.
+The two server submodules have separate dependencies and checks; see
+[WORKSPACE.md](WORKSPACE.md).
+
 Visual appearance is reviewed manually. Keep new UI tests focused on behavior,
 permissions, state transitions and resource cleanup. Avoid new screenshot or
 CSS geometry assertions for routine layout and styling changes.

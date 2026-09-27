@@ -1,4 +1,9 @@
-node_modules
+**/node_modules
+**/dist
+**/dev-dist
+servers
+.tmp
+target
 Dockerfile*
 docker-compose*
 .dockerignore
@@ -9,7 +14,7 @@ LICENSE
 .vscode
 Makefile
 helm-charts
-.env*
+**/.env*
 .editorconfig
 .idea
 coverage*

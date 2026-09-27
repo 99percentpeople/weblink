@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
-    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/branding/weblink-logo-dark.svg" />
+    <img src="apps/web/public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
   </picture>
 
   <h3>Share more. Install less.</h3>
@@ -117,6 +117,23 @@ Open **[webl.ink](https://webl.ink)** in your browser.
 Weblink uses the open-source
 [weblink-ws-worker](https://github.com/99percentpeople/weblink-ws-worker)
 signaling backend.
+
+## Development
+
+The frontend lives in `apps/web`. The two signaling implementations are pinned
+Git submodules under `servers/`, with independent dependencies and releases.
+Root commands continue to start, check and build the web application.
+
+```sh
+git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
+cd weblink
+bun install --frozen-lockfile
+bun dev
+```
+
+See [workspace development](docs/WORKSPACE.md) for server setup and submodule
+updates, and [the implementation plan](IMPLEMENTATION_PLAN.md) for the planned
+Windows-first Tauri desktop client. Desktop functionality is not implemented yet.
 
 ## Learn more
 

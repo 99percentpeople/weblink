@@ -1,0 +1,8 @@
+[submodule "servers/weblink-ws-server"]
+	path = servers/weblink-ws-server
+	url = https://github.com/99percentpeople/weblink-ws-server.git
+	branch = master
+[submodule "servers/weblink-ws-worker"]
+	path = servers/weblink-ws-worker
+	url = https://github.com/99percentpeople/weblink-ws-worker.git
+	branch = main

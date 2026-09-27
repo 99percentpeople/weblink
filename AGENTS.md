@@ -1,6 +1,21 @@
 # weblink — Agent Working Agreement
 
-This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
+This is the Weblink workspace. The SolidJS + TypeScript (strict) WebRTC app
+lives in `apps/web`. Run the commands below from the repository root.
+
+## Workspace and Git boundaries
+
+- `apps/*` and `packages/*` are Bun workspaces with the root `bun.lock`.
+- `servers/weblink-ws-server` and `servers/weblink-ws-worker` are Git submodules,
+  with independent dependencies, lockfiles and release workflows. Do not add
+  them to Bun workspaces or import files from outside their own repositories.
+- Commit and publish submodule changes in the server repository before updating
+  its gitlink in the parent. Normal builds use the pinned commit, not remote HEAD.
+- Application version lives in `apps/web/package.json`; root package metadata
+  is tooling-only. Build output is `apps/web/dist` and Vite env files belong in
+  `apps/web`. Never commit local env files or generated artifacts.
+- See `docs/WORKSPACE.md` for commands and `IMPLEMENTATION_PLAN.md` for the
+  requested desktop roadmap. Tauri/native implementation belongs to later phases.
 
 ## Quick commands
 
@@ -23,6 +38,8 @@ This repo is a SolidJS + TypeScript (strict) WebRTC chat / file-transfer app.
 - Prefer `AbortController` for listener lifetimes; avoid leaked intervals/listeners.
 
 ## Architecture notes
+
+Application paths below are relative to `apps/web/`.
 
 - `src/libs/domain`: low-level models, WebRTC controllers and file-transfer primitives.
   Do not import application, state or infrastructure from this layer.

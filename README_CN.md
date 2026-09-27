@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="public/branding/weblink-logo-dark.svg" />
-    <img src="public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/branding/weblink-logo-dark.svg" />
+    <img src="apps/web/public/branding/weblink-logo-light.svg" alt="Weblink" width="300" height="96" />
   </picture>
 
   <h3>分享更多，安装更少。</h3>
@@ -116,6 +116,22 @@ Weblink 使用开源的
 
 使用过程中如有问题，也可以加入 QQ 群反馈：
 [762463759](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)。
+
+## 本地开发
+
+网页应用位于 `apps/web`，两个信令服务器以 Git submodule 固定在 `servers/`，
+分别维护依赖和发布流程。可以继续在仓库根目录启动、检查和构建网页应用。
+
+```sh
+git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
+cd weblink
+bun install --frozen-lockfile
+bun dev
+```
+
+服务器安装与子模块更新见[工作区说明](docs/WORKSPACE.md)。
+Windows 优先的 Tauri 桌面端与远程控制见[完整实施计划](IMPLEMENTATION_PLAN.md)，
+桌面功能尚未实现。
 
 ## 了解更多
 

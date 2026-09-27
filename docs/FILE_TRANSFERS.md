@@ -141,7 +141,7 @@ A compatible non-Web sender/receiver should:
 9. Reject malformed JSON control frames and invalid binary headers rather than
    interpreting them as payload data.
 
-Unit coverage in `test/unit/file-transfer-protocol.test.ts` locks the JSON shapes,
+Unit coverage in `apps/web/test/unit/file-transfer-protocol.test.ts` locks the JSON shapes,
 range validation and exact byte-level header encoding.
 
 ## Cancellation and finalization

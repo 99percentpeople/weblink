@@ -7,9 +7,9 @@ before test payloads are sent. No test file or IndexedDB cache entry is created.
 
 ## Ownership and lifecycle
 
-- `src/libs/domain/speed-test-protocol.ts` defines messages, validation and limits.
-- `src/libs/domain/speed-test.ts` implements the bounded two-direction exchange.
-- `src/libs/application/speed-test-service.ts` owns one active diagnostic at a time.
+- `apps/web/src/libs/domain/speed-test-protocol.ts` defines messages, validation and limits.
+- `apps/web/src/libs/domain/speed-test.ts` implements the bounded two-direction exchange.
+- `apps/web/src/libs/application/speed-test-service.ts` owns one active diagnostic at a time.
   It receives the peer connection, busy policy, consent callback and state sink
   through injection.
 - `AppStateProvider` owns the service. Closing the dialog, changing its target or
