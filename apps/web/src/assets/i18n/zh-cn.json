@@ -221,6 +221,28 @@
       "reset_description": "恢复应用选项及房间、成员偏好的默认值，保留聊天记录和缓存文件。",
       "reset_failed": "重置设置失败：{{error}}",
       "cache_description": "清除缓存的页面资源，用于解决加载或更新异常。保留聊天记录、缓存文件和设置。"
+    },
+    "native_capture": {
+      "title": "原生屏幕采集测试",
+      "description": "选择显示器或窗口进行本地采集测试，不录制，也不会将画面发送到房间。",
+      "source": "采集来源",
+      "select_source": "请选择显示器或窗口",
+      "monitor": "显示器",
+      "window": "窗口",
+      "refresh": "刷新来源",
+      "start": "开始采集",
+      "stop": "停止采集",
+      "frames": "帧",
+      "waiting": "等待首帧，请确保所选窗口可见。",
+      "disconnected": "测试面板失去响应，采集已自动停止。",
+      "hint": "关闭此面板会停止采集。帧率表示实际画面更新频率，静止或最小化时可能降为零。",
+      "state": {
+        "idle": "就绪",
+        "running": "采集中",
+        "stopped": "已停止",
+        "closed": "来源已关闭",
+        "failed": "采集失败"
+      }
     }
   },
   "cache": {

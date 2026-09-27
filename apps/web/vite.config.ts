@@ -25,6 +25,7 @@ import {
 const packageJson = JSON.parse(
   readFileSync("./package.json", "utf-8"),
 );
+const envPrefix = ["VITE_", "WEBLINK_"];
 
 function getBuildLoggingOptions(
   mode: string,
@@ -92,7 +93,7 @@ const pwaOptions: Partial<VitePWAOptions> = {
 export default defineConfig(({ command, mode }) => {
   const desktop = mode === "desktop";
   const desktopEnv = desktop
-    ? loadEnv(mode, process.cwd(), "VITE_")
+    ? loadEnv(mode, process.cwd(), envPrefix)
     : {};
   const version = desktop
     ? JSON.parse(
@@ -111,6 +112,7 @@ export default defineConfig(({ command, mode }) => {
     getBuildCommit(),
   );
   return {
+    envPrefix,
     resolve: {
       alias: {
         ...(desktop

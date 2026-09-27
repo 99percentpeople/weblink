@@ -103,7 +103,7 @@ jobs:
           PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
         run: |
           if [[ -z "$PAGES_BUILD_ENV" ]]; then
-            echo "::error::Configure PAGES_BUILD_ENV with the development VITE_* settings."
+            echo "::error::Configure PAGES_BUILD_ENV with the development VITE_* / WEBLINK_* settings."
             exit 1
           fi
           printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.dev.local
@@ -189,7 +189,7 @@ jobs:
           PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
         run: |
           if [[ -z "$PAGES_BUILD_ENV" ]]; then
-            echo "::error::Configure PAGES_BUILD_ENV with the production VITE_* settings."
+            echo "::error::Configure PAGES_BUILD_ENV with the production VITE_* / WEBLINK_* settings."
             exit 1
           fi
           printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.production.local

@@ -75,7 +75,7 @@ function checkButton(field: HTMLTextAreaElement) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv("VITE_STUN_SERVERS", "");
+  vi.stubEnv("WEBLINK_STUN_SERVERS", "");
   vi.stubEnv("VITE_TURN_SERVERS", "");
   setAppState(
     "options",
@@ -244,7 +244,7 @@ describe("connection settings", () => {
   });
 
   it("resets server lists to deployment defaults", () => {
-    vi.stubEnv("VITE_STUN_SERVERS", "stun:default");
+    vi.stubEnv("WEBLINK_STUN_SERVERS", "stun:default");
     vi.stubEnv(
       "VITE_TURN_SERVERS",
       "turn:default|user|password|longterm",

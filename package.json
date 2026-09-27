@@ -47,7 +47,9 @@
     "dev:desktop": "bun --env-file=.env run --parallel dev:server desktop",
     "desktop": "bun run --cwd apps/desktop dev",
     "build:desktop": "bun run --cwd apps/desktop build",
-    "check:desktop": "bun run --cwd apps/desktop lint && bun run --cwd apps/desktop check"
+    "check:desktop": "bun run --cwd apps/desktop lint && bun run --cwd apps/desktop check",
+    "sync": "bun --env-file=.env scripts/sync.mjs",
+    "sync:watch": "bun --env-file=.env scripts/sync.mjs --watch"
   },
   "lint-staged": {
     "**/*.{js,jsx,mjs,ts,tsx,css,html,json,md,yml,yaml}": [

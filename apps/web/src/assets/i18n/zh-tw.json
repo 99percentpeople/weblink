@@ -221,6 +221,28 @@
       "reset_description": "恢復應用程式選項及房間、成員偏好的預設值，保留聊天記錄和快取檔案。",
       "reset_failed": "重設設定失敗：{{error}}",
       "cache_description": "清除快取的頁面資源，用於解決載入或更新異常。保留聊天記錄、快取檔案和設定。"
+    },
+    "native_capture": {
+      "title": "原生螢幕擷取測試",
+      "description": "選擇顯示器或視窗進行本機擷取測試，不錄製，也不會將畫面傳送至房間。",
+      "source": "擷取來源",
+      "select_source": "請選擇顯示器或視窗",
+      "monitor": "顯示器",
+      "window": "視窗",
+      "refresh": "重新整理來源",
+      "start": "開始擷取",
+      "stop": "停止擷取",
+      "frames": "幀",
+      "waiting": "等待首幀，請確保所選視窗可見。",
+      "disconnected": "測試面板失去回應，擷取已自動停止。",
+      "hint": "關閉此面板會停止擷取。影格率表示實際畫面更新頻率，靜止或最小化時可能降為零。",
+      "state": {
+        "idle": "就緒",
+        "running": "擷取中",
+        "stopped": "已停止",
+        "closed": "來源已關閉",
+        "failed": "擷取失敗"
+      }
     }
   },
   "cache": {

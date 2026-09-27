@@ -221,6 +221,28 @@
           "auto": "Auto"
         }
       }
+    },
+    "native_capture": {
+      "title": "Native screen capture test",
+      "description": "Capture a selected display or window locally. This test does not record or send video to a room.",
+      "source": "Capture source",
+      "select_source": "Select a display or window",
+      "monitor": "Display",
+      "window": "Window",
+      "refresh": "Refresh sources",
+      "start": "Start capture",
+      "stop": "Stop capture",
+      "frames": "frames",
+      "waiting": "Waiting for the first frame. Make sure the selected window is visible.",
+      "disconnected": "Capture stopped because the test panel stopped responding.",
+      "hint": "Closing this panel stops capture. Frame rate reflects actual updates and may fall to zero when the source is static or minimized.",
+      "state": {
+        "idle": "Ready",
+        "running": "Capturing",
+        "stopped": "Stopped",
+        "closed": "Source closed",
+        "failed": "Capture failed"
+      }
     }
   },
   "cache": {

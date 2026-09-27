@@ -164,8 +164,8 @@ export function ConnectionSettings(
         <div class="flex gap-2 self-end">
           <Show
             when={
-              import.meta.env.VITE_STUN_SERVERS &&
-              import.meta.env.VITE_STUN_SERVERS !==
+              import.meta.env.WEBLINK_STUN_SERVERS &&
+              import.meta.env.WEBLINK_STUN_SERVERS !==
                 appState.options.servers.stuns.join(",")
             }
           >

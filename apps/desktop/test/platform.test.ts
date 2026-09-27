@@ -79,6 +79,19 @@ describe("desktop platform boundary", () => {
     );
   });
 
+  it("passes source identity and session ownership through the capture boundary", async () => {
+    await platform.capture!.sources();
+    await platform.capture!.start("selected-window");
+    await platform.capture!.status("session-1");
+    await platform.capture!.stop("session-1");
+    expect(ipc.mock.calls).toEqual([
+      ["capture_sources", {}],
+      ["capture_start", { sourceId: "selected-window" }],
+      ["capture_status", { sessionId: "session-1" }],
+      ["capture_stop", { sessionId: "session-1" }],
+    ]);
+  });
+
   it("keeps router navigation and file downloads inside the webview", () => {
     expect(click("/about")).toBe(false);
     expect(click("blob:http://localhost/file", true)).toBe(

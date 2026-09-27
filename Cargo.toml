@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/desktop/src-tauri"]
+members = ["apps/desktop/src-tauri", "crates/desktop-capture"]
 resolver = "2"
 
 [profile.release]

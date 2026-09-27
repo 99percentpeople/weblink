@@ -76,12 +76,14 @@ Docker image also supports replacing that value at container startup through
 
 ## STUN and TURN
 
-Default ICE servers can be supplied at build time.
+Default ICE servers can be supplied at build time. Vite exposes both `VITE_`
+and `WEBLINK_` variables through `import.meta.env`. STUN uses
+`WEBLINK_STUN_SERVERS`; WebSocket and TURN retain their existing variable names.
 
 STUN servers are comma-separated:
 
 ```env
-VITE_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
+WEBLINK_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
 ```
 
 TURN entries use four pipe-separated fields:
@@ -133,7 +135,7 @@ API keys are never returned.
 The frontend derives the URL from `VITE_WEBSOCKET_URL`: `wss://host/ws` becomes
 `https://host/turn-credentials` (`ws` becomes `http`). It clears the signaling
 query, fragment, and URL user information. Reverse proxies must forward this
-root HTTP path as well as WebSocket upgrades; no extra `VITE_*` URL is needed.
+root HTTP path as well as WebSocket upgrades; no extra `VITE_*` / `WEBLINK_*` URL is needed.
 
 Credentials are requested only when connecting. The browser coalesces concurrent
 requests and keeps a memory-only cache. It checks freshness on new peer connections
@@ -164,7 +166,7 @@ Weblink's frontend is a static Vite build.
 
 For Vercel, Cloudflare Pages, Netlify, or another static host:
 
-1. configure the required `VITE_*` variables;
+1. configure the required `VITE_*` / `WEBLINK_*` variables;
 2. initialize submodules (`git submodule update --init --recursive`) and install
    dependencies with Bun;
 3. run `bun run build`;
@@ -215,11 +217,11 @@ identify the release.
 3. Configure the following GitHub Actions secrets, either on the repository or
    in its `production` environment:
 
-   | Secret                  | Value                                                          |
-   | ----------------------- | -------------------------------------------------------------- |
-   | `CLOUDFLARE_ACCOUNT_ID` | Account ID containing the existing Pages project               |
-   | `CLOUDFLARE_API_TOKEN`  | Pages API token                                                |
-   | `PAGES_BUILD_ENV`       | Complete production `VITE_*` settings in multiline dotenv form |
+   | Secret                  | Value                                                                        |
+   | ----------------------- | ---------------------------------------------------------------------------- |
+   | `CLOUDFLARE_ACCOUNT_ID` | Account ID containing the existing Pages project                             |
+   | `CLOUDFLARE_API_TOKEN`  | Pages API token                                                              |
+   | `PAGES_BUILD_ENV`       | Complete production `VITE_*` / `WEBLINK_*` settings in multiline dotenv form |
 
    A minimal `PAGES_BUILD_ENV` value is:
 
@@ -231,7 +233,7 @@ identify the release.
    value. Preserve the variable names documented above. The workflow writes this
    secret into the ignored `apps/web/.env.production.local` file before building. The
    build runs on GitHub, so variables configured only in the Pages build settings
-   are not supplied to it. `VITE_*` values become part of the public frontend;
+   are not supplied to it. `VITE_*` / `WEBLINK_*` values become part of the public frontend;
    keep the deployment API token in its separate secret.
 
 4. If the GitHub `production` environment restricts allowed deployment refs,
@@ -304,7 +306,7 @@ The GitHub **Preview** environment uses the repository's existing
 is needed for ordinary preview uploads.
 
 The frontend commits only `apps/web/.env.example`. The Preview environment's required
-`PAGES_BUILD_ENV` secret supplies the development `VITE_*` settings and is written
+`PAGES_BUILD_ENV` secret supplies the development `VITE_*` / `WEBLINK_*` settings and is written
 to ignored `apps/web/.env.dev.local` before building.
 
 Production environment secrets are not automatically available in Preview.
@@ -350,7 +352,7 @@ docker compose up -d
 The current frontend Dockerfile declares build arguments for:
 
 - `VITE_WEBSOCKET_URL`
-- `VITE_STUN_SERVERS`
+- `WEBLINK_STUN_SERVERS`
 - `VITE_TURN_SERVERS` (optional user-configured `longterm`/`hmac` endpoints only)
 
 The image always uses WebSocket signaling. Cloudflare provider keys must be

@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { appState } from "@/libs/state/app-state";
+import NativeCaptureSettings from "./native-capture-settings";
 
 export default function AdvancedSettings() {
   const canGetRtpCapabilities = createMemo(() => {
@@ -437,6 +438,7 @@ export default function AdvancedSettings() {
           )}
         </p>
       </label>
+      <NativeCaptureSettings />
     </section>
   );
 }

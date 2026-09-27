@@ -41,7 +41,7 @@ The Windows workflow builds an unsigned installer as a CI artifact; it does not
 publish a release or deploy the website.
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
-Put deployment-specific `VITE_*` values in `apps/web/.env.desktop.local`.
+Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.local`.
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.
 
@@ -54,22 +54,51 @@ do not become the packaged signaling endpoint.
   update prompt. Updates currently mean installing a newer desktop package;
   automatic updates need a separate signed release channel.
 - The shared `@weblink/platform` contract has browser and desktop adapters.
-  `runtime_capabilities` reports native screen capture and remote input as
-  unavailable. These features are not implemented by this shell.
-- Only the local main window can query native capabilities and open HTTP(S) or
-  mail links. External links open in the system browser. The window cannot
+  `runtime_capabilities` reports Windows native capture support when available;
+  remote input remains unavailable.
+- Only the local main window can query native capabilities, run capture diagnostics
+  and open HTTP(S) or mail links. External links open in the system browser. The window cannot
   navigate to a remote page or create another privileged webview. There are no
-  filesystem, shell execution, capture or input-control IPC permissions.
+  filesystem, shell execution or input-control IPC permissions.
 - The main window uses native window controls. Closing it exits the application;
   minimizing keeps sessions alive. A second instance focuses the existing
   window. No tray process, protocol registration or background service is added.
 - Files, clipboard and media currently use existing WebView browser APIs. Native
   drag/drop interception is disabled so the app's existing HTML drop handlers
   receive files. File selection/download and media permission prompts must be
-  checked in WebView2; the shell does not claim native capture support.
+  checked in WebView2. Room screen sharing still uses the browser media path.
 - IndexedDB and local storage belong to the application WebView profile under
   the OS application-data directory. Browser history is not automatically
   imported; development and packaged origins have separate storage.
+
+## Native capture prototype
+
+On Windows, open **Settings → Advanced → Native screen capture test**, select a
+display or window, then start capture. The panel reports frame dimensions, arrival
+rate and frame count. It does not preview, record or transmit frames. Static or
+minimized sources may deliver fewer frames; the displayed FPS is not an encoder
+or network performance measurement.
+
+`crates/desktop-capture` owns Windows Graphics Capture and its worker lifecycle,
+independently of Tauri. Frames remain on the native side; no pixel buffers are
+mapped to the CPU or serialized over IPC by this prototype. OS cursor/border
+defaults are retained. Native encoding, WebRTC transport and remote input are
+subsequent steps.
+
+Only one capture runs at a time. Closing the panel, closing the source, or exiting
+the application stops it. A 10-second lease also stops capture if the WebView
+disappears or stops polling. Session IDs prevent delayed commands from stopping
+a newer capture. GPU/startup failures are surfaced and allow retry.
+
+For a native smoke test, run this in an unlocked interactive Windows session:
+
+```sh
+cargo run -p weblink-desktop-capture --locked --example self_test
+```
+
+It creates and captures its own temporary window, checks frame delivery, resize,
+stop/restart and source closure, then removes the window. It does not capture
+existing windows or a display.
 
 ## Windows acceptance
 

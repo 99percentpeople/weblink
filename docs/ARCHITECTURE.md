@@ -15,6 +15,8 @@ the low-level `domain` layer.
 - `packages/platform/`: Platform capability and adapter contracts used by both
   applications. Vite selects the runtime adapter at build time; browser bundles
   do not import Tauri APIs.
+- `crates/desktop-capture/`: Tauri-independent Rust capture service, Windows
+  Graphics Capture backend and native lifecycle smoke test.
 - `servers/weblink-ws-server/` and `servers/weblink-ws-worker/`: independent
   Git submodules that also participate in the Bun workspace install.
 - `package.json` and `bun.lock`: root tooling, shared dependency installation
@@ -24,7 +26,7 @@ the low-level `domain` layer.
   the Docker image.
 - `scripts/`: repository-level helpers; application scripts live in `apps/web/scripts/`.
 
-Native capture and remote input crates will be introduced in later phases.
+Native encoding, media transport and remote input are subsequent phases.
 See [WORKSPACE.md](WORKSPACE.md) for dependency and submodule workflows and
 [DESKTOP.md](DESKTOP.md) for the desktop boundary.
 

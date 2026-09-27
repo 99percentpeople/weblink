@@ -4,11 +4,25 @@ import {
   isExternalLink,
   type PlatformRuntime,
   type RuntimeCapabilities,
+  type CaptureSource,
+  type CaptureStatus,
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
   kind: "desktop",
   supportsServiceWorker: false,
+  capture: {
+    sources: () =>
+      invoke<CaptureSource[]>("capture_sources"),
+    start: (sourceId) =>
+      invoke<CaptureStatus>("capture_start", { sourceId }),
+    status: (sessionId) =>
+      invoke<CaptureStatus>("capture_status", {
+        sessionId,
+      }),
+    stop: (sessionId) =>
+      invoke<CaptureStatus>("capture_stop", { sessionId }),
+  },
   getCapabilities: () =>
     invoke<RuntimeCapabilities>("runtime_capabilities"),
   initialize() {

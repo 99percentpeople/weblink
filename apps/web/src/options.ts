@@ -203,12 +203,11 @@ createEffect(() => {
 
 createEffect(() => {
   if (
-    import.meta.env.VITE_STUN_SERVERS &&
+    import.meta.env.WEBLINK_STUN_SERVERS &&
     appState.options.servers.stuns.length === 0
   ) {
-    const servers = import.meta.env.VITE_STUN_SERVERS.split(
-      ",",
-    );
+    const servers =
+      import.meta.env.WEBLINK_STUN_SERVERS.split(",");
     setAppOptions("servers", "stuns", servers);
   }
 });

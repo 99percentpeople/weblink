@@ -61,7 +61,7 @@ Stop existing services or select different ports in `.env` before starting.
 
 Use `bun run dev:web` or `bun run dev:server` to start just one service. The
 root `WEBLINK_WEBSOCKET_URL` overrides the frontend endpoint only while serving
-Vite; production builds continue to use the app's `VITE_*` settings.
+Vite; production builds continue to use the app's `VITE_*` / `WEBLINK_*` settings.
 
 ## Frontend commands
 
@@ -87,7 +87,7 @@ bun run --cwd apps/web dev
 
 Copy `apps/web/.env.example` to `apps/web/.env.local` for local configuration.
 Vite reads application env files from `apps/web`; root `.env` holds the combined
-development settings described above. Keep frontend build-time `VITE_*` values
+development settings described above. Keep frontend build-time `VITE_*` / `WEBLINK_*` values
 in the application env files. Production and dev artifacts are written to `apps/web/dist`.
 Root `bun run clean` removes workspace dependencies, including the server
 dependencies, and frontend output. It does not remove env files.
@@ -98,6 +98,42 @@ dependencies, and frontend output. It does not remove env files.
 root `.env`. `bun run build:desktop` creates a native build for the host platform.
 Desktop prerequisites, Windows installer commands and current capability limits
 are documented in [DESKTOP.md](DESKTOP.md).
+Root `Cargo.toml` and `Cargo.lock` cover the Tauri shell and native Rust crates
+under `crates/`; `bun install` manages JavaScript dependencies only.
+
+## Source sync
+
+Install rsync 3.x on both machines and configure SSH key access. Set the target
+in root `.env` (paths with spaces can be quoted):
+
+```dotenv
+WEBLINK_SYNC_TARGET=user@host:/path/to/weblink
+# Optional when rsync is not on the remote PATH:
+# WEBLINK_SYNC_RSYNC=/usr/local/bin/rsync
+```
+
+```sh
+bun run sync --dry-run
+bun run sync
+bun run sync:watch
+```
+
+The target can be Linux, macOS or Windows. For Windows with the official
+[cwRsync portable package](https://itefix.net/cwrsync), use a target such as
+`yzzpc:/cygdrive/c/Users/name/Desktop/weblink` and set `WEBLINK_SYNC_RSYNC` to
+`C:/Users/name/AppData/Local/Programs/cwrsync/bin/rsync.exe`.
+
+The watcher performs an initial sync, checks Git-visible sources every second,
+then batches saves. Ctrl+C stops it; failed transfers retry after three seconds.
+It includes uncommitted files and initialized submodule sources. Git metadata,
+`.env` files, `.tmp`, dependencies and build outputs stay local to each machine;
+only `.env.example` is copied. Source symlinks are rejected.
+
+This is one-way sync. Remote-only files are kept; local deletions propagate only
+for files previously synced successfully. Replaced and deleted remote files are
+backed up under `.tmp/rsync-backups/` at the destination. Each target has its own
+local sync inventory and process lock. Sync does not install dependencies or
+restart commands; running development watchers react to source changes.
 
 ## Signaling servers
 

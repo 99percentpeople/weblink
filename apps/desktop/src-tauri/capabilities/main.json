@@ -1,10 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the bundled main application can query capabilities and open web links.",
+  "description": "Only the bundled main application can query capabilities, run local capture diagnostics and open web links.",
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-capture-sources",
+    "allow-capture-start",
+    "allow-capture-status",
+    "allow-capture-stop",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

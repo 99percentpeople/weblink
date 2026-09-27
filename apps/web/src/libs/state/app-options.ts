@@ -180,7 +180,8 @@ export const getDefaultAppOptions = (): AppOption => {
     videoMaxBitrate: 25 * 1024 * 1024,
     servers: {
       stuns:
-        import.meta.env.VITE_STUN_SERVERS?.split(",") ?? [],
+        import.meta.env.WEBLINK_STUN_SERVERS?.split(",") ??
+        [],
       turns: parseTurnServers(
         import.meta.env.VITE_TURN_SERVERS ?? "",
       ),

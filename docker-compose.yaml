@@ -6,7 +6,7 @@ services:
       args:
         # Set your public websocket url here, example:
         - VITE_WEBSOCKET_URL=ws://192.168.8.100:8080/ws
-        - VITE_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
+        - WEBLINK_STUN_SERVERS=stun:stun.l.google.com,stun:stun1.l.google.com
     ports:
       - "8080:80"
       - "443:443"

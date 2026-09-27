@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
+mod capture;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,14 +14,18 @@ struct RuntimeCapabilities {
 }
 
 #[tauri::command]
-fn runtime_capabilities(app: tauri::AppHandle) -> RuntimeCapabilities {
-    RuntimeCapabilities {
+async fn runtime_capabilities(
+    app: tauri::AppHandle,
+    service: tauri::State<'_, capture::Service>,
+) -> Result<RuntimeCapabilities, String> {
+    let native_screen_capture = capture::run(service, |s| Ok(s.supported())).await?;
+    Ok(RuntimeCapabilities {
         runtime: "desktop",
         os: std::env::consts::OS,
         version: app.package_info().version.to_string(),
-        native_screen_capture: false,
+        native_screen_capture,
         remote_input: false,
-    }
+    })
 }
 
 fn same_origin(left: &Url, right: &Url) -> bool {
@@ -39,6 +44,10 @@ fn external_link(url: &Url) -> bool {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(std::sync::Arc::new(
+            weblink_desktop_capture::CaptureService::new()
+                .expect("could not start capture service"),
+        ))
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -50,7 +59,13 @@ pub fn run() {
                 .open_js_links_on_click(false)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![runtime_capabilities])
+        .invoke_handler(tauri::generate_handler![
+            runtime_capabilities,
+            capture::capture_sources,
+            capture::capture_start,
+            capture::capture_status,
+            capture::capture_stop
+        ])
         .setup(|app| {
             let dev_url = if cfg!(debug_assertions) {
                 app.config().build.dev_url.clone()
@@ -77,8 +92,13 @@ pub fn run() {
                 .build()?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("could not run Weblink desktop");
+        .build(tauri::generate_context!())
+        .expect("could not build Weblink desktop")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<capture::Service>().shutdown();
+            }
+        });
 }
 
 #[cfg(test)]

@@ -17,3 +17,4 @@ tauri = { version = "=2.12.0", features = [] }
 tauri-plugin-opener = "=2.6.0"
 tauri-plugin-single-instance = "=2.5.0"
 serde = { version = "1", features = ["derive"] }
+weblink-desktop-capture = { path = "../../../crates/desktop-capture" }
