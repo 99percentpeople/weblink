@@ -1,0 +1,106 @@
+@reference "../../global.css";
+
+/* Scope overrides above Sonner's injected defaults without changing its
+   stacking, swipe gestures, or enter/exit animations. */
+.toaster[data-sonner-toaster][data-sonner-theme] {
+  @apply font-sans;
+
+  [data-sonner-toast][data-styled="true"] {
+    @apply flex-wrap gap-3 rounded-lg px-4 py-3.5 text-sm;
+    box-shadow:
+      0 8px 24px -8px rgb(0 0 0 / 0.18),
+      0 2px 6px -2px rgb(0 0 0 / 0.08);
+
+    [data-content] {
+      @apply min-w-0 flex-1 gap-1;
+    }
+
+    [data-title] {
+      @apply leading-5 font-medium;
+      overflow-wrap: anywhere;
+    }
+
+    [data-description] {
+      @apply text-muted-foreground text-xs leading-5;
+      overflow-wrap: anywhere;
+    }
+
+    [data-icon] {
+      @apply text-primary m-0 size-5 justify-center;
+    }
+
+    [data-icon] svg {
+      @apply m-0 size-5;
+    }
+
+    &[data-type="success"] [data-icon] {
+      @apply text-success-foreground;
+    }
+
+    &[data-type="warning"] [data-icon] {
+      @apply text-warning-foreground;
+    }
+
+    &[data-type="error"] [data-icon] {
+      @apply text-destructive;
+    }
+
+    .sonner-loading-bar {
+      @apply bg-primary;
+    }
+
+    .sonner-loading-wrapper {
+      @apply m-auto;
+    }
+
+    /* Give actionable notices a full text row, including on narrow screens. */
+    &:has(> [data-button]) [data-content] {
+      flex-basis: calc(100% - --spacing(8));
+    }
+
+    [data-button] {
+      @apply m-0 h-auto min-h-8 min-w-0 shrink rounded-md px-3 py-1.5 text-xs font-medium;
+      transition:
+        background-color 150ms,
+        box-shadow 150ms;
+    }
+
+    [data-button]:first-of-type {
+      margin-inline-start: auto;
+    }
+
+    [data-action] {
+      @apply bg-primary text-primary-foreground;
+    }
+
+    [data-action]:hover {
+      @apply bg-primary/90;
+    }
+
+    [data-cancel] {
+      @apply bg-secondary text-secondary-foreground;
+    }
+
+    [data-cancel]:hover {
+      @apply bg-secondary/80;
+    }
+
+    [data-close-button] {
+      @apply border-border bg-popover text-muted-foreground size-6;
+    }
+
+    [data-close-button] svg {
+      @apply size-4;
+    }
+
+    &:hover [data-close-button]:hover {
+      @apply border-border bg-accent text-accent-foreground;
+    }
+
+    &:focus-visible,
+    [data-button]:focus-visible,
+    [data-close-button]:focus-visible {
+      @apply outline-ring outline-2 outline-offset-2;
+    }
+  }
+}
