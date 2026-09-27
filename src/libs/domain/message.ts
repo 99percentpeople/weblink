@@ -14,14 +14,16 @@ export interface BaseStorageMessage extends BaseExchangeMessage {
     senderName: string;
     senderAvatar: string | null;
   };
-  deliveries?: Record<string, RoomDeliveryStatus>;
+  deliveries?: Record<string, MessageDeliveryStatus>;
 }
 
-export type RoomDeliveryStatus =
+export type MessageDeliveryStatus =
   | "sending"
   | "delivered"
   | "failed"
   | "unsupported";
+
+export type RoomDeliveryStatus = MessageDeliveryStatus;
 
 export interface TextMessage extends BaseStorageMessage {
   type: "text";

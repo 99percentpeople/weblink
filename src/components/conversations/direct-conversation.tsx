@@ -46,7 +46,8 @@ export function ChatConversation(props: {
   embedded?: boolean;
   onBack?: () => void;
 }) {
-  const { sendFile, sendClipboard } = useAppState();
+  const { conversationMessaging, sendClipboard } =
+    useAppState();
   const routeLocation = useLocation();
   const client = createMemo<Client | null>(
     () =>
@@ -230,7 +231,12 @@ export function ChatConversation(props: {
       }}
       conversationKey={conversationId()}
       disabled={!canSend()}
-      onSendFile={(file) => sendFile(file, props.clientId)}
+      onSendFile={async (file) => {
+        await conversationMessaging.sendFile(
+          conversationId(),
+          file,
+        );
+      }}
       onSent={() => scroll.toBottom()}
       data-slot="chat-page"
       class={cn(
@@ -366,6 +372,7 @@ export function ChatConversation(props: {
             <Show when={currentIdentity()}>
               <ChatBar
                 client={client()}
+                onSent={() => scroll.toBottom()}
                 class="static shrink-0 p-2"
               />
             </Show>

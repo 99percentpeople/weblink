@@ -497,15 +497,19 @@ export class P2PRequestManager<
     try {
       let entry = state.processed.get(key);
       const contentRequest =
-        (message.type === "send-file" ||
-          message.type === "send-room-file") &&
-        message.fingerprint
-          ? JSON.stringify(message)
-          : undefined;
+        message.type === "send-text"
+          ? JSON.stringify([message.data])
+          : message.type === "send-room-text"
+            ? JSON.stringify([message.roomId, message.data])
+            : (message.type === "send-file" ||
+                  message.type === "send-room-file") &&
+                message.fingerprint
+              ? JSON.stringify(message)
+              : undefined;
       if (entry && entry.contentRequest !== contentRequest)
         throw new P2PProtocolError(
           "invalid-message",
-          "Conflicting file offer identity",
+          "Conflicting message identity",
         );
       if (!entry) {
         const handler = this.handlers.get(message.type);

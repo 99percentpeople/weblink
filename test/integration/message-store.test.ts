@@ -182,7 +182,8 @@ describe("MessageStores persistence boundary", () => {
         createRepository({ putMessage }),
       );
 
-      store.setSendMessage(
+      await store.initialize();
+      await store.setSendMessage(
         createSessionMessage(
           { clientId: "a", targetClientId: "b" },
           "send-text",

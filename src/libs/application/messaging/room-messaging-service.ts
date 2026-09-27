@@ -1,3 +1,5 @@
+import { normalizeChatText } from "@/libs/domain/protocol/chat-text";
+import type { OnMessageAccepted } from "./message-submission";
 import type { Client } from "@/libs/domain/client";
 import type {
   FileTransferMessage,
@@ -7,10 +9,7 @@ import type { ChunkMetaData } from "@/libs/domain/file";
 import { normalizePeerProfile } from "@/libs/domain/profile";
 import type { PeerSession } from "@/libs/domain/session";
 import type { WebRtcProtocol } from "../rtc/rtc-protocol";
-import {
-  ROOM_CHAT_MAX_TEXT_LENGTH,
-  ROOM_FILE_FEATURE,
-} from "@/libs/domain/protocol/messages";
+import { ROOM_FILE_FEATURE } from "@/libs/domain/protocol/messages";
 
 export type RoomChatScope = {
   roomId: string;
@@ -21,11 +20,8 @@ export type RoomChatCapability =
   | "checking"
   | "supported"
   | "unsupported";
-export type RoomDeliveryStatus =
-  | "sending"
-  | "delivered"
-  | "failed"
-  | "unsupported";
+export type { RoomDeliveryStatus } from "@/libs/domain/message";
+import type { RoomDeliveryStatus } from "@/libs/domain/message";
 
 export interface RoomMessagingServiceOptions {
   supportsFiles?: boolean;
@@ -648,19 +644,22 @@ export class RoomMessagingService {
     binding.lifetime.abort();
   }
 
-  async send(text: string): Promise<void> {
-    const data = text.trim();
-    if (!data || data.length > ROOM_CHAT_MAX_TEXT_LENGTH)
-      throw new Error(
-        "Room messages must contain 1 to 65536 characters",
-      );
-    await this.sendContent({ type: "text", data });
+  async send(
+    text: string,
+    onStored?: OnMessageAccepted,
+  ): Promise<void> {
+    await this.sendContent(
+      { type: "text", data: normalizeChatText(text) },
+      undefined,
+      onStored,
+    );
   }
 
   async sendFile(
     info: ChunkMetaData,
     scopeKey: string,
     messageId: string,
+    onStored?: OnMessageAccepted,
   ): Promise<void> {
     if (
       !this.options.supportsFiles ||
@@ -683,6 +682,7 @@ export class RoomMessagingService {
         fingerprint: info.fingerprint,
       },
       messageId,
+      onStored,
     );
   }
 
@@ -701,6 +701,7 @@ export class RoomMessagingService {
           | "fingerprint"
         >,
     messageId: string = crypto.randomUUID(),
+    onStored?: OnMessageAccepted,
   ): Promise<void> {
     this.syncSessions();
     const room = this.options.getRoom();
@@ -748,8 +749,22 @@ export class RoomMessagingService {
       ),
     };
     await this.options.store.putRoomMessage(message);
-    if (message.type === "file" && message.fid)
-      await this.options.onFileSending?.(message.fid);
+    onStored?.(message.id);
+    try {
+      if (message.type === "file" && message.fid)
+        await this.options.onFileSending?.(message.fid);
+    } catch (error) {
+      await Promise.all(
+        recipients.map(({ binding }) =>
+          this.options.store.setRoomDelivery(
+            message.id,
+            binding.session.targetClientId,
+            "failed",
+          ),
+        ),
+      );
+      throw error;
+    }
     await this.deliverAll(message, recipients);
   }
 

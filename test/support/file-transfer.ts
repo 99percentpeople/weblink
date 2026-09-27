@@ -91,14 +91,16 @@ export class FakeMessages {
     if (existing) Object.assign(existing, converted);
     else this.messages.push(converted);
   }
-  setSendMessage = vi.fn((message: SessionMessage) =>
+  setSendMessage = vi.fn(async (message: SessionMessage) =>
     this.store(message, true),
   );
-  retrySendMessage = vi.fn((message: SessionMessage) =>
-    this.store(message, true),
+  retrySendMessage = vi.fn(
+    async (message: SessionMessage) =>
+      this.store(message, true),
   );
-  setReceiveMessage = vi.fn((message: SessionMessage) =>
-    this.store(message, false),
+  setReceiveMessage = vi.fn(
+    async (message: SessionMessage) =>
+      this.store(message, false),
   );
 }
 

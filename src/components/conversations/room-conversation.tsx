@@ -1,28 +1,20 @@
 import { layoutScroll } from "@/components/ui/motion-layout";
-import {
-  createMemo,
-  createSignal,
-  For,
-  Show,
-} from "solid-js";
+import { createMemo, For, Show } from "solid-js";
 import { A, useLocation } from "@solidjs/router";
 import { ConversationHeader } from "./conversation-header";
-import { makePersisted } from "@solid-primitives/storage";
 import { Users, Video } from "lucide-solid";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import { IconSettings } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ChatComposer } from "./chat-composer";
+import { ConversationComposer } from "./conversation-composer";
 import { ChatFileDropArea } from "./chat-file-drop-area";
 import { ChatScrollButton } from "./chat-scroll-button";
 import { ChatEmptyState } from "./chat-empty-state";
-import { createSendItemPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import type { Conversation } from "@/libs/domain/conversation";
 
-import { ROOM_CHAT_MAX_TEXT_LENGTH } from "@/libs/domain/protocol/messages";
 import { createBottomScroll } from "@/libs/hooks/create-bottom-scroll";
 import { createConversationReadTracking } from "@/libs/hooks/conversation-read";
 import { MessageContent } from "@/routes/client/[id]/components/message";
@@ -63,15 +55,6 @@ export function RoomConversation(props: {
         state.roomChatCapabilities()[peer.clientId] !==
         "unsupported",
     );
-  const [draft, setDraft] = makePersisted(
-    createSignal(""),
-    {
-      storage: sessionStorage,
-      name: `conversation-draft:${props.conversation.id}`,
-    },
-  );
-  const { open: openPreview } =
-    createSendItemPreviewDialog();
   const fileCapabilities = () =>
     state.roomFileCapabilities?.();
   const canSendFiles = () =>
@@ -120,7 +103,12 @@ export function RoomConversation(props: {
       as="section"
       conversationKey={props.conversation.id}
       disabled={!canSendFiles()}
-      onSendFile={(file) => state.sendRoomFile(file)}
+      onSendFile={async (file) => {
+        await state.conversationMessaging.sendFile(
+          props.conversation.id,
+          file,
+        );
+      }}
       onSent={() => scroll.toBottom()}
       data-slot="room-conversation"
       class={cn(
@@ -270,44 +258,16 @@ export function RoomConversation(props: {
           onClick={() => scroll.toBottom()}
         />
       </div>
-      <ChatComposer
+      <ConversationComposer
         class="static"
-        conversationKey={props.conversation.id}
-        value={draft()}
-        onValueChange={setDraft}
-        onSendText={(text) => state.sendRoomText(text)}
-        onSendFiles={async (files) => {
-          const conversationId = props.conversation.id;
-          for (const file of files) {
-            if (
-              state.activeRoomConversationId() !==
-              conversationId
-            )
-              throw new Error(
-                t("conversations.room_inactive"),
-              );
-            await state.sendRoomFile(file);
-          }
-        }}
-        previewFile={async (file) =>
-          Boolean(
-            (
-              await openPreview(
-                file,
-                props.conversation.title,
-              )
-            ).result,
-          )
-        }
-        onPaste={(event) => event.stopPropagation()}
+        conversationId={props.conversation.id}
+        title={props.conversation.title}
         onSent={() => scroll.toBottom()}
         disabled={!active() || peers().length === 0}
         textDisabled={!canSend()}
         filesDisabled={!canSendFiles()}
-        maxLength={ROOM_CHAT_MAX_TEXT_LENGTH}
         inputLabel={t("conversations.room_message")}
         sendLabel={t("conversations.send")}
-        sendShortcut="enter"
       />
     </ChatFileDropArea>
   );

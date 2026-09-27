@@ -331,7 +331,9 @@ describe("message bubble layout", () => {
     expect(
       screen.getByText("errors.connection_failed"),
     ).toBeInTheDocument();
-    const button = screen.getByLabelText("tasks.resume");
+    const button = screen.getByLabelText(
+      "conversations.retry_failed",
+    );
     fireEvent.click(button);
     expect(retryMessage).toHaveBeenCalledWith(message);
   });
@@ -427,7 +429,9 @@ describe("message bubble layout", () => {
     expect(
       screen.getByText("errors.connection_closed"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("tasks.resume"));
+    fireEvent.click(
+      screen.getByLabelText("conversations.retry_failed"),
+    );
     expect(retryMessage).toHaveBeenCalledWith(failed);
   });
 

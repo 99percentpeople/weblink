@@ -180,6 +180,10 @@ async function main() {
       );
     };
     setTaskTestContext({
+      conversationMessaging: {
+        sendText: unexpected,
+        sendFile: unexpected,
+      },
       conversationHistory: {
         cacheLocalTextBatch: unexpected,
       },

@@ -13,6 +13,7 @@ import type {
   RoomDeliveryStatus,
 } from "@/libs/domain/message";
 import {
+  directConversationId,
   type Conversation,
   type ConversationLabel,
 } from "@/libs/domain/conversation";
@@ -33,7 +34,8 @@ import {
 } from "@/libs/state/app-state";
 import type { MessageRepository } from "./message-repository";
 import { ConversationStore } from "./conversation-store";
-import { RoomMessageStore } from "./room-message-store";
+import { ConversationMessageStore } from "./conversation-message-store";
+import { recoverMessageDelivery } from "./message-delivery";
 import { snapshotStoreMessage } from "./message-snapshot";
 import {
   applyTrackedResponse,
@@ -54,7 +56,7 @@ export class MessageStores {
   readonly labels = appState.message.labels;
 
   private readonly metadata: ConversationStore;
-  private readonly roomMessages: RoomMessageStore;
+  private readonly durableMessages: ConversationMessageStore;
 
   private setMessages: SetStoreFunction<StoreMessage[]> = ((
     ...args: any[]
@@ -108,14 +110,18 @@ export class MessageStores {
       removeMessages: (ids) =>
         this.removePersistedMessages(ids),
     });
-    this.roomMessages = new RoomMessageStore(repository, {
-      conversations: this.conversations,
-      messages: this.messages,
-      initialize: () => this.initialize(),
-      withLocalSequence: (message) =>
-        this.withLocalSequence(message),
-      setMessages: this.setMessages,
-    });
+    this.durableMessages = new ConversationMessageStore(
+      repository,
+      {
+        conversations: this.conversations,
+        messages: this.messages,
+        initialize: () => this.initialize(),
+        attach: (message) => this.metadata.attach(message),
+        withLocalSequence: (message) =>
+          this.withLocalSequence(message),
+        setMessages: this.setMessages,
+      },
+    );
   }
 
   initialize(): Promise<void> {
@@ -158,30 +164,9 @@ export class MessageStores {
             reconcile(labels),
           );
           const normalized = messages.map((message) => {
-            let projected = this.metadata.attach(message);
-            // There is no background outbox: a reload retires any in-flight
-            // delivery, so expose it as retryable instead of sending forever.
-            if (
-              projected.room &&
-              projected.deliveries &&
-              Object.values(projected.deliveries).includes(
-                "sending",
-              )
-            ) {
-              projected = {
-                ...projected,
-                deliveries: Object.fromEntries(
-                  Object.entries(projected.deliveries).map(
-                    ([peer, status]) => [
-                      peer,
-                      status === "sending"
-                        ? "failed"
-                        : status,
-                    ],
-                  ),
-                ),
-              } as RoomMessage;
-            }
+            let projected = recoverMessageDelivery(
+              this.metadata.attach(message),
+            );
             if (
               projected.type === "file" &&
               projected.room &&
@@ -228,6 +213,9 @@ export class MessageStores {
                 messages[index].conversationId ||
               message.localSequence !==
                 messages[index].localSequence ||
+              message.status !== messages[index].status ||
+              message.deliveries !==
+                messages[index].deliveries ||
               (!!message.room &&
                 message !== messages[index])
                 ? this.repository.putMessage(
@@ -340,52 +328,38 @@ export class MessageStores {
   ): void {
     this.metadata.setConversationLabels(id, labelIds);
   }
-  putRoomMessage(message: RoomMessage): Promise<boolean> {
-    return this.roomMessages.putRoomMessage(message);
+  async putRoomMessage(
+    message: RoomMessage,
+  ): Promise<boolean> {
+    if (!message.room)
+      throw new Error(
+        "Room message is missing room identity",
+      );
+    return this.durableMessages.putMessage(message);
   }
   setRoomDelivery(
     messageId: string,
     peerId: string,
     status: RoomDeliveryStatus,
   ): Promise<void> {
-    return this.roomMessages.setRoomDelivery(
+    return this.durableMessages.setDelivery(
       messageId,
       peerId,
       status,
     );
   }
   deleteConversation(id: string): void {
-    this.roomMessages.invalidateConversation(id);
+    this.durableMessages.invalidateConversation(id);
     this.metadata.deleteConversation(id);
   }
   clearConversation(id: string): void {
-    this.roomMessages.invalidateConversation(id);
+    this.durableMessages.invalidateConversation(id);
     this.metadata.clearConversation(id);
   }
 
   private persistMessage(message: StoreMessage): void {
-    if (message.room) {
-      void this.roomMessages
-        .persistCurrentRoomMessage(message.id)
-        .catch((error) => {
-          console.error(
-            "[MessageStore] could not persist room message",
-            error,
-          );
-        });
-      return;
-    }
-    const snapshot = snapshotStoreMessage(message);
-    void this.repository
-      .putMessage(snapshot)
-      .then(() => {
-        if (
-          !this.messages.some(
-            (item) => item.id === snapshot.id,
-          )
-        )
-          return this.repository.removeMessage(snapshot.id);
-      })
+    void this.durableMessages
+      .persistCurrentMessage(message.id)
       .catch((error) => {
         console.error(
           "[MessageStore] could not persist message",
@@ -443,137 +417,107 @@ export class MessageStores {
       });
   }
 
-  setSendMessage(sessionMsg: SessionMessage): void {
-    if (
-      this.messages.some(
-        (message) => message.id === sessionMsg.id,
-      )
-    ) {
-      return;
-    }
-
-    const projected = projectOutgoingMessage(sessionMsg);
-    if (!projected) return;
-    const message = this.metadata.attach(projected);
-
-    this.setMessages(
-      produce((state) => {
-        state.push(message);
-      }),
-    );
-    this.persistMessage(message);
+  async setSendMessage(
+    sessionMsg: SessionMessage,
+  ): Promise<void> {
+    const message = projectOutgoingMessage(sessionMsg);
+    if (message)
+      await this.durableMessages.putMessage(
+        message,
+        sessionMsg.type === "request-file",
+      );
   }
 
-  retrySendMessage(sessionMsg: SessionMessage): void {
-    const index = this.messages.findLastIndex(
+  async retrySendMessage(
+    sessionMsg: SessionMessage,
+  ): Promise<void> {
+    await this.initialize();
+    const current = this.messages.find(
       (message) => message.id === sessionMsg.id,
     );
-
-    if (index === -1) {
-      this.setSendMessage(sessionMsg);
-      return;
-    }
-
-    if (this.messages[index].room) return;
-
-    const message = projectRetry(
-      this.messages[index],
-      sessionMsg,
+    if (!current) throw new Error("Message was removed");
+    if (current.room) return;
+    const incoming = projectOutgoingMessage(sessionMsg);
+    if (!incoming) return;
+    this.durableMessages.assertSameMessage(
+      current,
+      incoming,
+      sessionMsg.type === "request-file",
     );
-    if (!message) return;
-
-    this.setMessages(index, reconcile(message));
-    this.persistMessage(message);
+    await this.durableMessages.update(
+      current.id,
+      (message) => {
+        const retry = projectRetry(message, sessionMsg);
+        if (!retry) return null;
+        return {
+          status: retry.status,
+          error: undefined,
+          deliveries: { [sessionMsg.target]: "sending" },
+          ...(retry.type === "file" &&
+          sessionMsg.type === "request-file"
+            ? { transferStatus: retry.transferStatus }
+            : {}),
+        };
+      },
+    );
   }
 
-  setReceiveMessage(sessionMsg: SessionMessage): void {
-    const index = this.messages.findIndex(
-      (message) => message.id === sessionMsg.id,
-    );
-    const current = this.messages[index];
-    // Room receipts are tracked per recipient; a legacy private response
-    // sharing an id must never mutate a room's logical message.
-    if (current?.room) return;
-
+  async setReceiveMessage(
+    sessionMsg: SessionMessage,
+  ): Promise<void> {
+    // A private receipt must never mutate a room message with the same ID.
     if (
       sessionMsg.type === "ack" ||
       sessionMsg.type === "error"
     ) {
-      if (index === -1) return;
-      const message = applyTrackedResponse(
-        this.messages[index],
-        sessionMsg,
+      await this.initialize();
+      const current = this.messages.find(
+        (message) => message.id === sessionMsg.id,
       );
-      if (!message) return;
-      this.setMessages(index, reconcile(message));
-      this.persistMessage(message);
+      if (!current || current.room) return;
+      await this.durableMessages.update(
+        current.id,
+        (message) => {
+          const response = applyTrackedResponse(
+            message,
+            sessionMsg,
+          );
+          return response
+            ? {
+                status: response.status,
+                error: response.error,
+                deliveries: response.deliveries,
+              }
+            : null;
+        },
+      );
       return;
     }
-
-    if (index !== -1) {
-      // Preserve historical duplicate semantics: repeated text/file setup clears
-      // a stale local error, while repeated request-file does not mutate history.
-      if (
-        sessionMsg.type === "send-text" ||
-        sessionMsg.type === "send-file"
-      ) {
-        const message = {
-          ...this.messages[index],
-          error: undefined,
-        } as StoreMessage;
-        this.setMessages(index, reconcile(message));
-        this.persistMessage(message);
-      }
-      return;
-    }
-
-    const projected = projectIncomingMessage(sessionMsg);
-    if (!projected) return;
-    const message = this.metadata.attach(projected);
-
-    this.setMessages(
-      produce((state) => {
-        state.push(message);
-      }),
-    );
-    this.persistMessage(message);
+    const incoming = projectIncomingMessage(sessionMsg);
+    if (incoming)
+      await this.durableMessages.putMessage(
+        incoming,
+        sessionMsg.type === "request-file",
+      );
   }
 
-  /** A content receipt must follow durable history, not just reactive publication. */
+  /** Receipts and progress share the same ordered persistence boundary. */
   async flushMessage(id: string): Promise<void> {
     await this.initialize();
-    const message = this.messages.find(
-      (item) => item.id === id,
-    );
-    if (!message) throw new Error("Message was removed");
-    if (message.room)
-      await this.roomMessages.persistCurrentRoomMessage(id);
-    else {
-      await this.repository.putMessage(
-        snapshotStoreMessage(message),
-      );
-      if (!this.messages.some((item) => item.id === id)) {
-        await this.repository.removeMessage(id);
-        throw new Error("Message was removed");
-      }
-    }
+    await this.durableMessages.persistCurrentMessage(id);
   }
 
   async addMessage(message: StoreMessage): Promise<void> {
     if (!this.hydrated) await this.initialize();
-    message = this.metadata.attach(message);
-    this.setMessages(
-      produce((state) => {
-        state.push(message);
-      }),
-    );
-    await this.repository.putMessage(
-      snapshotStoreMessage(message),
-    );
-    if (
-      !this.messages.some((item) => item.id === message.id)
-    )
-      await this.repository.removeMessage(message.id);
+    await this.durableMessages.putMessage({
+      ...message,
+      conversationId:
+        message.conversationId ??
+        directConversationId(
+          message.client,
+          message.target,
+        ),
+    });
   }
 
   getClient(clientId: ClientID): Client | undefined {
@@ -689,6 +633,21 @@ export class MessageStores {
       produce((message) => {
         if (message.type !== "file") return;
         update(message);
+        // Completion is proof that the offer reached its sole private recipient.
+        // Byte-transfer failures, however, must not undo an acknowledged offer.
+        if (
+          !message.room &&
+          message.deliveries &&
+          message.transferStatus === "complete"
+        ) {
+          message.deliveries = Object.fromEntries(
+            Object.keys(message.deliveries).map((peer) => [
+              peer,
+              "delivered" as const,
+            ]),
+          );
+          message.status = "received";
+        }
       }),
     );
     this.persistMessage(this.messages[index]);

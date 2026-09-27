@@ -136,7 +136,7 @@
       "title": "File Sender Settings",
       "enable_clipboard": {
         "title": "Enable Clipboard",
-        "description": "Enable the clipboard sending function of the sender, after enabling, you can send the clipboard content by pressing Ctrl + V on the chat window, and on mobile devices, you can send it by pasting into the information input box",
+        "description": "Enable clipboard sending by pasting into the private chat area outside the message input. Pasting into the message input always edits the draft.",
         "unsupported": "Clipboard is not supported, please use in a secure context"
       },
       "chunk_size": {

@@ -143,6 +143,57 @@ const payload = {
 };
 
 describe("file control handlers", () => {
+  it("waits for an in-flight history write on cancellation and accepts exactly one retained message", async () => {
+    const write = deferred<void>();
+    const insert =
+      f.messages.setSendMessage.getMockImplementation()!;
+    f.messages.setSendMessage.mockImplementationOnce(
+      async (message) => {
+        await write.promise;
+        await insert(message);
+      },
+    );
+    const accepted = vi.fn();
+    const outcome = f.service
+      .sendFile(
+        f.session,
+        new File(["bytes"], "file.txt"),
+        { onStored: accepted },
+      )
+      .catch((error) => error);
+    await flushRtc();
+    expect(
+      f.messages.setSendMessage,
+    ).toHaveBeenCalledOnce();
+    f.service.closeSession(f.session);
+    expect(accepted).not.toHaveBeenCalled();
+    write.resolve();
+    await outcome;
+    expect(accepted).toHaveBeenCalledOnce();
+    expect(f.messages.messages).toHaveLength(1);
+    expect(f.messages.messages[0].status).not.toBe(
+      "sending",
+    );
+    expect(f.transport.sendCalls).toHaveLength(0);
+  });
+
+  it("keeps an acknowledged offer delivered when opening its binary channel fails", async () => {
+    f.autoAck();
+    vi.mocked(
+      f.session.createChannel,
+    ).mockRejectedValueOnce(new Error("channel failed"));
+    await expect(
+      f.service.sendFile(
+        f.session,
+        new File(["bytes"], "file.txt"),
+      ),
+    ).rejects.toThrow("channel failed");
+    expect(f.messages.messages[0]).toMatchObject({
+      status: "received",
+      transferStatus: "error",
+    });
+  });
+
   it("prepares a receiver before acknowledging send-file", async () => {
     const incoming = createSessionMessage(
       remote,

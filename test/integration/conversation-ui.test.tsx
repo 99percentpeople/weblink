@@ -76,6 +76,14 @@ vi.mock("lucide-solid", () => {
 });
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    conversationMessaging: {
+      sendText: (_id: string, text: string) =>
+        service.sendRoomText(text),
+      sendFile: (id: string, file: unknown) =>
+        id.startsWith("room:")
+          ? service.sendRoomFile(file)
+          : service.sendFile(file, "alice"),
+    },
     activeRoomConversationId: () =>
       appState.roomStatus.roomId
         ? roomConversationId(

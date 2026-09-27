@@ -1,3 +1,4 @@
+import { MessageRetryButton } from "@/components/conversations/message-retry-button";
 import { userErrorMessage } from "@/libs/user-error";
 import { DirectFileMessageCard as FileMessageCard } from "@/components/conversations/direct-file-message-card";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -32,7 +33,6 @@ import {
   IconDelete,
   IconDownload,
   IconFileCopy,
-  IconRestartAlt,
   IconPreview,
   IconShare,
   IconSchedule,
@@ -562,17 +562,11 @@ export const MessageContent: Component<MessageCardProps> = (
                     )}
                   </Show>
                   <Show when={shouldShowRestoreButton()}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      class="size-6 rounded-full"
-                      aria-label={t("tasks.resume")}
-                      onClick={() => {
-                        void retryMessage(props.message);
-                      }}
-                    >
-                      <IconRestartAlt class="size-3.5" />
-                    </Button>
+                    <MessageRetryButton
+                      retry={() =>
+                        retryMessage(props.message)
+                      }
+                    />
                   </Show>
                   <Show when={!local.joinedNext}>
                     <time

@@ -167,7 +167,7 @@ describe("room file persistence", () => {
       clientId: "peer",
       targetClientId: "local",
     };
-    store.setReceiveMessage(
+    await store.setReceiveMessage(
       createSessionMessage(
         peer,
         "ack",
@@ -175,7 +175,7 @@ describe("room file persistence", () => {
         { id: "offer" },
       ),
     );
-    store.setReceiveMessage(
+    await store.setReceiveMessage(
       createSessionMessage(
         peer,
         "error",
@@ -183,7 +183,7 @@ describe("room file persistence", () => {
         { id: "offer" },
       ),
     );
-    store.retrySendMessage(
+    await store.retrySendMessage(
       createSessionMessage(
         peer,
         "send-file",

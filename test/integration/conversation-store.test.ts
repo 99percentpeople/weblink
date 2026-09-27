@@ -157,9 +157,14 @@ describe("conversation storage", () => {
     await store.initialize();
     const pending = store.addMessage(direct);
     const id = directConversationId("local", "peer");
+    await vi.waitFor(() =>
+      expect(finish).toBeTypeOf("function"),
+    );
     store.clearConversation(id);
     finish();
-    await pending;
+    await expect(pending).rejects.toThrow(
+      "Conversation was cleared",
+    );
     expect(store.getConversationMessages(id)).toEqual([]);
     expect(
       store.conversations.some((item) => item.id === id),

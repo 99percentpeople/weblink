@@ -56,7 +56,6 @@ export type ChatComposerProps = Omit<
   placeholder?: string;
   inputLabel?: string;
   sendLabel?: string;
-  sendShortcut?: "modifier-enter" | "enter";
   hint?: JSX.Element;
   footer?: JSX.Element;
 };
@@ -79,7 +78,6 @@ export function ChatComposer(props: ChatComposerProps) {
     "placeholder",
     "inputLabel",
     "sendLabel",
-    "sendShortcut",
     "hint",
     "footer",
   ]);
@@ -141,10 +139,11 @@ export function ChatComposer(props: ChatComposerProps) {
   const send = async () => {
     if (!canSendText()) return;
     const snapshot = local.value;
+    const conversation = target();
     setSendingText(true);
     try {
       await local.onSendText(snapshot.trim());
-      if (!disposed) {
+      if (!disposed && target() === conversation) {
         if (local.value === snapshot)
           local.onValueChange("");
         local.onSent?.();
@@ -386,10 +385,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 event.isComposing
               )
                 return;
-              const submits =
-                local.sendShortcut === "enter"
-                  ? !event.shiftKey
-                  : event.ctrlKey || event.shiftKey;
+              const submits = !event.shiftKey;
               if (submits) {
                 event.preventDefault();
                 void send();

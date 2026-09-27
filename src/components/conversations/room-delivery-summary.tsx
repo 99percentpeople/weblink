@@ -1,25 +1,16 @@
-import { userErrorMessage } from "@/libs/user-error";
-import {
-  createMemo,
-  createSignal,
-  For,
-  Show,
-} from "solid-js";
-import { RotateCw } from "lucide-solid";
+import { createMemo, For, Show } from "solid-js";
 import { ClientAvatar } from "@/components/common/client-avatar";
-import { Button } from "@/components/ui/button";
+import { MessageRetryButton } from "./message-retry-button";
 import { useAppState } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
 import type { RoomMessage } from "@/libs/domain/message";
 import { t } from "@/i18n";
 import { cn } from "@/libs/cn";
-import { toast } from "solid-sonner";
 
 export function RoomDeliverySummary(props: {
   message: RoomMessage;
 }) {
   const state = useAppState();
-  const [retrying, setRetrying] = createSignal(false);
   const deliveries = createMemo(() =>
     Object.entries(props.message.deliveries ?? {}),
   );
@@ -53,19 +44,6 @@ export function RoomDeliverySummary(props: {
         appState.session.clientViewData[peer]
           ?.messageChannel,
     );
-  const retry = async () => {
-    if (retrying()) return;
-    setRetrying(true);
-    try {
-      await state.retryMessage(props.message);
-    } catch (error) {
-      toast.error(
-        userErrorMessage(error, "errors.unexpected"),
-      );
-    } finally {
-      setRetrying(false);
-    }
-  };
   return (
     <Show when={deliveries().length}>
       <div
@@ -130,21 +108,9 @@ export function RoomDeliverySummary(props: {
               state.activeRoomConversationId()
           }
         >
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            class="size-6 shrink-0 rounded-full"
-            aria-label={t("conversations.retry_failed")}
-            title={t("conversations.retry_failed")}
-            disabled={retrying()}
-            onClick={() => void retry()}
-          >
-            <RotateCw
-              class="size-3"
-              classList={{ "animate-spin": retrying() }}
-            />
-          </Button>
+          <MessageRetryButton
+            retry={() => state.retryMessage(props.message)}
+          />
         </Show>
       </div>
     </Show>

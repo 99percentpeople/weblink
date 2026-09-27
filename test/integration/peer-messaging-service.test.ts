@@ -30,9 +30,9 @@ function setup() {
   const protocol = new RtcProtocol(transport);
   protocols.push(protocol);
   const store = {
-    setSendMessage: vi.fn(),
-    retrySendMessage: vi.fn(),
-    setReceiveMessage: vi.fn(),
+    setSendMessage: vi.fn(async () => {}),
+    retrySendMessage: vi.fn(async () => {}),
+    setReceiveMessage: vi.fn(async () => {}),
   };
   return {
     transport,
@@ -54,10 +54,12 @@ describe("peer messaging state bridge", () => {
     const pending = service.send(local, "send-text", {
       data: "hello",
     });
+    await flushRtc();
     const message = transport.sendCalls[0]!.message;
     expect(store.setSendMessage).toHaveBeenCalledWith(
       message,
     );
+    await flushRtc();
     await transport.emit(
       local,
       createSessionMessage(
@@ -86,9 +88,11 @@ describe("peer messaging state bridge", () => {
       { id: "m1", createdAt: 42, retry: true },
     );
     expect(store.setSendMessage).not.toHaveBeenCalled();
+    await flushRtc();
     expect(store.retrySendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: "m1", createdAt: 42 }),
     );
+    await flushRtc();
     await transport.emit(
       local,
       createSessionMessage(
@@ -109,6 +113,7 @@ describe("peer messaging state bridge", () => {
       { data: "hello" },
       { id: "m1" },
     );
+    await flushRtc();
     await transport.emit(
       local,
       createSessionMessage(
@@ -167,6 +172,7 @@ describe("peer messaging state bridge", () => {
     ).resolves.toBeNull();
     expect(store.retrySendMessage).not.toHaveBeenCalled();
     expect(store.setReceiveMessage).not.toHaveBeenCalled();
+    await flushRtc();
     await transport.emit(
       local,
       createSessionMessage(
@@ -195,6 +201,7 @@ describe("peer messaging state bridge", () => {
         { id: "m1", throwOnError: true },
       ),
     );
+    await flushRtc();
     await transport.emit(
       local,
       createSessionMessage(

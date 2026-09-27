@@ -29,15 +29,27 @@ export type TrackedSendOptions = RequestOptions &
     retry?: boolean;
     /** Nested remote commands must propagate failure instead of ACKing success. */
     throwOnError?: boolean;
-    onStored?(): void | Promise<void>;
+    onStored?(
+      message: MessageOf<TrackedType>,
+    ): void | Promise<void>;
   };
 
 /** The only bridge between control-request lifecycle and persisted chat state. */
 export class PeerMessagingService {
+  private readonly offText: () => void;
   constructor(
     private readonly protocol: WebRtcProtocol,
     private readonly store: MessageStore,
-  ) {}
+  ) {
+    this.offText = protocol.handle(
+      "send-text",
+      ({ message }) => store.setReceiveMessage(message),
+    );
+  }
+
+  dispose(): void {
+    this.offText();
+  }
 
   async send<T extends TrackedType>(
     session: PeerSession,
@@ -49,6 +61,8 @@ export class PeerMessagingService {
     ackMessage: AckMessage | FileOfferResultMessage;
   } | null> {
     let prepared: MessageOf<T> | undefined;
+    let stored = false;
+    let preparation: Promise<void> | undefined;
     try {
       const ackMessage = await this.protocol.call(
         session,
@@ -56,16 +70,19 @@ export class PeerMessagingService {
         payload,
         {
           ...options,
-          onPrepared: (message) => {
-            prepared = message;
-            if (options.retry)
-              this.store.retrySendMessage(message);
-            else this.store.setSendMessage(message);
-            return options.onStored?.();
-          },
+          onPrepared: (message) =>
+            (preparation = (async () => {
+              prepared = message;
+              if (options.retry)
+                await this.store.retrySendMessage(message);
+              else await this.store.setSendMessage(message);
+              stored = true;
+              await options.onStored?.(message);
+            })()),
         },
       );
-      this.store.setReceiveMessage(
+      await preparation;
+      await this.store.setReceiveMessage(
         ackMessage.type === "file-offer-result"
           ? createSessionMessage(
               {
@@ -87,22 +104,21 @@ export class PeerMessagingService {
         if (options.throwOnError) throw error;
         return null;
       }
-      if (prepared) this.fail(prepared, error);
-      if (options.throwOnError) throw error;
-      if (!prepared)
-        console.warn(
-          "[PeerMessagingService] request could not be prepared",
-          error,
-        );
+      // Closing a channel may settle the request while durable insertion is pending.
+      // Retire the stored message after that insertion, never leave it sending forever.
+      await preparation?.catch(() => {});
+      if (prepared && stored)
+        await this.fail(prepared, error);
+      if (!stored || options.throwOnError) throw error;
       return null;
     }
   }
 
-  fail(
+  async fail(
     message: MessageOf<TrackedType>,
     error: unknown,
-  ): void {
-    this.store.setReceiveMessage(
+  ): Promise<void> {
+    await this.store.setReceiveMessage(
       createSessionMessage(
         {
           clientId: message.client,

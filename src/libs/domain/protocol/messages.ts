@@ -12,7 +12,9 @@ export const FILE_CONTENT_FEATURE =
 export const SHARED_FILES_FEATURE =
   "shared-files-v1" as const;
 export const ROOM_FILE_FEATURE = "room-file-v1" as const;
-export const ROOM_CHAT_MAX_TEXT_LENGTH = 64 * 1024;
+import { CHAT_MAX_TEXT_LENGTH } from "./chat-text";
+export const ROOM_CHAT_MAX_TEXT_LENGTH =
+  CHAT_MAX_TEXT_LENGTH;
 export const RTC_PROFILE_PROTOCOL_VERSION =
   P2P_PROFILE_PROTOCOL_VERSION;
 

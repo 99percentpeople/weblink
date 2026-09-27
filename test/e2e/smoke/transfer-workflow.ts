@@ -190,15 +190,16 @@ function makeNode(
   };
   const store = {
     messages,
-    setSendMessage: insert,
-    retrySendMessage: (message: SessionMessage) => {
+    setSendMessage: async (message: SessionMessage) =>
+      insert(message),
+    retrySendMessage: async (message: SessionMessage) => {
       insert(message);
       update(message.id, (item) => {
         item.status = "sending";
         item.error = undefined;
       });
     },
-    setReceiveMessage: (message: SessionMessage) => {
+    setReceiveMessage: async (message: SessionMessage) => {
       if (message.type === "ack")
         update(message.id, (item) => {
           item.status = "received";

@@ -343,6 +343,11 @@ export function validateSessionMessage(
         value.data.length <= ROOM_CHAT_MAX_TEXT_LENGTH;
       break;
     case "send-text":
+      valid =
+        text(value.data) &&
+        value.data.trim().length > 0 &&
+        value.data.length <= ROOM_CHAT_MAX_TEXT_LENGTH;
+      break;
     case "send-clipboard":
       valid = text(value.data);
       break;

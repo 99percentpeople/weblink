@@ -36,6 +36,7 @@ describe("message projection", () => {
       ),
       type: "text",
       status: "sending",
+      deliveries: { remote: "sending" },
     });
   });
 

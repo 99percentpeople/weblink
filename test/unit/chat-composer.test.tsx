@@ -16,6 +16,12 @@ import {
   within,
 } from "@solidjs/testing-library";
 import { ChatBar } from "@/routes/client/[id]/components/chat-bar";
+import { ConversationComposer } from "@/components/conversations/conversation-composer";
+import {
+  directConversationId,
+  roomConversationId,
+} from "@/libs/domain/conversation";
+import { deferred } from "../support/rtc-transport";
 import { Show } from "solid-js";
 import { setAppState } from "@/libs/state/app-state";
 
@@ -29,6 +35,26 @@ const service = vi.hoisted(() => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    conversationMessaging: {
+      sendText: (id: string, text: string) =>
+        service.sendText(
+          text,
+          id.startsWith("direct:")
+            ? JSON.parse(id.slice(7)).find(
+                (peer: string) => peer !== "self",
+              )
+            : id,
+        ),
+      sendFile: (id: string, file: unknown) =>
+        service.sendFile(
+          file,
+          id.startsWith("direct:")
+            ? JSON.parse(id.slice(7)).find(
+                (peer: string) => peer !== "self",
+              )
+            : id,
+        ),
+    },
     sendText: service.sendText,
     sendFile: service.sendFile,
   }),
@@ -37,6 +63,7 @@ vi.mock("@/libs/state/app-state", async () => {
   const { createStore } = await import("solid-js/store");
   const [appState, setAppState] = createStore({
     options: { enableClipboard: false },
+    profile: { clientId: "self" },
     session: { clientViewData: {} },
   });
   return { appState, setAppState };
@@ -89,6 +116,7 @@ const alice = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   service.sendText.mockReset();
   service.sendText.mockResolvedValue(undefined);
   service.sendFile.mockReset();
@@ -109,6 +137,104 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("shared chat composer adapters", () => {
+  it.each(["direct", "room"] as const)(
+    "persists %s drafts, uses normal paste, and clears only after acceptance",
+    async (kind) => {
+      const id =
+        kind === "direct"
+          ? directConversationId("self", "alice")
+          : roomConversationId("server", "room");
+      const view = () => (
+        <ConversationComposer
+          conversationId={id}
+          title="Conversation"
+        />
+      );
+      let mounted = render(view);
+      let textarea = screen.getByRole(
+        "textbox",
+      ) as HTMLTextAreaElement;
+      fireEvent.input(textarea, {
+        target: { value: "keep draft" },
+      });
+      mounted.unmount();
+      mounted = render(view);
+      textarea = screen.getByRole(
+        "textbox",
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("keep draft");
+      expect(textarea.maxLength).toBe(65536);
+      const outerPaste = vi.fn();
+      window.addEventListener("paste", outerPaste);
+      fireEvent.paste(textarea, {
+        clipboardData: { items: [{ kind: "string" }] },
+      });
+      window.removeEventListener("paste", outerPaste);
+      expect(outerPaste).not.toHaveBeenCalled();
+      expect(textarea.value).toBe("keep draft");
+      const accepting = deferred<void>();
+      service.sendText.mockReturnValueOnce(
+        accepting.promise,
+      );
+      fireEvent.keyDown(textarea, {
+        key: "Enter",
+        shiftKey: true,
+      });
+      expect(service.sendText).not.toHaveBeenCalled();
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      expect(service.sendText).toHaveBeenCalledOnce();
+      expect(textarea.value).toBe("keep draft");
+      accepting.resolve();
+      await waitFor(() => expect(textarea.value).toBe(""));
+      mounted.unmount();
+      render(view);
+      expect(
+        (screen.getByRole("textbox") as HTMLTextAreaElement)
+          .value,
+      ).toBe("");
+    },
+  );
+
+  it.each([false, true])(
+    "handles acceptance after remount without losing a newer draft (edited=%s)",
+    async (edited) => {
+      const view = () => <ChatBar client={alice} />;
+      const accepting = deferred<void>();
+      service.sendText.mockReturnValueOnce(
+        accepting.promise,
+      );
+      const mounted = render(view);
+      fireEvent.input(screen.getByRole("textbox"), {
+        target: { value: "pending" },
+      });
+      fireEvent.keyDown(screen.getByRole("textbox"), {
+        key: "Enter",
+      });
+      mounted.unmount();
+      render(view);
+      const textarea = screen.getByRole(
+        "textbox",
+      ) as HTMLTextAreaElement;
+      if (edited)
+        fireEvent.input(textarea, {
+          target: { value: "new draft" },
+        });
+      accepting.resolve();
+      await waitFor(() =>
+        expect(textarea.value).toBe(
+          edited ? "new draft" : "",
+        ),
+      );
+      expect(
+        JSON.parse(
+          sessionStorage.getItem(
+            `conversation-draft:${directConversationId("self", "alice")}`,
+          )!,
+        ),
+      ).toBe(edited ? "new draft" : "");
+    },
+  );
+
   it("retains the private draft while disconnected, blocks every send entry and enables them again after reconnection", async () => {
     const { container } = render(() => (
       <ChatBar client={alice} />
@@ -376,7 +502,7 @@ describe("shared chat composer adapters", () => {
     expect(textbox.value).toBe("do not send this draft");
   });
 
-  it("keeps private keyboard shortcuts and retains failed or newly edited drafts during asynchronous sends", async () => {
+  it("uses Enter to send and Shift+Enter to compose, retaining unaccepted or newly edited drafts", async () => {
     let complete!: () => void;
     service.sendText.mockImplementationOnce(
       () =>
@@ -391,7 +517,10 @@ describe("shared chat composer adapters", () => {
     fireEvent.input(textbox, {
       target: { value: "  first draft  " },
     });
-    fireEvent.keyDown(textbox, { key: "Enter" });
+    fireEvent.keyDown(textbox, {
+      key: "Enter",
+      shiftKey: true,
+    });
     fireEvent.keyDown(textbox, {
       key: "Enter",
       ctrlKey: true,
@@ -428,10 +557,7 @@ describe("shared chat composer adapters", () => {
     service.sendText.mockRejectedValueOnce(
       new Error("Connection failed"),
     );
-    fireEvent.keyDown(textbox, {
-      key: "Enter",
-      shiftKey: true,
-    });
+    fireEvent.keyDown(textbox, { key: "Enter" });
     await waitFor(() =>
       expect(service.error).toHaveBeenCalledWith(
         "errors.connection_failed",

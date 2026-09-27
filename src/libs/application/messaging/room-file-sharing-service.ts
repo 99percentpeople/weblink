@@ -1,3 +1,4 @@
+import type { OnMessageAccepted } from "./message-submission";
 import type {
   ChunkMetaData,
   FileSource,
@@ -98,7 +99,10 @@ export class RoomFileSharingService {
     );
   }
 
-  async sendFile(file: FileSource): Promise<void> {
+  async sendFile(
+    file: FileSource,
+    onStored?: OnMessageAccepted,
+  ): Promise<void> {
     const scopeKey = this.options.rooms.currentScopeKey;
     if (!scopeKey)
       throw new Error("Join a room before sharing a file");
@@ -126,6 +130,7 @@ export class RoomFileSharingService {
         info,
         scopeKey,
         messageId,
+        onStored,
       );
     } catch (error) {
       if (

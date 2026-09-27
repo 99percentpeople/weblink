@@ -1,70 +1,40 @@
-import { useAppState } from "@/libs/state/app-state-context";
 import {
-  createSignal,
   splitProps,
   type Component,
   type ComponentProps,
 } from "solid-js";
 import type { Client } from "@/libs/domain/client";
-import { createSendItemPreviewDialog } from "@/components/dialogs/preview-dialog";
+import { directConversationId } from "@/libs/domain/conversation";
 import { appState } from "@/libs/state/app-state";
-import { createIsMobile } from "@/libs/hooks/create-mobile";
-import { ChatComposer } from "@/components/conversations/chat-composer";
+import { ConversationComposer } from "@/components/conversations/conversation-composer";
 
 export const ChatBar: Component<
-  ComponentProps<"div"> & { client: Client }
+  Omit<ComponentProps<"div">, "onPaste"> & {
+    client: Client;
+    onSent?: () => void;
+  }
 > = (props) => {
   const [local, other] = splitProps(props, [
     "client",
     "class",
+    "onSent",
   ]);
-  const { sendText, sendFile } = useAppState();
-  const [text, setText] = createSignal("");
-  const { open: openPreview } =
-    createSendItemPreviewDialog();
-  const mobile = createIsMobile();
   const peer = () =>
     appState.session.clientViewData[local.client.clientId];
-  const connected = () =>
-    peer()?.onlineStatus === "online" &&
-    !!peer()?.messageChannel;
   return (
-    <ChatComposer
+    <ConversationComposer
       {...other}
       class={local.class}
-      conversationKey={local.client.clientId}
-      disabled={!connected()}
-      value={text()}
-      onValueChange={setText}
-      onSendText={(value) =>
-        sendText(value, local.client.clientId)
+      conversationId={directConversationId(
+        appState.profile.clientId,
+        local.client.clientId,
+      )}
+      title={local.client.name}
+      disabled={
+        peer()?.onlineStatus !== "online" ||
+        !peer()?.messageChannel
       }
-      onSendFiles={async (files) => {
-        const clientId = local.client.clientId;
-        for (const file of files)
-          await sendFile(file, clientId);
-      }}
-      previewFile={async (file) =>
-        Boolean(
-          (await openPreview(file, local.client.name))
-            .result,
-        )
-      }
-      onPaste={(event) => {
-        if (
-          !navigator.clipboard ||
-          !appState.options.enableClipboard
-        )
-          return;
-        if (!mobile()) event.stopPropagation();
-        else if (
-          !Array.from(
-            event.clipboardData?.items ?? [],
-          ).some((item) => item.kind === "file")
-        ) {
-          setTimeout(() => setText(""), 0);
-        }
-      }}
+      onSent={local.onSent}
     />
   );
 };

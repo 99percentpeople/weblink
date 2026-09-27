@@ -327,6 +327,7 @@ describe("room file authorization and explicit pulls", () => {
       expect.objectContaining({ id: "cached" }),
       "scope",
       origin.messageId,
+      undefined,
     );
     expect(f.files.serveFileOffer).not.toHaveBeenCalled();
   });

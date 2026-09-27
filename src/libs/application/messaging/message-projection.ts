@@ -32,6 +32,13 @@ function textMessage(
     ),
     type: "text",
     status,
+    ...(status === "sending"
+      ? {
+          deliveries: {
+            [message.target]: "sending" as const,
+          },
+        }
+      : {}),
   };
 }
 
@@ -47,6 +54,13 @@ function sentFileMessage(
     ),
     type: "file",
     status,
+    ...(status === "sending"
+      ? {
+          deliveries: {
+            [message.target]: "sending" as const,
+          },
+        }
+      : {}),
   };
 }
 
@@ -72,6 +86,13 @@ function requestedFileMessage(
     client: message.target,
     target: message.client,
     transferStatus: "init",
+    ...(status === "sending"
+      ? {
+          deliveries: {
+            [message.target]: "sending" as const,
+          },
+        }
+      : {}),
   };
 }
 
@@ -170,12 +191,30 @@ export function applyTrackedResponse(
         ...current,
         status: "received",
         error: undefined,
+        ...(current.deliveries
+          ? {
+              deliveries: Object.fromEntries(
+                Object.keys(current.deliveries).map(
+                  (peer) => [peer, "delivered" as const],
+                ),
+              ),
+            }
+          : {}),
       };
     case "error":
       return {
         ...current,
         status: "error",
         error: message.error,
+        ...(current.deliveries
+          ? {
+              deliveries: Object.fromEntries(
+                Object.keys(current.deliveries).map(
+                  (peer) => [peer, "failed" as const],
+                ),
+              ),
+            }
+          : {}),
       };
     default:
       return null;

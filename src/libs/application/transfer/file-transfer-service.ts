@@ -1,3 +1,4 @@
+import type { OnMessageAccepted } from "../messaging/message-submission";
 import { FileContentReceives } from "./file-content-receives";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
 import { completeLocalFile } from "./file-content-completion";
@@ -56,7 +57,7 @@ export interface FileTransferServiceOptions {
     | "updateTransferMessage"
   > &
     Partial<Pick<typeof messageStores, "flushMessage">>;
-  messaging: Pick<PeerMessagingService, "send" | "fail">;
+  messaging: Pick<PeerMessagingService, "send">;
   getSession(peerId: string): PeerSession | undefined;
   getChunkSize(): number;
   automaticCacheDeletion?(): boolean;
@@ -447,7 +448,10 @@ export class FileTransferService {
     cache: ChunkCache,
     type: T,
     payload: MessagePayload<T>,
-    metadata: MessageMetadata & { retry?: boolean } = {},
+    metadata: MessageMetadata & {
+      retry?: boolean;
+      onStored?: OnMessageAccepted;
+    } = {},
   ): Promise<void> {
     if (
       type === "send-file" &&
@@ -469,43 +473,44 @@ export class FileTransferService {
     let run = negotiated
       ? undefined
       : this.register(op, cache, messageId, mode, false);
-    const result = await this.step(
-      op,
-      this.deps.messaging
-        .send(op.session, type, payload, {
-          ...metadata,
-          id: messageId,
-          signal: op.controller.signal,
-          throwOnError: true,
-          onStored:
-            type === "send-file" && !metadata.retry
-              ? () =>
-                  this.deps.caches.library?.setShared(
-                    cache.id,
-                    true,
-                  )
-              : undefined,
-        })
-        .catch((error) => {
-          // The protocol marks an aborted pending request as failed. File cancellation is
-          // instead resumable; apply its final state after that pending request settles.
-          if (
-            op.controller.signal.aborted &&
-            op.controller.signal.reason?.name ===
-              "AbortError"
-          ) {
-            this.deps.messages.updateTransferMessage(
-              messageId,
-              (message) => {
-                message.status = "received";
-                message.transferStatus = "paused";
-                message.error = undefined;
-              },
+    // The protocol owns cancellation here; await its durable preparation before
+    // releasing an attachment or reporting submission failure.
+    const result = await this.deps.messaging
+      .send(op.session, type, payload, {
+        ...metadata,
+        id: messageId,
+        signal: op.controller.signal,
+        throwOnError: true,
+        onStored: async () => {
+          metadata.onStored?.(messageId);
+          if (type === "send-file" && !metadata.retry)
+            await this.deps.caches.library?.setShared(
+              cache.id,
+              true,
             );
-          }
-          throw error;
-        }),
-    );
+        },
+      })
+      .catch((error) => {
+        // The protocol marks an aborted pending request as failed. File cancellation is
+        // instead resumable; apply its final state after that pending request settles.
+        if (
+          op.controller.signal.aborted &&
+          op.controller.signal.reason?.name === "AbortError"
+        ) {
+          this.deps.messages.updateTransferMessage(
+            messageId,
+            (message) => {
+              if (!message.deliveries)
+                message.status = "received";
+              message.transferStatus = "paused";
+              message.error = undefined;
+            },
+          );
+        }
+        this.check(op);
+        throw error;
+      });
+    this.check(op);
     if (!result)
       throw new Error("file request was not prepared");
     if (result.ackMessage.type === "file-offer-result") {
@@ -536,7 +541,16 @@ export class FileTransferService {
       await this.openChannel(op, cache);
     } catch (error) {
       if (this.valid(op))
-        this.deps.messaging.fail(result.message, error);
+        this.deps.messages.updateTransferMessage(
+          messageId,
+          (message) => {
+            message.transferStatus = "error";
+            message.error =
+              error instanceof Error
+                ? error.message
+                : String(error);
+          },
+        );
       throw error;
     }
   }
@@ -817,7 +831,10 @@ export class FileTransferService {
   sendFile(
     session: PeerSession,
     file: FileSource,
-    options: { signal?: AbortSignal } = {},
+    options: {
+      signal?: AbortSignal;
+      onStored?: OnMessageAccepted;
+    } = {},
   ): Promise<void> {
     if (!session.isMessageChannelReady)
       return Promise.reject(
@@ -864,18 +881,24 @@ export class FileTransferService {
         const info = await this.step(op, cache.getInfo());
         if (!info?.isComplete)
           throw new Error("File content is unavailable");
-        await this.outgoing(op, cache, "send-file", {
-          fid,
-          fileName: info.fileName,
-          fileSize: info.fileSize,
-          mimeType: info.mimetype,
-          lastModified: info.lastModified,
-          chunkSize,
-          ...(this.deps.supportsContent?.(session) &&
-          info.fingerprint
-            ? { fingerprint: info.fingerprint }
-            : {}),
-        });
+        await this.outgoing(
+          op,
+          cache,
+          "send-file",
+          {
+            fid,
+            fileName: info.fileName,
+            fileSize: info.fileSize,
+            mimeType: info.mimetype,
+            lastModified: info.lastModified,
+            chunkSize,
+            ...(this.deps.supportsContent?.(session) &&
+            info.fingerprint
+              ? { fingerprint: info.fingerprint }
+              : {}),
+          },
+          { onStored: options.onStored },
+        );
       },
     );
   }
@@ -1272,7 +1295,9 @@ export class FileTransferService {
           message.fingerprint &&
           this.deps.caches.library
         ) {
-          this.deps.messages.setReceiveMessage(message);
+          await this.deps.messages.setReceiveMessage(
+            message,
+          );
           await this.deps.messages.flushMessage?.(
             message.id,
           );
@@ -1366,7 +1391,7 @@ export class FileTransferService {
           this.deps.caches.createCache(message.fid),
         );
         this.hold(op, cache);
-        this.deps.messages.setReceiveMessage(message);
+        await this.deps.messages.setReceiveMessage(message);
         const run = this.register(
           op,
           cache,
@@ -1443,7 +1468,7 @@ export class FileTransferService {
           throw new Error(
             `cache ${message.fid} is not complete`,
           );
-        this.deps.messages.setReceiveMessage(message);
+        await this.deps.messages.setReceiveMessage(message);
         const run = this.register(
           op,
           cache,

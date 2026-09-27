@@ -132,14 +132,16 @@ function fixture(automaticDeletion = false) {
   };
   const store = {
     messages,
-    setSendMessage: vi.fn(track),
-    retrySendMessage: vi.fn((m: SessionMessage) => {
+    setSendMessage: vi.fn(async (m: SessionMessage) =>
+      track(m),
+    ),
+    retrySendMessage: vi.fn(async (m: SessionMessage) => {
       track(m);
       update(m.id, (item) => {
         item.status = "sending";
       });
     }),
-    setReceiveMessage: vi.fn((m: SessionMessage) => {
+    setReceiveMessage: vi.fn(async (m: SessionMessage) => {
       if (m.type === "ack")
         update(m.id, (item) => {
           item.status = "received";

@@ -79,6 +79,11 @@ the low-level `domain` layer.
     session runtime and are joined to source semantics through
     `RTCTrackEvent.transceiver.mid`, so UI identity does not depend on a
     cross-peer `MediaStreamTrack.id`.
+    The same snapshot associates microphone and shared audio MIDs with their
+    corresponding views; shared audio refers to its screen's video MID.
+    One audio player retains playback and speaker selection, while each tile
+    controls only its audio group. The microphone group survives camera/avatar
+    changes. Member mute controls all groups; global mute controls playback.
     All stage views use 16:9 frames and contain the source video. One stage-owned
     ResizeObserver measures the grid's allotted content box and coalesces updates
     per animation frame. Grid columns, centering offsets and tile dimensions use
@@ -261,8 +266,13 @@ the low-level `domain` layer.
     list entry. Active rooms and online private peers allow clearing but block
     deletion until leaving the room; confirmation rechecks presence. Private
     actions target the selected conversation's original local identity.
-    `chat-composer.tsx` supplies the same text and attachment controls to both
-    conversation types; their callbacks retain separate delivery policies.
+    `conversation-composer.tsx` binds both conversation kinds to the same submission
+    API and `chat-composer.tsx` controls. Enter sends, Shift+Enter inserts a newline,
+    and text is limited to 65,536 UTF-16 code units. Session-local drafts are keyed
+    by conversation and survive navigation. Acceptance clears only the submitted
+    draft, including after remount, without erasing later edits. Text paste edits
+    the draft on every platform; clipboard forwarding is confined to the private
+    chat area outside the input. Message retries share pending/error presentation.
     Room file cards show metadata without loading remote bytes on mount.
     Locally cached images, video and audio render inline, so senders can see
     their own media immediately and recipients see it after a manual or opted-in
@@ -339,9 +349,10 @@ may select concrete infrastructure implementations.
     injectable credential/probe functions, without UI or shared-state ownership.
   - `messaging/`: reactive message history, persistence port and tracked
     message workflows. IndexedDB does not live in this layer.
-    - `message-store.ts`: private-message history and hydration, stable reactive
+    - `message-store.ts`: shared message history and hydration, stable reactive
       arrays, browser-local message sequencing, and the shared facade composed
-      from injected conversation and room-message stores.
+      from injected conversation metadata and durable message stores. Interrupted
+      private and room sends become retryable failures when history is loaded.
     - `conversation-history-service.ts`: application API for caching local text
       conversations. It waits for hydration, creates records and stable message
       IDs, coalesces concurrent batches, and resumes incomplete writes without
@@ -351,10 +362,26 @@ may select concrete infrastructure implementations.
       cursors. Private and room history is queried and removed by conversation
       identity; contact deletion never removes room messages authored by that
       contact.
-    - `room-message-store.ts`: durable room-message insertion, duplicate identity
-      checks and serialized per-recipient delivery updates, without networking.
-      Clearing or deleting a conversation invalidates pending room insertions;
-      late private and room writes cannot restore removed history.
+    - `conversation-message-store.ts`: durable insertion for both conversation
+      kinds, immutable duplicate identity checks, and serialized delivery/progress
+      writes. New messages are published only after persistence succeeds. Clearing
+      or deleting a conversation invalidates pending insertions; late writes cannot
+      restore removed history. File resume requests may carry a fresh request
+      timestamp but must retain the original file identity.
+    - `conversation-messaging-service.ts`: the shared UI send/retry entry point,
+      validating the selected conversation, local identity and current destination.
+      `message-submission.ts` separates durable local acceptance from network
+      completion. Both paths derive completion from persisted recipient outcomes,
+      including partial room delivery failures. Accepted messages own delivery
+      failures; only pre-acceptance failures retain a draft. Retries resolve the
+      stored message again and reuse
+      its ID. Private delivery has one recipient; room delivery retains its original
+      recipient snapshot. `message-delivery.ts` projects recipient outcomes into
+      the historical top-level status and recovers interrupted delivery on reload.
+    - `peer-messaging-service.ts`: the private protocol adapter, including text
+      reception. Private sends and incoming ACKs wait for durable history just as
+      room messages do. File-byte transfer status remains separate from successful
+      offer delivery; a later binary-channel failure does not undo an offer ACK.
     - `conversation-query.ts`: pure summary, search, label filtering and grouping
       projections used by both sidebars. Text search and label selection combine
       with AND; selected labels combine with OR. A conversation may appear under

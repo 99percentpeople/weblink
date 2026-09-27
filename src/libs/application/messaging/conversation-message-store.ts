@@ -1,30 +1,30 @@
 import {
   produce,
-  reconcile,
   type SetStoreFunction,
 } from "solid-js/store";
 import type { Conversation } from "@/libs/domain/conversation";
 import type {
   StoreMessage,
-  RoomMessage,
-  RoomDeliveryStatus,
+  MessageDeliveryStatus,
 } from "@/libs/domain/message";
 import type { MessageRepository } from "./message-repository";
+import { deliveryStatus } from "./message-delivery";
 import { snapshotStoreMessage } from "./message-snapshot";
 
-export interface RoomMessageStoreDependencies {
+export interface ConversationMessageStoreDependencies {
   messages: StoreMessage[];
   conversations: Conversation[];
   initialize(): Promise<void>;
+  attach(message: StoreMessage): StoreMessage;
   withLocalSequence<T extends StoreMessage>(message: T): T;
   setMessages: SetStoreFunction<StoreMessage[]>;
 }
 
-/** Durable room insertion and serialized per-recipient receipts, without networking. */
-export class RoomMessageStore {
-  private pendingRoomMessages = new Map<
+/** Shared durable insertion, identity checks and ordered message updates. */
+export class ConversationMessageStore {
+  private pendingMessages = new Map<
     string,
-    { message: RoomMessage; promise: Promise<void> }
+    { message: StoreMessage; promise: Promise<void> }
   >();
   private deliveryWrites = new Map<string, Promise<void>>();
   private conversationVersions = new Map<string, number>();
@@ -37,7 +37,7 @@ export class RoomMessageStore {
   }
   constructor(
     private readonly repository: MessageRepository,
-    private readonly dependencies: RoomMessageStoreDependencies,
+    private readonly dependencies: ConversationMessageStoreDependencies,
   ) {}
   private get messages() {
     return this.dependencies.messages;
@@ -46,20 +46,30 @@ export class RoomMessageStore {
     return this.dependencies.conversations;
   }
 
-  private assertSameRoomMessage(
+  assertSameMessage(
     current: StoreMessage,
-    incoming: RoomMessage,
+    incoming: StoreMessage,
+    fileRequest = false,
   ): void {
+    const conflict = () => {
+      throw new Error(
+        current.room || incoming.room
+          ? "Conflicting room message identity"
+          : "Conflicting message identity",
+      );
+    };
     if (
       current.type !== incoming.type ||
-      !current.room ||
+      Boolean(current.room) !== Boolean(incoming.room) ||
       current.conversationId !== incoming.conversationId ||
       current.client !== incoming.client ||
-      current.createdAt !== incoming.createdAt ||
-      current.room.roomId !== incoming.room?.roomId
-    ) {
-      throw new Error("Conflicting room message identity");
-    }
+      (!current.room &&
+        current.target !== incoming.target) ||
+      (!fileRequest &&
+        current.createdAt !== incoming.createdAt) ||
+      current.room?.roomId !== incoming.room?.roomId
+    )
+      conflict();
     if (
       current.type === "text" &&
       incoming.type === "text"
@@ -73,24 +83,27 @@ export class RoomMessageStore {
         current.fid === incoming.fid &&
         current.fileName === incoming.fileName &&
         current.fileSize === incoming.fileSize &&
-        current.mimeType === incoming.mimeType &&
+        (current.mimeType ?? "") ===
+          (incoming.mimeType ?? "") &&
         current.lastModified === incoming.lastModified &&
         current.chunkSize === incoming.chunkSize &&
-        JSON.stringify(current.fingerprint) ===
-          JSON.stringify(incoming.fingerprint)
+        (fileRequest ||
+          JSON.stringify(current.fingerprint) ===
+            JSON.stringify(incoming.fingerprint))
       )
         return;
     }
-    throw new Error("Conflicting room message identity");
+    conflict();
   }
 
-  async putRoomMessage(
-    message: RoomMessage,
+  async putMessage(
+    message: StoreMessage,
+    fileRequest = false,
   ): Promise<boolean> {
     const conversationId = message.conversationId;
     if (!conversationId)
       throw new Error(
-        "Room message does not belong to a known room conversation",
+        "Message does not belong to a known conversation",
       );
     const version =
       this.conversationVersions.get(conversationId);
@@ -102,31 +115,42 @@ export class RoomMessageStore {
       throw new Error(
         "Conversation history was cleared while saving the message",
       );
+    message = this.dependencies.attach({
+      ...message,
+      localSequence: 0,
+    });
     const conversation = this.conversations.find(
       (item) => item.id === message.conversationId,
     );
     if (
-      !message.room ||
-      (message.type === "file" && !message.fid) ||
-      conversation?.kind !== "room" ||
-      conversation.roomId !== message.room.roomId
-    ) {
+      !conversation ||
+      (message.room
+        ? conversation.kind !== "room" ||
+          conversation.roomId !== message.room.roomId ||
+          (message.type === "file" && !message.fid)
+        : conversation.kind !== "direct")
+    )
       throw new Error(
-        "Room message does not belong to a known room conversation",
+        "Message does not belong to a known conversation",
       );
-    }
     const existing = this.messages.find(
       (item) => item.id === message.id,
     );
     if (existing) {
-      this.assertSameRoomMessage(existing, message);
+      this.assertSameMessage(
+        existing,
+        message,
+        fileRequest,
+      );
       return false;
     }
-    const pending = this.pendingRoomMessages.get(
-      message.id,
-    );
+    const pending = this.pendingMessages.get(message.id);
     if (pending) {
-      this.assertSameRoomMessage(pending.message, message);
+      this.assertSameMessage(
+        pending.message,
+        message,
+        fileRequest,
+      );
       await pending.promise;
       return false;
     }
@@ -167,7 +191,7 @@ export class RoomMessageStore {
         }),
       );
     })();
-    this.pendingRoomMessages.set(message.id, {
+    this.pendingMessages.set(message.id, {
       message: snapshot,
       promise,
     });
@@ -175,7 +199,7 @@ export class RoomMessageStore {
       await promise;
       return true;
     } finally {
-      this.pendingRoomMessages.delete(message.id);
+      this.pendingMessages.delete(message.id);
     }
   }
 
@@ -199,14 +223,12 @@ export class RoomMessageStore {
   }
 
   /** Share receipt ordering with synchronous progress updates from transfer runs. */
-  persistCurrentRoomMessage(
-    messageId: string,
-  ): Promise<void> {
+  persistCurrentMessage(messageId: string): Promise<void> {
     return this.enqueueWrite(messageId, async () => {
       const current = this.messages.find(
         (message) => message.id === messageId,
       );
-      if (!current?.room) return;
+      if (!current) throw new Error("Message was removed");
       await this.repository.putMessage(
         snapshotStoreMessage(current),
       );
@@ -214,41 +236,90 @@ export class RoomMessageStore {
         !this.messages.some(
           (message) => message.id === messageId,
         )
-      )
+      ) {
         await this.repository.removeMessage(messageId);
+        throw new Error("Message was removed");
+      }
     });
   }
 
-  setRoomDelivery(
+  /** Patch only owned fields so concurrent transfer progress is retained. */
+  update(
     messageId: string,
-    peerId: string,
-    status: RoomDeliveryStatus,
+    project: (
+      current: StoreMessage,
+    ) => Partial<StoreMessage> | null,
   ): Promise<void> {
     return this.enqueueWrite(messageId, async () => {
+      const current = this.messages.find(
+        (message) => message.id === messageId,
+      );
+      if (!current) throw new Error("Message was removed");
+      const patch = project(current);
+      if (!patch) return;
+      const snapshot = snapshotStoreMessage({
+        ...current,
+        ...patch,
+      } as StoreMessage);
+      try {
+        await this.repository.putMessage(snapshot);
+      } catch (error) {
+        const index = this.messages.findIndex(
+          (message) => message.id === messageId,
+        );
+        if (index !== -1)
+          this.dependencies.setMessages(index, {
+            status: "error",
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error),
+            ...(current.deliveries
+              ? {
+                  deliveries: Object.fromEntries(
+                    Object.entries(current.deliveries).map(
+                      ([peer, status]) => [
+                        peer,
+                        status === "sending"
+                          ? "failed"
+                          : status,
+                      ],
+                    ),
+                  ),
+                }
+              : {}),
+          });
+        throw error;
+      }
       const index = this.messages.findIndex(
         (message) => message.id === messageId,
       );
-      const message = this.messages[index];
-      if (!message || !message.room)
-        throw new Error("Unknown room message");
-      const snapshot: RoomMessage = {
-        ...snapshotStoreMessage(message),
-        deliveries: {
-          ...message.deliveries,
-          [peerId]: status,
-        },
-      };
-      await this.repository.putMessage(snapshot);
-      const currentIndex = this.messages.findIndex(
-        (item) => item.id === messageId,
+      if (index === -1) {
+        await this.repository.removeMessage(messageId);
+        throw new Error("Message was removed");
+      }
+      this.dependencies.setMessages(
+        index,
+        produce((message) => Object.assign(message, patch)),
       );
-      if (currentIndex !== -1)
-        this.dependencies.setMessages(
-          currentIndex,
-          "deliveries",
-          reconcile(snapshot.deliveries),
-        );
-      else await this.repository.removeMessage(messageId);
+    });
+  }
+
+  setDelivery(
+    messageId: string,
+    peerId: string,
+    status: MessageDeliveryStatus,
+  ): Promise<void> {
+    return this.update(messageId, (message) => {
+      const deliveries = {
+        ...message.deliveries,
+        [peerId]: status,
+      };
+      return {
+        deliveries,
+        status: deliveryStatus(deliveries),
+        error: undefined,
+      };
     });
   }
 }

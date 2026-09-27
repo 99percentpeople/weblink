@@ -1,3 +1,4 @@
+import { ConversationMessagingService } from "@/libs/application/messaging/conversation-messaging-service";
 import { userErrorMessage } from "@/libs/user-error";
 import { t } from "@/i18n";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
@@ -75,6 +76,10 @@ import { roomConversationId } from "@/libs/domain/conversation";
 import { getRoomNamespace } from "@/libs/application/room-identity";
 
 export interface AppStateContextProps {
+  conversationMessaging: Pick<
+    ConversationMessagingService,
+    "sendText" | "sendFile"
+  >;
   conversationHistory: Pick<
     ConversationHistoryService,
     "cacheLocalTextBatch"
@@ -183,6 +188,7 @@ export const AppStateProvider: Component<
     protocol,
     messageStores,
   );
+  onCleanup(() => messaging.dispose());
   const namespace = getRoomNamespace();
   const desiredRoom = createMemo(() => {
     const roomId = appState.roomStatus.roomId?.trim();
@@ -320,6 +326,26 @@ export const AppStateProvider: Component<
     },
   });
   onCleanup(() => roomFiles.dispose());
+  const conversationMessaging =
+    new ConversationMessagingService({
+      getConversation: (id) =>
+        appState.message.conversations.find(
+          (item) => item.id === id,
+        ),
+      getMessage: (id) =>
+        messageStores.messages.find(
+          (message) => message.id === id,
+        ),
+      getLocalClientId: () => appState.profile.clientId,
+      getSession: (id) => sessionService.sessions[id],
+      getActiveRoomId: () =>
+        currentRoom()?.conversationId ?? null,
+      peers: messaging,
+      rooms: roomMessaging,
+      files,
+      roomFiles,
+    });
+
   const canShareFiles = (session: PeerSession) =>
     sessionService.sessions[session.targetClientId] ===
       session &&
@@ -590,13 +616,6 @@ export const AppStateProvider: Component<
       signal: controller.signal,
     });
 
-    const offSendText = protocol.handle(
-      "send-text",
-      ({ message }) => {
-        messageStores.setReceiveMessage(message);
-      },
-    );
-
     const offClipboard = protocol.handle(
       "send-clipboard",
       ({ message }) => {
@@ -657,7 +676,6 @@ export const AppStateProvider: Component<
 
     onCleanup(() => {
       controller.abort();
-      offSendText();
       offClipboard();
       offStreamState();
       offSpeedTestChannel();
@@ -750,20 +768,14 @@ export const AppStateProvider: Component<
     text: string,
     target: ClientID | ClientID[],
   ) {
-    const sessions = getTargetSessions(target);
-    if (
-      !sessions.length ||
-      sessions.some(
-        (session) => !session.isMessageChannelReady,
-      )
-    )
-      throw new Error(t("conversations.composer_offline"));
-    for (const session of sessions) {
-      await messaging.send(
-        session,
-        "send-text",
-        { data: text },
-        { throwOnError: true },
+    for (const id of Array.isArray(target)
+      ? target
+      : [target]) {
+      const conversation =
+        messageStores.ensureDirectConversation(id);
+      await conversationMessaging.sendText(
+        conversation.id,
+        text,
       );
     }
   }
@@ -772,13 +784,16 @@ export const AppStateProvider: Component<
     file: FileSource,
     target: ClientID | ClientID[],
   ) {
-    const sessions = getTargetSessions(target);
-    if (!sessions.length)
-      throw new Error(t("file_library.peer_unavailable"));
-    for (const session of sessions)
-      await runFileAction(() =>
-        files.sendFile(session, file),
+    for (const id of Array.isArray(target)
+      ? target
+      : [target]) {
+      const conversation =
+        messageStores.ensureDirectConversation(id);
+      await conversationMessaging.sendFile(
+        conversation.id,
+        file,
       );
+    }
   }
 
   async function sendClipboard(
@@ -799,36 +814,8 @@ export const AppStateProvider: Component<
     }
   }
 
-  async function retryMessage(message: StoreMessage) {
-    if (message.room) {
-      await roomMessaging.retry(message);
-      return;
-    }
-    const self = appState.profile.clientId;
-    const sessionId =
-      message.client === self
-        ? message.target
-        : message.client;
-    const session = sessionService.sessions[sessionId];
-    if (!session) return;
-    if (message.type === "text") {
-      await messaging.send(
-        session,
-        "send-text",
-        { data: message.data },
-        {
-          id: message.id,
-          createdAt: message.createdAt,
-          retry: true,
-        },
-      );
-      return;
-    }
-    if (message.type === "file")
-      await runFileAction(() =>
-        files.retryFile(session, message),
-      );
-  }
+  const retryMessage = (message: StoreMessage) =>
+    conversationMessaging.retryMessage(message);
 
   const shareFile = (fileId: FileID, target: ClientID) =>
     withFileSession(target, (session) =>
@@ -854,6 +841,7 @@ export const AppStateProvider: Component<
   return (
     <AppStateContext.Provider
       value={{
+        conversationMessaging,
         conversationHistory,
         joinRoom,
         roomConflict,
@@ -862,12 +850,22 @@ export const AppStateProvider: Component<
           currentRoom()?.conversationId ?? null,
         roomChatCapabilities,
         roomFileCapabilities,
-        sendRoomFile: (file) => roomFiles.sendFile(file),
+        sendRoomFile: async (file) => {
+          await conversationMessaging.sendFile(
+            currentRoom()?.conversationId ?? "",
+            file,
+          );
+        },
         requestRoomFile: (message) =>
           runFileAction(() =>
             roomFiles.requestFile(message),
           ),
-        sendRoomText: (text) => roomMessaging.send(text),
+        sendRoomText: async (text) => {
+          await conversationMessaging.sendText(
+            currentRoom()?.conversationId ?? "",
+            text,
+          );
+        },
         shareFile: (fileId, target) => {
           void shareFile(fileId, target);
         },

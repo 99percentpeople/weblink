@@ -128,12 +128,12 @@ The request policy is defined once by `requestSpec`:
 | `resume-file`         | `ack` mode `receive`                |
 | `request-storage`     | `storage` response plus receipt ACK |
 
-An ACK means the receiving request handler completed successfully. It does
-**not** mean durable database storage, file-transfer completion, clipboard
-permission or that a human read a message.
+An ACK means the receiving request handler completed successfully. The portable
+protocol itself does not guarantee durable storage, file-transfer completion,
+clipboard permission or that a human read a message.
 
-The browser room-chat handler additionally waits for its local IndexedDB write
-before returning. Its receipt therefore confirms successful local persistence
+The browser private and room chat handlers additionally wait for their local
+IndexedDB write before returning. Their receipts confirm successful local persistence
 at that instant; it does not imply a read receipt, server history, or retention
 after the user deletes browser data.
 
@@ -178,8 +178,9 @@ browser `File`, IndexedDB record or cache implementation.
 `room-capabilities` and `send-room-text` require
 `P2P_ROOM_CHAT_PROTOCOL_VERSION` (currently 1). They use the existing point-to-point
 control DataChannel: `client` and `target` remain the actual session's peer IDs.
-The signaling protocol, presence records, and private `send-text` contract do not
-change. Never turn an unsupported room message into a private message.
+The signaling protocol, presence records, and private `send-text` envelope do not
+change. Private and room text share nonblank validation and a 65,536 UTF-16 code-unit
+limit. Never turn an unsupported room message into a private message.
 
 After the message channel becomes ready, both peers send `room-capabilities`
 with `{ roomId, token }`. Each token is fresh for that local room/channel binding.
@@ -426,11 +427,19 @@ await protocol.notify(session, "stream-state", {
     { mid: "0", kind: "camera" },
     { mid: "2", kind: "screen" },
   ],
+  audioSources: [
+    { mid: "1", kind: "microphone" },
+    { mid: "3", kind: "screen", videoMid: "2" },
+  ],
 });
 ```
 
-`stream-state` carries a complete video-source snapshot. `videoSources` maps the
+`stream-state` carries complete video and audio source snapshots. Both arrays are
+required, including when empty. `videoSources` maps the
 negotiated RTP `mid` of each published video transceiver to `camera` or `screen`.
+`audioSources` identifies each microphone MID or links a shared-audio MID to its
+screen's `videoMid`. An audio MID occurs once and cannot also be a video MID;
+each shared-audio owner must appear as a screen in the same video snapshot.
 The receiver independently records `RTCTrackEvent.transceiver.mid` for each
 local received track and joins the two views by MID; `MediaStreamTrack.id` is not
 used as a wire identity. This keeps the participant/avatar (and microphone
@@ -442,6 +451,13 @@ Removing one source renegotiates only the changed senders. Local capture tracks
 are borrowed by each peer connection and are stopped only by the application's
 capture owner, so closing a peer or a screen does not stop the remaining
 publications.
+
+Presentation streams attach microphone audio to the participant's camera/avatar
+and each display's audio to its own screen tile. Tile mute affects only that
+source; member mute applies to all that member's sources, including future ones.
+Unmuting one tile after a member mute enables only that tile. Global playback
+mute remains independent. Rendering and source mute never stop capture tracks
+or play the same audio in multiple video elements.
 
 The `client-profile` notification carries
 `P2P_PROFILE_PROTOCOL_VERSION` (currently 1). The historical
@@ -554,11 +570,24 @@ The portable state machine has no concept of chat history or IndexedDB.
 
 Weblink adds those concerns above the protocol:
 
+- `application/messaging/conversation-messaging-service.ts` is the shared
+  conversation-scoped text/file submission and retry interface. A submission
+  resolves after durable local acceptance and exposes network completion separately.
+  Completion reflects persisted recipient outcomes, including partial room failures.
+  Failure before acceptance creates no message; subsequent delivery failures stay
+  on the original message and retries retain its identity.
 - `application/messaging/peer-messaging-service.ts` maps tracked protocol
-  requests to local message-history state.
+  requests to durable message-history state and handles private text reception.
+  Both private and room receivers persist before ACKing. Failed writes are not
+  cached as successful requests and can be retried. Text requests with conflicting
+  content under the same identity are rejected, including cached request replays.
 - `application/messaging/room-messaging-service.ts` owns room capability
   negotiation, binding lifetime, recipient snapshots and per-peer receipts.
 - `application/messaging/message-store.ts` owns reactive chat/file history.
+- `application/messaging/conversation-message-store.ts` owns shared durable
+  insertion, duplicate identity checks and ordered receipt/progress writes. Private
+  and room deliveries interrupted by reload become retryable failures; there is no
+  automatic offline replay. Metadata delivery and binary-file completion are distinct.
 - `application/messaging/message-repository.ts` is the persistence port.
 - `infrastructure/storage/indexeddb-message-repository.ts` is the browser
   persistence adapter.

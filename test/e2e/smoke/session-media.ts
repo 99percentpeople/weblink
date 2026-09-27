@@ -1,4 +1,6 @@
 import { PeerSessionMediaController } from "../../../src/libs/domain/session-media";
+import type { StreamAudioSource } from "../../../src/libs/domain/protocol/messages";
+import { getRemoteAudioVideoTrackId } from "../../../src/routes/home/components/meeting-audio-sources";
 
 function assert(
   value: unknown,
@@ -93,6 +95,11 @@ export async function runSessionMediaSmoke() {
   const receivedBindings: Array<
     Array<{ trackId: string; mid: string }>
   > = [];
+  let audioSources: readonly StreamAudioSource[] = [];
+  let audioTracks: readonly {
+    trackId: string;
+    mid: string;
+  }[] = [];
   const codecOptions = () => ({
     preferredVideoCodec: null,
     preferredAudioCodec: null,
@@ -101,8 +108,14 @@ export async function runSessionMediaSmoke() {
     getCodecOptions: codecOptions,
     getVideoSourceKind: (track) =>
       track === screen.track ? "screen" : "camera",
-    notifyStreamState: (videoSources) =>
-      sourceNotifications.push([...videoSources]),
+    getAudioSource: (track) =>
+      track === screenAudio
+        ? { kind: "screen", videoTrack: screen.track }
+        : { kind: "microphone" },
+    notifyStreamState: (videoSources, nextAudioSources) => {
+      sourceNotifications.push([...videoSources]);
+      audioSources = nextAudioSources;
+    },
     targetClientId: () => "receiver",
     getPeerConnection: () => sender,
     onRemoteStreamChange: () => {},
@@ -118,6 +131,9 @@ export async function runSessionMediaSmoke() {
     },
     onRemoteVideoTracksChange: (bindings) =>
       receivedBindings.push([...bindings]),
+    onRemoteAudioTracksChange: (bindings) => {
+      audioTracks = bindings;
+    },
   });
   const negotiate = async () => {
     await sender.setLocalDescription(
@@ -220,6 +236,25 @@ export async function runSessionMediaSmoke() {
     }, "receiver track-to-MID bindings");
     const microphoneReceiver = remoteReceiver(microphone);
     const screenAudioReceiver = remoteReceiver(screenAudio);
+    await waitUntil(() => {
+      const metadata = {
+        audioSources,
+        audioTracks,
+        videoTracks: receivedBindings.at(-1),
+      };
+      return (
+        audioSources.length === 2 &&
+        audioTracks.length === 2 &&
+        getRemoteAudioVideoTrackId(
+          screenAudioReceiver.track.id,
+          metadata,
+        ) === screenReceiver.track.id &&
+        getRemoteAudioVideoTrackId(
+          microphoneReceiver.track.id,
+          metadata,
+        ) === undefined
+      );
+    }, "shared audio MID resolves to its own screen, microphone remains independent");
     await waitUntil(
       async () =>
         (await received(cameraReceiver)) > 0 &&
@@ -350,6 +385,7 @@ export async function runSessionMediaSmoke() {
       receiverTrackReused:
         replacementReceiver.track === cameraReceiver.track,
       sourceMetadataMatchedByMid: true,
+      audioSourceMetadataMatchedByMid: true,
       emptyRemoteStreamCleared: true,
       borrowedCapturePreserved: true,
       renegotiationsRequested,
