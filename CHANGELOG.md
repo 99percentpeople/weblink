@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.7] - 2026-09-29
+
+### Improvements
+
+- Add the first Tauri desktop shell and shared platform abstraction, including Windows build automation, desktop-specific runtime handling, and packaged application assets 新增首个 Tauri 桌面端外壳与共享平台抽象，包括 Windows 构建流程、桌面运行时处理及应用打包资源
+- Add native capture diagnostics and development tooling for the desktop app, with Windows capture backend probes, synchronized workspace tooling, configuration UI, and automated tests 新增桌面端原生采集诊断与开发工具，包括 Windows 采集后端探测、workspace 同步工具、配置界面及自动化测试
+- Centralize conversation message persistence behind a shared repository contract so browser storage, chat history, delivery state, and transfer-related message updates follow one persistence path 将会话消息持久化统一到共享 repository 契约，使浏览器存储、聊天历史、送达状态及传输相关消息更新走同一持久化路径
+- Add real-browser persistence and private-messaging regression checks to CI to cover IndexedDB and WebRTC messaging behavior that unit tests cannot fully reproduce 在 CI 中加入真实浏览器的持久化与私聊回归检查，覆盖单元测试难以完整复现的 IndexedDB 与 WebRTC 消息行为
+
+### Fixes
+
+- Persist private messages correctly after joining a room and keep conversation history available when room membership changes 修复加入房间后私聊消息未正确持久化的问题，并在房间成员状态变化时保持会话历史可用
+- Guard browser messaging and persistence against stale, deleted, or mismatched records so retired asynchronous writes cannot recreate removed messages or corrupt active conversations 加强浏览器消息与持久化边界，避免过期、已删除或不匹配的记录通过异步写入重新生成消息或影响当前会话
+
 ## [1.0.6] - 2026-09-27
 
 ### Improvements

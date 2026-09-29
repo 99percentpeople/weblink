@@ -2,7 +2,7 @@
   "name": "@weblink/web",
   "type": "module",
   "description": "A P2P web chat and file transfer, file synchronization application using WebRTC",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "license": "MIT",
   "author": {
     "name": "99percentpeople",
