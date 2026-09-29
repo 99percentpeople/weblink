@@ -116,6 +116,52 @@ afterEach(() => {
 });
 
 describe("shared durable message lifecycle", () => {
+  it.each(["send-text", "send-file"] as const)(
+    "persists %s in a private conversation with room membership before sending",
+    async (type) => {
+      const snapshots: unknown[] = [];
+      const f = await setup({
+        putConversation: async (conversation) => {
+          snapshots.push(structuredClone(conversation));
+        },
+      });
+      const room = f.store.ensureRoomConversation(
+        "room",
+        "server",
+      );
+      f.store.recordRoomMember(room.id, "peer");
+      f.transport.sendImpl = async (session, outgoing) => {
+        await f.transport.emit(
+          session,
+          createSessionMessage(
+            makeSession("peer", "local"),
+            "ack",
+            { mode: "receive" },
+            { id: outgoing.id },
+          ),
+        );
+      };
+      const payload =
+        type === "send-text"
+          ? { data: "hello" }
+          : {
+              fid: "file",
+              fileName: "hello.txt",
+              fileSize: 5,
+              chunkSize: 4,
+            };
+      await f.service.send(f.session, type, payload, {
+        throwOnError: true,
+      });
+      expect(f.transport.sendCalls).toHaveLength(1);
+      expect(f.store.messages[0].status).toBe("received");
+      expect(snapshots.at(-1)).toMatchObject({
+        id: f.conversation.id,
+        roomConversationIds: [room.id],
+      });
+    },
+  );
+
   it.each(["direct", "room"] as const)(
     "publishes %s only after durable insertion, merges duplicates and rejects conflicting content",
     async (kind) => {
@@ -157,18 +203,25 @@ describe("shared durable message lifecycle", () => {
     },
   );
 
-  it("rejects a private submission before transmission if local insertion fails", async () => {
-    const f = await setup({
-      putMessage: async () => {
-        throw new Error("quota");
-      },
-    });
-    await expect(
-      f.messaging.sendText(f.conversation.id, "hello"),
-    ).rejects.toThrow();
-    expect(f.transport.sendCalls).toHaveLength(0);
-    expect(f.store.messages).toHaveLength(0);
-  });
+  it.each(["QuotaExceededError", "DataCloneError"])(
+    "preserves a local %s without reporting a transport failure",
+    async (name) => {
+      const failure = new DOMException(
+        "local storage failed",
+        name,
+      );
+      const f = await setup({
+        putMessage: async () => {
+          throw failure;
+        },
+      });
+      await expect(
+        f.messaging.sendText(f.conversation.id, "hello"),
+      ).rejects.toBe(failure);
+      expect(f.transport.sendCalls).toHaveLength(0);
+      expect(f.store.messages).toHaveLength(0);
+    },
+  );
 
   it("ACKs private reception only after saving and permits a retry after storage failure", async () => {
     const write = deferred<void>();

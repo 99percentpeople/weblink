@@ -7,6 +7,7 @@ import {
 import { reconcile } from "solid-js/store";
 import { directConversationId } from "../../../src/libs/domain/conversation";
 import type { TextMessage } from "../../../src/libs/domain/message";
+import { createSessionMessage } from "../../../src/libs/domain/protocol/messages";
 
 function assert(
   value: unknown,
@@ -142,6 +143,50 @@ async function main() {
     },
   };
   await store.putRoomMessage(group);
+  // Joining a room adds a reactive membership array to the private conversation.
+  // All private text/file writes must snapshot it before IndexedDB cloning.
+  store.recordRoomMember(room.id, "peer");
+  for (const incoming of [false, true]) {
+    const session = incoming
+      ? { clientId: "peer", targetClientId: "local" }
+      : { clientId: "local", targetClientId: "peer" };
+    const text = createSessionMessage(
+      session,
+      "send-text",
+      { data: "private message after joining" },
+    );
+    const file = createSessionMessage(
+      session,
+      "send-file",
+      {
+        fid: `private-file-${incoming}`,
+        fileName: "private.txt",
+        fileSize: 5,
+        chunkSize: 4,
+      },
+    );
+    for (const message of [text, file]) {
+      if (incoming) await store.setReceiveMessage(message);
+      else await store.setSendMessage(message);
+    }
+  }
+  const privateSnapshot = await repository.load();
+  assert(
+    privateSnapshot.messages.filter(
+      (message) => message.conversationId === directId,
+    ).length === 6,
+    "private text/file persistence failed after joining a room",
+  );
+  const privateConversation =
+    privateSnapshot.conversations?.find(
+      (conversation) => conversation.id === directId,
+    );
+  assert(
+    privateConversation?.kind === "direct" &&
+      privateConversation.roomConversationIds?.[0] ===
+        room.id,
+    "private message persistence lost room membership",
+  );
   await Promise.all([
     store.setRoomDelivery(group.id, "first", "delivered"),
     store.setRoomDelivery(group.id, "second", "failed"),
@@ -293,6 +338,7 @@ async function main() {
       "legacy text and file metadata",
       "conversation index",
       "legacy conversation hydration",
+      "private text and file persistence with room membership",
       "labels and read position",
       "recipient delivery persistence",
       "interrupted delivery recovery",

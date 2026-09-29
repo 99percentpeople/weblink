@@ -122,6 +122,8 @@ export function userErrorMessage(
     return t("errors.cancelled");
   if (value?.name === "QuotaExceededError")
     return t("errors.storage_full");
+  if (value?.name === "DataCloneError")
+    return t("errors.storage_unavailable");
   if (
     value?.name === "NotAllowedError" ||
     value?.name === "SecurityError"
@@ -150,8 +152,6 @@ export function userErrorMessage(
       return t("errors.connection_closed");
     case "aborted":
       return t("errors.cancelled");
-    case "send-failed":
-      return t("errors.member_offline");
     case "invalid-message":
       return t("errors.connection_response");
   }

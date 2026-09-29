@@ -16,6 +16,9 @@ export interface ConversationMessageStoreDependencies {
   conversations: Conversation[];
   initialize(): Promise<void>;
   attach(message: StoreMessage): StoreMessage;
+  snapshotConversation(
+    conversation: Conversation,
+  ): Conversation;
   withLocalSequence<T extends StoreMessage>(message: T): T;
   setMessages: SetStoreFunction<StoreMessage[]>;
 }
@@ -161,10 +164,11 @@ export class ConversationMessageStore {
       }),
     );
     const promise = (async () => {
-      await this.repository.putConversation?.({
-        ...conversation,
-        labelIds: [...conversation.labelIds],
-      });
+      await this.repository.putConversation?.(
+        this.dependencies.snapshotConversation(
+          conversation,
+        ),
+      );
       await this.repository.putMessage(snapshot);
       if (
         !this.conversations.includes(conversation) ||
