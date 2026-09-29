@@ -106,7 +106,11 @@ export class PeerMessagingService {
       }
       // Closing a channel may settle the request while durable insertion is pending.
       // Retire the stored message after that insertion, never leave it sending forever.
-      await preparation?.catch(() => {});
+      await preparation?.catch((preparationError) => {
+        // A local persistence failure is not a transport failure. Keep its
+        // original type so the UI can report storage/permission errors.
+        if (!stored) throw preparationError;
+      });
       if (prepared && stored)
         await this.fail(prepared, error);
       if (!stored || options.throwOnError) throw error;
