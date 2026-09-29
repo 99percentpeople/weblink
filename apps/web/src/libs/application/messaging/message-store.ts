@@ -117,6 +117,8 @@ export class MessageStores {
         messages: this.messages,
         initialize: () => this.initialize(),
         attach: (message) => this.metadata.attach(message),
+        snapshotConversation: (conversation) =>
+          this.metadata.snapshot(conversation),
         withLocalSequence: (message) =>
           this.withLocalSequence(message),
         setMessages: this.setMessages,

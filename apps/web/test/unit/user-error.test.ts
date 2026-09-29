@@ -106,6 +106,13 @@ describe.each(Object.keys(dictionaries))(
       ],
       [
         new DOMException(
+          "Internal clone details",
+          "DataCloneError",
+        ),
+        "storage_unavailable",
+      ],
+      [
+        new DOMException(
           "Error preparing Blob/File data to be stored in object store",
           "UnknownError",
         ),
@@ -139,6 +146,21 @@ describe.each(Object.keys(dictionaries))(
       );
       expect(error.message).toContain(
         "InternalServerFailure",
+      );
+    });
+    it("does not describe an unspecified send failure as an offline peer", () => {
+      language.current = locale;
+      expect(
+        userErrorMessage(
+          new P2PProtocolError(
+            "send-failed",
+            "Internal failure",
+          ),
+          "errors.unexpected",
+        ),
+      ).toBe(
+        dictionaries[locale as keyof typeof dictionaries]
+          .errors.unexpected,
       );
     });
     it("keeps the actionable TURN line number without exposing input credentials", () => {
