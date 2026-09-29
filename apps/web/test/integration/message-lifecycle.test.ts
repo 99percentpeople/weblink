@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository as repository } from "../support/message-repository";
 import {
   afterEach,
   beforeEach,
@@ -42,24 +43,6 @@ const wire = (id = "message", data = "hello") =>
     { data },
     { id, createdAt: 1 },
   );
-function repository(
-  overrides: Partial<MessageRepository> = {},
-): MessageRepository {
-  return {
-    load: async () => ({
-      messages: [],
-      clients: [],
-      conversations: [],
-    }),
-    putMessage: vi.fn(async () => {}),
-    putConversation: vi.fn(async () => {}),
-    removeMessage: vi.fn(async () => {}),
-    removeMessages: async () => {},
-    putClient: async () => {},
-    removeClient: async () => {},
-    ...overrides,
-  };
-}
 async function setup(
   overrides: Partial<MessageRepository> = {},
 ) {
@@ -119,12 +102,7 @@ describe("shared durable message lifecycle", () => {
   it.each(["send-text", "send-file"] as const)(
     "persists %s in a private conversation with room membership before sending",
     async (type) => {
-      const snapshots: unknown[] = [];
-      const f = await setup({
-        putConversation: async (conversation) => {
-          snapshots.push(structuredClone(conversation));
-        },
-      });
+      const f = await setup();
       const room = f.store.ensureRoomConversation(
         "room",
         "server",
@@ -155,7 +133,11 @@ describe("shared durable message lifecycle", () => {
       });
       expect(f.transport.sendCalls).toHaveLength(1);
       expect(f.store.messages[0].status).toBe("received");
-      expect(snapshots.at(-1)).toMatchObject({
+      expect(
+        (await f.repo.load()).conversations?.find(
+          (item) => item.id === f.conversation.id,
+        ),
+      ).toMatchObject({
         id: f.conversation.id,
         roomConversationIds: [room.id],
       });

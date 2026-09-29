@@ -5,6 +5,7 @@ export type P2PProtocolErrorCode =
   | "aborted"
   | "closed"
   | "remote-error"
+  | "prepare-failed"
   | "send-failed"
   | "invalid-message";
 
@@ -14,8 +15,9 @@ export class P2PProtocolError extends Error {
   constructor(
     readonly code: P2PProtocolErrorCode,
     message: string = code,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "P2PProtocolError";
   }
 }
@@ -34,6 +36,7 @@ export function protocolError(
         error instanceof Error
           ? error.message
           : String(error),
+        { cause: error },
       );
 }
 

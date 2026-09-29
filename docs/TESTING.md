@@ -68,6 +68,12 @@ bun run test:integration
 ```
 
 Shared test fakes live in `test/support/`.
+Message-store tests use `createMessageRepository` from
+`test/support/message-repository.ts`. Its default writes serialize and clone
+records, and reads return independent values. Override methods only for deliberate
+failure, delay or legacy-load scenarios. The same repository value contract runs
+against this fixture and real Chromium IndexedDB; no-op write mocks cannot verify
+reactive model serialization.
 
 The default correctness suite runs both unit and integration tests:
 
@@ -76,7 +82,8 @@ bun run test
 ```
 
 CI runs unit and integration as separate steps so a failure clearly identifies
-the affected boundary.
+the affected boundary. The checks job also gates deployment on Chromium conversation
+storage and private messaging regressions.
 
 ### Browser E2E smoke tests
 
@@ -94,6 +101,14 @@ Vite server. They exercise real browser primitives that jsdom/fakes cannot prove
 
 They are **smoke tests**, not the primary exhaustive regression suite. Each one
 covers a high-value end-to-end subsystem path with a small number of scenarios.
+
+`node apps/web/scripts/run-messaging-check.mjs` (from the repository root) launches
+the real app and Bun signaling server on temporary local ports, plus two isolated
+Chromium contexts. It checks private text/file sending with empty history and
+again after reloading persisted history, including room membership, receipts,
+draft clearing and downloaded file contents. It requires Node 22+, Bun and
+Chromium (`CHROMIUM_PATH` can select the browser). Profiles, Vite caches and server
+processes are disposable; it does not connect to a deployed signaling service.
 
 `node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
 workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This

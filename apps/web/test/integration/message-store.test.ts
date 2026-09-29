@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository as createRepository } from "../support/message-repository";
 import {
   beforeEach,
   describe,
@@ -21,20 +22,6 @@ function deferred<T>() {
     resolve = yes;
   });
   return { promise, resolve };
-}
-
-function createRepository(
-  overrides: Partial<MessageRepository> = {},
-): MessageRepository {
-  return {
-    load: async () => ({ messages: [], clients: [] }),
-    putMessage: async () => {},
-    removeMessage: async () => {},
-    removeMessages: async () => {},
-    putClient: async () => {},
-    removeClient: async () => {},
-    ...overrides,
-  };
 }
 
 beforeEach(() => {

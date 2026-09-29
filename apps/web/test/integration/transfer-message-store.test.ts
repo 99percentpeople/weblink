@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import { createMessageRepository } from "../support/message-repository";
 import { afterEach, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 import { createMessageStores } from "@/libs/application/messaging/message-store";
-import type { MessageRepository } from "@/libs/application/messaging/message-repository";
 import {
   appState,
   setAppState,
@@ -19,14 +19,7 @@ import {
 afterEach(() => vi.unstubAllGlobals());
 it("the production store resolves message identity after deletion and never resurrects a removed message", () => {
   // This test exercises the real reactive store and event binding with persistence isolated behind its port.
-  const repository: MessageRepository = {
-    load: async () => ({ messages: [], clients: [] }),
-    putMessage: async () => {},
-    removeMessage: async () => {},
-    removeMessages: async () => {},
-    putClient: async () => {},
-    removeClient: async () => {},
-  };
+  const repository = createMessageRepository();
   setAppState(
     "message",
     "messages",

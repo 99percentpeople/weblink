@@ -55,6 +55,43 @@ afterEach(() => {
 });
 
 describe("typed RTC calls", () => {
+  it.each(["sync", "async"])(
+    "preserves %s preparation failures and releases the request identity",
+    async (mode) => {
+      const { protocol, transport } = create();
+      const cause = new DOMException(
+        "Cannot persist",
+        "DataCloneError",
+      );
+      const onPrepared = () => {
+        if (mode === "sync") throw cause;
+        return Promise.reject(cause);
+      };
+      await expect(
+        protocol.call(
+          local,
+          "send-text",
+          { data: "hello" },
+          { id: "prepared", onPrepared },
+        ),
+      ).rejects.toMatchObject({
+        code: "prepare-failed",
+        cause,
+      });
+      expect(transport.sendCalls).toHaveLength(0);
+      const retry = protocol.call(
+        local,
+        "send-text",
+        { data: "hello" },
+        { id: "prepared" },
+      );
+      await transport.emit(local, ack("prepared"));
+      await expect(retry).resolves.toMatchObject({
+        id: "prepared",
+      });
+      expect(transport.sendCalls).toHaveLength(1);
+    },
+  );
   it("creates the envelope and resolves the matching ACK", async () => {
     const { protocol, transport } = create();
     const prepared = vi.fn();

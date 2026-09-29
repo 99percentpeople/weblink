@@ -16,6 +16,11 @@ export type MessageRepositorySnapshot = {
   importLegacyClients?: boolean;
 };
 
+/**
+ * Accepts live (including reactive) models. Writes capture detached persistent
+ * values synchronously, before yielding; later caller mutations cannot change
+ * the record. Reads return independent values. Adapters own serialization.
+ */
 export interface MessageRepository {
   load(): Promise<MessageRepositorySnapshot>;
   putMessage(message: StoreMessage): Promise<void>;

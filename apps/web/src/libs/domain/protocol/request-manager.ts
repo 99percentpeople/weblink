@@ -282,12 +282,12 @@ export class P2PRequestManager<
         const prepared = onPrepared?.();
         if (prepared) {
           void prepared.then(sendAttempt, (error) =>
-            finish(protocolError(error)),
+            finish(protocolError(error, "prepare-failed")),
           );
           return;
         }
       } catch (error) {
-        finish(protocolError(error));
+        finish(protocolError(error, "prepare-failed"));
         return;
       }
       void sendAttempt();

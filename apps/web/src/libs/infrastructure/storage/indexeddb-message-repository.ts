@@ -1,9 +1,6 @@
 import type { Client } from "@/libs/domain/client";
 import type { ClientID } from "@/libs/domain/ids";
-import type {
-  FileTransferMessage,
-  StoreMessage,
-} from "@/libs/domain/message";
+import type { StoreMessage } from "@/libs/domain/message";
 import type { MessageID } from "@/libs/domain/protocol/messages";
 import type {
   MessageRepository,
@@ -14,6 +11,12 @@ import {
   type Conversation,
   type ConversationLabel,
 } from "@/libs/domain/conversation";
+import {
+  clientRecord,
+  conversationRecord,
+  labelRecord,
+  messageRecord,
+} from "./message-record";
 
 const DB_NAME = "message_store";
 const MESSAGES_STORE = "messages";
@@ -64,17 +67,6 @@ function transactionDone(
       { once: true },
     );
   });
-}
-
-function persistentMessage(
-  message: StoreMessage,
-): StoreMessage {
-  if (message.type !== "file") {
-    return { ...message };
-  }
-  const { progress, ...stored } =
-    message as FileTransferMessage;
-  return stored;
 }
 
 export class IndexedDbMessageRepository implements MessageRepository {
@@ -246,14 +238,13 @@ export class IndexedDbMessageRepository implements MessageRepository {
   }
 
   async putMessage(message: StoreMessage): Promise<void> {
+    const record = messageRecord(message);
     const db = await this.open();
     const transaction = db.transaction(
       MESSAGES_STORE,
       "readwrite",
     );
-    transaction
-      .objectStore(MESSAGES_STORE)
-      .put(persistentMessage(message));
+    transaction.objectStore(MESSAGES_STORE).put(record);
     await transactionDone(transaction);
   }
 
@@ -287,12 +278,13 @@ export class IndexedDbMessageRepository implements MessageRepository {
   }
 
   async putClient(client: Client): Promise<void> {
+    const record = clientRecord(client);
     const db = await this.open();
     const transaction = db.transaction(
       CLIENTS_STORE,
       "readwrite",
     );
-    transaction.objectStore(CLIENTS_STORE).put(client);
+    transaction.objectStore(CLIENTS_STORE).put(record);
     await transactionDone(transaction);
   }
 
@@ -309,6 +301,7 @@ export class IndexedDbMessageRepository implements MessageRepository {
   async putConversation(
     conversation: Conversation,
   ): Promise<void> {
+    const record = conversationRecord(conversation);
     const db = await this.open();
     const transaction = db.transaction(
       CONVERSATIONS_STORE,
@@ -316,7 +309,7 @@ export class IndexedDbMessageRepository implements MessageRepository {
     );
     transaction
       .objectStore(CONVERSATIONS_STORE)
-      .put(conversation);
+      .put(record);
     await transactionDone(transaction);
     this.importLegacyClients = false;
   }
@@ -348,12 +341,13 @@ export class IndexedDbMessageRepository implements MessageRepository {
   }
 
   async putLabel(label: ConversationLabel): Promise<void> {
+    const record = labelRecord(label);
     const db = await this.open();
     const transaction = db.transaction(
       LABELS_STORE,
       "readwrite",
     );
-    transaction.objectStore(LABELS_STORE).put(label);
+    transaction.objectStore(LABELS_STORE).put(record);
     await transactionDone(transaction);
   }
 

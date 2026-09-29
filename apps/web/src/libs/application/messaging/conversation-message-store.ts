@@ -16,9 +16,6 @@ export interface ConversationMessageStoreDependencies {
   conversations: Conversation[];
   initialize(): Promise<void>;
   attach(message: StoreMessage): StoreMessage;
-  snapshotConversation(
-    conversation: Conversation,
-  ): Conversation;
   withLocalSequence<T extends StoreMessage>(message: T): T;
   setMessages: SetStoreFunction<StoreMessage[]>;
 }
@@ -164,11 +161,7 @@ export class ConversationMessageStore {
       }),
     );
     const promise = (async () => {
-      await this.repository.putConversation?.(
-        this.dependencies.snapshotConversation(
-          conversation,
-        ),
-      );
+      await this.repository.putConversation?.(conversation);
       await this.repository.putMessage(snapshot);
       if (
         !this.conversations.includes(conversation) ||
@@ -233,9 +226,7 @@ export class ConversationMessageStore {
         (message) => message.id === messageId,
       );
       if (!current) throw new Error("Message was removed");
-      await this.repository.putMessage(
-        snapshotStoreMessage(current),
-      );
+      await this.repository.putMessage(current);
       if (
         !this.messages.some(
           (message) => message.id === messageId,

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository } from "../support/message-repository";
 import {
   afterEach,
   beforeEach,
@@ -11,13 +12,7 @@ import { waitFor } from "@solidjs/testing-library";
 import { reconcile } from "solid-js/store";
 import { MessageStores } from "@/libs/application/messaging/message-store";
 import { ConversationHistoryService } from "@/libs/application/messaging/conversation-history-service";
-import type {
-  MessageRepository,
-  MessageRepositorySnapshot,
-} from "@/libs/application/messaging/message-repository";
-import type { Client } from "@/libs/domain/client";
-import type { Conversation } from "@/libs/domain/conversation";
-import type { StoreMessage } from "@/libs/domain/message";
+import type { MessageRepositorySnapshot } from "@/libs/application/messaging/message-repository";
 import {
   appState,
   createInitialAppState,
@@ -33,43 +28,8 @@ function deferred<T>() {
 }
 
 function repository() {
-  const messages = new Map<string, StoreMessage>();
-  const clients = new Map<string, Client>();
-  const conversations = new Map<string, Conversation>();
-  const repo = {
-    load: vi.fn(async () => ({
-      messages: [...messages.values()],
-      clients: [...clients.values()],
-      conversations: [...conversations.values()],
-    })),
-    putMessage: vi.fn(async (message: StoreMessage) => {
-      messages.set(message.id, structuredClone(message));
-    }),
-    putClient: vi.fn(async (client: Client) => {
-      clients.set(client.clientId, { ...client });
-    }),
-    putConversation: vi.fn(
-      async (conversation: Conversation) => {
-        conversations.set(
-          conversation.id,
-          structuredClone(conversation),
-        );
-      },
-    ),
-    removeMessage: vi.fn(async (id: string) => {
-      messages.delete(id);
-    }),
-    removeMessages: vi.fn(async (ids: string[]) => {
-      ids.forEach((id) => messages.delete(id));
-    }),
-    removeClient: vi.fn(async (id: string) => {
-      clients.delete(id);
-    }),
-    removeConversation: vi.fn(async (id: string) => {
-      conversations.delete(id);
-    }),
-  } satisfies MessageRepository;
-  return { repo, messages, clients };
+  const repo = createMessageRepository();
+  return { repo, ...repo.records };
 }
 
 const entries = [

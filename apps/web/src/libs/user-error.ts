@@ -107,8 +107,15 @@ export function userErrorMessage(
           name?: string;
           code?: string;
           message?: unknown;
+          cause?: unknown;
         })
       : undefined;
+  if (
+    value?.code === "prepare-failed" &&
+    value.cause !== undefined &&
+    value.cause !== error
+  )
+    return userErrorMessage(value.cause, fallback);
   const message = (
     typeof error === "string"
       ? error

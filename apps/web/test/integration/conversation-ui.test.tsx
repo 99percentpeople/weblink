@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository } from "../support/message-repository";
 import {
   afterEach,
   beforeAll,
@@ -210,18 +211,9 @@ const previousDirectId = directConversationId(
   "former-local",
   "alice",
 );
-const store = createMessageStores({
-  load: async () => ({ messages: [], clients: [] }),
-  putMessage: async () => {},
-  removeMessage: async () => {},
-  removeMessages: async () => {},
-  putClient: async () => {},
-  removeClient: async () => {},
-  putConversation: async () => {},
-  removeConversation: async () => {},
-  putLabel: async () => {},
-  removeLabel: async () => {},
-});
+const store = createMessageStores(
+  createMessageRepository(),
+);
 
 const roomMessage = (
   id: string,

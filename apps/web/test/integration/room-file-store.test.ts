@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository as repository } from "../support/message-repository";
 import {
   beforeEach,
   describe,
@@ -8,7 +9,6 @@ import {
 } from "vitest";
 import { reconcile } from "solid-js/store";
 import { MessageStores } from "@/libs/application/messaging/message-store";
-import type { MessageRepository } from "@/libs/application/messaging/message-repository";
 import { snapshotStoreMessage } from "@/libs/application/messaging/message-snapshot";
 import { summarizeConversations } from "@/libs/application/messaging/conversation-query";
 import {
@@ -22,21 +22,6 @@ import type {
 } from "@/libs/domain/message";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 
-function repository(
-  overrides: Partial<MessageRepository> = {},
-): MessageRepository {
-  return {
-    load: async () => ({ messages: [], clients: [] }),
-    putMessage: vi.fn(async () => {}),
-    removeMessage: vi.fn(async () => {}),
-    removeMessages: vi.fn(async () => {}),
-    putClient: vi.fn(async () => {}),
-    removeClient: vi.fn(async () => {}),
-    putConversation: vi.fn(async () => {}),
-    removeConversation: vi.fn(async () => {}),
-    ...overrides,
-  };
-}
 const offer = (): FileTransferMessage => ({
   id: "offer",
   type: "file",

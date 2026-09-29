@@ -36,17 +36,12 @@ import type { MessageRepository } from "./message-repository";
 import { ConversationStore } from "./conversation-store";
 import { ConversationMessageStore } from "./conversation-message-store";
 import { recoverMessageDelivery } from "./message-delivery";
-import { snapshotStoreMessage } from "./message-snapshot";
 import {
   applyTrackedResponse,
   projectIncomingMessage,
   projectOutgoingMessage,
   projectRetry,
 } from "./message-projection";
-
-function snapshotClient(client: Client): Client {
-  return { ...client };
-}
 
 export class MessageStores {
   readonly messages: StoreMessage[] =
@@ -117,8 +112,6 @@ export class MessageStores {
         messages: this.messages,
         initialize: () => this.initialize(),
         attach: (message) => this.metadata.attach(message),
-        snapshotConversation: (conversation) =>
-          this.metadata.snapshot(conversation),
         withLocalSequence: (message) =>
           this.withLocalSequence(message),
         setMessages: this.setMessages,
@@ -220,16 +213,14 @@ export class MessageStores {
                 messages[index].deliveries ||
               (!!message.room &&
                 message !== messages[index])
-                ? this.repository.putMessage(
-                    snapshotStoreMessage(message),
-                  )
+                ? this.repository.putMessage(message)
                 : Promise.resolve(),
             ),
           );
           await Promise.all(
             this.conversations.map((conversation) =>
               this.repository.putConversation?.(
-                this.metadata.snapshot(conversation),
+                conversation,
               ),
             ),
           );
@@ -371,8 +362,7 @@ export class MessageStores {
   }
 
   private persistClient(client: Client): Promise<void> {
-    const snapshot = snapshotClient(client);
-    const persisted = this.repository.putClient(snapshot);
+    const persisted = this.repository.putClient(client);
     void persisted.catch((error) => {
       console.error(
         "[MessageStore] could not persist client",
@@ -530,7 +520,8 @@ export class MessageStores {
 
   setClient(client: Client): Promise<void> {
     if (!this.hydrated) {
-      const snapshot = snapshotClient(client);
+      // Capture this request before waiting for initial hydration.
+      const snapshot = { ...client };
       const pending = this.initialize().then(() =>
         this.setClient(snapshot),
       );

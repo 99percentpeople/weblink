@@ -8,6 +8,7 @@ import { reconcile } from "solid-js/store";
 import { directConversationId } from "../../../src/libs/domain/conversation";
 import type { TextMessage } from "../../../src/libs/domain/message";
 import { createSessionMessage } from "../../../src/libs/domain/protocol/messages";
+import { checkMessageRepository } from "../../support/message-repository-contract";
 
 function assert(
   value: unknown,
@@ -29,6 +30,11 @@ const complete = (transaction: IDBTransaction) =>
   });
 
 async function main() {
+  await result(indexedDB.deleteDatabase("message_store"));
+  const contractRepository =
+    new IndexedDbMessageRepository();
+  await checkMessageRepository(contractRepository);
+  contractRepository.close();
   await result(indexedDB.deleteDatabase("message_store"));
   const open = indexedDB.open("message_store", 1);
   open.onupgradeneeded = () => {
@@ -334,6 +340,7 @@ async function main() {
     ok: true,
     storage: "real Chromium IndexedDB",
     passed: [
+      "repository call-time snapshots and isolated reads",
       "v1 to v2 migration",
       "legacy text and file metadata",
       "conversation index",

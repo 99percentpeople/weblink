@@ -72,24 +72,9 @@ export class ConversationStore {
     });
   }
 
-  snapshot(conversation: Conversation): Conversation {
-    return {
-      ...conversation,
-      labelIds: [...conversation.labelIds],
-      ...(conversation.kind === "direct" &&
-      conversation.roomConversationIds
-        ? {
-            roomConversationIds: [
-              ...conversation.roomConversationIds,
-            ],
-          }
-        : {}),
-    };
-  }
-
   persist(conversation: Conversation): void {
     void this.repository
-      .putConversation?.(this.snapshot(conversation))
+      .putConversation?.(conversation)
       .catch((error) =>
         console.error(
           "[MessageStore] could not persist conversation",
@@ -272,7 +257,7 @@ export class ConversationStore {
       produce((state) => state.push(label)),
     );
     void this.repository
-      .putLabel?.({ ...label })
+      .putLabel?.(label)
       .catch((error) =>
         console.error(
           "[MessageStore] could not persist label",
@@ -304,7 +289,7 @@ export class ConversationStore {
     if (index === -1) return;
     this.dependencies.setLabels(index, "name", normalized);
     void this.repository
-      .putLabel?.({ ...this.labels[index] })
+      .putLabel?.(this.labels[index])
       .catch((error) =>
         console.error(
           "[MessageStore] could not persist label",

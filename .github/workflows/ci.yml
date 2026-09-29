@@ -62,6 +62,19 @@ jobs:
       - name: Run integration tests
         run: bun run test:integration
 
+      - name: Set up Node for browser regressions
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Check real browser persistence and private messaging
+        timeout-minutes: 5
+        env:
+          CHROMIUM_PATH: google-chrome
+        run: |
+          node apps/web/scripts/run-browser-check.mjs --conversations
+          node apps/web/scripts/run-messaging-check.mjs
+
   deploy-dev:
     name: Deploy development site
     needs: checks

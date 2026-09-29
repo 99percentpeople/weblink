@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Run with Bun or Node 22+: built-in WebSocket, no automation dependency required.
 import { createServer } from "vite";
+import { connect } from "./browser-cdp.mjs";
 import solidPlugin from "vite-plugin-solid";
 import solidSvg from "vite-plugin-solid-svg";
 import tailwindcss from "@tailwindcss/vite";
@@ -58,62 +59,6 @@ const entry = dropTest
                       : "test/e2e/smoke/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-async function connect(url) {
-  const socket = new WebSocket(url);
-  const pending = new Map();
-  let sequence = 0;
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("CDP connection timeout")),
-      5000,
-    );
-    socket.onopen = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    socket.onerror = () => {
-      clearTimeout(timer);
-      reject(new Error("CDP connection failed"));
-    };
-  });
-  socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data));
-    const request = pending.get(message.id);
-    if (!request) return;
-    pending.delete(message.id);
-    clearTimeout(request.timer);
-    if (message.error)
-      request.reject(
-        new Error(JSON.stringify(message.error)),
-      );
-    else request.resolve(message.result);
-  };
-  socket.onclose = () => {
-    for (const request of pending.values()) {
-      clearTimeout(request.timer);
-      request.reject(new Error("CDP connection closed"));
-    }
-    pending.clear();
-  };
-  return {
-    close: () => socket.close(),
-    call(method, params = {}) {
-      return new Promise((resolve, reject) => {
-        const id = ++sequence;
-        const timer = setTimeout(
-          () => {
-            pending.delete(id);
-            reject(new Error(`CDP timeout: ${method}`));
-          },
-          method === "Page.navigate" ? 30000 : 10000,
-        );
-        pending.set(id, { resolve, reject, timer });
-        socket.send(JSON.stringify({ id, method, params }));
-      });
-    },
-  };
-}
 
 async function main() {
   const profile = await mkdtemp(

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createMessageRepository as repository } from "../support/message-repository";
 import {
   beforeEach,
   describe,
@@ -9,7 +10,6 @@ import {
 import { reconcile } from "solid-js/store";
 import { createComputed, createRoot } from "solid-js";
 import { MessageStores } from "@/libs/application/messaging/message-store";
-import type { MessageRepository } from "@/libs/application/messaging/message-repository";
 import {
   appState,
   createInitialAppState,
@@ -18,27 +18,8 @@ import {
 import {
   directConversationId,
   roomConversationId,
-  type Conversation,
 } from "@/libs/domain/conversation";
 import type { TextMessage } from "@/libs/domain/message";
-
-function repository(
-  overrides: Partial<MessageRepository> = {},
-): MessageRepository {
-  return {
-    load: async () => ({ messages: [], clients: [] }),
-    putMessage: vi.fn(async () => {}),
-    removeMessage: vi.fn(async () => {}),
-    removeMessages: vi.fn(async () => {}),
-    putClient: vi.fn(async () => {}),
-    removeClient: vi.fn(async () => {}),
-    putConversation: vi.fn(async () => {}),
-    removeConversation: vi.fn(async () => {}),
-    putLabel: vi.fn(async () => {}),
-    removeLabel: vi.fn(async () => {}),
-    ...overrides,
-  };
-}
 
 const direct: TextMessage = {
   id: "direct-message",
@@ -174,27 +155,16 @@ describe("conversation storage", () => {
     );
   });
   it("persists silent room membership with private conversations and does not recreate deleted conversations", async () => {
-    const saved = new Map<string, Conversation>();
     const peer = {
       clientId: "peer",
       name: "Peer",
       avatar: null,
     };
-    const repo = repository({
-      load: async () => ({
-        messages: [],
-        clients: [peer],
-        conversations: [...saved.values()].map((item) =>
-          structuredClone(item),
-        ),
-      }),
-      putConversation: vi.fn(async (item) => {
-        saved.set(item.id, structuredClone(item));
-      }),
-      removeConversation: vi.fn(async (id) => {
-        saved.delete(id);
-      }),
-    });
+    const repo = repository(
+      {},
+      { messages: [], clients: [peer], conversations: [] },
+    );
+    const saved = repo.records.conversations;
     const store = new MessageStores(repo);
     await store.initialize();
     store.setClient(peer);

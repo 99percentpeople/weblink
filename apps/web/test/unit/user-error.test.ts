@@ -112,6 +112,32 @@ describe.each(Object.keys(dictionaries))(
         "storage_unavailable",
       ],
       [
+        new P2PProtocolError(
+          "prepare-failed",
+          "Local preparation failed",
+          {
+            cause: new DOMException(
+              "Internal clone details",
+              "DataCloneError",
+            ),
+          },
+        ),
+        "storage_unavailable",
+      ],
+      [
+        new P2PProtocolError(
+          "prepare-failed",
+          "Local preparation failed",
+          {
+            cause: new DOMException(
+              "Internal quota details",
+              "QuotaExceededError",
+            ),
+          },
+        ),
+        "storage_full",
+      ],
+      [
         new DOMException(
           "Error preparing Blob/File data to be stored in object store",
           "UnknownError",
