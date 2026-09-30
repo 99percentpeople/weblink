@@ -6,6 +6,13 @@ use weblink_desktop_capture::{
 
 pub type Service = Arc<CaptureService>;
 
+#[tauri::command]
+pub async fn capture_display_layout(
+    service: State<'_, Service>,
+) -> Result<weblink_desktop_capture::geometry::DisplayLayout, String> {
+    run(service, CaptureService::display_layout).await
+}
+
 pub async fn run<T: Send + 'static>(
     service: State<'_, Service>,
     operation: impl FnOnce(&CaptureService) -> Result<T, String> + Send + 'static,

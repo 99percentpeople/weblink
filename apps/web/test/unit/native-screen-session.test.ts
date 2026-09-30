@@ -115,6 +115,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("native screen control", () => {
+  it("keeps control capabilities opt-in and forgets them on disconnect", async () => {
+    const { session, channel } = setup();
+    expect(channel.sent[0]).not.toHaveProperty(
+      "remoteControl",
+    );
+    channel.receive({
+      type: "hello",
+      receiveScreen: true,
+      remoteControl: { request: true, host: false },
+    });
+    await flush();
+    expect(session.remoteControlCapabilities).toEqual({
+      request: true,
+      host: false,
+    });
+    session.reset();
+    expect(
+      session.remoteControlCapabilities,
+    ).toBeUndefined();
+  });
+  it("malformed control capabilities do not break legacy screen sharing", async () => {
+    const { session, channel } = setup();
+    channel.receive({
+      type: "hello",
+      receiveScreen: true,
+      remoteControl: { request: true, host: "true" },
+    });
+    await flush();
+    expect(
+      session.remoteControlCapabilities,
+    ).toBeUndefined();
+  });
   const ice = {
     candidate: "candidate:host",
     sdpMid: "0",

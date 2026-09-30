@@ -3,7 +3,7 @@ use crate::{CaptureMethod, CaptureSource, Frames, Result, Session, SourceKind};
 use std::sync::{Arc, Mutex};
 use windows_capture::monitor::Monitor;
 
-fn id(m: Monitor) -> String {
+pub(super) fn id(m: Monitor) -> String {
     format!(
         "monitor:{:x}:{}",
         m.as_raw_hmonitor() as usize,

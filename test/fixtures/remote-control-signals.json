@@ -1,0 +1,137 @@
+[
+  {
+    "name": "request",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": true
+  },
+  {
+    "name": "grant",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\",\"leaseMs\":2000}",
+    "valid": true
+  },
+  {
+    "name": "cancel",
+    "json": "{\"type\":\"cancel\",\"requestId\":\"request-1\"}",
+    "valid": true
+  },
+  {
+    "name": "deny",
+    "json": "{\"type\":\"deny\",\"requestId\":\"request-1\",\"reason\":\"busy\"}",
+    "valid": true
+  },
+  {
+    "name": "revoke",
+    "json": "{\"type\":\"revoke\",\"grantId\":\"grant-1\",\"reason\":\"sourceChanged\"}",
+    "valid": true
+  },
+  {
+    "name": "future fields are additive",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"future\":{\"mode\":true}}",
+    "valid": true
+  },
+  {
+    "name": "integral exponent lease",
+    "json": "{\"type\": \"grant\", \"requestId\": \"request-1\", \"target\": {\"sourceId\": \"source-1\", \"mediaId\": \"media-1\", \"geometryRevision\": \"layout-1\"}, \"grantId\": \"grant-1\", \"leaseMs\": 2e3}",
+    "valid": true
+  },
+  {
+    "name": "array",
+    "json": "[]",
+    "valid": false
+  },
+  {
+    "name": "null",
+    "json": "null",
+    "valid": false
+  },
+  {
+    "name": "unknown type",
+    "json": "{\"type\":\"approve\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "empty request id",
+    "json": "{\"type\":\"request\",\"requestId\":\"\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "oversized id",
+    "json": "{\"type\":\"request\",\"requestId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "control characters",
+    "json": "{\"type\":\"request\",\"requestId\":\"a\\nb\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "nonascii id",
+    "json": "{\"type\":\"request\",\"requestId\":\"授权\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "missing target",
+    "json": "{\"type\":\"request\",\"requestId\":\"r\"}",
+    "valid": false
+  },
+  {
+    "name": "wrong target type",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":[]}",
+    "valid": false
+  },
+  {
+    "name": "empty media id",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"\",\"geometryRevision\":\"layout-1\"}}",
+    "valid": false
+  },
+  {
+    "name": "missing revision",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"s\",\"mediaId\":\"m\"}}",
+    "valid": false
+  },
+  {
+    "name": "unknown reason",
+    "json": "{\"type\":\"deny\",\"requestId\":\"r\",\"reason\":\"anything\"}",
+    "valid": false
+  },
+  {
+    "name": "wrong grant id",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":5,\"leaseMs\":2000}",
+    "valid": false
+  },
+  {
+    "name": "fractional lease",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\",\"leaseMs\":1500.5}",
+    "valid": false
+  },
+  {
+    "name": "string lease",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\",\"leaseMs\":\"2000\"}",
+    "valid": false
+  },
+  {
+    "name": "short lease",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\",\"leaseMs\":499}",
+    "valid": false
+  },
+  {
+    "name": "long lease",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\",\"leaseMs\":10001}",
+    "valid": false
+  },
+  {
+    "name": "missing lease",
+    "json": "{\"type\":\"grant\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"grantId\":\"grant-1\"}",
+    "valid": false
+  },
+  {
+    "name": "utf8 byte bound",
+    "json": "{\"type\":\"request\",\"requestId\":\"request-1\",\"target\":{\"sourceId\":\"source-1\",\"mediaId\":\"media-1\",\"geometryRevision\":\"layout-1\"},\"future\":\"字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\"}",
+    "valid": false
+  },
+  {
+    "name": "malformed json",
+    "json": "{\"type\":",
+    "valid": false
+  }
+]

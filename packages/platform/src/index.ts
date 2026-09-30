@@ -25,6 +25,28 @@ export interface CaptureSource {
   height: number;
 }
 
+/** Physical desktop pixels, including negative multi-monitor origins. */
+export interface DisplayRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+export interface DisplayGeometry {
+  sourceId: string;
+  bounds: DisplayRect;
+  /** Display orientation; bounds are already oriented. */
+  rotation: 0 | 90 | 180 | 270;
+  /** OS resource scale; never multiply physical coordinates by this value. */
+  scalePercent: number | null;
+}
+export interface DisplayLayout {
+  /** Opaque, service-local revision. A query failure invalidates its predecessor. */
+  revision: string;
+  virtualBounds: DisplayRect;
+  displays: DisplayGeometry[];
+}
+
 export type CaptureBackend = "auto" | "wgc" | "dxgi";
 export interface CaptureOptions {
   backend: CaptureBackend;
@@ -71,6 +93,8 @@ export interface CaptureStatus {
 
 /** Source discovery and capture control. Streaming frames stay native. */
 export interface NativeCapture {
+  /** Read-only physical inventory; does not start capture or grant input. */
+  displayLayout?(): Promise<DisplayLayout>;
   sources(): Promise<CaptureSource[]>;
   backends(): Promise<CaptureCapabilities>;
   /** One bounded PNG snapshot for the local picker; never starts a media share. */

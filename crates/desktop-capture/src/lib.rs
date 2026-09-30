@@ -8,6 +8,7 @@ use std::{
 };
 
 mod backend;
+pub mod geometry;
 pub mod media;
 #[cfg(windows)]
 pub mod surface;
@@ -148,6 +149,9 @@ trait Backend {
         Vec::new()
     }
     fn sources(&self) -> Result<Vec<CaptureSource>>;
+    fn displays(&self) -> Result<Vec<geometry::DisplayGeometry>> {
+        Err("Display geometry is unavailable on this platform".into())
+    }
     #[cfg(windows)]
     fn thumbnail(&self, _: &CaptureSource) -> Result<Vec<u8>> {
         Err("This backend does not provide source snapshots".into())
@@ -181,6 +185,7 @@ struct Engine<B> {
     active: HashMap<String, Active>,
     stopped: VecDeque<CaptureStatus>,
     next_id: u64,
+    layout: geometry::LayoutTracker,
 }
 
 impl<B: Backend> Engine<B> {
@@ -190,6 +195,7 @@ impl<B: Backend> Engine<B> {
             active: HashMap::new(),
             stopped: VecDeque::new(),
             next_id: 0,
+            layout: geometry::LayoutTracker::default(),
         }
     }
 
@@ -206,6 +212,37 @@ impl<B: Backend> Engine<B> {
 
     fn supported(&self) -> bool {
         !self.active.is_empty() || self.backend.supported()
+    }
+
+    fn display_layout(&mut self) -> Result<geometry::DisplayLayout> {
+        match self.backend.displays() {
+            Ok(displays) => self.layout.update(displays),
+            Err(error) => {
+                self.layout.invalidate();
+                Err(error)
+            }
+        }
+    }
+
+    fn display_geometry(&mut self, id: &str, now: Instant) -> Result<geometry::DisplayLayout> {
+        self.tick(now);
+        let source = self
+            .active
+            .get(id)
+            .and_then(|active| active.status.source.as_ref())
+            .filter(|source| source.kind == SourceKind::Monitor)
+            .ok_or("No active display capture for this session")?
+            .id
+            .clone();
+        let layout = self.display_layout()?;
+        if !layout
+            .displays
+            .iter()
+            .any(|display| display.source_id == source)
+        {
+            return Err("Captured display disconnected".into());
+        }
+        Ok(layout)
     }
 
     #[cfg(test)]
@@ -450,6 +487,8 @@ type CaptureSink = Arc<dyn surface::FrameSink>;
 type CaptureSink = ();
 
 enum Command {
+    DisplayLayout(mpsc::Sender<Result<geometry::DisplayLayout>>),
+    DisplayGeometry(String, mpsc::Sender<Result<geometry::DisplayLayout>>),
     Capabilities(mpsc::Sender<CaptureCapabilities>),
     Supported(mpsc::Sender<bool>),
     DisplayRefreshRates(mpsc::Sender<Vec<u32>>),
@@ -490,6 +529,12 @@ impl CaptureService {
                 loop {
                     engine.tick(Instant::now());
                     match receiver.recv_timeout(Duration::from_millis(250)) {
+                        Ok(Command::DisplayLayout(reply)) => {
+                            let _ = reply.send(engine.display_layout());
+                        }
+                        Ok(Command::DisplayGeometry(id, reply)) => {
+                            let _ = reply.send(engine.display_geometry(&id, Instant::now()));
+                        }
                         Ok(Command::Capabilities(reply)) => {
                             let _ = reply.send(engine.capabilities());
                         }
@@ -558,6 +603,15 @@ impl CaptureService {
     }
     pub fn sources(&self) -> Result<Vec<CaptureSource>> {
         self.request(Command::Sources)?
+    }
+    /// Read-only inventory. Does not start capture or renew a capture lease.
+    pub fn display_layout(&self) -> Result<geometry::DisplayLayout> {
+        self.request(Command::DisplayLayout)?
+    }
+    /// Native consumers must re-resolve an active display session before authorizing input.
+    /// This query does not renew the capture lease and cannot authorize control itself.
+    pub fn display_geometry(&self, session_id: String) -> Result<geometry::DisplayLayout> {
+        self.request(|reply| Command::DisplayGeometry(session_id, reply))?
     }
     /// One PNG snapshot, at most 640x360, without changing an active capture.
     pub fn thumbnail(&self, source_id: String, options: CaptureOptions) -> Result<Vec<u8>> {

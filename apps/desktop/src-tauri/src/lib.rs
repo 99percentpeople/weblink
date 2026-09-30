@@ -66,6 +66,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             runtime_capabilities,
             capture::capture_sources,
+            capture::capture_display_layout,
             capture::capture_thumbnail,
             capture::capture_codecs,
             capture::capture_backends,

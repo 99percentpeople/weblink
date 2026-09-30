@@ -26,6 +26,28 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("reads physical display layout without starting or authorizing capture", async () => {
+    const layout = {
+      revision: "layout-1",
+      virtualBounds: {
+        left: -1920,
+        top: 0,
+        width: 3840,
+        height: 1080,
+      },
+      displays: [],
+    };
+    ipc.mockResolvedValue(layout);
+    expect(
+      await platform.capture!.displayLayout!(),
+    ).toEqual(layout);
+    expect(ipc).toHaveBeenCalledOnce();
+    expect(ipc).toHaveBeenCalledWith(
+      "capture_display_layout",
+      {},
+    );
+  });
+
   it("carries incremental ICE over the native control boundary", async () => {
     const candidate = {
       candidate: "candidate:host",

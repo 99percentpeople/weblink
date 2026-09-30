@@ -6,6 +6,7 @@ import {
   type PlatformRuntime,
   type RuntimeCapabilities,
   type CaptureSource,
+  type DisplayLayout,
   type CaptureStatus,
   type CaptureCapabilities,
   type NativeEncoder,
@@ -15,6 +16,8 @@ export const platform: PlatformRuntime = {
   kind: "desktop",
   supportsServiceWorker: false,
   capture: {
+    displayLayout: () =>
+      invoke<DisplayLayout>("capture_display_layout"),
     sources: () =>
       invoke<CaptureSource[]>("capture_sources"),
     backends: () =>

@@ -4856,10 +4856,21 @@ dependencies = [
  "libwebrtc",
  "png 0.18.1",
  "serde",
+ "serde_json",
  "tokio",
+ "uuid",
  "windows 0.62.2",
  "windows-capture",
  "windows-core 0.62.2",
+]
+
+[[package]]
+name = "weblink-desktop-input"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

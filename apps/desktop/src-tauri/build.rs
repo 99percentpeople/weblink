@@ -3,6 +3,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
             "capture_sources",
+            "capture_display_layout",
             "capture_thumbnail",
             "capture_codecs",
             "capture_backends",

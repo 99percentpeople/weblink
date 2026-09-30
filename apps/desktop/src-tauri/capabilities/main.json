@@ -6,6 +6,7 @@
   "permissions": [
     "allow-runtime-capabilities",
     "allow-capture-sources",
+    "allow-capture-display-layout",
     "allow-capture-thumbnail",
     "allow-capture-codecs",
     "allow-capture-backends",

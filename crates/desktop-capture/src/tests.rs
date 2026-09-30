@@ -12,6 +12,8 @@ struct Fake {
     queried_running: Rc<Cell<Option<CaptureMethod>>>,
     support_probes: Rc<Cell<usize>>,
     frames: Rc<RefCell<Option<Arc<Mutex<Frames>>>>>,
+    monitor: Rc<Cell<bool>>,
+    displays: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
     #[cfg(windows)]
     snapshot: Rc<RefCell<Option<Vec<u8>>>>,
 }
@@ -19,6 +21,15 @@ struct Fake {
 impl Backend for Fake {
     fn capabilities(&self, running: Option<CaptureMethod>) -> CaptureCapabilities {
         self.queried_running.set(running);
+        if self.monitor.get() {
+            return CaptureCapabilities {
+                screen: vec![CaptureBackendInfo {
+                    id: CaptureMethod::Wgc,
+                    name: "WGC".into(),
+                }],
+                window: vec![],
+            };
+        }
         CaptureCapabilities {
             screen: vec![],
             window: vec![CaptureBackendInfo {
@@ -36,13 +47,23 @@ impl Backend for Fake {
             vec![CaptureSource {
                 id: "selected".into(),
                 name: "Test window".into(),
-                kind: SourceKind::Window,
+                kind: if self.monitor.get() {
+                    SourceKind::Monitor
+                } else {
+                    SourceKind::Window
+                },
                 width: 640,
                 height: 480,
             }]
         } else {
             vec![]
         })
+    }
+    fn displays(&self) -> Result<Vec<geometry::DisplayGeometry>> {
+        self.displays
+            .borrow()
+            .clone()
+            .ok_or_else(|| "Display query failed".into())
     }
     #[cfg(windows)]
     fn thumbnail(&self, source: &CaptureSource) -> Result<Vec<u8>> {
@@ -91,6 +112,46 @@ fn start(engine: &mut Engine<Fake>) -> String {
         .unwrap()
         .session_id
         .unwrap()
+}
+
+#[test]
+fn display_queries_require_an_active_monitor_and_do_not_renew_capture_leases() {
+    let (mut engine, fake) = setup();
+    fake.displays.replace(Some(vec![geometry::DisplayGeometry {
+        source_id: "selected".into(),
+        bounds: geometry::PixelRect {
+            left: -640,
+            top: 0,
+            width: 640,
+            height: 480,
+        },
+        rotation: 0,
+        scale_percent: Some(150),
+    }]));
+    let window = start(&mut engine);
+    assert!(engine.display_geometry(&window, Instant::now()).is_err());
+    engine.stop(&window, Instant::now()).unwrap();
+    fake.monitor.set(true);
+    let id = start(&mut engine);
+    let heartbeat = engine.active[&id].heartbeat;
+    let first = engine.display_geometry(&id, heartbeat).unwrap();
+    fake.displays.replace(None);
+    assert!(engine.display_geometry(&id, heartbeat).is_err());
+    fake.displays.replace(Some(first.displays.clone()));
+    let restored = engine
+        .display_geometry(&id, heartbeat + Duration::from_secs(9))
+        .unwrap();
+    assert_ne!(first.revision, restored.revision);
+    assert!(engine.display_geometry(&id, heartbeat + LEASE).is_err());
+    assert_eq!(
+        engine.stopped.back().unwrap().stop_reason,
+        Some(StopReason::ClientDisconnected)
+    );
+    let next = start(&mut engine);
+    assert!(engine.display_geometry(&id, Instant::now()).is_err());
+    fake.displays.borrow_mut().as_mut().unwrap()[0].source_id = "replacement".into();
+    assert!(engine.display_geometry(&next, Instant::now()).is_err());
+    engine.stop_all(StopReason::Shutdown, Instant::now());
 }
 
 #[test]

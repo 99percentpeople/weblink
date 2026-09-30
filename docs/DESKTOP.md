@@ -352,6 +352,39 @@ peers. Ordinary tests skip it because an SSH or CI session has no interactive de
 cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
 ```
 
+## Remote-control foundation
+
+Remote input remains disabled. `crates/desktop-input` contains the portable
+authorization model and wire validation, with a fake backend for tests; it does
+not inject OS input and has no Tauri input permission or remote approval command.
+Only explicit local consent can create a grant. Grants bind the room generation,
+peer generation, client, capture session, publication, media connection and layout
+revision. Disconnect, expiry or invalidation releases ownership; reconnecting
+cannot reuse an old grant. One host authority covers all peers and sources.
+
+Native screen hello messages can carry additive control capabilities. Production
+does not advertise them yet; old peers remain view-only. A browser's ability to
+request control is independent of its inability to inject input locally.
+
+`NativeCapture.displayLayout()` / `capture_display_layout` reads physical display
+bounds, virtual-desktop bounds, orientation and optional OS resource scale without
+opening capture. The scale is metadata, not a multiplier for these coordinates.
+The opaque revision changes on an observed layout change or failed query and is
+local to the capture service lifetime. Native `display_geometry(session_id)` also
+requires an active monitor capture and does not renew its lease. This inventory
+is not an authorization or a display-change subscription; input integration must
+invalidate ownership on topology/session events as well as query failures.
+Windows queries use [EnumDisplaySettingsExW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsexw)
+for physical pixels independent of DPI virtualization.
+
+Read-only Windows inventory check:
+`cargo run -p weblink-desktop-capture --example display_geometry`.
+The shared browser/Rust wire fixtures live in
+`test/fixtures/remote-control-signals.json`; run the Rust contract/lifecycle tests
+with `cargo test -p weblink-desktop-input` and the browser tests with
+`bun run --cwd apps/web test test/unit/remote-control.test.ts`.
+These checks do not constitute actual remote keyboard/mouse acceptance.
+
 ## Windows acceptance
 
 On a Windows device verify install/start/relaunch, About version, room join,

@@ -1,5 +1,6 @@
 //! Display and window capture have separate inventories and backend selection.
 mod dxgi;
+mod geometry;
 mod screen;
 mod snapshot;
 mod wgc;
@@ -32,6 +33,9 @@ impl Drop for NativeBackend {
     }
 }
 impl Backend for NativeBackend {
+    fn displays(&self) -> Result<Vec<crate::geometry::DisplayGeometry>> {
+        geometry::displays()
+    }
     fn display_refresh_rates(&self) -> Vec<u32> {
         screen::refresh_rates()
     }

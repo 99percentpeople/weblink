@@ -1,5 +1,9 @@
 import { ScreenReceiver } from "./receiver";
 import { bindNativeScreenAudio } from "./tracks";
+import {
+  parseControlCapabilities,
+  type ControlCapabilities,
+} from "../protocol/remote-control";
 import type { NativeVideoSettings } from "@weblink/platform";
 import {
   readBrowserVideoStats,
@@ -33,6 +37,8 @@ export interface NativeScreenPublication {
   closePeer(peerId: string): Promise<void>;
 }
 interface ScreenSessionPort {
+  /** Omitted until the corresponding control implementation is ready. */
+  controlCapabilities?: ControlCapabilities;
   loadIceServers(): Promise<RTCIceServer[]>;
   relayOnly(): boolean;
   changed(stream: MediaStream | null): void;
@@ -44,6 +50,7 @@ type Signal =
       receiveScreen: true;
       trickleIce?: true;
       multiScreen?: true;
+      remoteControl?: ControlCapabilities;
     }
   | {
       type: "offer";
@@ -147,6 +154,16 @@ export class NativeScreenSession {
   private ready = false;
   private trickleIce = false;
   private multiScreen = false;
+  private controlCapabilities?: ControlCapabilities;
+  get remoteControlCapabilities():
+    | ControlCapabilities
+    | undefined {
+    return (
+      this.controlCapabilities && {
+        ...this.controlCapabilities,
+      }
+    );
+  }
   private publications = new Map<string, Publication>();
   private incoming = new Map<string, Incoming>();
   constructor(private readonly port: ScreenSessionPort) {}
@@ -201,6 +218,13 @@ export class NativeScreenSession {
         receiveScreen: true,
         trickleIce: true,
         multiScreen: true,
+        ...(this.port.controlCapabilities
+          ? {
+              remoteControl: {
+                ...this.port.controlCapabilities,
+              },
+            }
+          : {}),
       });
     channel.addEventListener("open", open, {
       signal: listeners.signal,
@@ -258,6 +282,7 @@ export class NativeScreenSession {
     this.ready = false;
     this.trickleIce = false;
     this.multiScreen = false;
+    this.controlCapabilities = undefined;
     for (const entry of this.publications.values()) {
       this.stopOutgoing(entry);
       entry.retries = 0;
@@ -434,6 +459,9 @@ export class NativeScreenSession {
         this.ready = true;
         this.trickleIce = value.trickleIce === true;
         this.multiScreen = value.multiScreen === true;
+        this.controlCapabilities = parseControlCapabilities(
+          value.remoteControl,
+        );
         this.publishSelected();
       }
       return;
