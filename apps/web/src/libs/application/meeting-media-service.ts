@@ -8,6 +8,11 @@ export interface MeetingMediaPort {
     constraints: MediaStreamConstraints,
   ): Promise<MediaStream>;
   getDisplayMedia?(): Promise<MediaStream>;
+  cancelDisplayMedia?(): void;
+  setDisplayAudioEnabled?(
+    track: MediaStreamTrack,
+    enabled: boolean,
+  ): Promise<void>;
 }
 
 // Capture identity survives route disposal without cloning the source track.
@@ -394,11 +399,24 @@ export function createMeetingMediaController(
     );
   };
 
+  const setDisplayAudioEnabled = (
+    track: MediaStreamTrack,
+    enabled: boolean,
+  ) => {
+    track.enabled = enabled;
+    void port
+      .setDisplayAudioEnabled?.(track, enabled)
+      .catch(report);
+  };
   const setAudioEnabled = (enabled: boolean) => {
     if (disposed) return;
     for (const track of port.stream()?.getAudioTracks() ??
       []) {
-      if (live(track)) track.enabled = enabled;
+      if (live(track)) {
+        if (screenAudioOwners.has(track))
+          setDisplayAudioEnabled(track, enabled);
+        else track.enabled = enabled;
+      }
     }
     updateState();
   };
@@ -410,9 +428,9 @@ export function createMeetingMediaController(
     );
     if (!audio.length) return;
     sharingAudioEnabled = enabled;
-    audio.forEach((track) => {
-      track.enabled = enabled;
-    });
+    audio.forEach((track) =>
+      setDisplayAudioEnabled(track, enabled),
+    );
     updateState();
   };
 
@@ -449,8 +467,10 @@ export function createMeetingMediaController(
       audio.forEach((track) => {
         track.contentHint = "music";
         // Adding another display must not undo a user's shared-audio mute.
-        track.enabled =
-          track.enabled && sharingAudioEnabled;
+        setDisplayAudioEnabled(
+          track,
+          track.enabled && sharingAudioEnabled,
+        );
         screenAudioOwners.set(track, video);
       });
       publish(() => true, [video, ...audio]);
@@ -504,6 +524,7 @@ export function createMeetingMediaController(
     ++microphoneRequest;
     ++cameraRequest;
     ++sharingRequest;
+    port.cancelDisplayMedia?.();
     setMicrophoneBusy(false);
     setCameraBusy(false);
     setSharingBusy(false);

@@ -90,6 +90,18 @@ export type AppOption = {
   roomConfigs: Record<string, RoomConfig | undefined>;
 
   // Stream
+  showStreamStats: boolean;
+  videoResolution:
+    | "480p"
+    | "720p"
+    | "1080p"
+    | "1440p"
+    | "2160p";
+  videoFrameRate: number;
+  nativeScreenCodec: string | null;
+  nativeScreenEncoder: string;
+  nativeScreenCaptureBackend: import("@weblink/platform").CaptureBackend;
+  nativeWindowCaptureBackend: import("@weblink/platform").CaptureBackend;
   videoMaxBitrate: number;
   degradationPreference: RTCDegradationPreference;
   preferredVideoCodec: string | null;
@@ -200,6 +212,13 @@ export const getDefaultAppOptions = (): AppOption => {
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",
+    videoResolution: "1080p",
+    videoFrameRate: 30,
+    showStreamStats: false,
+    nativeScreenCodec: null,
+    nativeScreenEncoder: "auto",
+    nativeScreenCaptureBackend: "auto",
+    nativeWindowCaptureBackend: "auto",
     preferredVideoCodec: null,
     preferredAudioCodec: null,
   } satisfies AppOption;

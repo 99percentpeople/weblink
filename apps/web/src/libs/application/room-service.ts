@@ -22,6 +22,7 @@ type SessionCoordinator = Pick<
   | "clientService"
   | "setClientService"
   | "addClient"
+  | "setSessionStream"
   | "removeSession"
   | "destoryAllSession"
 >;
@@ -175,7 +176,10 @@ export class RoomService {
       return;
     }
 
-    session.setStream(this.options.getLocalStream());
+    this.options.sessions.setSessionStream(
+      session,
+      this.options.getLocalStream(),
+    );
     this.options.rtc.bindSession(session);
     this.options.profiles.bindSession(session);
 

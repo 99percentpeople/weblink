@@ -168,19 +168,23 @@ export const AudioPlayerProvider = (props: ParentProps) => {
       appState.session.clientViewData,
     )
       .filter(Boolean)
-      .flatMap((client) =>
-        client.stream
-          ? [{ id: client.clientId, stream: client.stream }]
-          : [],
-      );
+      .map((client) => ({
+        id: client.clientId,
+        streams: [
+          client.stream,
+          client.nativeScreenStream,
+        ].filter(
+          (stream): stream is MediaStream => !!stream,
+        ),
+      }));
     const controller = new AbortController();
     const observed = new WeakSet<MediaStreamTrack>();
     const refresh = () => {
       const byPeer = new Map(
-        peers.map(({ id, stream }) => [
+        peers.map(({ id, streams }) => [
           id,
-          stream
-            .getAudioTracks()
+          streams
+            .flatMap((stream) => stream.getAudioTracks())
             .filter(
               (track) => track.readyState !== "ended",
             ),
@@ -206,14 +210,16 @@ export const AudioPlayerProvider = (props: ParentProps) => {
           : next,
       );
     };
-    peers.forEach(({ stream }) => {
-      stream.addEventListener("addtrack", refresh, {
-        signal: controller.signal,
+    peers
+      .flatMap(({ streams }) => streams)
+      .forEach((stream) => {
+        stream.addEventListener("addtrack", refresh, {
+          signal: controller.signal,
+        });
+        stream.addEventListener("removetrack", refresh, {
+          signal: controller.signal,
+        });
       });
-      stream.addEventListener("removetrack", refresh, {
-        signal: controller.signal,
-      });
-    });
     refresh();
     onCleanup(() => controller.abort());
   });

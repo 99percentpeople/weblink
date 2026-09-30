@@ -1,0 +1,4 @@
+# The prebuilt native WebRTC library uses the static MSVC runtime (/MT).
+# Keep Rust and its C++ bindings on the same CRT instead of mixing /MD and /MT.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

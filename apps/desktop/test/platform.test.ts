@@ -26,6 +26,66 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("carries incremental ICE over the native control boundary", async () => {
+    const candidate = {
+      candidate: "candidate:host",
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+    };
+    const receive = vi.fn();
+    await platform.screenShare!.offer(
+      "capture",
+      "peer",
+      [],
+      true,
+      false,
+      receive,
+    );
+    const [command, args] = ipc.mock.calls[0];
+    expect(command).toBe("capture_offer");
+    expect(args.relayOnly).toBe(true);
+    args.candidates.onmessage(candidate);
+    expect(receive).toHaveBeenCalledWith(candidate);
+    await platform.screenShare!.addIceCandidate(
+      "capture",
+      "peer",
+      candidate,
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "capture_add_ice_candidate",
+      {
+        sessionId: "capture",
+        peerId: "peer",
+        candidate,
+      },
+    );
+  });
+
+  it("mutes the native audio sender through session-scoped IPC", async () => {
+    await platform.screenShare!.setAudioEnabled!(
+      "capture",
+      false,
+    );
+    expect(ipc).toHaveBeenCalledWith(
+      "capture_set_audio_enabled",
+      { sessionId: "capture", enabled: false },
+    );
+  });
+
+  it("reads video counters for only the selected native session and peer", async () => {
+    ipc.mockResolvedValue([{ id: "video", bytes: 1000 }]);
+    expect(
+      await platform.screenShare!.stats!(
+        "capture",
+        "preview",
+      ),
+    ).toEqual([{ id: "video", bytes: 1000 }]);
+    expect(ipc).toHaveBeenCalledWith(
+      "capture_video_stats",
+      { sessionId: "capture", peerId: "preview" },
+    );
+  });
+
   const click = (href: string, download = false) => {
     const link = document.createElement("a");
     link.href = href;
@@ -55,6 +115,7 @@ describe("desktop platform boundary", () => {
       os: "windows",
       version: "0.1.0",
       nativeScreenCapture: false,
+      displayRefreshRates: [60, 144],
       remoteInput: false,
     };
     ipc.mockResolvedValue(capabilities);
@@ -86,10 +147,168 @@ describe("desktop platform boundary", () => {
     await platform.capture!.stop("session-1");
     expect(ipc.mock.calls).toEqual([
       ["capture_sources", {}],
-      ["capture_start", { sourceId: "selected-window" }],
+      [
+        "capture_start",
+        { sourceId: "selected-window", options: {} },
+      ],
       ["capture_status", { sessionId: "session-1" }],
       ["capture_stop", { sessionId: "session-1" }],
     ]);
+  });
+
+  it("loads a bounded binary thumbnail without starting a shared capture", async () => {
+    ipc.mockResolvedValue(
+      new Uint8Array([137, 80, 78, 71]).buffer,
+    );
+    const image = await platform.capture!.thumbnail(
+      "selected-window",
+      { backend: "wgc" },
+    );
+    expect(image.type).toBe("image/png");
+    expect(image.size).toBe(4);
+    expect(ipc.mock.calls).toEqual([
+      [
+        "capture_thumbnail",
+        {
+          sourceId: "selected-window",
+          options: { backend: "wgc" },
+        },
+      ],
+    ]);
+  });
+
+  it("queries native codec capabilities and forwards explicit encoder settings", async () => {
+    const options = {
+      maxWidth: 1920,
+      maxHeight: 1080,
+      frameRate: 144,
+      maxBitrate: 5_000_000,
+      codec: "video/h264",
+      degradationPreference: "balanced" as const,
+    };
+    await platform.screenShare!.codecs();
+    await platform.screenShare!.encoders();
+    await platform.capture!.backends();
+    await platform.screenShare!.start("source", options, {
+      backend: "dxgi",
+    });
+    await platform.screenShare!.offer(
+      "capture",
+      "preview",
+      [],
+      false,
+      true,
+    );
+    expect(ipc.mock.calls).toEqual([
+      ["capture_codecs", {}],
+      ["capture_encoders", {}],
+      ["capture_backends", {}],
+      [
+        "capture_share_start",
+        {
+          sourceId: "source",
+          options,
+          capture: { backend: "dxgi" },
+        },
+      ],
+      [
+        "capture_offer",
+        {
+          sessionId: "capture",
+          peerId: "preview",
+          iceServers: [],
+          relayOnly: false,
+          preview: true,
+        },
+      ],
+    ]);
+  });
+
+  it("keeps media negotiation scoped to the capture session and forwards current TURN credentials", async () => {
+    await platform.screenShare!.start("selected-window");
+    await platform.screenShare!.offer(
+      "capture",
+      "receiver",
+      [
+        { urls: "stun:example.test" },
+        {
+          urls: ["turn:example.test"],
+          username: "temporary-user",
+          credential: "temporary-password",
+        },
+      ],
+      true,
+    );
+    await platform.screenShare!.answer(
+      "capture",
+      "receiver",
+      "answer-sdp",
+    );
+    await platform.screenShare!.closePeer(
+      "capture",
+      "receiver",
+    );
+    expect(ipc.mock.calls).toEqual([
+      [
+        "capture_share_start",
+        {
+          sourceId: "selected-window",
+          options: {},
+          capture: {},
+        },
+      ],
+      [
+        "capture_offer",
+        {
+          sessionId: "capture",
+          peerId: "receiver",
+          relayOnly: true,
+          preview: false,
+          iceServers: [
+            {
+              urls: ["stun:example.test"],
+              username: "",
+              credential: "",
+            },
+            {
+              urls: ["turn:example.test"],
+              username: "temporary-user",
+              credential: "temporary-password",
+            },
+          ],
+        },
+      ],
+      [
+        "capture_answer",
+        {
+          sessionId: "capture",
+          peerId: "receiver",
+          sdp: "answer-sdp",
+        },
+      ],
+      [
+        "capture_close_peer",
+        { sessionId: "capture", peerId: "receiver" },
+      ],
+    ]);
+  });
+
+  it("updates only video controls in the selected native session", async () => {
+    const settings = {
+      maxWidth: 1280,
+      maxHeight: 720,
+      frameRate: 60,
+      maxBitrate: 2_000_000,
+      degradationPreference: "balanced" as const,
+    };
+    await platform.screenShare!.updateVideoSettings(
+      "owned",
+      settings,
+    );
+    expect(ipc).toHaveBeenCalledWith(
+      "capture_update_video_settings",
+      { sessionId: "owned", settings },
+    );
   });
 
   it("keeps router navigation and file downloads inside the webview", () => {

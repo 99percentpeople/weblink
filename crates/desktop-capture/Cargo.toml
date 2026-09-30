@@ -9,5 +9,9 @@ license = "MIT"
 serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
+png = "=0.18.1"
+libwebrtc = "=0.3.49"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 windows-capture = "=2.0.1"
-windows = { version = "0.62.2", features = ["Win32_System_WinRT", "Win32_UI_WindowsAndMessaging"] }
+windows-core = "0.62.2"
+windows = { version = "0.62.2", features = ["Win32_Media_Audio", "Win32_System_Threading", "Win32_System_Com_StructuredStorage", "Win32_Security", "Graphics_Capture", "Security_Authorization_AppCapabilityAccess", "Win32_Graphics_Gdi", "Win32_UI_HiDpi", "Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_Dxgi_Common", "Win32_System_WinRT", "Win32_UI_WindowsAndMessaging", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Variant", "Win32_System_Ole"] }

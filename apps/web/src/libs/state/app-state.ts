@@ -49,6 +49,7 @@ export interface ClientInfo extends TransferClient {
   streamState?: "placeholder" | "media";
   videoSources?: StreamVideoSource[];
   videoTracks?: RemoteMediaTrackBinding[];
+  nativeScreenStream?: MediaStream;
   audioSources?: StreamAudioSource[];
   audioTracks?: RemoteMediaTrackBinding[];
   clipboard?: SendClipboardMessage[];

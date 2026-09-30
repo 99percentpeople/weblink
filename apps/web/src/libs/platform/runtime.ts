@@ -8,6 +8,7 @@ export const platform: PlatformRuntime = {
     os: "browser",
     version: null,
     nativeScreenCapture: false,
+    displayRefreshRates: [],
     remoteInput: false,
   }),
   initialize: () => () => {},

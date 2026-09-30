@@ -186,27 +186,6 @@
       },
       "advanced_receiver": {
         "title": "高级文件接收设置"
-      },
-      "stream": {
-        "title": "视频通话设置",
-        "video_max_bitrate": {
-          "title": "视频最大比特率",
-          "description": "视频通话的最大比特率"
-        },
-        "degradation_preference": {
-          "title": "降级偏好",
-          "description": "在视频通话中，当网络条件较差时，应用程序将优先考虑视频质量还是帧率"
-        },
-        "preferred_video_codec": {
-          "title": "首选视频编码器",
-          "description": "在协商视频流时优先使用该编码器。仅对新建连接生效。",
-          "auto": "自动"
-        },
-        "preferred_audio_codec": {
-          "title": "首选音频编码器",
-          "description": "在协商音频流时优先使用该编码器。仅对新建连接生效。",
-          "auto": "自动"
-        }
       }
     },
     "about": {
@@ -243,6 +222,43 @@
         "closed": "来源已关闭",
         "failed": "采集失败"
       }
+    },
+    "meeting_settings": {
+      "resolution": "最高分辨率",
+      "frame_rate": "最高帧率",
+      "capture_description": "分辨率、帧率、码率和画质优先策略会同步应用于正在运行的串流，实际效果受来源和可用资源限制。编码格式、编码器和捕获后端的更改在下次共享时生效。",
+      "native_unavailable": "无法读取原生编码能力。",
+      "stream": {
+        "title": "视频通话设置",
+        "video_max_bitrate": {
+          "title": "视频最大比特率",
+          "description": "视频通话的最大比特率"
+        },
+        "degradation_preference": {
+          "title": "降级偏好",
+          "description": "在视频通话中，当网络条件较差时，应用程序将优先考虑视频质量还是帧率"
+        },
+        "preferred_video_codec": {
+          "title": "浏览器视频优先编码",
+          "description": "在协商视频流时优先使用该编码器。仅对新建连接生效。",
+          "auto": "自动"
+        },
+        "preferred_audio_codec": {
+          "title": "首选音频编码器",
+          "description": "在协商音频流时优先使用该编码器。仅对新建连接生效。",
+          "auto": "自动"
+        },
+        "statistics": {
+          "title": "显示串流统计叠加层",
+          "description": "在视频上显示可获取的实时编码、码率、分辨率、帧率及处理耗时。"
+        }
+      },
+      "native_capture": "原生屏幕共享",
+      "native_encoder": "原生视频编码",
+      "native_encoder_auto": "自动（优先兼容的硬件编码器）",
+      "hardware": "硬件编码",
+      "software": "软件编码",
+      "native_encoder_description": "选择编码格式及硬件或软件编码器。硬件选项根据当前驱动检测，接收端也需支持所选格式；下次共享时生效。"
     }
   },
   "cache": {
@@ -303,6 +319,24 @@
       "autoplay_blocked": "浏览器阻止了自动播放，请点击播放画面",
       "play": "播放画面",
       "retry": "重试"
+    },
+    "statistics": {
+      "display": "呈现",
+      "submitted": "预览提交",
+      "player_dropped": "播放器丢帧",
+      "receive_to_present": "接收 → 呈现",
+      "title": "串流统计",
+      "send": "发送",
+      "receive": "接收",
+      "capture": "本地采集",
+      "preview": "本地预览",
+      "encode": "编码",
+      "decode": "解码",
+      "buffer": "缓冲",
+      "encoder_queue": "编码等待",
+      "capture_to_encode": "采集 → 编码完成",
+      "send_queue": "发送队列",
+      "rtt": "RTT"
     }
   },
   "browser_unsupported": {
@@ -755,7 +789,33 @@
     "pip_not_supported": "当前浏览器或视频不支持画中画。",
     "pip_video_required": "等待可播放的视频画面",
     "pip_video_elsewhere": "此画面正在以画中画模式运行",
-    "pip_video_restore": "将画面移回此处"
+    "pip_video_restore": "将画面移回此处",
+    "native_screen": {
+      "share_audio": "共享音频",
+      "share_audio_description": "共享系统播放的声音，不包含本应用的声音。",
+      "title": "分享屏幕或窗口",
+      "preview": "来源预览",
+      "preview_select": "选择左侧来源以预览",
+      "preview_loading": "正在加载预览…",
+      "preview_failed": "暂时无法预览此来源",
+      "preview_retry": "重新加载预览",
+      "description": "选择要共享的屏幕或窗口。",
+      "source": "分享来源",
+      "select": "请选择显示器或窗口",
+      "empty": "没有可用的显示器或窗口",
+      "share": "开始分享",
+      "screens": "屏幕",
+      "windows": "窗口",
+      "screen_backend": "屏幕捕获方式",
+      "window_backend": "窗口捕获方式",
+      "auto_backend": "自动选择",
+      "unavailable": "不可用",
+      "search_windows": "搜索窗口",
+      "size_unknown": "尺寸未知",
+      "no_matches": "没有匹配的窗口",
+      "backend_unavailable": "所选捕获方式不可用，请在设置中修改捕获方式，或重新打开此对话框后重试。",
+      "loading": "正在获取来源…"
+    }
   },
   "room_dialog": {
     "actions": "房间操作",
@@ -791,7 +851,8 @@
     "settings_connection": "连接",
     "settings_transfer": "传输",
     "settings_advanced": "高级",
-    "settings_about": "关于"
+    "settings_about": "关于",
+    "settings_meeting": "音视频"
   },
   "file_library": {
     "search": "搜索文件…",

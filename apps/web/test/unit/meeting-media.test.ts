@@ -110,6 +110,13 @@ function setup(initial: MediaStream | null = null) {
     >();
   const getDisplayMedia =
     vi.fn<() => Promise<MediaStream>>();
+  const cancelDisplayMedia = vi.fn();
+  const setDisplayAudioEnabled = vi.fn(
+    async (
+      _track: MediaStreamTrack,
+      _enabled: boolean,
+    ) => {},
+  );
   let media!: ReturnType<
     typeof createMeetingMediaController
   >;
@@ -120,6 +127,8 @@ function setup(initial: MediaStream | null = null) {
       clear: service.clear,
       getUserMedia,
       getDisplayMedia,
+      cancelDisplayMedia,
+      setDisplayAudioEnabled,
     });
     createEffect(media.sync);
     cleanups.push(() => {
@@ -128,7 +137,14 @@ function setup(initial: MediaStream | null = null) {
       service.clear();
     });
   });
-  return { service, media, getUserMedia, getDisplayMedia };
+  return {
+    service,
+    media,
+    getUserMedia,
+    getDisplayMedia,
+    cancelDisplayMedia,
+    setDisplayAudioEnabled,
+  };
 }
 beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => {
@@ -137,6 +153,24 @@ afterEach(() => {
 });
 
 describe("meeting media controls", () => {
+  it("cancels pending native acquisition immediately on clear and never publishes its late result", async () => {
+    const f = setup();
+    let resolve!: (value: MediaStream) => void;
+    f.getDisplayMedia.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    const request = f.media.addSharing();
+    f.media.clear();
+    expect(f.cancelDisplayMedia).toHaveBeenCalledOnce();
+    const video = new FakeTrack("video", "screen");
+    resolve(stream(video));
+    await request;
+    expect(video.stop).toHaveBeenCalledOnce();
+    expect(f.service.stream()).toBeNull();
+  });
+
   it("only mutes existing outgoing audio without acquiring, replacing or stopping streams", async () => {
     const microphone = new FakeTrack("audio");
     const camera = new FakeTrack("video");
@@ -729,6 +763,14 @@ describe("meeting media controls", () => {
     expect(f.media.sharingAudioAvailable()).toBe(true);
     expect(firstAudio.enabled).toBe(false);
     expect(secondAudio.enabled).toBe(false);
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      firstAudio,
+      false,
+    );
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      secondAudio,
+      false,
+    );
     expect(f.media.microphoneOn()).toBe(true);
     expect(mic.enabled).toBe(true);
     await f.media.toggleMicrophone();
@@ -736,6 +778,14 @@ describe("meeting media controls", () => {
     expect(f.media.sharingAudioOn()).toBe(true);
     expect(firstAudio.enabled).toBe(true);
     expect(secondAudio.enabled).toBe(true);
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      firstAudio,
+      true,
+    );
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      secondAudio,
+      true,
+    );
     expect(mic.enabled).toBe(false);
     expect(f.service.stream()).toBe(current);
     for (const video of [camera, first, second])
@@ -769,6 +819,14 @@ describe("meeting media controls", () => {
     f.media.setSharingAudioEnabled(false);
     await f.media.addSharing();
     expect(secondAudio.enabled).toBe(false);
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      firstAudio,
+      false,
+    );
+    expect(f.setDisplayAudioEnabled).toHaveBeenCalledWith(
+      secondAudio,
+      false,
+    );
     expect(f.media.sharingAudioOn()).toBe(false);
     await f.media.toggleSharing();
     expect(f.media.sharingAudioAvailable()).toBe(false);

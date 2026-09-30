@@ -76,6 +76,7 @@ function createHarness(
       installed = undefined;
     }),
     addClient: vi.fn(),
+    setSessionStream: vi.fn(),
     removeSession: vi.fn(),
     destoryAllSession: vi.fn(() => {
       installed?.close();
@@ -190,6 +191,10 @@ describe("RoomService", () => {
       "room-a",
       expect.objectContaining({ name: "Saved Bob" }),
     );
+    expect(
+      h.sessions.setSessionStream,
+    ).toHaveBeenCalledWith(session, null);
+    expect(session.setStream).not.toHaveBeenCalled();
   });
 
   it("keeps room signaling alive when an interrupted peer attempt fails", async () => {

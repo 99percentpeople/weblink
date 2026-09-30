@@ -45,6 +45,11 @@ class Stream extends EventTarget {
       (track) => track.kind === "audio",
     );
   }
+  getVideoTracks() {
+    return this.tracks.filter(
+      (track) => track.kind === "video",
+    );
+  }
   add(track: MediaStreamTrack) {
     this.tracks.push(track);
     this.dispatchEvent(new Event("addtrack"));
@@ -595,4 +600,58 @@ describe("meeting audio playback", () => {
     expect(player.hasAudio()).toBe(false);
     expect(player.playState()).toBe(false);
   });
+});
+
+it("plays native screen audio and applies screen mute independently of the microphone", async () => {
+  const microphone = track();
+  const system = track();
+  const video = Object.assign(track(), { kind: "video" });
+  connect(new Stream([microphone]));
+  setAppState(
+    "session",
+    "clientViewData",
+    "alice",
+    "nativeScreenStream",
+    new Stream([video, system]) as unknown as MediaStream,
+  );
+  const view = setup();
+  await flush();
+  const audio = view.container.querySelector("audio")!;
+  expect(
+    (audio.srcObject as MediaStream).getAudioTracks(),
+  ).toEqual([microphone, system]);
+  player.setSourceMuted(
+    "alice",
+    JSON.stringify(["alice", video.id]),
+    true,
+  );
+  expect(system.enabled).toBe(false);
+  expect(microphone.enabled).toBe(true);
+  player.setSourceMuted(
+    "alice",
+    JSON.stringify(["alice", video.id]),
+    false,
+  );
+  expect(system.enabled).toBe(true);
+  setAppState(
+    "session",
+    "clientViewData",
+    "alice",
+    "stream",
+    undefined,
+  );
+  await flush();
+  expect(player.hasPeerAudio("alice")).toBe(true);
+  expect(
+    (audio.srcObject as MediaStream).getAudioTracks(),
+  ).toEqual([system]);
+  setAppState(
+    "session",
+    "clientViewData",
+    "alice",
+    "nativeScreenStream",
+    undefined,
+  );
+  await flush();
+  expect(player.hasAudio()).toBe(false);
 });

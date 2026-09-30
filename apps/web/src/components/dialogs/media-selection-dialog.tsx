@@ -1,3 +1,4 @@
+import { meetingVideoConstraints } from "@/libs/application/meeting-video-settings";
 import {
   createEffect,
   createMemo,
@@ -246,7 +247,7 @@ export const createMediaSelectionDialog = () => {
       navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "monitor",
-          ...appState.media.constraints.video,
+          ...meetingVideoConstraints(appState.options),
         },
         audio:
           enableSpeaker && !screenAudioInput
@@ -345,7 +346,7 @@ export const createMediaSelectionDialog = () => {
 
     if (enableCamera && availableCameras().length !== 0) {
       const videoConstraints: MediaTrackConstraints = {
-        ...appState.media.constraints.video,
+        ...meetingVideoConstraints(appState.options),
       };
 
       if (devices.camera?.deviceId) {
@@ -984,14 +985,14 @@ export const createMediaSelectionDialog = () => {
                       class="text-muted-foreground hover:text-foreground
                         focus-visible:ring-ring inline-flex size-5 items-center
                         justify-center rounded-full transition-colors
-                        focus-visible:ring-2 focus-visible:outline-none"
+                        focus-visible:outline-none focus-visible:ring-2"
                       aria-label={t(
                         "common.media_selection_dialog.obs_audio_setup_tip",
                       )}
                     >
                       <IconInfo class="size-4" />
                     </TooltipTrigger>
-                    <TooltipContent class="leading-relaxed whitespace-pre-line">
+                    <TooltipContent class="whitespace-pre-line leading-relaxed">
                       {t(
                         "common.media_selection_dialog.obs_audio_setup_tip",
                       )}

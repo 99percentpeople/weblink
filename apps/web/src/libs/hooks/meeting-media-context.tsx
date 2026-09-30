@@ -1,3 +1,14 @@
+import { appState } from "@/libs/state/app-state";
+import {
+  meetingVideoConstraints,
+  nativeScreenOptions,
+} from "@/libs/application/meeting-video-settings";
+import { platform } from "@/libs/platform/runtime";
+import {
+  createNativeScreenStream,
+  getNativeScreenPublication,
+} from "@/libs/application/native-screen-service";
+import { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
 import {
   createContext,
   createEffect,
@@ -7,6 +18,7 @@ import {
   type ParentProps,
 } from "solid-js";
 import { createMeetingMediaController } from "@/libs/application/meeting-media-service";
+import { createLiveVideoSettings } from "@/libs/application/live-video-settings";
 import type { MeetingDeviceControls } from "@/libs/domain/meeting-devices";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useAudioPlayer } from "@/routes/home/components/audio-player";
@@ -41,6 +53,65 @@ export function MeetingMediaProvider(props: ParentProps) {
     outputSupported: audio.outputSupported,
   });
   let disposed = false;
+  let captureGeneration = 0;
+  let pendingNative: AbortController | undefined;
+  const nativePicker =
+    platform.capture && platform.screenShare
+      ? createNativeScreenDialog(platform.capture)
+      : undefined;
+  const browserDisplayMedia =
+    typeof navigator.mediaDevices?.getDisplayMedia ===
+    "function"
+      ? () =>
+          navigator.mediaDevices.getDisplayMedia({
+            video: meetingVideoConstraints(
+              appState.options,
+            ),
+            audio: true,
+            systemAudio: "include",
+          } as DisplayMediaStreamOptions)
+      : undefined;
+  const getDisplayMedia = nativePicker
+    ? async () => {
+        const generation = captureGeneration;
+        const capabilities =
+          await platform.getCapabilities();
+        if (disposed || generation !== captureGeneration)
+          throw new DOMException(
+            "Capture cancelled",
+            "AbortError",
+          );
+        if (!capabilities.nativeScreenCapture) {
+          if (browserDisplayMedia)
+            return browserDisplayMedia();
+          throw new Error(t("meeting.media_unavailable"));
+        }
+        const source = await nativePicker.choose();
+        if (disposed || generation !== captureGeneration)
+          throw new DOMException(
+            "Capture cancelled",
+            "AbortError",
+          );
+        const pending = (pendingNative =
+          new AbortController());
+        try {
+          return await createNativeScreenStream(
+            platform.capture!,
+            platform.screenShare!,
+            source.sourceId,
+            pending.signal,
+            {
+              ...nativeScreenOptions(appState.options),
+              audio: source.audio,
+            },
+            { backend: source.backend },
+          );
+        } finally {
+          if (pendingNative === pending)
+            pendingNative = undefined;
+        }
+      }
+    : browserDisplayMedia;
   const media = createMeetingMediaController({
     stream: state.localStream,
     replace: state.replaceLocalStream,
@@ -50,26 +121,37 @@ export function MeetingMediaProvider(props: ParentProps) {
         return Promise.reject(
           new Error(t("meeting.media_unavailable")),
         );
-      return navigator.mediaDevices.getUserMedia(
-        constraints,
-      );
+      return navigator.mediaDevices.getUserMedia({
+        ...constraints,
+        video: constraints.video
+          ? {
+              ...meetingVideoConstraints(appState.options),
+              ...(typeof constraints.video === "object"
+                ? constraints.video
+                : {}),
+            }
+          : false,
+        audio: constraints.audio
+          ? {
+              ...appState.media.constraints.microphone,
+              ...(typeof constraints.audio === "object"
+                ? constraints.audio
+                : {}),
+            }
+          : false,
+      });
     },
-    getDisplayMedia:
-      typeof navigator.mediaDevices?.getDisplayMedia ===
-      "function"
-        ? () => {
-            const options: DisplayMediaStreamOptions & {
-              systemAudio: "include";
-            } = {
-              video: true,
-              audio: true,
-              systemAudio: "include",
-            };
-            return navigator.mediaDevices.getDisplayMedia(
-              options,
-            );
-          }
-        : undefined,
+    getDisplayMedia,
+    setDisplayAudioEnabled: async (track, enabled) => {
+      await getNativeScreenPublication(
+        track,
+      )?.setAudioEnabled?.(enabled);
+    },
+    cancelDisplayMedia: () => {
+      captureGeneration++;
+      pendingNative?.abort();
+      nativePicker?.cancel();
+    },
   });
   createEffect(media.sync);
   // A capture approved after leaving must not publish into the next room.
@@ -86,6 +168,16 @@ export function MeetingMediaProvider(props: ParentProps) {
         `${t("meeting.media_error")}: ${error instanceof Error ? error.message : String(error)}`,
       );
   };
+  const liveSettings = createLiveVideoSettings({
+    publication: getNativeScreenPublication,
+    error: report,
+  });
+  createEffect(() =>
+    liveSettings.sync(
+      state.localStream(),
+      appState.options,
+    ),
+  );
   createEffect(on(media.error, report));
   createEffect(on(discovery.error, report));
   createEffect(on(access.error, report));
@@ -96,6 +188,7 @@ export function MeetingMediaProvider(props: ParentProps) {
   );
   onCleanup(() => {
     disposed = true;
+    liveSettings.dispose();
     media.dispose();
   });
   const devices: MeetingDeviceControls = {

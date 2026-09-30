@@ -119,6 +119,7 @@ Commands:
 ```sh
 bun run test:e2e:protocol
 bun run test:e2e:recovery
+bun run test:e2e:native-screen
 bun run test:e2e:playback
 bun run test:e2e:transfer
 bun run test:e2e:cache
@@ -135,6 +136,19 @@ and camera/screen/audio RTP after reconnect. Signaling outages are controlled
 in-process; SDP, ICE, decoded video frames, audio packets and data channels are
 real browser transports. It also verifies that leaving/rejoining reuses local
 capture without reopening a stopped camera.
+
+`test:e2e:native-screen` exercises native publication signaling and decoded RTP
+with an unreachable STUN endpoint: share before/after joining, both negotiation
+roles and stop/restart without rebuilding the room connection. It substitutes a
+browser sender for the native host. Windows capture-crate tests independently
+check actual libwebrtc trickle ICE and isolation of preview frame-rate adaptation.
+It also checks stream-statistics routing and overlay polling/toggle lifetimes
+against decoded browser RTP. Windows tests verify software and MF encoder counters;
+MF processing time must come from the transform rather than the RTP passthrough.
+The Windows `media_self_test` example accepts `--scene-burst` to exercise a
+moving texture in its own window, controlled by the exchange directory's `motion`
+file. Use native capture and decoded browser RTP together when checking scene-cut
+bitrate recovery; publication smoke tests do not measure native encoder performance.
 
 `test:e2e:playback` uses Node 22+ and Chromium with the actual video component
 and received RTP. It checks deferred source attachment, interrupted playback,

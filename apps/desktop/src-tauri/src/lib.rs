@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 mod capture;
+mod preview;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,6 +11,7 @@ struct RuntimeCapabilities {
     os: &'static str,
     version: String,
     native_screen_capture: bool,
+    display_refresh_rates: Vec<u32>,
     remote_input: bool,
 }
 
@@ -18,12 +20,14 @@ async fn runtime_capabilities(
     app: tauri::AppHandle,
     service: tauri::State<'_, capture::Service>,
 ) -> Result<RuntimeCapabilities, String> {
-    let native_screen_capture = capture::run(service, |s| Ok(s.supported())).await?;
+    let (native_screen_capture, display_refresh_rates) =
+        capture::run(service, |s| Ok((s.supported(), s.display_refresh_rates()))).await?;
     Ok(RuntimeCapabilities {
         runtime: "desktop",
         os: std::env::consts::OS,
         version: app.package_info().version.to_string(),
         native_screen_capture,
+        display_refresh_rates,
         remote_input: false,
     })
 }
@@ -62,9 +66,25 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             runtime_capabilities,
             capture::capture_sources,
+            capture::capture_thumbnail,
+            capture::capture_codecs,
+            capture::capture_backends,
+            capture::capture_encoders,
             capture::capture_start,
             capture::capture_status,
-            capture::capture_stop
+            capture::capture_stop,
+            capture::capture_share_start,
+            capture::capture_set_audio_enabled,
+            capture::capture_update_video_settings,
+            capture::capture_video_stats,
+            capture::capture_pipeline_stats,
+            preview::capture_preview_open,
+            preview::capture_preview_frame,
+            preview::capture_preview_close,
+            capture::capture_offer,
+            capture::capture_answer,
+            capture::capture_add_ice_candidate,
+            capture::capture_close_peer
         ])
         .setup(|app| {
             let dev_url = if cfg!(debug_assertions) {
@@ -79,6 +99,11 @@ pub fn run() {
                 "tauri://localhost"
             })?;
             WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                .on_page_load(|webview, payload| {
+                    if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                        preview::clear(&webview);
+                    }
+                })
                 .on_navigation(move |url| {
                     same_origin(url, &local_url)
                         || dev_url.as_ref().is_some_and(|dev| same_origin(url, dev))

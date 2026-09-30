@@ -124,7 +124,10 @@ The target can be Linux, macOS or Windows. For Windows with the official
 `C:/Users/name/AppData/Local/Programs/cwrsync/bin/rsync.exe`.
 
 The watcher performs an initial sync, checks Git-visible sources every second,
-then batches saves. Ctrl+C stops it; failed transfers retry after three seconds.
+then batches saves and sends only files changed since the last successful sync.
+Unchanged Rust files are not visited during frontend-only updates, preventing
+spurious Tauri restarts from Windows file-write notifications.
+Ctrl+C stops it; failed transfers retry after three seconds.
 It includes uncommitted files and initialized submodule sources. Git metadata,
 `.env` files, `.tmp`, dependencies and build outputs stay local to each machine;
 only `.env.example` is copied. Source symlinks are rejected.

@@ -13,8 +13,12 @@ unsupported-browser page. Linux WebRTC support remains a separate platform task.
 ## Run and build
 
 Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): on
-Windows these include the MSVC C++ build tools, Windows SDK, Rust and WebView2.
+Windows these include the MSVC 14.44 (Visual Studio 2022 17.14) or newer, Windows SDK 10.0.26100 or newer, Rust and WebView2. Native WebRTC downloads its prebuilt library on the first Cargo build. The root Cargo configuration selects the static MSVC runtime required by that library.
 The repository pins Rust in `rust-toolchain.toml` and Bun in `package.json`.
+Cargo also fetches the patched WebRTC bindings from the
+[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/weblink-native-media),
+pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
+No vendored source or separate dependency preparation step is needed.
 After initializing Git submodules, run from the root:
 
 ```sh
@@ -56,39 +60,253 @@ do not become the packaged signaling endpoint.
 - The shared `@weblink/platform` contract has browser and desktop adapters.
   `runtime_capabilities` reports Windows native capture support when available;
   remote input remains unavailable.
-- Only the local main window can query native capabilities, run capture diagnostics
+- Only the local main window can query native capabilities, control native screen sharing
   and open HTTP(S) or mail links. External links open in the system browser. The window cannot
   navigate to a remote page or create another privileged webview. There are no
   filesystem, shell execution or input-control IPC permissions.
 - The main window uses native window controls. Closing it exits the application;
   minimizing keeps sessions alive. A second instance focuses the existing
   window. No tray process, protocol registration or background service is added.
-- Files, clipboard and media currently use existing WebView browser APIs. Native
+- Files, clipboard, camera and microphone use existing WebView browser APIs. Native
   drag/drop interception is disabled so the app's existing HTML drop handlers
   receive files. File selection/download and media permission prompts must be
-  checked in WebView2. Room screen sharing still uses the browser media path.
+  checked in WebView2. Windows screen sharing uses the native path below.
 - IndexedDB and local storage belong to the application WebView profile under
   the OS application-data directory. Browser history is not automatically
   imported; development and packaged origins have separate storage.
 
-## Native capture prototype
+## Native screen sharing
 
-On Windows, open **Settings → Advanced → Native screen capture test**, select a
-display or window, then start capture. The panel reports frame dimensions, arrival
-rate and frame count. It does not preview, record or transmit frames. Static or
-minimized sources may deliver fewer frames; the displayed FPS is not an encoder
-or network performance measurement.
+The meeting screen-share button opens a display/window picker on supported
+Windows systems. The picker separates screens and windows, lists sources in a
+single column with their dimensions and supports window search. Selecting a source
+loads its thumbnail in the adjacent preview pane; sources are not captured for
+thumbnails before selection. Capture methods
+are configured in Settings and read by the picker for the selected source type. Screens
+can use DXGI Desktop Duplication or Windows Graphics Capture (WGC); windows use
+WGC. Availability is probed in the current interactive session. While DXGI capture
+is active, queries reuse that running session as evidence of support; they must
+not attempt a second duplication of an output already owned by this process.
+After capture stops, availability is probed again. Auto prefers DXGI
+for screens and WGC for windows; explicit unavailable choices fail instead of
+silently capturing through a different backend. Defaults remain 1080p / 30 fps. Settings → Audio & video
+controls resolution (up to 2160p), frame rate, bitrate and degradation.
+Desktop frame-rate choices use connected displays' current refresh rates, including
+high-refresh choices above 60 FPS. Common lower rates remain available; unknown
+display information and browser builds use 15/24/30/60 FPS. Reopening the controls
+refreshes display information, and a saved unavailable rate is lowered to the
+nearest offered rate. Browser builds hide native capture and encoder controls.
+These are upper limits, not throughput guarantees. Camera and browser screen
+capture use the same resolution/frame-rate preferences. Resolution, frame rate,
+bitrate and degradation changes update active browser and native streams without
+recreating capture or WebRTC connections. Rapid edits are coalesced and native
+preview tracks are never constrained or re-encoded by the WebView. Codec, encoder
+and capture backend changes apply to the next share. Audio consent and mute state
+are preserved. Invalid live limits are rejected before commit; constraint and sender
+parameter failures are reported to the user.
 
-`crates/desktop-capture` owns Windows Graphics Capture and its worker lifecycle,
-independently of Tauri. Frames remain on the native side; no pixel buffers are
-mapped to the CPU or serialized over IPC by this prototype. OS cursor/border
-defaults are retained. Native encoding, WebRTC transport and remote input are
-subsequent steps.
+Software formats come from libwebrtc's sender capabilities. Hardware H.264 encoders
+come from Media Foundation hardware-transform enumeration followed by activation
+and input/output type negotiation, not GPU model names. Auto prefers an available
+hardware encoder when H.264 or automatic codec selection is requested; other
+explicit formats use software. Settings combines encoder and format into one
+selector with Auto and the detected hardware/software format combinations.
+Existing preferences remain readable; unavailable saved combinations are marked
+instead of silently replaced. Each remote peer owns its hardware transform and
+encoded-frame source, with independent bitrate and keyframe feedback. A selected
+codec restricts negotiation to that format: incompatible receivers fail instead
+of silently switching codecs. Driver/session limits and accepted resolution/rate
+combinations still apply. The Windows local preview does not create an encoder or
+WebRTC connection; encoder selection and bitrate govern remote publication.
+Camera and microphone still use browser codec preferences. Saved bitrate and browser
+codec preferences retain their existing storage keys.
 
-Only one capture runs at a time. Closing the panel, closing the source, or exiting
-the application stops it. A 10-second lease also stops capture if the WebView
-disappears or stops polling. Session IDs prevent delayed commands from stopping
-a newer capture. GPU/startup failures are surfaced and allow retry.
+Hardware encoding keeps the selected frame cadence independent of WebRTC's
+observed input frame rate, so motion can resume after static content. Remote peers
+start conservatively, apply bandwidth reductions immediately and recover confirmed
+increases in bounded steps while suppressing small estimate changes.
+The encoder target stays within the peer's latest positive bandwidth allocation
+and configured bitrate cap; WebRTC retains congestion control and pacing. These
+limits govern the target rate, not the size of individual keyframe bursts. Where
+the driver supports it, the H.264 encoder requests a 100 ms VBV buffer (at least
+one frame) to reduce large scene-cut bursts. Lowering
+the live bitrate ceiling takes effect immediately; raising it retains gradual,
+feedback-driven recovery. Frame-rate changes recreate only the hardware transform
+when its fixed media type requires it; the RTP session stays connected.
+
+The optional **Audio & video → Show stream statistics** overlay samples only
+while displayed. It keeps each peer and local preview separate; rates and
+per-frame processing times use successive counter differences. Unavailable values
+remain absent. Native hardware encode time measures accepted MF input to output,
+including driver and output-delivery latency, rather than WebRTC's encoded-frame passthrough.
+Hardware input wait is measured separately. Capture-to-encoded time starts at
+arrival in the application's capture callback; cached static repeats are excluded.
+Packet-send queue delay uses packet counts, not frame counts. RTT belongs to the
+selected ICE candidate pair. Neither RTT nor a sum of these overlapping stage
+measurements is a glass-to-glass latency measurement. Only small counters cross
+Tauri IPC; statistics never change capture, transport or borrowed track lifetimes.
+
+Native capture retains the original GPU texture and reuses its staging resources.
+For unrotated sources, a D3D11 shader scales to the selected dimensions before CPU
+readback and color conversion. DXGI cursor coordinates and pixels follow that scale.
+Unsupported GPU processing falls back to CPU scaling; rotated displays retain the
+existing rotation path. The original texture preserves detail when increasing live
+resolution while the screen is static. Capture
+coalesces new content for a single conversion worker. Only the newest pending GPU frame
+is retained; the conversion worker owns the frame-rate cap. Software input follows
+an absolute cadence, while hardware capture starts promptly after idle and skips
+missed deadlines. Hardware MFT input/output readiness wakes its worker through
+Media Foundation events; there is no second encoder FPS gate or output polling
+timer. Each encoder keeps only its latest pending input. Reconfiguration and
+shutdown release callback state without retaining the capture session. On Windows versions supporting
+WGC's minimum update interval, capture requests updates at a 1 ms minimum interval
+and the worker enforces the selected output rate; older Windows versions retain
+the OS default. The worker preserves the latest pending frame without
+losing the final update when a screen becomes static. GPU mapping/conversion runs
+outside the async executor. Hardware encoding repeats static content at most twice
+per second. Software encoding reuses the latest converted pixels at the selected
+cadence: sparse input otherwise inflates its per-frame budget when motion resumes.
+This does not repeat GPU readback or pixel conversion. Software H.264 uses the
+real-time rate-control preset. Its single-stream OpenH264 encoder delegates frame
+dropping to WebRTC rather than also skipping consecutive frames inside the codec
+after large scene changes. OpenH264 still controls quantization; WebRTC retains
+its frame dropper, bitrate adjustment, congestion control and pacing. Limited
+bandwidth can still reduce frame rate or quality according to the selected
+degradation preference. This policy is scoped to the native screen factory's
+software H.264 backend; other codecs and hardware pass-through keep their behavior.
+Native screen receivers
+request minimal playout buffering where the browser supports it; network jitter,
+encoding and decoding can still add delay.
+Native senders additionally advertise a negotiated RTP playout-delay range of
+10–50 ms. A zero minimum with a positive maximum selects Chromium's low-latency
+renderer, whose [fixed 60 FPS frame-duration assumption](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/mediastream/low_latency_video_renderer_algorithm.h)
+can discard decoded frames from higher-rate streams. The smallest positive RTP delay unit keeps
+timestamp-based scheduling while retaining a bounded playout hint. Receivers
+without the extension keep their normal buffering. This is a hint,
+not an end-to-end deadline or a guarantee of smooth playback on a jittery link.
+The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
+encoder bitrate limits, congestion control and retransmission remain active.
+Both options belong to the native screen session's factory, not process-global
+settings. The binding changes and upstream versions are documented in the fork's
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/7a9b0458282577a92e7bd9fd4c577729c7bf0797/WEBLINK.md).
+Update the fork first, then the full Cargo revision and lockfile together; normal
+builds never follow the branch tip. Preserve upstream license notices and verify
+native-to-browser RTP when upgrading the bindings.
+The local preview reads packed I420 frames through a read-only WebView2 shared
+buffer and submits VideoFrames directly to a generated video track where WebView2
+supports it. This avoids the Canvas draw/recapture round trip; older runtimes keep
+the Canvas capture fallback. Both preserve existing layout and playback ownership,
+and neither is sent through browser RTC. One request/submission is allowed in
+flight: the WebView copies shared memory into a VideoFrame before requesting
+another write, and unchanged pixels are not recopied. The generated track retains
+only the latest frame and repeats it at most twice per
+second during static content, so a newly attached player can display it without
+another shared-memory copy. Closing releases the writer and retained frame.
+The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
+only its available dimensions and preview-submission counters (including static
+refresh submissions) are shown. The overlay separates submitted/encoded/decoded
+FPS from the video element's presentation FPS, using cumulative compositor
+counters where supported. Player
+drops and receive-to-presentation timing are shown only when available. These are
+browser presentation measurements, not physical display scan-out or end-to-end latency.
+Closing or navigating releases both shared-buffer mappings. A silent local audio
+track carries consent, mute and ownership through existing controls; actual system
+audio remains native.
+The preview has no network feedback and cannot throttle remote senders. Window resize
+updates are observed after the source repaints at its new size.
+
+`capture_pipeline_stats` exposes bounded rolling mean/P95/max timings for lock wait,
+GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
+input/readback dimensions, GPU fallback reason and active peer/encoder counts.
+It also reports capture wait, per-peer hardware input wait, input-to-output and
+capture-to-encoded distributions, replaced input counts and in-flight samples.
+Hardware controls include the requested value, setter result and driver readback;
+an accepted setter alone does not establish that a low-latency/CBR/buffer request
+was honored. Unsupported optional controls remain diagnostic and do not silently
+disable otherwise usable hardware encoders.
+Preparation times measure CPU submission; GPU completion wait appears in Map.
+These diagnostics exclude network transit and presentation latency.
+
+DXGI enables D3D immediate-context thread protection before duplication starts:
+DXGI acquisition/release and the asynchronous GPU readback worker share this
+context, so locking only the readback calls is insufficient. Acquisition polls with
+a zero timeout and waits outside the D3D call when no frame is available, allowing
+the conversion worker to map its staging texture without waiting for a new screen
+update. DXGI handles display
+rotation and its separate color/monochrome cursor. Display
+mode changes, disconnection or access loss end the capture and require selecting
+the source again. Native frames still pass through CPU readback/conversion before
+software or hardware encoding; hardware input uses libyuv's native I420-to-NV12
+conversion. GPU zero-copy and remote input remain separate work. Browser screen sharing and microphone/camera behavior are retained.
+
+The native source picker defaults “Share audio” on for each new selection.
+It captures system playback for both display and window shares, excluding the
+Weblink process tree so received meeting audio is not sent back. Windows process
+loopback requires Windows build 20348 or newer; disabling audio keeps video-only
+capture available. Startup failures are reported instead of silently omitting
+requested audio. PCM is captured on a dedicated WASAPI worker and sent directly
+to native WebRTC/Opus; it never crosses Tauri IPC. Audio capture ends with the
+screen session. Preview audio is excluded from browser re-publication and local
+playback, while received audio belongs to its screen's existing mute controls.
+
+Display and window inventories/backend dispatch live separately in
+`crates/desktop-capture/src/backend/windows/{screen,window}.rs`. `CaptureOptions`
+is independent of `MediaOptions`. Native consumers can use
+`CaptureService::start_with_sink` and `surface::FrameSink` without a media session:
+the callback borrows a GPU texture, rotation and optional cursor metadata until it
+returns. A consumer must copy retained frames and keep its own queues bounded.
+This is the capture boundary for future remote desktop; it grants no remote input
+capability. The service owns a persistent WinRT apartment so repeated capability
+queries cannot invalidate WGC activation factories.
+
+Each remote peer receives video directly from Rust over its own send-only WebRTC
+connection. Raw local presentation is independent and its tracks are excluded
+from browser senders. Streaming pixels never use Tauri invoke/event payloads;
+only the WebView2 shared-memory mapping exposes preview pixels to the local page.
+The picker separately requests one PNG thumbnail (at most 640×360) over binary IPC.
+Monitor thumbnails use a single GDI transfer directly into a small bitmap,
+independent of the streaming backend; no WGC/DXGI session is opened. Window thumbnails
+use WGC with OS-approved border suppression and release resources after one frame
+or a two-second frame timeout. If border suppression is unavailable or denied,
+the window preview stays unavailable instead of starting a capture with a border.
+Neither path replaces an active share. The preview frame stays 16:9 and preserves
+the image aspect ratio. The UI
+keeps one request in flight, discards stale results and releases image URLs on
+selection changes or close; a preview failure does not prevent sharing.
+The native connection uses the existing ICE/TURN credential
+loader and relay-only setting; raw local preview does not use ICE or TURN.
+Initial room binding, late join and capture changes all use this same publication
+path; reconnecting must never republish the local preview through a browser encoder.
+
+The ordered `weblink-desktop-media` DataChannel belongs to the authenticated room
+PeerSession and carries a capability handshake, source/session identities, SDP
+and incremental ICE candidates. Peers advertising `trickleIce` exchange SDP
+immediately, allowing reachable routes to connect while slow STUN/TURN requests
+continue. Candidates are scoped to their media connection and queued until its
+remote description is applied. Older native receivers use the complete-SDP
+fallback. Old clients keep chat/file/camera functionality but must update to
+receive native screen shares. A screen is identified by its control session and
+single video transceiver, independently of the ordinary connection's MIDs.
+Peers advertising `multiScreen` send all active publications, each with its own
+media connection, ICE queue, bounded retries and statistics. Receivers combine
+the tracks for presentation while retaining each connection's audio/video ownership.
+Peers without this capability receive the first active publication; stopping it
+promotes the next one without replacing the room connection.
+Closing/replacing that channel releases its native senders and remote receivers.
+ICE failure retries are bounded; stopping and restarting sharing resets them.
+
+Adding a native share retains existing screens and windows. Each capture owns
+its raw preview, encoder, remote peers and heartbeat independently (up to 16 captures).
+Explicit stop, source closure, application exit and a 10-second lost-client lease
+release the affected capture and transports; application exit releases all of them.
+Leaving a room releases its peer connections but
+retains an explicitly running local capture for rejoin. Pending selections cannot
+start in a replacement room. Stale session IDs cannot stop a newer capture.
+
+**Settings → Advanced → Native screen capture test** remains a local diagnostic
+using the same capture service with an independent session.
+It reports capture arrival statistics without mapping or transmitting pixels.
+Closing this diagnostic panel stops only the capture it owns.
 
 For a native smoke test, run this in an unlocked interactive Windows session:
 
@@ -98,7 +316,41 @@ cargo run -p weblink-desktop-capture --locked --example self_test
 
 It creates and captures its own temporary window, checks frame delivery, resize,
 stop/restart and source closure, then removes the window. It does not capture
-existing windows or a display.
+existing windows or a display. `media_self_test` additionally accepts a temporary
+exchange directory, an optional codec MIME type (for example `video/vp8`), and
+an optional encoder ID (`software` by default, or a detected `mf:...` ID):
+it exercises 640×480 / 15 fps / 1 Mbps limits, writes `offer.sdp`, accepts a browser's `answer.sdp`, and
+responds to `resize` / `motion` / `done` marker files. The `motion` marker
+updates only the test window until removed, allowing receiver FPS checks. Use browser inbound RTP/decode counters
+to validate video delivery and resize before writing `done`; no personal desktop
+content is used by either harness. `display_self_test` separately exercises the
+available screen backends and their stop/restart lifecycle in an interactive
+Windows session. It counts borrowed GPU frames without reading, saving, encoding
+or exporting display pixels. Windows unit tests exercise synthetic hardware H.264
+when an activated hardware transform is available; this is distinct from proving
+all vendors, driver versions or a sustained target frame rate.
+
+`multi_media_self_test` takes a fresh exchange directory, creates two test windows
+and writes `offer-1.sdp` / `offer-2.sdp` for two browser receivers. Supply matching
+`answer-1.sdp` / `answer-2.sdp`; verify both decode, then write `stop-first`.
+After `first-stopped` appears, verify the second receiver still decodes at its new
+size, then write `done`. It checks independent raw previews, media handles,
+stop, live settings and source closure without capturing existing windows.
+
+`thumbnail_self_test` checks window/WGC and screen/GDI PNG snapshots, repeated requests,
+closed sources and preservation of an existing capture. Run it interactively:
+`cargo run -p weblink-desktop-capture --example thumbnail_self_test`.
+It decodes thumbnails only in memory and does not save or transmit them.
+
+The DXGI readback regression must run explicitly in an unlocked interactive
+Windows session. It captures the display into memory, checks software and
+available hardware encoding through two WebRTC receivers in the same process,
+and repeats stop/start. It does not save screenshots or send pixels to external
+peers. Ordinary tests skip it because an SSH or CI session has no interactive desktop:
+
+```sh
+cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
+```
 
 ## Windows acceptance
 

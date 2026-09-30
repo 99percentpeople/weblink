@@ -1,11 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { createRawPreview } from "./preview";
 import {
   isExternalLink,
   type PlatformRuntime,
   type RuntimeCapabilities,
   type CaptureSource,
   type CaptureStatus,
+  type CaptureCapabilities,
+  type NativeEncoder,
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
@@ -14,14 +17,97 @@ export const platform: PlatformRuntime = {
   capture: {
     sources: () =>
       invoke<CaptureSource[]>("capture_sources"),
-    start: (sourceId) =>
-      invoke<CaptureStatus>("capture_start", { sourceId }),
+    backends: () =>
+      invoke<CaptureCapabilities>("capture_backends"),
+    thumbnail: async (sourceId, options) => {
+      const image = await invoke<ArrayBuffer>(
+        "capture_thumbnail",
+        {
+          sourceId,
+          options: options ?? {},
+        },
+      );
+      return new Blob([image], { type: "image/png" });
+    },
+    start: (sourceId, options) =>
+      invoke<CaptureStatus>("capture_start", {
+        sourceId,
+        options: options ?? {},
+      }),
     status: (sessionId) =>
       invoke<CaptureStatus>("capture_status", {
         sessionId,
       }),
     stop: (sessionId) =>
       invoke<CaptureStatus>("capture_stop", { sessionId }),
+  },
+  screenShare: {
+    preview: createRawPreview,
+    stats: (sessionId, peerId) =>
+      invoke<
+        import("@weblink/platform").NativeVideoStats[]
+      >("capture_video_stats", { sessionId, peerId }),
+    updateVideoSettings: (sessionId, settings) =>
+      invoke<void>("capture_update_video_settings", {
+        sessionId,
+        settings,
+      }),
+    setAudioEnabled: (sessionId, enabled) =>
+      invoke<void>("capture_set_audio_enabled", {
+        sessionId,
+        enabled,
+      }),
+    codecs: () => invoke<string[]>("capture_codecs"),
+    encoders: () =>
+      invoke<NativeEncoder[]>("capture_encoders"),
+    start: (sourceId, options, capture) =>
+      invoke<CaptureStatus>("capture_share_start", {
+        sourceId,
+        options: options ?? {},
+        capture: capture ?? {},
+      }),
+    offer: (
+      sessionId,
+      peerId,
+      iceServers,
+      relayOnly,
+      preview = false,
+      onCandidate,
+    ) =>
+      invoke<string>("capture_offer", {
+        sessionId,
+        peerId,
+        relayOnly,
+        preview,
+        ...(onCandidate
+          ? { candidates: new Channel(onCandidate) }
+          : {}),
+        iceServers: iceServers.map((server) => ({
+          urls:
+            typeof server.urls === "string"
+              ? [server.urls]
+              : server.urls,
+          username: server.username ?? "",
+          credential: server.credential ?? "",
+        })),
+      }),
+    addIceCandidate: (sessionId, peerId, candidate) =>
+      invoke<void>("capture_add_ice_candidate", {
+        sessionId,
+        peerId,
+        candidate,
+      }),
+    answer: (sessionId, peerId, sdp) =>
+      invoke<void>("capture_answer", {
+        sessionId,
+        peerId,
+        sdp,
+      }),
+    closePeer: (sessionId, peerId) =>
+      invoke<void>("capture_close_peer", {
+        sessionId,
+        peerId,
+      }),
   },
   getCapabilities: () =>
     invoke<RuntimeCapabilities>("runtime_capabilities"),

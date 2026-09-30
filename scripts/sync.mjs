@@ -109,6 +109,7 @@ async function statIfPresent(path) {
 export async function snapshot(sourceRoot) {
   const files = [];
   const signatures = [];
+  const versions = new Map();
   async function visit(repository) {
     const prefix = relative(sourceRoot, repository)
       .split("\\")
@@ -162,24 +163,33 @@ export async function snapshot(sourceRoot) {
         await visit(full);
       } else if (stat.isFile()) {
         files.push(path);
-        signatures.push(
-          JSON.stringify([
-            path,
-            stat.size,
-            stat.mtimeMs,
-            stat.ctimeMs,
-          ]),
-        );
+        const version = JSON.stringify([
+          stat.size,
+          stat.mtimeMs,
+          stat.ctimeMs,
+        ]);
+        versions.set(path, version);
+        signatures.push(JSON.stringify([path, version]));
       }
     }
   }
   await visit(sourceRoot);
   return {
     files: files.sort(),
+    versions,
     signature: createHash("sha256")
       .update(signatures.sort().join("\n"))
       .digest("hex"),
   };
+}
+
+/** Compare against the last successful transfer, so failures remain retryable. */
+export function changedFiles(current, synced) {
+  return current.files.filter(
+    (path) =>
+      current.versions.get(path) !==
+      synced?.versions.get(path),
+  );
 }
 
 /** Delete only vanished files previously managed by this script, never remote-only files. */
@@ -296,7 +306,11 @@ export function syncFilter(files, removed) {
     return [...dirs].sort();
   };
   return [
-    ...parents(files).map((path) => `+s /${escape(path)}/`),
+    // Keep deletion ancestors in the sender tree. Otherwise rsync tries to
+    // remove them too, which fails for Windows directories held by dev servers.
+    ...parents([...files, ...removed]).map(
+      (path) => `+s /${escape(path)}/`,
+    ),
     ...files.map((path) => `+s /${escape(path)}`),
     "-s *",
     ...parents(removed).map(
@@ -392,7 +406,10 @@ async function main() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    const sync = async (current) => {
+    const sync = async (current, synced) => {
+      // Even unchanged files can generate LastWrite notifications through cwRsync.
+      // Only visit changed source paths after the initial full reconciliation.
+      const changed = changedFiles(current, synced);
       const removed = await removedFiles(
         root,
         current.files,
@@ -405,10 +422,10 @@ async function main() {
       const filterFile = `${stateFile}.filter`;
       await writeFile(
         filterFile,
-        syncFilter(current.files, removed),
+        syncFilter(changed, removed),
       );
       console.log(
-        `[sync] ${args.has("--dry-run") ? "Preview" : "Sending"} ${current.files.length} source files → ${target.host}:${target.destination}`,
+        `[sync] ${args.has("--dry-run") ? "Preview" : "Sending"} ${changed.length} source files, ${removed.length} removals → ${target.host}:${target.destination}`,
       );
       await run(
         "rsync",
@@ -449,8 +466,8 @@ async function main() {
     let attemptedAt = 0;
     const attempt = async () => {
       try {
-        await sync(current);
-        synced = current.signature;
+        await sync(current, synced);
+        synced = current;
       } catch (error) {
         if (controller.signal.aborted) return;
         if (!args.has("--watch")) throw error;
@@ -477,7 +494,7 @@ async function main() {
         changedAt = Date.now();
       }
       if (
-        current.signature !== synced &&
+        current.signature !== synced?.signature &&
         Date.now() - changedAt >= 750 &&
         Date.now() - attemptedAt >= 3000
       )

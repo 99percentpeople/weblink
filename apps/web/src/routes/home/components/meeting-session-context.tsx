@@ -83,6 +83,7 @@ function createMeetingSession() {
       name: client.name,
       avatar: client.avatar ?? undefined,
       stream: client.stream,
+      nativeScreenStream: client.nativeScreenStream,
       videoSources: client.videoSources,
       videoTracks: client.videoTracks,
       audioSources: client.audioSources,

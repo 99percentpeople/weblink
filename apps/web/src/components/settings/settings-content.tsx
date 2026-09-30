@@ -11,6 +11,7 @@ import { t } from "@/i18n";
 import AppearanceSettings from "./appearance-settings";
 import { ConnectionSettings } from "./connection-settings";
 import TransferSettings from "./transfer-settings";
+import MeetingSettings from "./meeting-settings";
 import AdvancedSettings from "./advanced-settings";
 import AboutSettings from "./about-settings";
 
@@ -18,6 +19,7 @@ export const settingsSections = [
   "appearance",
   "connection",
   "transfer",
+  "meeting",
   "advanced",
   "about",
 ] as const;
@@ -78,6 +80,9 @@ export default function SettingsContent(props: {
               </Match>
               <Match when={section === "transfer"}>
                 <TransferSettings />
+              </Match>
+              <Match when={section === "meeting"}>
+                <MeetingSettings />
               </Match>
               <Match when={section === "advanced"}>
                 <AdvancedSettings />

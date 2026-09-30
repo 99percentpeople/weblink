@@ -3,6 +3,8 @@ export interface RuntimeCapabilities {
   os: string;
   version: string | null;
   nativeScreenCapture: boolean;
+  /** Current refresh rates of connected displays; empty when unavailable. */
+  displayRefreshRates: number[];
   remoteInput: boolean;
 }
 
@@ -10,6 +12,7 @@ export interface PlatformRuntime {
   readonly kind: "browser" | "desktop";
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
+  readonly screenShare?: NativeScreenShare;
   getCapabilities(): Promise<RuntimeCapabilities>;
   initialize(): () => void;
 }
@@ -22,9 +25,29 @@ export interface CaptureSource {
   height: number;
 }
 
+export type CaptureBackend = "auto" | "wgc" | "dxgi";
+export interface CaptureOptions {
+  backend: CaptureBackend;
+}
+export interface CaptureBackendInfo {
+  id: Exclude<CaptureBackend, "auto">;
+  name: string;
+}
+export interface CaptureCapabilities {
+  screen: CaptureBackendInfo[];
+  window: CaptureBackendInfo[];
+}
+export interface NativeEncoder {
+  id: string;
+  name: string;
+  hardware: boolean;
+  codecs: string[];
+}
+
 export interface CaptureStatus {
   sessionId: string | null;
   source: CaptureSource | null;
+  backend?: CaptureBackend | null;
   state:
     | "idle"
     | "running"
@@ -46,10 +69,19 @@ export interface CaptureStatus {
   error: string | null;
 }
 
-/** Diagnostics only. Frames remain native; this is not a WebRTC media track. */
+/** Source discovery and capture control. Streaming frames stay native. */
 export interface NativeCapture {
   sources(): Promise<CaptureSource[]>;
-  start(sourceId: string): Promise<CaptureStatus>;
+  backends(): Promise<CaptureCapabilities>;
+  /** One bounded PNG snapshot for the local picker; never starts a media share. */
+  thumbnail(
+    sourceId: string,
+    options?: CaptureOptions,
+  ): Promise<Blob>;
+  start(
+    sourceId: string,
+    options?: CaptureOptions,
+  ): Promise<CaptureStatus>;
   /** Renews the session lease; call regularly while owning a running capture. */
   status(sessionId: string): Promise<CaptureStatus>;
   stop(sessionId: string): Promise<CaptureStatus>;
@@ -62,4 +94,113 @@ export function isExternalLink(url: URL): boolean {
     !url.username &&
     !url.password
   );
+}
+
+export interface NativeScreenOptions {
+  /** Capture system playback only after explicit picker consent. */
+  audio?: boolean;
+  maxWidth: number;
+  maxHeight: number;
+  frameRate: number;
+  maxBitrate: number;
+  codec: string | null;
+  encoder?: string;
+  degradationPreference: RTCDegradationPreference;
+}
+
+/** Validation ceiling, not a promise of capture/encoder throughput. */
+export const MAX_NATIVE_FRAME_RATE = 1000;
+
+/** Parameters that can change without recreating capture or WebRTC sessions. */
+export type NativeVideoSettings = Pick<
+  NativeScreenOptions,
+  | "maxWidth"
+  | "maxHeight"
+  | "frameRate"
+  | "maxBitrate"
+  | "degradationPreference"
+>;
+
+/** Remote encoding stays native; local raw presentation has its own memory boundary. */
+export interface NativeVideoStats {
+  id: string;
+  timestamp: number;
+  codec: string;
+  implementation: string;
+  width: number;
+  height: number;
+  bytes: number;
+  frames: number;
+  encodeFrames: number;
+  encodeSeconds: number;
+  encoderQueueSeconds?: number;
+  captureToEncodeSeconds?: number;
+  freshFrames?: number;
+  packetsSent?: number;
+  sendDelaySeconds?: number;
+  roundTripSeconds?: number;
+}
+
+export interface NativeScreenPreview {
+  stream: MediaStream;
+  close(): void;
+  stats(): {
+    id: string;
+    timestamp: number;
+    width: number;
+    height: number;
+    frames: number;
+    implementation: string;
+  };
+}
+
+export interface NativeScreenShare {
+  /** Raw local presentation. Remote publication remains native WebRTC. */
+  preview?(
+    sessionId: string,
+    audio: boolean,
+    onEnded: () => void,
+    signal?: AbortSignal,
+  ): Promise<NativeScreenPreview>;
+  stats?(
+    sessionId: string,
+    peerId: string,
+  ): Promise<NativeVideoStats[]>;
+  updateVideoSettings(
+    sessionId: string,
+    settings: NativeVideoSettings,
+  ): Promise<void>;
+  setAudioEnabled?(
+    sessionId: string,
+    enabled: boolean,
+  ): Promise<void>;
+  codecs(): Promise<string[]>;
+  encoders(): Promise<NativeEncoder[]>;
+  start(
+    sourceId: string,
+    options?: NativeScreenOptions,
+    capture?: CaptureOptions,
+  ): Promise<CaptureStatus>;
+  offer(
+    sessionId: string,
+    peerId: string,
+    iceServers: RTCIceServer[],
+    relayOnly: boolean,
+    preview?: boolean,
+    onCandidate?: (candidate: RTCIceCandidateInit) => void,
+  ): Promise<string>;
+  addIceCandidate(
+    sessionId: string,
+    peerId: string,
+    candidate: RTCIceCandidateInit,
+  ): Promise<void>;
+  answer(
+    sessionId: string,
+    peerId: string,
+    sdp: string,
+  ): Promise<void>;
+  closePeer(
+    sessionId: string,
+    peerId: string,
+  ): Promise<void>;
 }

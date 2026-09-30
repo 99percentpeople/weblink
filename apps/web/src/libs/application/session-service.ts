@@ -1,3 +1,13 @@
+import {
+  NativeScreenSession,
+  NATIVE_SCREEN_CHANNEL,
+} from "../domain/native-screen/session";
+import { readVideoStatistics } from "./video-statistics-service";
+import type { VideoStatsBatch } from "../domain/video-stats";
+import {
+  browserMediaStream,
+  getNativeScreenPublication,
+} from "./native-screen-service";
 import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../domain/session";
 import type { Client } from "@/libs/domain/client";
@@ -31,6 +41,45 @@ export class SessionService {
   readonly clientViewData: Record<ClientID, ClientInfo> =
     appState.session.clientViewData;
   private service?: ClientService;
+  private nativeScreens = new Map<
+    PeerSession,
+    NativeScreenSession
+  >();
+
+  getVideoStats(
+    track: MediaStreamTrack,
+  ): Promise<VideoStatsBatch[]> {
+    return readVideoStatistics(
+      track,
+      Object.values(this.sessions).map((session) => ({
+        pc: session.peerConnection,
+        native: this.nativeScreens.get(session),
+        name: this.clientViewData[session.clientId]?.name,
+      })),
+    );
+  }
+
+  setStream(stream: MediaStream | null) {
+    for (const session of Object.values(this.sessions))
+      this.setSessionStream(session, stream);
+  }
+
+  /** Initial room binding and later capture changes must use the same path. */
+  setSessionStream(
+    session: PeerSession,
+    stream: MediaStream | null,
+  ) {
+    const tracks = stream?.getTracks() ?? [];
+    const publications = tracks.flatMap((track) => {
+      const publication = getNativeScreenPublication(track);
+      return publication ? [publication] : [];
+    });
+    const browserStream = browserMediaStream(stream);
+    session.setStream(browserStream);
+    this.nativeScreens
+      .get(session)
+      ?.setPublications(publications);
+  }
   private pendingClients = new Map<
     ClientID,
     SignalingService
@@ -217,6 +266,93 @@ export class SessionService {
       getAudioSource: getMeetingAudioSource,
     });
 
+    const controller = new AbortController();
+    const native = new NativeScreenSession({
+      loadIceServers: this.loadIceServers,
+      relayOnly: () => appState.options.relayOnly,
+      changed: (stream) => {
+        if (
+          this.sessions[client.clientId] === session &&
+          this.clientViewData[client.clientId]
+        )
+          setAppState(
+            "session",
+            "clientViewData",
+            client.clientId,
+            "nativeScreenStream",
+            reconcile(stream ?? undefined),
+          );
+      },
+      error: (error) =>
+        console.error("Native screen connection", error),
+    });
+    this.nativeScreens.set(session, native);
+    let opening = false;
+    const openNative = () => {
+      if (
+        !session.polite ||
+        opening ||
+        !session.peerConnection
+      )
+        return;
+      opening = true;
+      try {
+        native.bind(
+          session.peerConnection.createDataChannel(
+            NATIVE_SCREEN_CHANNEL,
+            {
+              protocol: NATIVE_SCREEN_CHANNEL,
+              ordered: true,
+            },
+          ),
+        );
+      } catch (error) {
+        opening = false;
+        console.debug(
+          "Native screen channel unavailable",
+          error,
+        );
+      }
+    };
+    session.addEventListener(
+      "channel",
+      ({ detail }) => {
+        if (
+          detail.label === NATIVE_SCREEN_CHANNEL &&
+          detail.protocol === NATIVE_SCREEN_CHANNEL
+        )
+          native.bind(detail);
+      },
+      { signal: controller.signal },
+    );
+    session.addEventListener(
+      "peerconnectioninit",
+      () => {
+        opening = false;
+        native.reset();
+      },
+      { signal: controller.signal },
+    );
+    session.addEventListener(
+      "messagechannelchange",
+      ({ detail }) => {
+        if (detail === "ready") void openNative();
+        else {
+          opening = false;
+          native.reset();
+        }
+      },
+      { signal: controller.signal },
+    );
+    controller.signal.addEventListener(
+      "abort",
+      () => {
+        native.reset();
+        this.nativeScreens.delete(session);
+      },
+      { once: true },
+    );
+
     setAppState(
       "session",
       "clientViewData",
@@ -233,8 +369,6 @@ export class SessionService {
       client.clientId,
       session,
     );
-
-    const controller = new AbortController();
 
     session.addEventListener(
       "peerconnectioninit",

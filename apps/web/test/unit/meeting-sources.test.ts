@@ -7,6 +7,7 @@ import {
   vi,
 } from "vitest";
 import { createRoot, createSignal } from "solid-js";
+import { bindNativeScreenAudio } from "@/libs/domain/native-screen/tracks";
 import {
   createMeetingSources,
   selectMeetingFeaturedSource,
@@ -23,6 +24,12 @@ class FakeStream {
   constructor(private tracks: MediaStreamTrack[] = []) {}
   getTracks() {
     return [...this.tracks];
+  }
+  getVideoTracks() {
+    return this.tracks.filter((t) => t.kind === "video");
+  }
+  getAudioTracks() {
+    return this.tracks.filter((t) => t.kind === "audio");
   }
 }
 const stream = (...tracks: MediaStreamTrack[]) =>
@@ -45,6 +52,137 @@ beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("meeting source presentation", () => {
+  it("keeps each native screen's audio and presentation identity when another screen stops", () => {
+    createRoot((dispose) => {
+      const one = track("native-one", "video"),
+        two = track("native-two", "video");
+      const audioOne = track("audio-one", "audio"),
+        audioTwo = track("audio-two", "audio");
+      bindNativeScreenAudio(stream(one, audioOne));
+      bindNativeScreenAudio(stream(two, audioTwo));
+      const [participants, setParticipants] = createSignal<
+        MeetingParticipant[]
+      >([
+        {
+          id: "peer",
+          name: "Peer",
+          nativeScreenStream: stream(
+            one,
+            audioTwo,
+            two,
+            audioOne,
+          ),
+        },
+      ]);
+      const sources = createMeetingSources(participants);
+      const screens = sources().filter(
+        (s) => s.kind === "screen",
+      );
+      expect(
+        screens.map((s) => s.stream!.getTracks()),
+      ).toEqual([
+        [one, audioOne],
+        [two, audioTwo],
+      ]);
+      // Browser getTracks() need not retain the constructor's track order.
+      vi.spyOn(
+        screens[1].stream!,
+        "getTracks",
+      ).mockReturnValue([audioTwo, two]);
+      setParticipants([
+        {
+          ...participants()[0],
+          nativeScreenStream: stream(two, audioTwo),
+        },
+      ]);
+      const remaining = sources().find(
+        (s) => s.kind === "screen",
+      )!;
+      expect(remaining.id).toBe(screens[1].id);
+      expect(remaining.audioId).toBe(screens[1].audioId);
+      expect(remaining.stream).toBe(screens[1].stream);
+      expect(two.stop).not.toHaveBeenCalled();
+      expect(audioTwo.stop).not.toHaveBeenCalled();
+      dispose();
+    });
+  });
+
+  it("does not attach a new source's early audio to the screen already being watched", () => {
+    createRoot((dispose) => {
+      const video = track("first", "video"),
+        audio = track("first-audio", "audio");
+      const incoming = track("second-audio", "audio");
+      bindNativeScreenAudio(stream(video, audio));
+      bindNativeScreenAudio(stream(incoming));
+      const sources = createMeetingSources(() => [
+        {
+          id: "peer",
+          name: "Peer",
+          nativeScreenStream: stream(
+            video,
+            audio,
+            incoming,
+          ),
+        },
+      ]);
+      expect(
+        sources()
+          .find((s) => s.kind === "screen")!
+          .stream!.getTracks(),
+      ).toEqual([video, audio]);
+      dispose();
+    });
+  });
+  it("keeps a native screen independent of camera MID metadata and browser placeholders", () => {
+    createRoot((dispose) => {
+      const camera = track("camera", "video");
+      const native = track("screen", "video");
+      const nativeAudio = track("screen-audio", "audio");
+      const [participants, setParticipants] = createSignal<
+        MeetingParticipant[]
+      >([
+        {
+          id: "peer",
+          name: "Peer",
+          stream: stream(camera),
+          nativeScreenStream: stream(native, nativeAudio),
+          videoSources: [{ mid: "0", kind: "camera" }],
+          videoTracks: [{ mid: "0", trackId: camera.id }],
+        },
+      ]);
+      const sources = createMeetingSources(participants);
+      expect(sources().map((s) => s.kind)).toEqual([
+        "camera",
+        "screen",
+      ]);
+      expect(sources()[0].stream?.getTracks()).toEqual([
+        camera,
+      ]);
+      expect(sources()[1].stream?.getTracks()).toEqual([
+        native,
+        nativeAudio,
+      ]);
+      setParticipants([
+        { ...participants()[0], placeholder: true },
+      ]);
+      expect(sources().map((s) => s.kind)).toEqual([
+        "participant",
+        "screen",
+      ]);
+      setParticipants([
+        {
+          ...participants()[0],
+          nativeScreenStream: undefined,
+        },
+      ]);
+      expect(sources().map((s) => s.kind)).toEqual([
+        "participant",
+      ]);
+      expect(native.stop).not.toHaveBeenCalled();
+      dispose();
+    });
+  });
+
   it("moves shared audio onto its matching screen when MID metadata arrives, without duplicating tracks", () => {
     createRoot((dispose) => {
       const camera = track("receiver-camera", "video");

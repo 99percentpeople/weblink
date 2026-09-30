@@ -23,6 +23,7 @@
     "test:integration": "vitest run test/integration",
     "test:e2e:protocol": "bun scripts/run-browser-check.mjs --protocol",
     "test:e2e:recovery": "node scripts/run-browser-check.mjs --recovery",
+    "test:e2e:native-screen": "node scripts/run-browser-check.mjs --native-screen",
     "test:e2e:playback": "node scripts/run-browser-check.mjs --playback",
     "test:e2e:transfer": "bun scripts/run-browser-check.mjs --transfer",
     "test:e2e:cache": "bun scripts/run-browser-check.mjs --cache",

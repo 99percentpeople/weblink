@@ -24,6 +24,9 @@ import { createFullscreenVideoOrientation } from "@/libs/hooks/fullscreen-video-
 import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { reportMeetingPipError } from "./meeting-pip-error";
+import { VideoStatisticsOverlay } from "./video-statistics-overlay";
+import { appState } from "@/libs/state/app-state";
+import { sessionService } from "@/libs/application/session-service";
 import {
   useVideoDisplay,
   VideoDisplay,
@@ -120,6 +123,19 @@ export function MeetingTile(props: {
           playbackActive={props.playbackActive}
           muted
         >
+          <Show
+            when={
+              appState.options.showStreamStats &&
+              props.playbackActive !== false
+            }
+          >
+            <VideoStatisticsOverlay
+              local={props.local}
+              read={(track) =>
+                sessionService.getVideoStats(track)
+              }
+            />
+          </Show>
           <Show when={props.onSelect}>
             <button
               type="button"

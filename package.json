@@ -26,6 +26,7 @@
     "test:integration": "bun run --cwd apps/web test:integration",
     "test:e2e:protocol": "bun run --cwd apps/web test:e2e:protocol",
     "test:e2e:recovery": "bun run --cwd apps/web test:e2e:recovery",
+    "test:e2e:native-screen": "bun run --cwd apps/web test:e2e:native-screen",
     "test:e2e:playback": "bun run --cwd apps/web test:e2e:playback",
     "test:e2e:transfer": "bun run --cwd apps/web test:e2e:transfer",
     "test:e2e:cache": "bun run --cwd apps/web test:e2e:cache",

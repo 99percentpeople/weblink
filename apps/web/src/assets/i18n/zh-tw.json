@@ -186,27 +186,6 @@
       },
       "advanced_receiver": {
         "title": "進階檔案接收設定"
-      },
-      "stream": {
-        "title": "視訊通話設定",
-        "video_max_bitrate": {
-          "title": "視訊最大位元速率",
-          "description": "視訊通話的最大比特率"
-        },
-        "degradation_preference": {
-          "title": "降級偏好",
-          "description": "當網路條件較差時，應用程式將優先考慮視訊質量還是幀率"
-        },
-        "preferred_video_codec": {
-          "title": "首選視訊編碼器",
-          "description": "在協商視訊串流時優先使用該編碼器。僅對新建連接生效。",
-          "auto": "自動"
-        },
-        "preferred_audio_codec": {
-          "title": "首選音訊編碼器",
-          "description": "在協商音訊串流時優先使用該編碼器。僅對新建連接生效。",
-          "auto": "自動"
-        }
       }
     },
     "about": {
@@ -243,6 +222,43 @@
         "closed": "來源已關閉",
         "failed": "擷取失敗"
       }
+    },
+    "meeting_settings": {
+      "resolution": "最高解析度",
+      "frame_rate": "最高影格率",
+      "capture_description": "解析度、影格率、位元率和畫質優先策略會同步套用至正在執行的串流，實際效果受來源和可用資源限制。編碼格式、編碼器和擷取後端的變更在下次分享時生效。",
+      "native_unavailable": "無法讀取原生編碼能力。",
+      "stream": {
+        "title": "視訊通話設定",
+        "video_max_bitrate": {
+          "title": "視訊最大位元速率",
+          "description": "視訊通話的最大比特率"
+        },
+        "degradation_preference": {
+          "title": "降級偏好",
+          "description": "當網路條件較差時，應用程式將優先考慮視訊質量還是幀率"
+        },
+        "preferred_video_codec": {
+          "title": "瀏覽器視訊優先編碼",
+          "description": "在協商視訊串流時優先使用該編碼器。僅對新建連接生效。",
+          "auto": "自動"
+        },
+        "preferred_audio_codec": {
+          "title": "首選音訊編碼器",
+          "description": "在協商音訊串流時優先使用該編碼器。僅對新建連接生效。",
+          "auto": "自動"
+        },
+        "statistics": {
+          "title": "顯示串流統計疊加層",
+          "description": "在影片上顯示可取得的即時編碼、位元率、解析度、幀率及處理耗時。"
+        }
+      },
+      "native_capture": "原生螢幕分享",
+      "native_encoder": "原生影片編碼",
+      "native_encoder_auto": "自動（優先相容的硬體編碼器）",
+      "hardware": "硬體編碼",
+      "software": "軟體編碼",
+      "native_encoder_description": "選擇編碼格式及硬體或軟體編碼器。硬體選項依目前驅動程式偵測，接收端也需支援所選格式；下次分享時生效。"
     }
   },
   "cache": {
@@ -303,6 +319,24 @@
       "autoplay_blocked": "瀏覽器阻止了自動播放，請點擊播放畫面",
       "play": "播放畫面",
       "retry": "重試"
+    },
+    "statistics": {
+      "display": "呈現",
+      "submitted": "預覽提交",
+      "player_dropped": "播放器掉幀",
+      "receive_to_present": "接收 → 呈現",
+      "title": "串流統計",
+      "send": "傳送",
+      "receive": "接收",
+      "capture": "本機擷取",
+      "preview": "本機預覽",
+      "encode": "編碼",
+      "decode": "解碼",
+      "buffer": "緩衝",
+      "encoder_queue": "編碼等待",
+      "capture_to_encode": "擷取 → 編碼完成",
+      "send_queue": "傳送佇列",
+      "rtt": "RTT"
     }
   },
   "browser_unsupported": {
@@ -755,7 +789,33 @@
     "pip_not_supported": "目前的瀏覽器或影片不支援子母畫面。",
     "pip_video_required": "等待可播放的影片畫面",
     "pip_video_elsewhere": "此畫面正在以子母畫面模式執行",
-    "pip_video_restore": "將畫面移回此處"
+    "pip_video_restore": "將畫面移回此處",
+    "native_screen": {
+      "share_audio": "分享音訊",
+      "share_audio_description": "分享系統播放的聲音，不包含本應用程式的聲音。",
+      "title": "分享螢幕或視窗",
+      "preview": "來源預覽",
+      "preview_select": "選擇左側來源以預覽",
+      "preview_loading": "正在載入預覽…",
+      "preview_failed": "暫時無法預覽此來源",
+      "preview_retry": "重新載入預覽",
+      "description": "選擇要分享的螢幕或視窗。",
+      "source": "分享來源",
+      "select": "請選擇顯示器或視窗",
+      "empty": "沒有可用的顯示器或視窗",
+      "share": "開始分享",
+      "screens": "螢幕",
+      "windows": "視窗",
+      "screen_backend": "螢幕擷取方式",
+      "window_backend": "視窗擷取方式",
+      "auto_backend": "自動選擇",
+      "unavailable": "無法使用",
+      "search_windows": "搜尋視窗",
+      "size_unknown": "尺寸未知",
+      "no_matches": "沒有符合的視窗",
+      "backend_unavailable": "所選擷取方式無法使用，請在設定中修改擷取方式，或重新開啟此對話框後再試。",
+      "loading": "正在取得來源…"
+    }
   },
   "room_dialog": {
     "actions": "房間操作",
@@ -791,7 +851,8 @@
     "settings_connection": "連線",
     "settings_transfer": "傳輸",
     "settings_advanced": "進階",
-    "settings_about": "關於"
+    "settings_about": "關於",
+    "settings_meeting": "音視訊"
   },
   "file_library": {
     "search": "搜尋檔案…",

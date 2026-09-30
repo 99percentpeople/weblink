@@ -8,6 +8,8 @@ import {
   mkdir,
   readFile,
   rm,
+  stat,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +17,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   allowedPath,
+  changedFiles,
   snapshot,
   removedFiles,
   rsyncArgs,
@@ -221,6 +224,128 @@ test("rsync backs up overwrites and propagates managed deletions while keeping W
       await readFile(join(remote, file), "utf8"),
       "keep",
     );
+});
+
+test("incremental sync isolates frontend updates, nested deletions and native updates", async (t) => {
+  const root = await fixture(t);
+  const source = join(root, "source");
+  const remote = join(root, "remote");
+  await mkdir(source);
+  await mkdir(remote);
+  git(source, "init", "-q");
+  const web = "apps/web/src/component.tsx";
+  const native = "apps/desktop/src-tauri/src/lib.rs";
+  const capture = "crates/desktop-capture/src/lib.rs";
+  const added = "apps/web/src/nested/new.ts";
+  const remoteOnly = "apps/web/src/nested/remote-only.ts";
+  await put(source, web, "frontend v1");
+  await put(source, native, "native v1");
+  await put(source, capture, "capture v1");
+
+  let synced;
+  let sequence = 0;
+  async function transfer(current) {
+    const files = changedFiles(current, synced);
+    const removed = await removedFiles(
+      source,
+      current.files,
+      synced?.files ?? [],
+    );
+    const filter = join(root, "filter");
+    await writeFile(filter, syncFilter(files, removed));
+    const result = spawnSync(
+      "rsync",
+      rsyncArgs(
+        source,
+        `${remote}/`,
+        `${remote}/.tmp/backups/${++sequence}`,
+        filter,
+      ),
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(
+      result.stdout,
+      /cannot delete non-empty directory/,
+    );
+    synced = current;
+  }
+
+  const initial = await snapshot(source);
+  assert.deepEqual(changedFiles(initial), initial.files);
+  await transfer(initial);
+  assert.deepEqual(
+    changedFiles(await snapshot(source), synced),
+    [],
+  );
+  // A full-tree transfer would reset these timestamps even with identical bytes.
+  const remoteTime = new Date("2000-01-01T00:00:00Z");
+  for (const path of [native, capture]) {
+    await utimes(
+      join(remote, path),
+      remoteTime,
+      remoteTime,
+    );
+  }
+  await put(source, web, "frontend v2, edited");
+  await put(source, added, "new frontend module");
+  const edited = await snapshot(source);
+  assert.deepEqual(changedFiles(edited, synced), [
+    web,
+    added,
+  ]);
+  await transfer(edited);
+  assert.equal(
+    await readFile(join(remote, web), "utf8"),
+    "frontend v2, edited",
+  );
+  assert.equal(
+    await readFile(join(remote, added), "utf8"),
+    "new frontend module",
+  );
+  for (const path of [native, capture]) {
+    assert.equal(
+      (await stat(join(remote, path))).mtimeMs,
+      remoteTime.getTime(),
+    );
+  }
+
+  // Deletion-only updates must reach nested files without visiting other sources.
+  await put(remote, remoteOnly, "keep remote-only");
+  await rm(join(source, added));
+  const deleted = await snapshot(source);
+  assert.deepEqual(changedFiles(deleted, synced), []);
+  await transfer(deleted);
+  await assert.rejects(readFile(join(remote, added)), {
+    code: "ENOENT",
+  });
+  assert.equal(
+    await readFile(join(remote, remoteOnly), "utf8"),
+    "keep remote-only",
+  );
+  assert.equal(
+    await readFile(join(remote, web), "utf8"),
+    "frontend v2, edited",
+  );
+  assert.equal(
+    (await stat(join(remote, native))).mtimeMs,
+    remoteTime.getTime(),
+  );
+
+  await put(source, capture, "capture v2, edited");
+  const nativeEdited = await snapshot(source);
+  assert.deepEqual(changedFiles(nativeEdited, synced), [
+    capture,
+  ]);
+  await transfer(nativeEdited);
+  assert.equal(
+    await readFile(join(remote, capture), "utf8"),
+    "capture v2, edited",
+  );
+  assert.equal(
+    (await stat(join(remote, native))).mtimeMs,
+    remoteTime.getTime(),
+  );
 });
 
 test("uses ordinary SSH targets for POSIX and Windows without remote PowerShell", () => {

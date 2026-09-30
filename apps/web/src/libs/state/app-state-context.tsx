@@ -684,11 +684,7 @@ export const AppStateProvider: Component<
 
   createEffect(() => {
     setAppState("session", "localStream", localStream());
-    for (const session of Object.values(
-      sessionService.sessions,
-    )) {
-      session.setStream(localStream());
-    }
+    sessionService.setStream(localStream());
   });
 
   createEffect(() => {

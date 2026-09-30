@@ -28,35 +28,40 @@ const conversationStorage = process.argv.includes(
 const ui =
   taskUi || chatUi || meetingUi || playbackTest || dropTest;
 const protocolTest = process.argv.includes("--protocol");
+const nativeScreenTest = process.argv.includes(
+  "--native-screen",
+);
 const recoveryTest = process.argv.includes("--recovery");
 const transferTest = process.argv.includes("--transfer");
 const cacheBenchmark = process.argv.includes(
   "--cache-benchmark",
 );
 const cacheTest = process.argv.includes("--cache");
-const entry = dropTest
-  ? "test/e2e/smoke/chat-file-drop.html"
-  : playbackTest
-    ? "test/e2e/smoke/video-playback.html"
-    : recoveryTest
-      ? "test/e2e/smoke/session-recovery.html"
-      : meetingUi
-        ? "test/e2e/smoke/meeting.html"
-        : conversationStorage
-          ? "test/e2e/smoke/conversation-storage.html"
-          : chatUi
-            ? "test/e2e/smoke/chat-scroll.html"
-            : cacheBenchmark
-              ? "test/e2e/benchmark/cache-merge.html"
-              : cacheTest
-                ? "test/e2e/smoke/cache-merge.html"
-                : taskUi
-                  ? "test/e2e/smoke/task-center.html"
-                  : protocolTest
-                    ? "test/e2e/smoke/rtc-protocol.html"
-                    : transferTest
-                      ? "test/e2e/smoke/transfer-workflow.html"
-                      : "test/e2e/smoke/speed-test.html";
+const entry = nativeScreenTest
+  ? "test/e2e/smoke/native-screen.html"
+  : dropTest
+    ? "test/e2e/smoke/chat-file-drop.html"
+    : playbackTest
+      ? "test/e2e/smoke/video-playback.html"
+      : recoveryTest
+        ? "test/e2e/smoke/session-recovery.html"
+        : meetingUi
+          ? "test/e2e/smoke/meeting.html"
+          : conversationStorage
+            ? "test/e2e/smoke/conversation-storage.html"
+            : chatUi
+              ? "test/e2e/smoke/chat-scroll.html"
+              : cacheBenchmark
+                ? "test/e2e/benchmark/cache-merge.html"
+                : cacheTest
+                  ? "test/e2e/smoke/cache-merge.html"
+                  : taskUi
+                    ? "test/e2e/smoke/task-center.html"
+                    : protocolTest
+                      ? "test/e2e/smoke/rtc-protocol.html"
+                      : transferTest
+                        ? "test/e2e/smoke/transfer-workflow.html"
+                        : "test/e2e/smoke/speed-test.html";
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -77,9 +82,10 @@ async function main() {
       cacheDir: join(profile, "vite-cache"),
       configFile: false,
       logLevel: "error",
-      plugins: ui
-        ? [solidPlugin(), solidSvg(), tailwindcss()]
-        : [],
+      plugins:
+        ui || nativeScreenTest
+          ? [solidPlugin(), solidSvg(), tailwindcss()]
+          : [],
       resolve: {
         conditions: ["browser", "development"],
         alias: [
@@ -134,7 +140,16 @@ async function main() {
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
-        ...(protocolTest || recoveryTest || playbackTest
+        ...(nativeScreenTest
+          ? [
+              "--use-fake-device-for-media-stream",
+              "--use-fake-ui-for-media-stream",
+            ]
+          : []),
+        ...(protocolTest ||
+        recoveryTest ||
+        playbackTest ||
+        nativeScreenTest
           ? ["--autoplay-policy=no-user-gesture-required"]
           : []),
         "--no-first-run",

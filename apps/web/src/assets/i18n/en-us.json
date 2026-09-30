@@ -199,27 +199,6 @@
       },
       "advanced_receiver": {
         "title": "Advanced File Recevier Settings"
-      },
-      "stream": {
-        "title": "Video Call Settings",
-        "video_max_bitrate": {
-          "title": "Video Max Bitrate",
-          "description": "Max video bitrate of the stream"
-        },
-        "degradation_preference": {
-          "title": "Degradation Preference",
-          "description": "When the network condition is poor, the application will prioritize video quality or frame rate"
-        },
-        "preferred_video_codec": {
-          "title": "Preferred Video Codec",
-          "description": "Prefer using this codec when negotiating the video stream. Takes effect for new connections.",
-          "auto": "Auto"
-        },
-        "preferred_audio_codec": {
-          "title": "Preferred Audio Codec",
-          "description": "Prefer using this codec when negotiating the audio stream. Takes effect for new connections.",
-          "auto": "Auto"
-        }
       }
     },
     "native_capture": {
@@ -243,6 +222,43 @@
         "closed": "Source closed",
         "failed": "Capture failed"
       }
+    },
+    "meeting_settings": {
+      "resolution": "Maximum resolution",
+      "frame_rate": "Maximum frame rate",
+      "capture_description": "Resolution, frame rate, bitrate and degradation preference also apply to active streams. Limits depend on the source and available resources. Codec, encoder and capture backend changes apply to the next share.",
+      "native_unavailable": "Native codec capabilities could not be loaded.",
+      "stream": {
+        "title": "Video Call Settings",
+        "video_max_bitrate": {
+          "title": "Video Max Bitrate",
+          "description": "Max video bitrate of the stream"
+        },
+        "degradation_preference": {
+          "title": "Degradation Preference",
+          "description": "When the network condition is poor, the application will prioritize video quality or frame rate"
+        },
+        "preferred_video_codec": {
+          "title": "Browser video codec preference",
+          "description": "Prefer using this codec when negotiating the video stream. Takes effect for new connections.",
+          "auto": "Auto"
+        },
+        "preferred_audio_codec": {
+          "title": "Preferred Audio Codec",
+          "description": "Prefer using this codec when negotiating the audio stream. Takes effect for new connections.",
+          "auto": "Auto"
+        },
+        "statistics": {
+          "title": "Show stream statistics",
+          "description": "Show available live codec, bitrate, resolution, frame rate and processing time over videos."
+        }
+      },
+      "native_capture": "Native screen sharing",
+      "native_encoder": "Native video encoding",
+      "native_encoder_auto": "Automatic (prefer compatible hardware)",
+      "hardware": "Hardware",
+      "software": "Software",
+      "native_encoder_description": "Choose a format and hardware or software encoder. Hardware options are detected from the current driver. Receivers must support the format; changes apply to the next share."
     }
   },
   "cache": {
@@ -303,6 +319,24 @@
       "autoplay_blocked": "Your browser blocked autoplay. Select Play video to continue.",
       "play": "Play video",
       "retry": "Retry"
+    },
+    "statistics": {
+      "display": "Presentation",
+      "submitted": "Submitted",
+      "player_dropped": "Player dropped",
+      "receive_to_present": "Receive → present",
+      "title": "Stream statistics",
+      "send": "Send",
+      "receive": "Receive",
+      "capture": "Local capture",
+      "preview": "Local preview",
+      "encode": "Encode",
+      "decode": "Decode",
+      "buffer": "Buffer",
+      "encoder_queue": "Encoder wait",
+      "capture_to_encode": "Capture → encoded",
+      "send_queue": "Send queue",
+      "rtt": "RTT"
     }
   },
   "browser_unsupported": {
@@ -755,7 +789,33 @@
     "pip_not_supported": "Picture-in-picture is unavailable for this browser or video.",
     "pip_video_required": "Waiting for playable video",
     "pip_video_elsewhere": "This video is playing in picture-in-picture",
-    "pip_video_restore": "Bring video back here"
+    "pip_video_restore": "Bring video back here",
+    "native_screen": {
+      "share_audio": "Share audio",
+      "share_audio_description": "Share system playback, excluding audio from this app.",
+      "title": "Share a screen or window",
+      "preview": "Source preview",
+      "preview_select": "Select a source to preview",
+      "preview_loading": "Loading preview…",
+      "preview_failed": "This source cannot be previewed right now",
+      "preview_retry": "Reload preview",
+      "description": "Choose a screen or window to share.",
+      "source": "Screen source",
+      "select": "Choose a display or window",
+      "empty": "No available displays or windows",
+      "share": "Share",
+      "screens": "Screens",
+      "windows": "Windows",
+      "screen_backend": "Screen capture method",
+      "window_backend": "Window capture method",
+      "auto_backend": "Automatic",
+      "unavailable": "Unavailable",
+      "search_windows": "Search windows",
+      "size_unknown": "Size unavailable",
+      "no_matches": "No matching windows",
+      "backend_unavailable": "This capture method is unavailable. Change it in Settings, or reopen this dialog and try again.",
+      "loading": "Loading sources…"
+    }
   },
   "room_dialog": {
     "actions": "Room actions",
@@ -791,7 +851,8 @@
     "settings_connection": "Connection",
     "settings_transfer": "Transfers",
     "settings_advanced": "Advanced",
-    "settings_about": "About"
+    "settings_about": "About",
+    "settings_meeting": "Audio & video"
   },
   "file_library": {
     "search": "Search files…",

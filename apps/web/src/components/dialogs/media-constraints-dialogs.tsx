@@ -13,14 +13,7 @@ import {
   SwitchControl,
   SwitchThumb,
 } from "@/components/ui/switch";
-import {
-  Slider,
-  SliderFill,
-  SliderLabel,
-  SliderThumb,
-  SliderTrack,
-  SliderValueLabel,
-} from "@/components/ui/slider";
+import VideoCaptureSettings from "@/components/settings/video-capture-settings";
 import {
   appState,
   setAppState,
@@ -370,47 +363,12 @@ export const createPresetMicrophoneConstraintsDialog =
     });
   };
 
-export const createPresetVideoConstraintsDialog = () => {
-  return createDialog({
-    title: () => t("common.action.settings"),
+export const createPresetVideoConstraintsDialog = () =>
+  createDialog({
+    title: () => t("app_menu.settings_meeting"),
     content: () => (
       <div class="flex flex-col gap-2">
-        <Slider
-          minValue={1}
-          maxValue={120}
-          value={[
-            typeof appState.media.constraints.video
-              .frameRate === "number"
-              ? appState.media.constraints.video.frameRate
-              : (appState.media.constraints.video.frameRate
-                  ?.max ?? 30),
-          ]}
-          onChange={(value) =>
-            setAppState(
-              "media",
-              "constraints",
-              "video",
-              "frameRate",
-              { max: value[0] },
-            )
-          }
-          getValueLabel={({ values }) => `${values[0]} FPS`}
-          class="gap-2"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <SliderLabel>
-              {t(
-                "common.media_selection_dialog.constraints.max_frame_rate",
-              )}
-            </SliderLabel>
-            <SliderValueLabel />
-          </div>
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
+        <VideoCaptureSettings />
       </div>
     ),
   });
-};

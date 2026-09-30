@@ -15,6 +15,7 @@ export interface MeetingParticipant extends RemoteAudioSources {
   name: string;
   avatar?: string;
   stream?: MediaStream | null;
+  nativeScreenStream?: MediaStream;
   videoSources?: readonly StreamVideoSource[];
   videoTracks?: readonly RemoteMediaTrackBinding[];
   local?: boolean;
@@ -82,14 +83,30 @@ export function createMeetingSources(
             .filter(
               (track) => track.readyState !== "ended",
             ) ?? [];
-        const audio = tracks.filter(
-          (track) => track.kind === "audio",
-        );
-        const video = participant.placeholder
-          ? []
-          : tracks.filter(
-              (track) => track.kind === "video",
-            );
+        const audio = [
+          ...tracks.filter(
+            (track) => track.kind === "audio",
+          ),
+          ...(participant.nativeScreenStream
+            ?.getAudioTracks()
+            .filter(
+              (track) => track.readyState !== "ended",
+            ) ?? []),
+        ];
+        const nativeTracks =
+          participant.nativeScreenStream
+            ?.getVideoTracks()
+            .filter(
+              (track) => track.readyState === "live",
+            ) ?? [];
+        const video = [
+          ...(participant.placeholder
+            ? []
+            : tracks.filter(
+                (track) => track.kind === "video",
+              )),
+          ...nativeTracks,
+        ];
         const kindByMid = new Map(
           participant.videoSources?.map((source) => [
             source.mid,
@@ -109,6 +126,8 @@ export function createMeetingSources(
             "participant"
           >;
         }> = video.map((track) => {
+          if (nativeTracks.includes(track))
+            return { track, kind: "screen" };
           if (participant.local)
             return {
               track,
@@ -177,8 +196,8 @@ export function createMeetingSources(
           const previousTracks = previous?.getTracks();
           const stream = selected.length
             ? previousTracks?.length === selected.length &&
-              previousTracks.every(
-                (item, i) => item === selected[i],
+              previousTracks.every((item) =>
+                selected.includes(item),
               )
               ? previous!
               : new MediaStream(selected)

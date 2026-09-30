@@ -9,11 +9,26 @@ struct Fake {
     available: Rc<Cell<bool>>,
     fail_start: Rc<Cell<bool>>,
     fail_stop: Rc<Cell<bool>>,
+    queried_running: Rc<Cell<Option<CaptureMethod>>>,
+    support_probes: Rc<Cell<usize>>,
     frames: Rc<RefCell<Option<Arc<Mutex<Frames>>>>>,
+    #[cfg(windows)]
+    snapshot: Rc<RefCell<Option<Vec<u8>>>>,
 }
 
 impl Backend for Fake {
+    fn capabilities(&self, running: Option<CaptureMethod>) -> CaptureCapabilities {
+        self.queried_running.set(running);
+        CaptureCapabilities {
+            screen: vec![],
+            window: vec![CaptureBackendInfo {
+                id: CaptureMethod::Wgc,
+                name: "WGC".into(),
+            }],
+        }
+    }
     fn supported(&self) -> bool {
+        self.support_probes.set(self.support_probes.get() + 1);
         true
     }
     fn sources(&self) -> Result<Vec<CaptureSource>> {
@@ -29,7 +44,19 @@ impl Backend for Fake {
             vec![]
         })
     }
-    fn start(&self, _: &CaptureSource, frames: Arc<Mutex<Frames>>) -> Result<Box<dyn Session>> {
+    #[cfg(windows)]
+    fn thumbnail(&self, source: &CaptureSource) -> Result<Vec<u8>> {
+        if let Some(bytes) = self.snapshot.borrow().as_ref() {
+            return Ok(bytes.clone());
+        }
+        surface::thumbnail::capture(|frames| self.start(source, CaptureMethod::Wgc, frames))
+    }
+    fn start(
+        &self,
+        _: &CaptureSource,
+        _: CaptureMethod,
+        frames: Arc<Mutex<Frames>>,
+    ) -> Result<Box<dyn Session>> {
         if self.fail_start.get() {
             return Err("GPU unavailable".into());
         }
@@ -67,6 +94,69 @@ fn start(engine: &mut Engine<Fake>) -> String {
 }
 
 #[test]
+fn capability_queries_reuse_only_the_currently_owned_backend() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    assert_eq!(fake.queried_running.get(), None);
+    engine.capabilities();
+    assert_eq!(fake.queried_running.get(), Some(CaptureMethod::Wgc));
+    assert!(engine.supported());
+    assert_eq!(fake.support_probes.get(), 0);
+    assert_eq!(fake.stops.get(), 0);
+
+    engine.stop(&id, Instant::now()).unwrap();
+    // A stopped status retains its backend, but must not skip fresh probing.
+    assert_eq!(
+        engine.stopped.back().unwrap().backend,
+        Some(CaptureMethod::Wgc)
+    );
+    engine.capabilities();
+    assert_eq!(fake.queried_running.get(), None);
+    assert!(engine.supported());
+    assert_eq!(fake.support_probes.get(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn snapshot_does_not_open_streaming_capture_and_rejects_stale_sources() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    fake.snapshot.replace(Some(vec![1, 2, 3]));
+    fake.fail_start.set(true);
+    // A backend's snapshot is independent of streaming options and availability.
+    let options = CaptureOptions {
+        backend: CaptureMethod::Dxgi,
+    };
+    assert_eq!(engine.thumbnail("selected", options).unwrap(), [1, 2, 3]);
+    assert_eq!(fake.stops.get(), 0);
+    assert_eq!(
+        engine.status(&id, Instant::now()).unwrap().state,
+        CaptureState::Running
+    );
+    fake.available.set(false);
+    assert!(engine.thumbnail("selected", options).is_err());
+    engine.stop(&id, Instant::now()).unwrap();
+    assert_eq!(fake.stops.get(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn thumbnail_timeout_releases_its_session_without_replacing_active_capture() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    let error = engine
+        .thumbnail("selected", CaptureOptions::default())
+        .unwrap_err();
+    assert!(error.contains("preview frame"), "{error}");
+    assert_eq!(fake.stops.get(), 1);
+    let current = engine.status(&id, Instant::now()).unwrap();
+    assert_eq!(current.state, CaptureState::Running);
+    assert_eq!(current.session_id.as_deref(), Some(id.as_str()));
+    engine.stop(&id, Instant::now()).unwrap();
+    assert_eq!(fake.stops.get(), 2);
+}
+
+#[test]
 fn rejects_missing_sources_and_allows_retry_after_start_failure() {
     let (mut engine, fake) = setup();
     assert!(engine.start("unlisted-handle", Instant::now()).is_err());
@@ -75,38 +165,145 @@ fn rejects_missing_sources_and_allows_retry_after_start_failure() {
     fake.available.set(true);
     fake.fail_start.set(true);
     assert!(engine.start("selected", Instant::now()).is_err());
-    assert!(engine.active.is_none());
+    assert!(engine.active.is_empty());
     fake.fail_start.set(false);
     start(&mut engine);
-    engine.stop_active(StopReason::Shutdown, Instant::now());
+    engine.stop_all(StopReason::Shutdown, Instant::now());
     assert_eq!(fake.stops.get(), 1);
 }
 
 #[test]
-fn rejects_concurrent_start_and_stale_stop_without_touching_new_session() {
+fn stopping_a_retired_capture_never_stops_a_new_session() {
     let (mut engine, fake) = setup();
     let old = start(&mut engine);
-    assert!(engine.start("selected", Instant::now()).is_err());
     engine.stop(&old, Instant::now()).unwrap();
     engine.stop(&old, Instant::now()).unwrap();
     assert_eq!(fake.stops.get(), 1);
     let current = start(&mut engine);
     assert_ne!(old, current);
-    assert!(engine.stop(&old, Instant::now()).is_err());
-    assert!(engine.status(&old, Instant::now()).is_err());
+    assert_eq!(
+        engine.stop(&old, Instant::now()).unwrap().state,
+        CaptureState::Stopped
+    );
     assert_eq!(
         engine.status(&current, Instant::now()).unwrap().state,
         CaptureState::Running
     );
+    assert_eq!(fake.stops.get(), 1);
     engine.stop(&current, Instant::now()).unwrap();
     assert_eq!(fake.stops.get(), 2);
+}
+
+#[test]
+fn concurrent_captures_keep_separate_frames_and_stop_independently() {
+    let (mut engine, fake) = setup();
+    let first = start(&mut engine);
+    let second = start(&mut engine);
+    assert_ne!(first, second);
+    for (id, width) in [(&first, 640), (&second, 1920)] {
+        let mut frames = engine.active[id].frames.lock().unwrap();
+        frames.width = width;
+        frames.count = 10;
+    }
+    let now = Instant::now();
+    assert_eq!(engine.status(&first, now).unwrap().width, 640);
+    assert_eq!(engine.status(&second, now).unwrap().width, 1920);
+    engine.stop(&first, now).unwrap();
+    assert_eq!(fake.stops.get(), 1);
+    assert_eq!(
+        engine.status(&second, now).unwrap().state,
+        CaptureState::Running
+    );
+    let third = start(&mut engine);
+    engine.stop(&first, now).unwrap();
+    assert_eq!(engine.active.len(), 2);
+    assert!(engine.active.contains_key(&third));
+    engine.stop_all(StopReason::Shutdown, now);
+    assert_eq!(fake.stops.get(), 3);
+    assert!(engine.active.is_empty());
+}
+
+#[test]
+fn closing_one_source_and_expiring_one_lease_leave_other_captures_running() {
+    let (mut engine, fake) = setup();
+    let closed = start(&mut engine);
+    let expired = start(&mut engine);
+    let live = start(&mut engine);
+    let now = Instant::now();
+    engine.active[&closed].frames.lock().unwrap().closed = true;
+    engine.status(&live, now + Duration::from_secs(9)).unwrap();
+    engine.tick(now + Duration::from_secs(11));
+    assert_eq!(fake.stops.get(), 2);
+    assert_eq!(
+        engine.status(&closed, now).unwrap().stop_reason,
+        Some(StopReason::SourceClosed)
+    );
+    assert_eq!(
+        engine.status(&expired, now).unwrap().stop_reason,
+        Some(StopReason::ClientDisconnected)
+    );
+    assert_eq!(
+        engine
+            .status(&live, now + Duration::from_secs(12))
+            .unwrap()
+            .state,
+        CaptureState::Running
+    );
+    engine.stop_all(StopReason::Shutdown, now);
+}
+
+#[test]
+fn failed_or_cancelled_addition_only_releases_its_own_capture() {
+    let (mut engine, fake) = setup();
+    let first = start(&mut engine);
+    fake.fail_start.set(true);
+    let result = engine.start("selected", Instant::now());
+    assert!(result.is_err());
+    let (reply, receiver) = mpsc::channel();
+    drop(receiver);
+    engine.reply_started(result, reply);
+    assert_eq!(fake.stops.get(), 0);
+
+    fake.fail_start.set(false);
+    let result = engine.start("selected", Instant::now());
+    assert!(result.is_ok());
+    let (reply, receiver) = mpsc::channel();
+    drop(receiver);
+    engine.reply_started(result, reply);
+    assert_eq!(fake.stops.get(), 1);
+    assert_eq!(engine.active.len(), 1);
+    assert_eq!(
+        engine.status(&first, Instant::now()).unwrap().state,
+        CaptureState::Running
+    );
+    engine.stop_all(StopReason::Shutdown, Instant::now());
+}
+
+#[test]
+fn capture_limits_recover_after_stop_and_terminal_statuses_are_bounded() {
+    let (mut engine, fake) = setup();
+    let first = start(&mut engine);
+    for _ in 1..MAX_SESSIONS {
+        start(&mut engine);
+    }
+    assert!(engine.start("selected", Instant::now()).is_err());
+    engine.stop(&first, Instant::now()).unwrap();
+    start(&mut engine);
+    engine.stop_all(StopReason::Shutdown, Instant::now());
+    assert_eq!(fake.stops.get(), MAX_SESSIONS + 1);
+    for _ in 0..MAX_RETIRED_SESSIONS {
+        let id = start(&mut engine);
+        engine.stop(&id, Instant::now()).unwrap();
+    }
+    assert_eq!(engine.stopped.len(), MAX_RETIRED_SESSIONS);
+    assert!(engine.status(&first, Instant::now()).is_err());
 }
 
 #[test]
 fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
     let (mut engine, fake) = setup();
     let id = start(&mut engine);
-    let now = engine.active.as_ref().unwrap().started;
+    let now = engine.active.get(&id).unwrap().started;
     engine.status(&id, now + Duration::from_secs(9)).unwrap();
     engine.tick(now + Duration::from_secs(11));
     assert_eq!(fake.stops.get(), 0);
@@ -115,7 +312,7 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
         .is_err());
     engine.tick(now + Duration::from_secs(19));
     assert_eq!(
-        engine.status.stop_reason,
+        engine.stopped.back().unwrap().stop_reason,
         Some(StopReason::ClientDisconnected)
     );
     assert_eq!(fake.stops.get(), 1);
@@ -127,20 +324,21 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
             .state,
         CaptureState::Stopped
     );
-    assert!(engine.active.is_none());
+    assert!(engine.active.is_empty());
 }
 
 #[test]
 fn captures_dimensions_and_measures_arrivals_then_reports_zero_when_static() {
     let (mut engine, fake) = setup();
     let id = start(&mut engine);
-    let now = engine.active.as_ref().unwrap().started;
+    let now = engine.active.get(&id).unwrap().started;
     *fake.frames.borrow().as_ref().unwrap().lock().unwrap() = Frames {
         count: 30,
         width: 1920,
         height: 1080,
         last: Some(now),
         closed: false,
+        ..Frames::default()
     };
     let stats = engine.status(&id, now + Duration::from_secs(1)).unwrap();
     assert_eq!((stats.width, stats.height, stats.frames), (1920, 1080, 30));
@@ -160,7 +358,7 @@ fn captures_dimensions_and_measures_arrivals_then_reports_zero_when_static() {
         .unwrap()
         .closed = true;
     engine.tick(now + Duration::from_secs(3));
-    assert_eq!(engine.status.state, CaptureState::Closed);
+    assert_eq!(engine.stopped.back().unwrap().state, CaptureState::Closed);
     assert_eq!(fake.stops.get(), 1);
 }
 
@@ -171,12 +369,15 @@ fn reaps_finished_worker_and_surfaces_device_failure() {
     fake.finished.set(true);
     fake.fail_stop.set(true);
     engine.tick(Instant::now());
-    assert_eq!(engine.status.state, CaptureState::Failed);
-    assert_eq!(engine.status.error.as_deref(), Some("Device lost"));
+    assert_eq!(engine.stopped.back().unwrap().state, CaptureState::Failed);
+    assert_eq!(
+        engine.stopped.back().unwrap().error.as_deref(),
+        Some("Device lost")
+    );
     assert_eq!(fake.stops.get(), 1);
     fake.fail_stop.set(false);
     start(&mut engine);
-    engine.stop_active(StopReason::Shutdown, Instant::now());
+    engine.stop_all(StopReason::Shutdown, Instant::now());
     assert_eq!(fake.stops.get(), 2);
 }
 
@@ -187,4 +388,97 @@ fn shutdown_is_idempotent_and_rejects_further_requests() {
     service.shutdown();
     assert!(service.sources().is_err());
     assert!(!service.supported());
+}
+
+#[test]
+fn window_backend_cannot_start_a_display_only_method() {
+    let (mut engine, fake) = setup();
+    assert!(engine
+        .start_media(
+            "selected",
+            Instant::now(),
+            None,
+            CaptureOptions {
+                backend: CaptureMethod::Dxgi
+            },
+            None
+        )
+        .is_err());
+    assert!(fake.frames.borrow().is_none());
+    let status = engine
+        .start_media(
+            "selected",
+            Instant::now(),
+            None,
+            CaptureOptions {
+                backend: CaptureMethod::Wgc,
+            },
+            None,
+        )
+        .unwrap();
+    assert_eq!(status.backend, Some(CaptureMethod::Wgc));
+    engine
+        .stop(&status.session_id.unwrap(), Instant::now())
+        .unwrap();
+}
+
+#[test]
+fn automatic_display_capture_can_fallback_but_explicit_choice_cannot() {
+    struct DisplayBackend(Fake);
+    impl Backend for DisplayBackend {
+        fn supported(&self) -> bool {
+            true
+        }
+        fn capabilities(&self, _: Option<CaptureMethod>) -> CaptureCapabilities {
+            CaptureCapabilities {
+                screen: vec![
+                    CaptureBackendInfo {
+                        id: CaptureMethod::Dxgi,
+                        name: "DXGI".into(),
+                    },
+                    CaptureBackendInfo {
+                        id: CaptureMethod::Wgc,
+                        name: "WGC".into(),
+                    },
+                ],
+                window: vec![],
+            }
+        }
+        fn sources(&self) -> Result<Vec<CaptureSource>> {
+            let mut sources = self.0.sources()?;
+            sources[0].kind = SourceKind::Monitor;
+            Ok(sources)
+        }
+        fn start(
+            &self,
+            source: &CaptureSource,
+            method: CaptureMethod,
+            frames: Arc<Mutex<Frames>>,
+        ) -> Result<Box<dyn Session>> {
+            if method == CaptureMethod::Dxgi {
+                return Err("This display cannot be duplicated".into());
+            }
+            self.0.start(source, method, frames)
+        }
+    }
+    let (_, fake) = setup();
+    let mut engine = Engine::new(DisplayBackend(fake.clone()));
+    assert!(engine
+        .start_media(
+            "selected",
+            Instant::now(),
+            None,
+            CaptureOptions {
+                backend: CaptureMethod::Dxgi
+            },
+            None
+        )
+        .is_err());
+    assert!(fake.frames.borrow().is_none());
+    let status = engine.start("selected", Instant::now()).unwrap();
+    assert_eq!(status.backend, Some(CaptureMethod::Wgc));
+    engine
+        .stop(&status.session_id.unwrap(), Instant::now())
+        .unwrap();
+    assert_eq!(fake.stops.get(), 1);
 }
