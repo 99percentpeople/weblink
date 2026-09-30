@@ -18,9 +18,10 @@ impl Backend for Fake {
     fn is_current(&self, binding: &Binding) -> bool {
         self.current.borrow().contains(binding)
     }
-    fn release(&mut self, grant: &Grant) {
+    fn release(&mut self, grant: &Grant) -> bool {
         self.released.borrow_mut().push(grant.clone());
         assert!(!self.fail_release.get(), "release failed");
+        true
     }
 }
 

@@ -1,3 +1,9 @@
-//! Remote-control authorization foundation. No OS input injection is exposed yet.
+//! Attended remote-control input. Native ownership stays separate from UI and transport.
 pub mod authorization;
+pub mod engine;
+pub mod input;
+#[cfg(any(target_os = "windows", test))]
+mod mailbox;
 pub mod protocol;
+#[cfg(target_os = "windows")]
+pub mod windows;

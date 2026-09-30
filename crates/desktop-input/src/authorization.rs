@@ -36,7 +36,8 @@ pub struct Grant {
 /// A real implementation must serialize release with injection before reporting completion.
 pub trait Backend {
     fn is_current(&self, binding: &Binding) -> bool;
-    fn release(&mut self, grant: &Grant);
+    /// False permanently closes this authority: OS cleanup could not be confirmed.
+    fn release(&mut self, grant: &Grant) -> bool;
 }
 
 struct Pending {
@@ -103,6 +104,9 @@ impl<B: Backend> Authority<B> {
             return None;
         }
         self.tick(now);
+        if self.closed {
+            return None;
+        }
         let Signal::Request { request_id, target } = signal else {
             return None;
         };
@@ -148,6 +152,9 @@ impl<B: Backend> Authority<B> {
     /// Only an explicit local approval may call this. There is no remote "approve" handler.
     pub fn approve(&mut self, consent_id: &str, now: Instant) -> Option<Signal> {
         self.tick(now);
+        if self.closed {
+            return None;
+        }
         if !matches!(&self.state, State::Pending(p) if p.consent_id == consent_id) {
             return None;
         }
@@ -203,7 +210,8 @@ impl<B: Backend> Authority<B> {
     }
     pub fn permits(&mut self, binding: &Binding, grant_id: &str, now: Instant) -> bool {
         self.tick(now);
-        matches!(&self.state, State::Granted { grant, .. } if grant.id == grant_id && grant.binding == *binding)
+        !self.closed
+            && matches!(&self.state, State::Granted { grant, .. } if grant.id == grant_id && grant.binding == *binding)
     }
     pub fn renew(&mut self, binding: &Binding, grant_id: &str, now: Instant) -> bool {
         if !self.permits(binding, grant_id, now) {
@@ -245,14 +253,29 @@ impl<B: Backend> Authority<B> {
         if let State::Granted { grant, .. } = std::mem::replace(&mut self.state, State::Idle) {
             let closed = self.closed;
             self.closed = true;
-            self.backend.release(&grant);
-            self.closed = closed;
+            let released = self.backend.release(&grant);
+            self.closed = closed || !released;
         }
     }
     pub fn shutdown(&mut self) {
         self.closed = true;
         self.bindings.clear();
         self.revoke();
+    }
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+    pub fn grant(&self) -> Option<&Grant> {
+        match &self.state {
+            State::Granted { grant, .. } if !self.closed => Some(grant),
+            _ => None,
+        }
+    }
+    pub(crate) fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
+    pub(crate) fn pending_matches(&self, consent: &str) -> bool {
+        !self.closed && matches!(&self.state, State::Pending(p) if p.consent_id == consent)
     }
 }
 

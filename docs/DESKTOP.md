@@ -354,9 +354,10 @@ cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_re
 
 ## Remote-control foundation
 
-Remote input remains disabled. `crates/desktop-input` contains the portable
-authorization model and wire validation, with a fake backend for tests; it does
-not inject OS input and has no Tauri input permission or remote approval command.
+Remote input remains disabled in the app. `crates/desktop-input` contains the
+portable authorization/input state machines, wire validation and an independent
+Windows input worker. The app does not start this worker and has no Tauri input
+permission or remote approval command.
 Only explicit local consent can create a grant. Grants bind the room generation,
 peer generation, client, capture session, publication, media connection and layout
 revision. Disconnect, expiry or invalidation releases ownership; reconnecting
@@ -384,6 +385,53 @@ The shared browser/Rust wire fixtures live in
 with `cargo test -p weblink-desktop-input` and the browser tests with
 `bun run --cwd apps/web test test/unit/remote-control.test.ts`.
 These checks do not constitute actual remote keyboard/mouse acceptance.
+
+### Native input worker
+
+The native owner registers verified room/media bindings and physical display
+geometry. One worker serializes consent, grant validation, input and cleanup;
+`Ctrl+Alt+Shift+F10` is registered before it can accept a grant. Registration,
+hook or session-notification failure makes startup fail. Remote input never
+selects arbitrary HWNDs, scan codes outside the allowlist or system coordinates.
+The selected display constrains pointer mapping, not the OS keyboard foreground
+or application permissions.
+
+The reliable queue holds at most 128 commands. Pointer motion occupies one latest
+slot, ordered against reliable events by local enqueue order. Local revoke
+discards queued work; overflow, input older than 100 ms, injection or cleanup
+failure closes the worker. Network sequence/epoch checks still belong at the
+future transport boundary. Queue acceptance and successful `SendInput` submission
+do not prove that the target application rendered an action.
+
+An independent native thread pumps hooks, hotkeys and system notifications;
+it never injects input or waits for the input worker. The input worker checks the
+two-second grant lease without frontend timers. Keeping hooks off the thread
+calling `SendInput` avoids stalls waiting for its own hook delivery. The injection
+tag fits in 31 bits because the mouse path can truncate ExtraInfo to 32 bits.
+Local key/button presses revoke active control; pointer motion
+alone does not. Own injections carry a marker; other injected input also counts
+as local takeover. Cleanup releases only owned presses, in reverse order, and
+preserves keys/buttons currently held physically. Other injected events cannot
+create or clear physical ownership. A local held key
+blocks approval. Scan-code input distinguishes extended keys; committed Unicode
+text is bounded and cannot be mixed with held physical keys. Pause/PrintScreen
+are not in the scan-code allowlist.
+
+Display/settings/session notifications, unavailable input desktop, or changed
+physical monitor inventory close the worker. Restart and new consent are required;
+unlock never restores a grant. Normal shutdown joins after cleanup. Failed OS
+release is reported as failure, not successful revocation; process kill and
+unavailable/secure-desktop cleanup are not guaranteed by in-process ownership.
+`SendInput` operates within Windows [UIPI limits](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput);
+this is not elevated or login-screen control.
+
+Run `cargo run -p weblink-desktop-input --example input_self_test` in an interactive
+Windows session. It creates its own test window, requires foreground ownership,
+restricts pointer injection to that window's client area, and closes its native
+worker before destroying the window. If Windows refuses activation, click the
+test window within 30 seconds and leave keyboard/mouse idle during the probe.
+The probe checks real window events and cleanup; simulated lifecycle/other-source
+input does not substitute for physical-device, lockscreen or crash acceptance.
 
 ## Windows acceptance
 
