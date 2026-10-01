@@ -82,8 +82,14 @@ bun run test
 ```
 
 CI runs unit and integration as separate steps so a failure clearly identifies
-the affected boundary. The checks job also gates deployment on Chromium conversation
-storage and private messaging regressions.
+the affected boundary. The shared Checks job runs web/desktop TypeScript checks,
+desktop adapter tests, and Chromium conversation storage and private messaging
+regressions once. Web deployment and the Windows development build depend on
+that job. `web-dev.yml`, `web-production.yml`, `desktop-dev.yml`, and
+`desktop-production.yml` are reusable workflows called by `ci.yml`; development
+runs on `public` pushes, desktop development also validates pull requests, and
+production runs on stable version tags. Windows runs Rust formatting and tests
+once in the same profile as its executable or installer build.
 
 ### Browser E2E smoke tests
 

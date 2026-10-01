@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@solidjs/testing-library";
-import { createEffect, createSignal, Show } from "solid-js";
+import {
+  batch,
+  createEffect,
+  createSignal,
+  Show,
+} from "solid-js";
 import { Portal } from "solid-js/web";
 import {
   afterEach,
@@ -48,6 +53,39 @@ afterEach(() => {
 });
 
 describe("Motion layout ownership", () => {
+  it("can measure while a Show source is removed before its owner cleanup flushes", () => {
+    const [source, setSource] = createSignal<
+      { id: string } | undefined
+    >({ id: "screen" });
+    let group!: ReturnType<typeof createMotionLayout>;
+    render(() => {
+      group = createMotionLayout();
+      return (
+        <MotionLayout value={group}>
+          <Show when={source()}>
+            {(current) => (
+              <Motion.div layout layoutId={current().id} />
+            )}
+          </Show>
+        </MotionLayout>
+      );
+    });
+    expect(group.registry.nodes.size).toBe(1);
+    const registered = [...group.registry.nodes][0];
+    setSource({ id: "updated-screen" });
+    expect([...group.registry.nodes]).toEqual([registered]);
+    expect(registered.options().layoutId).toBe(
+      "updated-screen",
+    );
+    expect(() =>
+      batch(() => {
+        setSource(undefined);
+        group.transition(() => {});
+      }),
+    ).not.toThrow();
+    expect(group.registry.nodes.size).toBe(0);
+  });
+
   it("does not subscribe a transition's caller to layout metadata", () => {
     const [enabled, setEnabled] = createSignal(false);
     const invoked = vi.fn();
@@ -213,6 +251,8 @@ describe("Motion layout ownership", () => {
       [...group.registry.nodes].map((node) => node.element),
     ).toEqual([second]);
     view.unmount();
+    expect(group.registry.nodes.size).toBe(0);
+    register(first);
     expect(group.registry.nodes.size).toBe(0);
   });
 });

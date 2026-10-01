@@ -25,7 +25,6 @@ import {
 import { cn } from "@/libs/cn";
 import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import { appState } from "@/libs/state/app-state";
-import { setClientProfile } from "@/libs/state/profile-store";
 import {
   getDefaultAppOptions,
   parseTurnServers,
@@ -112,26 +111,6 @@ export function ConnectionSettings(
       <h3 id="connection" class="h3">
         {t("setting.connection.title")}
       </h3>
-      <div class="flex flex-col gap-2">
-        <Switch
-          disabled={appState.profile.initalJoin}
-          class="flex items-center justify-between"
-          checked={appState.profile.autoJoin}
-          onChange={(isChecked) =>
-            setClientProfile("autoJoin", isChecked)
-          }
-        >
-          <SwitchLabel>
-            {t("setting.connection.auto_join.title")}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t("setting.connection.auto_join.description")}
-        </p>
-      </div>
       <label class="flex flex-col gap-2">
         <Label>
           {t("setting.connection.stun_servers.title")}

@@ -1,5 +1,6 @@
 import {
   createContext,
+  createRenderEffect,
   onCleanup,
   useContext,
   type Accessor,
@@ -45,14 +46,36 @@ export function createMotionLayoutRef(
   present: Accessor<boolean> = () => true,
 ) {
   const registry = useContext(MotionLayoutContext);
+  let disposed = false;
+  let currentOptions: MotionLayoutOptions = {};
+  let currentPresent = true;
+  // Measurements can run inside a batch, after a Show condition becomes false
+  // but before its child owners are disposed. Read props in their render owner
+  // and store plain values; a registry read must never invoke a stale Show getter.
+  createRenderEffect(() => {
+    const next = options();
+    currentOptions = {
+      layout: next.layout,
+      layoutId: next.layoutId,
+      layoutScroll: next.layoutScroll,
+      layoutContainer: next.layoutContainer,
+      layoutSize: next.layoutSize,
+      layoutOverlay: next.layoutOverlay,
+    };
+    currentPresent = present();
+  });
   let unregister: (() => void) | undefined;
-  onCleanup(() => unregister?.());
+  onCleanup(() => {
+    disposed = true;
+    unregister?.();
+  });
   return (element: HTMLElement) => {
+    if (disposed) return;
     unregister?.();
     unregister = registry?.register({
       element,
-      options,
-      present,
+      options: () => currentOptions,
+      present: () => currentPresent,
     });
   };
 }

@@ -1,5 +1,7 @@
 {
   "tasks": {
+    "pause": "Pause",
+    "resume": "Resume",
     "title": "Tasks",
     "count": "{{active}} active · {{total}} total",
     "active_count": "{{count}} active tasks",
@@ -315,6 +317,10 @@
       "forget_description": "Forget “{{name}}” and remove its saved permissions? Conversation history will be kept."
     },
     "application": {
+      "automatic_pip_desktop_description": "Shrink the meeting into an always-on-top window when Weblink goes into the background. Use Return to meeting to restore the window.",
+      "autostart": "Launch at startup",
+      "autostart_description": "Start Weblink automatically when you sign in to this computer.",
+      "autostart_failed": "Could not read or update the system startup setting.",
       "automatic_pip_description": "Open picture-in-picture when leaving the meeting or sending it to the background. Availability depends on browser support and site permission.",
       "close_behavior": {
         "title": "When closing the window",
@@ -1064,6 +1070,9 @@
     "decline": "Decline",
     "allow": "Allow control",
     "host_active": "{{name}} can control this computer.",
+    "controller_active": "Controlling {{name}}",
+    "host_active_short": "Being controlled",
+    "controller_active_short": "Controlling",
     "revoke": "Revoke control",
     "revoke_failed": "Could not revoke control. Use Ctrl+Alt+Shift+F10 on the host to stop it.",
     "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",

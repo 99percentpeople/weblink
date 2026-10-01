@@ -36,6 +36,10 @@ import { deferred } from "../support/rtc-transport";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import type { Conversation } from "@/libs/domain/conversation";
 
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: { remoteControl: { screen: {} } },
+}));
+
 const deletion = vi.hoisted(() => ({
   remove: vi.fn<(id: string) => void>(),
   clear: vi.fn<(id: string) => void>(),
@@ -558,6 +562,7 @@ describe("room dialog and shared meeting device ownership", () => {
     expect(
       resolveRoomConfig(appState.options, "current"),
     ).toEqual({
+      name: "Current room",
       autoDownloadFiles: true,
       autoDownloadMaxSize: 10 * 1024 * 1024,
     });

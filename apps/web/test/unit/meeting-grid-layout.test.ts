@@ -202,6 +202,23 @@ describe("meeting feature activation flush", () => {
 });
 
 describe("meeting grid observer ownership", () => {
+  it("does not restart layout animations for every frame of a continuous resize", () => {
+    const transition = vi.fn((update: () => void) =>
+      update(),
+    );
+    const f = setup(transition);
+    const observer = observers[0];
+    for (const height of [600, 580, 550, 520]) {
+      observer.emit(f.element, 800, height);
+      flushFrame();
+    }
+    expect(transition).not.toHaveBeenCalled();
+    f.layout.schedule(() => f.setCount(2));
+    flushFrame();
+    expect(transition).toHaveBeenCalledOnce();
+    expect(f.layout().count).toBe(2);
+  });
+
   it("transitions resize and source changes together, after the first measurement", () => {
     const transition = vi.fn((update: () => void) =>
       update(),

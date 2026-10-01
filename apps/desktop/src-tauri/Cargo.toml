@@ -21,6 +21,7 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 weblink-desktop-input = { path = "../../../crates/desktop-input" }
 weblink-desktop-capture = { path = "../../../crates/desktop-capture" }
+tauri-plugin-autostart = "=2.6.0"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "=0.39.1"

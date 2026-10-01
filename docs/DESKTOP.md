@@ -41,8 +41,16 @@ bun run build:desktop --bundles nsis
 Run the NSIS command on Windows. For a host-only build without installers use
 `bun run build:desktop --no-bundle`. Desktop frontend files go to
 `apps/desktop/dist`; Rust binaries and installers go to root `target/`.
-The Windows workflow builds an unsigned installer as a CI artifact; it does not
-publish a release or deploy the website.
+CI runs shared web/desktop TypeScript checks and tests once. `desktop-dev.yml`
+then runs Rust tests and a `--no-bundle` build in the same release profile, with
+LTO disabled and 16 codegen units to reduce compilation and cache overhead.
+Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
+machine needs WebView2 installed. Only `public` builds save this dependency cache.
+
+Stable `vX.Y.Z` web release tags instead call `desktop-production.yml`, using the
+workspace's full release optimizations and producing the
+`weblink-windows-x64-installer` NSIS artifact. Desktop keeps its own application
+version. These workflows upload artifacts without publishing a GitHub Release.
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
 Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.local`.
@@ -106,11 +114,29 @@ background freezing. Capture leases remain active and still expire if the render
 actually stops responding. These measures rely on WebView runtime behavior, so
 background operation must be checked when changing the supported runtime.
 
-The browser's automatic picture-in-picture preference lives in Application settings
-and imports the former meeting preference. It uses the existing browser PiP lifecycle
-and permission rules. The toggle remains visible but disabled in unsupported browsers
-and Tauri; a native mini window is a separate feature. Keyboard forwarding and exit
-shortcuts live in Remote control settings alongside touch input preferences.
+Picture-in-picture preferences live in Application settings and import the former
+meeting preference. Browsers keep their existing PiP lifecycle and permission rules;
+the automatic toggle is disabled where document PiP is unsupported. On desktop,
+PiP turns the main window into a resizable, always-on-top window with a custom drag
+bar, the browser PiP's featured-view/thumbnail layout and compact meeting controls.
+It retains the same renderer, media players and control session. Window bounds animate
+on entry and return, and follow the system reduced-motion preference. Native frames
+are cancellable and only one is queued at a time; hiding or reloading restores bounds
+immediately and invalidates pending frames. Returning or
+closing the small window restores its previous size, position and window flags;
+closing the small window does not quit. Tray Show also restores the main window.
+Source removal, room leave and page reload release native presentation ownership.
+
+Desktop automatic PiP activates when an eligible video view loses foreground focus
+or is minimized. Active dialogs, source pickers and an explicit hide-to-tray prevent
+automatic entry. Focusing the small window keeps it usable; use its return button to
+restore the main window. Explicit host-control auto-hide keeps its existing behavior.
+
+Application settings also contain the existing auto-join preference and a desktop
+launch-at-login switch. Auto-join keeps its existing profile value and room behavior.
+Launch at login reads the OS registration rather than storing a second preference;
+only changing that switch enables or disables registration. Keyboard forwarding and
+exit shortcuts remain in Remote control settings alongside touch input preferences.
 
 ## Native screen sharing
 

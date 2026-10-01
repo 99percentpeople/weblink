@@ -1,5 +1,7 @@
 {
   "tasks": {
+    "pause": "暂停",
+    "resume": "继续",
     "title": "任务列表",
     "count": "{{active}} 项进行中 · 共 {{total}} 项",
     "active_count": "{{count}} 项进行中的任务",
@@ -315,6 +317,10 @@
       "forget_description": "是否忘记“{{name}}”并移除已保存的权限？聊天记录会保留。"
     },
     "application": {
+      "automatic_pip_desktop_description": "Weblink 切到后台时，将会议缩为置顶小窗。点击返回会议可恢复窗口。",
+      "autostart": "开机自动启动",
+      "autostart_description": "登录此电脑后自动启动 Weblink。",
+      "autostart_failed": "无法读取或修改系统启动设置。",
       "automatic_pip_description": "离开会议页面或切换到后台时自动打开画中画，具体取决于浏览器支持与网站权限。",
       "close_behavior": {
         "title": "关闭窗口时",
@@ -1064,6 +1070,9 @@
     "decline": "拒绝",
     "allow": "允许控制",
     "host_active": "{{name}} 可以控制本机。",
+    "controller_active": "正在控制 {{name}}",
+    "host_active_short": "被控制中",
+    "controller_active_short": "控制中",
     "revoke": "收回控制",
     "revoke_failed": "无法收回控制，请在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",

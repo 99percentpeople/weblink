@@ -5,6 +5,11 @@ import type {
 } from "@weblink/platform";
 
 export const nativeApplication: NativeApplication = {
+  autostart: {
+    enabled: () => invoke("application_autostart_enabled"),
+    setEnabled: (enabled) =>
+      invoke("application_autostart_set", { enabled }),
+  },
   configure: (options) =>
     invoke("application_configure", { options }),
   async watchCloseRequests(onRequest) {

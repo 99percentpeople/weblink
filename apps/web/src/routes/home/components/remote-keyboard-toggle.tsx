@@ -42,8 +42,12 @@ export function RemoteKeyboardToggle(props: {
     );
   return (
     <Show when={controlling().some((active) => active())}>
+      <span
+        class="bg-input h-[18px] w-px shrink-0"
+        aria-hidden="true"
+      />
       <Switch
-        class="meeting-status-pill"
+        class="flex shrink-0 items-center gap-1.5"
         title={label()}
         checked={enabled()}
         onChange={(value) =>
@@ -68,7 +72,7 @@ export function RemoteKeyboardToggle(props: {
               aria-hidden="true"
             />
           </Show>
-          <span class="whitespace-nowrap max-md:sr-only">
+          <span class="sr-only">
             {t("remote_control.keyboard_control")}
           </span>
         </SwitchLabel>

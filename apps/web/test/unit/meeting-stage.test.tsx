@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@solidjs/testing-library";
+import {
+  cleanup,
+  render,
+  waitFor,
+} from "@solidjs/testing-library";
 import {
   batch,
   createSignal,
@@ -26,6 +30,12 @@ const fixture = vi.hoisted(() => ({
   }[],
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    getRemoteControl: () => undefined,
+    getScreenControl: () => undefined,
+  },
+}));
 vi.mock("@/routes/home/components/audio-player", () => ({
   useAudioPlayer: () => ({
     isSourceMuted: () => false,
@@ -35,12 +45,24 @@ vi.mock("@/routes/home/components/audio-player", () => ({
   }),
 }));
 vi.mock("@/routes/home/components/video-display", () => ({
+  useVideoDisplay: () => ({
+    videoRef: () => undefined,
+    videoTrack: () => undefined,
+    audioTracks: () => [],
+  }),
   VideoDisplay: (
     props: ParentProps<{
       ref?: (node: HTMLDivElement) => void;
     }>,
   ) => <div ref={props.ref}>{props.children}</div>,
 }));
+// Exercise source/exit lifetimes and tile actions without an input surface.
+vi.mock(
+  "@/routes/home/components/remote-control-overlay",
+  () => ({
+    RemoteControlOverlay: () => null,
+  }),
+);
 vi.mock(
   "@/routes/home/components/meeting-grid-layout",
   () => ({
@@ -116,7 +138,7 @@ const source = (id: string): MeetingSource => ({
   stream: null,
   local: false,
 });
-function setup(pinned: boolean) {
+function setup(pinned: boolean, compact = true) {
   const self = source("self");
   const peer = source("peer");
   const screen = {
@@ -130,7 +152,7 @@ function setup(pinned: boolean) {
   >(pinned ? peer.id : null);
   const view = render(() => (
     <MeetingStage
-      compact
+      compact={compact}
       sources={sources()}
       pinnedId={pinnedId()}
       railCollapsed={false}
@@ -162,6 +184,44 @@ function setup(pinned: boolean) {
 }
 
 describe("meeting source exit ownership", () => {
+  it.each([false, true])(
+    "disposes full tile actions after departure and supports rejoin (reduced motion=%s)",
+    async (reduced) => {
+      vi.stubGlobal("matchMedia", () => ({
+        matches: reduced,
+        addEventListener() {},
+        removeEventListener() {},
+      }));
+      const f = setup(true, false);
+      f.setSources([
+        f.self,
+        { ...f.peer, name: "Updated peer" },
+      ]);
+      expect(f.tile("peer")).toBe(f.peerTile);
+      expect(f.peerTile.getAttribute("aria-label")).toBe(
+        "Updated peer",
+      );
+      f.setSources([f.self]);
+      expect(commitLayout).not.toThrow();
+      if (!reduced) {
+        expect(f.tile("peer")).toBe(f.peerTile);
+        fixture.animations
+          .findLast((animation) => animation.opacity === 0)!
+          .complete();
+      }
+      await waitFor(() =>
+        expect(f.tile("peer")).toBeNull(),
+      );
+      f.setSources([f.self, f.peer]);
+      expect(commitLayout).not.toThrow();
+      expect(f.tile("peer")).not.toBe(f.peerTile);
+      expect(
+        f.tile("peer")!.getAttribute("aria-label"),
+      ).toBe("peer");
+      expect(f.unmount).not.toThrow();
+    },
+  );
+
   it.each([false, true])(
     "releases a returning participant's exit state (featured=%s)",
     async (featured) => {

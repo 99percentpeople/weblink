@@ -235,7 +235,11 @@ it("persists gesture choices and preserves them across direct mode", async () =>
     }),
   );
   expect(appState.options.remoteTouch.mode).toBe("direct");
-  expect(screen.queryByRole("switch")).toBeNull();
+  expect(
+    screen.queryByRole("switch", {
+      name: "setting.remote_control.twoFingerScroll",
+    }),
+  ).toBeNull();
   expect(
     screen.getByText(
       "setting.remote_control.mode.direct_description",

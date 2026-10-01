@@ -5,6 +5,7 @@ import {
 } from "./remote-control-action";
 import { RemoteControlOverlay } from "./remote-control-overlay";
 import { RemoteKeyboardInput } from "./remote-keyboard-input";
+import type { MeetingPipControls } from "./meeting-controls";
 import type {
   RegisterMeetingMainFeatures,
   MeetingMainFeatures,
@@ -70,6 +71,7 @@ export function MeetingTile(props: {
   onPin?(): void;
   onActivate?(action: () => void): void;
   registerFeatures?: RegisterMeetingMainFeatures;
+  desktopPip?: MeetingPipControls;
   onStop?: () => void;
 }) {
   const [displayRef, setDisplayRef] =
@@ -220,6 +222,7 @@ export function MeetingTile(props: {
               pinned={props.pinned}
               onPin={props.onPin}
               onActivate={props.onActivate}
+              desktopPip={props.desktopPip}
               registerFeatures={props.registerFeatures}
               onStop={props.onStop}
               name={props.name}
@@ -244,6 +247,7 @@ function TileActions(props: {
   onPin?(): void;
   onActivate?(action: () => void): void;
   registerFeatures?: RegisterMeetingMainFeatures;
+  desktopPip?: MeetingPipControls;
   onStop?: () => void;
   name: string;
 }) {
@@ -268,9 +272,46 @@ function TileActions(props: {
     videoRef,
   );
   const isMobile = createIsMobile();
-  const pip = createPictureInPicture(videoRef, {
+  const videoPip = createPictureInPicture(videoRef, {
     onError: reportMeetingPipError,
   });
+  const pip = {
+    isSupported: () =>
+      props.desktopPip
+        ? !!videoRef()
+        : videoPip.isSupported(),
+    isReady: () =>
+      props.desktopPip ? !!videoRef() : videoPip.isReady(),
+    isBusy: () =>
+      props.desktopPip?.busy() ?? videoPip.isBusy(),
+    isThisElementInPip: () =>
+      props.desktopPip
+        ? props.pinned && props.desktopPip.active()
+        : videoPip.isThisElementInPip(),
+    requestPictureInPicture: () => {
+      if (!props.desktopPip)
+        return videoPip.requestPictureInPicture();
+      return fullscreen.exitFullscreen().then(() => {
+        if (
+          props.pinned &&
+          props.container?.isConnected &&
+          !fullscreen.isThisElementFullscreen() &&
+          !props.desktopPip?.active()
+        )
+          props.desktopPip?.toggle();
+      });
+    },
+    exitPictureInPicture: () => {
+      if (!props.desktopPip)
+        return videoPip.exitPictureInPicture();
+      if (props.pinned && props.desktopPip.active())
+        props.desktopPip.toggle();
+      return Promise.resolve();
+    },
+  };
+  const showPip = () =>
+    (props.desktopPip || isMobile()) && pip.isSupported();
+
   const hasActions = createMemo(
     () =>
       Boolean(showControl()) ||
@@ -280,7 +321,7 @@ function TileActions(props: {
         audioTracks().length &&
         props.onToggleAudio,
       ) ||
-      (isMobile() && pip.isSupported()) ||
+      Boolean(showPip()) ||
       Boolean(videoRef() && fullscreen.isSupported()) ||
       Boolean(props.onPin),
   );
@@ -302,17 +343,18 @@ function TileActions(props: {
       controlInUse() ||
       fullscreen.isThisElementFullscreen() ||
       fullscreen.isBusy() ||
-      pip.isThisElementInPip() ||
-      pip.isBusy(),
+      videoPip.isThisElementInPip() ||
+      videoPip.isBusy(),
     stop: async () => {
       if (controlInUse()) remote.control()?.cancel();
       await Promise.all([
         fullscreen.exitFullscreen(),
-        pip.exitPictureInPicture(),
+        // Native window PiP belongs to the meeting's shared presentation owner.
+        videoPip.exitPictureInPicture(),
       ]);
       return (
         !fullscreen.isThisElementFullscreen() &&
-        !pip.isThisElementInPip()
+        !videoPip.isThisElementInPip()
       );
     },
   };
@@ -330,7 +372,7 @@ function TileActions(props: {
         // Also release presentation on an automatic avatar-to-screen handoff.
         // Its control belongs to the approved screen and must not be cancelled.
         void fullscreen.exitFullscreen();
-        void pip.exitPictureInPicture();
+        void videoPip.exitPictureInPicture();
       },
     ),
   );
@@ -340,7 +382,9 @@ function TileActions(props: {
   });
   return (
     <>
-      <Show when={pip.isThisElementInPip()}>
+      <Show
+        when={!props.desktopPip && pip.isThisElementInPip()}
+      >
         <div
           class="absolute inset-0 flex flex-col items-center justify-center
             gap-3 bg-black p-4 text-center text-white"
@@ -431,7 +475,7 @@ function TileActions(props: {
               </Show>
             </MeetingTileAction>
           </Show>
-          <Show when={isMobile() && pip.isSupported()}>
+          <Show when={showPip()}>
             <MeetingTileAction
               label={t(
                 pip.isThisElementInPip()

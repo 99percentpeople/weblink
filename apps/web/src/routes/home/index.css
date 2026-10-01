@@ -7,6 +7,8 @@
 .meeting {
   @apply text-foreground relative flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent;
   --meeting-surface: var(--card);
+  --meeting-toolbar-motion: 0.28s
+    cubic-bezier(0.22, 1, 0.36, 1);
   --meeting-controls-height: --spacing(20.5);
   --meeting-controls-bottom: max(
     --spacing(4),
@@ -65,6 +67,7 @@
     var(--meeting-controls-height) +
       var(--meeting-controls-bottom) + --spacing(2)
   );
+  transition: margin-bottom var(--meeting-toolbar-motion);
 }
 .meeting.is-controls-collapsed .meeting-workspace {
   margin-bottom: calc(
@@ -96,6 +99,9 @@
 }
 .meeting-stage {
   @apply p-4.5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  transition:
+    margin-bottom var(--meeting-toolbar-motion),
+    padding var(--meeting-toolbar-motion);
 }
 .meeting-grid {
   @apply grid min-h-0 w-full min-w-0 flex-[1_1_0] place-content-center overflow-hidden;
@@ -164,6 +170,8 @@
   grid-template-rows:
     minmax(0, 1fr) var(--meeting-rail-toggle-height)
     minmax(0, var(--meeting-rail-height));
+  transition: grid-template-rows
+    var(--meeting-toolbar-motion);
 }
 .meeting-grid.has-featured.is-solo {
   grid-template-rows: minmax(0, 1fr);
@@ -300,10 +308,21 @@
   @apply wrap-anywhere min-w-0 flex-1;
 }
 .meeting-controls {
-  @apply border-input z-45 min-h-(--meeting-controls-height) gap-6.5 bg-(--meeting-surface) absolute left-1/2 flex w-max max-w-[calc(100%---spacing(8))] shrink-0 items-center justify-center rounded-xl border border-solid p-3;
+  @apply border-input z-45 min-h-(--meeting-controls-height) gap-6.5 bg-(--meeting-surface) absolute left-1/2 flex w-max min-w-0 max-w-[calc(100%---spacing(8))] shrink-0 items-center justify-center rounded-xl border border-solid p-3;
   bottom: var(--meeting-controls-bottom);
   translate: -50% 0;
-  filter: drop-shadow(0 12px 22px #0006);
+  box-shadow: 0 12px 22px #0006;
+  /* Stay anchored during native resizing; scaling a fixed snapshot would make
+     the toolbar drift outside the shrinking viewport and stretch its icons. */
+  transition:
+    min-width var(--meeting-toolbar-motion),
+    max-width var(--meeting-toolbar-motion),
+    min-height var(--meeting-toolbar-motion),
+    bottom var(--meeting-toolbar-motion),
+    gap var(--meeting-toolbar-motion),
+    padding var(--meeting-toolbar-motion),
+    border-radius var(--meeting-toolbar-motion),
+    box-shadow var(--meeting-toolbar-motion);
 }
 .meeting-controls.is-device-menu-open {
   @apply rounded-t-none border-t-transparent;
@@ -312,9 +331,32 @@
   @apply bg-secondary z-45 absolute left-1/2 inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full;
   bottom: var(--meeting-collapsed-controls-bottom);
   translate: -50% 0;
+  transition: bottom var(--meeting-toolbar-motion);
 }
 .meeting-controls-group {
-  @apply flex items-center gap-2;
+  @apply flex items-center;
+  --meeting-control-gap: --spacing(2);
+}
+.meeting-controls-group > * + * {
+  margin-inline-start: var(--meeting-control-gap);
+  transition: margin-inline-start
+    var(--meeting-toolbar-motion);
+}
+.meeting-control-slot {
+  @apply grid shrink-0;
+  grid-template-columns: 1fr;
+  transition:
+    grid-template-columns var(--meeting-toolbar-motion),
+    opacity var(--meeting-toolbar-motion),
+    margin-inline-start var(--meeting-toolbar-motion);
+}
+.meeting-control-slot > div {
+  @apply flex min-w-0 overflow-hidden;
+}
+.meeting-control-slot.is-hidden {
+  @apply pointer-events-none opacity-0;
+  grid-template-columns: 0fr;
+  margin-inline-start: 0;
 }
 .meeting-device-control {
   @apply bg-secondary flex shrink-0 items-stretch rounded-md;
@@ -347,15 +389,51 @@
   @apply text-muted-foreground flex-1 text-[11px] leading-[1.6];
 }
 .meeting-control {
-  @apply bg-secondary flex h-14 min-w-16 flex-col items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[10px];
-  transition: background 0.15s;
+  @apply bg-secondary flex h-14 min-w-16 max-w-56 shrink-0 flex-col items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[10px];
+}
+.meeting-control,
+.meeting-leave {
+  transition:
+    background 0.15s,
+    width var(--meeting-toolbar-motion),
+    height var(--meeting-toolbar-motion),
+    min-width var(--meeting-toolbar-motion),
+    max-width var(--meeting-toolbar-motion),
+    min-height var(--meeting-toolbar-motion),
+    padding var(--meeting-toolbar-motion),
+    gap var(--meeting-toolbar-motion);
+}
+.meeting-control span,
+.meeting-leave span {
+  @apply block max-w-56 overflow-hidden;
+  max-height: 1.5em;
+  transition:
+    opacity var(--meeting-toolbar-motion),
+    max-width var(--meeting-toolbar-motion),
+    max-height var(--meeting-toolbar-motion);
 }
 .meeting-control:hover {
   @apply bg-muted;
 }
 .meeting-control svg,
 .meeting-leave svg {
-  @apply size-5;
+  @apply size-5 shrink-0;
+}
+.meeting-pip-icon {
+  @apply relative size-5 shrink-0;
+}
+.meeting-pip-icon svg {
+  @apply absolute inset-0;
+  transition:
+    opacity var(--meeting-toolbar-motion),
+    scale var(--meeting-toolbar-motion);
+}
+.meeting-pip-return-icon,
+.meeting-controls.is-compact .meeting-pip-enter-icon {
+  @apply scale-90 opacity-0;
+}
+.meeting-controls.is-compact .meeting-pip-return-icon {
+  @apply scale-100 opacity-100;
 }
 .meeting-control.is-off {
   @apply text-destructive;
@@ -369,10 +447,14 @@
   @apply text-accent-foreground bg-accent;
 }
 .meeting-control-divider {
-  @apply bg-border h-7.5 mx-1 my-0 w-px;
+  @apply bg-border h-7.5 my-0 w-px shrink-0;
+  transition:
+    width var(--meeting-toolbar-motion),
+    opacity var(--meeting-toolbar-motion),
+    margin-inline-start var(--meeting-toolbar-motion);
 }
 .meeting-leave {
-  @apply bg-destructive flex min-h-12 items-center justify-center gap-2.5 whitespace-nowrap rounded-md px-5 py-3 text-[12px] text-white;
+  @apply bg-destructive flex min-h-12 min-w-0 max-w-56 shrink-0 items-center justify-center gap-2.5 whitespace-nowrap rounded-md px-5 py-3 text-[12px] text-white;
 }
 .meeting-leave:hover {
   background: color-mix(
@@ -403,26 +485,25 @@
     @apply max-w-[calc(100%---spacing(4))] gap-2.5 p-2;
   }
   .meeting-controls-group {
-    @apply gap-1.25 min-w-0 overflow-x-auto;
+    @apply min-w-0 overflow-x-auto;
+    --meeting-control-gap: --spacing(1.25);
     scrollbar-width: none;
   }
   .meeting-device-toggle {
     @apply w-6;
   }
   .meeting-control {
-    @apply h-11.5 w-10.5 min-w-10 rounded-md p-2.5;
+    @apply h-11.5 w-10.5 min-w-10 gap-0 rounded-md p-2.5;
   }
-  .meeting-control span {
-    @apply hidden;
+  .meeting-control span,
+  .meeting-leave span {
+    @apply max-h-0 max-w-0 opacity-0;
   }
   .meeting-control-divider {
-    @apply hidden;
+    @apply ml-0 w-0 opacity-0;
   }
   .meeting-leave {
-    @apply min-h-11.5 w-11.5 p-3;
-  }
-  .meeting-leave span {
-    @apply hidden;
+    @apply min-h-11.5 w-11.5 gap-0 p-3;
   }
   .meeting-tile-actions {
     @apply opacity-100;
@@ -436,7 +517,7 @@
     @apply gap-1.5 px-1.5 py-2;
   }
   .meeting-controls-group {
-    @apply gap-1;
+    --meeting-control-gap: --spacing(1);
   }
   .meeting-device-toggle {
     @apply w-5.5;
@@ -461,7 +542,21 @@ html[data-meeting-pip] body > div {
 }
 .meeting-pip {
   --meeting-controls-height: --spacing(13);
-  --meeting-controls-bottom: --spacing(0);
+  --meeting-controls-bottom: --spacing(1.5);
+  --meeting-collapsed-controls-bottom: --spacing(1.5);
+}
+.meeting-pip > .meeting-stage,
+.meeting-pip .meeting-workspace {
+  margin-bottom: calc(
+    var(--meeting-controls-height) +
+      var(--meeting-controls-bottom)
+  );
+}
+.meeting-pip.is-controls-collapsed > .meeting-stage,
+.meeting-pip.is-controls-collapsed .meeting-workspace {
+  margin-bottom: calc(
+    --spacing(7) + var(--meeting-collapsed-controls-bottom)
+  );
 }
 .meeting-pip .meeting-stage {
   @apply p-1.5;
@@ -481,32 +576,40 @@ html[data-meeting-pip] body > div {
 .meeting-pip .meeting-tile {
   @apply rounded-md;
 }
-.meeting-pip .meeting-controls {
-  @apply min-h-13 relative inset-auto mx-1.5 mb-1.5 mt-0 w-[calc(100%---spacing(3))] max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
-  translate: none;
-  filter: none;
+.meeting-controls.is-compact {
+  @apply min-h-13 min-w-[calc(100%---spacing(3))] max-w-[calc(100%---spacing(3))] gap-1.5 rounded-lg p-1.5;
+  box-shadow: 0 0 0 #0000;
 }
-.meeting-pip.is-controls-collapsed .meeting-controls {
-  @apply absolute bottom-0 left-0;
+.meeting-controls.is-compact .meeting-controls-group {
+  @apply min-w-0 overflow-x-auto;
+  --meeting-control-gap: --spacing(1);
+  scrollbar-width: none;
 }
-.meeting-pip .meeting-collapsed-controls {
-  @apply relative inset-auto mx-1.5 mb-1.5 mt-0 self-center;
-  translate: none;
+.meeting-controls.is-compact .meeting-control,
+.meeting-controls.is-compact .meeting-leave {
+  @apply size-9 min-h-9 min-w-9 max-w-9 gap-0 rounded-md p-2;
 }
-.meeting-pip:not(.is-controls-collapsed)
-  .meeting-collapsed-controls {
-  @apply absolute bottom-1.5 left-1/2;
-  translate: -50% 0;
+.meeting-controls.is-compact .meeting-control span,
+.meeting-controls.is-compact .meeting-leave span {
+  @apply max-h-0 max-w-0 opacity-0;
 }
-.meeting-pip .meeting-controls-group {
-  @apply flex-wrap justify-center gap-1 overflow-visible;
+.meeting-controls.is-compact .meeting-control-divider {
+  @apply ml-0 w-0 opacity-0;
 }
-.meeting-pip .meeting-control,
-.meeting-pip .meeting-leave {
-  @apply min-w-8.5 size-9 min-h-9 rounded-md p-2;
+
+/* Native PiP keeps the meeting/player tree mounted in the same WebView. */
+.native-pip-bar .meeting-icon-button {
+  @apply h-full max-h-7 w-7;
 }
-.meeting-pip .meeting-control span,
-.meeting-pip .meeting-leave span,
-.meeting-pip .meeting-control-divider {
-  @apply hidden;
+.meeting.is-native-pip {
+  @apply bg-background;
+}
+.meeting.is-native-pip > .meeting-header,
+.meeting.is-native-pip .meeting-panel-slot {
+  display: none;
+}
+.meeting.is-native-pip .meeting-canvas {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
 }

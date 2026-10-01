@@ -1,0 +1,45 @@
+name: Desktop development
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows desktop
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      # Keep native media optimized, but avoid the release profile's expensive fat LTO.
+      # Tests and the executable share one dependency build and a smaller cache.
+      CARGO_PROFILE_RELEASE_LTO: "off"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-dev-release
+          save-if: ${{ github.ref == 'refs/heads/public' }}
+      - run: bun install --frozen-lockfile
+      # Shared TypeScript checks and tests already passed in the caller's Checks job.
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked --release
+      - name: Build Windows executable
+        run: bun run build:desktop --no-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weblink-windows-x64
+          path: target/release/weblink-desktop.exe
+          if-no-files-found: error

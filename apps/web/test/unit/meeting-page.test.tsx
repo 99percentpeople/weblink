@@ -121,10 +121,12 @@ vi.mock("@solidjs/router", () => ({
     props: JSX.AnchorHTMLAttributes<HTMLAnchorElement>,
   ) => <a {...props} />,
 }));
-vi.mock("@/libs/state/app-state", () => ({
+vi.mock("@/libs/state/app-state", async () => ({
   appState: {
     profile: { clientId: "me", name: "Me" },
-    options: {},
+    options: (
+      await import("@/libs/state/app-options")
+    ).getDefaultAppOptions(),
     roomStatus: {
       get roomId() {
         return currentRoomId();

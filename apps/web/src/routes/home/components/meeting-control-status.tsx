@@ -1,14 +1,31 @@
-import { createSignal } from "solid-js";
-import { MousePointer2 } from "lucide-solid";
+import { createSignal, type JSX } from "solid-js";
+import { MousePointer2, Square } from "lucide-solid";
 import { t } from "@/i18n";
 
 export function MeetingControlStatus(props: {
   name: string;
-  revoke(): Promise<void>;
+  side?: "host" | "controller";
+  children?: JSX.Element;
+  revoke(): void | Promise<void>;
 }) {
   const [revoking, setRevoking] = createSignal(false);
   const label = () =>
-    t("remote_control.host_active", { name: props.name });
+    t(
+      props.side === "controller"
+        ? "remote_control.controller_active"
+        : "remote_control.host_active",
+      { name: props.name },
+    );
+  const actionLabel = () =>
+    t(
+      props.side === "controller"
+        ? "remote_control.end"
+        : "remote_control.revoke",
+    );
+  const title = (text: string) =>
+    props.side === "controller"
+      ? text
+      : `${text} · Ctrl+Alt+Shift+F10`;
   return (
     <div class="meeting-status-pill max-w-[360px]">
       <MousePointer2
@@ -18,10 +35,18 @@ export function MeetingControlStatus(props: {
       <span
         role="status"
         class="min-w-0 truncate font-medium"
-        title={`${label()} · Ctrl+Alt+Shift+F10`}
+        title={title(label())}
       >
-        {label()}
+        <span class="max-md:hidden">{label()}</span>
+        <span class="md:hidden" aria-label={label()}>
+          {t(
+            props.side === "controller"
+              ? "remote_control.controller_active_short"
+              : "remote_control.host_active_short",
+          )}
+        </span>
       </span>
+      {props.children}
       <span
         class="bg-input h-[18px] w-px shrink-0"
         aria-hidden="true"
@@ -29,7 +54,8 @@ export function MeetingControlStatus(props: {
       <button
         type="button"
         class="meeting-status-action"
-        title={`${t("remote_control.revoke")} · Ctrl+Alt+Shift+F10`}
+        title={title(actionLabel())}
+        aria-label={actionLabel()}
         disabled={revoking()}
         onClick={async () => {
           if (revoking()) return;
@@ -41,7 +67,11 @@ export function MeetingControlStatus(props: {
           }
         }}
       >
-        {t("remote_control.revoke")}
+        <Square
+          class="size-3.5 md:hidden"
+          aria-hidden="true"
+        />
+        <span class="max-md:hidden">{actionLabel()}</span>
       </button>
     </div>
   );

@@ -1,4 +1,6 @@
 import { t } from "@/i18n";
+import { toast } from "solid-sonner";
+import { setClientProfile } from "@/libs/state/profile-store";
 import {
   createSignal,
   onCleanup,
@@ -41,14 +43,34 @@ export default function ApplicationSettings() {
       .catch(() => undefined);
     if (!disposed) setCapabilities(detected);
   });
+  const [autostart, setAutostart] = createSignal<boolean>();
+  const [startupBusy, setStartupBusy] = createSignal(false);
+  const startup = platform.application?.autostart;
+  onMount(async () => {
+    if (!startup) return;
+    try {
+      const enabled = await startup.enabled();
+      if (!disposed) setAutostart(enabled);
+    } catch (error) {
+      console.warn(
+        "Could not read autostart status",
+        error,
+      );
+      if (!disposed)
+        toast.error(
+          t("setting.application.autostart_failed"),
+        );
+    }
+  });
   const pipSupported =
-    platform.kind === "browser" &&
-    typeof (
-      window as Window & {
-        documentPictureInPicture?: DocumentPictureInPictureAPI;
-      }
-    ).documentPictureInPicture?.requestWindow ===
-      "function";
+    !!platform.pictureInPicture ||
+    (platform.kind === "browser" &&
+      typeof (
+        window as Window & {
+          documentPictureInPicture?: DocumentPictureInPictureAPI;
+        }
+      ).documentPictureInPicture?.requestWindow ===
+        "function");
   const application = () => appState.options.application;
   return (
     <section
@@ -58,6 +80,26 @@ export default function ApplicationSettings() {
       <h3 id="application-settings" class="h3">
         {t("app_menu.settings_application")}
       </h3>
+      <div class="flex flex-col gap-2">
+        <Switch
+          disabled={appState.profile.initalJoin}
+          class="flex items-center justify-between"
+          checked={appState.profile.autoJoin}
+          onChange={(isChecked) =>
+            setClientProfile("autoJoin", isChecked)
+          }
+        >
+          <SwitchLabel>
+            {t("setting.connection.auto_join.title")}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t("setting.connection.auto_join.description")}
+        </p>
+      </div>
       <div class="flex flex-col gap-2">
         <Switch
           class="flex w-full items-center justify-between gap-3"
@@ -80,12 +122,57 @@ export default function ApplicationSettings() {
         </Switch>
         <p class="muted">
           {t(
-            pipSupported
-              ? "setting.application.automatic_pip_description"
-              : "setting.application.automatic_pip_unavailable",
+            platform.pictureInPicture
+              ? "setting.application.automatic_pip_desktop_description"
+              : pipSupported
+                ? "setting.application.automatic_pip_description"
+                : "setting.application.automatic_pip_unavailable",
           )}
         </p>
       </div>
+      <Show when={startup}>
+        <div class="flex flex-col gap-2">
+          <Switch
+            class="flex w-full items-center justify-between gap-3"
+            checked={autostart() === true}
+            disabled={
+              startupBusy() || autostart() === undefined
+            }
+            onChange={async (enabled) => {
+              if (!startup || startupBusy()) return;
+              setStartupBusy(true);
+              try {
+                const actual =
+                  await startup.setEnabled(enabled);
+                if (!disposed) setAutostart(actual);
+              } catch (error) {
+                console.warn(
+                  "Could not update autostart",
+                  error,
+                );
+                if (!disposed)
+                  toast.error(
+                    t(
+                      "setting.application.autostart_failed",
+                    ),
+                  );
+              } finally {
+                if (!disposed) setStartupBusy(false);
+              }
+            }}
+          >
+            <SwitchLabel>
+              {t("setting.application.autostart")}
+            </SwitchLabel>
+            <SwitchControl>
+              <SwitchThumb />
+            </SwitchControl>
+          </Switch>
+          <p class="muted">
+            {t("setting.application.autostart_description")}
+          </p>
+        </div>
+      </Show>
       <Show when={platform.application}>
         <div class="flex flex-col gap-2">
           <Label id="application-close-behavior">

@@ -81,9 +81,8 @@ export function MeetingTileActions(
           <DropdownMenu
             modal={false}
             placement="top-end"
-            // The fullscreen surface escapes the grid's clipping ancestors.
-            // Keep this bottom-right menu above its trigger instead of letting
-            // Floating UI shift it into the original non-fullscreen tile.
+            // Fullscreen escapes the tile's clipping ancestors, but Floating UI
+            // still sees them. Keep its menu above the bottom-right trigger.
             flip={!props.portalMount}
             slide={!props.portalMount}
             open={open()}
@@ -106,15 +105,17 @@ export function MeetingTileActions(
             </DropdownMenuTrigger>
             <DropdownMenuContent
               portalMount={props.portalMount}
+              // The dropdown wrapper otherwise restores trigger focus even
+              // when onCloseAutoFocus is prevented, dismissing the mobile IME.
               manualFocus
               class="min-w-44 max-w-[calc(100vw-1rem)] overflow-y-auto"
               style={{
+                // The computed popper height includes the same stale ancestors.
                 "max-height": props.portalMount
                   ? "calc(100dvh - 4rem)"
                   : "var(--kb-popper-content-available-height)",
               }}
               onInteractOutside={() => {
-                // Preserve focus chosen by clicking elsewhere, too.
                 keepFocus = true;
               }}
               onCloseAutoFocus={(event) => {
@@ -136,8 +137,8 @@ export function MeetingTileActions(
                   <DropdownMenuItem
                     disabled={action.disabled}
                     closeOnSelect={false}
-                    // Use the completed click, after touch-generated mouse
-                    // focus, so it cannot steal focus from the keyboard editor.
+                    // Wait for click after touch-generated mouse focus. The
+                    // keyboard must open synchronously in that completed gesture.
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();

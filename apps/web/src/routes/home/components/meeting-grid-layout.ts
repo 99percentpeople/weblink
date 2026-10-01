@@ -112,8 +112,11 @@ export function createMeetingGridLayout(
         update?.();
         setSize(pending);
       });
-    // The first measurement (or a hidden stage) has no visible layout to tween.
+    // Source changes need FLIP. Resizes already follow the native window or CSS
+    // layout animation; restarting FLIP for each observed frame freezes the rail
+    // behind that motion and makes it jump when the animations finally finish.
     if (
+      update &&
       size().width > 0 &&
       size().height > 0 &&
       pending.width > 0 &&

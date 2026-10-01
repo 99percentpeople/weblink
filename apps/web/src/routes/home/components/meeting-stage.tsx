@@ -20,6 +20,7 @@ import { Portal } from "solid-js/web";
 import { t } from "@/i18n";
 import { MeetingCollapseButton } from "./meeting-collapse-button";
 import { MeetingTile } from "./meeting-tile";
+import type { MeetingPipControls } from "./meeting-controls";
 import type { RegisterMeetingMainFeatures } from "./meeting-main-view";
 import {
   selectMeetingFeaturedSource,
@@ -43,6 +44,7 @@ export function MeetingStage(
     onPin(id: string): void;
     onActivate?(id: string, action: () => void): void;
     registerFeatures?: RegisterMeetingMainFeatures;
+    desktopPip?: MeetingPipControls;
     onStop(trackId: string): void;
     transitionLayout(update: () => void): void;
   }>,
@@ -211,108 +213,114 @@ export function MeetingStage(
       />
     </Motion.div>
   );
-  const Tile = (tile: { id: string; order: number }) => (
-    <Show when={byId().get(tile.id)}>
-      {(source) => (
-        <AnimatePresence
-          when={activeIds().has(tile.id)}
-          onExitComplete={() =>
-            removeRenderedSource(tile.id)
+  const Tile = (tile: { id: string; order: number }) => {
+    const initial = untrack(() => byId().get(tile.id));
+    if (!initial) return;
+    // The keyed source list owns this tile's lifetime. Keep its latest data
+    // through exit cleanup: tile actions still read props while disposing,
+    // after removeRenderedSource has already removed the map entry.
+    const source = createMemo(
+      (previous: MeetingSource) =>
+        byId().get(tile.id) ?? previous,
+      initial,
+    );
+    return (
+      <AnimatePresence
+        when={activeIds().has(tile.id)}
+        onExitComplete={() => removeRenderedSource(tile.id)}
+      >
+        <MeetingTile
+          ref={(element) =>
+            tileElements.set(source().id, element)
           }
-        >
-          <MeetingTile
-            ref={(element) =>
-              tileElements.set(source().id, element)
-            }
-            compact={props.compact}
-            exitRect={exitRects().get(source().id)}
-            playbackActive={
-              activeIds().has(source().id) &&
-              props.active !== false
-            }
-            layoutVisible={
-              layout().tileWidth > 0 &&
-              (!featured() ||
-                source().id === featured()?.id ||
-                !railCollapsed())
-            }
-            onSelect={
-              source().id !== featured()?.id &&
-              (props.compact || Boolean(featured()))
-                ? () => props.onPin(source().id)
-                : undefined
-            }
-            sourceId={source().id}
-            clientId={source().participantId}
-            order={tile.order}
-            sourceKind={source().kind}
-            trackId={source().track?.id}
-            name={source().name}
-            avatar={source().avatar}
-            stream={source().stream}
-            local={source().local}
-            audioMuted={audio.isSourceMuted(
+          compact={props.compact}
+          exitRect={exitRects().get(source().id)}
+          playbackActive={
+            activeIds().has(source().id) &&
+            props.active !== false
+          }
+          layoutVisible={
+            layout().tileWidth > 0 &&
+            (!featured() ||
+              source().id === featured()?.id ||
+              !railCollapsed())
+          }
+          onSelect={
+            source().id !== featured()?.id &&
+            (props.compact || Boolean(featured()))
+              ? () => props.onPin(source().id)
+              : undefined
+          }
+          sourceId={source().id}
+          clientId={source().participantId}
+          order={tile.order}
+          sourceKind={source().kind}
+          trackId={source().track?.id}
+          name={source().name}
+          avatar={source().avatar}
+          stream={source().stream}
+          local={source().local}
+          audioMuted={audio.isSourceMuted(
+            source().participantId,
+            source().audioId,
+          )}
+          onToggleAudio={() =>
+            audio.setSourceMuted(
               source().participantId,
               source().audioId,
-            )}
-            onToggleAudio={() =>
-              audio.setSourceMuted(
+              !audio.isSourceMuted(
                 source().participantId,
                 source().audioId,
-                !audio.isSourceMuted(
-                  source().participantId,
-                  source().audioId,
-                ),
-              )
-            }
-            pinned={source().id === featured()?.id}
-            onPin={
-              sources().length > 1 &&
-              (!featured() ||
-                source().id === featured()?.id)
-                ? () => props.onPin(source().id)
-                : undefined
-            }
-            onActivate={
-              props.onActivate
-                ? (action) => {
-                    props.onActivate?.(tile.id, () => {
-                      // A caller may still be inside a reactive batch: the pin
-                      // changed, but its effect has not scheduled the DOM move.
-                      // Finish that batch before flushing. A microtask retains
-                      // the gesture without waiting for an animation frame.
-                      queueMicrotask(() => {
-                        if (
-                          disposed ||
-                          props.active === false ||
-                          selectMeetingFeaturedSource(
-                            props.sources,
-                            props.pinnedId,
-                          )?.id !== tile.id
-                        )
-                          return;
-                        layout.flush();
-                        if (
-                          activeIds().has(tile.id) &&
-                          featured()?.id === tile.id
-                        )
-                          action();
-                      });
+              ),
+            )
+          }
+          pinned={source().id === featured()?.id}
+          onPin={
+            sources().length > 1 &&
+            (!featured() || source().id === featured()?.id)
+              ? () => props.onPin(source().id)
+              : undefined
+          }
+          onActivate={
+            props.onActivate
+              ? (action) => {
+                  props.onActivate?.(tile.id, () => {
+                    // A caller may still be inside a reactive batch: the pin
+                    // changed, but its effect has not scheduled the DOM move.
+                    // Finish that batch before flushing. A microtask retains
+                    // the gesture without waiting for an animation frame.
+                    queueMicrotask(() => {
+                      if (
+                        disposed ||
+                        props.active === false ||
+                        selectMeetingFeaturedSource(
+                          props.sources,
+                          props.pinnedId,
+                        )?.id !== tile.id
+                      )
+                        return;
+                      layout.flush();
+                      if (
+                        activeIds().has(tile.id) &&
+                        featured()?.id === tile.id
+                      )
+                        action();
                     });
-                  }
-                : undefined
-            }
-            registerFeatures={props.registerFeatures}
-            onStop={
-              source().local && source().track
-                ? () => props.onStop(source().track!.id)
-                : undefined
-            }
-          />
-        </AnimatePresence>
-      )}
-    </Show>
-  );
+                  });
+                }
+              : undefined
+          }
+          desktopPip={props.desktopPip}
+          registerFeatures={props.registerFeatures}
+          onStop={
+            source().local && source().track
+              ? () => props.onStop(source().track!.id)
+              : undefined
+          }
+        />
+      </AnimatePresence>
+    );
+  };
 
   return (
     <section

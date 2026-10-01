@@ -19,6 +19,10 @@ import { AccountMenu } from "@/components/app/account-menu";
 import { AppDialogsProvider } from "@/components/app/app-dialogs";
 import { ModalProvider } from "@/components/dialogs/base";
 
+vi.mock("@/components/app/remote-control-status", () => ({
+  RemoteControlStatus: () => null,
+}));
+
 const loaded = vi.hoisted(() => ({
   settings: vi.fn(),
   files: vi.fn(),

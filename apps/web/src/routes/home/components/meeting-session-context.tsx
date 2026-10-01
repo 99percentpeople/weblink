@@ -24,6 +24,7 @@ import { platform } from "@/libs/platform/runtime";
 import { setAppOptions } from "@/options";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { createReducedMotion } from "@/libs/hooks/reduced-motion";
 import {
   createDocumentPictureInPicture,
   type DocumentPictureInPictureAPI,
@@ -31,6 +32,7 @@ import {
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import { sessionService } from "@/libs/application/session-service";
+import { createNativePictureInPicture } from "@/libs/application/native-picture-in-picture";
 import { createMeetingMainView } from "./meeting-main-view";
 import { createMeetingMainViewConfirmation } from "./meeting-main-view-dialog";
 import {
@@ -59,7 +61,6 @@ function createMeetingSession() {
   const [toolbarCollapsed, setToolbarCollapsed] =
     createSignal(false);
   const automatic = () =>
-    platform.kind === "browser" &&
     appState.options.application.automaticPictureInPicture;
   let automaticReason: "route" | "background" | undefined;
   let dismissed = false;
@@ -106,7 +107,7 @@ function createMeetingSession() {
         track.enabled &&
         !track.muted,
     );
-  const pip = createDocumentPictureInPicture({
+  const browserPip = createDocumentPictureInPicture({
     api: (
       window as Window & {
         documentPictureInPicture?: DocumentPictureInPictureAPI;
@@ -119,6 +120,84 @@ function createMeetingSession() {
       dismissed = !inForeground();
       automaticReason = undefined;
     },
+  });
+  const [nativeActive, setNativeActive] =
+    createSignal(false);
+  const [nativeBusy, setNativeBusy] = createSignal(0);
+  const [nativeTransitioning, setNativeTransitioning] =
+    createSignal(false);
+  const [nativeTitleBarHeight, setNativeTitleBarHeight] =
+    createSignal(36);
+  const reducedMotion = createReducedMotion();
+  const nativePip = platform.pictureInPicture
+    ? createNativePictureInPicture(
+        platform.pictureInPicture,
+        (state) => {
+          setNativeTitleBarHeight(state.titleBarHeight);
+          setNativeActive(state.active);
+          setNativeTransitioning(state.transitioning);
+        },
+        reportMeetingPipError,
+      )
+    : undefined;
+  const runNative = async (action: () => Promise<void>) => {
+    setNativeBusy((value) => value + 1);
+    try {
+      await action();
+    } finally {
+      setNativeBusy((value) => value - 1);
+    }
+  };
+  const pip = nativePip
+    ? {
+        window: browserPip.window,
+        supported: () => true,
+        active: nativeActive,
+        busy: () =>
+          nativeBusy() > 0 || nativeTransitioning(),
+        open: () => runNative(nativePip.enter),
+        close: () => runNative(nativePip.exit),
+      }
+    : browserPip;
+  const [nativeAutoBlocked, setNativeAutoBlocked] =
+    createSignal(false);
+  if (nativePip) {
+    const blur = () =>
+      setNativeAutoBlocked(
+        Boolean(
+          document.querySelector(
+            'dialog[open], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]',
+          ),
+        ),
+      );
+    const focus = () => setNativeAutoBlocked(false);
+    window.addEventListener("blur", blur);
+    window.addEventListener("focus", focus);
+    onCleanup(() => {
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("focus", focus);
+    });
+  }
+  // Keep native eligibility current without moving/recreating the meeting tree.
+  createEffect(() => {
+    if (!nativePip) return;
+    const source = selected();
+    nativePip.configure({
+      reducedMotion: reducedMotion(),
+      eligible:
+        !!source &&
+        onMeetingPage() &&
+        engaged() &&
+        !state.roomConflict(),
+      automatic:
+        automatic() &&
+        hasSharedVideo() &&
+        !media.sharingBusy() &&
+        !nativeAutoBlocked(),
+    });
+  });
+  onCleanup(() => {
+    void nativePip?.close();
   });
   const mainConfirmation =
     createMeetingMainViewConfirmation();
@@ -135,7 +214,7 @@ function createMeetingSession() {
       active: () => pip.active() || pip.busy(),
       stop: async () => {
         automaticReason = undefined;
-        pip.close();
+        await pip.close();
         return !pip.active();
       },
     },
@@ -166,6 +245,7 @@ function createMeetingSession() {
     browserOccluded = false,
   ) => {
     if (
+      nativePip ||
       !automatic() ||
       state.roomConflict() ||
       !engaged() ||
@@ -244,6 +324,7 @@ function createMeetingSession() {
   createEffect(() => {
     const session = navigator.mediaSession;
     if (
+      nativePip ||
       !automatic() ||
       !engaged() ||
       !pip.supported() ||
@@ -280,7 +361,7 @@ function createMeetingSession() {
     openAutomatically("background");
   };
   const foreground = () => {
-    if (!inForeground()) return;
+    if (nativePip || !inForeground()) return;
     dismissed = false;
     if (
       automaticReason === "background" &&
@@ -391,9 +472,15 @@ function createMeetingSession() {
         if (room === previous) return;
         mainView.invalidate();
         mainConfirmation.dismiss();
+        automaticReason = undefined;
         pip.close();
         setPinnedId(null);
         if (!room) setEngaged(false);
+        else if (onMeetingPage() && !state.roomConflict()) {
+          // Rejoining on Home does not trigger the route-entry effect.
+          setEngaged(true);
+          dismissed = false;
+        }
       },
       { defer: true },
     ),
@@ -423,7 +510,9 @@ function createMeetingSession() {
     toggle: () => {
       automaticReason = undefined;
       if (pip.active()) pip.close();
-      else if (selected()) {
+      else if (selected() && !state.roomConflict()) {
+        // An explicit request also resumes the local preview after leaving a room.
+        setEngaged(true);
         dismissed = false;
         void pip.open();
       }
@@ -443,6 +532,14 @@ function createMeetingSession() {
     setToolbarCollapsed,
     selected,
     pip,
+    nativePip: nativePip
+      ? {
+          active: nativeActive,
+          transitioning: nativeTransitioning,
+          titleBarHeight: nativeTitleBarHeight,
+          drag: nativePip.drag,
+        }
+      : undefined,
     controls,
     leave,
   };

@@ -1,0 +1,60 @@
+name: Web production
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy production release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: cloudflare-pages-production
+      cancel-in-progress: false
+    env:
+      PAGES_PROJECT_NAME: weblink
+
+    steps:
+      - name: Check out tested release
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Node for Wrangler
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build production bundle
+        env:
+          PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
+        run: |
+          if [[ -z "$PAGES_BUILD_ENV" ]]; then
+            echo "::error::Configure PAGES_BUILD_ENV with the production VITE_* / WEBLINK_* settings."
+            exit 1
+          fi
+          printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.production.local
+          bun run build
+
+      - name: Deploy release to Pages production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bunx wrangler@4.137.0 pages deploy apps/web/dist \
+            --project-name "$PAGES_PROJECT_NAME" \
+            --branch public \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Release $GITHUB_REF_NAME"

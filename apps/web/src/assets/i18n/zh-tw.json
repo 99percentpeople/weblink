@@ -1,5 +1,7 @@
 {
   "tasks": {
+    "pause": "暫停",
+    "resume": "繼續",
     "title": "任務列表",
     "count": "{{active}} 項進行中 · 共 {{total}} 項",
     "active_count": "{{count}} 項進行中的任務",
@@ -315,6 +317,10 @@
       "forget_description": "是否忘記「{{name}}」並移除已儲存的權限？聊天記錄會保留。"
     },
     "application": {
+      "automatic_pip_desktop_description": "Weblink 切到背景時，將會議縮為置頂小視窗。點擊返回會議可還原視窗。",
+      "autostart": "開機自動啟動",
+      "autostart_description": "登入此電腦後自動啟動 Weblink。",
+      "autostart_failed": "無法讀取或修改系統啟動設定。",
       "automatic_pip_description": "離開會議頁面或切換到背景時自動開啟子母畫面，實際行為取決於瀏覽器支援與網站權限。",
       "close_behavior": {
         "title": "關閉視窗時",
@@ -1064,6 +1070,9 @@
     "decline": "拒絕",
     "allow": "允許控制",
     "host_active": "{{name}} 可以控制本機",
+    "controller_active": "正在控制 {{name}}",
+    "host_active_short": "被控制中",
+    "controller_active_short": "控制中",
     "revoke": "收回控制",
     "revoke_failed": "無法收回控制，請在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",

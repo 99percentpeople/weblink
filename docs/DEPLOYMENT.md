@@ -191,7 +191,10 @@ The [CI workflow](../.github/workflows/ci.yml) is the single gate for both
 development and production publishing. Stable tags such as `v1.0.0` run the same
 `Checks` job as branch pushes: release metadata validation against `apps/web/package.json`, type-checking, unit
 tests and integration tests. Only after `Checks` succeeds does the
-`deploy-production` job build the production bundle and upload `apps/web/dist/`.
+`deploy-production` job call [web-production.yml](../.github/workflows/web-production.yml)
+to build the production bundle and upload `apps/web/dist/`. The parallel
+[desktop production workflow](../.github/workflows/desktop-production.yml)
+builds a Windows NSIS installer artifact.
 Prerelease tags such as `v1.1.0-beta.1` do not match the workflow trigger and
 therefore do not publish to production.
 
@@ -200,8 +203,8 @@ serialized, while a failed `Checks` job prevents the build and upload entirely.
 Bun, Node's major version, and Wrangler are explicitly selected; application
 dependencies use the frozen lockfile.
 
-The workflow reads the existing project's `production_branch` through the
-Cloudflare API and supplies it to `wrangler pages deploy --branch`. This preserves
+The workflow supplies the project's `public` production branch to
+`wrangler pages deploy --branch`. This preserves
 the production domain even though the source checkout is a tag, and avoids
 mistaking the tag name for a preview branch. The deployed commit hash and message
 identify the release.
@@ -267,7 +270,8 @@ previous successful production deployment in the Pages dashboard.
 `https://dev.webl.ink` follows the latest successful push to `public`. The
 [CI workflow](../.github/workflows/ci.yml) first runs only the shared validation
 gate: type-checking, unit tests and integration tests. After `Checks` succeeds,
-the dependent `deploy-dev` job builds and uploads the development bundle. Tests
+the dependent `deploy-dev` job calls [web-dev.yml](../.github/workflows/web-dev.yml)
+to build and upload the development bundle. Tests
 are not repeated, and CI no longer builds a throwaway production bundle before
 the dev build. Pull requests, other branches and release tags cannot publish to
 this hostname. Local commits take effect only after a push; when several commits

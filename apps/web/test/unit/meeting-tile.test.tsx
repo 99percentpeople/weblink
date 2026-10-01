@@ -7,7 +7,10 @@ import {
   screen,
   waitFor,
 } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import {
+  createSignal,
+  type ComponentProps,
+} from "solid-js";
 import {
   afterEach,
   beforeEach,
@@ -41,6 +44,30 @@ vi.mock("solid-sonner", () => ({
 }));
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+// Test tile media/control lifetimes with actions exposed, independently of
+// the mobile menu presentation. Keep the real action registration and cleanup.
+vi.mock(
+  "@/routes/home/components/meeting-tile-actions",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/routes/home/components/meeting-tile-actions")
+      >();
+    return {
+      ...actual,
+      MeetingTileActions: (
+        props: ComponentProps<
+          typeof actual.MeetingTileActions
+        >,
+      ) => (
+        <actual.MeetingTileActions
+          {...props}
+          compact={false}
+        />
+      ),
+    };
+  },
+);
 vi.mock("@/components/icons", () => ({
   IconVolumeUpFilled: () => null,
 }));
@@ -79,6 +106,11 @@ const activateFullscreen = (element: Element | null) => {
 };
 
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
   vi.stubGlobal("innerWidth", 390);
   window.dispatchEvent(new Event("resize"));
   fixture.error.mockClear();
@@ -255,11 +287,11 @@ describe("local screen preview cover", () => {
     expect(
       document.fullscreenElement?.contains(cover()),
     ).toBe(true);
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.exit_fullscreen",
-      }),
-    );
+    const restore = screen.getByRole("button", {
+      name: "common.action.exit_fullscreen",
+    });
+    await waitFor(() => expect(restore).toBeEnabled());
+    fireEvent.click(restore);
     await waitFor(() =>
       expect(document.fullscreenElement).toBeNull(),
     );
@@ -492,11 +524,11 @@ describe("native PiP on a meeting tile", () => {
     await waitFor(() =>
       expect(lock).toHaveBeenCalledWith("portrait"),
     );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.exit_fullscreen",
-      }),
-    );
+    const restore = screen.getByRole("button", {
+      name: "common.action.exit_fullscreen",
+    });
+    await waitFor(() => expect(restore).toBeEnabled());
+    fireEvent.click(restore);
     await waitFor(() =>
       expect(unlock).toHaveBeenCalledOnce(),
     );
@@ -515,6 +547,8 @@ it("keeps one remote control action across request, cancellation, active control
     request = vi.fn(() => this.update("requesting"));
     cancel = vi.fn(() => this.update("viewing"));
     resetInput = vi.fn();
+    supportsKeyboard = () => false;
+    supportsText = () => false;
   }
   const control = (fixture.control = new Control());
   const view = setup();

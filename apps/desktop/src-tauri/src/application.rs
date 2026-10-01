@@ -9,6 +9,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
+pub mod autostart;
 pub mod close;
 mod control_window;
 
@@ -73,6 +74,14 @@ pub struct Service {
 impl Service {
     pub fn ready(&self) -> bool {
         self.ready.load(Ordering::Acquire)
+    }
+    pub fn allow_auto_presentation(&self) -> bool {
+        !self.exiting.load(Ordering::Acquire)
+            && !self
+                .close
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .pending()
     }
     fn options(&self) -> Options {
         *self.options.lock().unwrap_or_else(|e| e.into_inner())
@@ -188,6 +197,8 @@ pub fn show(app: &tauri::AppHandle) {
 
 fn show_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        app.state::<crate::picture_in_picture::Service>()
+            .restore(&window, false);
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -203,6 +214,8 @@ fn hide_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window("main")
         .ok_or(tauri::Error::WindowNotFound)?;
+    app.state::<crate::picture_in_picture::Service>()
+        .suspend(&window);
     window.hide()?;
     // Captured controller keys require foreground focus; the native host stays alive.
     app.state::<crate::keyboard::Shared>().close();

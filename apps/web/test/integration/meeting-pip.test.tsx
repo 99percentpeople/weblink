@@ -32,6 +32,25 @@ import {
   MeetingSessionProvider,
   useMeetingSession,
 } from "@/routes/home/components/meeting-session-context";
+import { platform } from "@/libs/platform/runtime";
+import type {
+  NativePictureInPicture,
+  NativePipOptions,
+  NativePipState,
+} from "@weblink/platform";
+
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    remoteControl: { status: () => ({ clientId: null }) },
+    getScreenControl: () => undefined,
+  },
+}));
+vi.mock(
+  "@/routes/home/components/remote-control-overlay",
+  () => ({
+    RemoteControlOverlay: () => null,
+  }),
+);
 
 const fixture = vi.hoisted(() => ({
   clear: vi.fn(),
@@ -178,6 +197,7 @@ function newPipWindow(): Window {
 }
 function setup(
   requestWindow = vi.fn(async () => newPipWindow()),
+  featureRemote = true,
 ) {
   vi.stubGlobal("documentPictureInPicture", {
     requestWindow,
@@ -210,6 +230,11 @@ function setup(
       />
     </MemoryRouter>
   ));
+  if (featureRemote)
+    session.setPinnedId(
+      session.sources().find((source) => !source.local)
+        ?.id ?? null,
+    );
   return { ...result, requestWindow, history };
 }
 const current = () => windows.at(-1)!;
@@ -232,13 +257,19 @@ const setVisibility = (value: DocumentVisibilityState) => {
   });
   document.dispatchEvent(new Event("visibilitychange"));
 };
+let animationStyle: HTMLStyleElement;
 beforeEach(() => {
+  animationStyle = document.createElement("style");
+  animationStyle.textContent =
+    "* { animation-name: none !important; }";
+  document.head.append(animationStyle);
   setRoomConflict(false);
   localStorage.removeItem("meeting-toolbar-follows-rail");
   localStorage.removeItem(
     "meeting-auto-picture-in-picture",
   );
   vi.clearAllMocks();
+  fixture.leave.mockReset();
   fixture.sharingBusy.mockReturnValue(false);
   vi.stubGlobal("MediaStream", FakeStream);
   windowFocused = true;
@@ -300,15 +331,135 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  animationStyle.remove();
+  Reflect.deleteProperty(platform, "pictureInPicture");
   windows.splice(0).forEach(({ frame }) => frame.remove());
   document.documentElement.removeAttribute("data-kb-theme");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
+describe("PiP room re-entry", () => {
+  function nativeWindow() {
+    let options: NativePipOptions = {
+      eligible: false,
+      automatic: false,
+    };
+    let emit!: (state: NativePipState) => void;
+    const update = (active: boolean) =>
+      emit({
+        active,
+        transitioning: false,
+        titleBarHeight: 31,
+      });
+    const native = {
+      configure: vi.fn(async (next: NativePipOptions) => {
+        options = next;
+        if (!options.eligible) update(false);
+      }),
+      enter: vi.fn(async () => {
+        if (options.eligible) update(true);
+      }),
+      exit: vi.fn(async () => update(false)),
+      drag: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+    const api: NativePictureInPicture = {
+      watch: vi.fn(async (onState) => {
+        emit = onState;
+        return native;
+      }),
+    };
+    Object.defineProperty(platform, "pictureInPicture", {
+      configurable: true,
+      value: api,
+    });
+    const capture = sharedStream(
+      new FakeTrack(true, "local-screen"),
+    );
+    setAppState("session", "localStream", capture);
+    const view = setup();
+    const selectLocal = () =>
+      session.setPinnedId(
+        session.sources().find((source) => source.local)!
+          .id,
+      );
+    fixture.leave.mockImplementation(() =>
+      setAppState("roomStatus", "roomId", null),
+    );
+    return { ...view, native, api, selectLocal, capture };
+  }
+
+  it("rearms native PiP after leaving and rejoining on the same page", async () => {
+    const f = nativeWindow();
+    f.selectLocal();
+    session.controls.setAutomatic(true);
+    session.controls.toggle();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(true),
+    );
+    for (const room of ["room", "another-room"]) {
+      session.leave();
+      await waitFor(() =>
+        expect(session.pip.busy()).toBe(false),
+      );
+      expect(session.pip.active()).toBe(false);
+      setAppState("roomStatus", "roomId", room);
+      f.selectLocal();
+      await waitFor(() =>
+        expect(f.native.configure).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            eligible: true,
+            automatic: true,
+          }),
+        ),
+      );
+      session.controls.toggle();
+      await waitFor(() =>
+        expect(session.pip.active()).toBe(true),
+      );
+    }
+    expect(f.history.get()).toBe("/");
+    expect(f.api.watch).toHaveBeenCalledOnce();
+    expect(f.native.close).not.toHaveBeenCalled();
+    expect(appState.session.localStream).toBe(f.capture);
+    expect(fixture.clear).not.toHaveBeenCalled();
+  });
+
+  it("allows explicitly reopening the native local preview after leaving", async () => {
+    const f = nativeWindow();
+    session.leave();
+    await waitFor(() =>
+      expect(session.pip.busy()).toBe(false),
+    );
+    f.selectLocal();
+    session.controls.toggle();
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(true),
+    );
+    expect(appState.roomStatus.roomId).toBeNull();
+    expect(fixture.clear).not.toHaveBeenCalled();
+  });
+
+  it("rearms browser automatic PiP after joining again without navigating", () => {
+    const f = setup();
+    session.controls.setAutomatic(true);
+    expect(mediaAction).toBeTypeOf("function");
+    fixture.leave.mockImplementationOnce(() =>
+      setAppState("roomStatus", "roomId", null),
+    );
+    session.leave();
+    expect(mediaAction).toBeNull();
+    setAppState("roomStatus", "roomId", "room");
+    expect(mediaAction).toBeTypeOf("function");
+    expect(f.requestWindow).not.toHaveBeenCalled();
+    expect(f.history.get()).toBe("/");
+  });
+});
+
 describe("meeting PiP across routes and documents", () => {
   it("features the first shared screen automatically without letting later screens steal a manual pin", async () => {
-    setup();
+    setup(undefined, false);
     expect(session.pinnedId()).toBeNull();
 
     setAppState(
@@ -650,12 +801,17 @@ describe("meeting PiP across routes and documents", () => {
       ),
     ).toBeNull();
     click("meeting.feature_source");
-    await waitFor(() =>
-      expect(source()).toBe("Me (meeting.you)"),
+    const confirmation = within(
+      current().window.document.body,
     );
-    expect(session.selected()?.participantId).toBe("me");
-    click("meeting.feature_source");
-    await waitFor(() => expect(source()).toBe("Bob"));
+    fireEvent.click(
+      await confirmation.findByRole("button", {
+        name: "common.action.cancel",
+      }),
+    );
+    expect(source()).toBe("Bob");
+    expect(session.selected()?.participantId).toBe("bob");
+    expect(session.pip.active()).toBe(true);
     for (const view of views)
       expect(
         current().window.document.body.contains(view),
@@ -715,7 +871,6 @@ describe("meeting PiP across routes and documents", () => {
         ),
       ).toBe("dark"),
     );
-    setAppState("session", "clientViewData", reconcile({}));
     const pipScreen = within(
       current().window.document.body,
     );
@@ -743,8 +898,10 @@ describe("meeting PiP across routes and documents", () => {
     expect(
       pipScreen.queryByLabelText("meeting.controls"),
     ).not.toBeNull();
-    current().close();
-    expect(session.pip.active()).toBe(false);
+    setAppState("session", "clientViewData", reconcile({}));
+    await waitFor(() =>
+      expect(session.pip.active()).toBe(false),
+    );
     expect(
       current().window.document.body.children,
     ).toHaveLength(0);

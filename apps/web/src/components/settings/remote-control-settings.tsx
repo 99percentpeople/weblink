@@ -35,7 +35,7 @@ import RemoteKeyboardSettings from "./remote-keyboard-settings";
 export default function RemoteControlSettings() {
   const options = () =>
     resolveRemoteTouchOptions(appState.options.remoteTouch);
-  const prefix = "setting.remote_control";
+  const prefix = "setting.remote_control.";
   return (
     <section
       class="settings-section"
@@ -44,13 +44,13 @@ export default function RemoteControlSettings() {
       <h3 id="remote-control-settings" class="h3">
         {t("app_menu.settings_remote_control")}
       </h3>
-      <h4 class="h3">{t(`${prefix}.keyboard_heading`)}</h4>
+      <h4 class="h3">{t(`${prefix}keyboard_heading`)}</h4>
       <RemoteKeyboardSettings />
-      <h4 class="h3">{t(`${prefix}.touch_heading`)}</h4>
-      <p class="muted">{t(`${prefix}.description`)}</p>
+      <h4 class="h3">{t(`${prefix}touch_heading`)}</h4>
+      <p class="muted">{t(`${prefix}description`)}</p>
       <div class="flex flex-col gap-2">
         <Label id="remote-touch-mode">
-          {t(`${prefix}.mode.title`)}
+          {t(`${prefix}mode.title`)}
         </Label>
         <Select<TouchMode>
           modal
@@ -63,25 +63,21 @@ export default function RemoteControlSettings() {
           options={["trackpad", "direct"]}
           itemComponent={(props) => (
             <SelectItem item={props.item}>
-              {t(`${prefix}.mode.${props.item.rawValue}`)}
+              {t(`${prefix}mode.${props.item.rawValue}`)}
             </SelectItem>
           )}
         >
           <SelectTrigger aria-labelledby="remote-touch-mode">
             <SelectValue<TouchMode>>
               {(state) =>
-                t(
-                  `${prefix}.mode.${state.selectedOption()}`,
-                )
+                t(`${prefix}mode.${state.selectedOption()}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent />
         </Select>
         <p class="muted">
-          {t(
-            `${prefix}.mode.${options().mode}_description`,
-          )}
+          {t(`${prefix}mode.${options().mode}_description`)}
         </p>
       </div>
       <Show when={options().mode === "trackpad"}>
@@ -104,7 +100,7 @@ export default function RemoteControlSettings() {
         >
           <div class="flex w-full items-center justify-between gap-3">
             <SliderLabel>
-              {t(`${prefix}.pointer_speed`)}
+              {t(`${prefix}pointer_speed`)}
             </SliderLabel>
             <SliderValueLabel />
           </div>
@@ -133,7 +129,7 @@ export default function RemoteControlSettings() {
         >
           <div class="flex w-full items-center justify-between gap-3">
             <SliderLabel>
-              {t(`${prefix}.scroll_speed`)}
+              {t(`${prefix}scroll_speed`)}
             </SliderLabel>
             <SliderValueLabel />
           </div>
@@ -165,7 +161,7 @@ export default function RemoteControlSettings() {
               }
             >
               <SwitchLabel>
-                {t(`${prefix}.${key}`)}
+                {t(`${prefix}${key}`)}
               </SwitchLabel>
               <SwitchControl>
                 <SwitchThumb />
@@ -175,7 +171,7 @@ export default function RemoteControlSettings() {
         </For>
         <div class="flex flex-col gap-2">
           <Label id="remote-long-press">
-            {t(`${prefix}.long_press.title`)}
+            {t(`${prefix}long_press.title`)}
           </Label>
           <Select<LongPressAction>
             modal
@@ -193,7 +189,7 @@ export default function RemoteControlSettings() {
             itemComponent={(props) => (
               <SelectItem item={props.item}>
                 {t(
-                  `${prefix}.long_press.${props.item.rawValue}`,
+                  `${prefix}long_press.${props.item.rawValue}`,
                 )}
               </SelectItem>
             )}
@@ -202,7 +198,7 @@ export default function RemoteControlSettings() {
               <SelectValue<LongPressAction>>
                 {(state) =>
                   t(
-                    `${prefix}.long_press.${state.selectedOption()}`,
+                    `${prefix}long_press.${state.selectedOption()}`,
                   )
                 }
               </SelectValue>
@@ -211,7 +207,7 @@ export default function RemoteControlSettings() {
           </Select>
         </div>
       </Show>
-      <p class="muted">{t(`${prefix}.changes`)}</p>
+      <p class="muted">{t(`${prefix}changes`)}</p>
     </section>
   );
 }

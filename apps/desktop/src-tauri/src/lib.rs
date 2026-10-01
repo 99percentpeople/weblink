@@ -4,6 +4,7 @@ use tauri_plugin_opener::OpenerExt;
 mod application;
 mod capture;
 mod keyboard;
+mod picture_in_picture;
 mod preview;
 mod remote_control;
 
@@ -62,6 +63,8 @@ pub fn run() {
         .manage(std::sync::Arc::new(remote_control::Service::default()))
         .manage(std::sync::Arc::new(keyboard::Service::default()))
         .manage(application::Service::default())
+        .manage(picture_in_picture::Service::default())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             application::show(app);
         }))
@@ -73,6 +76,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             runtime_capabilities,
             application::application_configure,
+            application::autostart::application_autostart_enabled,
+            application::autostart::application_autostart_set,
+            picture_in_picture::pip_watch,
+            picture_in_picture::pip_unwatch,
+            picture_in_picture::pip_configure,
+            picture_in_picture::pip_enter,
+            picture_in_picture::pip_exit,
+            picture_in_picture::pip_drag,
             application::close::application_close_watch,
             application::close::application_close_unwatch,
             application::close::application_close_respond,
@@ -133,6 +144,9 @@ pub fn run() {
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
+                        if let Some(window) = webview.app_handle().get_webview_window("main") {
+                            webview.state::<picture_in_picture::Service>().reset(&window);
+                        }
                         webview.state::<application::Service>().clear_close_requests();
                         webview.state::<keyboard::Shared>().close();
                         webview.state::<remote_control::Shared>().close();
@@ -155,16 +169,25 @@ pub fn run() {
         .expect("could not build Weblink desktop")
         .run(|app, event| {
             if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
-                if label == "main" && app.state::<application::Service>().handle_close(app) {
-                    api.prevent_close();
+                if label == "main" {
+                    let pip = app.get_webview_window("main").is_some_and(|window| app.state::<picture_in_picture::Service>().restore(&window, true));
+                    if pip || app.state::<application::Service>().handle_close(app) { api.prevent_close(); }
                 }
             }
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed, .. } if label == "main") {
                 app.state::<keyboard::Shared>().close();
             }
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+                app.state::<picture_in_picture::Service>().shutdown();
                 app.state::<application::Service>().shutdown();
                 app.state::<remote_control::Shared>().close();
+            }
+            if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
+                if label == "main" {
+                    if let Some(window) = app.get_webview_window("main") {
+                        app.state::<picture_in_picture::Service>().window_event(&window, event);
+                    }
+                }
             }
             if matches!(event, tauri::RunEvent::Exit) {
                 app.state::<application::Service>().shutdown();

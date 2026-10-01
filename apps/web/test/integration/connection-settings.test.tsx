@@ -18,6 +18,7 @@ import {
 import { reconcile } from "solid-js/store";
 import type { JSX } from "solid-js";
 import { toast } from "solid-sonner";
+import ApplicationSettings from "@/components/settings/application-settings";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import {
   appState,
@@ -223,22 +224,30 @@ describe("connection settings", () => {
     }
   });
 
-  it("retains auto-join and server-sharing switches and the initial-join restriction", () => {
+  it("keeps server sharing in connection settings and auto-join in application settings", () => {
     render(() => (
       <ConnectionSettings diagnostics={diagnostics} />
     ));
-    const autoJoin = screen.getByRole("switch", {
-      name: "setting.connection.auto_join.title",
-    });
-    const sharing = screen.getByRole("switch", {
-      name: "setting.connection.share_servers_with_others.title",
-    });
-    fireEvent.click(autoJoin);
-    fireEvent.click(sharing);
-    expect(appState.profile.autoJoin).toBe(true);
+    expect(
+      screen.queryByRole("switch", {
+        name: "setting.connection.auto_join.title",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "setting.connection.share_servers_with_others.title",
+      }),
+    );
     expect(appState.options.shareServersWithOthers).toBe(
       true,
     );
+
+    render(() => <ApplicationSettings />);
+    const autoJoin = screen.getByRole("switch", {
+      name: "setting.connection.auto_join.title",
+    });
+    fireEvent.click(autoJoin);
+    expect(appState.profile.autoJoin).toBe(true);
     setAppState("profile", "initalJoin", true);
     expect(autoJoin).toBeDisabled();
   });

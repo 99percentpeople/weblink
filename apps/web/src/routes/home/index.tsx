@@ -64,7 +64,9 @@ import {
 } from "./components/meeting-stage";
 import { useMeetingSession } from "./components/meeting-session-context";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
+import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";
+import { createControlState } from "./components/remote-control-action";
 import { RemoteKeyboardToggle } from "./components/remote-keyboard-toggle";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 import { MeetingChatPanel } from "./components/meeting-chat-panel";
@@ -115,6 +117,10 @@ export default function Home() {
   const { media, devices } = useMeetingMedia();
   const { open: openRoomInfo } = createRoomInfoDialog();
   const meeting = useMeetingSession();
+  // The native window and toolbar resize continuously. Keep the stage in flow
+  // so its rail follows them instead of freezing a FLIP snapshot until the end.
+  const nativePipActive = () =>
+    meeting.nativePip?.active() === true;
   const {
     clients,
     sources,
@@ -125,9 +131,20 @@ export default function Home() {
     toolbarCollapsed,
     setToolbarCollapsed,
   } = meeting;
-  const displayedToolbarCollapsed = layout.value(
-    toolbarCollapsed,
-  );
+  const outgoingControl = createControlState(() => {
+    const source = meeting.selected();
+    if (!source || source.local) return;
+    return (
+      (source.track &&
+        sessionService.getRemoteControl(source.track)) ||
+      (source.kind !== "screen"
+        ? sessionService.getScreenControl(
+            source.participantId,
+          )
+        : undefined)
+    );
+  });
+  const displayedToolbarCollapsed = toolbarCollapsed;
   const showPreviewHint = layout.value(
     () => !appState.roomStatus.roomId,
   );
@@ -489,6 +506,8 @@ export default function Home() {
         ref={page}
         class="meeting"
         classList={{
+          "is-native-pip": nativePipActive(),
+          "meeting-pip": nativePipActive(),
           "is-controls-collapsed":
             displayedToolbarCollapsed(),
         }}
@@ -502,6 +521,21 @@ export default function Home() {
           closePanel();
         }}
       >
+        <AnimatePresence when={nativePipActive()}>
+          <NativePipBar
+            active={meeting.nativePip?.active() === true}
+            height={
+              meeting.nativePip?.titleBarHeight() ?? 36
+            }
+            name={
+              meeting.selected()?.name ??
+              t("meeting.pip_title")
+            }
+            onDrag={() => void meeting.nativePip?.drag()}
+            onRestore={meeting.controls.returnToMeeting}
+            transitioning={meeting.nativePip?.transitioning()}
+          />
+        </AnimatePresence>
         <header
           class="meeting-header bg-background/80 max-md:bg-background
             md:border-border/50 flex min-h-[68px] items-center gap-3
@@ -574,22 +608,37 @@ export default function Home() {
                 />
               )}
             </Show>
-            <RemoteKeyboardToggle
-              controls={sources().flatMap((source) => {
-                if (
-                  source.id !== meeting.selected()?.id ||
-                  source.local ||
-                  source.kind !== "screen" ||
-                  !source.track
-                )
-                  return [];
-                const control =
-                  sessionService.getRemoteControl(
-                    source.track,
-                  );
-                return control ? [control] : [];
-              })}
-            />
+            <Show
+              when={
+                outgoingControl.state() === "active" ||
+                outgoingControl.state() === "activating"
+              }
+            >
+              <MeetingControlStatus
+                side="controller"
+                name={meeting.selected()?.name ?? ""}
+                revoke={() =>
+                  outgoingControl.control()?.cancel()
+                }
+              >
+                <RemoteKeyboardToggle
+                  controls={sources().flatMap((source) => {
+                    if (
+                      source.id !==
+                        meeting.selected()?.id ||
+                      source.local ||
+                      !source.track
+                    )
+                      return [];
+                    const control =
+                      sessionService.getRemoteControl(
+                        source.track,
+                      );
+                    return control ? [control] : [];
+                  })}
+                />
+              </MeetingControlStatus>
+            </Show>
             <Show when={devices.access.needsPermission()}>
               <button
                 type="button"
@@ -650,10 +699,14 @@ export default function Home() {
         >
           <div
             class="meeting-canvas"
-            inert={fullPanel()}
-            aria-hidden={fullPanel()}
+            inert={
+              fullPanel() && !meeting.nativePip?.active()
+            }
+            aria-hidden={
+              fullPanel() && !meeting.nativePip?.active()
+            }
           >
-            <AnimatePresence when={!meeting.pip.active()}>
+            <AnimatePresence when={!meeting.pip.window()}>
               <Motion.div
                 class="meeting-canvas-view"
                 initial={{ opacity: 0 }}
@@ -665,7 +718,10 @@ export default function Home() {
                 }}
               >
                 <MeetingStage
-                  active={!fullPanel()}
+                  active={
+                    !fullPanel() ||
+                    meeting.nativePip?.active()
+                  }
                   ref={(value) => {
                     stage = value;
                   }}
@@ -683,6 +739,11 @@ export default function Home() {
                       action,
                     )
                   }
+                  desktopPip={
+                    meeting.nativePip
+                      ? meeting.controls
+                      : undefined
+                  }
                   registerFeatures={
                     meeting.mainView.register
                   }
@@ -690,7 +751,10 @@ export default function Home() {
                 >
                   <div class="relative shrink-0">
                     <AnimatePresence
-                      when={showPreviewHint()}
+                      when={
+                        showPreviewHint() &&
+                        !nativePipActive()
+                      }
                     >
                       <Motion.div
                         native
@@ -761,7 +825,8 @@ export default function Home() {
                 </MeetingStage>
               </Motion.div>
             </AnimatePresence>
-            <AnimatePresence when={meeting.pip.active()}>
+            {/* Native PiP keeps the meeting here; only a separate window needs this placeholder. */}
+            <AnimatePresence when={!!meeting.pip.window()}>
               <Motion.div
                 class="meeting-canvas-view"
                 initial={{ opacity: 0 }}
@@ -1007,6 +1072,7 @@ export default function Home() {
           </AnimatePresence>
         </div>
         <MeetingControls
+          compact={nativePipActive()}
           collapsed={displayedToolbarCollapsed()}
           onCollapsedChange={setToolbarCollapsed}
           pip={meeting.controls}

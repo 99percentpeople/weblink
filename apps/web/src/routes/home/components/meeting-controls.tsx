@@ -9,6 +9,7 @@ import {
   onCleanup,
   Show,
   type Accessor,
+  type ParentProps,
 } from "solid-js";
 import {
   Camera,
@@ -53,6 +54,23 @@ export interface MeetingPipControls {
   returnToMeeting(): void;
 }
 
+// Keep mode-dependent controls mounted so their space can collapse along with
+// the window. Inactive controls leave both the focus order and accessibility tree.
+function ControlSlot(
+  props: ParentProps<{ visible: boolean }>,
+) {
+  return (
+    <div
+      class="meeting-control-slot"
+      classList={{ "is-hidden": !props.visible }}
+      inert={!props.visible}
+      aria-hidden={!props.visible}
+    >
+      <div>{props.children}</div>
+    </div>
+  );
+}
+
 export function MeetingControls(props: {
   media: MediaControls;
   playingAudio: boolean;
@@ -70,6 +88,9 @@ export function MeetingControls(props: {
   collapsed?: boolean;
   onCollapsedChange?(collapsed: boolean): void;
 }) {
+  // Full and compact presentation use the same rules in either runtime.
+  const showDeviceMenus = () =>
+    !props.compact && Boolean(props.devices);
   const [menu, setMenu] = createSignal<
     "audio" | "camera" | null
   >(null);
@@ -105,7 +126,8 @@ export function MeetingControls(props: {
     }
   };
   createEffect(() => {
-    if (props.collapsed) setMenu(null);
+    if (props.collapsed || !showDeviceMenus())
+      setMenu(null);
   });
   createEffect(() => {
     if (!menu()) return;
@@ -168,13 +190,14 @@ export function MeetingControls(props: {
           transition={{ duration: 0.2, ease: "easeOut" }}
           classList={{
             "is-device-menu-open": Boolean(menu()),
+            "is-compact": Boolean(props.compact),
           }}
           aria-label={t("meeting.controls")}
           inert={props.collapsed}
           aria-hidden={props.collapsed}
         >
           <AnimatePresence
-            when={Boolean(props.devices && menu())}
+            when={showDeviceMenus() && Boolean(menu())}
           >
             <MeetingDeviceMenu
               mode={displayedMenu()}
@@ -190,18 +213,20 @@ export function MeetingControls(props: {
           <div class="meeting-controls-group">
             <div class="meeting-device-control">
               <Show when={props.devices}>
-                <button
-                  ref={audioToggle}
-                  type="button"
-                  class="meeting-device-toggle"
-                  aria-label={t("meeting.audio_devices")}
-                  title={t("meeting.audio_devices")}
-                  aria-expanded={menu() === "audio"}
-                  aria-controls="meeting-device-menu"
-                  onClick={() => toggleMenu("audio")}
-                >
-                  <ChevronUp />
-                </button>
+                <ControlSlot visible={showDeviceMenus()}>
+                  <button
+                    ref={audioToggle}
+                    type="button"
+                    class="meeting-device-toggle"
+                    aria-label={t("meeting.audio_devices")}
+                    title={t("meeting.audio_devices")}
+                    aria-expanded={menu() === "audio"}
+                    aria-controls="meeting-device-menu"
+                    onClick={() => toggleMenu("audio")}
+                  >
+                    <ChevronUp />
+                  </button>
+                </ControlSlot>
               </Show>
               <button
                 type="button"
@@ -236,18 +261,20 @@ export function MeetingControls(props: {
             </div>
             <div class="meeting-device-control">
               <Show when={props.devices}>
-                <button
-                  ref={cameraToggle}
-                  type="button"
-                  class="meeting-device-toggle"
-                  aria-label={t("meeting.camera_devices")}
-                  title={t("meeting.camera_devices")}
-                  aria-expanded={menu() === "camera"}
-                  aria-controls="meeting-device-menu"
-                  onClick={() => toggleMenu("camera")}
-                >
-                  <ChevronUp />
-                </button>
+                <ControlSlot visible={showDeviceMenus()}>
+                  <button
+                    ref={cameraToggle}
+                    type="button"
+                    class="meeting-device-toggle"
+                    aria-label={t("meeting.camera_devices")}
+                    title={t("meeting.camera_devices")}
+                    aria-expanded={menu() === "camera"}
+                    aria-controls="meeting-device-menu"
+                    onClick={() => toggleMenu("camera")}
+                  >
+                    <ChevronUp />
+                  </button>
+                </ControlSlot>
               </Show>
               <button
                 type="button"
@@ -324,26 +351,27 @@ export function MeetingControls(props: {
             <Show
               when={
                 props.media.sharingSupported() &&
-                props.media.sharing() &&
-                !props.compact
+                props.media.sharing()
               }
             >
-              <button
-                type="button"
-                class="meeting-control"
-                disabled={props.media.sharingBusy()}
-                aria-label={t("meeting.add_sharing")}
-                title={t("meeting.add_sharing")}
-                onClick={() =>
-                  void props.media.addSharing()
-                }
-              >
-                <Plus />
-                <span>{t("meeting.add_sharing")}</span>
-              </button>
+              <ControlSlot visible={!props.compact}>
+                <button
+                  type="button"
+                  class="meeting-control"
+                  disabled={props.media.sharingBusy()}
+                  aria-label={t("meeting.add_sharing")}
+                  title={t("meeting.add_sharing")}
+                  onClick={() =>
+                    void props.media.addSharing()
+                  }
+                >
+                  <Plus />
+                  <span>{t("meeting.add_sharing")}</span>
+                </button>
+              </ControlSlot>
             </Show>
             <span class="meeting-control-divider" />
-            <Show when={!props.devices}>
+            <ControlSlot visible={!showDeviceMenus()}>
               <button
                 type="button"
                 class="meeting-control"
@@ -369,34 +397,34 @@ export function MeetingControls(props: {
                 </Show>
                 <span>{t("meeting.sound")}</span>
               </button>
-            </Show>
-            <Show
-              when={!props.compact && props.onToggleLayout}
-            >
-              <button
-                type="button"
-                class="meeting-control"
-                aria-pressed={props.spotlight}
-                aria-label={
-                  props.spotlight
-                    ? t("meeting.grid_layout")
-                    : t("meeting.focus_layout")
-                }
-                title={
-                  props.spotlight
-                    ? t("meeting.grid_layout")
-                    : t("meeting.focus_layout")
-                }
-                onClick={props.onToggleLayout}
-              >
-                <Show
-                  when={props.spotlight}
-                  fallback={<RectangleEllipsis />}
+            </ControlSlot>
+            <Show when={props.onToggleLayout}>
+              <ControlSlot visible={!props.compact}>
+                <button
+                  type="button"
+                  class="meeting-control"
+                  aria-pressed={props.spotlight}
+                  aria-label={
+                    props.spotlight
+                      ? t("meeting.grid_layout")
+                      : t("meeting.focus_layout")
+                  }
+                  title={
+                    props.spotlight
+                      ? t("meeting.grid_layout")
+                      : t("meeting.focus_layout")
+                  }
+                  onClick={props.onToggleLayout}
                 >
-                  <Grid2X2 />
-                </Show>
-                <span>{t("meeting.layout")}</span>
-              </button>
+                  <Show
+                    when={props.spotlight}
+                    fallback={<RectangleEllipsis />}
+                  >
+                    <Grid2X2 />
+                  </Show>
+                  <span>{t("meeting.layout")}</span>
+                </button>
+              </ControlSlot>
             </Show>
             <Show
               when={props.pip?.supported() && props.pip}
@@ -438,12 +466,13 @@ export function MeetingControls(props: {
                       else pip().toggle();
                     }}
                   >
-                    <Show
-                      when={props.compact}
-                      fallback={<PictureInPicture2 />}
+                    <div
+                      class="meeting-pip-icon"
+                      aria-hidden="true"
                     >
-                      <PanelTopOpen />
-                    </Show>
+                      <PictureInPicture2 class="meeting-pip-enter-icon" />
+                      <PanelTopOpen class="meeting-pip-return-icon" />
+                    </div>
                     <span>
                       {t(
                         props.compact
@@ -464,11 +493,14 @@ export function MeetingControls(props: {
               props.joining ||
               (!props.joined && !props.onJoin)
             }
-            onClick={() =>
-              props.joined
-                ? props.onLeave()
-                : props.onJoin?.()
-            }
+            onClick={() => {
+              if (props.joined) props.onLeave();
+              else {
+                if (props.compact)
+                  props.pip?.returnToMeeting();
+                props.onJoin?.();
+              }
+            }}
             aria-label={t(
               props.joining
                 ? "app_menu.joining"

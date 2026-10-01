@@ -40,9 +40,8 @@ export function MeetingPipWindow(props: {
     afterUpdate: () => stage?.measure(),
   });
   const transitionLayout = layout.transition;
-  const displayedToolbarCollapsed = layout.value(
-    () => props.toolbarCollapsed,
-  );
+  const displayedToolbarCollapsed = () =>
+    props.toolbarCollapsed;
   const { media } = useMeetingMedia();
   const roomActions = useRoomActions();
   const audio = useAudioPlayer();
@@ -97,12 +96,8 @@ export function MeetingPipWindow(props: {
               audio.setPlay(!audio.playState())
             }
             spotlight
-            onToggleLayout={() => {}}
             joined={Boolean(appState.roomStatus.roomId)}
-            onJoin={() => {
-              props.controls.returnToMeeting();
-              void roomActions.join();
-            }}
+            onJoin={() => void roomActions.join()}
             joining={
               roomActions.busy() ||
               appState.session.clientServiceStatus ===

@@ -12,6 +12,7 @@ export interface RuntimeCapabilities {
 }
 
 export interface PlatformRuntime {
+  readonly pictureInPicture?: NativePictureInPicture;
   readonly application?: NativeApplication;
   readonly keyboard?: NativeKeyboard;
   readonly remoteControl?: NativeRemoteControl;
@@ -30,12 +31,40 @@ export interface NativeApplicationOptions {
 }
 
 export interface NativeApplication {
+  readonly autostart?: {
+    enabled(): Promise<boolean>;
+    setEnabled(enabled: boolean): Promise<boolean>;
+  };
   configure(
     options: NativeApplicationOptions,
   ): Promise<void>;
   watchCloseRequests(
     onRequest: (request: NativeCloseRequest) => void,
   ): Promise<NativeCloseSession>;
+}
+
+export interface NativePipOptions {
+  eligible: boolean;
+  automatic: boolean;
+  reducedMotion?: boolean;
+}
+export interface NativePipState {
+  active: boolean;
+  transitioning: boolean;
+  /** Logical height replacing the native caption in the compact window. */
+  titleBarHeight: number;
+}
+export interface NativePictureInPicture {
+  watch(
+    onState: (state: NativePipState) => void,
+  ): Promise<NativePipSession>;
+}
+export interface NativePipSession {
+  configure(options: NativePipOptions): Promise<void>;
+  enter(): Promise<void>;
+  exit(): Promise<void>;
+  drag(): Promise<void>;
+  close(): Promise<void>;
 }
 
 export interface NativeCloseRequest {
