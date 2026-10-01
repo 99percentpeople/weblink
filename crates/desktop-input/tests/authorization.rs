@@ -186,18 +186,25 @@ fn geometry_capture_or_peer_change_revokes_before_the_next_permission_check() {
     assert_eq!(fake.released.borrow().len(), 1);
 }
 #[test]
-fn renewal_cannot_resurrect_expired_grants_and_drop_releases_once() {
+fn input_timeout_preserves_consent_but_ended_grants_cannot_be_renewed() {
     let (mut a, fake, b, now) = setup();
     let id = grant(&mut a, &b, now);
     assert!(a.renew(&b, &id, now + Duration::from_millis(1000)));
     assert!(a.permits(&b, &id, now + Duration::from_millis(2999)));
-    assert!(!a.renew(&b, &id, now + Duration::from_millis(3000)));
-    drop(a);
+    let later = now + Duration::from_secs(30);
+    assert!(!a.permits(&b, &id, later));
+    assert_eq!(a.grant().unwrap().id, id);
     assert_eq!(fake.released.borrow().len(), 1);
-    let (mut a, fake, b, now) = setup();
-    grant(&mut a, &b, now);
-    drop(a);
+    a.tick(later);
     assert_eq!(fake.released.borrow().len(), 1);
+    assert!(!a.renew(&b, "foreign-grant", later));
+    assert!(a.renew(&b, &id, later));
+    assert!(a.permits(&b, &id, later));
+    a.revoke();
+    assert!(!a.renew(&b, &id, later));
+    assert_eq!(fake.released.borrow().len(), 2);
+    drop(a);
+    assert_eq!(fake.released.borrow().len(), 2);
 }
 
 #[test]

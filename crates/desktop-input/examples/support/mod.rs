@@ -10,12 +10,48 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::ClientToScreen,
         System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentProcessId},
-        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+        UI::{
+            HiDpi::*,
+            Input::{KeyboardAndMouse::*, Pointer::*},
+            WindowsAndMessaging::*,
+        },
     },
 };
 type Events = Arc<Mutex<Vec<(u32, usize, isize)>>>;
 thread_local! {static EVENTS:RefCell<Option<Events>>=const {RefCell::new(None)};}
+#[derive(Debug)]
+#[allow(dead_code)] // Also compiled by the mouse-only input example.
+struct TouchEvent {
+    message: u32,
+    flags: u32,
+    x: i32,
+    y: i32,
+}
+type TouchEvents = Arc<Mutex<Vec<TouchEvent>>>;
+thread_local! {static TOUCH_EVENTS:RefCell<Option<TouchEvents>>=const {RefCell::new(None)};}
 unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if matches!(msg, WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP) {
+        let mut info = POINTER_INFO::default();
+        if GetPointerInfo((wp.0 & 0xffff) as u32, &mut info).is_ok() && info.pointerType == PT_TOUCH
+        {
+            TOUCH_EVENTS.with(|e| {
+                if let Some(events) = e.borrow().as_ref() {
+                    let mut events = events.lock().unwrap();
+                    if events.len() < 4096 {
+                        events.push(TouchEvent {
+                            message: msg,
+                            flags: info.pointerFlags.0,
+                            x: info.ptPixelLocation.x,
+                            y: info.ptPixelLocation.y,
+                        });
+                    }
+                }
+            });
+        }
+        if std::env::var_os("WEBLINK_CONTROL_TEST_PROMOTE_TOUCH").is_none() {
+            return LRESULT(0);
+        }
+    }
     if matches!(
         msg,
         WM_MOUSEMOVE
@@ -45,6 +81,8 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
 pub struct TestWindow {
     hwnd: usize,
     events: Events,
+    #[allow(dead_code)]
+    touch_events: TouchEvents,
     stop: mpsc::Sender<()>,
     thread: Option<JoinHandle<()>>,
 }
@@ -55,6 +93,8 @@ impl TestWindow {
     pub fn with_focus_timeout(timeout: Duration) -> Result<Self, String> {
         let events = Arc::new(Mutex::new(Vec::new()));
         let out = events.clone();
+        let touch_events = Arc::new(Mutex::new(Vec::new()));
+        let touch_out = touch_events.clone();
         let (ready, rx) = mpsc::channel();
         let (stop, stopped) = mpsc::channel();
         let thread = thread::spawn(move || unsafe {
@@ -65,6 +105,7 @@ impl TestWindow {
             let module = GetModuleHandleW(None).unwrap();
             let class = HSTRING::from(format!("WeblinkInputTest-{}", uuid::Uuid::new_v4()));
             EVENTS.with(|e| *e.borrow_mut() = Some(out));
+            TOUCH_EVENTS.with(|e| *e.borrow_mut() = Some(touch_out));
             let wc = WNDCLASSW {
                 lpfnWndProc: Some(procedure),
                 hInstance: module.into(),
@@ -115,6 +156,7 @@ impl TestWindow {
         let result = Self {
             hwnd,
             events,
+            touch_events,
             stop,
             thread: Some(thread),
         };
@@ -178,6 +220,41 @@ impl TestWindow {
             |events| events.iter().filter(|e| e.0 == message).count() >= count,
             &format!("message {message:#x}, count {count}"),
         )
+    }
+    #[allow(dead_code)]
+    pub fn assert_touch(&self) -> Result<(), String> {
+        if std::env::var_os("WEBLINK_CONTROL_TEST_PROMOTE_TOUCH").is_some() {
+            self.wait_for(WM_LBUTTONUP, 1)?;
+        }
+        let events = self.touch_events.lock().unwrap();
+        let downs: Vec<_> = events
+            .iter()
+            .filter(|e| e.message == WM_POINTERDOWN)
+            .collect();
+        let ups: Vec<_> = events
+            .iter()
+            .filter(|e| e.message == WM_POINTERUP)
+            .collect();
+        if downs.len() < 3 || ups.len() != downs.len() {
+            return Err(format!(
+                "touch lifecycle mismatch: {} downs, {} ups, {} events",
+                downs.len(),
+                ups.len(),
+                events.len()
+            ));
+        }
+        if !ups.iter().any(|e| e.flags & POINTER_FLAG_CANCELED.0 != 0) {
+            return Err(format!("missing native canceled touch: {events:?}"));
+        }
+        if !events.iter().any(|e| e.message == WM_POINTERUPDATE) {
+            return Err("missing native touch updates".into());
+        }
+        let (x, y) = self.point(160, 150)?;
+        let p = downs[0];
+        if (p.x - x).abs() > 1 || (p.y - y).abs() > 1 {
+            return Err("native touch coordinate mismatch".into());
+        }
+        Ok(())
     }
     fn wait(
         &self,

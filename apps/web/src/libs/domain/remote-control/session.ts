@@ -1,5 +1,6 @@
 import {
   CONTROL_REQUEST_TIMEOUT_MS,
+  CONTROL_LEASE_MS,
   canRequestControl,
   controlId,
   controlTarget,
@@ -32,6 +33,8 @@ export interface ControlSessionPort {
   id(): string;
   /** Clear local held-input bookkeeping before reporting a lost grant. */
   release(): void;
+  /** Release interrupted input without ending consent on persistent hosts. */
+  suspend?(): void;
 }
 
 /** Controller-side intent only. Native authority must independently validate every input.
@@ -40,9 +43,11 @@ export class RemoteControlSession {
   private current: ControlState = { type: "viewing" };
   private readonly binding: ControlBinding;
   private readonly issued = new Set<string>();
+  private leaseMs = CONTROL_LEASE_MS;
   constructor(
     binding: ControlBinding,
     private readonly port: ControlSessionPort,
+    private readonly persistent = false,
   ) {
     if (
       ![
@@ -107,6 +112,7 @@ export class RemoteControlSession {
       message.requestId === this.current.requestId &&
       sameControlTarget(message.target, this.binding.target)
     ) {
+      this.leaseMs = message.leaseMs;
       this.current = {
         type: "granted",
         grantId: message.grantId,
@@ -150,16 +156,21 @@ export class RemoteControlSession {
     )
       this.current = {
         ...this.current,
-        deadline: this.port.now() + 2000,
+        deadline: this.port.now() + this.leaseMs,
       };
   }
   tick(): void {
+    const current = this.current;
     if (
-      (this.current.type === "requesting" ||
-        this.current.type === "granted") &&
-      this.port.now() >= this.current.deadline
-    )
-      this.cancel();
+      (current.type === "requesting" ||
+        current.type === "granted") &&
+      this.port.now() >= current.deadline
+    ) {
+      if (current.type === "granted" && this.persistent) {
+        this.current = { ...current, deadline: Infinity };
+        this.port.suspend?.();
+      } else this.cancel();
+    }
   }
   /** Room leave, source change, transport failure or owner abort is terminal. */
   close(): void {

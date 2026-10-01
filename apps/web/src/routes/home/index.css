@@ -29,10 +29,10 @@
   outline-offset: 3px;
 }
 .meeting-icon-button.meeting-permission-button {
-  @apply text-warning-foreground w-auto shrink-0 gap-1.5 px-2 py-0 text-[12px] whitespace-nowrap;
+  @apply text-warning-foreground w-auto shrink-0 gap-1.5 whitespace-nowrap px-2 py-0 text-[12px];
 }
 .meeting-icon-button {
-  @apply inline-flex size-8.5 shrink-0 items-center justify-center rounded-md;
+  @apply size-8.5 inline-flex shrink-0 items-center justify-center rounded-md;
   transition: background 0.15s;
 }
 .meeting-icon-button:hover,
@@ -51,7 +51,7 @@
   @apply bg-accent text-primary;
 }
 .meeting-member-count {
-  @apply w-auto gap-1.75 px-2 py-0 text-[12px];
+  @apply gap-1.75 w-auto px-2 py-0 text-[12px];
 }
 .meeting-workspace {
   @apply relative flex min-h-0 min-w-0 flex-1 gap-0;
@@ -89,7 +89,7 @@
   @apply flex min-h-0 min-w-0 flex-1;
 }
 .meeting-stage {
-  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4.5;
+  @apply p-4.5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
 }
 .meeting-grid {
   @apply grid min-h-0 w-full min-w-0 flex-[1_1_0] place-content-center overflow-hidden;
@@ -123,7 +123,7 @@
 }
 .meeting-tile-surface {
   /* Fade the background and border with the content, not the layout frame. */
-  @apply border-border absolute inset-0 overflow-hidden rounded-[inherit] border border-solid bg-(--meeting-surface);
+  @apply border-border bg-(--meeting-surface) absolute inset-0 overflow-hidden rounded-[inherit] border border-solid;
 }
 .meeting-tile .meeting-video-avatar {
   @apply size-[clamp(--spacing(9),25cqw,--spacing(20))];
@@ -223,7 +223,7 @@
   @apply size-7;
 }
 .meeting-tile-actions {
-  @apply absolute right-2 bottom-2 flex gap-0.75 rounded-lg bg-[#10151cd9] p-0.75 text-white opacity-0;
+  @apply gap-0.75 p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cd9] text-white opacity-0;
   transition: opacity 0.15s;
 }
 .meeting-tile-actions .meeting-icon-button:hover {
@@ -246,11 +246,11 @@
 }
 .meeting-panel-slot {
   /* Leave room for four tabs, both actions, padding and the outer margin. */
-  @apply min-h-0 w-[min(--spacing(100),calc(100%---spacing(70)))] max-w-full min-w-0 flex-none;
+  @apply min-h-0 w-[min(--spacing(100),calc(100%---spacing(70)))] min-w-0 max-w-full flex-none;
   transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .meeting-panel-slot.is-closing {
-  @apply absolute top-0 right-0 bottom-0 z-33;
+  @apply z-33 absolute bottom-0 right-0 top-0;
 }
 .meeting-panel-slot.is-expanded {
   @apply w-[min(--spacing(190),70%,calc(100%---spacing(70)))];
@@ -259,7 +259,7 @@
   @apply w-full max-w-full;
 }
 .meeting-panel-slot.is-full .meeting-side-panel {
-  @apply mx-3.5 mt-3.5 mb-0 w-[calc(100%---spacing(7))];
+  @apply mx-3.5 mb-0 mt-3.5 w-[calc(100%---spacing(7))];
 }
 .meeting-leave.meeting-join {
   @apply text-primary-foreground bg-primary;
@@ -273,7 +273,7 @@
 }
 .meeting-side-panel {
   /* The workspace already reserves the gap above the floating controls. */
-  @apply border-border bg-card text-foreground mt-3.5 mr-3.5 mb-0 ml-0 flex size-[calc(100%---spacing(3.5))] min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid;
+  @apply border-border bg-card text-foreground mb-0 ml-0 mr-3.5 mt-3.5 flex size-[calc(100%---spacing(3.5))] min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid;
   box-shadow: 0 8px 30px #0002;
 }
 .meeting-panel-content {
@@ -283,13 +283,13 @@
   @apply min-h-0;
 }
 .meeting-info-action {
-  @apply h-auto min-h-10.5 justify-start px-3 py-2.5 text-left text-[12px] whitespace-normal;
+  @apply min-h-10.5 h-auto justify-start whitespace-normal px-3 py-2.5 text-left text-[12px];
 }
 .meeting-info-action > span {
-  @apply min-w-0 flex-1 wrap-anywhere;
+  @apply wrap-anywhere min-w-0 flex-1;
 }
 .meeting-controls {
-  @apply border-input absolute left-1/2 z-45 flex min-h-(--meeting-controls-height) w-max max-w-[calc(100%---spacing(8))] shrink-0 items-center justify-center gap-6.5 rounded-xl border border-solid bg-(--meeting-surface) p-3;
+  @apply border-input z-45 min-h-(--meeting-controls-height) gap-6.5 bg-(--meeting-surface) absolute left-1/2 flex w-max max-w-[calc(100%---spacing(8))] shrink-0 items-center justify-center rounded-xl border border-solid p-3;
   bottom: var(--meeting-controls-bottom);
   translate: -50% 0;
   filter: drop-shadow(0 12px 22px #0006);
@@ -298,7 +298,7 @@
   @apply rounded-t-none border-t-transparent;
 }
 .meeting-collapsed-controls {
-  @apply bg-secondary absolute left-1/2 z-45 inline-flex shrink-0 items-center justify-center rounded-full whitespace-nowrap;
+  @apply bg-secondary z-45 absolute left-1/2 inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full;
   bottom: var(--meeting-collapsed-controls-bottom);
   translate: -50% 0;
 }
@@ -309,7 +309,7 @@
   @apply bg-secondary flex shrink-0 items-stretch rounded-md;
 }
 .meeting-device-toggle {
-  @apply text-muted-foreground grid w-6.5 shrink-0 place-items-center rounded-l-md rounded-r-none;
+  @apply text-muted-foreground w-6.5 grid shrink-0 place-items-center rounded-l-md rounded-r-none;
 }
 .meeting-device-toggle:hover,
 .meeting-device-toggle[aria-expanded="true"] {
@@ -323,7 +323,7 @@
   transform: rotate(180deg);
 }
 .meeting-device-menu {
-  @apply border-input text-foreground absolute bottom-[calc(100%+1px)] -left-px max-h-[min(--spacing(90),calc(100dvh---spacing(45)))] w-[calc(100%+2px)] overflow-auto rounded-t-xl rounded-b-none border border-b-0 border-solid bg-(--meeting-surface) px-3.5 pt-2.5 pb-3.5;
+  @apply border-input text-foreground bg-(--meeting-surface) absolute -left-px bottom-[calc(100%+1px)] max-h-[min(--spacing(90),calc(100dvh---spacing(45)))] w-[calc(100%+2px)] overflow-auto rounded-b-none rounded-t-xl border border-b-0 border-solid px-3.5 pb-3.5 pt-2.5;
 }
 .meeting-device-menu-header
   .meeting-icon-button:not(.meeting-permission-button) {
@@ -336,7 +336,7 @@
   @apply text-muted-foreground flex-1 text-[11px] leading-[1.6];
 }
 .meeting-control {
-  @apply bg-secondary flex h-14 min-w-16 flex-col items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[10px] whitespace-nowrap;
+  @apply bg-secondary flex h-14 min-w-16 flex-col items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[10px];
   transition: background 0.15s;
 }
 .meeting-control:hover {
@@ -358,10 +358,10 @@
   @apply text-accent-foreground bg-accent;
 }
 .meeting-control-divider {
-  @apply bg-border mx-1 my-0 h-7.5 w-px;
+  @apply bg-border h-7.5 mx-1 my-0 w-px;
 }
 .meeting-leave {
-  @apply bg-destructive flex min-h-12 items-center justify-center gap-2.5 rounded-md px-5 py-3 text-[12px] whitespace-nowrap text-white;
+  @apply bg-destructive flex min-h-12 items-center justify-center gap-2.5 whitespace-nowrap rounded-md px-5 py-3 text-[12px] text-white;
 }
 .meeting-leave:hover {
   background: color-mix(
@@ -392,7 +392,7 @@
     @apply max-w-[calc(100%---spacing(4))] gap-2.5 p-2;
   }
   .meeting-controls-group {
-    @apply min-w-0 gap-1.25 overflow-x-auto;
+    @apply gap-1.25 min-w-0 overflow-x-auto;
     scrollbar-width: none;
   }
   .meeting-device-toggle {
@@ -477,7 +477,7 @@ html[data-meeting-pip] body > div {
   @apply rounded-md;
 }
 .meeting-pip .meeting-controls {
-  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 min-h-13 w-[calc(100%---spacing(3))] max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
+  @apply min-h-13 relative inset-auto mx-1.5 mb-1.5 mt-0 w-[calc(100%---spacing(3))] max-w-none flex-wrap gap-1.5 rounded-lg p-1.5;
   translate: none;
   filter: none;
 }
@@ -485,7 +485,7 @@ html[data-meeting-pip] body > div {
   @apply absolute bottom-0 left-0;
 }
 .meeting-pip .meeting-collapsed-controls {
-  @apply relative inset-auto mx-1.5 mt-0 mb-1.5 self-center;
+  @apply relative inset-auto mx-1.5 mb-1.5 mt-0 self-center;
   translate: none;
 }
 .meeting-pip:not(.is-controls-collapsed)
@@ -498,7 +498,7 @@ html[data-meeting-pip] body > div {
 }
 .meeting-pip .meeting-control,
 .meeting-pip .meeting-leave {
-  @apply size-9 min-h-9 min-w-8.5 rounded-md p-2;
+  @apply min-w-8.5 size-9 min-h-9 rounded-md p-2;
 }
 .meeting-pip .meeting-control span,
 .meeting-pip .meeting-leave span,

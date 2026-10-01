@@ -66,6 +66,13 @@ impl<T> Mailbox<T> {
             s.reliable.pop_front().map(|(_, v)| v)
         }
     }
+    pub fn discard(&self, mut remove: impl FnMut(&T) -> bool) {
+        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        s.reliable.retain(|(_, value)| !remove(value));
+        if s.movement.as_ref().is_some_and(|(_, value)| remove(value)) {
+            s.movement = None;
+        }
+    }
     pub fn clear(&self) {
         let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
         s.reliable.clear();
@@ -109,6 +116,18 @@ mod tests {
         q.push(4, false).unwrap();
         q.clear();
         assert_eq!(q.pop(), None);
+    }
+    #[test]
+    fn interruption_discards_input_but_keeps_local_status_and_consent_calls() {
+        let q = Mailbox::default();
+        q.push((true, 1), false).unwrap();
+        q.push((false, 2), false).unwrap();
+        q.push((true, 3), true).unwrap();
+        q.discard(|(input, _)| *input);
+        assert_eq!(q.pop(), Some((false, 2)));
+        assert_eq!(q.pop(), None);
+        q.push((true, 4), false).unwrap();
+        assert_eq!(q.pop(), Some((true, 4)));
     }
     #[test]
     fn overflow_and_close_discard_everything_and_cannot_reopen() {

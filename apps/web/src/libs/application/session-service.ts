@@ -22,7 +22,13 @@ import type {
   ClientService,
   TransferClient,
 } from "../domain/client";
-import { Accessor, createEffect } from "solid-js";
+import {
+  Accessor,
+  createEffect,
+  createRoot,
+  on,
+} from "solid-js";
+import { setClientConfig } from "@/libs/state/permission-options";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import { loadSessionIceServers } from "./ice-server-service";
 import { catchError, catchErrorSync } from "@/libs/catch";
@@ -41,7 +47,19 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
-  readonly remoteControl = new RemoteControlHost(platform);
+  readonly remoteControl = new RemoteControlHost(platform, {
+    decision: (id) =>
+      appState.options.clientConfigs[id]?.remoteControl,
+    remember: (id, remoteControl) =>
+      setClientConfig(id, {
+        name: this.clientViewData[id]?.name ?? id,
+        remoteControl,
+      }),
+  });
+  getScreenControl(clientId: string) {
+    return this.nativeScreens.get(this.sessions[clientId])
+      ?.screenControl;
+  }
   getRemoteControl(track: MediaStreamTrack) {
     for (const native of this.nativeScreens.values()) {
       const control = native.getRemoteControl(track);
@@ -133,6 +151,7 @@ export class SessionService {
   updateClientProfile(client: Client) {
     const view = this.clientViewData[client.clientId];
     if (!view) return false;
+    setClientConfig(client.clientId, { name: client.name });
 
     setAppState(
       "session",
@@ -284,7 +303,18 @@ export class SessionService {
     let controlGeneration = createUuid();
     const native = new NativeScreenSession({
       loadControlCapabilities: () =>
-        this.remoteControl.capabilities(),
+        this.remoteControl.capabilities(client.clientId),
+      requestScreen: (signal) =>
+        this.remoteControl.requestScreen(
+          client.clientId,
+          controlGeneration,
+          signal,
+        ),
+      cancelScreenRequest: () =>
+        this.remoteControl.screen.cancelPeer(
+          client.clientId,
+          controlGeneration,
+        ),
       controlContext: () =>
         this.remoteControl.context(
           controlGeneration,
@@ -309,6 +339,30 @@ export class SessionService {
         console.error("Native screen connection", error),
     });
     this.nativeScreens.set(session, native);
+    const disposePolicy = createRoot((dispose) => {
+      createEffect(
+        on(
+          () =>
+            appState.options.clientConfigs[client.clientId]
+              ?.remoteControl,
+          () => {
+            void (async () => {
+              await this.remoteControl.policyChanged(
+                client.clientId,
+              );
+              await native.refreshControlCapabilities();
+            })().catch((error) =>
+              console.warn(
+                "Remote control permissions",
+                error,
+              ),
+            );
+          },
+          { defer: true },
+        ),
+      );
+      return dispose;
+    });
     let opening = false;
     const openNative = () => {
       if (
@@ -351,8 +405,8 @@ export class SessionService {
       "peerconnectioninit",
       () => {
         opening = false;
-        controlGeneration = createUuid();
         native.reset();
+        controlGeneration = createUuid();
       },
       { signal: controller.signal },
     );
@@ -362,8 +416,8 @@ export class SessionService {
         if (detail === "ready") void openNative();
         else {
           opening = false;
-          controlGeneration = createUuid();
           native.reset();
+          controlGeneration = createUuid();
         }
       },
       { signal: controller.signal },
@@ -371,8 +425,9 @@ export class SessionService {
     controller.signal.addEventListener(
       "abort",
       () => {
-        controlGeneration = createUuid();
+        disposePolicy();
         native.reset();
+        controlGeneration = createUuid();
         this.nativeScreens.delete(session);
       },
       { once: true },
@@ -394,6 +449,7 @@ export class SessionService {
       client.clientId,
       session,
     );
+    setClientConfig(client.clientId, { name: client.name });
 
     session.addEventListener(
       "peerconnectioninit",

@@ -12,6 +12,8 @@ import AppearanceSettings from "./appearance-settings";
 import { ConnectionSettings } from "./connection-settings";
 import TransferSettings from "./transfer-settings";
 import MeetingSettings from "./meeting-settings";
+import RemoteControlSettings from "./remote-control-settings";
+import PermissionsSettings from "./permissions-settings";
 import AdvancedSettings from "./advanced-settings";
 import AboutSettings from "./about-settings";
 
@@ -20,6 +22,8 @@ export const settingsSections = [
   "connection",
   "transfer",
   "meeting",
+  "remote_control",
+  "permissions",
   "advanced",
   "about",
 ] as const;
@@ -83,6 +87,12 @@ export default function SettingsContent(props: {
               </Match>
               <Match when={section === "meeting"}>
                 <MeetingSettings />
+              </Match>
+              <Match when={section === "remote_control"}>
+                <RemoteControlSettings />
+              </Match>
+              <Match when={section === "permissions"}>
+                <PermissionsSettings />
               </Match>
               <Match when={section === "advanced"}>
                 <AdvancedSettings />

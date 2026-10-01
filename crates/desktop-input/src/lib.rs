@@ -4,7 +4,10 @@ pub mod engine;
 pub mod input;
 #[cfg(any(target_os = "windows", test))]
 mod mailbox;
+pub mod pan;
 pub mod protocol;
+pub mod touch;
+pub mod trackpad;
 #[cfg(target_os = "windows")]
 pub mod windows;
 pub mod wire;

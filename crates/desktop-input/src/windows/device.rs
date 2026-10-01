@@ -2,19 +2,47 @@ use super::{environment, safety::Safety};
 use crate::{engine::Device, input::*};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
-pub(super) struct WindowsDevice(pub Safety);
+pub(super) struct WindowsDevice(
+    pub Safety,
+    pub super::touch::TouchDevice,
+    pub super::pan::PanDevice,
+);
 impl Device for WindowsDevice {
+    fn pan_supported(&self) -> bool {
+        self.2.supported()
+    }
+    fn submit_pan(&mut self, gesture: crate::pan::Pan) -> Result<(), Error> {
+        if !self.available() {
+            return Err(Error::Unavailable);
+        }
+        self.2.submit(gesture)
+    }
+    fn cancel_pan(&mut self) -> Result<(), Error> {
+        self.2.cancel()
+    }
+    fn cursor_position(&self) -> Result<(i32, i32), Error> {
+        let mut point = windows::Win32::Foundation::POINT::default();
+        unsafe { windows::Win32::UI::WindowsAndMessaging::GetPhysicalCursorPos(&mut point) }
+            .map_err(|_| Error::Unavailable)?;
+        Ok((point.x, point.y))
+    }
+    fn touch_supported(&self) -> bool {
+        self.1.supported()
+    }
+    fn submit_touch(&mut self, contacts: &[crate::touch::Action]) -> Result<(), Error> {
+        if !self.available() || contacts.iter().any(|c| !self.0.pixel_in_guard(c.x, c.y)) {
+            return Err(Error::Unavailable);
+        }
+        self.1.submit(contacts)
+    }
+    fn cancel_touch(&mut self) -> Result<(), Error> {
+        self.1.cancel()
+    }
     fn available(&self) -> bool {
         !self.0.observations.pending() && environment::desktop_available() && self.0.guard_current()
     }
     fn geometry_current(&self, g: Geometry) -> bool {
         self.0.geometry_current(g)
-    }
-    fn ready_to_approve(&self) -> bool {
-        self.available() && self.0.local_keys_up()
-    }
-    fn physically_held(&self, held: Held) -> bool {
-        self.0.observations.physical(held)
     }
     fn submit(&mut self, actions: &[Action]) -> Result<(), Error> {
         let only_release = actions.iter().all(|a| {

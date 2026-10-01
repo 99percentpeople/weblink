@@ -352,10 +352,10 @@ peers. Ordinary tests skip it because an SSH or CI session has no interactive de
 cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
 ```
 
-## Attended remote mouse control
+## Attended remote control
 
 Windows display shares are view-only until the viewer requests control and the
-host explicitly approves. Browser viewers can request control even though they
+host approves this request or has saved an allow rule for the client. Browser viewers can request control even though they
 cannot host native input. Window shares and older clients remain view-only.
 Keyboard/text forwarding is a later phase. The confirmation describes computer-wide
 input authority: a display rectangle maps the pointer, not an OS security sandbox.
@@ -367,7 +367,34 @@ peer generation, client, capture session, publication and current display geomet
 and source on the computer. Remote messages cannot register a target or approve
 consent. Approval is a trusted local policy decision exposed only to the main
 desktop window. It does not require foreground activation or physical-click
-evidence. The current UI requires confirmation; automatic approval is not enabled.
+evidence. Incoming requests use a persistent toast with Approve/Decline actions.
+The split Approve button also offers approve-and-allowlist and reject-and-blocklist.
+Rules are local preferences keyed by the existing persistent client ID, not by its
+editable display name; they are not a separate authenticated device identity.
+Blocked clients receive no hosting capability, including after a rule changes on
+an existing connection. Native requests are also rejected and active control is
+revoked. Removing a rule returns future requests to manual approval.
+
+Settings → Clients & rooms uses the existing client/room preference records for
+control and file permissions. Connections are remembered automatically; existing
+local history is imported once. Each record opens its own settings. Forgetting a
+visible client or the active room restores defaults and retains the record;
+forgetting an offline record removes it without deleting conversation history.
+
+A capable desktop also advertises `hello.requestScreen` on the existing native
+screen signaling channel. The avatar/camera action can send `control-request`,
+`control-cancel`, and receive `control-result`. Approval reuses the meeting capture
+owner to share the first monitor (and system audio) with the entire room; an
+existing controllable display is reused. No capture starts before approval. The
+request then hands off to that publication's ordinary native pointer. A one-use
+approval binds the client, peer generation and source for 30 seconds, preventing
+a second confirmation without carrying consent to other peers or captures.
+Cancellation, room/peer teardown and request expiry invalidate pending startup.
+
+The toast lifetime
+is bound to the native consent ID: polling does not recreate it, and cancellation,
+expiration or owner teardown removes it. Failed responses remain retryable while
+that same request is current.
 
 For mutually capable peers, the native media offer includes `weblink-control`
 (ordered/reliable) and `weblink-pointer` (unordered, no retransmission) channels.
@@ -379,16 +406,83 @@ bound to its grant, connection, geometry revision and activation epoch. Buttons
 and wheels include their position; moves have independent sequence numbers and a
 reliable-event barrier, so reordered moves cannot jump across a button transition.
 
-The host enforces separate two-second remote and frontend-owner leases; remote
-heartbeats cannot keep a reloaded/abandoned page's permission alive. Media/channel
-closure atomically invalidates queued input. Stopping a share, room/peer replacement,
-local takeover, revoke or lease expiry ends control; rejoining never restores a
-grant. A visible host banner and Ctrl+Alt+Shift+F10 allow local revocation.
+The host advertises additive `ready.persistentControl`: approval lasts for the
+current room/peer/media binding until explicitly revoked or that binding ends.
+A two-second remote heartbeat gap or stale input releases held input but keeps
+consent. Local keyboard/mouse activity is not monitored and does not pause or
+revoke control. The native sequencer suspends
+the old input epoch. After a fresh heartbeat the controller automatically requests
+a new activation epoch if the user still intends to control; interrupted input is
+never replayed. An explicit end/revoke cannot be undone by a late heartbeat or
+activation acknowledgement.
+
+Temporary ICE disconnection and DataChannel backpressure do not close control.
+While the reliable sender is congested, input is interrupted and unsent gestures
+are discarded; draining the buffer resumes with a fresh epoch and release barrier.
+Native reply queues preserve consent/revoke order, coalesce liveness observations,
+and acknowledge input transitions rather than every movement. An inbound network
+input burst clears delayed input and resets its epoch while retaining the channel.
+A terminal control-channel failure enters the existing media retry path, rebuilding
+the peer transport for the same capture; authorization is not carried to a new peer.
+
+Frontend status polling observes native state and applies saved or one-use approvals. Native window/page teardown,
+room leave, channel/media closure and explicit revoke own the session lifetime;
+a delayed WebView timer or failed status read cannot revoke consent. Stopping a
+share or replacing the room/peer ends the grant, and rejoining never restores it.
+The header sharing status and Ctrl+Alt+Shift+F10 provide explicit local revocation.
 
 The viewing UI maps only the contained video content, excluding letterbox areas.
-Blur, hidden view, lost drag capture or leaving the controlling view releases and
-pauses input. Resuming requires an explicit action and a fresh acknowledged epoch.
+The tile action bar has one icon button for request, cancel request and end control.
+Approval activates input automatically; there is no user-facing pause mode. Blur,
+hidden view, lost drag capture and settings changes release the current gesture
+using a fresh acknowledged epoch, without ending consent. Escape ends control.
 The existing video node, audio routing and statistics remain owned by the player.
+
+### Mobile touch input
+
+Settings → Remote control stores viewer-side touch preferences. Trackpad mode
+uses relative single-finger motion, tap-to-click, two-finger right click/scroll,
+and configurable long-press drag or right click. Long press is triggered by the
+phone browser's `contextmenu` event, with no application timer or delay preference;
+it applies only to a stationary single-finger gesture. Mouse right clicks continue
+through pointer events, and direct touch leaves long-press recognition to Windows.
+Pointer/scroll speed, direction and gesture switches are local preferences. Changes release the current gesture and
+apply immediately.
+
+Hosts advertise `ready.relativePointer` for native trackpad gestures. These use
+ordered `trackpad` input events: move deltas are fractions of the shared display,
+and buttons/wheels carry no cached absolute coordinate. The native input thread
+reads the actual physical cursor for each event, preserves subpixel motion and
+constrains output to the shared display. Deltas coalesce at 120 updates/s but use
+the reliable channel so individual displacement is never lost to packet loss.
+Older hosts retain absolute pointer emulation for movement and clicks.
+Two-finger scrolling requires the additive `ready.touchpadPan` capability and uses
+ordered `trackpad` pan start/update/end/cancel events. Updates carry cumulative
+CSS-pixel centroid displacement, coalesced at 120 Hz, with the configured speed
+and natural-scroll direction. Windows uses a dedicated `PT_TOUCHPAD` device via
+`CreateSyntheticPointerDevice2` with physical-size and gesture-only flags; it
+handles scroll recognition and inertia. Capability detection checks the actual
+API/device availability. There is no wheel-emulation fallback for this gesture.
+Pausing, revoking, disconnecting or cancelling ends contacts and native inertia.
+Mouse wheels still use the ordinary wheel input path.
+
+Direct touch requires the host's additive `ready.touchContacts` capability. It
+sends real Windows `PT_TOUCH` contacts using a dedicated synthetic pointer device,
+not mouse emulation. Hosts without this capability can still use trackpad mode.
+Each ordered frame includes every active contact, with up to ten normalized
+positions and explicit down/update/up/cancel phases. Movement coalesces to 60
+frames/s; stationary updates preserve native press-and-hold recognition. Gesture
+interpretation belongs to Windows and the target application. Letterboxes never
+generate direct contacts; positions map to physical display pixels without an
+extra DPI scale factor.
+
+The native engine validates contact ownership and transitions before injection.
+Pause, cancellation, mode changes, revoke, session loss and lease expiry release
+owned contacts. Cancellation covers the whole gesture and destroys its dedicated
+device, producing canceled touch events rather than completing a tap/drop. A new
+device is created on the next gesture. Touch cannot mix with held mouse buttons or keys. The existing
+grant, epoch, bounded queue and stale-input rules also apply to touch. Synthetic
+pointer creation failure disables direct touch without disabling mouse control.
 
 `NativeCapture.displayLayout()` / `capture_display_layout` reads physical display
 bounds, virtual-desktop bounds, orientation and optional OS resource scale without
@@ -413,35 +507,34 @@ These checks do not constitute actual remote keyboard/mouse acceptance.
 
 The native owner registers verified room/media bindings and physical display
 geometry. One worker serializes consent, grant validation, input and cleanup;
-`Ctrl+Alt+Shift+F10` is registered before it can accept a grant. Registration,
-hook or session-notification failure makes startup fail. Remote input never
+`Ctrl+Alt+Shift+F10` is registered before it can accept a grant. Hotkey or
+session-notification registration failure makes startup fail. Remote input never
 selects arbitrary HWNDs, scan codes outside the allowlist or system coordinates.
 The selected display constrains pointer mapping, not the OS keyboard foreground
 or application permissions.
 
 The reliable queue holds at most 128 commands. Pointer motion occupies one latest
 slot, ordered against reliable events by local enqueue order. Local revoke
-discards queued work; overflow, input older than 100 ms, injection or cleanup
-failure closes the worker. The native wire sequencer checks network sequence,
+discards queued work; worker overflow, injection or cleanup failure closes the worker.
+Input older than 100 ms is discarded and interrupts the current input epoch,
+retaining consent until a fresh activation. Interruption preserves queued local
+status/consent calls while dropping queued input. The native wire sequencer checks network sequence,
 epoch and movement barriers before enqueueing input. Queue acceptance and successful `SendInput` submission
 do not prove that the target application rendered an action.
 
-An independent native thread pumps hooks, hotkeys and system notifications;
-it never injects input or waits for the input worker. The input worker checks the
-two-second grant lease without frontend timers. Keeping hooks off the thread
-calling `SendInput` avoids stalls waiting for its own hook delivery. The injection
-tag fits in 31 bits because the mouse path can truncate ExtraInfo to 32 bits.
-Local key/button presses revoke active control; pointer motion
-alone does not. Own injections carry a marker; other injected input also counts
-as local takeover. Cleanup releases only owned presses, in reverse order, and
-preserves keys/buttons currently held physically. Other injected events cannot
-create or clear physical ownership. A local held key
-blocks approval. Scan-code input distinguishes extended keys; committed Unicode
-text is bounded and cannot be mixed with held physical keys. Pause/PrintScreen
-are not in the scan-code allowlist.
+An independent native thread pumps hotkeys and system notifications; it never
+injects input or waits for the input worker. The input worker checks the two-second
+heartbeat deadline without frontend timers. There are no keyboard/mouse hooks or
+local idle checks: using this computer, including its Weblink window, does not
+interrupt remote control or prevent local approval. Explicit revoke and the
+emergency hotkey end consent. Cleanup releases presses recorded for the grant,
+in reverse order; unmatched remote key/button releases are ignored. Scan-code
+input distinguishes extended keys; committed Unicode text is bounded and cannot
+be mixed with held remote keys. Pause/PrintScreen are not in the scan-code allowlist.
 
-Display/settings/session notifications, unavailable input desktop, or changed
-physical monitor inventory close the worker. Restart and new consent are required;
+Display/session notifications, unavailable input desktop, or changed
+physical monitor inventory close the worker. Settings notifications recheck the
+actual desktop/layout rather than unconditionally closing it. Restart and new consent are required;
 unlock never restores a grant. Normal shutdown joins after cleanup. Failed OS
 release is reported as failure, not successful revocation; process kill and
 unavailable/secure-desktop cleanup are not guaranteed by in-process ownership.
@@ -461,6 +554,9 @@ and test results through `WEBLINK_CONTROL_TEST_DIR` with a browser using the
 production `RemotePointer` receiver. Its local test owner approves only the
 guarded test session; it does not require physical-click evidence. It is opt-in
 and still restricts injection to its own foreground test window.
+Set `WEBLINK_CONTROL_TEST_TOUCH=1` for its native touch assertions; the browser
+driver must exercise multitouch, movement, lift and cancellation. The receiver
+checks `WM_POINTER*` messages and `PT_TOUCH`, not inferred mouse events.
 
 ## Windows acceptance
 

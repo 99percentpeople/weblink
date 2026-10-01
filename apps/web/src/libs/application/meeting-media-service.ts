@@ -434,19 +434,27 @@ export function createMeetingMediaController(
     updateState();
   };
 
-  const addSharing = async () => {
+  const addSharing = async (
+    capture = port.getDisplayMedia,
+    signal?: AbortSignal,
+  ) => {
     if (
       disposed ||
       sharingBusy() ||
-      typeof port.getDisplayMedia !== "function"
+      signal?.aborted ||
+      typeof capture !== "function"
     )
       return;
     setError(null);
     const request = ++sharingRequest;
     setSharingBusy(true);
     try {
-      const captured = await port.getDisplayMedia();
-      if (disposed || request !== sharingRequest) {
+      const captured = await capture();
+      if (
+        disposed ||
+        request !== sharingRequest ||
+        signal?.aborted
+      ) {
         stop(captured);
         return;
       }

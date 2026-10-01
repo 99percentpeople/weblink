@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 use weblink_desktop_capture::media::control::Port;
+#[cfg(any(windows, test))]
+mod transport;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
@@ -25,6 +27,7 @@ pub struct Pending {
     pub consent_id: String,
     pub client_id: String,
     pub source_id: String,
+    pub peer_generation: String,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,7 +70,7 @@ pub async fn remote_control_open(service: State<'_, Shared>) -> Result<String, S
         .await
         .map_err(|e| e.to_string())?
 }
-/// The trusted frontend's separate lease. Network heartbeats never call this.
+/// Status observation; native window/room/media ownership controls the lifetime.
 #[tauri::command]
 pub async fn remote_control_status(
     service: State<'_, Shared>,

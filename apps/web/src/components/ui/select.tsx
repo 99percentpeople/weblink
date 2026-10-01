@@ -51,7 +51,7 @@ export const SelectTrigger = <
     >
       <div
         class="[&>*[data-placeholder-shown]]:text-muted-foreground absolute
-          right-8 left-2 truncate text-left"
+          left-2 right-8 truncate text-left"
       >
         {local.children}
       </div>
@@ -99,7 +99,7 @@ export const SelectContent = <
           data-[expanded]:animate-in data-[closed]:animate-out
           data-[closed]:fade-out-0 data-[expanded]:fade-in-0
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95
-          relative z-50 flex
+          relative z-[60] flex
           max-h-[min(--spacing(80),var(--kb-popper-content-available-height))]
           min-w-32 flex-col overflow-hidden rounded-lg border
           shadow-md`,
@@ -111,7 +111,7 @@ export const SelectContent = <
         {...rest}
       >
         <SelectPrimitive.Listbox
-          class="min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain
+          class="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain
             p-1 outline-none"
         />
       </SelectPrimitive.Content>
@@ -134,8 +134,8 @@ export const SelectItem = <T extends ValidComponent = "li">(
     <SelectPrimitive.Item
       class={cn(
         `focus:bg-accent focus:text-accent-foreground relative flex
-        w-full cursor-default items-center rounded-md py-1.5 pr-8
-        pl-2 text-sm outline-none select-none
+        w-full cursor-default select-none items-center rounded-md
+        py-1.5 pl-2 pr-8 text-sm outline-none
         data-[disabled]:pointer-events-none
         data-[disabled]:opacity-50`,
         local.class,

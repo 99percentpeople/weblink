@@ -1,4 +1,6 @@
 import "./index.css";
+import { sessionService } from "@/libs/application/session-service";
+import { toast } from "solid-sonner";
 import { createWindowSize } from "@solid-primitives/resize-observer";
 import { SharedFilesPanel } from "@/components/files/shared-files-panel";
 import {
@@ -85,6 +87,25 @@ export default function Home() {
   const transitionLayout = layout.transition;
   const state = useAppState();
   const roomActions = useRoomActions();
+  const controller = createMemo(() => {
+    const id =
+      sessionService.remoteControl.status().clientId;
+    if (!id) return;
+    return {
+      name: appState.session.clientViewData[id]?.name ?? id,
+      async revoke() {
+        try {
+          await sessionService.remoteControl.revoke();
+        } catch (error) {
+          console.warn(
+            "Could not revoke remote control",
+            error,
+          );
+          toast.error(t("remote_control.revoke_failed"));
+        }
+      },
+    };
+  });
   const [search, setSearch] = useSearchParams();
   const navigate = useNavigate();
   const routeLocation = useLocation<HomeRouteState>();
@@ -528,6 +549,7 @@ export default function Home() {
           >
             <Show when={media.sharing()}>
               <MeetingSharingStatus
+                controller={controller()}
                 name={appState.profile.name}
                 avatar={
                   appState.profile.avatar ?? undefined
@@ -776,11 +798,11 @@ export default function Home() {
                       {(value) => (
                         <TabsTrigger
                           value={value}
-                          class="text-muted-foreground data-selected:text-foreground h-9
-                            min-w-0 flex-1 flex-row gap-1.5 px-2 py-1.5 text-xs
-                            font-normal md:h-11.5 md:w-17 md:grow-0 md:basis-17
-                            md:flex-col md:gap-1 md:px-1.25 md:text-[11px]
-                            [&>svg]:size-3.75 [&>svg]:shrink-0"
+                          class="text-muted-foreground data-selected:text-foreground
+                            md:h-11.5 md:w-17 md:basis-17 md:px-1.25 [&>svg]:size-3.75
+                            h-9 min-w-0 flex-1 flex-row gap-1.5 px-2 py-1.5 text-xs
+                            font-normal md:grow-0 md:flex-col md:gap-1 md:text-[11px]
+                            [&>svg]:shrink-0"
                           id={`meeting-tab-${value}`}
                           aria-label={t(`meeting.${value}`)}
                           title={t(`meeting.${value}`)}

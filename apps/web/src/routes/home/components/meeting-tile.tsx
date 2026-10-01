@@ -1,3 +1,8 @@
+import {
+  createVideoRemoteControl,
+  createControlState,
+  RemoteControlAction,
+} from "./remote-control-action";
 import { RemoteControlOverlay } from "./remote-control-overlay";
 import { Motion } from "@/components/ui/motion";
 import {
@@ -42,6 +47,7 @@ export function MeetingTile(props: {
   sourceId?: string;
   order?: number;
   sourceKind?: string;
+  clientId?: string;
   trackId?: string;
   name: string;
   avatar?: string;
@@ -181,6 +187,11 @@ export function MeetingTile(props: {
           </Show>
           <Show when={!props.compact}>
             <TileActions
+              clientId={
+                props.sourceKind !== "screen"
+                  ? props.clientId
+                  : undefined
+              }
               fullscreen={fullscreen}
               local={props.local}
               audioMuted={props.audioMuted}
@@ -199,6 +210,7 @@ export function MeetingTile(props: {
 }
 
 function TileActions(props: {
+  clientId?: string;
   fullscreen: ReturnType<typeof createFullscreen>;
   local?: boolean;
   audioMuted?: boolean;
@@ -210,6 +222,19 @@ function TileActions(props: {
   name: string;
 }) {
   const { videoRef, audioTracks } = useVideoDisplay();
+  const videoControl = createVideoRemoteControl();
+  const remote = createControlState(
+    () =>
+      videoControl.control() ??
+      (props.clientId
+        ? sessionService.getScreenControl(props.clientId)
+        : undefined),
+  );
+  const showControl = () =>
+    !props.local &&
+    remote.control() &&
+    (videoControl.control() ||
+      remote.state() !== "unavailable");
   const muted = () => props.audioMuted === true;
   const fullscreen = props.fullscreen;
   createFullscreenVideoOrientation(
@@ -222,6 +247,7 @@ function TileActions(props: {
   });
   const hasActions = createMemo(
     () =>
+      Boolean(showControl()) ||
       Boolean(props.onStop) ||
       Boolean(
         !props.local &&
@@ -276,6 +302,14 @@ function TileActions(props: {
       </Show>
       <Show when={hasActions()}>
         <div class="meeting-tile-actions">
+          <Show when={showControl() && remote.control()}>
+            {(control) => (
+              <RemoteControlAction
+                control={control()}
+                state={remote.state()}
+              />
+            )}
+          </Show>
           <Show when={props.onStop}>
             <button
               type="button"

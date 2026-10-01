@@ -191,6 +191,7 @@ export interface NativeControlStatus {
     consentId: string;
     clientId: string;
     sourceId: string;
+    peerGeneration?: string;
   } | null;
   clientId: string | null;
   closed: boolean;

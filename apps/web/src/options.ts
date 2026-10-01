@@ -1,9 +1,22 @@
+import {
+  setClientConfig,
+  setRoomConfig,
+} from "@/libs/state/permission-options";
+export {
+  getClientConfig,
+  setClientConfig,
+  setRoomConfig,
+  forgetClientConfig,
+  forgetRoomConfig,
+} from "@/libs/state/permission-options";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
+import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { makePersisted } from "@solid-primitives/storage";
 import {
   createEffect,
   createSignal,
   onCleanup,
+  untrack,
 } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { SetStoreFunction } from "solid-js/store";
@@ -12,22 +25,17 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
-import type {
-  AppOption,
-  ClientConfig,
-  RoomConfig,
-} from "@/libs/state/app-options";
+import type { AppOption } from "@/libs/state/app-options";
 import {
   defaultClientConfig,
   getDefaultAppOptions,
   parseTurnServers,
   resolveClientConfig,
-  resolveRoomConfig,
 } from "@/libs/state/app-options";
 
 export type {
-  AppOption,
   ClientConfig,
+  AppOption,
   CompressionLevel,
   Locale,
   TurnServerOptions,
@@ -90,6 +98,9 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        remoteTouch: resolveRemoteTouchOptions(
+          parsed.remoteTouch,
+        ),
         bufferedAmountLowThreshold:
           legacyBufferedAmount !== undefined
             ? defaults.bufferedAmountLowThreshold
@@ -122,6 +133,26 @@ export function initializeAppOptions() {
 
   setAppState("options", reconcile(loadFromLocalStorage()));
 
+  // Import existing history once. Forgotten offline entries must not reappear on reload.
+  createEffect(() => {
+    if (
+      appState.message.status !== "ready" ||
+      appState.options.permissionHistoryImported
+    )
+      return;
+    untrack(() => {
+      for (const client of appState.message.clients)
+        if (client.clientId !== appState.profile.clientId)
+          setClientConfig(client.clientId, {
+            name: client.name,
+          });
+      for (const room of appState.message.conversations)
+        if (room.kind === "room")
+          setRoomConfig(room.id, { name: room.title });
+      setAppOptions("permissionHistoryImported", true);
+    });
+  });
+
   createEffect(() => {
     if (typeof localStorage === "undefined") return;
     localStorage.setItem(
@@ -136,31 +167,6 @@ export const appOptions = appState.options;
 export const setAppOptions: SetStoreFunction<AppOption> = ((
   ...args: any[]
 ) => (setAppState as any)("options", ...args)) as any;
-
-export const getClientConfig = (
-  clientId: string,
-): ClientConfig =>
-  resolveClientConfig(appState.options, clientId);
-
-export const setClientConfig = (
-  clientId: string,
-  patch: Partial<ClientConfig>,
-) => {
-  setAppOptions("clientConfigs", clientId, {
-    ...getClientConfig(clientId),
-    ...patch,
-  });
-};
-
-export const setRoomConfig = (
-  conversationId: string,
-  patch: Partial<RoomConfig>,
-) => {
-  setAppOptions("roomConfigs", conversationId, {
-    ...resolveRoomConfig(appState.options, conversationId),
-    ...patch,
-  });
-};
 
 export const [backgroundImage, setBackgroundImage] =
   createSignal<string | undefined>(undefined);

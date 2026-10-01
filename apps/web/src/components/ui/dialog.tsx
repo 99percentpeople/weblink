@@ -18,6 +18,8 @@ import {
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 
+// Dialogs use layer 50; body-portalled menus/popovers use 60 and tooltips 70,
+// so their visibility does not depend on portal insertion order.
 const DialogPortal: Component<
   DialogPrimitive.DialogPortalProps
 > = (props) => {
@@ -82,11 +84,12 @@ const DialogContent = <T extends ValidComponent = "div">(
         <DialogPrimitive.CloseButton
           class="ring-offset-background focus:ring-ring
             data-[expanded]:bg-accent
-            data-[expanded]:text-muted-foreground absolute top-4 right-4
-            rounded-xs opacity-70 transition-opacity hover:opacity-100
-            focus:ring-2 focus:ring-offset-2 focus:outline-hidden
-            disabled:pointer-events-none [&_svg]:pointer-events-none
-            [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            data-[expanded]:text-muted-foreground rounded-xs
+            focus:outline-hidden absolute right-4 top-4 opacity-70
+            transition-opacity hover:opacity-100 focus:ring-2
+            focus:ring-offset-2 disabled:pointer-events-none
+            [&_svg:not([class*='size-'])]:size-4
+            [&_svg]:pointer-events-none [&_svg]:shrink-0"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -167,7 +170,7 @@ const DialogTitle = <T extends ValidComponent = "h2">(
   return (
     <DialogPrimitive.Title
       class={cn(
-        "text-lg leading-none font-semibold tracking-tight",
+        "text-lg font-semibold leading-none tracking-tight",
         props.class,
       )}
       {...rest}

@@ -1413,3 +1413,30 @@ describe("meeting media device selection", () => {
     expect(systemDefault.stop).not.toHaveBeenCalled();
   });
 });
+
+it("uses the existing sharing owner for a consented default screen and cancels a late capture", async () => {
+  const { media, service, getDisplayMedia } = setup();
+  const abort = new AbortController();
+  const pending = deferred();
+  const add = media.addSharing(
+    () => pending.promise,
+    abort.signal,
+  );
+  const video = new FakeTrack("video", "screen");
+  const audio = new FakeTrack("audio", "screen");
+  abort.abort();
+  pending.resolve(stream(video, audio));
+  await add;
+  expect(service.stream()).toBeNull();
+  expect(video.stop).toHaveBeenCalledOnce();
+  expect(audio.stop).toHaveBeenCalledOnce();
+  expect(getDisplayMedia).not.toHaveBeenCalled();
+  const next = new FakeTrack("video", "screen");
+  await media.addSharing(async () => stream(next));
+  expect(service.stream()?.getVideoTracks()).toContain(
+    asTrack(next),
+  );
+  expect(getMeetingVideoSourceKind(asTrack(next))).toBe(
+    "screen",
+  );
+});

@@ -54,6 +54,15 @@ const [playingAudio, setPlayingAudio] = createSignal(false);
 const [currentRoomId, setCurrentRoomId] = createSignal<
   string | undefined
 >("Current room");
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    remoteControl: {
+      status: () => ({ clientId: null }),
+      screen: {},
+    },
+    getScreenControl: () => undefined,
+  },
+}));
 vi.mock("@/i18n", () => ({
   t: (key: string, values?: { error: string }) =>
     values?.error ?? key,

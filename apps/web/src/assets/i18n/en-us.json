@@ -28,8 +28,6 @@
     },
     "empty": "No tasks in this view.",
     "progress": "File transfer progress",
-    "pause": "Pause",
-    "resume": "Resume / retry",
     "inspect": "Peer details",
     "clear_finished": "Clear finished",
     "show_more": "Show more",
@@ -259,6 +257,48 @@
       "hardware": "Hardware",
       "software": "Software",
       "native_encoder_description": "Choose a format and hardware or software encoder. Hardware options are detected from the current driver. Receivers must support the format; changes apply to the next share."
+    },
+    "remote_control": {
+      "description": "Choose how this device’s touch gestures control a remote screen.",
+      "mode": {
+        "title": "Touch mode",
+        "trackpad": "Trackpad",
+        "direct": "Direct touch",
+        "trackpad_description": "Move one finger to move the cursor. Tap to click, use two fingers to right-click or scroll, and hold to drag.",
+        "direct_description": "Send real touch contacts at the corresponding screen positions, including multi-touch and press-and-hold. Gestures are handled by Windows and the remote app. The remote host must support touch input."
+      },
+      "pointer_speed": "Cursor speed",
+      "scroll_speed": "Two-finger scroll speed",
+      "tapToClick": "Tap to left-click",
+      "twoFingerRightClick": "Two-finger tap to right-click",
+      "twoFingerScroll": "Two-finger scrolling",
+      "naturalScroll": "Natural scrolling",
+      "long_press": {
+        "title": "One-finger press and hold",
+        "drag": "Hold to drag",
+        "right-click": "Right-click",
+        "none": "No action"
+      },
+      "changes": "Changes apply immediately and release any pressed buttons or touches.",
+      "pan_unavailable": "Native touchpad scrolling is unavailable on this host.",
+      "unavailable": "This host does not support direct touch. Select Trackpad in Remote control settings."
+    },
+    "permissions": {
+      "description": "Connected clients and rooms are remembered here. Forgetting a visible client or the current room resets its permissions; offline entries are removed.",
+      "clients": "Clients",
+      "rooms": "Rooms",
+      "empty_clients": "No saved client permissions.",
+      "empty_rooms": "No saved room permissions.",
+      "remove": "Remove {{name}}",
+      "ask": "Ask every time",
+      "allow": "Automatically approve (allowlist)",
+      "deny": "Automatically reject (blocklist)",
+      "configure": "Permissions for {{name}}",
+      "reset": "Reset permissions for {{name}}",
+      "reset_title": "Reset permissions?",
+      "forget_title": "Forget this entry?",
+      "reset_description": "“{{name}}” is still present. Restore default permissions and keep this entry?",
+      "forget_description": "Forget “{{name}}” and remove its saved permissions? Conversation history will be kept."
     }
   },
   "cache": {
@@ -852,7 +892,9 @@
     "settings_transfer": "Transfers",
     "settings_advanced": "Advanced",
     "settings_about": "About",
-    "settings_meeting": "Audio & video"
+    "settings_meeting": "Audio & video",
+    "settings_remote_control": "Remote control",
+    "settings_permissions": "Clients & rooms"
   },
   "file_library": {
     "search": "Search files…",
@@ -978,18 +1020,22 @@
   "remote_control": {
     "request_title": "Allow remote control?",
     "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
-    "revoke_hint": "Click or press a key locally to take back control, or press Ctrl+Alt+Shift+F10. Keyboard forwarding will be added in a later phase.",
+    "revoke_hint": "Use “Revoke control” or press Ctrl+Alt+Shift+F10 on this computer to end control. Keyboard forwarding will be added later.",
     "decline": "Decline",
     "allow": "Allow control",
     "host_active": "{{name}} can control this computer.",
     "revoke": "Revoke control",
+    "revoke_failed": "Could not revoke control. Use Ctrl+Alt+Shift+F10 on the host to stop it.",
     "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
-    "surface": "Remote mouse control. Press Escape to pause.",
+    "reconnecting": "Reconnecting control",
+    "surface": "Remote control; press Escape to end control.",
     "request": "Request control",
     "waiting": "Waiting for approval",
-    "cancel": "Cancel",
-    "resume": "Control mouse",
-    "pause": "Pause control",
-    "end": "End control"
+    "cancel": "Cancel request",
+    "end": "End control",
+    "more_choices": "More approval options",
+    "allow_remember": "Approve and add to allowlist",
+    "deny_remember": "Reject and add to blocklist",
+    "share_first_screen": "Approval shares Screen 1 and its audio with everyone in the room."
   }
 }

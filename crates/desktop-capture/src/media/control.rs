@@ -4,8 +4,14 @@ pub const RELIABLE_LABEL: &str = "weblink-control";
 pub const MOVEMENT_LABEL: &str = "weblink-pointer";
 pub const MAX_BYTES: usize = 4096;
 pub const HIGH_WATER: u64 = 16 * 1024;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SendResult {
+    Sent,
+    Backpressure,
+    Closed,
+}
 pub trait Sender: Send + Sync {
-    fn send(&self, data: &[u8]) -> bool;
+    fn send(&self, data: &[u8]) -> SendResult;
     fn close(&self);
 }
 /// Callbacks must not block WebRTC threads. Closing input does not end screen viewing.

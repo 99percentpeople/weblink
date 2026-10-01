@@ -1,5 +1,6 @@
 import { ConversationMessagingService } from "@/libs/application/messaging/conversation-messaging-service";
 import { userErrorMessage } from "@/libs/user-error";
+import { setRoomConfig } from "@/libs/state/permission-options";
 import { t } from "@/i18n";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
@@ -205,6 +206,15 @@ export const AppStateProvider: Component<
   });
   const [currentRoom, setCurrentRoom] =
     createSignal<ReturnType<typeof desiredRoom>>(null);
+  createEffect(() => {
+    const room = desiredRoom();
+    if (room)
+      untrack(() =>
+        setRoomConfig(room.conversationId, {
+          name: room.roomId,
+        }),
+      );
+  });
   const [roomChatCapabilities, setRoomChatCapabilities] =
     createSignal<
       Readonly<

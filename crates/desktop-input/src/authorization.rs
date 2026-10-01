@@ -49,7 +49,10 @@ struct Pending {
 enum State {
     Idle,
     Pending(Pending),
-    Granted { grant: Grant, deadline: Instant },
+    Granted {
+        grant: Grant,
+        deadline: Option<Instant>,
+    },
 }
 #[derive(Debug, PartialEq, Eq)]
 pub enum RequestResult {
@@ -173,7 +176,7 @@ impl<B: Backend> Authority<B> {
         };
         self.state = State::Granted {
             grant,
-            deadline: now + Duration::from_millis(LEASE_MS),
+            deadline: Some(now + Duration::from_millis(LEASE_MS)),
         };
         Some(signal)
     }
@@ -211,14 +214,17 @@ impl<B: Backend> Authority<B> {
     pub fn permits(&mut self, binding: &Binding, grant_id: &str, now: Instant) -> bool {
         self.tick(now);
         !self.closed
-            && matches!(&self.state, State::Granted { grant, .. } if grant.id == grant_id && grant.binding == *binding)
+            && matches!(&self.state, State::Granted { grant, deadline: Some(_) } if grant.id == grant_id && grant.binding == *binding)
     }
     pub fn renew(&mut self, binding: &Binding, grant_id: &str, now: Instant) -> bool {
-        if !self.permits(binding, grant_id, now) {
+        self.tick(now);
+        if self.closed
+            || !matches!(&self.state, State::Granted { grant, .. } if grant.id == grant_id && grant.binding == *binding)
+        {
             return false;
         }
         if let State::Granted { deadline, .. } = &mut self.state {
-            *deadline = now + Duration::from_millis(LEASE_MS);
+            *deadline = Some(now + Duration::from_millis(LEASE_MS));
         }
         true
     }
@@ -237,15 +243,26 @@ impl<B: Backend> Authority<B> {
         }
     }
     pub fn tick(&mut self, now: Instant) {
-        let expired = match &self.state {
+        if self.closed {
+            return;
+        }
+        let invalid = match &self.state {
             State::Idle => false,
             State::Pending(p) => now >= p.deadline || !self.backend.is_current(&p.binding),
-            State::Granted { grant, deadline } => {
-                now >= *deadline || !self.backend.is_current(&grant.binding)
-            }
+            State::Granted { grant, .. } => !self.backend.is_current(&grant.binding),
         };
-        if expired {
+        if invalid {
             self.revoke();
+            return;
+        }
+        if let State::Granted { grant, deadline } = &mut self.state {
+            if deadline.is_some_and(|at| now >= at) {
+                // A liveness gap releases input once, but consent belongs to the
+                // connection. Renewing it never restores an ended/replaced grant.
+                *deadline = None;
+                self.closed = true;
+                self.closed = !self.backend.release(grant);
+            }
         }
     }
     pub fn revoke(&mut self) {

@@ -1,7 +1,9 @@
 //! Native actor. No Tauri IPC or network handler is exposed by this module.
 mod device;
 mod environment;
+mod pan;
 mod safety;
+mod touch;
 use crate::{
     authorization::{Binding, Grant, RequestResult},
     engine::{Engine, Status, TrustedTarget},
@@ -55,6 +57,9 @@ impl Worker {
         let exclusive = Exclusive;
         let queue = Arc::new(Mailbox::default());
         let status = Arc::new(Mutex::new(Status {
+            input_suspended: false,
+            pan_supported: false,
+            touch_supported: false,
             pending_consent: None,
             grant: None,
             failure: None,
@@ -77,16 +82,16 @@ impl Worker {
                         }
                     };
                     let observations = safety.observations.clone();
-                    let mut engine = Engine::new(WindowsDevice(safety));
+                    let touch = touch::TouchDevice::new();
+                    let mut engine =
+                        Engine::new(WindowsDevice(safety, touch, pan::PanDevice::new()));
                     let _ = ready.send(Ok(()));
                     loop {
                         let signals = observations.signals();
                         if signals & safety::INVALIDATED != 0 {
                             q.close(Error::Unavailable);
                         }
-                        if signals & safety::EMERGENCY != 0
-                            || (signals & safety::TAKEOVER != 0 && engine.status().grant.is_some())
-                        {
+                        if signals & safety::EMERGENCY != 0 {
                             q.clear();
                             engine.revoke();
                         }
@@ -224,6 +229,14 @@ impl Worker {
     }
     pub fn invalidate(&self, binding: Binding) -> Result<(), Error> {
         self.call(move |e| e.invalidate(&binding))
+    }
+    pub fn interrupt(&self) -> Result<(), Error> {
+        self.queue
+            .discard(|command| matches!(command, Command::Input { .. }));
+        self.call(|e| {
+            e.interrupt();
+            e.status().failure.map_or(Ok(()), Err)
+        })?
     }
     pub fn revoke(&self) -> Result<(), Error> {
         self.call_with_priority(true, |e| {

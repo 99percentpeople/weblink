@@ -129,6 +129,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("could not build Weblink desktop")
         .run(|app, event| {
+            if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+                app.state::<remote_control::Shared>().close();
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 app.state::<remote_control::Shared>().close();
                 app.state::<capture::Service>().shutdown();

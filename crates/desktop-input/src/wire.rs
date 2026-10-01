@@ -25,6 +25,12 @@ pub struct Packet {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PointerEvent {
+    Trackpad {
+        action: crate::trackpad::Event,
+    },
+    Touch {
+        contacts: Vec<crate::touch::Contact>,
+    },
     Activate,
     Pause,
     Move {
@@ -50,6 +56,8 @@ impl PointerEvent {
             x.is_finite() && y.is_finite() && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)
         };
         match *self {
+            Self::Trackpad { action } => action.valid(),
+            Self::Touch { ref contacts } => crate::touch::valid_frame(contacts),
             Self::Activate | Self::Pause => true,
             Self::Move { x, y } => position(x, y),
             Self::Button { x, y, button, .. } => position(x, y) && button <= 4,
@@ -67,6 +75,8 @@ impl PointerEvent {
     }
     fn input(&self) -> Event {
         match *self {
+            Self::Trackpad { action } => Event::Trackpad(action),
+            Self::Touch { ref contacts } => Event::Touch(contacts.clone()),
             Self::Activate | Self::Pause => Event::ReleaseAll,
             Self::Move { x, y } => Event::Move(Position { x, y }),
             Self::Button { x, y, button, down } => Event::Button {
@@ -144,6 +154,13 @@ impl Sequencer {
             active: false,
         }
     }
+    pub fn epoch(&self) -> Option<&str> {
+        self.epoch.as_deref()
+    }
+    pub fn suspend(&mut self) {
+        self.active = false;
+        self.pending = None;
+    }
     pub fn active(&self) -> bool {
         self.active
     }
@@ -162,7 +179,6 @@ impl Sequencer {
         }
         if matches!(p.event, PointerEvent::Activate) {
             if movement
-                || self.active
                 || self.used.contains(&p.input_epoch)
                 || self.used.len() >= 256
                 || p.sequence != 1
@@ -170,6 +186,8 @@ impl Sequencer {
             {
                 return vec![];
             }
+            // A fresh reliable activation can replace an unacknowledged epoch.
+            // Always release its input first; previously used epochs remain rejected.
             self.used.insert(p.input_epoch.clone());
             self.epoch = Some(p.input_epoch);
             self.reliable = 1;
@@ -237,6 +255,119 @@ mod tests {
     }
     fn sequencer() -> Sequencer {
         Sequencer::new("grant".into(), "connection".into(), "geometry".into())
+    }
+    #[test]
+    fn relative_gestures_are_bounded_and_reliable_only() {
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"trackpad","action":{"type":"move","x":-0.1,"y":0.2}}});
+        let p = parse(value.to_string().as_bytes()).unwrap();
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        assert!(s.accept(p.clone(), true).is_empty());
+        assert!(
+            matches!(s.accept(p.clone(), false).as_slice(), [Event::Trackpad(crate::trackpad::Event::Move {x, ..})] if *x == -0.1)
+        );
+        assert!(s.accept(p, false).is_empty());
+        for action in [
+            serde_json::json!({"type":"move","x":1.01,"y":0}),
+            serde_json::json!({"type":"button","button":5,"down":true}),
+            serde_json::json!({"type":"wheel","vertical":1201,"horizontal":0}),
+        ] {
+            value["event"]["action"] = action;
+            assert!(parse(value.to_string().as_bytes()).is_none());
+        }
+    }
+    #[test]
+    fn native_interruption_rejects_the_old_epoch_and_accepts_a_fresh_activation() {
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        s.suspend();
+        assert_eq!(s.epoch(), Some("epoch"));
+        assert!(s
+            .accept(
+                packet(
+                    2,
+                    PointerEvent::Button {
+                        x: 0.5,
+                        y: 0.5,
+                        button: 0,
+                        down: true
+                    }
+                ),
+                false
+            )
+            .is_empty());
+        assert!(s
+            .accept(packet(1, PointerEvent::Activate), false)
+            .is_empty());
+        let mut resume = packet(1, PointerEvent::Activate);
+        resume.input_epoch = "fresh".into();
+        assert_eq!(s.accept(resume, false), vec![Event::ReleaseAll]);
+        assert!(s.active());
+    }
+    #[test]
+    fn lost_activation_ack_can_recover_without_replaying_the_old_epoch() {
+        let mut s = sequencer();
+        let first = packet(1, PointerEvent::Activate);
+        assert_eq!(s.accept(first.clone(), false), vec![Event::ReleaseAll]);
+        let mut next = first.clone();
+        next.input_epoch = "retry".into();
+        assert_eq!(s.accept(next, false), vec![Event::ReleaseAll]);
+        assert!(s.accept(first, false).is_empty());
+        assert!(s.accept(packet(2, PointerEvent::Pause), false).is_empty());
+        assert!(s.active());
+        assert_eq!(s.epoch(), Some("retry"));
+    }
+    #[test]
+    fn native_pan_is_bounded_and_reliable_only() {
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        for (i, gesture) in [
+            serde_json::json!({"phase":"start"}),
+            serde_json::json!({"phase":"update","x":0.25,"y":-32.5}),
+            serde_json::json!({"phase":"end"}),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut action = gesture;
+            action["type"] = serde_json::json!("pan");
+            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":i+2,"event":{"type":"trackpad","action":action}});
+            let p = parse(value.to_string().as_bytes()).unwrap();
+            assert!(s.accept(p.clone(), true).is_empty());
+            assert!(matches!(
+                s.accept(p.clone(), false).as_slice(),
+                [Event::Trackpad(crate::trackpad::Event::Pan { .. })]
+            ));
+            assert!(s.accept(p, false).is_empty());
+        }
+        for action in [
+            serde_json::json!({"type":"pan","phase":"update","x":2049,"y":0}),
+            serde_json::json!({"type":"pan","phase":"update","x":0}),
+            serde_json::json!({"type":"pan","phase":"unknown"}),
+        ] {
+            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":5,"event":{"type":"trackpad","action":action}});
+            assert!(parse(value.to_string().as_bytes()).is_none());
+        }
+    }
+    #[test]
+    fn touch_frames_are_bounded_ordered_and_cannot_use_the_motion_channel() {
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"touch","contacts":[{"id":1,"x":0.2,"y":0.3,"phase":"down"}]}});
+        let p = parse(value.to_string().as_bytes()).unwrap();
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        assert!(s.accept(p.clone(), true).is_empty());
+        assert!(matches!(s.accept(p.clone(), false).as_slice(), [Event::Touch(c)] if c.len() == 1));
+        assert!(s.accept(p, false).is_empty());
+        let c = value["event"]["contacts"][0].clone();
+        for contacts in [
+            serde_json::json!([]),
+            serde_json::json!([c, c]),
+            serde_json::json!([{"id":11,"x":0.5,"y":0.5,"phase":"down"}]),
+            serde_json::json!([{"id":1,"x":1.1,"y":0.5,"phase":"down"}]),
+        ] {
+            value["event"]["contacts"] = contacts;
+            assert!(parse(value.to_string().as_bytes()).is_none());
+        }
     }
     #[test]
     fn moves_wait_for_button_and_old_barriers_cannot_move_a_drag_backwards() {

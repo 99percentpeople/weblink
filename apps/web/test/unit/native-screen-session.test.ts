@@ -705,3 +705,185 @@ it("does not attach input after owner preparation finishes for an obsolete chann
     channel.sent.filter((v) => v.type === "offer"),
   ).toEqual([]);
 });
+
+it("retries a failed control transport for the same shared source and binds a fresh controller", async () => {
+  const { session, channel, port } = setup();
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: true },
+  });
+  channel.receive({
+    type: "offer",
+    id: "first",
+    sourceId: "display",
+    sdp: "offer",
+    control: true,
+  });
+  await flush();
+  const first = mediaStream("first-video");
+  receivers[0].stream = first;
+  receivers[0].changed(first);
+  const controller = session.getRemoteControl(
+    first.getVideoTracks()[0],
+  );
+  expect(controller).toBeDefined();
+  receivers[0].failed(
+    new Error("Native control connection ended"),
+  );
+  expect(controller?.state()).toBe("unavailable");
+  expect(channel.sent.at(-1)).toEqual({
+    type: "retry",
+    id: "first",
+  });
+  channel.receive({
+    type: "offer",
+    id: "second",
+    sourceId: "display",
+    sdp: "replacement",
+    control: true,
+  });
+  await flush();
+  const replacement = mediaStream("second-video");
+  receivers[1].stream = replacement;
+  receivers[1].changed(replacement);
+  expect(
+    session.getRemoteControl(
+      replacement.getVideoTracks()[0],
+    ),
+  ).toBeDefined();
+  expect(
+    session.getRemoteControl(
+      replacement.getVideoTracks()[0],
+    ),
+  ).not.toBe(controller);
+  expect(port.changed).toHaveBeenLastCalledWith(
+    replacement,
+  );
+  expect(channel.readyState).toBe("open");
+  session.reset();
+});
+
+it("refreshes per-peer control capabilities and republishes the same capture without control for a blocked peer", async () => {
+  let allowed = true;
+  const port = {
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+    loadControlCapabilities: async () => ({
+      request: true,
+      host: allowed,
+    }),
+    controlContext: async () =>
+      allowed
+        ? {
+            ownerId: "owner",
+            clientId: "alice",
+            peerGeneration: "peer",
+          }
+        : undefined,
+    requestScreen: vi.fn(async () => "screen"),
+  };
+  const session = new NativeScreenSession(port);
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  const pub = { ...publication(), controlEligible: true };
+  session.setPublication(pub);
+  await flush();
+  expect(
+    channel.sent.find((signal) => signal.type === "hello")
+      .requestScreen,
+  ).toBe(true);
+  expect(
+    channel.sent.find((signal) => signal.type === "offer")
+      .control,
+  ).toBe(true);
+  allowed = false;
+  await session.refreshControlCapabilities();
+  await flush();
+  expect(
+    channel.sent
+      .filter((signal) => signal.type === "hello")
+      .at(-1),
+  ).toMatchObject({ remoteControl: { host: false } });
+  expect(
+    channel.sent
+      .filter((signal) => signal.type === "hello")
+      .at(-1),
+  ).not.toHaveProperty("requestScreen");
+  expect(
+    channel.sent
+      .filter((signal) => signal.type === "offer")
+      .at(-1),
+  ).not.toHaveProperty("control");
+  channel.receive({
+    type: "control-request",
+    id: "blocked",
+  });
+  await flush();
+  expect(port.requestScreen).not.toHaveBeenCalled();
+  expect(channel.sent.at(-1)).toEqual({
+    type: "control-result",
+    id: "blocked",
+  });
+  allowed = true;
+  await session.refreshControlCapabilities();
+  await flush();
+  expect(
+    channel.sent
+      .filter((signal) => signal.type === "offer")
+      .at(-1),
+  ).toMatchObject({
+    control: true,
+    sourceId: pub.sourceId,
+  });
+  session.reset();
+});
+
+it("cancels an avatar approval before it can return a stale source and clears capabilities on reset", async () => {
+  const pending = deferred<string | undefined>();
+  let signal: AbortSignal;
+  const port = {
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+    controlCapabilities: { host: true, request: true },
+    requestScreen: vi.fn((abort: AbortSignal) => {
+      signal = abort;
+      return pending.promise;
+    }),
+    cancelScreenRequest: vi.fn(),
+  };
+  const session = new NativeScreenSession(port);
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    requestScreen: true,
+    remoteControl: { host: true, request: true },
+  });
+  expect(session.screenControl.state()).toBe("viewing");
+  channel.receive({ type: "control-request", id: "first" });
+  await flush();
+  channel.receive({ type: "control-cancel", id: "other" });
+  expect(signal!.aborted).toBe(false);
+  channel.receive({ type: "control-cancel", id: "first" });
+  expect(signal!.aborted).toBe(true);
+  pending.resolve("stale-screen");
+  await flush();
+  expect(
+    channel.sent.some(
+      (value) => value.type === "control-result",
+    ),
+  ).toBe(false);
+  session.reset();
+  expect(session.screenControl.state()).toBe("unavailable");
+});

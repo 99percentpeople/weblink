@@ -20,6 +20,15 @@ export class ScreenReceiver {
     private readonly control?: RemotePointer,
   ) {
     this.pc = new RTCPeerConnection(configuration);
+    control?.addEventListener(
+      "transporterror",
+      () => {
+        this.fail(
+          new Error("Native control connection ended"),
+        );
+      },
+      { signal: this.lifetime.signal },
+    );
     this.pc.addEventListener(
       "datachannel",
       ({ channel }) => {
@@ -91,16 +100,14 @@ export class ScreenReceiver {
     this.pc.addEventListener(
       "connectionstatechange",
       () => {
-        if (
-          ["disconnected", "failed", "closed"].includes(
-            this.pc.connectionState,
-          )
-        )
-          this.control?.close();
         clearTimeout(this.disconnectTimer);
         if (this.pc.connectionState === "failed")
           this.fail(
             new Error("Native screen connection failed"),
+          );
+        else if (this.pc.connectionState === "closed")
+          this.fail(
+            new Error("Native screen connection closed"),
           );
         else if (this.pc.connectionState === "disconnected")
           this.disconnectTimer = setTimeout(

@@ -1,4 +1,8 @@
 import { createUuid } from "../ids";
+import {
+  ScreenControlRequest,
+  type ScreenControlSignal,
+} from "./control-request";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
@@ -42,6 +46,10 @@ export interface NativeScreenPublication {
   closePeer(peerId: string): Promise<void>;
 }
 interface ScreenSessionPort {
+  requestScreen?(
+    signal: AbortSignal,
+  ): Promise<string | undefined>;
+  cancelScreenRequest?(): void;
   /** Omitted until the corresponding control implementation is ready. */
   controlCapabilities?: ControlCapabilities;
   loadControlCapabilities?(): Promise<ControlCapabilities>;
@@ -54,12 +62,14 @@ interface ScreenSessionPort {
   error(error: unknown): void;
 }
 type Signal =
+  | ScreenControlSignal
   | {
       type: "hello";
       receiveScreen: true;
       trickleIce?: true;
       multiScreen?: true;
       remoteControl?: ControlCapabilities;
+      requestScreen?: true;
     }
   | {
       type: "offer";
@@ -98,6 +108,21 @@ export function parseScreenSignal(
       return;
     if (value.type === "stop" || value.type === "retry")
       return value;
+    if (
+      value.type === "control-request" ||
+      value.type === "control-cancel"
+    )
+      return value;
+    if (value.type === "control-result") {
+      if (
+        value.sourceId === undefined ||
+        (typeof value.sourceId === "string" &&
+          value.sourceId.length > 0 &&
+          value.sourceId.length <= 128)
+      )
+        return value;
+      return;
+    }
     if (value.type === "candidate") {
       const candidate = value.candidate;
       if (
@@ -160,6 +185,14 @@ type Incoming = {
 /** Authenticated control channel; each source owns its media connection and retries.
  * Multiple sources require an additive hello capability. Legacy peers keep one. */
 export class NativeScreenSession {
+  readonly screenControl = new ScreenControlRequest(
+    (value) => this.send(value),
+  );
+  private screenRequest?: {
+    id: string;
+    abort: AbortController;
+  };
+  private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
   private listeners?: AbortController;
   private ready = false;
@@ -238,11 +271,15 @@ export class NativeScreenSession {
         listeners.signal.aborted
       )
         return;
+      this.localCapabilities = capabilities;
       this.send({
         type: "hello",
         receiveScreen: true,
         trickleIce: true,
         multiScreen: true,
+        ...(capabilities?.host && this.port.requestScreen
+          ? { requestScreen: true as const }
+          : {}),
         ...(capabilities
           ? {
               remoteControl: {
@@ -283,6 +320,38 @@ export class NativeScreenSession {
     if (channel.readyState === "open") open();
   }
 
+  async refreshControlCapabilities() {
+    const channel = this.channel;
+    const capabilities =
+      await this.port.loadControlCapabilities?.();
+    if (
+      !channel ||
+      channel !== this.channel ||
+      channel.readyState !== "open"
+    )
+      return;
+    const changed =
+      this.localCapabilities?.host !== capabilities?.host;
+    this.localCapabilities = capabilities;
+    this.send({
+      type: "hello",
+      receiveScreen: true,
+      trickleIce: true,
+      multiScreen: true,
+      remoteControl: capabilities,
+      ...(capabilities?.host && this.port.requestScreen
+        ? { requestScreen: true as const }
+        : {}),
+    });
+    if (changed) {
+      for (const entry of this.publications.values()) {
+        this.stopOutgoing(entry);
+        entry.retries = 0;
+      }
+      this.publishSelected();
+    }
+  }
+
   setPublication(publication?: NativeScreenPublication) {
     this.setPublications(publication ? [publication] : []);
   }
@@ -312,6 +381,11 @@ export class NativeScreenSession {
     this.publishSelected();
   }
   reset(): void {
+    this.screenRequest?.abort.abort();
+    this.screenRequest = undefined;
+    this.port.cancelScreenRequest?.();
+    this.screenControl.setAvailable(false);
+    this.localCapabilities = undefined;
     this.listeners?.abort();
     this.listeners = undefined;
     const channel = this.channel;
@@ -368,14 +442,16 @@ export class NativeScreenSession {
     const outgoing = entry.outgoing;
     entry.outgoing = undefined;
     if (!outgoing) return;
-    // Close native resources even if the control channel has overflowed.
-    void entry.publication
-      .closePeer(outgoing.id)
-      .catch(() => {});
     try {
       this.send({ type: "stop", id: outgoing.id });
     } catch (error) {
       this.port.error(error);
+    } finally {
+      // Tell the receiver this is intentional before closing its input channels.
+      // Native resources must still close if signaling has overflowed.
+      void entry.publication
+        .closePeer(outgoing.id)
+        .catch(() => {});
     }
   }
   private selected(entry: Publication) {
@@ -512,6 +588,19 @@ export class NativeScreenSession {
   }
   private async handle(value: Signal) {
     if (value.type === "hello") {
+      this.controlCapabilities = parseControlCapabilities(
+        value.remoteControl,
+      );
+      if (!this.controlCapabilities?.host) {
+        for (const entry of this.incoming.values()) {
+          entry.control?.close();
+          entry.control = undefined;
+        }
+      }
+      this.screenControl.setAvailable(
+        value.requestScreen === true &&
+          this.controlCapabilities?.host === true,
+      );
       if (!this.ready) {
         this.ready = true;
         this.trickleIce = value.trickleIce === true;
@@ -524,6 +613,48 @@ export class NativeScreenSession {
       return;
     }
     if (!this.ready) return;
+    if (value.type === "control-cancel") {
+      if (this.screenRequest?.id === value.id) {
+        this.screenRequest.abort.abort();
+        this.screenRequest = undefined;
+        this.port.cancelScreenRequest?.();
+      }
+      return;
+    }
+    if (value.type === "control-request") {
+      if (this.screenRequest?.id === value.id) return;
+      this.screenRequest?.abort.abort();
+      this.port.cancelScreenRequest?.();
+      const request = {
+        id: value.id,
+        abort: new AbortController(),
+      };
+      this.screenRequest = request;
+      let sourceId: string | undefined;
+      try {
+        if (this.localCapabilities?.host)
+          sourceId = await this.port.requestScreen?.(
+            request.abort.signal,
+          );
+      } catch (error) {
+        this.port.error(error);
+      }
+      if (
+        this.screenRequest === request &&
+        !request.abort.signal.aborted
+      )
+        this.send({
+          type: "control-result",
+          id: value.id,
+          ...(sourceId ? { sourceId } : {}),
+        });
+      return;
+    }
+    if (value.type === "control-result") {
+      this.screenControl.result(value);
+      this.attachRequestedControl();
+      return;
+    }
     if (value.type === "candidate") {
       const entry = this.findOutgoing(value.id);
       const outgoing = entry?.outgoing;
@@ -621,6 +752,7 @@ export class NativeScreenSession {
         value.id,
       );
     this.incoming.set(value.id, incoming);
+    this.attachRequestedControl();
     const current = () =>
       this.incoming.get(value.id) === incoming;
     const failed = (error: unknown) => {
@@ -681,5 +813,13 @@ export class NativeScreenSession {
     } catch (error) {
       failed(error);
     }
+  }
+  private attachRequestedControl() {
+    for (const entry of this.incoming.values())
+      if (entry.control)
+        this.screenControl.attach(
+          entry.sourceId,
+          entry.control,
+        );
   }
 }

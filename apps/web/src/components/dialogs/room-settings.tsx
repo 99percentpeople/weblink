@@ -27,6 +27,28 @@ export function RoomSettings(props: {
   online: boolean;
   onDeleted?(): void;
 }) {
+  return (
+    <div class="space-y-5">
+      <RoomPermissions
+        conversationId={props.conversationId}
+      />
+      <section class="space-y-3 border-t pt-5">
+        <h3 class="text-sm font-medium">
+          {t("room_dialog.actions")}
+        </h3>
+        <ConversationActions
+          conversationId={props.conversationId}
+          online={props.online}
+          onDeleted={props.onDeleted}
+        />
+      </section>
+    </div>
+  );
+}
+
+export function RoomPermissions(props: {
+  conversationId: string;
+}) {
   const limitId = createUniqueId();
   const config = () =>
     resolveRoomConfig(
@@ -92,16 +114,6 @@ export function RoomSettings(props: {
           <SelectContent />
         </Select>
       </div>
-      <section class="space-y-3 border-t pt-5">
-        <h3 class="text-sm font-medium">
-          {t("room_dialog.actions")}
-        </h3>
-        <ConversationActions
-          conversationId={props.conversationId}
-          online={props.online}
-          onDeleted={props.onDeleted}
-        />
-      </section>
     </div>
   );
 }

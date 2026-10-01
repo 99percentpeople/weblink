@@ -1,6 +1,6 @@
 use super::*;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
@@ -8,7 +8,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
-use weblink_desktop_capture::{geometry::PixelRect, media::control::Sender, CaptureService};
+use weblink_desktop_capture::{geometry::PixelRect, CaptureService};
 use weblink_desktop_input::{
     authorization::{Binding, Grant, RequestResult},
     engine::TrustedTarget,
@@ -20,79 +20,7 @@ use weblink_desktop_input::{
 fn error(e: weblink_desktop_input::input::Error) -> String {
     format!("Native input: {e:?}")
 }
-const LEASE: Duration = Duration::from_secs(2);
-struct Queue {
-    reliable: VecDeque<(Instant, Vec<u8>)>,
-    movement: Option<(Instant, Vec<u8>)>,
-}
-struct Endpoint {
-    closed: Arc<AtomicBool>,
-    sender: Mutex<Option<Arc<dyn Sender>>>,
-    queue: Mutex<Queue>,
-}
-impl Endpoint {
-    fn new() -> Self {
-        Self {
-            closed: Arc::new(AtomicBool::new(false)),
-            sender: Mutex::new(None),
-            queue: Mutex::new(Queue {
-                reliable: VecDeque::new(),
-                movement: None,
-            }),
-        }
-    }
-    fn send(&self, value: &impl Serialize) -> bool {
-        let ok = !self.closed.load(Ordering::Acquire)
-            && serde_json::to_vec(value).ok().is_some_and(|data| {
-                self.sender
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .as_ref()
-                    .is_some_and(|sender| sender.send(&data))
-            });
-        if !ok {
-            self.closed();
-        }
-        ok
-    }
-    fn dispose(&self) {
-        self.closed();
-        let sender = self.sender.lock().unwrap_or_else(|e| e.into_inner()).take();
-        if let Some(sender) = sender {
-            sender.close();
-        }
-    }
-    fn pop(&self) -> Option<(bool, Instant, Vec<u8>)> {
-        let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
-        q.reliable
-            .pop_front()
-            .map(|(at, data)| (false, at, data))
-            .or_else(|| q.movement.take().map(|(at, data)| (true, at, data)))
-    }
-}
-impl Port for Endpoint {
-    fn opened(&self, sender: Arc<dyn Sender>) {
-        *self.sender.lock().unwrap_or_else(|e| e.into_inner()) = Some(sender);
-    }
-    fn message(&self, movement: bool, data: &[u8]) {
-        if self.closed.load(Ordering::Acquire) {
-            return;
-        }
-        let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
-        if data.len() > protocol::MAX_MESSAGE_BYTES || (!movement && q.reliable.len() >= 128) {
-            self.closed();
-            return;
-        }
-        if movement {
-            q.movement = Some((Instant::now(), data.to_vec()));
-        } else {
-            q.reliable.push_back((Instant::now(), data.to_vec()));
-        }
-    }
-    fn closed(&self) {
-        self.closed.store(true, Ordering::Release);
-    }
-}
+use super::transport::Endpoint;
 struct Peer {
     binding: Binding,
     endpoint: Arc<Endpoint>,
@@ -136,6 +64,17 @@ impl Host {
             }
         }
     }
+    fn synchronize_input(&mut self) {
+        if !self.worker.status().input_suspended {
+            return;
+        }
+        if let Some(active) = self.active.as_mut().filter(|a| a.sequencer.active()) {
+            active.sequencer.suspend();
+            if let Some(peer) = self.peers.get(&active.grant.binding.target.media_id) {
+                peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":active.sequencer.epoch(),"active":false}));
+            }
+        }
+    }
     fn tick(&mut self) {
         let now = Instant::now();
         if self.pending.as_ref().is_some_and(|p| {
@@ -153,6 +92,7 @@ impl Host {
         {
             self.pending = None;
         }
+        self.synchronize_input();
         let ids: Vec<_> = self.peers.keys().cloned().collect();
         for id in ids {
             let peer = self.peers.get_mut(&id).unwrap();
@@ -169,7 +109,8 @@ impl Host {
             if self.worker.status().closed {
                 peer.endpoint.closed();
             }
-            if peer.endpoint.closed.load(Ordering::Acquire) {
+            peer.endpoint.flush();
+            if peer.endpoint.is_closed() {
                 let peer = self.peers.remove(&id).unwrap();
                 peer.endpoint.dispose();
                 let _ = self.worker.invalidate(peer.binding);
@@ -185,34 +126,58 @@ impl Host {
                 }
                 continue;
             }
-            if !peer.ready
-                && peer
-                    .endpoint
-                    .sender
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .is_some()
-            {
-                peer.ready=peer.endpoint.send(&serde_json::json!({"type":"ready","target":peer.binding.target,"generation":id}));
+            if !peer.ready && peer.endpoint.is_open() {
+                peer.ready = peer.endpoint.send(&serde_json::json!({
+                    "type": "ready",
+                    "target": peer.binding.target,
+                    "generation": id,
+                    "relativePointer": true,
+                    "persistentControl": true,
+                    "touchpadPan": self.worker.status().pan_supported,
+                    "touchContacts": if self.worker.status().touch_supported { weblink_desktop_input::touch::MAX_CONTACTS } else { 0 },
+                }));
             }
             let endpoint = peer.endpoint.clone();
+            if endpoint.take_interrupted()
+                && self
+                    .active
+                    .as_ref()
+                    .is_some_and(|a| a.grant.binding.target.media_id == id)
+            {
+                let _ = self.worker.interrupt();
+                self.synchronize_input();
+            }
             for _ in 0..32 {
                 let Some((movement, at, data)) = endpoint.pop() else {
                     break;
                 };
                 // Never execute a delayed burst of input, even if heartbeats are queued behind it.
                 if at.elapsed() > Duration::from_millis(100) {
-                    endpoint.closed();
-                    break;
+                    if let Some(packet) = wire::parse(&data) {
+                        if self.active.as_ref().is_some_and(|a| {
+                            a.grant.binding.target.media_id == id
+                                && packet.grant_id == a.grant.id
+                                && packet.generation == id
+                                && packet.geometry_revision
+                                    == a.grant.binding.target.geometry_revision
+                                && a.sequencer.epoch() == Some(packet.input_epoch.as_str())
+                                && a.sequencer.active()
+                        }) {
+                            let _ = self.worker.interrupt();
+                            self.synchronize_input();
+                        }
+                        continue;
+                    }
                 }
                 self.message(&id, movement, &data, at);
-                if endpoint.closed.load(Ordering::Acquire) {
+                if endpoint.is_closed() {
                     break;
                 }
             }
         }
     }
     fn message(&mut self, id: &str, movement: bool, data: &[u8], at: Instant) {
+        self.synchronize_input();
         let Some(peer) = self.peers.get(id) else {
             return;
         };
@@ -227,6 +192,10 @@ impl Host {
             else {
                 return;
             };
+            let transition = matches!(
+                packet.event,
+                wire::PointerEvent::Activate | wire::PointerEvent::Pause
+            );
             let epoch = packet.input_epoch.clone();
             let events = active.sequencer.accept_at(packet, movement, at);
             if events.is_empty() {
@@ -238,14 +207,19 @@ impl Host {
                     return;
                 }
             }
-            // Acknowledge transitions only after native release completed, never merely queued.
-            if !movement
-                && self
-                    .worker
-                    .flush()
-                    .is_ok_and(|s| s.grant.as_ref() == Some(&active.grant))
-            {
-                peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":epoch,"active":active.sequencer.active()}));
+            // Acknowledge only completed native input. Interruptions retain the
+            // grant but invalidate this input epoch before accepting another gesture.
+            if !movement {
+                if let Ok(status) = self.worker.flush() {
+                    if status.grant.as_ref() == Some(&active.grant) {
+                        if status.input_suspended {
+                            active.sequencer.suspend();
+                        }
+                        if transition || status.input_suspended {
+                            peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":epoch,"active":active.sequencer.active()}));
+                        }
+                    }
+                }
             }
             return;
         }
@@ -266,6 +240,7 @@ impl Host {
                                 consent_id,
                                 client_id: peer.binding.client_id.clone(),
                                 source_id: peer.binding.target.source_id.clone(),
+                                peer_generation: peer.binding.peer_generation.clone(),
                             },
                             media: id.into(),
                             requested: Instant::now(),
@@ -309,7 +284,6 @@ impl Host {
 }
 struct Owner {
     id: String,
-    lease: Mutex<Instant>,
     alive: AtomicBool,
     host: Mutex<Host>,
     thread: Mutex<Option<JoinHandle<()>>>,
@@ -317,12 +291,6 @@ struct Owner {
 impl Owner {
     fn live(&self) -> bool {
         self.alive.load(Ordering::Acquire)
-            && self
-                .lease
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .elapsed()
-                < LEASE
     }
     fn shutdown(&self) {
         self.alive.store(false, Ordering::Release);
@@ -343,7 +311,7 @@ impl Service {
             .as_ref()
             .filter(|o| o.id == id && o.live())
             .cloned()
-            .ok_or_else(|| "Remote control owner expired".into())
+            .ok_or_else(|| "Remote control owner ended".into())
     }
     pub fn open(&self) -> Result<String, String> {
         self.start(None)
@@ -356,7 +324,6 @@ impl Service {
         let worker = Worker::start(test_window).map_err(error)?;
         let owner = Arc::new(Owner {
             id: uuid::Uuid::new_v4().to_string(),
-            lease: Mutex::new(Instant::now()),
             alive: AtomicBool::new(true),
             host: Mutex::new(Host {
                 worker,
@@ -407,8 +374,14 @@ impl Service {
         }
     }
     pub fn status(&self, id: &str) -> Result<Snapshot, String> {
-        let o = self.owner(id)?;
-        *o.lease.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        // Polling only observes state. WebView scheduling must not own the lifetime
+        // of an approved native session; room/media/window teardown owns it.
+        let Ok(o) = self.owner(id) else {
+            return Ok(Snapshot {
+                closed: true,
+                ..Default::default()
+            });
+        };
         let state = o.host.lock().unwrap_or_else(|e| e.into_inner()).snapshot();
         Ok(state)
     }

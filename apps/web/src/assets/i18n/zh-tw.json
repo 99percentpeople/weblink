@@ -28,8 +28,6 @@
     },
     "empty": "目前分類下沒有任務。",
     "progress": "檔案傳輸進度",
-    "pause": "暫停",
-    "resume": "繼續 / 重試",
     "inspect": "查看對端",
     "clear_finished": "清除已結束記錄",
     "show_more": "顯示更多",
@@ -259,6 +257,48 @@
       "hardware": "硬體編碼",
       "software": "軟體編碼",
       "native_encoder_description": "選擇編碼格式及硬體或軟體編碼器。硬體選項依目前驅動程式偵測，接收端也需支援所選格式；下次分享時生效。"
+    },
+    "remote_control": {
+      "description": "設定本機觸摸手勢如何控制遠端畫面。",
+      "mode": {
+        "title": "觸摸模式",
+        "trackpad": "觸控板",
+        "direct": "直接觸控",
+        "trackpad_description": "單指滑動移動游標，輕點單擊，雙指輕點右鍵或滑動捲動，長按後可拖動。",
+        "direct_description": "將觸點對應到遠端螢幕，傳送真正的觸控事件，支援多點觸控和長按。手勢由 Windows 與遠端應用程式處理，需要對端支援觸控輸入。"
+      },
+      "pointer_speed": "游標移動速度",
+      "scroll_speed": "雙指捲動速度",
+      "tapToClick": "輕點模擬左鍵單擊",
+      "twoFingerRightClick": "雙指輕點模擬右鍵",
+      "twoFingerScroll": "雙指滑動捲動",
+      "naturalScroll": "自然捲動",
+      "long_press": {
+        "title": "單指長按行為",
+        "drag": "按住並拖動",
+        "right-click": "右鍵單擊",
+        "none": "不執行操作"
+      },
+      "changes": "修改立即生效，並釋放目前按住的按鍵和觸點。",
+      "pan_unavailable": "被控端不支援原生觸控板捲動。",
+      "unavailable": "對端不支援直接觸控，請在「遠端控制」設定中選擇「觸控板」。"
+    },
+    "permissions": {
+      "description": "在此管理連線過的用戶端與房間。忘記仍可見的用戶端或目前房間時，僅恢復預設權限；離線記錄會從清單移除。",
+      "clients": "用戶端",
+      "rooms": "房間",
+      "empty_clients": "尚無已儲存的用戶端權限。",
+      "empty_rooms": "尚無已儲存的房間權限。",
+      "remove": "刪除 {{name}}",
+      "ask": "每次詢問",
+      "allow": "自動批准（白名單）",
+      "deny": "自動拒絕（黑名單）",
+      "configure": "設定 {{name}} 的權限",
+      "reset": "重設 {{name}} 的權限",
+      "reset_title": "恢復預設權限？",
+      "forget_title": "忘記此記錄？",
+      "reset_description": "「{{name}}」仍可見或正在使用中。是否恢復預設權限並保留在清單中？",
+      "forget_description": "是否忘記「{{name}}」並移除已儲存的權限？聊天記錄會保留。"
     }
   },
   "cache": {
@@ -852,7 +892,9 @@
     "settings_transfer": "傳輸",
     "settings_advanced": "進階",
     "settings_about": "關於",
-    "settings_meeting": "音視訊"
+    "settings_meeting": "音視訊",
+    "settings_remote_control": "遠端控制",
+    "settings_permissions": "用戶端與房間"
   },
   "file_library": {
     "search": "搜尋檔案…",
@@ -978,18 +1020,22 @@
   "remote_control": {
     "request_title": "允許遠端控制？",
     "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
-    "revoke_hint": "在本機點擊滑鼠、按鍵，或按 Ctrl+Alt+Shift+F10 即可收回控制。鍵盤轉發將在後續階段接入。",
+    "revoke_hint": "點選「收回控制」或在本機按 Ctrl+Alt+Shift+F10 可結束控制。鍵盤轉送將在後續階段加入。",
     "decline": "拒絕",
     "allow": "允許控制",
     "host_active": "{{name}} 可以控制本機。",
     "revoke": "收回控制",
+    "revoke_failed": "無法收回控制，請在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",
-    "surface": "遠端滑鼠控制，按 Escape 暫停。",
+    "reconnecting": "正在恢復控制連線",
+    "surface": "遠端控制；按 Escape 結束控制。",
     "request": "請求控制",
     "waiting": "等待對方批准",
-    "cancel": "取消",
-    "resume": "控制滑鼠",
-    "pause": "暫停控制",
-    "end": "結束控制"
+    "cancel": "取消請求",
+    "end": "結束控制",
+    "more_choices": "更多批准選項",
+    "allow_remember": "批准並加入白名單",
+    "deny_remember": "拒絕並加入黑名單",
+    "share_first_screen": "批准後將螢幕 1 及其音訊分享給房間內所有成員。"
   }
 }

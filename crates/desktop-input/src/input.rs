@@ -38,6 +38,24 @@ impl Geometry {
     pub fn valid(self) -> bool {
         self.desktop.contains(self.display)
     }
+    pub fn pixels(self, position: Position) -> Option<(i32, i32)> {
+        if !self.valid()
+            || !position.x.is_finite()
+            || !position.y.is_finite()
+            || !(0.0..=1.0).contains(&position.x)
+            || !(0.0..=1.0).contains(&position.y)
+        {
+            return None;
+        }
+        Some((
+            (i64::from(self.display.left)
+                + (position.x * f64::from(self.display.width - 1)).round() as i64)
+                as i32,
+            (i64::from(self.display.top)
+                + (position.y * f64::from(self.display.height - 1)).round() as i64)
+                as i32,
+        ))
+    }
     /// Physical, already-oriented display coordinates. DPI is not a multiplier.
     pub fn absolute(self, position: Position) -> Option<(i32, i32)> {
         if !self.valid()
@@ -110,6 +128,8 @@ pub enum Held {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    Trackpad(crate::trackpad::Event),
+    Touch(Vec<crate::touch::Contact>),
     Move(Position),
     Button {
         position: Position,

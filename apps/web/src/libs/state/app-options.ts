@@ -6,12 +6,19 @@ import type { CompressionLevel } from "@/libs/domain/transfer/options";
 import type { ClientID, FileID } from "@/libs/domain/ids";
 import languages from "@/assets/i18n/languages.json";
 import type { WallpaperPresetId } from "@/libs/wallpapers";
+import {
+  defaultRemoteTouchOptions,
+  type RemoteTouchOptions,
+} from "@/libs/domain/remote-control/touch-options";
 
 export type Locale = string;
 export type ConnectionOptions = IceServerOptions;
 export type { TurnServerOptions, CompressionLevel };
 
 export type ClientConfig = {
+  /** Local permission record; identity follows the existing persistent client ID. */
+  name?: string;
+  remoteControl?: "allow" | "deny";
   /** Whether this peer may enumerate completed local cache entries. */
   provideFileList: boolean;
 };
@@ -21,6 +28,7 @@ export const defaultClientConfig: ClientConfig = {
 };
 
 export type RoomConfig = {
+  name?: string;
   autoDownloadFiles: boolean;
   /** Maximum size in bytes, inclusive. */
   autoDownloadMaxSize: number;
@@ -55,6 +63,8 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  permissionHistoryImported: boolean;
+  remoteTouch: RemoteTouchOptions;
   // Receiver
   maxMomeryCacheSlices: number;
   automaticDownload: boolean;
@@ -208,7 +218,9 @@ export const getDefaultAppOptions = (): AppOption => {
     backgroundImageOpacity: 0.5,
     automaticDownload: false,
     clientConfigs: {},
+    permissionHistoryImported: false,
     roomConfigs: {},
+    remoteTouch: { ...defaultRemoteTouchOptions },
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

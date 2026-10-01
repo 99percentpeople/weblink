@@ -39,7 +39,7 @@ describe("remote control contract", () => {
   });
 });
 
-function setup() {
+function setup(persistent = false) {
   let now = 0;
   let nextId = 0;
   const binding: ControlBinding = {
@@ -55,10 +55,15 @@ function setup() {
   const port = {
     send: vi.fn<(signal: ControlSignal) => void>(),
     release: vi.fn(),
+    suspend: vi.fn(),
     now: () => now,
     id: () => `request-${++nextId}`,
   };
-  const session = new RemoteControlSession(binding, port);
+  const session = new RemoteControlSession(
+    binding,
+    port,
+    persistent,
+  );
   const request = () =>
     session.request(
       { request: true, host: false },
@@ -213,4 +218,32 @@ describe("remote control intent lifecycle", () => {
     session.tick();
     expect(session.state.type).toBe("requesting");
   });
+});
+
+it("retains approved persistent sessions through missing heartbeats and never restores explicit revocation", () => {
+  const { session, port, request, grant, setTime } =
+    setup(true);
+  request();
+  grant();
+  setTime(30_000);
+  session.tick();
+  session.tick();
+  expect(session.state).toMatchObject({
+    type: "granted",
+    grantId: "grant-1",
+  });
+  expect(port.suspend).toHaveBeenCalledTimes(1);
+  expect(port.release).not.toHaveBeenCalled();
+  expect(port.send).toHaveBeenCalledTimes(1);
+  session.acknowledge("foreign-grant");
+  expect(session.state).toMatchObject({
+    deadline: Infinity,
+  });
+  session.acknowledge("grant-1");
+  expect(session.state).toMatchObject({ deadline: 32_000 });
+  session.cancel();
+  session.acknowledge("grant-1");
+  grant();
+  expect(session.state.type).toBe("viewing");
+  expect(port.release).toHaveBeenCalledTimes(1);
 });

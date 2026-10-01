@@ -1,20 +1,28 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { RemoteControlHost } from "@/libs/application/remote-control-host";
-import type { PlatformRuntime } from "@weblink/platform";
+import {
+  RemoteControlHost,
+  type RemoteControlPolicy,
+} from "@/libs/application/remote-control-host";
+import type {
+  PlatformRuntime,
+  NativeControlStatus,
+} from "@weblink/platform";
 afterEach(() => vi.useRealTimers());
 const flush = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
-function setup() {
+function setup(policy?: RemoteControlPolicy) {
   let next = 0;
   const api = {
     open: vi.fn(async () => `owner-${++next}`),
     end: vi.fn(async () => {}),
-    status: vi.fn(async () => ({
-      pending: null,
-      clientId: null,
-      closed: false,
-    })),
+    status: vi.fn(
+      async (): Promise<NativeControlStatus> => ({
+        pending: null,
+        clientId: null,
+        closed: false,
+      }),
+    ),
     approve: vi.fn(async () => {}),
     revoke: vi.fn(async () => {}),
   };
@@ -24,10 +32,10 @@ function setup() {
       remoteInput: true,
     })),
   } as unknown as PlatformRuntime;
-  const host = new RemoteControlHost(platform);
+  const host = new RemoteControlHost(platform, policy);
   return { host, api };
 }
-it("starts a distinct room owner, maintains its lease, and closes it on leave", async () => {
+it("starts a distinct room owner, polls status, and closes it on leave", async () => {
   vi.useFakeTimers();
   const { host, api } = setup();
   host.start();
@@ -67,20 +75,165 @@ it("late native open completion cannot carry permission into another room", asyn
   ).toMatchObject({ ownerId: "owner-1" });
   host.close();
 });
-it("a failed owner heartbeat closes host capability instead of silently reopening", async () => {
+it("retries a failed status read without ending the owner or requiring new approval", async () => {
   vi.useFakeTimers();
+  const warning = vi
+    .spyOn(console, "warn")
+    .mockImplementation(() => {});
   const { host, api } = setup();
   host.start();
   await flush();
   api.status.mockRejectedValueOnce(
-    new Error("owner expired"),
+    new Error("temporary IPC failure"),
   );
   await vi.advanceTimersByTimeAsync(500);
   expect(await host.capabilities()).toEqual({
     request: true,
-    host: false,
+    host: true,
   });
+  expect(api.end).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(500);
+  expect(api.status).toHaveBeenCalledTimes(3);
+  expect(host.status().closed).toBe(false);
+  api.status.mockResolvedValueOnce({
+    pending: null,
+    clientId: null,
+    closed: true,
+  });
+  await vi.advanceTimersByTimeAsync(500);
   expect(host.status().closed).toBe(true);
+  expect(api.end).toHaveBeenCalledWith("owner-1");
   expect(api.open).toHaveBeenCalledTimes(1);
+  host.close();
+  warning.mockRestore();
+});
+
+it.each(["allow", "deny"] as const)(
+  "enforces a saved %s decision without presenting the native request",
+  async (decision) => {
+    vi.useFakeTimers();
+    const { host, api } = setup({
+      decision: () => decision,
+      remember: vi.fn(),
+    });
+    host.start();
+    await flush();
+    api.status.mockResolvedValue({
+      closed: false,
+      clientId: null,
+      pending: {
+        consentId: "pending",
+        clientId: "alice",
+        sourceId: "screen",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(api.approve).toHaveBeenCalledWith(
+      "owner-1",
+      "pending",
+      decision === "allow",
+    );
+    expect(host.status().pending).toBeNull();
+    expect((await host.capabilities("alice")).host).toBe(
+      decision === "allow",
+    );
+    expect(
+      Boolean(await host.context("peer", "alice")),
+    ).toBe(decision === "allow");
+    host.close();
+  },
+);
+
+it("remembers only the selected answer and automatically approves the subsequent matching screen request", async () => {
+  vi.useFakeTimers();
+  const remember = vi.fn();
+  const { host, api } = setup({
+    decision: () => undefined,
+    remember,
+  });
+  host.start();
+  await flush();
+  host.screen.share = vi.fn(async () => "screen");
+  const result = host.requestScreen(
+    "alice",
+    "peer",
+    new AbortController().signal,
+  );
+  await flush();
+  expect(host.screen.share).not.toHaveBeenCalled();
+  const pending = host.status().pending!;
+  await host.approve(pending.consentId, true);
+  expect(await result).toBe("screen");
+  expect(remember).not.toHaveBeenCalled();
+  api.status.mockResolvedValue({
+    closed: false,
+    clientId: null,
+    pending: {
+      consentId: "native",
+      clientId: "alice",
+      sourceId: "screen",
+      peerGeneration: "peer",
+    },
+  });
+  await vi.advanceTimersByTimeAsync(500);
+  expect(api.approve).toHaveBeenCalledWith(
+    "owner-1",
+    "native",
+    true,
+  );
+  api.status.mockResolvedValue({
+    closed: false,
+    clientId: null,
+    pending: {
+      consentId: "next",
+      clientId: "alice",
+      sourceId: "screen",
+      peerGeneration: "peer",
+    },
+  });
+  await vi.advanceTimersByTimeAsync(500);
+  expect(host.status().pending?.consentId).toBe("next");
+  await host.approve("stale", false, true);
+  expect(remember).not.toHaveBeenCalled();
+  await host.approve("next", false, true);
+  expect(remember).toHaveBeenCalledWith("alice", "deny");
+  host.close();
+});
+
+it("auto-starts sharing only for allowed clients and revokes an active client when blocked", async () => {
+  vi.useFakeTimers();
+  let decision: "allow" | "deny" = "allow";
+  const { host, api } = setup({
+    decision: () => decision,
+    remember: vi.fn(),
+  });
+  host.start();
+  await flush();
+  host.screen.share = vi.fn(async () => "screen");
+  expect(
+    await host.requestScreen(
+      "alice",
+      "peer",
+      new AbortController().signal,
+    ),
+  ).toBe("screen");
+  expect(host.status().pending).toBeNull();
+  api.status.mockResolvedValue({
+    closed: false,
+    pending: null,
+    clientId: "alice",
+  });
+  await vi.advanceTimersByTimeAsync(500);
+  decision = "deny";
+  await host.policyChanged("alice");
+  expect(api.revoke).toHaveBeenCalledWith("owner-1");
+  expect(
+    await host.requestScreen(
+      "alice",
+      "peer",
+      new AbortController().signal,
+    ),
+  ).toBeUndefined();
+  expect(host.screen.share).toHaveBeenCalledTimes(1);
   host.close();
 });

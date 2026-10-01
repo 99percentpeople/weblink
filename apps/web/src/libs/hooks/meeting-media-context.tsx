@@ -1,4 +1,5 @@
 import { appState } from "@/libs/state/app-state";
+import { sessionService } from "@/libs/application/session-service";
 import {
   meetingVideoConstraints,
   nativeScreenOptions,
@@ -154,6 +155,54 @@ export function MeetingMediaProvider(props: ParentProps) {
     },
   });
   createEffect(media.sync);
+  const shareDefaultScreen = async (
+    signal: AbortSignal,
+  ) => {
+    const existing = state
+      .localStream()
+      ?.getVideoTracks()
+      .find(
+        (track) =>
+          track.readyState === "live" &&
+          getNativeScreenPublication(track)
+            ?.controlEligible,
+      );
+    if (existing)
+      return getNativeScreenPublication(existing)?.sourceId;
+    const capture = platform.capture;
+    const share = platform.screenShare;
+    if (!capture || !share || signal.aborted) return;
+    const source = (await capture.sources()).find(
+      (source) => source.kind === "monitor",
+    );
+    if (!source || disposed || signal.aborted) return;
+    let captured: MediaStream | undefined;
+    await media.addSharing(
+      async () =>
+        (captured = await createNativeScreenStream(
+          capture,
+          share,
+          source.id,
+          signal,
+          {
+            ...nativeScreenOptions(appState.options),
+            audio: true,
+          },
+          {
+            backend:
+              appState.options.nativeScreenCaptureBackend,
+          },
+        )),
+      signal,
+    );
+    const track = captured?.getVideoTracks()[0];
+    return track &&
+      state.localStream()?.getVideoTracks().includes(track)
+      ? getNativeScreenPublication(track)?.sourceId
+      : undefined;
+  };
+  sessionService.remoteControl.screen.share =
+    shareDefaultScreen;
   // A capture approved after leaving must not publish into the next room.
   createEffect(
     on(
@@ -187,6 +236,11 @@ export function MeetingMediaProvider(props: ParentProps) {
     }),
   );
   onCleanup(() => {
+    if (
+      sessionService.remoteControl.screen.share ===
+      shareDefaultScreen
+    )
+      sessionService.remoteControl.screen.share = undefined;
     disposed = true;
     liveSettings.dispose();
     media.dispose();

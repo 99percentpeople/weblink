@@ -90,9 +90,7 @@ impl Channels {
         pc.on_connection_state_change(Some(Box::new(move |state| {
             if matches!(
                 state,
-                PeerConnectionState::Disconnected
-                    | PeerConnectionState::Failed
-                    | PeerConnectionState::Closed
+                PeerConnectionState::Failed | PeerConnectionState::Closed
             ) {
                 if let Some(this) = weak.upgrade() {
                     this.terminate();
@@ -133,12 +131,23 @@ impl Sender for Outbound {
             channels.close();
         }
     }
-    fn send(&self, data: &[u8]) -> bool {
-        self.0.upgrade().is_some_and(|c| {
-            !c.closed.load(Ordering::Acquire)
-                && data.len() <= MAX_BYTES
-                && c.reliable.buffered_amount() + data.len() as u64 <= HIGH_WATER
-                && c.reliable.send(data, false).is_ok()
-        })
+    fn send(&self, data: &[u8]) -> SendResult {
+        let Some(c) = self.0.upgrade() else {
+            return SendResult::Closed;
+        };
+        if c.closed.load(Ordering::Acquire)
+            || data.len() > MAX_BYTES
+            || c.reliable.state() != DataChannelState::Open
+        {
+            return SendResult::Closed;
+        }
+        if c.reliable.buffered_amount() + data.len() as u64 > HIGH_WATER {
+            return SendResult::Backpressure;
+        }
+        match c.reliable.send(data, false) {
+            Ok(()) => SendResult::Sent,
+            Err(_) if c.reliable.state() == DataChannelState::Open => SendResult::Backpressure,
+            Err(_) => SendResult::Closed,
+        }
     }
 }

@@ -25,6 +25,8 @@ static LOGGER: TestLogger = TestLogger;
 #[test]
 #[ignore = "interactive Windows + browser; WEBLINK_CONTROL_TEST_DIR required"]
 fn browser_pointer_attended() {
+    let touch = std::env::var_os("WEBLINK_CONTROL_TEST_TOUCH").is_some();
+    let persistent = std::env::var_os("WEBLINK_CONTROL_TEST_PERSISTENT").is_some();
     if std::env::var_os("WEBLINK_CONTROL_TEST_LOG").is_some() {
         let _ = log::set_logger(&LOGGER);
         log::set_max_level(log::LevelFilter::Debug);
@@ -118,7 +120,9 @@ fn browser_pointer_attended() {
     let keep_alive = || {
         assert!(Instant::now() < deadline, "browser test deadline");
         capture.status(session.clone()).unwrap();
-        service.status(&owner).unwrap();
+        if !persistent {
+            service.status(&owner).unwrap();
+        }
     };
     while !dir.join("answer.sdp").exists() {
         keep_alive();
@@ -140,6 +144,7 @@ fn browser_pointer_attended() {
     let mut approved = false;
     let mut revoked = false;
     let mut before_revoke = 0;
+    let mut interrupted = false;
     while !dir.join("done").exists() {
         keep_alive();
         std::fs::write(
@@ -157,7 +162,19 @@ fn browser_pointer_attended() {
             }
             applied = list.len();
         }
-        let state = service.status(&owner).unwrap();
+        let state = if persistent {
+            // Deliberately omit frontend status polling throughout the run.
+            service
+                .owner(&owner)
+                .unwrap()
+                .host
+                .lock()
+                .unwrap()
+                .snapshot()
+        } else {
+            service.status(&owner).unwrap()
+        };
+        assert!(!state.closed, "UI polling stopped the native owner");
         if let Some(p) = state.pending.filter(|_| !approved) {
             unsafe {
                 ::windows::Win32::UI::WindowsAndMessaging::SetWindowTextW(
@@ -192,11 +209,27 @@ fn browser_pointer_attended() {
                 std::fs::write(dir.join("approved"), "ok").unwrap();
             }
         }
+        if persistent && dir.join("interrupt").exists() && !interrupted {
+            let o = service.owner(&owner).unwrap();
+            let before = o.host.lock().unwrap().worker.flush().unwrap().grant;
+            window.external_click().unwrap();
+            thread::sleep(Duration::from_millis(50));
+            let status = o.host.lock().unwrap().worker.flush().unwrap();
+            assert_eq!(status.grant, before);
+            assert!(!status.input_suspended);
+            interrupted = true;
+            std::fs::write(dir.join("interrupted"), "ok").unwrap();
+            println!("PASS unrelated input keeps browser control active with no owner polling");
+        }
         if dir.join("revoke").exists() && !revoked {
             assert!(approved);
-            window.wait_for(WM_LBUTTONUP, 1).unwrap();
-            window.wait_for(WM_MOUSEWHEEL, 1).unwrap();
-            window.wait_drag().unwrap();
+            if touch {
+                window.assert_touch().unwrap();
+            } else {
+                window.wait_for(WM_LBUTTONUP, 1).unwrap();
+                window.wait_for(WM_MOUSEWHEEL, 1).unwrap();
+                window.wait_drag().unwrap();
+            }
             window.assert_released().unwrap();
             service.revoke(&owner).unwrap();
             before_revoke = service
@@ -211,11 +244,12 @@ fn browser_pointer_attended() {
                 .submitted;
             revoked = true;
             std::fs::write(dir.join("revoked"), "ok").unwrap();
-            println!("PASS remote mouse / drag / wheel / release / local revoke");
+            println!("PASS remote input / release / local revoke; native touch: {touch}");
         }
         thread::sleep(Duration::from_millis(25));
     }
     assert!(approved && revoked);
+    assert!(!persistent || interrupted);
     assert_eq!(
         service
             .owner(&owner)
@@ -236,7 +270,7 @@ fn browser_pointer_attended() {
     thread::sleep(Duration::from_millis(50));
     assert!(service.status(&owner).unwrap().pending.is_none());
     service.end(&owner);
-    assert!(service.status(&owner).is_err());
+    assert!(service.status(&owner).unwrap().closed);
     capture.stop(session).unwrap();
     capture.shutdown();
     println!("PASS no input before approval or after revoke; media and owner teardown; guarded browser input complete");

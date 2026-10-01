@@ -17,10 +17,30 @@ pub const MAX_INPUT_AGE: Duration = Duration::from_millis(100);
 
 /// Implementations must not block on frontend/network work. Err may mean partial insertion.
 pub trait Device {
+    fn pan_supported(&self) -> bool {
+        false
+    }
+    fn submit_pan(&mut self, _: crate::pan::Pan) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
+    fn cancel_pan(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
+    /// Physical desktop coordinates, queried on the serialized native input thread.
+    fn cursor_position(&self) -> Result<(i32, i32), Error> {
+        Err(Error::Unavailable)
+    }
+    fn touch_supported(&self) -> bool {
+        false
+    }
+    fn submit_touch(&mut self, _: &[crate::touch::Action]) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
+    fn cancel_touch(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
     fn available(&self) -> bool;
     fn geometry_current(&self, geometry: Geometry) -> bool;
-    fn ready_to_approve(&self) -> bool;
-    fn physically_held(&self, held: Held) -> bool;
     fn submit(&mut self, actions: &[Action]) -> Result<(), Error>;
 }
 #[derive(Clone, Debug)]
@@ -33,6 +53,10 @@ struct InputState<D: Device> {
     targets: HashMap<String, TrustedTarget>,
     invalidated: HashMap<String, Arc<AtomicBool>>,
     held: Vec<Held>,
+    touches: crate::touch::Contacts,
+    panning: bool,
+    interrupted: bool,
+    cursor: crate::trackpad::Cursor,
     unicode: Option<u16>,
     failure: Option<Error>,
     submitted: u64,
@@ -47,14 +71,19 @@ impl<D: Device> InputState<D> {
     }
     fn release_all(&mut self) -> bool {
         let mut ok = true;
+        self.touches.clear();
+        self.panning = false;
+        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.device.cancel_pan()))
+            .is_ok_and(|result| result.is_ok());
+        self.cursor = Default::default();
+        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.device.cancel_touch()))
+            .is_ok_and(|result| result.is_ok());
         if let Some(unit) = self.unicode.take() {
             ok &= self.release_action(Action::Unicode { unit, down: false });
         }
-        // Reverse order releases ordinary keys before their modifiers. Never release local ownership.
+        // Release only inputs recorded for this grant, in reverse order (keys before modifiers).
         for held in std::mem::take(&mut self.held).into_iter().rev() {
-            if !self.device.physically_held(held) {
-                ok &= self.release_action(held.up());
-            }
+            ok &= self.release_action(held.up());
         }
         if !ok {
             self.failure = Some(Error::Release);
@@ -62,11 +91,63 @@ impl<D: Device> InputState<D> {
         ok
     }
     fn apply(&mut self, grant: &Grant, event: Event) -> Result<(), Error> {
+        if self.panning
+            && !matches!(
+                event,
+                Event::Trackpad(crate::trackpad::Event::Pan { .. }) | Event::ReleaseAll
+            )
+        {
+            return Err(Error::Invalid);
+        }
+        if !self.touches.is_empty() && !matches!(event, Event::Touch(_) | Event::ReleaseAll) {
+            return Err(Error::Invalid);
+        }
         let geometry = self
             .targets
             .get(&grant.binding.target.media_id)
             .ok_or(Error::Unavailable)?
             .geometry;
+        if let Event::Trackpad(crate::trackpad::Event::Pan { gesture }) = event {
+            use crate::pan::Pan;
+            if !gesture.valid() {
+                return Err(Error::Invalid);
+            }
+            if !self.device.pan_supported() || !self.held.is_empty() || self.unicode.is_some() {
+                return Err(Error::Unavailable);
+            }
+            match gesture {
+                Pan::Start if !self.panning => {
+                    // Pan targets the actual cursor, clamped to the authorized shared display.
+                    let position = self.cursor.resolve(
+                        crate::trackpad::Event::Move { x: 0.0, y: 0.0 },
+                        self.device.cursor_position()?,
+                        geometry,
+                    )?;
+                    let Event::Move(position) = position else {
+                        unreachable!()
+                    };
+                    let (x, y) = geometry.absolute(position).ok_or(Error::Invalid)?;
+                    self.device.submit(&[Action::Move { x, y }])?;
+                    self.panning = true;
+                }
+                Pan::Update { .. } | Pan::End if self.panning => (),
+                Pan::Cancel => (),
+                _ => return Err(Error::Invalid),
+            }
+            self.device.submit_pan(gesture)?;
+            if matches!(gesture, Pan::End | Pan::Cancel) {
+                self.panning = false;
+            }
+            self.submitted += 1;
+            return Ok(());
+        }
+        let event = if let Event::Trackpad(event) = event {
+            self.cursor
+                .resolve(event, self.device.cursor_position()?, geometry)?
+        } else {
+            self.cursor = Default::default();
+            event
+        };
         let mut actions = Vec::with_capacity(3);
         let mut transition = None;
         let move_to = |p| {
@@ -76,6 +157,17 @@ impl<D: Device> InputState<D> {
                 .ok_or(Error::Invalid)
         };
         match event {
+            Event::Trackpad(_) => unreachable!("resolved above"),
+            Event::Touch(contacts) => {
+                if !self.device.touch_supported() || !self.held.is_empty() || self.unicode.is_some()
+                {
+                    return Err(Error::Unavailable);
+                }
+                let actions = self.touches.frame(&contacts, geometry)?;
+                self.device.submit_touch(&actions)?;
+                self.submitted += 1;
+                return Ok(());
+            }
             Event::Move(p) => actions.push(move_to(p)?),
             Event::Button {
                 position,
@@ -142,9 +234,6 @@ impl<D: Device> InputState<D> {
         }
         if let Some((held, down)) = transition {
             if down {
-                if self.device.physically_held(held) {
-                    return Err(Error::Unavailable);
-                }
                 if !self.held.contains(&held) {
                     // Record before SendInput, which may partially succeed.
                     self.held.push(held);
@@ -155,7 +244,7 @@ impl<D: Device> InputState<D> {
                     Held::Key(key) => Action::Key { key, down },
                     Held::Button(button) => Action::Button { button, down },
                 });
-            } else if self.held.contains(&held) && !self.device.physically_held(held) {
+            } else if self.held.contains(&held) {
                 actions.push(held.up());
             }
         }
@@ -181,11 +270,15 @@ impl<D: Device> Backend for InputState<D> {
                 .is_some_and(|t| t.binding == *binding && self.device.geometry_current(t.geometry))
     }
     fn release(&mut self, _: &Grant) -> bool {
+        self.interrupted = true;
         self.release_all()
     }
 }
 #[derive(Clone, Debug)]
 pub struct Status {
+    pub input_suspended: bool,
+    pub pan_supported: bool,
+    pub touch_supported: bool,
     pub pending_consent: Option<String>,
     pub grant: Option<Grant>,
     pub failure: Option<Error>,
@@ -203,6 +296,10 @@ impl<D: Device> Engine<D> {
                 targets: HashMap::new(),
                 invalidated: HashMap::new(),
                 held: vec![],
+                touches: Default::default(),
+                panning: false,
+                interrupted: false,
+                cursor: Default::default(),
                 unicode: None,
                 failure: None,
                 submitted: 0,
@@ -265,11 +362,11 @@ impl<D: Device> Engine<D> {
         if !self.authority.pending_matches(consent) {
             return None;
         }
-        if !self.authority.backend_mut().device.ready_to_approve() {
-            self.authority.revoke();
-            return None;
+        let approved = self.authority.approve(consent, now);
+        if approved.is_some() {
+            self.authority.backend_mut().interrupted = false;
         }
-        self.authority.approve(consent, now)
+        approved
     }
     pub fn decline(&mut self, consent: &str) -> Option<Signal> {
         self.authority.decline(consent)
@@ -311,10 +408,17 @@ impl<D: Device> Engine<D> {
             .checked_duration_since(queued)
             .is_none_or(|age| age > MAX_INPUT_AGE)
         {
-            self.fail(Error::Stale);
+            self.interrupt();
             return Err(Error::Stale);
         }
+        if self.authority.backend_mut().interrupted && !matches!(event, Event::ReleaseAll) {
+            return Err(Error::Unauthorized);
+        }
+        let reset = matches!(event, Event::ReleaseAll);
         let result = self.authority.backend_mut().apply(grant, event);
+        if reset && result.is_ok() {
+            self.authority.backend_mut().interrupted = false;
+        }
         if let Err(error) = result {
             self.fail(error);
         }
@@ -322,6 +426,15 @@ impl<D: Device> Engine<D> {
     }
     pub fn tick(&mut self, now: Instant) {
         self.authority.tick(now);
+    }
+    /// Release interrupted gestures while retaining this connection's local consent.
+    /// A fresh activation barrier is required before accepting further input.
+    pub fn interrupt(&mut self) {
+        let state = self.authority.backend_mut();
+        state.interrupted = true;
+        if !state.release_all() {
+            self.fail(Error::Release);
+        }
     }
     pub fn revoke(&mut self) {
         self.authority.revoke();
@@ -339,6 +452,9 @@ impl<D: Device> Engine<D> {
         let pending_consent = self.authority.pending_consent().map(str::to_owned);
         let state = self.authority.backend_mut();
         Status {
+            input_suspended: state.interrupted,
+            pan_supported: state.device.pan_supported(),
+            touch_supported: state.device.touch_supported(),
             pending_consent,
             grant,
             closed,

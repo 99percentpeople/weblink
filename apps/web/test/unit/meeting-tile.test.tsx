@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ScreenControlRequest } from "@/libs/domain/native-screen/control-request";
 import {
   cleanup,
   fireEvent,
@@ -24,7 +25,17 @@ vi.hoisted(() => {
   });
 });
 
-const fixture = vi.hoisted(() => ({ error: vi.fn() }));
+const fixture = vi.hoisted(() => ({
+  error: vi.fn(),
+  control: undefined as any,
+  screenControl: undefined as any,
+}));
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    getRemoteControl: () => fixture.control,
+    getScreenControl: () => fixture.screenControl,
+  },
+}));
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.error },
 }));
@@ -71,6 +82,8 @@ beforeEach(() => {
   vi.stubGlobal("innerWidth", 390);
   window.dispatchEvent(new Event("resize"));
   fixture.error.mockClear();
+  fixture.control = undefined;
+  fixture.screenControl = undefined;
   fullscreenElement = null;
   Object.defineProperties(document, {
     fullscreenEnabled: { configurable: true, value: true },
@@ -539,4 +552,115 @@ describe("native PiP on a meeting tile", () => {
     expect(unlock).toHaveBeenCalledOnce();
     expect(document.fullscreenElement).toBeNull();
   });
+});
+
+it("keeps one remote control action across request, cancellation, active control and recovery", () => {
+  class Control extends EventTarget {
+    value = "viewing";
+    state = () => this.value;
+    update(value: string) {
+      this.value = value;
+      this.dispatchEvent(new Event("change"));
+    }
+    request = vi.fn(() => this.update("requesting"));
+    cancel = vi.fn(() => this.update("viewing"));
+    resetInput = vi.fn();
+  }
+  const control = (fixture.control = new Control());
+  const view = setup();
+  view.setLocal(false);
+  const button = screen.getByRole("button", {
+    name: "remote_control.request",
+  });
+  expect(
+    button.closest(".meeting-tile-actions"),
+  ).not.toBeNull();
+  fireEvent.click(button);
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.cancel",
+    }),
+  ).toBe(button);
+  fireEvent.click(button);
+  expect(control.cancel).toHaveBeenCalledOnce();
+  fireEvent.click(button);
+  control.update("active");
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  ).toBe(button);
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.pause",
+    }),
+  ).toBeNull();
+  control.update("activating");
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  ).toBe(button);
+  fireEvent.click(button);
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.request",
+    }),
+  ).toBe(button);
+  control.update("unavailable");
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.reconnecting",
+    }),
+  ).toBe(button);
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  control.update("viewing");
+  expect((button as HTMLButtonElement).disabled).toBe(
+    false,
+  );
+  view.unmount();
+});
+
+it("offers request and cancel on the avatar and hides them when hosting capability is withdrawn", () => {
+  const send = vi.fn();
+  const control = new ScreenControlRequest(send);
+  fixture.screenControl = control;
+  render(() => (
+    <MeetingTile
+      clientId="host"
+      name="Host"
+      pinned={false}
+    />
+  ));
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.request",
+    }),
+  ).toBeNull();
+  control.setAvailable(true);
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.request",
+    }),
+  );
+  expect(send.mock.calls[0][0].type).toBe(
+    "control-request",
+  );
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.cancel",
+    }),
+  );
+  expect(send.mock.calls[1][0].type).toBe("control-cancel");
+  control.setAvailable(false);
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.request",
+    }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.reconnecting",
+    }),
+  ).toBeNull();
 });

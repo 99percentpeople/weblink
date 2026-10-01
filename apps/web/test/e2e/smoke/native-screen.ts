@@ -1,3 +1,4 @@
+import { remoteScreenRequestCheck } from "./remote-screen-request";
 import { createRoot } from "solid-js";
 import { liveVideoSettingsCheck } from "./live-video-settings";
 import { streamStatisticsCheck } from "./stream-statistics";
@@ -585,6 +586,8 @@ async function scenario(
   }
 }
 async function main() {
+  const remoteScreenRequest =
+    await remoteScreenRequestCheck();
   const liveSettings = await liveVideoSettingsCheck();
   const scenarios = [];
   for (const polite of [true, false])
@@ -594,6 +597,7 @@ async function main() {
   return {
     ok: true,
     unreachableStun: true,
+    remoteScreenRequest,
     liveSettings,
     scenarios,
   };

@@ -27,7 +27,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         protocol::{Signal, Target},
         windows::{physical_displays, Worker},
     };
-    use windows::Win32::UI::WindowsAndMessaging::*;
+    use windows::Win32::UI::{Input::KeyboardAndMouse::GetAsyncKeyState, WindowsAndMessaging::*};
     let window = support::TestWindow::new()?;
     let (x, y) = window.point(180, 130)?;
     let geometry = physical_displays()?
@@ -182,29 +182,39 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         worker.input(grant.clone(), Event::Key { key, down: true })?;
         worker.flush()?;
         let started = Instant::now();
-        while worker.status().grant.is_some() && started.elapsed() < Duration::from_secs(3) {
+        while !worker.status().input_suspended && started.elapsed() < Duration::from_secs(3) {
             thread::sleep(Duration::from_millis(5));
         }
-        assert!(!worker.renew(grant)?);
+        assert_eq!(worker.status().grant.as_ref(), Some(&grant));
+        assert!(worker.status().input_suspended);
+        assert!(worker.renew(grant.clone())?);
+        worker.input(grant, Event::ReleaseAll)?;
+        assert!(!worker.flush()?.input_suspended);
         window.wait_key_up(3)?;
         window.assert_released()?;
         println!(
-            "PASS: native lease expires without frontend heartbeat in {:?}",
+            "PASS: heartbeat gap releases input, preserves consent and resumes without reapproval in {:?}",
             started.elapsed()
         );
 
-        let grant = approve(&worker, "takeover")?;
-        worker.input(grant, Event::Key { key, down: true })?;
+        worker.revoke()?;
+        let grant = approve(&worker, "other-input")?;
+        worker.input(grant.clone(), Event::Key { key, down: true })?;
         worker.flush()?;
-        // A separately tagged SendInput event exercises the actual hook path, not a physical-device claim.
+        // Exercise unrelated input without monitoring physical devices or taking ownership.
         window.external_click()?;
-        let started = Instant::now();
-        while worker.status().grant.is_some() && started.elapsed() < Duration::from_secs(1) {
-            thread::sleep(Duration::from_millis(5));
-        }
-        assert!(worker.status().grant.is_none());
+        thread::sleep(Duration::from_millis(100));
+        let status = worker.flush()?;
+        assert_eq!(status.grant.as_ref(), Some(&grant));
+        assert!(!status.input_suspended);
+        assert!(unsafe { GetAsyncKeyState(0x41) } < 0);
+        worker.input(grant.clone(), Event::Key { key, down: false })?;
+        worker.input(grant, Event::Move(a))?;
+        worker.flush()?;
         window.assert_released()?;
-        println!("PASS: other-source input traverses native takeover hook and revokes");
+        window.assert_cursor(x, y)?;
+        println!("PASS: unrelated input does not interrupt control or release owned presses");
+        worker.revoke()?;
 
         thread::sleep(Duration::from_millis(30));
         let grant = approve(&worker, "hotkey")?;
@@ -245,7 +255,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("PASS: lifecycle notification {notification:#x} closes actor; restart requires new consent");
             drop(restarted);
         }
-        println!("PASS: all input probes completed; lockscreen, physical hardware takeover and process kill require separate acceptance");
+        println!("PASS: all input probes completed; lockscreen and process kill require separate acceptance");
         Ok(())
     })();
     if result.is_err() {

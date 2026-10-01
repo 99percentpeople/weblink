@@ -235,6 +235,7 @@ export function MeetingStage(
                 : undefined
             }
             sourceId={source().id}
+            clientId={source().participantId}
             order={tile.order}
             sourceKind={source().kind}
             trackId={source().track?.id}
