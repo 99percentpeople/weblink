@@ -30,26 +30,29 @@ const Toaster: Component<ToasterProps> = (props) => {
   );
   const { colorMode } = useColorMode();
   return (
-    <Sonner
-      theme={colorMode()}
-      className={cn("toaster", local.className)}
-      position={mergedProps.position}
-      icons={{
-        success: <IconCheck aria-hidden="true" />,
-        info: <IconInfo aria-hidden="true" />,
-        warning: <IconWarning aria-hidden="true" />,
-        error: <IconError aria-hidden="true" />,
-        close: <IconClose aria-hidden="true" />,
-      }}
-      style={
-        {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-        } as JSX.CSSProperties
-      }
-      {...rest}
-    />
+    // Sonner's React Aria marker is not recognized by Kobalte's modal layers.
+    <div data-kb-top-layer>
+      <Sonner
+        theme={colorMode()}
+        className={cn("toaster", local.className)}
+        position={mergedProps.position}
+        icons={{
+          success: <IconCheck aria-hidden="true" />,
+          info: <IconInfo aria-hidden="true" />,
+          warning: <IconWarning aria-hidden="true" />,
+          error: <IconError aria-hidden="true" />,
+          close: <IconClose aria-hidden="true" />,
+        }}
+        style={
+          {
+            "--normal-bg": "var(--popover)",
+            "--normal-text": "var(--popover-foreground)",
+            "--normal-border": "var(--border)",
+          } as JSX.CSSProperties
+        }
+        {...rest}
+      />
+    </div>
   );
 };
 

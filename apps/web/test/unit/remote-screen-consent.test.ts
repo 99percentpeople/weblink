@@ -200,3 +200,49 @@ it("cancels avatar requests on timeout and ignores late results", async () => {
   control.setAvailable(false);
   expect(control.state()).toBe("unavailable");
 });
+
+it.each(["unavailable", "active"] as const)(
+  "restores avatar requests when its %s screen controller is removed",
+  (state) => {
+    const send = vi.fn();
+    const control = new ScreenControlRequest(send);
+    control.setAvailable(true);
+    control.request();
+    const id = send.mock.calls[0][0].id;
+    control.result({
+      type: "control-result",
+      id,
+      sourceId: "screen",
+    });
+    const pointer = new Pointer();
+    control.attach(
+      "screen",
+      pointer as unknown as RemotePointer,
+    );
+    if (state === "active") {
+      pointer.change("viewing");
+      pointer.change("active");
+    }
+    const changed = vi.fn();
+    control.addEventListener("change", changed);
+    control.detach(
+      new Pointer() as unknown as RemotePointer,
+    );
+    expect(changed).not.toHaveBeenCalled();
+    control.detach(pointer as unknown as RemotePointer);
+    expect(changed).toHaveBeenCalledOnce();
+    expect(control.state()).toBe("viewing");
+    pointer.change("unavailable");
+    expect(changed).toHaveBeenCalledOnce();
+    control.request();
+    expect(control.state()).toBe("requesting");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0]).toEqual({
+      type: "control-request",
+      id: expect.any(String),
+    });
+    expect(send.mock.calls[1][0].id).not.toBe(id);
+    control.setAvailable(false);
+    expect(control.state()).toBe("unavailable");
+  },
+);

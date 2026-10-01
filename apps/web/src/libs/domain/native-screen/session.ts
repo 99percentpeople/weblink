@@ -431,6 +431,8 @@ export class NativeScreenSession {
       : [...this.incoming.values()];
     for (const incoming of entries) {
       this.incoming.delete(incoming.id);
+      if (incoming.control)
+        this.screenControl.detach(incoming.control);
       incoming.control?.close();
       incoming.receiver?.close();
     }

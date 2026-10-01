@@ -887,3 +887,75 @@ it("cancels an avatar approval before it can return a stale source and clears ca
   session.reset();
   expect(session.screenControl.state()).toBe("unavailable");
 });
+
+it.each(["stop", "failure"] as const)(
+  "allows a new avatar request after the controlled screen ends through %s",
+  async (reason) => {
+    const { session, channel } = setup();
+    channel.receive({
+      type: "hello",
+      receiveScreen: true,
+      requestScreen: true,
+      remoteControl: { host: true, request: true },
+    });
+    session.screenControl.request();
+    const request = channel.sent.at(-1);
+    channel.receive({
+      type: "offer",
+      id: "first",
+      sourceId: "display",
+      sdp: "offer",
+      control: true,
+    });
+    await flush();
+    const stream = mediaStream("first-video");
+    receivers[0].stream = stream;
+    receivers[0].changed(stream);
+    const pointer = session.getRemoteControl(
+      stream.getVideoTracks()[0],
+    )!;
+    const state = vi
+      .spyOn(pointer, "state")
+      .mockReturnValue("viewing");
+    const start = vi
+      .spyOn(pointer, "request")
+      .mockImplementation(() => {
+        state.mockReturnValue("active");
+        pointer.dispatchEvent(new Event("change"));
+      });
+    channel.receive({
+      type: "control-result",
+      id: request.id,
+      sourceId: "display",
+    });
+    expect(session.screenControl.state()).toBe("active");
+    state.mockRestore();
+    start.mockRestore();
+    if (reason === "stop")
+      channel.receive({ type: "stop", id: "first" });
+    else receivers[0].failed(new Error("connection ended"));
+    expect(pointer.state()).toBe("unavailable");
+    expect(session.screenControl.state()).toBe("viewing");
+    expect(channel.readyState).toBe("open");
+    session.screenControl.request();
+    expect(channel.sent.at(-1)).toEqual({
+      type: "control-request",
+      id: expect.any(String),
+    });
+    expect(channel.sent.at(-1).id).not.toBe(request.id);
+    pointer.dispatchEvent(new Event("change"));
+    channel.receive({ type: "stop", id: "first" });
+    expect(session.screenControl.state()).toBe(
+      "requesting",
+    );
+    channel.receive({
+      type: "hello",
+      receiveScreen: true,
+      remoteControl: { host: false, request: true },
+    });
+    expect(session.screenControl.state()).toBe(
+      "unavailable",
+    );
+    session.reset();
+  },
+);

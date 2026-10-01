@@ -102,6 +102,12 @@ export class ScreenControlRequest extends EventTarget {
       pointer.removeEventListener("change", changed);
     changed();
   }
+  detach(pointer: RemotePointer) {
+    if (this.pointer !== pointer) return;
+    // The screen ended, but the peer can still accept a fresh avatar request.
+    this.reset();
+    this.changed();
+  }
   cancel() {
     const id = this.pending?.id;
     const pointer = this.pointer;

@@ -4,6 +4,8 @@
    stacking, swipe gestures, or enter/exit animations. */
 .toaster[data-sonner-toaster][data-sonner-theme] {
   @apply font-sans;
+  /* Modal dialogs disable body pointer events; only the toast region opts in. */
+  pointer-events: auto;
 
   [data-sonner-toast][data-styled="true"] {
     @apply flex-wrap gap-3 rounded-lg px-4 py-3.5 text-sm;

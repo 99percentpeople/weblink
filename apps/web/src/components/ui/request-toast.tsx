@@ -124,7 +124,11 @@ export function showRequestToast(
               >
                 <ChevronDown class="size-4" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent class="z-[1000000000]">
+              {/* This portal is outside the toast region and needs its own modal exemption. */}
+              <DropdownMenuContent
+                data-kb-top-layer
+                class="z-[1000000000]"
+              >
                 <For each={options.choices}>
                   {(choice) => (
                     <DropdownMenuItem
