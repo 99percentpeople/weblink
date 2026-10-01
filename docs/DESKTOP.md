@@ -53,6 +53,10 @@ workspace's full release optimizations and producing the
 version. These workflows upload artifacts without publishing a GitHub Release.
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
+CI branch/tag builds read `PAGES_BUILD_ENV` from `Preview`/`production`, matching
+the web channel, and write `apps/web/.env.desktop.local` before building.
+Set `VITE_WEBSOCKET_URL=wss://ws.webl.ink` in that secret. Pull-request validation
+uses the built-in endpoint without reading deployment secrets.
 Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.local`.
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.

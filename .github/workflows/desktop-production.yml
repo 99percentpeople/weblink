@@ -11,6 +11,7 @@ jobs:
     name: Windows desktop
     runs-on: windows-latest
     timeout-minutes: 35
+    environment: production
     steps:
       - uses: actions/checkout@v5
         with:
@@ -19,6 +20,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Configure desktop build from environment secret
+        env:
+          PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PAGES_BUILD_ENV)) {
+            throw "Configure PAGES_BUILD_ENV with the VITE_* / WEBLINK_* settings."
+          }
+          [System.IO.File]::WriteAllText(
+            (Join-Path $PWD 'apps/web/.env.desktop.local'),
+            $env:PAGES_BUILD_ENV,
+            [System.Text.UTF8Encoding]::new($false)
+          )
       - name: Install Rust
         run: rustup show
       - uses: Swatinem/rust-cache@v2

@@ -85,6 +85,7 @@ jobs:
     needs: checks
     if: github.ref_type != 'tag'
     uses: ./.github/workflows/desktop-dev.yml
+    secrets: inherit
 
   deploy-dev:
     name: Deploy development site
@@ -117,3 +118,4 @@ jobs:
       github.ref_type == 'tag' &&
       github.event.deleted != true
     uses: ./.github/workflows/desktop-production.yml
+    secrets: inherit
