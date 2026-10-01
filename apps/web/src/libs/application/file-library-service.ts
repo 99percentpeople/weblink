@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type {
   ChunkCache,
   ChunkMetaData,
@@ -317,7 +318,7 @@ export class FileLibraryService {
       fingerprint,
       {
         ...metadata(file),
-        id: crypto.randomUUID(),
+        id: createUuid(),
         chunkSize:
           this.options.getChunkSize?.() ?? 256 * 1024,
         libraryPinned: true,
@@ -331,7 +332,7 @@ export class FileLibraryService {
     info: Partial<ChunkMetaData> = {},
     options: FingerprintOptions = {},
   ): Promise<ChunkCache> {
-    const id = info.id ?? crypto.randomUUID();
+    const id = info.id ?? createUuid();
     const fingerprintOptions = { ...options, fileId: id };
     const isLibrary = !(source instanceof File);
     let file: File;
@@ -506,8 +507,7 @@ export class FileLibraryService {
           key,
           fingerprint,
           storageId:
-            borrowedStorage ??
-            `content_${crypto.randomUUID()}`,
+            borrowedStorage ?? `content_${createUuid()}`,
           createdAt: Date.now(),
           state: "pending",
         };
@@ -670,7 +670,7 @@ export class FileLibraryService {
       if (!!record.isShared === enabled) return;
       const sharedId =
         record.sharedReferenceId ??
-        `shared_${crypto.randomUUID()}`;
+        `shared_${createUuid()}`;
       const retained = (await this.repository.reference(
         sharedId,
       )) ?? {

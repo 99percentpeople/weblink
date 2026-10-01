@@ -7,8 +7,8 @@ import type {
   SignalingServiceStatus,
 } from "@/libs/domain/signaling";
 import {
-  encryptData,
-  decryptData,
+  createPasswordCipher,
+  type PasswordCipher,
 } from "@/libs/domain/utils/encrypt/e2e";
 import {
   EventHandler,
@@ -23,7 +23,7 @@ export class WebSocketSignalingService implements SignalingService {
   private _clientId: string;
   private _targetClientId: string;
   private _status: SignalingServiceStatus = "init";
-  private password: string | null = null;
+  private cipher?: PasswordCipher;
   private controller: AbortController | null = null;
   private signalListenerReady = false;
   private pendingSignals: ClientSignal[] = [];
@@ -38,7 +38,9 @@ export class WebSocketSignalingService implements SignalingService {
     this.socket = socket;
     this._clientId = clientId;
     this._targetClientId = targetClientId;
-    this.password = password;
+    this.cipher = password
+      ? createPasswordCipher(password)
+      : undefined;
 
     this.setSocket(socket);
   }
@@ -160,8 +162,8 @@ export class WebSocketSignalingService implements SignalingService {
       );
     }
 
-    const data = this.password
-      ? await encryptData(this.password, signal.data)
+    const data = this.cipher
+      ? await this.cipher.encrypt(signal.data)
       : signal.data;
 
     // Encryption yields: the socket or the sender may close in the meantime.
@@ -210,8 +212,8 @@ export class WebSocketSignalingService implements SignalingService {
         return;
       }
 
-      const decryptedData = this.password
-        ? await decryptData(this.password, incoming.data)
+      const decryptedData = this.cipher
+        ? await this.cipher.decrypt(incoming.data)
         : incoming.data;
       const message: ClientSignal = {
         ...incoming,
@@ -251,6 +253,8 @@ export class WebSocketSignalingService implements SignalingService {
     this.controller?.abort();
     this.controller = null;
     this.pendingSignals.length = 0;
+    this.cipher?.dispose();
+    this.cipher = undefined;
     this.signalListenerReady = false;
     this.setStatus("closed");
     this.eventEmitter.clearListeners();

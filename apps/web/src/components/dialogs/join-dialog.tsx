@@ -236,8 +236,8 @@ export const createRoomDialog = () => {
               <button
                 type="button"
                 class="ring-offset-background focus-visible:ring-ring shrink-0
-                  rounded-full focus-visible:ring-2
-                  focus-visible:ring-offset-2 focus-visible:outline-none"
+                  rounded-full focus-visible:outline-none focus-visible:ring-2
+                  focus-visible:ring-offset-2"
                 aria-label={t(
                   "common.join_form.upload_avatar",
                 )}
@@ -325,7 +325,7 @@ export const createRoomDialog = () => {
                     class="text-muted-foreground hover:text-foreground
                       focus-visible:ring-ring inline-flex size-4 items-center
                       justify-center rounded-full transition-colors
-                      focus-visible:ring-2 focus-visible:outline-none"
+                      focus-visible:outline-none focus-visible:ring-2"
                     aria-label={t(
                       "common.join_form.client_id.description",
                     )}
@@ -351,8 +351,8 @@ export const createRoomDialog = () => {
               class="text-muted-foreground hover:bg-accent
                 hover:text-accent-foreground focus-visible:ring-ring
                 inline-flex size-8 shrink-0 items-center justify-center
-                rounded-md transition-colors focus-visible:ring-2
-                focus-visible:outline-none"
+                rounded-md transition-colors focus-visible:outline-none
+                focus-visible:ring-2"
               aria-label={t("common.action.copy")}
               onClick={() =>
                 navigator.clipboard.writeText(
@@ -415,7 +415,7 @@ export const createRoomDialog = () => {
                   class="text-muted-foreground hover:text-foreground
                     focus-visible:ring-ring inline-flex size-4 items-center
                     justify-center rounded-full transition-colors
-                    focus-visible:ring-2 focus-visible:outline-none"
+                    focus-visible:outline-none focus-visible:ring-2"
                   aria-label={t(
                     "common.join_form.password.description",
                   )}
@@ -479,9 +479,8 @@ export const createRoomDialog = () => {
                 title={t(
                   "common.join_form.password.generate",
                 )}
-                onClick={async () => {
-                  const password =
-                    await generateStrongPassword();
+                onClick={() => {
+                  const password = generateStrongPassword();
                   setClientProfile("password", password);
                 }}
               >

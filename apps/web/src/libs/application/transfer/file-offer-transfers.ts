@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type {
   ChunkCache,
   ChunkMetaData,
@@ -103,7 +104,7 @@ export class FileOfferTransfers {
     if (!(file instanceof File))
       throw new Error("File library is unavailable");
     const info: ChunkMetaData = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       fileName: file.name,
       fileSize: file.size,
       mimetype: file.type,

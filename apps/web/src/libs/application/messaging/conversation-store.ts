@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import {
   produce,
   reconcile,
@@ -250,7 +251,7 @@ export class ConversationStore {
     );
     if (existing) return existing;
     const label: ConversationLabel = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       name: normalized,
     };
     this.dependencies.setLabels(

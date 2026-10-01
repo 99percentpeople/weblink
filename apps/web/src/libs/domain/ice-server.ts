@@ -1,5 +1,5 @@
 import { catchError } from "@/libs/catch";
-import { generateHMAC } from "./utils/encrypt/hmac";
+import { generateHMAC } from "./utils/encrypt/cryptography";
 
 export type TurnServerOptions = {
   url: string;

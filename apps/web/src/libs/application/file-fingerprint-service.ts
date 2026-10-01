@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import { createSignal } from "solid-js";
 import FingerprintWorker from "@/libs/infrastructure/storage/fingerprint-worker?worker";
 import {
@@ -70,7 +71,7 @@ export class FileFingerprintService {
     if (!job) {
       const controller = new AbortController();
       const listeners = new Set<(bytes: number) => void>();
-      const id = crypto.randomUUID();
+      const id = createUuid();
       const next: Job = {
         id,
         controller,
@@ -201,7 +202,7 @@ export class FileFingerprintService {
   ): Promise<FileFingerprint> {
     signal.throwIfAborted();
     const worker = (this.worker ??= this.createWorker());
-    const id = crypto.randomUUID();
+    const id = createUuid();
     return new Promise((resolve, reject) => {
       const cleanup = () => {
         worker.removeEventListener("message", message);

@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type { OnMessageAccepted } from "../messaging/message-submission";
 import { FileContentReceives } from "./file-content-receives";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
@@ -461,7 +462,7 @@ export class FileTransferService {
       throw new Error(
         "The file recipient is not connected",
       );
-    const messageId = metadata.id ?? crypto.randomUUID();
+    const messageId = metadata.id ?? createUuid();
     const mode =
       type === "send-file"
         ? TransferMode.Send
@@ -840,7 +841,7 @@ export class FileTransferService {
       return Promise.reject(
         new Error("The file recipient is not connected"),
       );
-    const fid = crypto.randomUUID();
+    const fid = createUuid();
     return this.operation(
       session,
       fid,

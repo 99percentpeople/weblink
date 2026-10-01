@@ -1,3 +1,4 @@
+import { createUuid } from "../ids";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
@@ -406,7 +407,7 @@ export class NativeScreenSession {
     )
       return;
     const outgoing: Outgoing = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       answerApplied: false,
       candidates: [],
     };

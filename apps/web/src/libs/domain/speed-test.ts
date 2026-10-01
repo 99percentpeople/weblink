@@ -1,3 +1,4 @@
+import { createUuid } from "./ids";
 import {
   SPEED_TEST_PROTOCOL,
   encodeSpeedTestMessage,
@@ -45,7 +46,7 @@ export function createSpeedTestChannel(
   // One temporary, reliable, ordered channel for BOTH directions. Ordering
   // makes the end marker follow every payload; it is not a file channel.
   return pc.createDataChannel(
-    `speed-test-${crypto.randomUUID()}`,
+    `speed-test-${createUuid()}`,
     {
       protocol: SPEED_TEST_PROTOCOL,
       ordered: true,

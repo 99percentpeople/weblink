@@ -99,6 +99,15 @@ sender/target identity. It treats the nested `data` payload as opaque. Weblink's
 browser client may encrypt that payload with the room password before sending
 SDP/ICE objects.
 
+Password-protected browser and desktop clients use the same PBKDF2-SHA-256
+verifier (100,000 iterations, 16-byte salt, 32-byte output) and AES-256-GCM
+signaling envelope: Base64 of the 16-byte salt, 12-byte IV, ciphertext and
+16-byte authentication tag. LAN HTTP clients use a lazy shared worker with
+WASM key derivation and AES-GCM when native Web Crypto is unavailable.
+Each peer transport reuses a derived sending key with a fresh random IV per
+message and caches a bounded number of received salt keys. Closing the
+transport disposes these keys. Password preparation failures reject joining.
+
 For future native clients the required lifecycle is:
 
 1. Open the WebSocket with `room` and optional `pwd` query parameters.

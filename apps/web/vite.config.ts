@@ -140,7 +140,11 @@ export default defineConfig(({ command, mode }) => {
     },
     optimizeDeps: {
       // Pre-bundle worker dependencies before their first use.
-      include: ["hash-wasm", "fflate"],
+      include: [
+        "hash-wasm",
+        "fflate",
+        "@noble/ciphers/aes.js",
+      ],
     },
     build: {
       outDir: desktop ? "../desktop/dist" : "dist",

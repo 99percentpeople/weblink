@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type {
   NativeCapture,
   CaptureOptions,
@@ -53,7 +54,7 @@ export async function createNativeScreenStream(
     throw new Error(
       status.error ?? "Native screen could not start",
     );
-  const peerId = crypto.randomUUID();
+  const peerId = createUuid();
   let closed = false;
   let audioQueue = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -156,7 +157,7 @@ export async function createNativeScreenStream(
     originalStop = track.stop.bind(track);
     track.stop = release;
     const publication: NativeScreenPublication = {
-      sourceId: crypto.randomUUID(),
+      sourceId: createUuid(),
       controlEligible: status.source?.kind === "monitor",
       getSenderStats: (
         peer = rawPreview ? undefined : peerId,

@@ -13,7 +13,10 @@ import {
 import { produce, reconcile } from "solid-js/store";
 import { PeerSession } from "../domain/session";
 import type { Client } from "@/libs/domain/client";
-import type { ClientID } from "@/libs/domain/ids";
+import {
+  createUuid,
+  type ClientID,
+} from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import type {
   ClientService,
@@ -278,7 +281,7 @@ export class SessionService {
     });
 
     const controller = new AbortController();
-    let controlGeneration = crypto.randomUUID();
+    let controlGeneration = createUuid();
     const native = new NativeScreenSession({
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(),
@@ -348,7 +351,7 @@ export class SessionService {
       "peerconnectioninit",
       () => {
         opening = false;
-        controlGeneration = crypto.randomUUID();
+        controlGeneration = createUuid();
         native.reset();
       },
       { signal: controller.signal },
@@ -359,7 +362,7 @@ export class SessionService {
         if (detail === "ready") void openNative();
         else {
           opening = false;
-          controlGeneration = crypto.randomUUID();
+          controlGeneration = createUuid();
           native.reset();
         }
       },
@@ -368,7 +371,7 @@ export class SessionService {
     controller.signal.addEventListener(
       "abort",
       () => {
-        controlGeneration = crypto.randomUUID();
+        controlGeneration = createUuid();
         native.reset();
         this.nativeScreens.delete(session);
       },

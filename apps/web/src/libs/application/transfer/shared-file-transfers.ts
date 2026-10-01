@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import { createSignal } from "solid-js";
 import type {
   ChunkCache,
@@ -130,7 +131,7 @@ export class SharedFileTransfers {
       },
       fileId,
       task: {
-        id: crypto.randomUUID(),
+        id: createUuid(),
         shared: true,
         fileId,
         peerId,
@@ -435,7 +436,7 @@ export class SharedFileTransfers {
     job ??= this.newJob(
       peerId,
       info,
-      `shared-transfer_${crypto.randomUUID()}`,
+      `shared-transfer_${createUuid()}`,
     );
     await this.start(job);
   }

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   afterEach,
   describe,
@@ -24,6 +25,26 @@ afterEach(() => {
 });
 
 describe("user-configured ICE servers", () => {
+  it("encodes HMAC TURN credentials as Base64", async () => {
+    const now = 1_790_812_800_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const username = `${Math.floor(now / 1000) + 24 * 3600}:user`;
+    const credential = createHmac("sha1", "password")
+      .update(username)
+      .digest("base64");
+
+    expect(
+      await parseTurnServer({
+        ...local,
+        authMethod: "hmac",
+      }),
+    ).toEqual({
+      urls: local.url,
+      username,
+      credential,
+    });
+  });
+
   it("supports longterm and hmac only", async () => {
     expect(
       parseTurnServers(

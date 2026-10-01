@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type { OnMessageAccepted } from "./message-submission";
 import type {
   ChunkMetaData,
@@ -106,7 +107,7 @@ export class RoomFileSharingService {
     const scopeKey = this.options.rooms.currentScopeKey;
     if (!scopeKey)
       throw new Error("Join a room before sharing a file");
-    const messageId = crypto.randomUUID();
+    const messageId = createUuid();
     const controller = new AbortController();
     this.preparing.add(controller);
     const scopeSignal = this.options.rooms.scopeSignal;

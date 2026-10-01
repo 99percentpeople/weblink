@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { FileMetaData } from "@/libs/domain/file";
 import type { PeerSession } from "@/libs/domain/session";
@@ -185,7 +186,7 @@ export class TransferRegistry {
     }
     const controller = new AbortController();
     const run: TransferRun = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       session: input.session,
       fileId: input.cache.id,
       messageId: input.messageId,

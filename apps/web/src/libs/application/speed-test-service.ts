@@ -10,7 +10,10 @@ import {
   type SpeedTestProgress,
   type SpeedTestResult,
 } from "../domain/speed-test-protocol";
-import type { ClientID } from "@/libs/domain/ids";
+import {
+  createUuid,
+  type ClientID,
+} from "@/libs/domain/ids";
 
 export interface SpeedTestState {
   /** Stable identity across progress updates and view remounts. */
@@ -121,7 +124,7 @@ export class SpeedTestService {
     incoming: boolean,
   ): Promise<void> {
     const run = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       startedAt: Date.now(),
       peerId,
       controller: new AbortController(),

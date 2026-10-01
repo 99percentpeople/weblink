@@ -217,9 +217,8 @@ export class WebSocketClientService implements ClientService {
           "Failed to hash room password",
           error,
         );
-        this.password = null;
         this.onNotice?.("password-hash-failed");
-        return null;
+        throw error;
       });
     }
     return this.passwordHashPromise;

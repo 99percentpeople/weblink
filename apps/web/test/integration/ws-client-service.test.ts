@@ -7,19 +7,20 @@ import {
   vi,
 } from "vitest";
 
+const cipherMock = vi.hoisted(() => ({
+  encrypt: vi.fn(async (data: string) => data),
+  decrypt: vi.fn(async (data: string) => data),
+  dispose: vi.fn(),
+}));
+
 vi.mock("@/libs/domain/utils/encrypt/e2e", () => ({
   hashPassword: vi.fn(async () => "client-password-hash"),
   comparePasswordHash: vi.fn(async () => true),
-  encryptData: vi.fn(
-    async (_password: string, data: unknown) => data,
-  ),
-  decryptData: vi.fn(
-    async (_password: string, data: unknown) => data,
-  ),
+  createPasswordCipher: () => ({ ...cipherMock }),
 }));
 
 import { WebSocketClientService } from "@/libs/infrastructure/signaling/client/ws-client-service";
-import { encryptData } from "@/libs/domain/utils/encrypt/e2e";
+import { hashPassword } from "@/libs/domain/utils/encrypt/e2e";
 import type { ClientServiceInitOptions } from "@/libs/domain/client";
 import {
   getReconnectDelayMs,
@@ -173,6 +174,13 @@ async function connectService(
 
 beforeEach(() => {
   notice.mockClear();
+  cipherMock.encrypt
+    .mockReset()
+    .mockImplementation(async (data) => data);
+  cipherMock.decrypt
+    .mockReset()
+    .mockImplementation(async (data) => data);
+  cipherMock.dispose.mockClear();
   FakeWebSocket.instances = [];
   FakeWebSocket.acknowledgeJoins = true;
   browserWindow = new EventTarget();
@@ -588,7 +596,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
       );
       const sender = service.createSender("remote")!;
       let encrypted!: (data: string) => void;
-      vi.mocked(encryptData).mockImplementationOnce(
+      cipherMock.encrypt.mockImplementationOnce(
         () =>
           new Promise<string>((resolve) => {
             encrypted = resolve;
@@ -613,6 +621,22 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     await connectService(createService());
     expect(notice).toHaveBeenCalledOnce();
     expect(notice).toHaveBeenCalledWith("room-unprotected");
+  });
+  it("rejects password preparation failure before opening an unprotected socket", async () => {
+    vi.mocked(hashPassword).mockRejectedValueOnce(
+      new Error("crypto worker unavailable"),
+    );
+    const service = createService({ password: "password" });
+    await expect(service.createClient()).rejects.toThrow(
+      "crypto worker unavailable",
+    );
+    expect(FakeWebSocket.instances).toHaveLength(0);
+    expect(notice).toHaveBeenCalledWith(
+      "password-hash-failed",
+    );
+    expect(notice).not.toHaveBeenCalledWith(
+      "room-unprotected",
+    );
   });
   it("does not register the deprecated unload event", () => {
     const addEventListener = vi.spyOn(

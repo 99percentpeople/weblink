@@ -1,3 +1,4 @@
+import { createUuid } from "../ids";
 import {
   controlId,
   controlTarget,
@@ -215,7 +216,7 @@ export class RemotePointer extends EventTarget {
             this.send(signal);
           },
           now: () => performance.now(),
-          id: () => crypto.randomUUID(),
+          id: () => createUuid(),
           release: () => this.release(),
         },
       );
@@ -254,7 +255,7 @@ export class RemotePointer extends EventTarget {
   }
   activate() {
     if (this.state() !== "paused") return;
-    this.epoch = crypto.randomUUID();
+    this.epoch = createUuid();
     this.sequence = 0;
     this.moves = 0;
     this.desired = true;

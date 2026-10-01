@@ -1,3 +1,4 @@
+import { createUuid } from "@/libs/domain/ids";
 import { normalizeChatText } from "@/libs/domain/protocol/chat-text";
 import type { OnMessageAccepted } from "./message-submission";
 import type { Client } from "@/libs/domain/client";
@@ -442,7 +443,7 @@ export class RoomMessagingService {
       lifetime: new AbortController(),
       epoch: new AbortController(),
       files: new AbortController(),
-      token: crypto.randomUUID(),
+      token: createUuid(),
       remoteOfferAt: -1,
       remoteOfferWaiters: new Set(),
       acknowledged: false,
@@ -484,7 +485,7 @@ export class RoomMessagingService {
     binding.epoch = new AbortController();
     binding.files.abort();
     binding.files = new AbortController();
-    binding.token = crypto.randomUUID();
+    binding.token = createUuid();
     binding.remoteToken = undefined;
     binding.remoteFeatures = undefined;
     binding.remoteOfferAt = -1;
@@ -700,7 +701,7 @@ export class RoomMessagingService {
           | "chunkSize"
           | "fingerprint"
         >,
-    messageId: string = crypto.randomUUID(),
+    messageId: string = createUuid(),
     onStored?: OnMessageAccepted,
   ): Promise<void> {
     this.syncSessions();
