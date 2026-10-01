@@ -77,8 +77,8 @@ jobs:
         env:
           CHROMIUM_PATH: google-chrome
         run: |
-          node apps/web/scripts/run-browser-check.mjs --conversations
-          node apps/web/scripts/run-messaging-check.mjs
+          dbus-run-session -- node apps/web/scripts/run-browser-check.mjs --conversations
+          dbus-run-session -- node apps/web/scripts/run-messaging-check.mjs
 
   desktop-dev:
     name: Desktop development build

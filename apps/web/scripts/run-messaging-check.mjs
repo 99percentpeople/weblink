@@ -182,7 +182,10 @@ try {
     "Chromium debugger",
     async () => {
       if (browserError) throw browserError;
-      if (browser.exitCode !== null)
+      if (
+        browser.exitCode !== null ||
+        browser.signalCode !== null
+      )
         throw new Error(`Chromium exited: ${diagnostics}`);
       try {
         return +(
@@ -195,7 +198,7 @@ try {
         return false;
       }
     },
-    10000,
+    30000,
   );
   root = await connect(
     (

@@ -138,6 +138,7 @@ async function main() {
         "--headless=new",
         "--no-sandbox",
         "--disable-gpu",
+        "--disable-dev-shm-usage",
         "--disable-extensions",
         "--disable-background-networking",
         ...(nativeScreenTest
@@ -168,8 +169,17 @@ async function main() {
       browserLog = (browserLog + data).slice(-8000);
     });
     let port;
-    for (let attempt = 0; attempt < 100; attempt++) {
+    // Hosted runners can need more than ten seconds for a cold browser start.
+    const startupDeadline = Date.now() + 30000;
+    while (Date.now() < startupDeadline) {
       if (browserError) throw browserError;
+      if (
+        browser.exitCode !== null ||
+        browser.signalCode !== null
+      )
+        throw new Error(
+          `Chromium exited during startup (${browser.exitCode ?? browser.signalCode}). ${browserLog}`,
+        );
       try {
         port = Number(
           (
