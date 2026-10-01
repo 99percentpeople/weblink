@@ -604,3 +604,104 @@ describe("native screen control", () => {
       expect(parseScreenSignal(input)).toBeUndefined();
   });
 });
+
+it("adds native control only for an eligible display and a capable authenticated peer", async () => {
+  const context = vi.fn(async () => ({
+    ownerId: "room",
+    peerGeneration: "peer",
+    clientId: "client",
+  }));
+  const s = new NativeScreenSession({
+    controlCapabilities: { request: true, host: true },
+    controlContext: context,
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: () => {},
+    error: vi.fn(),
+  });
+  const display = {
+    ...publication("display"),
+    controlEligible: true,
+  };
+  const window = publication("window");
+  s.setPublications([display, window]);
+  const channel = new Channel();
+  s.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    multiScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  await flush();
+  expect(display.offer).toHaveBeenCalledWith(
+    expect.any(String),
+    [],
+    false,
+    undefined,
+    {
+      ownerId: "room",
+      peerGeneration: "peer",
+      clientId: "client",
+      sourceId: "display",
+    },
+  );
+  expect(window.offer).toHaveBeenCalledWith(
+    expect.any(String),
+    [],
+    false,
+  );
+  expect(
+    channel.sent
+      .filter((v) => v.type === "offer")
+      .map((v) => [v.sourceId, v.control]),
+  ).toEqual(
+    expect.arrayContaining([
+      ["display", true],
+      ["window", undefined],
+    ]),
+  );
+  s.reset();
+  expect(display.closePeer).toHaveBeenCalledTimes(1);
+  expect(window.closePeer).toHaveBeenCalledTimes(1);
+});
+
+it("does not attach input after owner preparation finishes for an obsolete channel", async () => {
+  const pending = deferred<{
+    ownerId: string;
+    peerGeneration: string;
+    clientId: string;
+  }>();
+  const s = new NativeScreenSession({
+    controlCapabilities: { request: true, host: true },
+    controlContext: () => pending.promise,
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: () => {},
+    error: vi.fn(),
+  });
+  const display = {
+    ...publication("display"),
+    controlEligible: true,
+  };
+  s.setPublication(display);
+  const channel = new Channel();
+  s.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  await flush();
+  s.reset();
+  pending.resolve({
+    ownerId: "old-room",
+    peerGeneration: "old-peer",
+    clientId: "client",
+  });
+  await flush();
+  expect(display.offer).not.toHaveBeenCalled();
+  expect(
+    channel.sent.filter((v) => v.type === "offer"),
+  ).toEqual([]);
+});

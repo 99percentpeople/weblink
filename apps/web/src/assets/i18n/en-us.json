@@ -974,5 +974,22 @@
     "ice_config": "The relay server configuration is invalid. Check the address and authentication method.",
     "ice_config_line": "Line {{line}} must contain address, username, password and authentication method, separated by |.",
     "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm or hmac."
+  },
+  "remote_control": {
+    "request_title": "Allow remote control?",
+    "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
+    "revoke_hint": "Click or press a key locally to take back control, or press Ctrl+Alt+Shift+F10. Keyboard forwarding will be added in a later phase.",
+    "decline": "Decline",
+    "allow": "Allow control",
+    "host_active": "{{name}} can control this computer.",
+    "revoke": "Revoke control",
+    "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
+    "surface": "Remote mouse control. Press Escape to pause.",
+    "request": "Request control",
+    "waiting": "Waiting for approval",
+    "cancel": "Cancel",
+    "resume": "Control mouse",
+    "pause": "Pause control",
+    "end": "End control"
   }
 }

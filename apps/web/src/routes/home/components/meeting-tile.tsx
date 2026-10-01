@@ -1,3 +1,4 @@
+import { RemoteControlOverlay } from "./remote-control-overlay";
 import { Motion } from "@/components/ui/motion";
 import {
   createEffect,
@@ -123,6 +124,13 @@ export function MeetingTile(props: {
           playbackActive={props.playbackActive}
           muted
         >
+          <RemoteControlOverlay
+            enabled={
+              !props.local &&
+              !props.compact &&
+              props.playbackActive !== false
+            }
+          />
           <Show
             when={
               appState.options.showStreamStats &&

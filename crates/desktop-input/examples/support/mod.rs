@@ -50,6 +50,9 @@ pub struct TestWindow {
 }
 impl TestWindow {
     pub fn new() -> Result<Self, String> {
+        Self::with_focus_timeout(Duration::from_secs(30))
+    }
+    pub fn with_focus_timeout(timeout: Duration) -> Result<Self, String> {
         let events = Arc::new(Mutex::new(Vec::new()));
         let out = events.clone();
         let (ready, rx) = mpsc::channel();
@@ -117,22 +120,19 @@ impl TestWindow {
         };
         // Windows may refuse programmatic foreground activation. Let the local user click
         // this owned window; do not bypass foreground restrictions or inject into another app.
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while result.foreground().is_err() && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(5));
-        }
-        result.foreground()?;
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + timeout;
         let mut idle = Instant::now();
         loop {
-            result.foreground()?;
-            if unsafe { (1..255).any(|key| GetAsyncKeyState(key) < 0) } {
+            if result.foreground().is_err()
+                || unsafe { (1..255).any(|key| GetAsyncKeyState(key) < 0) }
+            {
                 idle = Instant::now();
             }
             if idle.elapsed() >= Duration::from_millis(200) {
                 break;
             }
             if Instant::now() >= deadline {
+                result.foreground()?;
                 let buttons = unsafe { (1..=6).filter(|key| GetAsyncKeyState(*key) < 0).count() };
                 let modifiers = unsafe {
                     [

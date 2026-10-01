@@ -1,6 +1,7 @@
 use super::{CandidateHandler, EncoderInfo, IceCandidate, IceServer, MediaOptions, VideoSettings};
 mod audio;
 mod compose;
+mod control;
 mod mf;
 mod statistics;
 #[cfg(test)]
@@ -58,10 +59,10 @@ pub struct MediaSession {
     pipeline: Mutex<super::pipeline::Timings>,
 }
 
-#[derive(Clone)]
 struct MediaPeer {
     connection: PeerConnection,
     preview: bool,
+    control: Option<control::Connection>,
 }
 
 impl MediaSession {
@@ -543,7 +544,8 @@ impl MediaSession {
         relay: bool,
         preview: bool,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, None).await
+        self.create_offer(id, servers, relay, preview, None, None)
+            .await
     }
 
     pub async fn offer_trickle(
@@ -554,10 +556,26 @@ impl MediaSession {
         preview: bool,
         candidates: CandidateHandler,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, Some(candidates))
+        self.create_offer(id, servers, relay, preview, Some(candidates), None)
             .await
     }
 
+    pub async fn offer_control(
+        &self,
+        id: String,
+        servers: Vec<IceServer>,
+        relay: bool,
+        candidates: Option<CandidateHandler>,
+        port: Arc<dyn super::control::Port>,
+    ) -> Result<String> {
+        let result = self
+            .create_offer(id, servers, relay, false, candidates, Some(port.clone()))
+            .await;
+        if result.is_err() {
+            port.closed();
+        }
+        result
+    }
     async fn create_offer(
         &self,
         id: String,
@@ -565,6 +583,7 @@ impl MediaSession {
         relay: bool,
         preview: bool,
         on_candidate: Option<CandidateHandler>,
+        control_port: Option<Arc<dyn super::control::Port>>,
     ) -> Result<String> {
         if id.is_empty() || id.len() > 128 {
             return Err("Invalid media peer identifier".into());
@@ -588,6 +607,12 @@ impl MediaSession {
             .factory
             .create_peer_connection(config)
             .map_err(|e| e.to_string())?;
+        let control = control_port
+            .map(|port| control::Channels::connect(&pc, port))
+            .transpose()
+            .inspect_err(|_| {
+                pc.close();
+            })?;
         {
             let options = self.options.lock().unwrap_or_else(|e| e.into_inner());
             // Preview keeps its own congestion feedback and encoder, at the selected
@@ -696,6 +721,7 @@ impl MediaSession {
                     MediaPeer {
                         connection: pc.clone(),
                         preview,
+                        control,
                     },
                 );
                 if let Some(encoder) = hardware {
@@ -767,22 +793,22 @@ impl MediaSession {
         if sdp.len() > 65536 {
             return Err("Media SDP too large".into());
         }
-        let peer = self
+        let (connection, preview) = self
             .peers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(id)
-            .cloned()
+            .map(|peer| (peer.connection.clone(), peer.preview))
             .ok_or("Media peer is no longer active")?;
         let options = self
             .options
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let sdp = super::starting_bitrate_sdp(sdp, options.max_bitrate, peer.preview);
+        let sdp = super::starting_bitrate_sdp(sdp, options.max_bitrate, preview);
         let description =
             SessionDescription::parse(&sdp, SdpType::Answer).map_err(|e| e.to_string())?;
-        peer.connection
+        connection
             .set_remote_description(description)
             .await
             .map_err(|e| e.to_string())
@@ -827,6 +853,9 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .remove(id);
         if let Some(peer) = pc {
+            if let Some(control) = peer.control {
+                control.close();
+            }
             let pc = peer.connection;
             pc.on_ice_candidate(None);
             pc.close();
@@ -848,6 +877,9 @@ impl MediaSession {
         self.notify.notify_one();
         let peers = std::mem::take(&mut *self.peers.lock().unwrap_or_else(|e| e.into_inner()));
         for (_, peer) in peers {
+            if let Some(control) = peer.control {
+                control.close();
+            }
             let pc = peer.connection;
             pc.on_ice_candidate(None);
             pc.close();

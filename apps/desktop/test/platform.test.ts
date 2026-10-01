@@ -26,6 +26,56 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("keeps local authorization IPC separate from media input and binds the offer to its owner", async () => {
+    const control = {
+      ownerId: "owner",
+      peerGeneration: "peer",
+      clientId: "client",
+      sourceId: "source",
+    };
+    ipc.mockResolvedValue("offer");
+    await platform.screenShare!.offer(
+      "capture",
+      "media",
+      [],
+      false,
+      false,
+      undefined,
+      control,
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "capture_offer",
+      expect.objectContaining({
+        sessionId: "capture",
+        peerId: "media",
+        control,
+      }),
+    );
+    await platform.remoteControl!.approve(
+      "owner",
+      "local-consent",
+      true,
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "remote_control_approve",
+      {
+        ownerId: "owner",
+        consentId: "local-consent",
+        approve: true,
+      },
+    );
+    await platform.remoteControl!.status("owner");
+    expect(ipc).toHaveBeenLastCalledWith(
+      "remote_control_status",
+      { ownerId: "owner" },
+    );
+    await platform.remoteControl!.end("owner");
+    expect(ipc).toHaveBeenLastCalledWith(
+      "remote_control_end",
+      { ownerId: "owner" },
+    );
+  });
+
   it("reads physical display layout without starting or authorizing capture", async () => {
     const layout = {
       revision: "layout-1",

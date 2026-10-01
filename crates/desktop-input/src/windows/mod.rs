@@ -55,6 +55,7 @@ impl Worker {
         let exclusive = Exclusive;
         let queue = Arc::new(Mailbox::default());
         let status = Arc::new(Mutex::new(Status {
+            pending_consent: None,
             grant: None,
             failure: None,
             closed: false,
@@ -137,14 +138,24 @@ impl Worker {
                 q.close(failure.unwrap_or(Error::Closed));
             })
             .map_err(|_| Error::Unavailable)?;
+        match initialized.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => (),
+            other => {
+                queue.close(Error::Closed);
+                worker.thread().unpark();
+                let _ = worker.join();
+                return Err(match other {
+                    Ok(Err(error)) => error,
+                    _ => Error::Timeout,
+                });
+            }
+        };
         let handle = Self {
             queue,
             status,
             thread: Some(worker),
         };
-        initialized
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| Error::Timeout)??;
+
         Ok(handle)
     }
     fn wake(&self) {
@@ -189,11 +200,21 @@ impl Worker {
     pub fn register(&self, target: TrustedTarget) -> Result<bool, Error> {
         self.call(move |e| e.register(target))
     }
+    pub fn register_until(
+        &self,
+        target: TrustedTarget,
+        invalidated: Arc<AtomicBool>,
+    ) -> Result<bool, Error> {
+        self.call(move |e| e.register_until(target, invalidated))
+    }
     pub fn request(&self, media: String, signal: Signal) -> Result<Option<RequestResult>, Error> {
         self.call(move |e| e.request(&media, &signal, Instant::now()))
     }
     pub fn approve(&self, consent: String) -> Result<Option<Signal>, Error> {
         self.call(move |e| e.approve(&consent, Instant::now()))
+    }
+    pub fn decline(&self, consent: String) -> Result<Option<Signal>, Error> {
+        self.call(move |e| e.decline(&consent))
     }
     pub fn renew(&self, grant: Grant) -> Result<bool, Error> {
         self.call(move |e| e.renew(&grant, Instant::now()))

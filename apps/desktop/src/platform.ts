@@ -15,6 +15,21 @@ import {
 export const platform: PlatformRuntime = {
   kind: "desktop",
   supportsServiceWorker: false,
+  remoteControl: {
+    open: () => invoke("remote_control_open"),
+    status: (ownerId) =>
+      invoke("remote_control_status", { ownerId }),
+    end: (ownerId) =>
+      invoke("remote_control_end", { ownerId }),
+    revoke: (ownerId) =>
+      invoke("remote_control_revoke", { ownerId }),
+    approve: (ownerId, consentId, approve) =>
+      invoke("remote_control_approve", {
+        ownerId,
+        consentId,
+        approve,
+      }),
+  },
   capture: {
     displayLayout: () =>
       invoke<DisplayLayout>("capture_display_layout"),
@@ -76,9 +91,11 @@ export const platform: PlatformRuntime = {
       relayOnly,
       preview = false,
       onCandidate,
+      control,
     ) =>
       invoke<string>("capture_offer", {
         sessionId,
+        ...(control ? { control } : {}),
         peerId,
         relayOnly,
         preview,

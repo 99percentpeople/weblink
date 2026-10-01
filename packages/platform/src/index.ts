@@ -9,6 +9,7 @@ export interface RuntimeCapabilities {
 }
 
 export interface PlatformRuntime {
+  readonly remoteControl?: NativeRemoteControl;
   readonly kind: "browser" | "desktop";
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
@@ -178,6 +179,34 @@ export interface NativeScreenPreview {
   };
 }
 
+/** Trusted local composition only. Never construct from remote signal payloads. */
+export interface NativeControlContext {
+  ownerId: string;
+  peerGeneration: string;
+  clientId: string;
+  sourceId: string;
+}
+export interface NativeControlStatus {
+  pending: {
+    consentId: string;
+    clientId: string;
+    sourceId: string;
+  } | null;
+  clientId: string | null;
+  closed: boolean;
+}
+export interface NativeRemoteControl {
+  open(): Promise<string>;
+  status(ownerId: string): Promise<NativeControlStatus>;
+  end(ownerId: string): Promise<void>;
+  revoke(ownerId: string): Promise<void>;
+  approve(
+    ownerId: string,
+    consentId: string,
+    approve: boolean,
+  ): Promise<void>;
+}
+
 export interface NativeScreenShare {
   /** Raw local presentation. Remote publication remains native WebRTC. */
   preview?(
@@ -212,6 +241,7 @@ export interface NativeScreenShare {
     relayOnly: boolean,
     preview?: boolean,
     onCandidate?: (candidate: RTCIceCandidateInit) => void,
+    control?: NativeControlContext,
   ): Promise<string>;
   addIceCandidate(
     sessionId: string,

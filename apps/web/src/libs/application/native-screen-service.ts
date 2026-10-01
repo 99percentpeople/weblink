@@ -157,6 +157,7 @@ export async function createNativeScreenStream(
     track.stop = release;
     const publication: NativeScreenPublication = {
       sourceId: crypto.randomUUID(),
+      controlEligible: status.source?.kind === "monitor",
       getSenderStats: (
         peer = rawPreview ? undefined : peerId,
       ) =>
@@ -214,8 +215,14 @@ export async function createNativeScreenStream(
           throw error;
         });
       },
-      offer: (peer, servers, relay, onCandidate) =>
-        onCandidate
+      offer: (
+        peer,
+        servers,
+        relay,
+        onCandidate,
+        control,
+      ) =>
+        control
           ? share.offer(
               id,
               peer,
@@ -223,8 +230,18 @@ export async function createNativeScreenStream(
               relay,
               false,
               onCandidate,
+              control,
             )
-          : share.offer(id, peer, servers, relay),
+          : onCandidate
+            ? share.offer(
+                id,
+                peer,
+                servers,
+                relay,
+                false,
+                onCandidate,
+              )
+            : share.offer(id, peer, servers, relay),
       answer: (peer, answer) =>
         share.answer(id, peer, answer),
       closePeer: (peer) => share.closePeer(id, peer),

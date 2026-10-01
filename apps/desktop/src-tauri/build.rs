@@ -2,6 +2,11 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "remote_control_open",
+            "remote_control_status",
+            "remote_control_end",
+            "remote_control_revoke",
+            "remote_control_approve",
             "capture_sources",
             "capture_display_layout",
             "capture_thumbnail",

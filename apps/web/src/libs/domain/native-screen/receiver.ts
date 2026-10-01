@@ -1,3 +1,4 @@
+import type { RemotePointer } from "../remote-control/pointer";
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
@@ -16,8 +17,17 @@ export class ScreenReceiver {
     private readonly onCandidate?: (
       candidate: RTCIceCandidateInit,
     ) => void,
+    private readonly control?: RemotePointer,
   ) {
     this.pc = new RTCPeerConnection(configuration);
+    this.pc.addEventListener(
+      "datachannel",
+      ({ channel }) => {
+        if (control) control.bind(channel);
+        else channel.close();
+      },
+      { signal: this.lifetime.signal },
+    );
     if (onCandidate)
       this.pc.addEventListener(
         "icecandidate",
@@ -81,6 +91,12 @@ export class ScreenReceiver {
     this.pc.addEventListener(
       "connectionstatechange",
       () => {
+        if (
+          ["disconnected", "failed", "closed"].includes(
+            this.pc.connectionState,
+          )
+        )
+          this.control?.close();
         clearTimeout(this.disconnectTimer);
         if (this.pc.connectionState === "failed")
           this.fail(
@@ -191,6 +207,7 @@ export class ScreenReceiver {
   }
   close(): void {
     if (this.lifetime.signal.aborted) return;
+    this.control?.close();
     this.lifetime.abort();
     this.candidates = [];
     clearTimeout(this.disconnectTimer);

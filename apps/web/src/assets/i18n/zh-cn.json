@@ -974,5 +974,22 @@
     "ice_config": "中继服务器配置无效，请检查地址和认证方式。",
     "ice_config_line": "第 {{line}} 行需包含地址、用户名、密码和认证方式，使用 | 分隔。",
     "ice_auth_line": "第 {{line}} 行的认证方式不受支持，请使用 longterm 或 hmac。"
+  },
+  "remote_control": {
+    "request_title": "允许远程控制？",
+    "request_description": "{{name}} 请求控制本机的鼠标和键盘。共享屏幕仅用于映射鼠标位置，控制权限不限于某个应用或显示器。",
+    "revoke_hint": "在本机点击鼠标、按键，或按 Ctrl+Alt+Shift+F10 即可收回控制。键盘转发将在后续阶段接入。",
+    "decline": "拒绝",
+    "allow": "允许控制",
+    "host_active": "{{name}} 可以控制本机。",
+    "revoke": "收回控制",
+    "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",
+    "surface": "远程鼠标控制，按 Escape 暂停。",
+    "request": "请求控制",
+    "waiting": "等待对方批准",
+    "cancel": "取消",
+    "resume": "控制鼠标",
+    "pause": "暂停控制",
+    "end": "结束控制"
   }
 }

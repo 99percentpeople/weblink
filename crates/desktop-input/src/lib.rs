@@ -7,3 +7,4 @@ mod mailbox;
 pub mod protocol;
 #[cfg(target_os = "windows")]
 pub mod windows;
+pub mod wire;

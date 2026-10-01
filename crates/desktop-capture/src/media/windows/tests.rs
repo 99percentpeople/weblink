@@ -260,8 +260,15 @@ fn preview_adaptation_does_not_throttle_remote_video() {
         .unwrap();
         let remote = connect(&media, "remote", false).await.unwrap();
         let preview = connect(&media, "preview", true).await.unwrap();
-        let pc = media.peers.lock().unwrap().get("preview").unwrap().clone();
-        let sender = pc.connection.senders().remove(0);
+        let pc = media
+            .peers
+            .lock()
+            .unwrap()
+            .get("preview")
+            .unwrap()
+            .connection
+            .clone();
+        let sender = pc.senders().remove(0);
         let mut parameters = sender.parameters();
         parameters.encodings[0].max_framerate = Some(5.0);
         sender.set_parameters(parameters).unwrap();
@@ -445,8 +452,15 @@ fn hardware_motion_recovers_after_idle_and_bitrate_changes() {
         }
         phase(&media, &remote, "motion", 60).await;
         phase(&media, &remote, "idle", 2).await;
-        let pc = media.peers.lock().unwrap().get("recovery").unwrap().clone();
-        let sender = pc.connection.senders().remove(0);
+        let pc = media
+            .peers
+            .lock()
+            .unwrap()
+            .get("recovery")
+            .unwrap()
+            .connection
+            .clone();
+        let sender = pc.senders().remove(0);
         let mut params = sender.parameters();
         params.encodings[0].max_bitrate = Some(500_000);
         sender.set_parameters(params).unwrap();

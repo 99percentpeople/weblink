@@ -1,3 +1,5 @@
+import { RemotePointer } from "../remote-control/pointer";
+import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
 import { bindNativeScreenAudio } from "./tracks";
 import {
@@ -15,6 +17,7 @@ export const NATIVE_SCREEN_CHANNEL =
   "weblink-desktop-media";
 export interface NativeScreenPublication {
   readonly sourceId: string;
+  readonly controlEligible?: boolean;
   getSenderStats?(
     peerId?: string,
   ): Promise<VideoStatsSample[]>;
@@ -28,6 +31,7 @@ export interface NativeScreenPublication {
     servers: RTCIceServer[],
     relay: boolean,
     onCandidate?: (candidate: RTCIceCandidateInit) => void,
+    control?: NativeControlContext,
   ): Promise<string>;
   answer(peerId: string, sdp: string): Promise<void>;
   addIceCandidate?(
@@ -39,6 +43,10 @@ export interface NativeScreenPublication {
 interface ScreenSessionPort {
   /** Omitted until the corresponding control implementation is ready. */
   controlCapabilities?: ControlCapabilities;
+  loadControlCapabilities?(): Promise<ControlCapabilities>;
+  controlContext?(): Promise<
+    Omit<NativeControlContext, "sourceId"> | undefined
+  >;
   loadIceServers(): Promise<RTCIceServer[]>;
   relayOnly(): boolean;
   changed(stream: MediaStream | null): void;
@@ -56,6 +64,7 @@ type Signal =
       type: "offer";
       id: string;
       sourceId: string;
+      control?: true;
       sdp: string;
       trickleIce?: true;
     }
@@ -142,6 +151,7 @@ type Incoming = {
   id: string;
   sourceId: string;
   receiver?: ScreenReceiver;
+  control?: RemotePointer;
   stream?: MediaStream;
   candidates: RTCIceCandidateInit[];
 };
@@ -168,6 +178,15 @@ export class NativeScreenSession {
   private incoming = new Map<string, Incoming>();
   constructor(private readonly port: ScreenSessionPort) {}
 
+  getRemoteControl(
+    track: MediaStreamTrack,
+  ): RemotePointer | undefined {
+    return [...this.incoming.values()].find((entry) =>
+      entry.receiver?.stream
+        .getVideoTracks()
+        .includes(track),
+    )?.control;
+  }
   async getVideoStats(
     track: MediaStreamTrack,
     publication?: NativeScreenPublication,
@@ -212,20 +231,37 @@ export class NativeScreenSession {
     this.channel = channel;
     const listeners = (this.listeners =
       new AbortController());
-    const open = () =>
+    const hello = (capabilities?: ControlCapabilities) => {
+      if (
+        this.channel !== channel ||
+        listeners.signal.aborted
+      )
+        return;
       this.send({
         type: "hello",
         receiveScreen: true,
         trickleIce: true,
         multiScreen: true,
-        ...(this.port.controlCapabilities
+        ...(capabilities
           ? {
               remoteControl: {
-                ...this.port.controlCapabilities,
+                ...capabilities,
               },
             }
           : {}),
       });
+    };
+    const open = () => {
+      if (this.port.loadControlCapabilities)
+        void this.port
+          .loadControlCapabilities()
+          .then(hello)
+          .catch((error) => {
+            this.port.error(error);
+            hello();
+          });
+      else hello(this.port.controlCapabilities);
+    };
     channel.addEventListener("open", open, {
       signal: listeners.signal,
     });
@@ -320,6 +356,7 @@ export class NativeScreenSession {
       : [...this.incoming.values()];
     for (const incoming of entries) {
       this.incoming.delete(incoming.id);
+      incoming.control?.close();
       incoming.receiver?.close();
     }
     this.changed();
@@ -400,12 +437,30 @@ export class NativeScreenSession {
         servers,
         this.port.relayOnly(),
       ] as const;
-      const sdp = trickle
+      const context =
+        this.controlCapabilities?.request &&
+        entry.publication.controlEligible
+          ? await this.port.controlContext?.()
+          : undefined;
+      if (!this.current(entry, outgoing)) return;
+      const control = context
+        ? {
+            ...context,
+            sourceId: entry.publication.sourceId,
+          }
+        : undefined;
+      const sdp = control
         ? await entry.publication.offer(
             ...args,
-            onCandidate,
+            trickle ? onCandidate : undefined,
+            control,
           )
-        : await entry.publication.offer(...args);
+        : trickle
+          ? await entry.publication.offer(
+              ...args,
+              onCandidate,
+            )
+          : await entry.publication.offer(...args);
       if (!this.current(entry, outgoing)) {
         await entry.publication
           .closePeer(outgoing.id)
@@ -416,6 +471,7 @@ export class NativeScreenSession {
         type: "offer",
         id: outgoing.id,
         sourceId: entry.publication.sourceId,
+        ...(control ? { control: true as const } : {}),
         sdp,
         ...(trickle ? { trickleIce: true as const } : {}),
       });
@@ -555,6 +611,14 @@ export class NativeScreenSession {
       sourceId: value.sourceId,
       candidates: [],
     };
+    if (
+      value.control === true &&
+      this.controlCapabilities?.host
+    )
+      incoming.control = new RemotePointer(
+        value.sourceId,
+        value.id,
+      );
     this.incoming.set(value.id, incoming);
     const current = () =>
       this.incoming.get(value.id) === incoming;
@@ -600,6 +664,7 @@ export class NativeScreenSession {
           value.trickleIce === true
             ? onCandidate
             : undefined,
+          incoming.control,
         ));
       for (const candidate of incoming.candidates.splice(0))
         await receiver.addIceCandidate(candidate);

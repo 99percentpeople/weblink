@@ -5,6 +5,11 @@
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-remote-control-open",
+    "allow-remote-control-status",
+    "allow-remote-control-end",
+    "allow-remote-control-revoke",
+    "allow-remote-control-approve",
     "allow-capture-sources",
     "allow-capture-display-layout",
     "allow-capture-thumbnail",
@@ -29,9 +34,15 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://*" },
-        { "url": "http://*" },
-        { "url": "mailto:*" }
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "mailto:*"
+        }
       ]
     }
   ]

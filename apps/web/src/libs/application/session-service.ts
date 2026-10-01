@@ -1,3 +1,5 @@
+import { platform } from "@/libs/platform/runtime";
+import { RemoteControlHost } from "./remote-control-host";
 import {
   NativeScreenSession,
   NATIVE_SCREEN_CHANNEL,
@@ -36,6 +38,13 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
+  readonly remoteControl = new RemoteControlHost(platform);
+  getRemoteControl(track: MediaStreamTrack) {
+    for (const native of this.nativeScreens.values()) {
+      const control = native.getRemoteControl(track);
+      if (control) return control;
+    }
+  }
   readonly sessions: Record<ClientID, PeerSession> =
     appState.session.sessions;
   readonly clientViewData: Record<ClientID, ClientInfo> =
@@ -142,6 +151,7 @@ export class SessionService {
       this.removeService();
     }
     this.service = cs;
+    this.remoteControl.start();
 
     cs.addEventListener("statuschange", (ev) => {
       setAppState(
@@ -153,6 +163,7 @@ export class SessionService {
   }
 
   removeService() {
+    this.remoteControl.close();
     this.pendingClients.clear();
     this.service?.close();
     this.service = undefined;
@@ -267,7 +278,15 @@ export class SessionService {
     });
 
     const controller = new AbortController();
+    let controlGeneration = crypto.randomUUID();
     const native = new NativeScreenSession({
+      loadControlCapabilities: () =>
+        this.remoteControl.capabilities(),
+      controlContext: () =>
+        this.remoteControl.context(
+          controlGeneration,
+          client.clientId,
+        ),
       loadIceServers: this.loadIceServers,
       relayOnly: () => appState.options.relayOnly,
       changed: (stream) => {
@@ -329,6 +348,7 @@ export class SessionService {
       "peerconnectioninit",
       () => {
         opening = false;
+        controlGeneration = crypto.randomUUID();
         native.reset();
       },
       { signal: controller.signal },
@@ -339,6 +359,7 @@ export class SessionService {
         if (detail === "ready") void openNative();
         else {
           opening = false;
+          controlGeneration = crypto.randomUUID();
           native.reset();
         }
       },
@@ -347,6 +368,7 @@ export class SessionService {
     controller.signal.addEventListener(
       "abort",
       () => {
+        controlGeneration = crypto.randomUUID();
         native.reset();
         this.nativeScreens.delete(session);
       },
@@ -575,6 +597,7 @@ export class SessionService {
   }
 
   destoryAllSession() {
+    this.remoteControl.close();
     this.pendingClients.clear();
     Object.values(this.sessions).forEach((session) =>
       session.close(),

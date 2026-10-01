@@ -142,6 +142,17 @@ export class RemoteControlSession {
         reason: "ended",
       });
   }
+  acknowledge(grantId: string): void {
+    this.tick();
+    if (
+      this.current.type === "granted" &&
+      this.current.grantId === grantId
+    )
+      this.current = {
+        ...this.current,
+        deadline: this.port.now() + 2000,
+      };
+  }
   tick(): void {
     if (
       (this.current.type === "requesting" ||

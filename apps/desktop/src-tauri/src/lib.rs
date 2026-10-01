@@ -3,6 +3,7 @@ use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 mod capture;
 mod preview;
+mod remote_control;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +29,7 @@ async fn runtime_capabilities(
         version: app.package_info().version.to_string(),
         native_screen_capture,
         display_refresh_rates,
-        remote_input: false,
+        remote_input: cfg!(windows),
     })
 }
 
@@ -52,6 +53,7 @@ pub fn run() {
             weblink_desktop_capture::CaptureService::new()
                 .expect("could not start capture service"),
         ))
+        .manage(std::sync::Arc::new(remote_control::Service::default()))
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -65,6 +67,11 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             runtime_capabilities,
+            remote_control::remote_control_open,
+            remote_control::remote_control_status,
+            remote_control::remote_control_end,
+            remote_control::remote_control_revoke,
+            remote_control::remote_control_approve,
             capture::capture_sources,
             capture::capture_display_layout,
             capture::capture_thumbnail,
@@ -103,6 +110,7 @@ pub fn run() {
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
+                        webview.state::<remote_control::Shared>().close();
                     }
                 })
                 .on_navigation(move |url| {
@@ -122,6 +130,7 @@ pub fn run() {
         .expect("could not build Weblink desktop")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<remote_control::Shared>().close();
                 app.state::<capture::Service>().shutdown();
             }
         });

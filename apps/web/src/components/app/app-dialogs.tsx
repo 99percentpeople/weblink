@@ -1,3 +1,4 @@
+import { RemoteControlStatus } from "./remote-control-status";
 import {
   createContext,
   createSignal,
@@ -93,6 +94,7 @@ export function AppDialogsProvider(props: ParentProps) {
   return (
     <AppDialogsContext.Provider value={dialogs}>
       {props.children}
+      <RemoteControlStatus />
     </AppDialogsContext.Provider>
   );
 }

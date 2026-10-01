@@ -59,7 +59,7 @@ do not become the packaged signaling endpoint.
   automatic updates need a separate signed release channel.
 - The shared `@weblink/platform` contract has browser and desktop adapters.
   `runtime_capabilities` reports Windows native capture support when available;
-  remote input remains unavailable.
+  Windows remote input is available with explicit local approval.
 - Only the local main window can query native capabilities, control native screen sharing
   and open HTTP(S) or mail links. External links open in the system browser. The window cannot
   navigate to a remote page or create another privileged webview. There are no
@@ -237,7 +237,7 @@ rotation and its separate color/monochrome cursor. Display
 mode changes, disconnection or access loss end the capture and require selecting
 the source again. Native frames still pass through CPU readback/conversion before
 software or hardware encoding; hardware input uses libyuv's native I420-to-NV12
-conversion. GPU zero-copy and remote input remain separate work. Browser screen sharing and microphone/camera behavior are retained.
+conversion. GPU zero-copy remains separate work. Browser screen sharing and microphone/camera behavior are retained.
 
 The native source picker defaults “Share audio” on for each new selection.
 It captures system playback for both display and window shares, excluding the
@@ -352,20 +352,43 @@ peers. Ordinary tests skip it because an SSH or CI session has no interactive de
 cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
 ```
 
-## Remote-control foundation
+## Attended remote mouse control
 
-Remote input remains disabled in the app. `crates/desktop-input` contains the
-portable authorization/input state machines, wire validation and an independent
-Windows input worker. The app does not start this worker and has no Tauri input
-permission or remote approval command.
-Only explicit local consent can create a grant. Grants bind the room generation,
-peer generation, client, capture session, publication, media connection and layout
-revision. Disconnect, expiry or invalidation releases ownership; reconnecting
-cannot reuse an old grant. One host authority covers all peers and sources.
+Windows display shares are view-only until the viewer requests control and the
+host explicitly approves. Browser viewers can request control even though they
+cannot host native input. Window shares and older clients remain view-only.
+Keyboard/text forwarding is a later phase. The confirmation describes computer-wide
+input authority: a display rectangle maps the pointer, not an OS security sandbox.
 
-Native screen hello messages can carry additive control capabilities. Production
-does not advertise them yet; old peers remain view-only. A browser's ability to
-request control is independent of its inability to inject input locally.
+The desktop composition layer binds each connection to its locally owned room,
+peer generation, client, capture session, publication and current display geometry.
+`crates/desktop-capture` supplies DataChannel ports; it never imports the independent
+`crates/desktop-input` authorization/input engine. One authority covers every peer
+and source on the computer. Remote messages cannot register a target or approve
+consent. Approval is a trusted local policy decision exposed only to the main
+desktop window. It does not require foreground activation or physical-click
+evidence. The current UI requires confirmation; automatic approval is not enabled.
+
+For mutually capable peers, the native media offer includes `weblink-control`
+(ordered/reliable) and `weblink-pointer` (unordered, no retransmission) channels.
+Input goes directly from those native callbacks to bounded native queues, without
+per-event Tauri IPC. The latter is reserved for local owner lifetime, confirmation
+and status. Messages are limited to 4 KiB, reliable queues to 128 entries and send
+buffers to 16 KiB. Pointer moves coalesce to at most 120 updates/s. Each input is
+bound to its grant, connection, geometry revision and activation epoch. Buttons
+and wheels include their position; moves have independent sequence numbers and a
+reliable-event barrier, so reordered moves cannot jump across a button transition.
+
+The host enforces separate two-second remote and frontend-owner leases; remote
+heartbeats cannot keep a reloaded/abandoned page's permission alive. Media/channel
+closure atomically invalidates queued input. Stopping a share, room/peer replacement,
+local takeover, revoke or lease expiry ends control; rejoining never restores a
+grant. A visible host banner and Ctrl+Alt+Shift+F10 allow local revocation.
+
+The viewing UI maps only the contained video content, excluding letterbox areas.
+Blur, hidden view, lost drag capture or leaving the controlling view releases and
+pauses input. Resuming requires an explicit action and a fresh acknowledged epoch.
+The existing video node, audio routing and statistics remain owned by the player.
 
 `NativeCapture.displayLayout()` / `capture_display_layout` reads physical display
 bounds, virtual-desktop bounds, orientation and optional OS resource scale without
@@ -399,8 +422,8 @@ or application permissions.
 The reliable queue holds at most 128 commands. Pointer motion occupies one latest
 slot, ordered against reliable events by local enqueue order. Local revoke
 discards queued work; overflow, input older than 100 ms, injection or cleanup
-failure closes the worker. Network sequence/epoch checks still belong at the
-future transport boundary. Queue acceptance and successful `SendInput` submission
+failure closes the worker. The native wire sequencer checks network sequence,
+epoch and movement barriers before enqueueing input. Queue acceptance and successful `SendInput` submission
 do not prove that the target application rendered an action.
 
 An independent native thread pumps hooks, hotkeys and system notifications;
@@ -432,6 +455,12 @@ worker before destroying the window. If Windows refuses activation, click the
 test window within 30 seconds and leave keyboard/mouse idle during the probe.
 The probe checks real window events and cleanup; simulated lifecycle/other-source
 input does not substitute for physical-device, lockscreen or crash acceptance.
+
+The desktop library's ignored `browser_pointer_attended` test exchanges SDP/ICE
+and test results through `WEBLINK_CONTROL_TEST_DIR` with a browser using the
+production `RemotePointer` receiver. Its local test owner approves only the
+guarded test session; it does not require physical-click evidence. It is opt-in
+and still restricts injection to its own foreground test window.
 
 ## Windows acceptance
 

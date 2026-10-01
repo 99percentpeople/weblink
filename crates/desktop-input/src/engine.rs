@@ -6,6 +6,10 @@ use crate::{
 };
 use std::{
     collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -27,6 +31,7 @@ pub struct TrustedTarget {
 struct InputState<D: Device> {
     device: D,
     targets: HashMap<String, TrustedTarget>,
+    invalidated: HashMap<String, Arc<AtomicBool>>,
     held: Vec<Held>,
     unicode: Option<u16>,
     failure: Option<Error>,
@@ -165,6 +170,10 @@ impl<D: Device> InputState<D> {
 impl<D: Device> Backend for InputState<D> {
     fn is_current(&self, binding: &Binding) -> bool {
         self.failure.is_none()
+            && !self
+                .invalidated
+                .get(&binding.target.media_id)
+                .is_some_and(|flag| flag.load(Ordering::Acquire))
             && self.device.available()
             && self
                 .targets
@@ -177,6 +186,7 @@ impl<D: Device> Backend for InputState<D> {
 }
 #[derive(Clone, Debug)]
 pub struct Status {
+    pub pending_consent: Option<String>,
     pub grant: Option<Grant>,
     pub failure: Option<Error>,
     pub closed: bool,
@@ -191,6 +201,7 @@ impl<D: Device> Engine<D> {
             authority: Authority::new(InputState {
                 device,
                 targets: HashMap::new(),
+                invalidated: HashMap::new(),
                 held: vec![],
                 unicode: None,
                 failure: None,
@@ -222,6 +233,30 @@ impl<D: Device> Engine<D> {
         }
         true
     }
+    /// Native media callbacks atomically invalidate before any queued input can execute.
+    pub fn register_until(&mut self, target: TrustedTarget, invalidated: Arc<AtomicBool>) -> bool {
+        if invalidated.load(Ordering::Acquire) {
+            return false;
+        }
+        let id = target.binding.target.media_id.clone();
+        let flags = &mut self.authority.backend_mut().invalidated;
+        let inserted = !flags.contains_key(&id);
+        if let Some(existing) = flags.get(&id) {
+            if !Arc::ptr_eq(existing, &invalidated) {
+                return false;
+            }
+        } else {
+            flags.insert(id.clone(), invalidated);
+        }
+        if self.register(target) {
+            true
+        } else {
+            if inserted {
+                self.authority.backend_mut().invalidated.remove(&id);
+            }
+            false
+        }
+    }
     pub fn request(&mut self, media: &str, signal: &Signal, now: Instant) -> Option<RequestResult> {
         self.authority.request(media, signal, now)
     }
@@ -235,6 +270,9 @@ impl<D: Device> Engine<D> {
             return None;
         }
         self.authority.approve(consent, now)
+    }
+    pub fn decline(&mut self, consent: &str) -> Option<Signal> {
+        self.authority.decline(consent)
     }
     pub fn renew(&mut self, grant: &Grant, now: Instant) -> bool {
         self.authority.renew(&grant.binding, &grant.id, now)
@@ -250,6 +288,10 @@ impl<D: Device> Engine<D> {
             .is_some_and(|t| t.binding == *binding)
         {
             targets.remove(&binding.target.media_id);
+            self.authority
+                .backend_mut()
+                .invalidated
+                .remove(&binding.target.media_id);
         }
     }
     pub fn input(&mut self, grant: &Grant, event: Event, now: Instant) -> Result<(), Error> {
@@ -294,8 +336,10 @@ impl<D: Device> Engine<D> {
     pub fn status(&mut self) -> Status {
         let grant = self.authority.grant().cloned();
         let closed = self.authority.is_closed();
+        let pending_consent = self.authority.pending_consent().map(str::to_owned);
         let state = self.authority.backend_mut();
         Status {
+            pending_consent,
             grant,
             closed,
             failure: state.failure,

@@ -397,3 +397,44 @@ fn stale_authorized_input_releases_but_stale_foreign_input_cannot_close_a_new_gr
     assert!(e.status().closed);
     assert_eq!(f.0.borrow().actions.last(), Some(&key_held().up()));
 }
+
+#[test]
+fn media_callback_invalidation_prevents_already_queued_input_and_releases_owned_buttons() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let fake = Fake::default();
+    let mut engine = Engine::new(fake.clone());
+    let now = Instant::now();
+    let ended = Arc::new(AtomicBool::new(false));
+    assert!(engine.register_until(target(), ended.clone()));
+    let consent = pending(&mut engine, "request", now);
+    engine.approve(&consent, now).unwrap();
+    let grant = engine.status().grant.unwrap();
+    engine
+        .input(
+            &grant,
+            Event::Button {
+                position: Position { x: 0.5, y: 0.5 },
+                button: Button::Left,
+                down: true,
+            },
+            now,
+        )
+        .unwrap();
+    fake.0.borrow_mut().actions.clear();
+    ended.store(true, Ordering::Release);
+    assert!(engine
+        .queued_input(&grant, Event::Move(Position { x: 0.9, y: 0.9 }), now, now)
+        .is_err());
+    assert_eq!(
+        fake.0.borrow().actions,
+        vec![Action::Button {
+            button: Button::Left,
+            down: false
+        }]
+    );
+    assert!(engine.status().grant.is_none());
+    assert!(!engine.renew(&grant, now));
+}

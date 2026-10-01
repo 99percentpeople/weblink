@@ -1,5 +1,6 @@
 //! Independent send-only WebRTC connections for one explicitly selected source.
 use serde::{Deserialize, Serialize};
+pub mod control;
 pub mod latency;
 pub mod pipeline;
 pub mod preview;
@@ -278,6 +279,16 @@ impl MediaSession {
         _: bool,
     ) -> crate::Result<String> {
         Err("Native screen sharing currently requires Windows".into())
+    }
+    pub async fn offer_control(
+        &self,
+        _: String,
+        _: Vec<IceServer>,
+        _: bool,
+        _: Option<CandidateHandler>,
+        _: std::sync::Arc<dyn control::Port>,
+    ) -> crate::Result<String> {
+        Err("Native control currently requires Windows".into())
     }
     pub async fn answer(&self, _: &str, _: &str) -> crate::Result<()> {
         Err("Native screen sharing currently requires Windows".into())

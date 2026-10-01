@@ -974,5 +974,22 @@
     "ice_config": "中繼伺服器設定無效，請檢查位址及驗證方式。",
     "ice_config_line": "第 {{line}} 行需包含位址、使用者名稱、密碼及驗證方式，使用 | 分隔。",
     "ice_auth_line": "第 {{line}} 行的驗證方式不受支援，請使用 longterm 或 hmac。"
+  },
+  "remote_control": {
+    "request_title": "允許遠端控制？",
+    "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
+    "revoke_hint": "在本機點擊滑鼠、按鍵，或按 Ctrl+Alt+Shift+F10 即可收回控制。鍵盤轉發將在後續階段接入。",
+    "decline": "拒絕",
+    "allow": "允許控制",
+    "host_active": "{{name}} 可以控制本機。",
+    "revoke": "收回控制",
+    "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",
+    "surface": "遠端滑鼠控制，按 Escape 暫停。",
+    "request": "請求控制",
+    "waiting": "等待對方批准",
+    "cancel": "取消",
+    "resume": "控制滑鼠",
+    "pause": "暫停控制",
+    "end": "結束控制"
   }
 }

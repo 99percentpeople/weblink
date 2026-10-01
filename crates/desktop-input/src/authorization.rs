@@ -265,6 +265,12 @@ impl<B: Backend> Authority<B> {
     pub fn is_closed(&self) -> bool {
         self.closed
     }
+    pub fn pending_consent(&self) -> Option<&str> {
+        match &self.state {
+            State::Pending(p) if !self.closed => Some(&p.consent_id),
+            _ => None,
+        }
+    }
     pub fn grant(&self) -> Option<&Grant> {
         match &self.state {
             State::Granted { grant, .. } if !self.closed => Some(grant),

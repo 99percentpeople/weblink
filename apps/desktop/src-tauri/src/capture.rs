@@ -89,6 +89,8 @@ pub async fn capture_share_start(
 pub async fn capture_offer(
     webview: tauri::Webview,
     service: State<'_, Service>,
+    control_service: State<'_, crate::remote_control::Shared>,
+    control: Option<crate::remote_control::Context>,
     session_id: String,
     peer_id: String,
     ice_servers: Vec<weblink_desktop_capture::media::IceServer>,
@@ -96,7 +98,44 @@ pub async fn capture_offer(
     preview: bool,
     candidates: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<String, String> {
-    let media = run(service, move |s| s.media(session_id)).await?;
+    let port = if let Some(context) = control {
+        if preview {
+            return Err("Preview cannot receive remote input".into());
+        }
+        let capture = service.inner().clone();
+        let host = control_service.inner().clone();
+        let session = session_id.clone();
+        let peer = peer_id.clone();
+        // Loss of optional input capability must not prevent read-only screen viewing.
+        tauri::async_runtime::spawn_blocking(move || host.attach(capture, context, session, peer))
+            .await
+            .map_err(|e| e.to_string())?
+            .ok()
+    } else {
+        None
+    };
+    let media = match run(service, move |s| s.media(session_id)).await {
+        Ok(media) => media,
+        Err(error) => {
+            if let Some(port) = port {
+                port.closed();
+            }
+            return Err(error);
+        }
+    };
+    if let Some(port) = port {
+        let callback: Option<weblink_desktop_capture::media::CandidateHandler> =
+            candidates.map(|id| {
+                let channel =
+                    id.channel_on::<_, weblink_desktop_capture::media::IceCandidate>(webview);
+                Box::new(move |candidate| {
+                    let _ = channel.send(candidate);
+                }) as weblink_desktop_capture::media::CandidateHandler
+            });
+        return media
+            .offer_control(peer_id, ice_servers, relay_only, callback, port)
+            .await;
+    }
     if let Some(channel) = candidates {
         let channel =
             channel.channel_on::<_, weblink_desktop_capture::media::IceCandidate>(webview);
