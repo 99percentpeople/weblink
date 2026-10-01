@@ -14,6 +14,7 @@ import type {
 } from "@/libs/domain/remote-control/pointer";
 import { t } from "@/i18n";
 import { useVideoDisplay } from "./video-display";
+import { MeetingTileAction } from "./meeting-tile-actions";
 
 export function createVideoRemoteControl() {
   const video = useVideoDisplay();
@@ -54,6 +55,7 @@ export function createControlState<T extends ControlAction>(
 export function RemoteControlAction(props: {
   control: ControlAction;
   state: PointerState;
+  onRequest?(request: () => void): void;
 }) {
   const controlling = () =>
     props.state === "active" ||
@@ -69,19 +71,24 @@ export function RemoteControlAction(props: {
             : "remote_control.request",
     );
   return (
-    <button
-      type="button"
-      class="meeting-icon-button"
-      aria-label={label()}
-      title={label()}
-      aria-pressed={controlling()}
+    <MeetingTileAction
+      label={label()}
+      active={controlling()}
+      order={0}
       disabled={props.state === "unavailable"}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (props.state === "viewing")
-          props.control.request();
-        else if (props.state !== "unavailable")
+      onAction={() => {
+        if (props.state === "viewing") {
+          const control = props.control;
+          const request = () => {
+            if (
+              props.control === control &&
+              control.state() === "viewing"
+            )
+              control.request();
+          };
+          if (props.onRequest) props.onRequest(request);
+          else request();
+        } else if (props.state !== "unavailable")
           props.control.cancel();
       }}
     >
@@ -98,6 +105,6 @@ export function RemoteControlAction(props: {
       >
         <X />
       </Show>
-    </button>
+    </MeetingTileAction>
   );
 }

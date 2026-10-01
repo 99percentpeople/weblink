@@ -15,10 +15,11 @@ import {
   screen,
   waitFor,
 } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { toast, Toaster } from "solid-sonner";
 import { RemoteControlStatus } from "@/components/app/remote-control-status";
 import { MeetingSharingStatus } from "@/routes/home/components/meeting-sharing-status";
+import { MeetingControlStatus } from "@/routes/home/components/meeting-control-status";
 import type { NativeControlStatus } from "@weblink/platform";
 
 const fixture = vi.hoisted(() => ({
@@ -211,7 +212,7 @@ it("retains a failed request for retry and declines only that consent ID", async
   );
 });
 
-it("keeps host control actions in the sharing status and prevents duplicate revokes", async () => {
+it("keeps host control actions independent of sharing and prevents duplicate revokes", async () => {
   let finish: () => void;
   const revoke = vi.fn(
     () =>
@@ -225,15 +226,24 @@ it("keeps host control actions in the sharing status and prevents duplicate revo
   }>();
   const stop = vi.fn();
   render(() => (
-    <MeetingSharingStatus
-      name="Host"
-      count={1}
-      onStop={stop}
-      audioAvailable={false}
-      audioOn={false}
-      onAudioChange={() => {}}
-      controller={controller()}
-    />
+    <>
+      <MeetingSharingStatus
+        name="Host"
+        count={1}
+        onStop={stop}
+        audioAvailable={false}
+        audioOn={false}
+        onAudioChange={() => {}}
+      />
+      <Show when={controller()}>
+        {(active) => (
+          <MeetingControlStatus
+            name={active().name}
+            revoke={active().revoke}
+          />
+        )}
+      </Show>
+    </>
   ));
   expect(
     screen.queryByRole("button", {

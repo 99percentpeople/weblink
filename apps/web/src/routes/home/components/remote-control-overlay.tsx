@@ -1,6 +1,7 @@
 import {
   createEffect,
   createMemo,
+  createSignal,
   onCleanup,
   Show,
 } from "solid-js";
@@ -11,8 +12,15 @@ import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
 import { Trackpad } from "@/libs/domain/remote-control/trackpad";
 import { DirectTouch } from "@/libs/domain/remote-control/direct-touch";
+import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
+import {
+  exitControlShortcutLabel,
+  resolveRemoteKeyboardOptions,
+} from "@/libs/domain/remote-control/keyboard-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { createVideoRemoteControl } from "./remote-control-action";
+import { platform } from "@/libs/platform/runtime";
+import { NativeKeyboardForwarder } from "@/libs/application/native-keyboard";
 export function RemoteControlOverlay(props: {
   enabled: boolean;
 }) {
@@ -23,9 +31,35 @@ export function RemoteControlOverlay(props: {
   const fingers = new Set<number>();
   let trackpad: Trackpad | undefined;
   let direct: DirectTouch | undefined;
+  let keyboard: RemoteKeyboard | undefined;
+  const [focused, setFocused] = createSignal(false);
+  const [systemKeyboard, setSystemKeyboard] =
+    createSignal(false);
+  createEffect(() => {
+    let disposed = false;
+    void platform.keyboard
+      ?.supported()
+      .then((supported) => {
+        if (!disposed) setSystemKeyboard(supported);
+      })
+      .catch(() => {});
+    onCleanup(() => {
+      disposed = true;
+    });
+  });
   const touchOptions = createMemo(() =>
     resolveRemoteTouchOptions(appState.options.remoteTouch),
   );
+  const keyboardOptions = createMemo(() =>
+    resolveRemoteKeyboardOptions(
+      appState.options.remoteKeyboard,
+    ),
+  );
+  const nativeKeys = () =>
+    systemKeyboard() &&
+    keyboardOptions().enabled &&
+    keyboardOptions().systemKeys &&
+    control()?.supportsKeyboard();
   const clearTouches = () => {
     trackpad?.cancel();
     direct?.cancel();
@@ -39,8 +73,70 @@ export function RemoteControlOverlay(props: {
   const resetInput = () => {
     clearTouches();
     held.clear();
+    keyboard?.clear();
     control()?.resetInput();
   };
+  createEffect(() => {
+    const c = control(),
+      options = keyboardOptions();
+    if (
+      !nativeKeys() ||
+      !props.enabled ||
+      !focused() ||
+      state() !== "active" ||
+      !c ||
+      !platform.keyboard
+    )
+      return;
+    keyboard?.release();
+    const forwarder = new NativeKeyboardForwarder(
+      platform.keyboard,
+      options.exitShortcut,
+      {
+        current: () =>
+          props.enabled &&
+          focused() &&
+          c === control() &&
+          c.state() === "active" &&
+          !!nativeKeys() &&
+          surface?.ownerDocument.activeElement ===
+            surface &&
+          !surface?.ownerDocument.hidden,
+        input: (event) => c.input(event),
+        reset: () => c.resetInput(),
+        cancel: () => c.cancel(),
+        stopped: (failed) => {
+          setFocused(false);
+          if (failed)
+            toast.error(
+              t("remote_control.system_keyboard_stopped"),
+            );
+        },
+      },
+    );
+    onCleanup(() => forwarder.stop());
+  });
+  createEffect(() => {
+    const c = control(),
+      options = keyboardOptions();
+    if (!c) return;
+    const keys = new RemoteKeyboard(
+      {
+        input: (event) => c.input(event),
+        cancel: () => {
+          clearTouches();
+          held.clear();
+          c.cancel();
+        },
+      },
+      options,
+    );
+    keyboard = keys;
+    onCleanup(() => {
+      keys.release();
+      if (keyboard === keys) keyboard = undefined;
+    });
+  });
   createEffect(() => {
     const c = control(),
       options = touchOptions();
@@ -110,18 +206,37 @@ export function RemoteControlOverlay(props: {
       () => {
         if (c.state() !== "active") {
           held.clear();
+          keyboard?.clear();
           clearTouches();
         }
       },
       { signal: life.signal },
     );
-    ownerWindow.addEventListener("blur", resetInput, {
-      signal: life.signal,
-    });
+    ownerWindow.addEventListener(
+      "blur",
+      () => {
+        setFocused(false);
+        resetInput();
+      },
+      {
+        signal: life.signal,
+      },
+    );
+    ownerWindow.addEventListener(
+      "focus",
+      () => {
+        if (ownerDocument.activeElement === surface)
+          setFocused(true);
+      },
+      { signal: life.signal },
+    );
     ownerDocument.addEventListener(
       "visibilitychange",
       () => {
-        if (ownerDocument.hidden) resetInput();
+        if (ownerDocument.hidden) {
+          setFocused(false);
+          resetInput();
+        }
       },
       { signal: life.signal },
     );
@@ -238,7 +353,11 @@ export function RemoteControlOverlay(props: {
           ref={surface}
           tabIndex={0}
           role="application"
-          aria-label={t("remote_control.surface")}
+          aria-label={t("remote_control.surface", {
+            shortcut: exitControlShortcutLabel(
+              keyboardOptions().exitShortcut,
+            ),
+          })}
           class="focus-visible:ring-primary absolute inset-0 z-10
             outline-none focus-visible:ring-2 focus-visible:ring-inset"
           style={{
@@ -249,16 +368,30 @@ export function RemoteControlOverlay(props: {
                 ? "none"
                 : undefined,
           }}
-          onBlur={resetInput}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            resetInput();
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
+            if (e.target !== e.currentTarget) return;
+            const native = nativeKeys();
+            if (native) keyboard?.exit(e);
+            if (native || keyboard?.down(e)) {
               e.preventDefault();
               e.stopPropagation();
-              clearTouches();
-              held.clear();
-              control()?.cancel();
             }
           }}
+          onKeyUp={(e) => {
+            if (
+              e.target === e.currentTarget &&
+              (nativeKeys() || keyboard?.up(e))
+            ) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+          onCompositionStart={() => keyboard?.release()}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -285,6 +418,7 @@ export function RemoteControlOverlay(props: {
           }}
           onPointerDown={(e) => {
             surface?.focus({ preventScroll: true });
+            setFocused(true);
             if (!touch(e, "down")) button(e, true);
           }}
           onPointerUp={(e) => {

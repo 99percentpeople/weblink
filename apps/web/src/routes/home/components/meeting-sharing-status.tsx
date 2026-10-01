@@ -1,10 +1,5 @@
-import { createSignal, Show } from "solid-js";
-import {
-  MonitorUp,
-  MousePointer2,
-  Volume2,
-  VolumeX,
-} from "lucide-solid";
+import { Show } from "solid-js";
+import { MonitorUp, Volume2, VolumeX } from "lucide-solid";
 import { ClientAvatar } from "@/components/common/client-avatar";
 import {
   Switch,
@@ -23,18 +18,13 @@ export function MeetingSharingStatus(props: {
   audioOn: boolean;
   onAudioChange(enabled: boolean): void;
   busy?: boolean;
-  controller?: { name: string; revoke(): Promise<void> };
 }) {
-  const [revoking, setRevoking] = createSignal(false);
   const presenter = () =>
     t("meeting.sharing_presenter", { name: props.name });
 
   return (
     <div
-      class="meeting-sharing-status bg-card flex min-w-0 max-w-[560px]
-        shrink items-center gap-[7px] rounded-full border py-[5px]
-        pl-2.5 pr-1.5 text-[12px] max-md:gap-[5px] max-md:py-1
-        max-md:pl-2 max-md:pr-[5px] max-md:text-[11px]"
+      class="meeting-sharing-status meeting-status-pill max-w-[560px]"
       data-sharing-count={props.count}
     >
       <MonitorUp
@@ -94,9 +84,7 @@ export function MeetingSharingStatus(props: {
       </Switch>
       <button
         type="button"
-        class="bg-accent text-accent-foreground hover:bg-secondary shrink-0
-          whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px]
-          leading-4 max-md:px-2 max-md:py-[5px]"
+        class="meeting-status-action"
         aria-label={t("meeting.stop_sharing")}
         title={t("meeting.stop_sharing")}
         disabled={props.busy}
@@ -109,48 +97,6 @@ export function MeetingSharingStatus(props: {
           {t("meeting.stop_sharing_short")}
         </span>
       </button>
-      <Show when={props.controller}>
-        {(controller) => (
-          <>
-            <span
-              class="bg-input h-[18px] w-px shrink-0"
-              aria-hidden="true"
-            />
-            <MousePointer2
-              class="text-primary size-4 shrink-0"
-              aria-hidden="true"
-            />
-            <span
-              role="status"
-              class="min-w-0 truncate font-medium"
-              title={`${t("remote_control.host_active", { name: controller().name })} · Ctrl+Alt+Shift+F10`}
-            >
-              {t("remote_control.host_active", {
-                name: controller().name,
-              })}
-            </span>
-            <button
-              type="button"
-              class="bg-accent text-accent-foreground hover:bg-secondary shrink-0
-                whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px]
-                leading-4 max-md:px-2 max-md:py-[5px]"
-              title={`${t("remote_control.revoke")} · Ctrl+Alt+Shift+F10`}
-              disabled={revoking()}
-              onClick={async () => {
-                if (revoking()) return;
-                setRevoking(true);
-                try {
-                  await controller().revoke();
-                } finally {
-                  setRevoking(false);
-                }
-              }}
-            >
-              {t("remote_control.revoke")}
-            </button>
-          </>
-        )}
-      </Show>
     </div>
   );
 }

@@ -281,7 +281,21 @@
       },
       "changes": "修改立即生效，並釋放目前按住的按鍵和觸點。",
       "pan_unavailable": "被控端不支援原生觸控板捲動。",
-      "unavailable": "對端不支援直接觸控，請在「遠端控制」設定中選擇「觸控板」。"
+      "unavailable": "對端不支援直接觸控，請在「遠端控制」設定中選擇「觸控板」。",
+      "keyboard_heading": "鍵盤",
+      "touch_heading": "觸控",
+      "keyboard": {
+        "title": "轉發鍵盤輸入",
+        "description": "點擊控制畫面後，按對方的鍵盤配置轉發支援的實體按鍵。瀏覽器和系統保留的快捷鍵仍由本機處理。焦點移開時釋放按鍵，不結束控制。"
+      },
+      "exit_shortcut": {
+        "title": "結束控制快捷鍵",
+        "description": "控制畫面取得焦點時生效，關閉鍵盤轉發後仍可使用。Escape 會轉發給對方。被控端隨時可用 Ctrl+Alt+Shift+F10 收回控制。"
+      },
+      "system_keyboard": {
+        "title": "轉送系統快捷鍵",
+        "description": "僅 Windows 桌面端：控制畫面聚焦時轉送支援的系統快捷鍵。關閉後使用網頁按鍵處理；Ctrl+Alt+Del 仍由本機系統處理。"
+      }
     },
     "permissions": {
       "description": "在此管理連線過的用戶端與房間。忘記仍可見的用戶端或目前房間時，僅恢復預設權限；離線記錄會從清單移除。",
@@ -299,6 +313,28 @@
       "forget_title": "忘記此記錄？",
       "reset_description": "「{{name}}」仍可見或正在使用中。是否恢復預設權限並保留在清單中？",
       "forget_description": "是否忘記「{{name}}」並移除已儲存的權限？聊天記錄會保留。"
+    },
+    "application": {
+      "automatic_pip_description": "離開會議頁面或切換到背景時自動開啟子母畫面，實際行為取決於瀏覽器支援與網站權限。",
+      "close_behavior": {
+        "title": "關閉視窗時",
+        "ask": "每次詢問",
+        "exit": "結束應用程式",
+        "tray": "隱藏至系統匣",
+        "description": "在系統匣中維持房間連線、分享與遠端控制，可透過系統匣圖示恢復視窗或結束應用程式。"
+      },
+      "auto_hide": {
+        "title": "批准遠端控制後隱藏視窗",
+        "description": "授予控制權限後將本機視窗隱藏至系統匣，自動批准時也會生效。分享與控制會繼續執行。"
+      },
+      "close_confirm_title": "關閉 Weblink？",
+      "close_confirm_description": "隱藏至系統匣可繼續分享與遠端控制，也可以結束應用程式。",
+      "close_confirm_exit_description": "結束應用程式將中斷房間連線，並停止分享與遠端控制。",
+      "remember_close_choice": "記住我的選擇",
+      "close_failed": "無法完成此操作，請重試。",
+      "tray_unavailable": "系統匣無法使用。關閉視窗時會詢問是否結束，自動隱藏不會生效。",
+      "update_failed": "無法套用應用程式設定，請重試。",
+      "automatic_pip_unavailable": "目前瀏覽器或桌面執行環境不支援自動子母畫面。"
     }
   },
   "cache": {
@@ -712,14 +748,13 @@
     "manage_hint": "清空僅移除聊天記錄並保留對話；刪除還會移除對話列表項目。"
   },
   "meeting": {
+    "source_actions": "{{name}} 的畫面操作",
     "pip_title": "會議子母畫面",
     "pip_elsewhere": "會議正在其他視窗中進行",
     "pip_elsewhere_hint": "你可以在子母畫面視窗查看畫面並控制會議。",
     "pip_restore": "將畫面移回此處",
     "feature_source": "在主畫面顯示 {{name}}",
-    "pip_settings": "子母畫面設定",
     "pip_automatic": "自動開啟子母畫面",
-    "pip_automatic_hint": "有人正在分享攝影機或螢幕畫面時，離開會議頁面或頁面進入背景隱藏時會自動開啟。選擇分享畫面或僅失去焦點時不會觸發。背景自動開啟取決於瀏覽器與網站權限；Chrome 通常需要正在使用麥克風、攝影機或播放有聲媒體，僅分享螢幕無法保證每次都自動開啟。關閉原分頁或在該分頁開啟其他網站會結束小視窗。",
     "pip_return": "返回會議",
     "pip_failed": "無法開啟子母畫面，請重試。",
     "controls": "會議控制",
@@ -745,6 +780,10 @@
     "leave_room": "離開房間",
     "pin": "固定至主畫面",
     "unpin": "取消固定畫面",
+    "leave_main_title": "離開目前主畫面？",
+    "leave_main_description": "切換或取消固定將結束目前畫面的遠端控制（含待核准請求）、子母畫面和全螢幕。螢幕分享會繼續。",
+    "leave_main_confirm": "結束功能並繼續",
+    "leave_main_failed": "無法退出目前顯示模式，請先退出該模式後重試。",
     "title": "會議",
     "in_room": "已加入房間",
     "preview": "會前預覽",
@@ -894,7 +933,8 @@
     "settings_about": "關於",
     "settings_meeting": "音視訊",
     "settings_remote_control": "遠端控制",
-    "settings_permissions": "用戶端與房間"
+    "settings_permissions": "用戶端與房間",
+    "settings_application": "應用"
   },
   "file_library": {
     "search": "搜尋檔案…",
@@ -1020,15 +1060,15 @@
   "remote_control": {
     "request_title": "允許遠端控制？",
     "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
-    "revoke_hint": "點選「收回控制」或在本機按 Ctrl+Alt+Shift+F10 可結束控制。鍵盤轉送將在後續階段加入。",
+    "revoke_hint": "點擊「收回控制」或在本機按 Ctrl+Alt+Shift+F10 可結束控制。",
     "decline": "拒絕",
     "allow": "允許控制",
-    "host_active": "{{name}} 可以控制本機。",
+    "host_active": "{{name}} 可以控制本機",
     "revoke": "收回控制",
     "revoke_failed": "無法收回控制，請在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",
     "reconnecting": "正在恢復控制連線",
-    "surface": "遠端控制；按 Escape 結束控制。",
+    "surface": "遠端控制；按 {{shortcut}} 結束控制。",
     "request": "請求控制",
     "waiting": "等待對方批准",
     "cancel": "取消請求",
@@ -1036,6 +1076,15 @@
     "more_choices": "更多批准選項",
     "allow_remember": "批准並加入白名單",
     "deny_remember": "拒絕並加入黑名單",
-    "share_first_screen": "批准後將螢幕 1 及其音訊分享給房間內所有成員。"
+    "share_first_screen": "批准後將螢幕 1 及其音訊分享給房間內所有成員。",
+    "keyboard_control": "鍵盤控制",
+    "keyboard_enable": "開啟鍵盤控制",
+    "keyboard_disable": "關閉鍵盤控制",
+    "keyboard_show": "開啟鍵盤",
+    "keyboard_hide": "收起鍵盤",
+    "keyboard_input": "向遠端輸入文字",
+    "text_too_long": "輸入過長，請分段傳送。",
+    "text_failed": "輸入未能完整傳送，請檢查遠端內容後重試。",
+    "system_keyboard_stopped": "系統鍵盤轉送已停止。請重新點擊控制畫面，或在「遠端控制」設定中關閉系統快捷鍵轉送。"
   }
 }

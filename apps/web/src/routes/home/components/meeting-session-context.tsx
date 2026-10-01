@@ -5,6 +5,7 @@ import {
   createSignal,
   on,
   onCleanup,
+  untrack,
   Show,
   useContext,
   type ParentProps,
@@ -18,8 +19,9 @@ import {
   HOME_PATH,
   isHomePath,
 } from "@/libs/application/home-navigation";
-import { makePersisted } from "@solid-primitives/storage";
 import { appState } from "@/libs/state/app-state";
+import { platform } from "@/libs/platform/runtime";
+import { setAppOptions } from "@/options";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
 import {
@@ -27,9 +29,13 @@ import {
   type DocumentPictureInPictureAPI,
 } from "@/libs/hooks/document-picture-in-picture";
 import { t } from "@/i18n";
+import { toast } from "solid-sonner";
+import { sessionService } from "@/libs/application/session-service";
+import { createMeetingMainView } from "./meeting-main-view";
+import { createMeetingMainViewConfirmation } from "./meeting-main-view-dialog";
 import {
   createMeetingSources,
-  selectMeetingPipSource,
+  selectMeetingFeaturedSource,
   selectMeetingVideoSource,
 } from "./meeting-sources";
 import { reportMeetingPipError } from "./meeting-pip-error";
@@ -52,13 +58,9 @@ function createMeetingSession() {
     createSignal(false);
   const [toolbarCollapsed, setToolbarCollapsed] =
     createSignal(false);
-  const [automatic, setAutomatic] = makePersisted(
-    createSignal(false),
-    {
-      name: "meeting-auto-picture-in-picture",
-      storage: localStorage,
-    },
-  );
+  const automatic = () =>
+    platform.kind === "browser" &&
+    appState.options.application.automaticPictureInPicture;
   let automaticReason: "route" | "background" | undefined;
   let dismissed = false;
   const pageHidden = () =>
@@ -92,7 +94,7 @@ function createMeetingSession() {
     })),
   ]);
   const selected = createMemo(() =>
-    selectMeetingPipSource(sources(), pinnedId()),
+    selectMeetingFeaturedSource(sources(), pinnedId()),
   );
   // Read track flags when opening: enabled/muted can change without a new stream.
   // Placeholder streams are already excluded from video sources.
@@ -118,6 +120,47 @@ function createMeetingSession() {
       automaticReason = undefined;
     },
   });
+  const mainConfirmation =
+    createMeetingMainViewConfirmation();
+  const mainView = createMeetingMainView({
+    current: () => selected()?.id,
+    valid: (id) =>
+      !id || sources().some((source) => source.id === id),
+    confirm: () =>
+      mainConfirmation.confirm(
+        (document.fullscreenElement as HTMLElement | null) ??
+          pip.window()?.document.body,
+      ),
+    shared: {
+      active: () => pip.active() || pip.busy(),
+      stop: async () => {
+        automaticReason = undefined;
+        pip.close();
+        return !pip.active();
+      },
+    },
+    onError: () =>
+      toast.error(t("meeting.leave_main_failed")),
+  });
+  const changePinnedId = (
+    id: string | null,
+    transition: (update: () => void) => void = (update) =>
+      update(),
+    activate?: () => void,
+  ) => {
+    if (id && !sources().some((source) => source.id === id))
+      return;
+    const next = selectMeetingFeaturedSource(
+      sources(),
+      id,
+    )?.id;
+    void mainView.change(next, () => {
+      transition(() => setPinnedId(id));
+      // The guard's immediate path preserves the original click activation.
+      activate?.();
+    });
+  };
+  onCleanup(() => mainView.invalidate());
   const openAutomatically = (
     reason: "route" | "background",
     browserOccluded = false,
@@ -127,6 +170,7 @@ function createMeetingSession() {
       state.roomConflict() ||
       !engaged() ||
       !hasSharedVideo() ||
+      !selected() ||
       (reason === "background" &&
         ((!pageHidden() && !browserOccluded) ||
           media.sharingBusy())) ||
@@ -262,31 +306,91 @@ function createMeetingSession() {
     window.removeEventListener("focus", foreground);
   });
   let hadSharedScreen = false;
-  createEffect(() => {
-    const next = sources();
-    const firstScreen = next.find(
-      (source) => source.kind === "screen",
-    );
-    const hasSharedScreen = Boolean(firstScreen);
-    const appeared = !hadSharedScreen && hasSharedScreen;
-    hadSharedScreen = hasSharedScreen;
-    if (appeared && firstScreen) {
-      setPinnedId(firstScreen.id);
-      return;
-    }
-
-    const id = pinnedId();
-    if (id && !next.some((source) => source.id === id)) {
-      setPinnedId(
-        selectMeetingVideoSource(next)?.id ?? null,
+  createEffect(
+    on(sources, (next, previous) => {
+      const former = selectMeetingFeaturedSource(
+        previous ?? [],
+        pinnedId(),
       );
-    }
+      const firstScreen = next.find(
+        (source) => source.kind === "screen",
+      );
+      const appeared = !hadSharedScreen && !!firstScreen;
+      hadSharedScreen = !!firstScreen;
+      if (
+        former &&
+        !next.some((source) => source.id === former.id)
+      ) {
+        mainView.remove(former.id);
+        mainConfirmation.dismiss();
+        pip.close();
+      }
+      // Preserve an implicit single main tile when another source joins. New
+      // shares must not replace a view that owns control, fullscreen or PiP.
+      if (
+        former &&
+        next.some((source) => source.id === former.id) &&
+        mainView.active(former.id)
+      ) {
+        setPinnedId(former.id);
+        return;
+      }
+      if (appeared && firstScreen) {
+        setPinnedId(firstScreen.id);
+        return;
+      }
+      const id = pinnedId();
+      if (id && !next.some((source) => source.id === id)) {
+        setPinnedId(
+          selectMeetingVideoSource(next)?.id ?? null,
+        );
+      }
+    }),
+  );
+  createEffect(
+    on(
+      () => selected()?.id,
+      () => mainConfirmation.dismiss(),
+      { defer: true },
+    ),
+  );
+  // An avatar request continues on its approved screen. This is the same
+  // control session, not an unrelated source stealing the user's main view.
+  createEffect(() => {
+    const main = selected();
+    const next = sources();
+    if (!main || main.local || main.kind === "screen")
+      return;
+    const request = sessionService.getScreenControl(
+      main.participantId,
+    );
+    if (!request) return;
+    const follow = () => {
+      if (untrack(selected)?.id !== main.id) return;
+      const screen = next.find(
+        (source) =>
+          source.kind === "screen" &&
+          source.track &&
+          source.participantId === main.participantId &&
+          request.controls(
+            sessionService.getRemoteControl(source.track),
+          ),
+      );
+      if (screen) setPinnedId(screen.id);
+    };
+    request.addEventListener("change", follow);
+    untrack(follow);
+    onCleanup(() =>
+      request.removeEventListener("change", follow),
+    );
   });
   createEffect(
     on(
       state.activeRoomConversationId,
       (room, previous) => {
         if (room === previous) return;
+        mainView.invalidate();
+        mainConfirmation.dismiss();
         pip.close();
         setPinnedId(null);
         if (!room) setEngaged(false);
@@ -306,15 +410,20 @@ function createMeetingSession() {
     if (!onMeetingPage()) navigate(HOME_PATH);
   };
   const controls: MeetingPipControls = {
-    supported: pip.supported,
+    supported: () => pip.supported() && !!selected(),
     active: pip.active,
     busy: pip.busy,
     automatic,
-    setAutomatic,
+    setAutomatic: (value) =>
+      setAppOptions(
+        "application",
+        "automaticPictureInPicture",
+        value,
+      ),
     toggle: () => {
       automaticReason = undefined;
       if (pip.active()) pip.close();
-      else {
+      else if (selected()) {
         dismissed = false;
         void pip.open();
       }
@@ -325,7 +434,9 @@ function createMeetingSession() {
     clients,
     sources,
     pinnedId,
-    setPinnedId,
+    setPinnedId: changePinnedId,
+    mainView,
+    MainViewConfirmation: mainConfirmation.Dialog,
     railCollapsed,
     setRailCollapsed,
     toolbarCollapsed,
@@ -353,6 +464,7 @@ export function MeetingSessionProvider(props: ParentProps) {
   return (
     <MeetingSessionContext.Provider value={session}>
       {props.children}
+      <session.MainViewConfirmation />
       <Show when={session.pip.window()} keyed>
         {(window) => (
           <MeetingPipWindow

@@ -1,7 +1,9 @@
 use serde::Serialize;
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
+mod application;
 mod capture;
+mod keyboard;
 mod preview;
 mod remote_control;
 
@@ -14,6 +16,8 @@ struct RuntimeCapabilities {
     native_screen_capture: bool,
     display_refresh_rates: Vec<u32>,
     remote_input: bool,
+    system_keyboard: bool,
+    system_tray: bool,
 }
 
 #[tauri::command]
@@ -30,6 +34,8 @@ async fn runtime_capabilities(
         native_screen_capture,
         display_refresh_rates,
         remote_input: cfg!(windows),
+        system_keyboard: cfg!(windows),
+        system_tray: app.state::<application::Service>().ready(),
     })
 }
 
@@ -54,11 +60,10 @@ pub fn run() {
                 .expect("could not start capture service"),
         ))
         .manage(std::sync::Arc::new(remote_control::Service::default()))
+        .manage(std::sync::Arc::new(keyboard::Service::default()))
+        .manage(application::Service::default())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            application::show(app);
         }))
         .plugin(
             tauri_plugin_opener::Builder::new()
@@ -67,6 +72,13 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             runtime_capabilities,
+            application::application_configure,
+            application::close::application_close_watch,
+            application::close::application_close_unwatch,
+            application::close::application_close_respond,
+            keyboard::keyboard_start,
+            keyboard::keyboard_renew,
+            keyboard::keyboard_stop,
             remote_control::remote_control_open,
             remote_control::remote_control_status,
             remote_control::remote_control_end,
@@ -95,6 +107,10 @@ pub fn run() {
             capture::capture_close_peer
         ])
         .setup(|app| {
+            if let Err(error) = application::setup(app.handle()) {
+                // Keep the application usable; without a tray no operation may hide it.
+                eprintln!("could not create Weblink tray: {error}");
+            }
             let dev_url = if cfg!(debug_assertions) {
                 app.config().build.dev_url.clone()
             } else {
@@ -106,10 +122,19 @@ pub fn run() {
             } else {
                 "tauri://localhost"
             })?;
-            WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+            let builder = WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?;
+            // Native media/signaling keep their renderer-owned leases in tray mode.
+            // The Tauri background_throttling option does not support Windows.
+            #[cfg(windows)]
+            let builder = builder.additional_browser_args("--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows");
+            #[cfg(target_os = "macos")]
+            let builder = builder.background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
+            builder
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
+                        webview.state::<application::Service>().clear_close_requests();
+                        webview.state::<keyboard::Shared>().close();
                         webview.state::<remote_control::Shared>().close();
                     }
                 })
@@ -129,10 +154,21 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("could not build Weblink desktop")
         .run(|app, event| {
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
+                if label == "main" && app.state::<application::Service>().handle_close(app) {
+                    api.prevent_close();
+                }
+            }
+            if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed, .. } if label == "main") {
+                app.state::<keyboard::Shared>().close();
+            }
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+                app.state::<application::Service>().shutdown();
                 app.state::<remote_control::Shared>().close();
             }
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<application::Service>().shutdown();
+                app.state::<keyboard::Shared>().close();
                 app.state::<remote_control::Shared>().close();
                 app.state::<capture::Service>().shutdown();
             }

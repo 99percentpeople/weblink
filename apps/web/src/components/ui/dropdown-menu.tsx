@@ -11,6 +11,7 @@ import type {
   DropdownMenuSubTriggerProps,
 } from "@kobalte/core/dropdown-menu";
 import { DropdownMenu as DropdownMenuPrimitive } from "@kobalte/core/dropdown-menu";
+import { Content as BaseMenuContent } from "@kobalte/core/menubar";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 import type {
   ComponentProps,
@@ -18,6 +19,7 @@ import type {
   ValidComponent,
 } from "solid-js";
 import { mergeProps, splitProps } from "solid-js";
+import { Dynamic } from "solid-js/web";
 
 export const DropdownMenuTrigger =
   DropdownMenuPrimitive.Trigger;
@@ -47,6 +49,9 @@ type dropdownMenuContentProps<
   T extends ValidComponent = "div",
 > = DropdownMenuContentProps<T> & {
   class?: string;
+  portalMount?: HTMLElement;
+  /** Let onCloseAutoFocus manage focus without the dropdown's trigger override. */
+  manualFocus?: boolean;
 };
 
 export const DropdownMenuContent = <
@@ -56,12 +61,20 @@ export const DropdownMenuContent = <
 ) => {
   const [local, rest] = splitProps(
     props as dropdownMenuContentProps,
-    ["class"],
+    ["class", "portalMount", "manualFocus"],
   );
 
   return (
-    <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.Content
+    <DropdownMenuPrimitive.Portal mount={local.portalMount}>
+      <Dynamic
+        component={
+          // Kobalte's DropdownMenu.Content restores trigger focus even when
+          // onCloseAutoFocus prevents it. Menubar exports the shared base
+          // Menu.Content, which honors it without requiring a Menubar root.
+          local.manualFocus
+            ? BaseMenuContent
+            : DropdownMenuPrimitive.Content
+        }
         data-slot="dropdown-menu-content"
         class={cn(
           `min-w-8rem bg-popover text-popover-foreground

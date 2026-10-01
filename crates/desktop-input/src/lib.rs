@@ -2,6 +2,7 @@
 pub mod authorization;
 pub mod engine;
 pub mod input;
+pub mod keyboard_capture;
 #[cfg(any(target_os = "windows", test))]
 mod mailbox;
 pub mod pan;

@@ -2,6 +2,13 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "application_configure",
+            "application_close_watch",
+            "application_close_unwatch",
+            "application_close_respond",
+            "keyboard_start",
+            "keyboard_renew",
+            "keyboard_stop",
             "remote_control_open",
             "remote_control_status",
             "remote_control_end",

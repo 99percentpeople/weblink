@@ -64,9 +64,14 @@ do not become the packaged signaling endpoint.
   and open HTTP(S) or mail links. External links open in the system browser. The window cannot
   navigate to a remote page or create another privileged webview. There are no
   filesystem, shell execution or input-control IPC permissions.
-- The main window uses native window controls. Closing it exits the application;
-  minimizing keeps sessions alive. A second instance focuses the existing
-  window. No tray process, protocol registration or background service is added.
+- The main window uses native window controls. Closing it asks by default in an
+  app-styled web dialog, with choices to hide to the tray, quit, or cancel. “Remember
+  my choice” saves hiding or quitting before performing the action; cancel does not
+  change preferences. Settings → Application can restore “Ask every time” or
+  select direct exit or hiding; existing saved choices are preserved. The tray restores
+  the window, revokes control of this device, or quits the application. A second
+  instance also shows and focuses the existing window. If tray creation fails,
+  hiding is disabled and the close prompt offers only quit or cancel.
 - Files, clipboard, camera and microphone use existing WebView browser APIs. Native
   drag/drop interception is disabled so the app's existing HTML drop handlers
   receive files. File selection/download and media permission prompts must be
@@ -74,6 +79,38 @@ do not become the packaged signaling endpoint.
 - IndexedDB and local storage belong to the application WebView profile under
   the OS application-data directory. Browser history is not automatically
   imported; development and packaged origins have separate storage.
+
+## Application window behavior
+
+“Hide window after approving remote control” is off by default and applies to the
+host, including approval through a remembered client permission. Only a successful
+native grant hides a visible, non-minimized window. Native grant termination
+restores the window only if that grant automatically hid it; a manual show/hide
+cancels automatic restoration. Replaced or stale grants cannot restore another
+session's window. This does not depend on WebView status polling. Stopping the
+controlled capture explicitly closes its control channels and invalidates its
+input binding before capture teardown; other shared displays remain available.
+Hiding or minimizing does not dispose room, media, or host input owners. Controller-side keyboard capture still stops on loss of
+foreground focus. Explicit room leave, page reload, window destruction and process
+exit keep their existing cleanup behavior; choosing Quit in the tray always exits.
+
+The main page subscribes to native close requests. Repeated close attempts share one
+prompt, and replies must match both the page subscription and pending request.
+Reloading releases the subscription. Before the page subscribes, or if its channel
+rejects delivery, normal native close remains available. The tray's Quit command
+can always exit independently of the renderer.
+
+Windows WebView2 is started with background timer/process throttling disabled;
+the desktop renderer also holds a shared Web Lock for its lifetime to resist
+background freezing. Capture leases remain active and still expire if the renderer
+actually stops responding. These measures rely on WebView runtime behavior, so
+background operation must be checked when changing the supported runtime.
+
+The browser's automatic picture-in-picture preference lives in Application settings
+and imports the former meeting preference. It uses the existing browser PiP lifecycle
+and permission rules. The toggle remains visible but disabled in unsupported browsers
+and Tauri; a native mini window is a separate feature. Keyboard forwarding and exit
+shortcuts live in Remote control settings alongside touch input preferences.
 
 ## Native screen sharing
 
@@ -357,8 +394,20 @@ cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_re
 Windows display shares are view-only until the viewer requests control and the
 host approves this request or has saved an allow rule for the client. Browser viewers can request control even though they
 cannot host native input. Window shares and older clients remain view-only.
-Keyboard/text forwarding is a later phase. The confirmation describes computer-wide
+Browser keyboard and mobile text/IME forwarding require the native peer's
+corresponding capabilities. The confirmation describes computer-wide
 input authority: a display rectangle maps the pointer, not an OS security sandbox.
+
+Secondary meeting views expose their supported remote-control, fullscreen and
+picture-in-picture actions. Activating one first promotes that existing tile to
+the main view, then starts the requested feature; input forwarding remains owned
+by the main view (a single tile is implicitly the main view). Switching or unpinning
+it while control is requested/active or a display mode is opening/active asks for
+confirmation; cancellation also cancels the requested new action. Confirming ends
+those modes before changing the view; it does not stop the shared tracks. Incoming shares preserve a busy main
+view. An approved avatar request follows its matching screen as the same control
+session; unrelated shares cannot take its place. A source disappearing or the
+room ending still performs normal cleanup without waiting for confirmation.
 
 The desktop composition layer binds each connection to its locally owned room,
 peer generation, client, capture session, publication and current display geometry.
@@ -432,11 +481,112 @@ share or replacing the room/peer ends the grant, and rejoining never restores it
 The header sharing status and Ctrl+Alt+Shift+F10 provide explicit local revocation.
 
 The viewing UI maps only the contained video content, excluding letterbox areas.
-The tile action bar has one icon button for request, cancel request and end control.
+The desktop tile action bar has one icon button for request, cancel request and end control.
+On mobile and coarse-pointer devices, tile actions share one dropdown button with
+labelled entries. Its portal stays inside the fullscreen container when fullscreen.
 Approval activates input automatically; there is no user-facing pause mode. Blur,
 hidden view, lost drag capture and settings changes release the current gesture
-using a fresh acknowledged epoch, without ending consent. Escape ends control.
+using a fresh acknowledged epoch, without ending consent. The configured viewer
+shortcut ends control; Escape is forwarded when keyboard input is supported.
 The existing video node, audio routing and statistics remain owned by the player.
+
+### Keyboard input
+
+Settings → Remote control controls keyboard forwarding and the viewer's exit shortcut
+(Ctrl+Alt+Shift+Q by default, optionally Ctrl+Alt+Shift+X). The shortcut works while
+the control surface has focus, including when forwarding is disabled. The host's
+independent Ctrl+Alt+Shift+F10 emergency revocation remains unchanged.
+Pointer and keyboard forwarding are enabled by default after approval. The keyboard
+switch in the room header appears only while controlling a remote screen that supports
+keyboard input; hosting a share or merely viewing one does not display it.
+It toggles the same saved preference immediately;
+disabling it releases keyboard input and closes the soft keyboard, while pointer
+control and consent remain active.
+
+Click the active remote surface to focus it. Local chat, settings and other inputs
+do not forward keys. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
+map to the existing Windows scan-code whitelist and use the remote keyboard layout.
+The receiver injects them through the existing [scan-code input path](https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-keybdinput).
+Letters, digits, editing/navigation keys, F1–F12, left/right modifiers and the numeric
+keypad are supported when the browser delivers those events. Pause, PrintScreen,
+unsupported international keys and OS-reserved secure sequences are unsupported.
+Local composition events are not forwarded as physical keys.
+
+Native `ready.keyboard: true` opts into reliable `key` packets containing `scanCode`,
+`extended` and `down`. They share the current grant, geometry, input epoch and ordered
+sequence checks; they never use the lossy pointer channel. Held-key repeats produce
+repeated downs with one owned release. Blur, transport interruption and teardown
+clear local key ownership; late releases/repeats do not replay old presses. Changing
+the keyboard preference releases owned keys immediately without ending consent.
+
+On Windows Tauri, Settings → Remote control also exposes system-shortcut forwarding,
+enabled by default. It uses a controller-side native keyboard hook only while the
+approved remote surface is focused and the shared keyboard toggle is on. The
+foreground native window must also match. In that interval, supported scan codes,
+including Alt/Win combinations, come from the native channel; DOM handlers do not
+send a second copy. Local editors, dialogs and the soft-keyboard editor use their
+usual paths. Turning off system shortcuts restores browser key handling.
+
+The [low-level hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
+runs on a dedicated message thread and only writes to a bounded queue; IPC delivery
+runs separately. Injected events are ignored to prevent input feedback. Keys held
+before capture remain local until released. Frontend consumption acknowledgements
+renew a 750 ms native lease every 200 ms, with at most 64 unacknowledged events;
+events older than 100 ms or a sequence gap stop forwarding and reset the input epoch.
+Late startup or delivery cannot attach to a different focused screen. Focus loss,
+window teardown and page navigation stop capture independently of the renderer.
+After stopping, the hook can drain only previously captured key releases for up
+to two seconds; it never captures new background presses. A failed capture requires
+another click on the remote screen, and does not revoke pointer control.
+
+The chosen exit chord is recognized natively and its final key is not forwarded.
+Ctrl+Alt+Shift+F10 also ends controller input and invokes the local host's emergency
+revocation if this app is hosting control at the same time. This does not add secure
+desktop or Ctrl+Alt+Del support. Real Windows shortcut behavior requires manual
+acceptance; compilation and ownership tests do not prove OS shortcut interception.
+
+The keyboard action on an actively controlled screen synchronously focuses an
+invisible text editor within that screen, including in fullscreen. Mobile browsers
+open their system keyboard from this user gesture; there is no custom input panel
+or key toolbar. The editor remains focusable, without taking space or intercepting
+pointer input. The tile action menu stays visible on touch devices, including
+landscape phones. The editor outlives menu content, and keyboard selection prevents
+menu close from restoring focus to its trigger. Hiding the keyboard does not end control.
+When the browser exposes the secure-context
+[VirtualKeyboard API](https://developer.chrome.com/docs/web-platform/virtual-keyboard),
+the editor uses manual keyboard policy and calls `show()` within the same tap after
+focusing. It stays inside the fullscreen container; showing the keyboard does not
+request an exit from fullscreen or change global viewport behavior. Reported keyboard
+geometry only updates the toggle; a zero rectangle never blurs the editor or calls
+`hide()`. Text forwarding follows actual editor focus, so transient geometry and
+window focus changes cannot close the input session. Reopening an already focused
+editor does not issue an intervening hide. A real DOM focus transfer, hidden page,
+control teardown or explicit dismissal releases input ownership and restores the
+editor's policy without hiding another input's keyboard. A fullscreen tile also
+keeps playback and input active if the keyboard collapses the underlying meeting
+grid; source removal and session teardown still disable them.
+Browsers without that API retain normal focus-based keyboard behavior.
+The editor stages IME candidates locally and sends
+only the committed value; it handles final input on either side of `compositionend`
+without sending intermediate composition strings or replaying `InputEvent.data`.
+This follows the [composition and input lifecycle](https://www.w3.org/TR/input-events-2/).
+Backspace, Delete and Enter use physical strokes, and pasted line breaks and tabs
+become Enter and Tab. Physical keyboard shortcuts in the focused editor continue
+to use the remote computer's keyboard layout.
+
+Native `ready.textInput: true`, together with `keyboard: true`, opts into reliable
+`text` packets. Each contains at most 64 UTF-16 units, no control characters and no
+unpaired surrogates. A single editor commit is limited to 1024 UTF-16 units before
+any prefix is sent; larger pastes are rejected. Packets do not split surrogate pairs.
+Text shares the keyboard's grant, epoch and ordered sequence checks and is rejected
+by the native engine while a physical key or mouse button remains held. Transport
+backpressure stops a commit; unsent suffixes are never retried automatically.
+
+Closing the editor, hiding the page, changing the source or keyboard preference,
+and loss of active input discard unfinished composition.
+The editor is independent of the video node and does not restart the media session.
+OS keyboard/IME behavior still requires real phone acceptance; logic tests do not
+prove mobile keyboard presentation or candidate-window behavior.
 
 ### Mobile touch input
 
@@ -524,8 +674,8 @@ do not prove that the target application rendered an action.
 
 An independent native thread pumps hotkeys and system notifications; it never
 injects input or waits for the input worker. The input worker checks the two-second
-heartbeat deadline without frontend timers. There are no keyboard/mouse hooks or
-local idle checks: using this computer, including its Weblink window, does not
+heartbeat deadline without frontend timers. The host does not monitor local input
+or idle time: using this computer, including its Weblink window, does not
 interrupt remote control or prevent local approval. Explicit revoke and the
 emergency hotkey end consent. Cleanup releases presses recorded for the grant,
 in reverse order; unmatched remote key/button releases are ignored. Scan-code
@@ -564,7 +714,7 @@ On a Windows device verify install/start/relaunch, About version, room join,
 chat, file selection/drop/download, clipboard, camera/microphone and supported
 screen sharing. Test denial of media permission, disconnection/reconnection,
 minimize/restore, close during media use and starting a second instance. Confirm
-that closing exits all application processes and stops active capture, external
+that confirming quit exits all application processes and stops active capture, external
 links open in the browser, and web PWA updates never replace desktop assets.
 
 Builds, host tests and ordinary Chromium runs do not establish WebView2 media,

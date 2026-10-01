@@ -149,6 +149,10 @@ it("hands the avatar request to the matching screen when the native pointer beco
     sourceId: "screen",
   });
   const pointer = new Pointer();
+  expect(
+    control.controls(pointer as unknown as RemotePointer),
+  ).toBe(false);
+  expect(control.controls(undefined)).toBe(false);
   control.attach(
     "screen",
     pointer as unknown as RemotePointer,
@@ -164,11 +168,30 @@ it("hands the avatar request to the matching screen when the native pointer beco
     pointer as unknown as RemotePointer,
   );
   expect(pointer.request).not.toHaveBeenCalled();
+  expect(
+    control.controls(pointer as unknown as RemotePointer),
+  ).toBe(true);
+  expect(
+    control.controls(
+      new Pointer() as unknown as RemotePointer,
+    ),
+  ).toBe(false);
   pointer.change("viewing");
   expect(pointer.request).toHaveBeenCalledTimes(1);
   pointer.change("active");
   expect(control.state()).toBe("active");
+  expect(
+    control.controls(pointer as unknown as RemotePointer),
+  ).toBe(true);
+  pointer.change("viewing");
+  expect(
+    control.controls(pointer as unknown as RemotePointer),
+  ).toBe(false);
+  pointer.change("active");
   control.cancel();
+  expect(
+    control.controls(pointer as unknown as RemotePointer),
+  ).toBe(false);
   expect(pointer.cancel).toHaveBeenCalledOnce();
   expect(control.state()).toBe("viewing");
 });

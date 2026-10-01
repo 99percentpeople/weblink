@@ -1,6 +1,9 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createRawPreview } from "./preview";
+import { nativeKeyboard } from "./keyboard";
+import { nativeApplication } from "./application";
+import { keepDesktopActive } from "./background";
 import {
   isExternalLink,
   type PlatformRuntime,
@@ -13,6 +16,8 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  application: nativeApplication,
+  keyboard: nativeKeyboard,
   kind: "desktop",
   supportsServiceWorker: false,
   remoteControl: {
@@ -133,6 +138,7 @@ export const platform: PlatformRuntime = {
     invoke<RuntimeCapabilities>("runtime_capabilities"),
   initialize() {
     const controller = new AbortController();
+    keepDesktopActive(navigator.locks, controller.signal);
     const openLink = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button > 1)
         return;

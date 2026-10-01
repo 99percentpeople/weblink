@@ -281,7 +281,21 @@
       },
       "changes": "修改立即生效，并释放当前按住的按键和触点。",
       "pan_unavailable": "被控端不支持原生触摸板滚动。",
-      "unavailable": "对端不支持直接触控，请在“远程控制”设置中选择“触控板”。"
+      "unavailable": "对端不支持直接触控，请在“远程控制”设置中选择“触控板”。",
+      "keyboard_heading": "键盘",
+      "touch_heading": "触摸",
+      "keyboard": {
+        "title": "转发键盘输入",
+        "description": "点击控制画面后，按对方的键盘布局转发支持的物理按键。浏览器和系统保留的快捷键仍由本机处理。焦点移开时释放按键，不结束控制。"
+      },
+      "exit_shortcut": {
+        "title": "结束控制快捷键",
+        "description": "控制画面获得焦点时生效，关闭键盘转发后仍可使用。Escape 会转发给对方。被控端始终可用 Ctrl+Alt+Shift+F10 收回控制。"
+      },
+      "system_keyboard": {
+        "title": "转发系统快捷键",
+        "description": "仅 Windows 桌面端：控制画面聚焦时转发支持的系统快捷键。关闭后使用网页按键处理；Ctrl+Alt+Del 仍由本机系统处理。"
+      }
     },
     "permissions": {
       "description": "在此管理连接过的客户端与房间。忘记仍可见的客户端或当前房间时，仅恢复默认权限；离线记录会从列表移除。",
@@ -299,6 +313,28 @@
       "forget_title": "忘记此记录？",
       "reset_description": "“{{name}}”仍可见或正在使用中。是否恢复默认权限并保留在列表中？",
       "forget_description": "是否忘记“{{name}}”并移除已保存的权限？聊天记录会保留。"
+    },
+    "application": {
+      "automatic_pip_description": "离开会议页面或切换到后台时自动打开画中画，具体取决于浏览器支持与网站权限。",
+      "close_behavior": {
+        "title": "关闭窗口时",
+        "ask": "每次询问",
+        "exit": "退出应用",
+        "tray": "隐藏到系统托盘",
+        "description": "在托盘中保持房间连接、共享与远程控制，可通过托盘图标恢复窗口或退出应用。"
+      },
+      "auto_hide": {
+        "title": "批准远程控制后隐藏窗口",
+        "description": "授予控制权限后将本机窗口隐藏到托盘，自动批准时也会生效。共享与控制会继续运行。"
+      },
+      "close_confirm_title": "关闭 Weblink？",
+      "close_confirm_description": "隐藏到托盘可继续共享与远程控制，也可以退出应用。",
+      "close_confirm_exit_description": "退出应用将断开房间连接，并停止共享与远程控制。",
+      "remember_close_choice": "记住我的选择",
+      "close_failed": "未能完成此操作，请重试。",
+      "tray_unavailable": "系统托盘不可用。关闭窗口时会询问是否退出，自动隐藏不会生效。",
+      "update_failed": "应用设置未能生效，请重试。",
+      "automatic_pip_unavailable": "当前浏览器或桌面运行环境不支持自动画中画。"
     }
   },
   "cache": {
@@ -712,14 +748,13 @@
     "manage_hint": "清空仅移除聊天记录并保留会话；删除还会移除会话列表项。"
   },
   "meeting": {
+    "source_actions": "{{name}} 的画面操作",
     "pip_title": "会议画中画",
     "pip_elsewhere": "会议正在其他窗口中进行",
     "pip_elsewhere_hint": "你可以在画中画窗口查看画面并控制会议。",
     "pip_restore": "将画面移回此处",
     "feature_source": "在主画面显示 {{name}}",
-    "pip_settings": "画中画设置",
     "pip_automatic": "自动开启画中画",
-    "pip_automatic_hint": "有人正在分享摄像头或屏幕画面时，离开会议页面或页面进入后台隐藏时会自动开启。选择分享画面或仅失去焦点时不会触发。后台自动开启取决于浏览器与网站权限；Chrome 通常需要正在使用麦克风、摄像头或播放有声媒体，仅分享屏幕无法保证每次都自动开启。关闭原标签页或在该标签页打开其他网站会结束小窗。",
     "pip_return": "返回会议",
     "pip_failed": "无法开启画中画，请重试。",
     "controls": "会议控制",
@@ -745,6 +780,10 @@
     "leave_room": "离开房间",
     "pin": "固定到主画面",
     "unpin": "取消固定画面",
+    "leave_main_title": "退出当前主画面？",
+    "leave_main_description": "切换或取消固定将结束当前画面的远程控制（含待批准请求）、画中画和全屏。屏幕共享会继续。",
+    "leave_main_confirm": "结束功能并继续",
+    "leave_main_failed": "无法退出当前显示模式，请先退出该模式后重试。",
     "title": "会议",
     "in_room": "已加入房间",
     "preview": "会前预览",
@@ -894,7 +933,8 @@
     "settings_about": "关于",
     "settings_meeting": "音视频",
     "settings_remote_control": "远程控制",
-    "settings_permissions": "客户端与房间"
+    "settings_permissions": "客户端与房间",
+    "settings_application": "应用"
   },
   "file_library": {
     "search": "搜索文件…",
@@ -1020,7 +1060,7 @@
   "remote_control": {
     "request_title": "允许远程控制？",
     "request_description": "{{name}} 请求控制本机的鼠标和键盘。共享屏幕仅用于映射鼠标位置，控制权限不限于某个应用或显示器。",
-    "revoke_hint": "点击“收回控制”或在本机按 Ctrl+Alt+Shift+F10 可结束控制。键盘转发将在后续阶段接入。",
+    "revoke_hint": "点击“收回控制”或在本机按 Ctrl+Alt+Shift+F10 可结束控制。",
     "decline": "拒绝",
     "allow": "允许控制",
     "host_active": "{{name}} 可以控制本机。",
@@ -1028,7 +1068,7 @@
     "revoke_failed": "无法收回控制，请在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",
     "reconnecting": "正在恢复控制连接",
-    "surface": "远程控制；按 Escape 结束控制。",
+    "surface": "远程控制；按 {{shortcut}} 结束控制。",
     "request": "请求控制",
     "waiting": "等待对方批准",
     "cancel": "取消请求",
@@ -1036,6 +1076,15 @@
     "more_choices": "更多批准选项",
     "allow_remember": "批准并加入白名单",
     "deny_remember": "拒绝并加入黑名单",
-    "share_first_screen": "批准后将屏幕 1 及其音频共享给房间内所有成员。"
+    "share_first_screen": "批准后将屏幕 1 及其音频共享给房间内所有成员。",
+    "keyboard_control": "键盘控制",
+    "keyboard_enable": "开启键盘控制",
+    "keyboard_disable": "关闭键盘控制",
+    "keyboard_show": "打开键盘",
+    "keyboard_hide": "收起键盘",
+    "keyboard_input": "向远端输入文字",
+    "text_too_long": "输入过长，请分段发送。",
+    "text_failed": "输入未能完整发送，请检查远端内容后重试。",
+    "system_keyboard_stopped": "系统键盘转发已停止。请重新点击控制画面，或在“远程控制”设置中关闭系统快捷键转发。"
   }
 }

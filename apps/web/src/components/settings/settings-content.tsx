@@ -9,6 +9,7 @@ import {
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { t } from "@/i18n";
 import AppearanceSettings from "./appearance-settings";
+import ApplicationSettings from "./application-settings";
 import { ConnectionSettings } from "./connection-settings";
 import TransferSettings from "./transfer-settings";
 import MeetingSettings from "./meeting-settings";
@@ -19,6 +20,7 @@ import AboutSettings from "./about-settings";
 
 export const settingsSections = [
   "appearance",
+  "application",
   "connection",
   "transfer",
   "meeting",
@@ -78,6 +80,9 @@ export default function SettingsContent(props: {
             <Switch>
               <Match when={section === "appearance"}>
                 <AppearanceSettings />
+              </Match>
+              <Match when={section === "application"}>
+                <ApplicationSettings />
               </Match>
               <Match when={section === "connection"}>
                 <ConnectionSettings />

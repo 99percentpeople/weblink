@@ -37,6 +37,15 @@ export class ScreenControlRequest extends EventTarget {
           ? "viewing"
           : "unavailable";
   }
+  controls(pointer: RemotePointer | undefined): boolean {
+    return (
+      !!pointer &&
+      this.pointer === pointer &&
+      (this.state() === "requesting" ||
+        this.state() === "activating" ||
+        this.state() === "active")
+    );
+  }
   private changed() {
     this.dispatchEvent(new Event("change"));
   }

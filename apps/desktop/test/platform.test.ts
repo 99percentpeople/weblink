@@ -26,6 +26,19 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("sends window preferences only through the local native configuration command", async () => {
+    const options = {
+      closeBehavior: "tray",
+      hideOnRemoteControl: true,
+      locale: "zh-cn",
+    } as const;
+    await platform.application!.configure(options);
+    expect(ipc).toHaveBeenLastCalledWith(
+      "application_configure",
+      { options },
+    );
+  });
+
   it("keeps local authorization IPC separate from media input and binds the offer to its owner", async () => {
     const control = {
       ownerId: "owner",

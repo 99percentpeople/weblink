@@ -48,6 +48,8 @@ function setup(
   relativePointer?: boolean,
   touchpadPan?: boolean,
   persistentControl?: boolean,
+  keyboard?: unknown,
+  textInput?: unknown,
 ) {
   const c = new RemotePointer("source", "media");
   controllers.push(c);
@@ -68,6 +70,8 @@ function setup(
     relativePointer,
     touchpadPan,
     persistentControl,
+    keyboard,
+    textInput,
   });
   const approve = () => {
     c.request();
@@ -108,6 +112,148 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("negotiates bounded Unicode text independently and sends only while active", () => {
+    const event = { type: "text" as const, text: "中😀" };
+    for (const [keyboard, textInput] of [
+      [true, undefined],
+      [true, "true"],
+      [false, true],
+    ]) {
+      const { c, approve, activate } = setup(
+        undefined,
+        undefined,
+        undefined,
+        true,
+        keyboard,
+        textInput,
+      );
+      approve();
+      activate();
+      expect(c.supportsText()).toBe(false);
+      expect(c.input(event)).toBe(false);
+    }
+    const { c, r, m, approve, activate } = setup(
+      undefined,
+      undefined,
+      undefined,
+      true,
+      true,
+      true,
+    );
+    expect(c.supportsText()).toBe(true);
+    expect(c.input(event)).toBe(false);
+    approve();
+    expect(c.input(event)).toBe(false);
+    const activation = activate();
+    expect(c.input(event)).toBe(true);
+    expect(r.sent.at(-1)).toMatchObject({
+      event,
+      grantId: "grant",
+      inputEpoch: activation.inputEpoch,
+      sequence: 2,
+    });
+    expect(m.sent).toEqual([]);
+    const count = r.sent.length;
+    for (const text of ["", "\n", "\ud800", "a".repeat(65)])
+      expect(c.input({ type: "text", text })).toBe(false);
+    expect(r.sent).toHaveLength(count);
+    c.resetInput();
+    expect(c.input(event)).toBe(false);
+    c.cancel();
+    expect(c.input(event)).toBe(false);
+  });
+  it("negotiates keyboard input and orders keys with the grant and input epoch", () => {
+    const event = {
+      type: "key" as const,
+      scanCode: 0x1e,
+      extended: false,
+      down: true,
+    };
+    for (const capability of [undefined, false, "true"]) {
+      const legacy = setup(
+        undefined,
+        undefined,
+        undefined,
+        true,
+        capability,
+      );
+      legacy.approve();
+      legacy.activate();
+      expect(legacy.c.supportsKeyboard()).toBe(false);
+      expect(legacy.c.input(event)).toBe(false);
+      expect(
+        legacy.r.sent.filter((p) => p.type === "input"),
+      ).toHaveLength(1);
+    }
+    const { c, r, m, approve, activate } = setup(
+      undefined,
+      undefined,
+      undefined,
+      true,
+      true,
+    );
+    expect(c.supportsKeyboard()).toBe(true);
+    expect(c.input(event)).toBe(false);
+    approve();
+    expect(c.input(event)).toBe(false);
+    const activation = activate();
+    expect(c.input(event)).toBe(true);
+    expect(c.input({ ...event, down: false })).toBe(true);
+    expect(m.sent).toHaveLength(0);
+    expect(r.sent.slice(-2)).toEqual([
+      expect.objectContaining({
+        type: "input",
+        sequence: 2,
+        inputEpoch: activation.inputEpoch,
+        grantId: "grant",
+        event,
+      }),
+      expect.objectContaining({
+        type: "input",
+        sequence: 3,
+        inputEpoch: activation.inputEpoch,
+        grantId: "grant",
+        event: { ...event, down: false },
+      }),
+    ]);
+    c.resetInput();
+    expect(c.state()).toBe("activating");
+    expect(c.input(event)).toBe(false);
+    c.cancel();
+    expect(c.input(event)).toBe(false);
+    c.close();
+    expect(c.input(event)).toBe(false);
+  });
+  it("drops keyboard input at backpressure and recovers through a fresh release epoch", () => {
+    const { c, r, approve, activate } = setup(
+      undefined,
+      undefined,
+      undefined,
+      true,
+      true,
+    );
+    approve();
+    const previous = activate();
+    r.bufferedAmount = 16 * 1024;
+    expect(
+      c.input({
+        type: "key",
+        scanCode: 0x1d,
+        extended: false,
+        down: true,
+      }),
+    ).toBe(false);
+    expect(c.state()).toBe("activating");
+    r.bufferedAmount = 0;
+    r.dispatchEvent(new Event("bufferedamountlow"));
+    r.receive({ type: "heartbeat", grantId: "grant" });
+    const next = r.sent.at(-1);
+    expect(next.event.type).toBe("activate");
+    expect(next.inputEpoch).not.toBe(previous.inputEpoch);
+    expect(
+      r.sent.some((p) => p.event?.type === "key"),
+    ).toBe(false);
+  });
   it("coalesces relative displacement on the reliable channel before a click and clears it when resetting a gesture", () => {
     const { c, r, m, approve, activate } = setup(
       undefined,

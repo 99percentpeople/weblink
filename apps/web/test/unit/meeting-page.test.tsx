@@ -260,7 +260,6 @@ vi.mock("@/routes/home/components/meeting-tile", () => ({
     pinned: boolean;
     onSelect?: () => void;
     onPin?: () => void;
-    onVideoPipEnter?: () => void;
   }) => (
     <article aria-label={props.name}>
       {props.name}
@@ -278,12 +277,6 @@ vi.mock("@/routes/home/components/meeting-tile", () => ({
           onClick={props.onPin}
         />
       </Show>
-      <button
-        aria-pressed={props.pinned}
-        onClick={props.onVideoPipEnter}
-      >
-        Native video PiP
-      </button>
     </article>
   ),
 }));
@@ -444,7 +437,7 @@ describe("meeting page navigation and panels", () => {
       ])
         expect(
           Boolean(screen.queryByRole("button", { name })),
-        ).toBe(capabilities.pip);
+        ).toBe(false); // No main view is selected in this grid.
       expect(
         screen.getByRole("button", {
           name: "meeting.enable_camera",
@@ -1335,59 +1328,6 @@ describe("meeting page navigation and panels", () => {
       key: "Escape",
     });
     expect(screen.queryByRole("tabpanel")).toBeNull();
-  });
-
-  it("features the source entering native video PiP and retains it on repeated entry", async () => {
-    window.innerWidth = 390;
-    render(() => (
-      <MeetingMediaProvider>
-        <MeetingSessionProvider>
-          <Video />
-        </MeetingSessionProvider>
-      </MeetingMediaProvider>
-    ));
-    const bob = screen.getByRole("article", {
-      name: "Bob",
-    });
-    const chris = screen.getByRole("article", {
-      name: "Chris",
-    });
-    const enterBob = within(bob).getByRole("button", {
-      name: "Native video PiP",
-    });
-    const enterChris = within(chris).getByRole("button", {
-      name: "Native video PiP",
-    });
-    expect(enterBob).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    fireEvent.click(enterBob);
-    await waitFor(() =>
-      expect(enterBob).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-    fireEvent.click(enterChris);
-    await waitFor(() =>
-      expect(enterChris).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-    expect(enterBob).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    fireEvent.click(enterChris);
-    expect(enterChris).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(bob).toBeInTheDocument();
-    expect(chris).toBeInTheDocument();
-    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
   });
 
   it("selects a focused secondary view directly without showing a pin action", async () => {

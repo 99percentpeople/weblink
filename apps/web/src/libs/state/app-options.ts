@@ -7,9 +7,17 @@ import type { ClientID, FileID } from "@/libs/domain/ids";
 import languages from "@/assets/i18n/languages.json";
 import type { WallpaperPresetId } from "@/libs/wallpapers";
 import {
+  defaultApplicationOptions,
+  type ApplicationOptions,
+} from "@/libs/domain/application-options";
+import {
   defaultRemoteTouchOptions,
   type RemoteTouchOptions,
 } from "@/libs/domain/remote-control/touch-options";
+import {
+  defaultRemoteKeyboardOptions,
+  type RemoteKeyboardOptions,
+} from "@/libs/domain/remote-control/keyboard-options";
 
 export type Locale = string;
 export type ConnectionOptions = IceServerOptions;
@@ -63,8 +71,10 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  application: ApplicationOptions;
   permissionHistoryImported: boolean;
   remoteTouch: RemoteTouchOptions;
+  remoteKeyboard: RemoteKeyboardOptions;
   // Receiver
   maxMomeryCacheSlices: number;
   automaticDownload: boolean;
@@ -221,6 +231,8 @@ export const getDefaultAppOptions = (): AppOption => {
     permissionHistoryImported: false,
     roomConfigs: {},
     remoteTouch: { ...defaultRemoteTouchOptions },
+    remoteKeyboard: { ...defaultRemoteKeyboardOptions },
+    application: { ...defaultApplicationOptions },
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

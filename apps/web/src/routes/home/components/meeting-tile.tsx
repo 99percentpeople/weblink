@@ -4,6 +4,15 @@ import {
   RemoteControlAction,
 } from "./remote-control-action";
 import { RemoteControlOverlay } from "./remote-control-overlay";
+import { RemoteKeyboardInput } from "./remote-keyboard-input";
+import type {
+  RegisterMeetingMainFeatures,
+  MeetingMainFeatures,
+} from "./meeting-main-view";
+import {
+  MeetingTileAction,
+  MeetingTileActions,
+} from "./meeting-tile-actions";
 import { Motion } from "@/components/ui/motion";
 import {
   createEffect,
@@ -42,6 +51,7 @@ export function MeetingTile(props: {
   ref?: (element: HTMLElement) => void;
   compact?: boolean;
   playbackActive?: boolean;
+  layoutVisible?: boolean;
   exitRect?: DOMRect;
   onSelect?: () => void;
   sourceId?: string;
@@ -58,13 +68,20 @@ export function MeetingTile(props: {
   onToggleAudio?: () => void;
   pinned: boolean;
   onPin?(): void;
-  onVideoPipEnter?(): void;
+  onActivate?(action: () => void): void;
+  registerFeatures?: RegisterMeetingMainFeatures;
   onStop?: () => void;
 }) {
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
   // Fullscreen the display container so its cover and controls remain usable.
   const fullscreen = createFullscreen(displayRef);
+  // The OS keyboard can collapse the grid behind a fullscreen surface. That
+  // must not unmount its editor or disable its input/playback owners.
+  const playbackActive = () =>
+    props.playbackActive !== false &&
+    (fullscreen.isThisElementFullscreen() ||
+      props.layoutVisible !== false);
   const [previewRevealed, setPreviewRevealed] =
     createSignal(false);
   createEffect(
@@ -127,20 +144,21 @@ export function MeetingTile(props: {
           name={props.name}
           avatar={props.avatar}
           isPlaceholderStream={props.placeholder}
-          playbackActive={props.playbackActive}
+          playbackActive={playbackActive()}
           muted
         >
           <RemoteControlOverlay
             enabled={
+              props.pinned &&
               !props.local &&
               !props.compact &&
-              props.playbackActive !== false
+              playbackActive()
             }
           />
           <Show
             when={
               appState.options.showStreamStats &&
-              props.playbackActive !== false
+              playbackActive()
             }
           >
             <VideoStatisticsOverlay
@@ -187,6 +205,8 @@ export function MeetingTile(props: {
           </Show>
           <Show when={!props.compact}>
             <TileActions
+              container={displayRef()}
+              sourceId={props.sourceId}
               clientId={
                 props.sourceKind !== "screen"
                   ? props.clientId
@@ -194,11 +214,13 @@ export function MeetingTile(props: {
               }
               fullscreen={fullscreen}
               local={props.local}
+              playbackActive={playbackActive()}
               audioMuted={props.audioMuted}
               onToggleAudio={props.onToggleAudio}
               pinned={props.pinned}
               onPin={props.onPin}
-              onVideoPipEnter={props.onVideoPipEnter}
+              onActivate={props.onActivate}
+              registerFeatures={props.registerFeatures}
               onStop={props.onStop}
               name={props.name}
             />
@@ -210,14 +232,18 @@ export function MeetingTile(props: {
 }
 
 function TileActions(props: {
+  container?: HTMLElement;
+  sourceId?: string;
   clientId?: string;
   fullscreen: ReturnType<typeof createFullscreen>;
   local?: boolean;
+  playbackActive?: boolean;
   audioMuted?: boolean;
   onToggleAudio?: () => void;
   pinned: boolean;
   onPin?(): void;
-  onVideoPipEnter?(): void;
+  onActivate?(action: () => void): void;
+  registerFeatures?: RegisterMeetingMainFeatures;
   onStop?: () => void;
   name: string;
 }) {
@@ -258,22 +284,60 @@ function TileActions(props: {
       Boolean(videoRef() && fullscreen.isSupported()) ||
       Boolean(props.onPin),
   );
+  const activate = (action: () => void) => {
+    const run = () => {
+      if (props.pinned && props.container?.isConnected)
+        action();
+    };
+    if (props.onActivate) props.onActivate(run);
+    else run();
+  };
+  const controlInUse = () =>
+    !props.local &&
+    (remote.state() === "requesting" ||
+      remote.state() === "activating" ||
+      remote.state() === "active");
+  const features: MeetingMainFeatures = {
+    active: () =>
+      controlInUse() ||
+      fullscreen.isThisElementFullscreen() ||
+      fullscreen.isBusy() ||
+      pip.isThisElementInPip() ||
+      pip.isBusy(),
+    stop: async () => {
+      if (controlInUse()) remote.control()?.cancel();
+      await Promise.all([
+        fullscreen.exitFullscreen(),
+        pip.exitPictureInPicture(),
+      ]);
+      return (
+        !fullscreen.isThisElementFullscreen() &&
+        !pip.isThisElementInPip()
+      );
+    },
+  };
+  createEffect(() => {
+    const id = props.sourceId;
+    if (!id || !props.registerFeatures) return;
+    const unregister = props.registerFeatures(id, features);
+    onCleanup(unregister);
+  });
   createEffect(
     on(
-      () => isMobile() && pip.isThisElementInPip(),
-      (active) => {
-        if (!active) return;
-        let cancelled = false;
-        // Leave the reactive batch before measuring the main-view transition.
-        queueMicrotask(() => {
-          if (!cancelled) props.onVideoPipEnter?.();
-        });
-        onCleanup(() => {
-          cancelled = true;
-        });
+      () => props.pinned,
+      (main) => {
+        if (main) return;
+        // Also release presentation on an automatic avatar-to-screen handoff.
+        // Its control belongs to the approved screen and must not be cancelled.
+        void fullscreen.exitFullscreen();
+        void pip.exitPictureInPicture();
       },
     ),
   );
+  onCleanup(() => {
+    if (props.pinned && controlInUse())
+      remote.control()?.cancel();
+  });
   return (
     <>
       <Show when={pip.isThisElementInPip()}>
@@ -301,29 +365,50 @@ function TileActions(props: {
         </div>
       </Show>
       <Show when={hasActions()}>
-        <div class="meeting-tile-actions">
+        <MeetingTileActions
+          compact={isMobile()}
+          label={t("meeting.source_actions", {
+            name: props.name,
+          })}
+          portalMount={
+            fullscreen.isThisElementFullscreen()
+              ? props.container
+              : undefined
+          }
+        >
+          <Show
+            when={
+              props.pinned &&
+              !props.local &&
+              videoControl.control()
+            }
+          >
+            {(control) => (
+              <RemoteKeyboardInput
+                control={control()}
+                state={videoControl.state()}
+                enabled={props.playbackActive !== false}
+              />
+            )}
+          </Show>
           <Show when={showControl() && remote.control()}>
             {(control) => (
               <RemoteControlAction
                 control={control()}
                 state={remote.state()}
+                onRequest={activate}
               />
             )}
           </Show>
           <Show when={props.onStop}>
-            <button
-              type="button"
-              class="meeting-icon-button"
-              aria-label={t("meeting.stop_source", {
+            <MeetingTileAction
+              label={t("meeting.stop_source", {
                 name: props.name,
               })}
-              title={t("meeting.stop_source", {
-                name: props.name,
-              })}
-              onClick={() => props.onStop?.()}
+              onAction={() => props.onStop?.()}
             >
               <X />
-            </button>
+            </MeetingTileAction>
           </Show>
           <Show
             when={
@@ -332,32 +417,23 @@ function TileActions(props: {
               props.onToggleAudio
             }
           >
-            <button
-              type="button"
-              class="meeting-icon-button"
-              aria-pressed={muted()}
-              aria-label={
+            <MeetingTileAction
+              active={muted()}
+              label={
                 muted()
                   ? t("common.action.unmute")
                   : t("common.action.mute")
               }
-              title={
-                muted()
-                  ? t("common.action.unmute")
-                  : t("common.action.mute")
-              }
-              onClick={() => props.onToggleAudio?.()}
+              onAction={() => props.onToggleAudio?.()}
             >
               <Show when={muted()} fallback={<Volume2 />}>
                 <VolumeX />
               </Show>
-            </button>
+            </MeetingTileAction>
           </Show>
           <Show when={isMobile() && pip.isSupported()}>
-            <button
-              type="button"
-              class="meeting-icon-button"
-              aria-label={t(
+            <MeetingTileAction
+              label={t(
                 pip.isThisElementInPip()
                   ? "common.action.exit_picture_in_picture"
                   : "common.action.picture_in_picture",
@@ -369,37 +445,44 @@ function TileActions(props: {
                     ? "common.action.exit_picture_in_picture"
                     : "common.action.picture_in_picture",
               )}
-              aria-pressed={pip.isThisElementInPip()}
+              active={pip.isThisElementInPip()}
               disabled={
                 !pip.isThisElementInPip() &&
                 (pip.isBusy() || !pip.isReady())
               }
-              onClick={() =>
-                void (pip.isThisElementInPip()
-                  ? pip.exitPictureInPicture()
-                  : pip.requestPictureInPicture())
+              onAction={() =>
+                pip.isThisElementInPip()
+                  ? void pip.exitPictureInPicture()
+                  : activate(
+                      () =>
+                        void pip.requestPictureInPicture(),
+                    )
               }
             >
               <PictureInPicture2 />
-            </button>
+            </MeetingTileAction>
           </Show>
           <Show
             when={videoRef() && fullscreen.isSupported()}
           >
-            <button
-              type="button"
-              class="meeting-icon-button"
-              aria-label={
+            <MeetingTileAction
+              label={
                 fullscreen.isThisElementFullscreen()
                   ? t("common.action.exit_fullscreen")
                   : t("common.action.fullscreen")
               }
               title={t("common.action.fullscreen")}
-              disabled={pip.isThisElementInPip()}
-              onClick={() =>
-                void (fullscreen.isThisElementFullscreen()
-                  ? fullscreen.exitFullscreen()
-                  : fullscreen.requestFullscreen())
+              disabled={
+                pip.isThisElementInPip() ||
+                fullscreen.isBusy()
+              }
+              onAction={() =>
+                fullscreen.isThisElementFullscreen()
+                  ? void fullscreen.exitFullscreen()
+                  : activate(
+                      () =>
+                        void fullscreen.requestFullscreen(),
+                    )
               }
             >
               <Show
@@ -408,31 +491,24 @@ function TileActions(props: {
               >
                 <Minimize2 />
               </Show>
-            </button>
+            </MeetingTileAction>
           </Show>
           <Show when={props.onPin}>
-            <button
-              type="button"
-              class="meeting-icon-button"
-              aria-pressed={props.pinned}
-              aria-label={
+            <MeetingTileAction
+              active={props.pinned}
+              label={
                 props.pinned
                   ? t("meeting.unpin")
                   : t("meeting.pin")
               }
-              title={
-                props.pinned
-                  ? t("meeting.unpin")
-                  : t("meeting.pin")
-              }
-              onClick={props.onPin}
+              onAction={() => props.onPin?.()}
             >
               <Show when={props.pinned} fallback={<Pin />}>
                 <PinOff />
               </Show>
-            </button>
+            </MeetingTileAction>
           </Show>
-        </div>
+        </MeetingTileActions>
       </Show>
     </>
   );

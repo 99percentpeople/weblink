@@ -1,5 +1,10 @@
 import { createUuid } from "../ids";
 import type { TrackpadEvent } from "./trackpad-types";
+import type { RemoteKeyEvent } from "./keyboard";
+import {
+  validRemoteText,
+  type RemoteTextEvent,
+} from "./text";
 import {
   MAX_TOUCH_CONTACTS,
   type TouchContact,
@@ -19,6 +24,8 @@ export const POINTER_CHANNEL = "weblink-pointer";
 const HIGH_WATER = 16 * 1024;
 export type PointerPosition = { x: number; y: number };
 export type PointerEvent =
+  | RemoteKeyEvent
+  | RemoteTextEvent
   | { type: "trackpad"; action: TrackpadEvent }
   | { type: "touch"; contacts: TouchContact[] }
   | { type: "activate" | "pause" }
@@ -73,6 +80,14 @@ export function videoPosition(
   return { x: px, y: py };
 }
 export class RemotePointer extends EventTarget {
+  private textAvailable = false;
+  supportsText(): boolean {
+    return this.textAvailable;
+  }
+  private keyboardAvailable = false;
+  supportsKeyboard(): boolean {
+    return this.keyboardAvailable;
+  }
   private persistent = false;
   private congested = false;
   private pendingSignals: ControlSignal[] = [];
@@ -257,6 +272,9 @@ export class RemotePointer extends EventTarget {
       )
         return;
       this.target = { ...v.target };
+      this.keyboardAvailable = v.keyboard === true;
+      this.textAvailable =
+        this.keyboardAvailable && v.textInput === true;
       this.touchAvailable =
         v.touchContacts === MAX_TOUCH_CONTACTS;
       this.relativeAvailable = v.relativePointer === true;
@@ -383,7 +401,7 @@ export class RemotePointer extends EventTarget {
     clearTimeout(this.moveTimer);
     this.moveTimer = undefined;
   }
-  input(event: PointerEvent) {
+  input(event: PointerEvent): boolean {
     const state = this.session?.state;
     if (
       state?.type !== "granted" ||
@@ -392,15 +410,22 @@ export class RemotePointer extends EventTarget {
         event.type !== "activate" &&
         event.type !== "pause")
     )
-      return;
+      return false;
+    if (event.type === "key" && !this.keyboardAvailable)
+      return false;
+    if (
+      event.type === "text" &&
+      (!this.textAvailable || !validRemoteText(event.text))
+    )
+      return false;
     if (event.type === "touch" && !this.touchAvailable)
-      return;
+      return false;
     if (
       event.type === "trackpad" &&
       (!this.relativeAvailable ||
         (event.action.type === "pan" && !this.panAvailable))
     )
-      return;
+      return false;
     if (event.type === "touch") {
       // A queued mouse move must not follow a touch down on the new reliable barrier.
       clearTimeout(this.moveTimer);
@@ -411,7 +436,7 @@ export class RemotePointer extends EventTarget {
     if ("x" in event)
       this.cursor = { x: event.x, y: event.y };
     const movement = event.type === "move";
-    this.send(
+    return this.send(
       {
         type: "input",
         grantId: state.grantId,

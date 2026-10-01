@@ -119,15 +119,14 @@ afterEach(() => {
   Reflect.deleteProperty(window.screen, "orientation");
 });
 
-function setup() {
+function setup(main = true) {
   const [local, setLocal] = createSignal(true);
   const [kind, setKind] = createSignal("screen");
-  const [pinned, setPinned] = createSignal(false);
+  const [pinned, setPinned] = createSignal(main);
   const [track, setTrack] = createSignal(
     new Track("screen-1"),
   );
   const onStop = vi.fn();
-  const onVideoPipEnter = vi.fn(() => setPinned(true));
   const view = render(() => (
     <MeetingTile
       name="Alice"
@@ -142,7 +141,6 @@ function setup() {
       local={local()}
       pinned={pinned()}
       onPin={() => setPinned((value) => !value)}
-      onVideoPipEnter={onVideoPipEnter}
       onStop={onStop}
     />
   ));
@@ -161,7 +159,6 @@ function setup() {
     setKind,
     setPinned,
     pinned,
-    onVideoPipEnter,
     onStop,
   };
 }
@@ -222,7 +219,7 @@ it("reflects shared member mute state and delegates audio changes to its owner",
 
 describe("local screen preview cover", () => {
   it("covers only a local screen featured in the main view", () => {
-    const view = setup();
+    const view = setup(false);
     expect(cover()).toBeNull();
     view.setPinned(true);
     expect(cover()).not.toBeNull();
@@ -263,8 +260,10 @@ describe("local screen preview cover", () => {
         name: "common.action.exit_fullscreen",
       }),
     );
-    expect(document.fullscreenElement).toBeNull();
-    expect(cover()).toBeNull();
+    await waitFor(() =>
+      expect(document.fullscreenElement).toBeNull(),
+    );
+    expect(cover()).not.toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
         name: "common.action.fullscreen",
@@ -340,56 +339,6 @@ function nativeVideoPip(view: ReturnType<typeof setup>) {
 }
 
 describe("native PiP on a meeting tile", () => {
-  it.each([false, true])(
-    "features the mobile video after confirmed PiP entry without toggling an existing pin (%s)",
-    async (alreadyPinned) => {
-      const view = setup();
-      view.setPinned(alreadyPinned);
-      const { enter, exit } = nativeVideoPip(view);
-      expect(view.onVideoPipEnter).not.toHaveBeenCalled();
-      await enter();
-      await waitFor(() =>
-        expect(view.onVideoPipEnter).toHaveBeenCalledOnce(),
-      );
-      expect(view.pinned()).toBe(true);
-      fireEvent.loadedMetadata(view.video);
-      view.video.dispatchEvent(
-        new Event("enterpictureinpicture"),
-      );
-      await Promise.resolve();
-      expect(view.onVideoPipEnter).toHaveBeenCalledOnce();
-      await exit();
-      expect(view.pinned()).toBe(true);
-      expect(view.onVideoPipEnter).toHaveBeenCalledOnce();
-    },
-  );
-
-  it("does not feature native PiP in the desktop layout, but does when returning to mobile", async () => {
-    vi.stubGlobal("innerWidth", 1440);
-    window.dispatchEvent(new Event("resize"));
-    const view = setup();
-    const { enter } = nativeVideoPip(view);
-    await enter();
-    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
-    expect(view.pinned()).toBe(false);
-    vi.stubGlobal("innerWidth", 390);
-    window.dispatchEvent(new Event("resize"));
-    await waitFor(() =>
-      expect(view.onVideoPipEnter).toHaveBeenCalledOnce(),
-    );
-    expect(view.pinned()).toBe(true);
-  });
-
-  it("cancels a queued main-view change when the video is removed", async () => {
-    const view = setup();
-    const { enter } = nativeVideoPip(view);
-    const entering = enter();
-    view.unmount();
-    await entering;
-    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
-    expect(view.track().stop).not.toHaveBeenCalled();
-  });
-
   it("offers the button only for a supported video, keeps the actual element alive under its placeholder, and restores it", async () => {
     const view = setup();
     expect(
@@ -518,8 +467,7 @@ describe("native PiP on a meeting tile", () => {
     expect(
       screen.queryByText("meeting.pip_video_elsewhere"),
     ).toBeNull();
-    expect(view.onVideoPipEnter).not.toHaveBeenCalled();
-    expect(view.pinned()).toBe(false);
+    expect(view.pinned()).toBe(true);
   });
 
   it("requests fullscreen before locking to the actual video ratio and releases orientation on exit", async () => {
@@ -549,7 +497,9 @@ describe("native PiP on a meeting tile", () => {
         name: "common.action.exit_fullscreen",
       }),
     );
-    expect(unlock).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(unlock).toHaveBeenCalledOnce(),
+    );
     expect(document.fullscreenElement).toBeNull();
   });
 });
@@ -626,11 +576,7 @@ it("offers request and cancel on the avatar and hides them when hosting capabili
   const control = new ScreenControlRequest(send);
   fixture.screenControl = control;
   render(() => (
-    <MeetingTile
-      clientId="host"
-      name="Host"
-      pinned={false}
-    />
+    <MeetingTile clientId="host" name="Host" pinned />
   ));
   expect(
     screen.queryByRole("button", {

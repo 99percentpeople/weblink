@@ -126,6 +126,12 @@ pub enum Held {
     Key(ScanCode),
     Button(Button),
 }
+pub(crate) fn valid_text(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 256
+        && text.encode_utf16().count() <= 64
+        && !text.chars().any(char::is_control)
+}
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     Trackpad(crate::trackpad::Event),

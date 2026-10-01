@@ -64,6 +64,8 @@ import {
 } from "./components/meeting-stage";
 import { useMeetingSession } from "./components/meeting-session-context";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
+import { MeetingControlStatus } from "./components/meeting-control-status";
+import { RemoteKeyboardToggle } from "./components/remote-keyboard-toggle";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 import { MeetingChatPanel } from "./components/meeting-chat-panel";
 import { MeetingInfoPanel } from "./components/meeting-info-panel";
@@ -461,10 +463,9 @@ export default function Home() {
     }),
   );
   const togglePin = (id: string) =>
-    transitionLayout(() =>
-      setPinnedId((current) =>
-        current === id ? null : id,
-      ),
+    setPinnedId(
+      pinnedId() === id ? null : id,
+      transitionLayout,
     );
   const participantSource = (id: string) =>
     sources().find((source) => source.participantId === id);
@@ -477,10 +478,9 @@ export default function Home() {
   const pinParticipant = (id: string) => {
     const source = participantSource(id);
     if (source)
-      transitionLayout(() =>
-        setPinnedId(
-          participantPinned(id) ? null : source.id,
-        ),
+      setPinnedId(
+        participantPinned(id) ? null : source.id,
+        transitionLayout,
       );
   };
   return (
@@ -544,12 +544,11 @@ export default function Home() {
             </span>
           </button>
           <div
-            class="meeting-header-actions ml-auto flex min-w-0 shrink
-              items-center gap-2.5 max-md:gap-1"
+            class="meeting-header-actions ml-auto flex min-w-0 shrink flex-wrap
+              items-center justify-end gap-2.5 max-md:gap-1"
           >
             <Show when={media.sharing()}>
               <MeetingSharingStatus
-                controller={controller()}
                 name={appState.profile.name}
                 avatar={
                   appState.profile.avatar ?? undefined
@@ -567,6 +566,30 @@ export default function Home() {
                 onAudioChange={media.setSharingAudioEnabled}
               />
             </Show>
+            <Show when={controller()}>
+              {(active) => (
+                <MeetingControlStatus
+                  name={active().name}
+                  revoke={active().revoke}
+                />
+              )}
+            </Show>
+            <RemoteKeyboardToggle
+              controls={sources().flatMap((source) => {
+                if (
+                  source.id !== meeting.selected()?.id ||
+                  source.local ||
+                  source.kind !== "screen" ||
+                  !source.track
+                )
+                  return [];
+                const control =
+                  sessionService.getRemoteControl(
+                    source.track,
+                  );
+                return control ? [control] : [];
+              })}
+            />
             <Show when={devices.access.needsPermission()}>
               <button
                 type="button"
@@ -653,10 +676,16 @@ export default function Home() {
                   railCollapsed={railCollapsed()}
                   onRailCollapsedChange={setRailCollapsed}
                   onPin={togglePin}
-                  onVideoPipEnter={(id) => {
-                    if (pinnedId() === id) return;
-                    transitionLayout(() => setPinnedId(id));
-                  }}
+                  onActivate={(id, action) =>
+                    setPinnedId(
+                      id,
+                      transitionLayout,
+                      action,
+                    )
+                  }
+                  registerFeatures={
+                    meeting.mainView.register
+                  }
                   onStop={media.stopVideoTrack}
                 >
                   <div class="relative shrink-0">
@@ -992,20 +1021,19 @@ export default function Home() {
           onToggleLayout={
             sources().length > 1
               ? () =>
-                  transitionLayout(() =>
-                    setPinnedId((current) =>
-                      current
-                        ? null
-                        : (sources().find(
-                            (source) =>
-                              source.kind === "screen",
-                          )?.id ??
+                  setPinnedId(
+                    pinnedId()
+                      ? null
+                      : (sources().find(
+                          (source) =>
+                            source.kind === "screen",
+                        )?.id ??
                           sources().find(
                             (source) => !source.local,
                           )?.id ??
                           sources()[0]?.id ??
                           null),
-                    ),
+                    transitionLayout,
                   )
               : undefined
           }

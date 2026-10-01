@@ -161,6 +161,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("meeting feature activation flush", () => {
+  it("commits the latest pending source update synchronously and cancels its scheduled replay", () => {
+    const f = setup();
+    const obsolete = vi.fn();
+    const latest = vi.fn();
+    f.layout.schedule(obsolete);
+    f.layout.schedule(latest);
+    expect(latest).not.toHaveBeenCalled();
+    f.layout.flush();
+    expect(latest).toHaveBeenCalledOnce();
+    expect(obsolete).not.toHaveBeenCalled();
+    expect(frames.size).toBe(0);
+    flushFrame();
+    f.layout.flush();
+    expect(latest).toHaveBeenCalledOnce();
+  });
+
+  it("leaves subsequently scheduled updates intact", () => {
+    const f = setup();
+    const next = vi.fn();
+    f.layout.schedule(() => f.layout.schedule(next));
+    f.layout.flush();
+    expect(next).not.toHaveBeenCalled();
+    expect(frames.size).toBe(1);
+    flushFrame();
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("cannot commit a pending source update after its owner is disposed", () => {
+    const f = setup();
+    const update = vi.fn();
+    f.layout.schedule(update);
+    f.dispose();
+    f.layout.flush();
+    flushFrame();
+    expect(update).not.toHaveBeenCalled();
+    expect(frames.size).toBe(0);
+  });
+});
+
 describe("meeting grid observer ownership", () => {
   it("transitions resize and source changes together, after the first measurement", () => {
     const transition = vi.fn((update: () => void) =>

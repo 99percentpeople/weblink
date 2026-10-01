@@ -22,6 +22,10 @@ use std::{
 };
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
+/// Read-only availability check shared by the host and focused controller capture.
+pub fn input_desktop_available() -> bool {
+    environment::desktop_available()
+}
 struct Exclusive;
 impl Drop for Exclusive {
     fn drop(&mut self) {

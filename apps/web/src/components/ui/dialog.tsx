@@ -64,6 +64,7 @@ type DialogContentProps<T extends ValidComponent = "div"> =
   DialogPrimitive.DialogContentProps<T> & {
     class?: string | undefined;
     children?: JSX.Element;
+    portalMount?: HTMLElement;
   };
 
 const DialogContent = <T extends ValidComponent = "div">(
@@ -72,9 +73,10 @@ const DialogContent = <T extends ValidComponent = "div">(
   const [, rest] = splitProps(props as DialogContentProps, [
     "class",
     "children",
+    "portalMount",
   ]);
   return (
-    <DialogPortal>
+    <DialogPortal mount={props.portalMount}>
       <DialogOverlay />
       <DialogPrimitive.Content
         class={getDialogContentClassName(props.class)}

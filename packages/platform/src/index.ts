@@ -6,9 +6,14 @@ export interface RuntimeCapabilities {
   /** Current refresh rates of connected displays; empty when unavailable. */
   displayRefreshRates: number[];
   remoteInput: boolean;
+  systemKeyboard?: boolean;
+  /** True only after a recoverable native tray icon has been created. */
+  systemTray?: boolean;
 }
 
 export interface PlatformRuntime {
+  readonly application?: NativeApplication;
+  readonly keyboard?: NativeKeyboard;
   readonly remoteControl?: NativeRemoteControl;
   readonly kind: "browser" | "desktop";
   readonly supportsServiceWorker: boolean;
@@ -16,6 +21,70 @@ export interface PlatformRuntime {
   readonly screenShare?: NativeScreenShare;
   getCapabilities(): Promise<RuntimeCapabilities>;
   initialize(): () => void;
+}
+
+export interface NativeApplicationOptions {
+  closeBehavior: "ask" | "exit" | "tray";
+  hideOnRemoteControl: boolean;
+  locale: "en" | "zh-cn" | "zh-tw";
+}
+
+export interface NativeApplication {
+  configure(
+    options: NativeApplicationOptions,
+  ): Promise<void>;
+  watchCloseRequests(
+    onRequest: (request: NativeCloseRequest) => void,
+  ): Promise<NativeCloseSession>;
+}
+
+export interface NativeCloseRequest {
+  id: string;
+  trayAvailable: boolean;
+}
+export type NativeCloseResponse =
+  | "cancel"
+  | "tray"
+  | "exit";
+export interface NativeCloseSession {
+  respond(
+    requestId: string,
+    response: NativeCloseResponse,
+    remember: boolean,
+  ): Promise<void>;
+  close(): Promise<void>;
+}
+
+/** Controller-side physical input, scoped to the focused local control surface. */
+export type NativeKeyboardEvent =
+  | {
+      type: "key";
+      scanCode: number;
+      extended: boolean;
+      down: boolean;
+      sequence: number;
+      timestamp: number;
+    }
+  | {
+      type: "stopped";
+      reason:
+        | "closed"
+        | "focus"
+        | "expired"
+        | "overflow"
+        | "exit"
+        | "emergency";
+    };
+export interface NativeKeyboardSession {
+  renew(sequence: number): Promise<void>;
+  close(): Promise<void>;
+}
+export interface NativeKeyboard {
+  supported(): Promise<boolean>;
+  start(
+    exitShortcut: "ctrl-alt-shift-q" | "ctrl-alt-shift-x",
+    onEvent: (event: NativeKeyboardEvent) => void,
+  ): Promise<NativeKeyboardSession>;
 }
 
 export interface CaptureSource {

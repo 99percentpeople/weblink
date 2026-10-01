@@ -281,7 +281,21 @@
       },
       "changes": "Changes apply immediately and release any pressed buttons or touches.",
       "pan_unavailable": "Native touchpad scrolling is unavailable on this host.",
-      "unavailable": "This host does not support direct touch. Select Trackpad in Remote control settings."
+      "unavailable": "This host does not support direct touch. Select Trackpad in Remote control settings.",
+      "keyboard_heading": "Keyboard",
+      "touch_heading": "Touch",
+      "keyboard": {
+        "title": "Forward keyboard input",
+        "description": "Click the controlled screen to forward supported physical keys using the remote keyboard layout. Browser and system reserved shortcuts remain local. Moving focus away releases held keys without ending control."
+      },
+      "exit_shortcut": {
+        "title": "End control shortcut",
+        "description": "Works while the controlled screen has focus, even when keyboard forwarding is off. Escape is forwarded to the remote computer. The host can always revoke with Ctrl+Alt+Shift+F10."
+      },
+      "system_keyboard": {
+        "title": "Forward system shortcuts",
+        "description": "Windows desktop only: capture supported system shortcuts while the remote screen is focused. Turn this off to use browser key handling. Ctrl+Alt+Del remains local."
+      }
     },
     "permissions": {
       "description": "Connected clients and rooms are remembered here. Forgetting a visible client or the current room resets its permissions; offline entries are removed.",
@@ -299,6 +313,28 @@
       "forget_title": "Forget this entry?",
       "reset_description": "“{{name}}” is still present. Restore default permissions and keep this entry?",
       "forget_description": "Forget “{{name}}” and remove its saved permissions? Conversation history will be kept."
+    },
+    "application": {
+      "automatic_pip_description": "Open picture-in-picture when leaving the meeting or sending it to the background. Availability depends on browser support and site permission.",
+      "close_behavior": {
+        "title": "When closing the window",
+        "ask": "Ask every time",
+        "exit": "Quit application",
+        "tray": "Hide to system tray",
+        "description": "Keep the room, sharing and remote control running in the tray. Use the tray icon to restore the window or quit."
+      },
+      "auto_hide": {
+        "title": "Hide window after approving remote control",
+        "description": "Hide this device’s window to the tray after control is granted, including automatic approval. Sharing and control continue."
+      },
+      "close_confirm_title": "Close Weblink?",
+      "close_confirm_description": "Hide to the tray to keep sharing and remote control running, or quit the application.",
+      "close_confirm_exit_description": "Quitting will disconnect from the room and stop sharing and remote control.",
+      "remember_close_choice": "Remember my choice",
+      "close_failed": "Could not complete this action. Please try again.",
+      "tray_unavailable": "System tray is unavailable. Closing the window will ask whether to quit; automatic hiding is disabled.",
+      "update_failed": "Could not apply application settings. Please try again.",
+      "automatic_pip_unavailable": "Automatic picture-in-picture is unavailable in this browser or desktop runtime."
     }
   },
   "cache": {
@@ -712,14 +748,13 @@
     "manage_hint": "Clear removes chat history and keeps the conversation. Delete also removes its entry from the conversation list."
   },
   "meeting": {
+    "source_actions": "Actions for {{name}}",
     "pip_title": "Meeting picture-in-picture",
     "pip_elsewhere": "Your meeting is in another window",
     "pip_elsewhere_hint": "Use the picture-in-picture window to view and control the meeting.",
     "pip_restore": "Bring the meeting back here",
     "feature_source": "Show {{name}} in the main view",
-    "pip_settings": "Picture-in-picture settings",
     "pip_automatic": "Automatic picture-in-picture",
-    "pip_automatic_hint": "Opens when leaving the meeting page or when the page becomes hidden while someone is sharing a camera or screen. Choosing a screen to share or losing focus alone does not trigger it. Background opening depends on the browser and site permission. Chrome generally requires microphone/camera capture or audible media playback; screen sharing alone cannot guarantee automatic entry every time. Closing the original tab or navigating it to another website ends the mini window.",
     "pip_return": "Return to meeting",
     "pip_failed": "Unable to open picture-in-picture. Please try again.",
     "controls": "Meeting controls",
@@ -745,6 +780,10 @@
     "leave_room": "Leave room",
     "pin": "Pin to main stage",
     "unpin": "Unpin view",
+    "leave_main_title": "Leave the main view?",
+    "leave_main_description": "Switching or unpinning this view will end its remote control (including pending requests), picture-in-picture and fullscreen. Screen sharing will continue.",
+    "leave_main_confirm": "End features and continue",
+    "leave_main_failed": "Could not exit the current display mode. Please exit it and try again.",
     "title": "Meeting",
     "in_room": "In room",
     "preview": "Meeting preview",
@@ -894,7 +933,8 @@
     "settings_about": "About",
     "settings_meeting": "Audio & video",
     "settings_remote_control": "Remote control",
-    "settings_permissions": "Clients & rooms"
+    "settings_permissions": "Clients & rooms",
+    "settings_application": "Application"
   },
   "file_library": {
     "search": "Search files…",
@@ -1020,7 +1060,7 @@
   "remote_control": {
     "request_title": "Allow remote control?",
     "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
-    "revoke_hint": "Use “Revoke control” or press Ctrl+Alt+Shift+F10 on this computer to end control. Keyboard forwarding will be added later.",
+    "revoke_hint": "Use “Revoke control” or press Ctrl+Alt+Shift+F10 on this computer to end control.",
     "decline": "Decline",
     "allow": "Allow control",
     "host_active": "{{name}} can control this computer.",
@@ -1028,7 +1068,7 @@
     "revoke_failed": "Could not revoke control. Use Ctrl+Alt+Shift+F10 on the host to stop it.",
     "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
     "reconnecting": "Reconnecting control",
-    "surface": "Remote control; press Escape to end control.",
+    "surface": "Remote control; press {{shortcut}} to end control.",
     "request": "Request control",
     "waiting": "Waiting for approval",
     "cancel": "Cancel request",
@@ -1036,6 +1076,15 @@
     "more_choices": "More approval options",
     "allow_remember": "Approve and add to allowlist",
     "deny_remember": "Reject and add to blocklist",
-    "share_first_screen": "Approval shares Screen 1 and its audio with everyone in the room."
+    "share_first_screen": "Approval shares Screen 1 and its audio with everyone in the room.",
+    "keyboard_control": "Keyboard control",
+    "keyboard_enable": "Enable keyboard control",
+    "keyboard_disable": "Disable keyboard control",
+    "keyboard_show": "Show keyboard",
+    "keyboard_hide": "Hide keyboard",
+    "keyboard_input": "Type on the remote computer",
+    "text_too_long": "Text is too long. Send it in smaller parts.",
+    "text_failed": "Input could not be fully sent. Check the remote text before trying again.",
+    "system_keyboard_stopped": "System keyboard forwarding stopped. Click the remote screen to try again, or turn off system shortcuts in Remote control settings."
   }
 }

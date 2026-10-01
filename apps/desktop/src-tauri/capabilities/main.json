@@ -5,6 +5,13 @@
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-application-configure",
+    "allow-application-close-watch",
+    "allow-application-close-unwatch",
+    "allow-application-close-respond",
+    "allow-keyboard-start",
+    "allow-keyboard-renew",
+    "allow-keyboard-stop",
     "allow-remote-control-open",
     "allow-remote-control-status",
     "allow-remote-control-end",

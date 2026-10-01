@@ -36,9 +36,18 @@ pub struct Snapshot {
     pub client_id: Option<String>,
     pub closed: bool,
 }
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum ControlEvent {
+    Granted(String),
+    Ended,
+}
+pub type Observer = Arc<dyn Fn(ControlEvent) + Send + Sync>;
 #[cfg(not(windows))]
 impl Service {
+    pub fn observe(&self, _: Observer) {}
+    pub fn stop_capture(&self, _: &str) {}
     pub fn close(&self) {}
+    pub fn emergency_revoke(&self) {}
     pub fn open(&self) -> Result<String, String> {
         Err("Remote input requires Windows".into())
     }
@@ -116,5 +125,6 @@ pub async fn remote_control_approve(
     let s = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || s.approve(&owner_id, &consent_id, approve))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    Ok(())
 }

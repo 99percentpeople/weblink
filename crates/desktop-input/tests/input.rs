@@ -361,6 +361,24 @@ fn exact_grant_and_live_binding_are_required_before_injection() {
     assert_eq!(e.input(&g, key(true), now), Err(Error::Unauthorized));
 }
 #[test]
+fn stopping_only_the_controlled_capture_releases_input_and_ends_its_grant() {
+    let (mut e, f, g, now) = setup();
+    let mut other = target();
+    other.binding.capture_session_id = "other-capture".into();
+    other.binding.target.source_id = "other-screen".into();
+    other.binding.target.media_id = "other-media".into();
+    assert!(e.register(other.clone()));
+    e.input(&g, key(true), now).unwrap();
+    f.0.borrow_mut().actions.clear();
+    e.invalidate(&other.binding);
+    assert_eq!(e.status().grant.as_ref(), Some(&g));
+    assert!(f.0.borrow().actions.is_empty());
+    e.invalidate(&g.binding);
+    assert!(e.status().grant.is_none());
+    assert!(!f.0.borrow().actions.is_empty());
+    assert_eq!(e.input(&g, key(true), now), Err(Error::Unauthorized));
+}
+#[test]
 fn heartbeat_gap_releases_input_and_preserves_consent_until_a_fresh_activation() {
     let (mut e, f, g, now) = setup();
     let ctrl = ScanCode::new(0x1d, true).unwrap();

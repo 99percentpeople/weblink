@@ -3,12 +3,6 @@ import {
   Motion,
 } from "@/components/ui/motion";
 import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
-import {
   createEffect,
   createMemo,
   createSignal,
@@ -77,7 +71,7 @@ export function MeetingControls(props: {
   onCollapsedChange?(collapsed: boolean): void;
 }) {
   const [menu, setMenu] = createSignal<
-    "audio" | "camera" | "pip" | null
+    "audio" | "camera" | null
   >(null);
   const displayedMenu = createMemo<"audio" | "camera">(
     (previous) =>
@@ -89,7 +83,6 @@ export function MeetingControls(props: {
   let footer!: HTMLElement;
   let audioToggle: HTMLButtonElement | undefined;
   let cameraToggle: HTMLButtonElement | undefined;
-  let pipToggle: HTMLButtonElement | undefined;
   let collapseToggle: HTMLButtonElement | undefined;
   let restoreToggle: HTMLButtonElement | undefined;
   const toggleCollapsed = (collapsed: boolean) => {
@@ -100,19 +93,15 @@ export function MeetingControls(props: {
   };
   const closeMenu = (restoreFocus = false) => {
     const toggle =
-      menu() === "audio"
-        ? audioToggle
-        : menu() === "camera"
-          ? cameraToggle
-          : pipToggle;
+      menu() === "audio" ? audioToggle : cameraToggle;
     setMenu(null);
     if (restoreFocus) toggle?.focus();
   };
-  const toggleMenu = (next: "audio" | "camera" | "pip") => {
+  const toggleMenu = (next: "audio" | "camera") => {
     if (menu() === next) closeMenu();
     else {
       setMenu(next);
-      if (next !== "pip") props.devices?.refresh();
+      props.devices?.refresh();
     }
   };
   createEffect(() => {
@@ -185,9 +174,7 @@ export function MeetingControls(props: {
           aria-hidden={props.collapsed}
         >
           <AnimatePresence
-            when={Boolean(
-              props.devices && menu() && menu() !== "pip",
-            )}
+            when={Boolean(props.devices && menu())}
           >
             <MeetingDeviceMenu
               mode={displayedMenu()}
@@ -199,43 +186,6 @@ export function MeetingControls(props: {
               onToggleAudio={props.onToggleAudio}
               onClose={() => closeMenu(true)}
             />
-          </AnimatePresence>
-          <AnimatePresence
-            when={
-              menu() === "pip" &&
-              Boolean(props.pip?.supported())
-            }
-          >
-            <Motion.section
-              id="meeting-pip-settings"
-              class="meeting-device-menu meeting-pip-settings"
-              aria-label={t("meeting.pip_settings")}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{
-                duration: 0.18,
-                ease: "easeOut",
-              }}
-            >
-              <Switch
-                checked={props.pip?.automatic()}
-                onChange={(value) =>
-                  props.pip?.setAutomatic(value)
-                }
-                class="flex items-center justify-between gap-4"
-              >
-                <SwitchLabel>
-                  {t("meeting.pip_automatic")}
-                </SwitchLabel>
-                <SwitchControl>
-                  <SwitchThumb />
-                </SwitchControl>
-              </Switch>
-              <p class="meeting-device-hint">
-                {t("meeting.pip_automatic_hint")}
-              </p>
-            </Motion.section>
           </AnimatePresence>
           <div class="meeting-controls-group">
             <div class="meeting-device-control">
@@ -453,20 +403,6 @@ export function MeetingControls(props: {
             >
               {(pip) => (
                 <div class="meeting-device-control">
-                  <Show when={!props.compact}>
-                    <button
-                      ref={pipToggle}
-                      type="button"
-                      class="meeting-device-toggle"
-                      aria-label={t("meeting.pip_settings")}
-                      title={t("meeting.pip_settings")}
-                      aria-expanded={menu() === "pip"}
-                      aria-controls="meeting-pip-settings"
-                      onClick={() => toggleMenu("pip")}
-                    >
-                      <ChevronUp />
-                    </button>
-                  </Show>
                   <button
                     type="button"
                     class="meeting-control"

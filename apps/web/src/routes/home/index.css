@@ -53,6 +53,12 @@
 .meeting-member-count {
   @apply gap-1.75 w-auto px-2 py-0 text-[12px];
 }
+.meeting-status-pill {
+  @apply bg-card flex min-h-10 min-w-0 items-center gap-[7px] rounded-full border py-[5px] pl-2.5 pr-1.5 text-[12px] max-md:min-h-9 max-md:gap-[5px] max-md:py-1 max-md:pl-2 max-md:pr-[5px] max-md:text-[11px];
+}
+.meeting-status-action {
+  @apply bg-accent text-accent-foreground hover:bg-secondary shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] leading-4 max-md:px-2 max-md:py-[5px];
+}
 .meeting-workspace {
   @apply relative flex min-h-0 min-w-0 flex-1 gap-0;
   margin-bottom: calc(
@@ -243,6 +249,11 @@
 .meeting-tile:hover .meeting-tile-actions,
 .meeting-tile:focus-within .meeting-tile-actions {
   @apply opacity-100;
+}
+@media (hover: none), (pointer: coarse) {
+  .meeting-tile-actions {
+    @apply opacity-100;
+  }
 }
 .meeting-panel-slot {
   /* Leave room for four tabs, both actions, padding and the outer margin. */
@@ -443,12 +454,6 @@
   }
 }
 
-.meeting-pip-settings {
-  @apply p-4.5;
-}
-.meeting-pip-settings .meeting-device-hint {
-  @apply mt-2.5;
-}
 html[data-meeting-pip],
 html[data-meeting-pip] body,
 html[data-meeting-pip] body > div {

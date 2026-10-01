@@ -1,6 +1,6 @@
-//! Bounded pointer wire contract and cross-channel ordering; contains no transport or OS calls.
+//! Bounded input wire contract and cross-channel ordering; contains no transport or OS calls.
 use crate::{
-    input::{Button, Event, Position},
+    input::{Button, Event, Position, ScanCode},
     protocol::{valid_id, MAX_MESSAGE_BYTES},
 };
 use serde::Deserialize;
@@ -25,6 +25,15 @@ pub struct Packet {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PointerEvent {
+    Text {
+        text: String,
+    },
+    Key {
+        #[serde(rename = "scanCode")]
+        scan_code: u16,
+        extended: bool,
+        down: bool,
+    },
     Trackpad {
         action: crate::trackpad::Event,
     },
@@ -56,6 +65,12 @@ impl PointerEvent {
             x.is_finite() && y.is_finite() && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)
         };
         match *self {
+            Self::Text { ref text } => crate::input::valid_text(text),
+            Self::Key {
+                scan_code,
+                extended,
+                ..
+            } => ScanCode::new(scan_code, extended).is_some(),
             Self::Trackpad { action } => action.valid(),
             Self::Touch { ref contacts } => crate::touch::valid_frame(contacts),
             Self::Activate | Self::Pause => true,
@@ -75,6 +90,15 @@ impl PointerEvent {
     }
     fn input(&self) -> Event {
         match *self {
+            Self::Text { ref text } => Event::Text(text.clone()),
+            Self::Key {
+                scan_code,
+                extended,
+                down,
+            } => Event::Key {
+                key: ScanCode::new(scan_code, extended).expect("validated scan code"),
+                down,
+            },
             Self::Trackpad { action } => Event::Trackpad(action),
             Self::Touch { ref contacts } => Event::Touch(contacts.clone()),
             Self::Activate | Self::Pause => Event::ReleaseAll,
@@ -168,7 +192,7 @@ impl Sequencer {
         self.accept_at(p, movement, Instant::now())
     }
     pub fn accept_at(&mut self, p: Packet, movement: bool, received: Instant) -> Vec<Event> {
-        if received.elapsed() > Duration::from_millis(100) {
+        if received.elapsed() > Duration::from_millis(100) || !p.event.valid() {
             return vec![];
         }
         if p.grant_id != self.grant
@@ -255,6 +279,109 @@ mod tests {
     }
     fn sequencer() -> Sequencer {
         Sequencer::new("grant".into(), "connection".into(), "geometry".into())
+    }
+    #[test]
+    fn text_is_bounded_unicode_on_the_current_reliable_input_epoch() {
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"text","text":"中😀"}});
+        let p = parse(value.to_string().as_bytes()).unwrap();
+        let mut s = sequencer();
+        assert!(s.accept(p.clone(), false).is_empty());
+        s.accept(packet(1, PointerEvent::Activate), false);
+        assert!(s.accept(p.clone(), true).is_empty());
+        let mut stale = p.clone();
+        stale.input_epoch = "retired".into();
+        assert!(s.accept(stale, false).is_empty());
+        assert_eq!(s.accept(p.clone(), false), vec![Event::Text("中😀".into())]);
+        assert!(s.accept(p, false).is_empty());
+        for text in [
+            "".to_string(),
+            "a\n".into(),
+            "\t".into(),
+            "\u{0085}".into(),
+            "a".repeat(65),
+            "😀".repeat(33),
+        ] {
+            value["event"]["text"] = serde_json::json!(text);
+            assert!(parse(value.to_string().as_bytes()).is_none());
+        }
+        value["event"]["text"] = serde_json::json!("😀".repeat(32));
+        assert!(parse(value.to_string().as_bytes()).is_some());
+        let malformed = value.to_string().replace(&"😀".repeat(32), "\\ud800");
+        assert!(parse(malformed.as_bytes()).is_none());
+    }
+    #[test]
+    fn keyboard_packets_validate_scan_codes_and_require_ordered_authorized_input() {
+        let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"key","scanCode":29,"extended":true,"down":true}});
+        let key = parse(value.to_string().as_bytes()).unwrap();
+        let mut s = sequencer();
+        assert!(s.accept(key.clone(), false).is_empty());
+        s.accept(packet(1, PointerEvent::Activate), false);
+        assert!(s.accept(key.clone(), true).is_empty());
+        let mut stale = key.clone();
+        stale.grant_id = "retired".into();
+        assert!(s.accept(stale, false).is_empty());
+        assert_eq!(
+            s.accept(key.clone(), false),
+            vec![Event::Key {
+                key: ScanCode::new(29, true).unwrap(),
+                down: true
+            }]
+        );
+        assert!(s.accept(key.clone(), false).is_empty());
+        let mut repeated = key;
+        repeated.sequence = 3;
+        assert_eq!(
+            s.accept(repeated, false),
+            vec![Event::Key {
+                key: ScanCode::new(29, true).unwrap(),
+                down: true
+            }]
+        );
+        assert_eq!(
+            s.accept(packet(4, PointerEvent::Pause), false),
+            vec![Event::ReleaseAll]
+        );
+        assert!(s
+            .accept(
+                packet(
+                    5,
+                    PointerEvent::Key {
+                        scan_code: 29,
+                        extended: true,
+                        down: false
+                    }
+                ),
+                false
+            )
+            .is_empty());
+        for event in [
+            serde_json::json!({"type":"key","scanCode":0,"extended":false,"down":true}),
+            serde_json::json!({"type":"key","scanCode":30,"extended":true,"down":true}),
+            serde_json::json!({"type":"key","scanCode":65536,"extended":false,"down":true}),
+            serde_json::json!({"type":"key","scanCode":1.5,"extended":false,"down":true}),
+            serde_json::json!({"type":"key","scanCode":30,"extended":false}),
+            serde_json::json!({"type":"key","scanCode":30,"extended":false,"down":"true"}),
+        ] {
+            let mut invalid = value.clone();
+            invalid["event"] = event;
+            assert!(parse(invalid.to_string().as_bytes()).is_none());
+        }
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        // Public callers also cannot bypass validation or panic the conversion.
+        assert!(s
+            .accept(
+                packet(
+                    2,
+                    PointerEvent::Key {
+                        scan_code: 0,
+                        extended: false,
+                        down: true
+                    }
+                ),
+                false
+            )
+            .is_empty());
     }
     #[test]
     fn relative_gestures_are_bounded_and_reliable_only() {

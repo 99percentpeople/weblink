@@ -67,12 +67,14 @@ import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 import { AudioPlayerProvider } from "./routes/home/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
+import { ApplicationCloseDialog } from "./components/app/application-close-dialog";
 import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 import { ModalProvider } from "@/components/dialogs/base";
 import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
+import { createApplicationSettingsSync } from "@/libs/application/application-settings";
 
 const InnerApp = (props: ParentProps) => {
   const { conversationHistory } = useAppState();
@@ -265,6 +267,13 @@ const InnerApp = (props: ParentProps) => {
   }
   return (
     <>
+      <Show when={platform.application}>
+        {(application) => (
+          <ApplicationCloseDialog
+            application={application()}
+          />
+        )}
+      </Show>
       <AppWakeLock enabled={appState.options.wakeLock} />
       <RoomConnectionOverlay />
       <div class="app-shell">
@@ -378,6 +387,33 @@ export default function App(props: RouteSectionProps) {
     console.error(err);
     toast.error(err?.message ?? String(err));
   });
+
+  if (platform.application) {
+    const settings = createApplicationSettingsSync(
+      platform.application,
+      (error) => {
+        console.error(
+          "Could not update native application settings",
+          error,
+        );
+        toast.error(t("setting.application.update_failed"));
+      },
+    );
+    createEffect(() => {
+      const { closeBehavior, hideOnRemoteControl } =
+        appState.options.application;
+      const locale = appState.options.locale;
+      settings.update({
+        closeBehavior,
+        hideOnRemoteControl,
+        locale:
+          locale === "zh-cn" || locale === "zh-tw"
+            ? locale
+            : "en",
+      });
+    });
+    onCleanup(() => settings.close());
+  }
 
   const wallpaper = createMemo(() =>
     resolveWallpaper(

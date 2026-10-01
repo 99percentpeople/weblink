@@ -20,6 +20,7 @@ import { Portal } from "solid-js/web";
 import { t } from "@/i18n";
 import { MeetingCollapseButton } from "./meeting-collapse-button";
 import { MeetingTile } from "./meeting-tile";
+import type { RegisterMeetingMainFeatures } from "./meeting-main-view";
 import {
   selectMeetingFeaturedSource,
   type MeetingSource,
@@ -40,12 +41,17 @@ export function MeetingStage(
     railCollapsed: boolean;
     onRailCollapsedChange(collapsed: boolean): void;
     onPin(id: string): void;
-    onVideoPipEnter?(id: string): void;
+    onActivate?(id: string, action: () => void): void;
+    registerFeatures?: RegisterMeetingMainFeatures;
     onStop(trackId: string): void;
     transitionLayout(update: () => void): void;
   }>,
 ) {
   const audio = useAudioPlayer();
+  let disposed = false;
+  onCleanup(() => {
+    disposed = true;
+  });
   const [grid, setGrid] = createSignal<HTMLDivElement>();
   const [frame, setFrame] = createSignal<HTMLDivElement>();
   const [rail, setRail] = createSignal<HTMLDivElement>();
@@ -222,7 +228,9 @@ export function MeetingStage(
             exitRect={exitRects().get(source().id)}
             playbackActive={
               activeIds().has(source().id) &&
-              props.active !== false &&
+              props.active !== false
+            }
+            layoutVisible={
               layout().tileWidth > 0 &&
               (!featured() ||
                 source().id === featured()?.id ||
@@ -265,9 +273,36 @@ export function MeetingStage(
                 ? () => props.onPin(source().id)
                 : undefined
             }
-            onVideoPipEnter={() =>
-              props.onVideoPipEnter?.(source().id)
+            onActivate={
+              props.onActivate
+                ? (action) => {
+                    props.onActivate?.(tile.id, () => {
+                      // A caller may still be inside a reactive batch: the pin
+                      // changed, but its effect has not scheduled the DOM move.
+                      // Finish that batch before flushing. A microtask retains
+                      // the gesture without waiting for an animation frame.
+                      queueMicrotask(() => {
+                        if (
+                          disposed ||
+                          props.active === false ||
+                          selectMeetingFeaturedSource(
+                            props.sources,
+                            props.pinnedId,
+                          )?.id !== tile.id
+                        )
+                          return;
+                        layout.flush();
+                        if (
+                          activeIds().has(tile.id) &&
+                          featured()?.id === tile.id
+                        )
+                          action();
+                      });
+                    });
+                  }
+                : undefined
             }
+            registerFeatures={props.registerFeatures}
             onStop={
               source().local && source().track
                 ? () => props.onStop(source().track!.id)

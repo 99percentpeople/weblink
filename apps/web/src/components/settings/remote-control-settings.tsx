@@ -30,6 +30,8 @@ import {
   type TouchMode,
 } from "@/libs/domain/remote-control/touch-options";
 
+import RemoteKeyboardSettings from "./remote-keyboard-settings";
+
 export default function RemoteControlSettings() {
   const options = () =>
     resolveRemoteTouchOptions(appState.options.remoteTouch);
@@ -42,6 +44,9 @@ export default function RemoteControlSettings() {
       <h3 id="remote-control-settings" class="h3">
         {t("app_menu.settings_remote_control")}
       </h3>
+      <h4 class="h3">{t(`${prefix}.keyboard_heading`)}</h4>
+      <RemoteKeyboardSettings />
+      <h4 class="h3">{t(`${prefix}.touch_heading`)}</h4>
       <p class="muted">{t(`${prefix}.description`)}</p>
       <div class="flex flex-col gap-2">
         <Label id="remote-touch-mode">

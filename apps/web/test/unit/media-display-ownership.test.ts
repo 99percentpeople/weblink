@@ -78,6 +78,11 @@ function mount(
     return {
       setElement,
       dispose,
+      enter:
+        "requestFullscreen" in hook
+          ? hook.requestFullscreen
+          : hook.requestPictureInPicture,
+      busy: hook.isBusy,
       isThis:
         "isThisElementFullscreen" in hook
           ? hook.isThisElementFullscreen
@@ -175,3 +180,39 @@ describe.each(["fullscreen", "pip"] as const)(
     });
   },
 );
+
+describe("pending fullscreen ownership", () => {
+  it.each(["cancel", "dispose", "replace"])(
+    "exits a late fullscreen entry after %s without affecting another tile",
+    async (action) => {
+      const first = video();
+      let entered!: () => void;
+      first.requestFullscreen = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            entered = resolve;
+          }),
+      );
+      const owner = mount("fullscreen", first);
+      const request = owner.enter();
+      expect(
+        first.requestFullscreen,
+      ).toHaveBeenCalledOnce();
+      expect(owner.busy()).toBe(true);
+      expect(owner.enter()).toBe(request);
+      let exit: Promise<void> | undefined;
+      if (action === "cancel") exit = owner.exit();
+      if (action === "dispose") owner.dispose();
+      if (action === "replace") owner.setElement(video());
+      activate("fullscreen", first);
+      entered();
+      await request;
+      await exit;
+      expect(fullscreenElement).toBeNull();
+      const other = video();
+      activate("fullscreen", other);
+      await owner.exit();
+      expect(fullscreenElement).toBe(other);
+    },
+  );
+});

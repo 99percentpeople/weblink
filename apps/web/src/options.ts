@@ -11,6 +11,8 @@ export {
 } from "@/libs/state/permission-options";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
+import { resolveApplicationOptions } from "@/libs/domain/application-options";
 import { makePersisted } from "@solid-primitives/storage";
 import {
   createEffect,
@@ -75,6 +77,14 @@ export function initializeAppOptions() {
       return defaults;
     }
 
+    const legacyPip = localStorage.getItem(
+      "meeting-auto-picture-in-picture",
+    );
+    defaults.application = resolveApplicationOptions(
+      undefined,
+      legacyPip,
+    );
+
     const raw = localStorage.getItem(
       STORAGE_KEYS.appOptions,
     );
@@ -98,8 +108,15 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        application: resolveApplicationOptions(
+          parsed.application,
+          legacyPip,
+        ),
         remoteTouch: resolveRemoteTouchOptions(
           parsed.remoteTouch,
+        ),
+        remoteKeyboard: resolveRemoteKeyboardOptions(
+          parsed.remoteKeyboard,
         ),
         bufferedAmountLowThreshold:
           legacyBufferedAmount !== undefined
@@ -163,6 +180,27 @@ export function initializeAppOptions() {
 }
 
 export const appOptions = appState.options;
+
+/** Commit before invoking native exit: a later reactive effect may not run. */
+export function rememberApplicationCloseBehavior(
+  closeBehavior: "tray" | "exit",
+) {
+  localStorage.setItem(
+    STORAGE_KEYS.appOptions,
+    JSON.stringify({
+      ...appState.options,
+      application: {
+        ...appState.options.application,
+        closeBehavior,
+      },
+    }),
+  );
+  setAppOptions(
+    "application",
+    "closeBehavior",
+    closeBehavior,
+  );
+}
 
 export const setAppOptions: SetStoreFunction<AppOption> = ((
   ...args: any[]

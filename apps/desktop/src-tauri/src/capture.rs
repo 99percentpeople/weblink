@@ -64,9 +64,15 @@ pub async fn capture_status(
 #[tauri::command]
 pub async fn capture_stop(
     service: State<'_, Service>,
+    control_service: State<'_, crate::remote_control::Shared>,
     session_id: String,
 ) -> Result<CaptureStatus, String> {
-    run(service, move |s| s.stop(session_id)).await
+    let control = control_service.inner().clone();
+    run(service, move |s| {
+        control.stop_capture(&session_id);
+        s.stop(session_id)
+    })
+    .await
 }
 
 #[tauri::command]

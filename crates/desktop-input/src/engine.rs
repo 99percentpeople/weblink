@@ -202,12 +202,7 @@ impl<D: Device> InputState<D> {
             Event::Key { key, down } => transition = Some((Held::Key(key), down)),
             Event::Text(text) => {
                 let started = Instant::now();
-                if text.is_empty()
-                    || text.len() > 256
-                    || text.encode_utf16().count() > 64
-                    || text.chars().any(char::is_control)
-                    || !self.held.is_empty()
-                {
+                if !crate::input::valid_text(&text) || !self.held.is_empty() {
                     return Err(Error::Invalid);
                 }
                 for unit in text.encode_utf16() {

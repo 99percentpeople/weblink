@@ -42,6 +42,7 @@ struct Host {
     peers: HashMap<String, Peer>,
     pending: Option<Consent>,
     active: Option<Active>,
+    observer: Option<Observer>,
 }
 impl Host {
     fn snapshot(&self) -> Snapshot {
@@ -58,11 +59,34 @@ impl Host {
         if let Some(active) = self.active.take() {
             if let Some(peer) = self.peers.get(&active.grant.binding.target.media_id) {
                 peer.endpoint.send(&Signal::Revoke {
-                    grant_id: active.grant.id,
+                    grant_id: active.grant.id.clone(),
                     reason: protocol::RevocationReason::Local,
                 });
             }
+            if let Some(observer) = &self.observer {
+                observer(ControlEvent::Ended);
+            }
         }
+    }
+    fn remove_peer(&mut self, id: &str) {
+        let Some(peer) = self.peers.get(id) else {
+            return;
+        };
+        // Atomically invalidate input before waiting for the worker. Disposing
+        // the endpoint also closes the viewer's control channels immediately.
+        peer.endpoint.dispose();
+        let _ = self.worker.invalidate(peer.binding.clone());
+        if self.pending.as_ref().is_some_and(|p| p.media == id) {
+            self.pending = None;
+        }
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|a| a.grant.binding.target.media_id == id)
+        {
+            self.end_grant();
+        }
+        self.peers.remove(id);
     }
     fn synchronize_input(&mut self) {
         if !self.worker.status().input_suspended {
@@ -111,19 +135,7 @@ impl Host {
             }
             peer.endpoint.flush();
             if peer.endpoint.is_closed() {
-                let peer = self.peers.remove(&id).unwrap();
-                peer.endpoint.dispose();
-                let _ = self.worker.invalidate(peer.binding);
-                if self.pending.as_ref().is_some_and(|p| p.media == id) {
-                    self.pending = None;
-                }
-                if self
-                    .active
-                    .as_ref()
-                    .is_some_and(|a| a.grant.binding.target.media_id == id)
-                {
-                    self.end_grant();
-                }
+                self.remove_peer(&id);
                 continue;
             }
             if !peer.ready && peer.endpoint.is_open() {
@@ -133,6 +145,8 @@ impl Host {
                     "generation": id,
                     "relativePointer": true,
                     "persistentControl": true,
+                    "keyboard": true,
+                    "textInput": true,
                     "touchpadPan": self.worker.status().pan_supported,
                     "touchContacts": if self.worker.status().touch_supported { weblink_desktop_input::touch::MAX_CONTACTS } else { 0 },
                 }));
@@ -302,8 +316,28 @@ impl Owner {
 #[derive(Default)]
 pub struct Service {
     owner: Mutex<Option<Arc<Owner>>>,
+    observer: Mutex<Option<Observer>>,
 }
 impl Service {
+    pub fn observe(&self, observer: Observer) {
+        *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(observer);
+    }
+    pub fn stop_capture(&self, session: &str) {
+        let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let Some(owner) = owner else {
+            return;
+        };
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let ids: Vec<_> = host
+            .peers
+            .iter()
+            .filter(|(_, peer)| peer.binding.capture_session_id == session)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            host.remove_peer(&id);
+        }
+    }
     fn owner(&self, id: &str) -> Result<Arc<Owner>, String> {
         self.owner
             .lock()
@@ -330,6 +364,11 @@ impl Service {
                 peers: HashMap::new(),
                 pending: None,
                 active: None,
+                observer: self
+                    .observer
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
             }),
             thread: Mutex::new(None),
         });
@@ -393,6 +432,18 @@ impl Service {
         h.end_grant();
         Ok(())
     }
+    /// Preserve the host's emergency path while the same app captures controller keys.
+    pub fn emergency_revoke(&self) {
+        let id = self
+            .owner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|o| o.id.clone());
+        if let Some(id) = id {
+            let _ = self.revoke(&id);
+        }
+    }
     pub fn approve(&self, id: &str, consent: &str, approve: bool) -> Result<(), String> {
         let o = self.owner(id)?;
         let mut h = o.host.lock().unwrap_or_else(|e| e.into_inner());
@@ -434,6 +485,9 @@ impl Service {
             let _ = h.worker.revoke();
             h.end_grant();
             return Err("Control channel ended".into());
+        }
+        if let (Some(observer), Signal::Grant { grant_id, .. }) = (&h.observer, &signal) {
+            observer(ControlEvent::Granted(grant_id.clone()));
         }
         Ok(())
     }

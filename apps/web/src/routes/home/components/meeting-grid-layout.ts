@@ -89,6 +89,7 @@ export function createMeetingGridLayout(
 ): Accessor<MeetingGridLayout> & {
   measure(): void;
   schedule(update: () => void): void;
+  flush(): void;
 } {
   const [size, setSize] = createSignal(
     { width: 0, height: 0 },
@@ -102,6 +103,25 @@ export function createMeetingGridLayout(
   let pending = size();
   let pendingUpdate: (() => void) | undefined;
   let disposed = false;
+  const applyPending = () => {
+    if (disposed) return;
+    const update = pendingUpdate;
+    pendingUpdate = undefined;
+    const apply = () =>
+      batch(() => {
+        update?.();
+        setSize(pending);
+      });
+    // The first measurement (or a hidden stage) has no visible layout to tween.
+    if (
+      size().width > 0 &&
+      size().height > 0 &&
+      pending.width > 0 &&
+      pending.height > 0
+    )
+      transitionLayout(apply);
+    else apply();
+  };
   const scheduleFrame = () => {
     if (disposed || frame !== undefined) return;
     // PiP keeps rendering while the opener's animation frames are suspended.
@@ -109,23 +129,7 @@ export function createMeetingGridLayout(
       element()?.ownerDocument.defaultView ?? window;
     frame = frameWindow.requestAnimationFrame(() => {
       frame = undefined;
-      if (disposed) return;
-      const update = pendingUpdate;
-      pendingUpdate = undefined;
-      const apply = () =>
-        batch(() => {
-          update?.();
-          setSize(pending);
-        });
-      // The first measurement (or a hidden stage) has no visible layout to tween.
-      if (
-        size().width > 0 &&
-        size().height > 0 &&
-        pending.width > 0 &&
-        pending.height > 0
-      )
-        transitionLayout(apply);
-      else apply();
+      applyPending();
     });
   };
   const measure = () => {
@@ -195,6 +199,15 @@ export function createMeetingGridLayout(
   );
   return Object.assign(layout, {
     measure,
+    flush() {
+      if (disposed || !pendingUpdate) return;
+      if (frame !== undefined)
+        frameWindow?.cancelAnimationFrame(frame);
+      frame = undefined;
+      // Presentation APIs must run after the existing tile has moved, within
+      // the same user gesture, rather than in the next animation frame.
+      applyPending();
+    },
     schedule(update: () => void) {
       pendingUpdate = update;
       scheduleFrame();
