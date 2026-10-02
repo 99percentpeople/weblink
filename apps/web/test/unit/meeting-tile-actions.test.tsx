@@ -70,16 +70,18 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function setup(fullscreen = false) {
+function setup(fullscreen = false, virtualKeyboard = true) {
   const api = new KeyboardAPI();
-  Object.defineProperty(navigator, "virtualKeyboard", {
-    configurable: true,
-    value: api,
-  });
+  if (virtualKeyboard)
+    Object.defineProperty(navigator, "virtualKeyboard", {
+      configurable: true,
+      value: api,
+    });
   const control = {
     supportsText: () => true,
     input: vi.fn(() => true),
     cancel: vi.fn(),
+    resetInput: vi.fn(),
   } as unknown as RemotePointer;
   const action = vi.fn();
   const [host, setHost] = createSignal<HTMLDivElement>();
@@ -124,14 +126,60 @@ function setup(fullscreen = false) {
     );
     return menu;
   };
-  return { api, action, editor, trigger, openMenu, host };
+  const expectEditorReady = () => {
+    expect(document.activeElement).toBe(editor);
+    expect(
+      editor.getAttribute("virtualkeyboardpolicy"),
+    ).toBe("auto");
+    // The optional API observes geometry; focus requests IME on both HTTP and HTTPS.
+    expect(api.show).not.toHaveBeenCalled();
+    expect(api.hide).not.toHaveBeenCalled();
+  };
+  const enterText = async () => {
+    fireEvent.compositionStart(editor);
+    editor.value = "zhongwen";
+    fireEvent.input(editor, {
+      inputType: "insertCompositionText",
+      data: "zhongwen",
+      isComposing: true,
+    });
+    expect(control.input).not.toHaveBeenCalled();
+    editor.value = "中文";
+    fireEvent.compositionEnd(editor, { data: "中文" });
+    fireEvent.input(editor, {
+      inputType: "insertFromComposition",
+      data: "中文",
+    });
+    await waitFor(() =>
+      expect(control.input).toHaveBeenCalledOnce(),
+    );
+    expect(control.input).toHaveBeenCalledWith({
+      type: "text",
+      text: "中文",
+    });
+  };
+  return {
+    api,
+    action,
+    editor,
+    trigger,
+    openMenu,
+    host,
+    expectEditorReady,
+    enterText,
+  };
 }
 
 describe("meeting action menu keyboard focus", () => {
-  it.each([false, true])(
-    "opens the keyboard in the completed touch click and retains focus (fullscreen=%s)",
-    async (fullscreen) => {
-      const f = setup(fullscreen);
+  it.each([
+    { fullscreen: false, virtualKeyboard: false },
+    { fullscreen: false, virtualKeyboard: true },
+    { fullscreen: true, virtualKeyboard: false },
+    { fullscreen: true, virtualKeyboard: true },
+  ])(
+    "opens the keyboard in the completed touch click and retains focus (fullscreen=$fullscreen, virtualKeyboard=$virtualKeyboard)",
+    async ({ fullscreen, virtualKeyboard }) => {
+      const f = setup(fullscreen, virtualKeyboard);
       const menu = await f.openMenu();
       if (fullscreen)
         expect(f.host()!.contains(menu)).toBe(true);
@@ -150,40 +198,45 @@ describe("meeting action menu keyboard focus", () => {
       };
       touch("pointerdown");
       touch("pointerup");
-      expect(f.api.show).not.toHaveBeenCalled();
+      expect(document.activeElement).not.toBe(f.editor);
       // Mobile browsers synthesize mouse focus before the completed click.
       fireEvent.mouseDown(item);
       item.focus();
       fireEvent.mouseUp(item);
+      expect(document.activeElement).not.toBe(f.editor);
       fireEvent.click(item);
-      expect(f.api.show).toHaveBeenCalledOnce();
-      expect(document.activeElement).toBe(f.editor);
+      f.expectEditorReady();
       await new Promise((resolve) =>
         setTimeout(resolve, 0),
       );
-      expect(document.activeElement).toBe(f.editor);
+      f.expectEditorReady();
       expect(screen.queryByRole("menu")).toBeNull();
-      expect(f.api.hide).not.toHaveBeenCalled();
+      await f.enterText();
       if (fullscreen)
         expect(document.fullscreenElement).toBe(f.host());
     },
   );
 
-  it("retains editor focus after keyboard selection and deferred menu cleanup", async () => {
-    const f = setup();
-    await f.openMenu();
-    fireEvent.keyDown(
-      screen.getByRole("menuitem", {
-        name: "remote_control.keyboard_show",
-      }),
-      { key: "Enter" },
-    );
-    expect(f.api.show).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(f.editor);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.activeElement).toBe(f.editor);
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
+  it.each([false, true])(
+    "retains editor focus after keyboard selection and deferred menu cleanup (virtualKeyboard=%s)",
+    async (virtualKeyboard) => {
+      const f = setup(false, virtualKeyboard);
+      await f.openMenu();
+      fireEvent.keyDown(
+        screen.getByRole("menuitem", {
+          name: "remote_control.keyboard_show",
+        }),
+        { key: "Enter" },
+      );
+      f.expectEditorReady();
+      await new Promise((resolve) =>
+        setTimeout(resolve, 0),
+      );
+      f.expectEditorReady();
+      expect(screen.queryByRole("menu")).toBeNull();
+      await f.enterText();
+    },
+  );
 
   it("returns focus to the trigger after an ordinary action", async () => {
     const f = setup();
