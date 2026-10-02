@@ -6,7 +6,7 @@ rust-version = "1.94"
 license = "MIT"
 
 [lib]
-name = "weblink_desktop"
+name = "weblink_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -42,8 +42,11 @@ Run the NSIS command on Windows. For a host-only build without installers use
 `bun run build:desktop --no-bundle`. Desktop frontend files go to
 `apps/desktop/dist`; Rust binaries and installers go to root `target/`.
 CI runs shared web/desktop TypeScript checks and tests once. `desktop-dev.yml`
-then runs Rust tests and a `--no-bundle` build in the same release profile, with
-LTO disabled and 16 codegen units to reduce compilation and cache overhead.
+then runs Rust tests and a `--no-bundle` build in the same release profile and
+with the same `tauri/custom-protocol` feature. Both desktop workflows build the
+frontend before Rust tests; `tauri.ci.conf.json` skips rebuilding it during
+packaging. Normal local builds retain their frontend build hook. Dev CI disables
+LTO and uses 16 codegen units to reduce compilation and cache overhead.
 Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
 machine needs WebView2 installed. Only `public` builds save this dependency cache.
 

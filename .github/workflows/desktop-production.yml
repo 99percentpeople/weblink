@@ -33,17 +33,20 @@ jobs:
             [System.Text.UTF8Encoding]::new($false)
           )
       - name: Install Rust
-        run: rustup show
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: windows-production-release
       - run: bun install --frozen-lockfile
       # Shared TypeScript checks and tests already passed in the caller's Checks job.
       - run: cargo fmt --all --check
-      - run: cargo test --workspace --locked --release
+      # Production-mode tests embed the frontend and use the CLI's Cargo features.
+      - name: Build desktop frontend
+        run: bun run --cwd apps/web build:desktop
+      - run: cargo test --workspace --locked --release --features tauri/custom-protocol
       - name: Build Windows installer
-        run: bun run build:desktop --bundles nsis
-      - uses: actions/upload-artifact@v4
+        run: bun run build:desktop --bundles nsis --config src-tauri/tauri.ci.conf.json
+      - uses: actions/upload-artifact@v7
         with:
           name: weblink-windows-x64-installer
           path: target/release/bundle/nsis/*.exe

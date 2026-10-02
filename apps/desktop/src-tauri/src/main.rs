@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    weblink_desktop::run();
+    weblink_desktop_lib::run();
 }

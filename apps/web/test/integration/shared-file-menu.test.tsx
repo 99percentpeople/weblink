@@ -99,10 +99,14 @@ describe("shared file header menu", () => {
     expect(
       cacheManager.library.setSharedBatch,
     ).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Cancel selection"));
+    fireEvent.click(
+      await screen.findByText("Cancel selection"),
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     await choose("shared_files.from_library");
-    fireEvent.click(screen.getByText("Confirm selection"));
+    fireEvent.click(
+      await screen.findByText("Confirm selection"),
+    );
     expect(
       cacheManager.library.setSharedBatch,
     ).toHaveBeenCalledWith(

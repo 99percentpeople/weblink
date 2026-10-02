@@ -1,5 +1,5 @@
 import { userErrorMessage } from "@/libs/user-error";
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, Suspense } from "solid-js";
 import {
   ChevronDown,
   FolderUp,
@@ -18,11 +18,15 @@ import {
 import { cacheManager } from "@/libs/application/cache-service";
 import { handleSelectFolder } from "@/libs/utils/process-file";
 import { t } from "@/i18n";
-import FilePickerDialog from "./file-picker-dialog";
+import { preload } from "@/libs/utils/preload";
 import {
   createLibraryImport,
   type LibraryImport,
 } from "@/libs/hooks/create-library-import";
+
+const FilePickerDialog = preload(
+  () => import("./file-picker-dialog"),
+);
 
 const report = (error: unknown) =>
   toast.error(
@@ -110,21 +114,23 @@ export function SharedFileMenu(props: {
         </DropdownMenuContent>
       </DropdownMenu>
       <Show when={picking()}>
-        <FilePickerDialog
-          sharing
-          open
-          onClose={() => setPicking(false)}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            if (trigger.isConnected) trigger.focus();
-          }}
-          onSelect={(ids) => {
-            setPicking(false);
-            void cacheManager.library
-              .setSharedBatch(ids, true)
-              .catch(report);
-          }}
-        />
+        <Suspense>
+          <FilePickerDialog
+            sharing
+            open
+            onClose={() => setPicking(false)}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (trigger.isConnected) trigger.focus();
+            }}
+            onSelect={(ids) => {
+              setPicking(false);
+              void cacheManager.library
+                .setSharedBatch(ids, true)
+                .catch(report);
+            }}
+          />
+        </Suspense>
       </Show>
     </div>
   );

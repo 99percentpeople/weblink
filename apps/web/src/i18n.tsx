@@ -20,16 +20,25 @@ import { appState } from "@/libs/state/app-state";
 
 import en from "@/assets/i18n/en-us.json";
 
+const dictionaryLoaders = import.meta.glob<{
+  default: typeof en;
+}>([
+  "./assets/i18n/*.json",
+  "!./assets/i18n/en-us.json",
+  "!./assets/i18n/languages.json",
+]);
+const englishDictionary = flatten(en);
+
 async function importDictionary(locale: Locale) {
   const localeKey = locale.toLowerCase();
-  if (!localeOptionsMap[localeKey]) {
+  if (localeKey === "en-us") return englishDictionary;
+  const loader =
+    dictionaryLoaders[`./assets/i18n/${localeKey}.json`];
+  if (!localeOptionsMap[localeKey] || !loader) {
     console.warn(`Locale ${locale} not found`);
-    return flatten(en);
+    return englishDictionary;
   }
-  if (localeKey === "en-us") return flatten(en);
-  const data = await import(
-    `./assets/i18n/${localeKey}.json`
-  );
+  const data = await loader();
   return flatten(data.default);
 }
 
@@ -45,7 +54,7 @@ export const isDictLoaded = createMemo(() => {
 const translate = translator(dict, resolveTemplate);
 
 const fallback = translator(
-  () => flatten(en),
+  () => englishDictionary,
   resolveTemplate,
 );
 
