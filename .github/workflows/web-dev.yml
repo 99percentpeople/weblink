@@ -16,6 +16,9 @@ jobs:
       url: https://dev.webl.ink
     env:
       PAGES_PROJECT_NAME: weblink
+      VITE_WEBSOCKET_URL: ${{ vars.VITE_WEBSOCKET_URL }}
+      WEBLINK_STUN_SERVERS: ${{ vars.WEBLINK_STUN_SERVERS }}
+      VITE_TURN_SERVERS: ${{ secrets.VITE_TURN_SERVERS }}
 
     steps:
       - name: Check out tested commit
@@ -38,14 +41,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build development channel
-        env:
-          PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
         run: |
-          if [[ -z "$PAGES_BUILD_ENV" ]]; then
-            echo "::error::Configure PAGES_BUILD_ENV with the development VITE_* / WEBLINK_* settings."
-            exit 1
-          fi
-          printf '%s\n' "$PAGES_BUILD_ENV" > apps/web/.env.dev.local
+          bun apps/web/scripts/check-build-env.ts dev
           bun run build:dev
 
       - name: Deploy dev preview, never production

@@ -147,7 +147,7 @@ behavior, but never silently disables an explicit relay-only policy.
 
 Before publishing the new frontend, configure and deploy the backend endpoint,
 then remove all `|cloudflare` entries from `VITE_TURN_SERVERS` in local settings,
-Docker build arguments, and the Preview/production `PAGES_BUILD_ENV` secrets.
+Docker build arguments, and any frontend build environment overrides.
 Keep any `longterm`/`hmac` entries that users still need. Vite rejects builds with
 obsolete Cloudflare entries rather than embedding provider keys in public JS.
 Old Cloudflare entries already stored in browser settings or invite payloads are
@@ -220,24 +220,29 @@ identify the release.
 3. Configure the following GitHub Actions secrets, either on the repository or
    in its `production` environment:
 
-   | Secret                  | Value                                                                        |
-   | ----------------------- | ---------------------------------------------------------------------------- |
-   | `CLOUDFLARE_ACCOUNT_ID` | Account ID containing the existing Pages project                             |
-   | `CLOUDFLARE_API_TOKEN`  | Pages API token                                                              |
-   | `PAGES_BUILD_ENV`       | Complete production `VITE_*` / `WEBLINK_*` settings in multiline dotenv form |
+   | Secret                 | Value           |
+   | ---------------------- | --------------- |
+   | `CLOUDFLARE_API_TOKEN` | Pages API token |
 
-   A minimal `PAGES_BUILD_ENV` value is:
+   Set public configuration under **Settings → Environments → production →
+   Environment variables**:
 
-   ```dotenv
-   VITE_WEBSOCKET_URL=wss://ws.webl.ink
-   ```
+   | Variable               | Value                                                        |
+   | ---------------------- | ------------------------------------------------------------ |
+   | `VITE_WEBSOCKET_URL`   | `wss://ws.webl.ink`                                          |
+   | `WEBLINK_STUN_SERVERS` | `stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302` |
 
-   Copy any existing production STUN or TURN settings into the same
-   value. Preserve the variable names documented above. The workflow writes this
-   secret into the ignored `apps/web/.env.production.local` file before building. The
-   build runs on GitHub, so variables configured only in the Pages build settings
-   are not supplied to it. `VITE_*` / `WEBLINK_*` values become part of the public frontend;
-   keep the deployment API token in its separate secret.
+   The web and desktop workflows read these values with `vars.*`; the old
+   `PAGES_BUILD_ENV` secret is no longer used. Optional additional static/HMAC
+   TURN configuration can use the `VITE_TURN_SERVERS` secret. Builds run on GitHub,
+   so variables configured only in Pages build settings are not supplied to them.
+   Frontend `VITE_*` / `WEBLINK_*` values are embedded in public JavaScript; keep
+   deployment and TURN provider tokens in GitHub/backend secrets.
+
+   Web and desktop CI validate these settings before building. Missing STUN,
+   the old `VITE_STUN_SERVERS` name, and removed `|cloudflare` TURN entries fail
+   with a configuration error. TURN supplied by the signaling backend does not
+   require a `VITE_TURN_SERVERS` entry.
 
 4. If the GitHub `production` environment restricts allowed deployment refs,
    permit the release tags. Keep any existing approval policy for that environment.
@@ -309,13 +314,10 @@ The GitHub **Preview** environment uses the repository's existing
 `CLOUDFLARE_API_TOKEN` secret (Pages Edit). No account lookup or DNS permission
 is needed for ordinary preview uploads.
 
-The frontend commits only `apps/web/.env.example`. The Preview environment's required
-`PAGES_BUILD_ENV` secret supplies the development `VITE_*` / `WEBLINK_*` settings and is written
-to ignored `apps/web/.env.dev.local` before building.
-
-Production environment secrets are not automatically available in Preview.
-Keep only browser-visible WebSocket/STUN settings and optional additional
-`longterm`/`hmac` TURN endpoints in `PAGES_BUILD_ENV`; Cloudflare TURN keys belong
+Set `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` in Preview's **Environment
+variables**, using the same names as production. Development web and desktop
+builds read these values directly. Production environment variables and secrets
+are not automatically available in Preview; Cloudflare TURN provider keys belong
 to the signaling backend. Regular deployments need no DNS-edit permission.
 
 #### Development custom domain

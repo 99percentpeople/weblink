@@ -13,6 +13,9 @@ jobs:
     timeout-minutes: 35
     environment: Preview
     env:
+      VITE_WEBSOCKET_URL: ${{ vars.VITE_WEBSOCKET_URL }}
+      WEBLINK_STUN_SERVERS: ${{ vars.WEBLINK_STUN_SERVERS }}
+      VITE_TURN_SERVERS: ${{ secrets.VITE_TURN_SERVERS }}
       # Keep native media optimized, but avoid the release profile's expensive fat LTO.
       # Tests and the executable share one dependency build and a smaller cache.
       CARGO_PROFILE_RELEASE_LTO: "off"
@@ -27,19 +30,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - name: Configure desktop build from environment secret
-        if: github.event_name != 'pull_request'
-        env:
-          PAGES_BUILD_ENV: ${{ secrets.PAGES_BUILD_ENV }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:PAGES_BUILD_ENV)) {
-            throw "Configure PAGES_BUILD_ENV with the VITE_* / WEBLINK_* settings."
-          }
-          [System.IO.File]::WriteAllText(
-            (Join-Path $PWD 'apps/web/.env.desktop.local'),
-            $env:PAGES_BUILD_ENV,
-            [System.Text.UTF8Encoding]::new($false)
-          )
       - name: Install Rust
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -47,6 +37,8 @@ jobs:
           shared-key: windows-dev-release
           save-if: ${{ github.ref == 'refs/heads/public' }}
       - run: bun install --frozen-lockfile
+      - name: Verify desktop build configuration
+        run: bun apps/web/scripts/check-build-env.ts desktop
       # Shared TypeScript checks and tests already passed in the caller's Checks job.
       - run: cargo fmt --all --check
       # Production-mode tests embed the frontend and use the CLI's Cargo features.
