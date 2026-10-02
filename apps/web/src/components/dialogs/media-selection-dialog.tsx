@@ -202,7 +202,7 @@ export const createMediaSelectionDialog = () => {
     }
 
     return catchError(
-      navigator.mediaDevices.getUserMedia({
+      media.capture({
         audio: audioConstraints,
         video: false,
       }),
@@ -360,7 +360,7 @@ export const createMediaSelectionDialog = () => {
       }
 
       const [cameraErr, cameraMedia] = await catchError(
-        navigator.mediaDevices.getUserMedia({
+        media.capture({
           audio: false,
           video: videoConstraints,
         }),

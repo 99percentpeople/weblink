@@ -98,7 +98,7 @@ export function createMeetingMedia({
         return Promise.reject(
           new Error(t("meeting.media_unavailable")),
         );
-      return navigator.mediaDevices.getUserMedia({
+      return access.capture({
         ...constraints,
         video: constraints.video
           ? {

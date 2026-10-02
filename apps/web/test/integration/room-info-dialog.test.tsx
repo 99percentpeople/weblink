@@ -34,6 +34,7 @@ import {
 import { reconcile } from "solid-js/store";
 import { deferred } from "../support/rtc-transport";
 import { resolveRoomConfig } from "@/libs/state/app-options";
+import { platform } from "@/libs/platform/runtime";
 import type { Conversation } from "@/libs/domain/conversation";
 
 vi.mock("@/libs/application/session-service", () => ({
@@ -192,6 +193,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(platform, "mediaPermissionPolicy");
   animationStyle.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -259,6 +261,77 @@ const openDevices = async (name = "Current settings") => {
 };
 
 describe("room dialog and shared meeting device ownership", () => {
+  it("uses desktop host grants without probing capture and reflects OS refusal and retry", async () => {
+    Object.defineProperty(
+      platform,
+      "mediaPermissionPolicy",
+      {
+        configurable: true,
+        value: "automatic",
+      },
+    );
+    const query = vi.fn();
+    Object.assign(navigator, { permissions: { query } });
+    const enumerate = vi.mocked(
+      navigator.mediaDevices.enumerateDevices,
+    );
+    const available = await enumerate();
+    enumerate.mockResolvedValue(
+      available.map((device) => ({
+        ...device,
+        deviceId: "",
+        label: "",
+      })),
+    );
+    const f = setup();
+    const dialog = await openDevices();
+    await waitFor(() =>
+      expect(
+        f.controls.devices.access.state("audioinput"),
+      ).toBe("granted"),
+    );
+    expect(
+      within(dialog).queryByRole("button", {
+        name: "meeting.get_permission",
+      }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByText(
+        "meeting.desktop_output_default_only",
+      ),
+    ).toBeVisible();
+    expect(query).not.toHaveBeenCalled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    getUserMedia.mockRejectedValueOnce(
+      new DOMException(
+        "OS privacy denial",
+        "NotAllowedError",
+      ),
+    );
+    await f.controls.media.toggleMicrophone();
+    expect(
+      f.controls.devices.access.state("audioinput"),
+    ).toBe("denied");
+    expect(
+      within(dialog).getByText(
+        "meeting.desktop_permission_disabled_hint",
+      ),
+    ).toBeVisible();
+    const track = new Track();
+    getUserMedia.mockResolvedValueOnce(
+      new Stream([
+        track as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream,
+    );
+    await f.controls.media.toggleMicrophone();
+    expect(f.controls.media.microphoneOn()).toBe(true);
+    expect(
+      f.controls.devices.access.state("audioinput"),
+    ).toBe("granted");
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("allows clearing an active room but requires leaving before deletion", async () => {
     const f = setup();
     fireEvent.click(

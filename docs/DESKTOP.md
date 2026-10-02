@@ -108,8 +108,17 @@ do not become the packaged signaling endpoint.
   hiding is disabled and the close prompt offers only quit or cancel.
 - Files, clipboard, camera and microphone use existing WebView browser APIs. Native
   drag/drop interception is disabled so the app's existing HTML drop handlers
-  receive files. File selection/download and media permission prompts must be
-  checked in WebView2. Windows screen sharing uses the native path below.
+  receive files. The host automatically grants camera and microphone access only
+  to the local application origin (or the configured development origin). Windows
+  refreshes those two WebView profile grants at startup, including older saved
+  denials. AppState skips browser permission queries and temporary permission
+  probes on desktop; opening a device menu never starts capture. The normal
+  microphone/camera controls start capture, and actual OS denials or missing
+  devices still update the shared state. Refreshing the list rechecks missing
+  devices; a successful capture clears a previous OS denial. Speaker selection uses exposed devices
+  or retains the default output without requesting microphone access. OS privacy
+  settings remain in force. File selection/download still requires WebView2
+  acceptance; Windows screen sharing uses the native path below.
 - IndexedDB and local storage belong to the application WebView profile under
   the OS application-data directory. Browser history is not automatically
   imported; development and packaged origins have separate storage.

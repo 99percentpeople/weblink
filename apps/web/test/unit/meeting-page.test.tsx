@@ -26,8 +26,10 @@ import { MeetingSessionProvider } from "../support/meeting-session-provider";
 import { MeetingMediaProvider } from "../support/meeting-media-provider";
 import { directConversationId } from "@/libs/domain/conversation";
 import { openMediaRoute } from "@/components/conversations/media-hash-route";
+import type { AppPermissions } from "@/libs/state/create-app-permissions";
 
 const fixture = vi.hoisted(() => ({
+  permissions: undefined as AppPermissions | undefined,
   navigate: vi.fn(),
   joinRoom: vi.fn(),
   editRoom: vi.fn(),
@@ -150,6 +152,12 @@ vi.mock("@/libs/state/app-state", async () => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    get permissions() {
+      return fixture.permissions;
+    },
+    set permissions(value: AppPermissions | undefined) {
+      fixture.permissions = value;
+    },
     roomConflict: () => false,
     localStream: () => null,
     replaceLocalStream: fixture.replaceLocalStream,
@@ -302,6 +310,7 @@ beforeEach(() => {
   document.head.append(animationStyle);
   history.replaceState(null, "", "/");
   vi.clearAllMocks();
+  fixture.permissions = undefined;
   fixture.routeState = undefined;
   setMutedMembers([]);
   setAudibleMembers(["bob"]);

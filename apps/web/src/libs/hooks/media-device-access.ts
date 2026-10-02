@@ -32,7 +32,10 @@ export function createMediaDeviceAccess(options: {
   refreshing: Accessor<boolean>;
   refresh(): Promise<void>;
   outputSupported: Accessor<boolean>;
+  permissionPolicy?: "prompt" | "automatic";
 }) {
+  const automatic =
+    options.permissionPolicy === "automatic";
   const [permissions, setPermissions] = createSignal<
     Partial<Record<MediaDeviceKind, PermissionState>>
   >({});
@@ -128,6 +131,10 @@ export function createMediaDeviceAccess(options: {
 
   const readPermissions = async () => {
     if (disposed) return;
+    if (automatic) {
+      setChecked(true);
+      return;
+    }
     const current = ++generation;
     await Promise.all(
       kinds.map(async (kind) => {
@@ -175,6 +182,16 @@ export function createMediaDeviceAccess(options: {
       return "granted";
     if (!checked() || options.refreshing())
       return previous?.[kind] ?? "checking";
+    if (automatic) {
+      // The host authorizes capture when it is used. Hidden identities do not
+      // require a temporary microphone/camera probe before the first capture.
+      if (kind === "audiooutput") return "default-only";
+      return devices().some(
+        (device) => device.kind === kind,
+      )
+        ? "granted"
+        : "unavailable";
+    }
     if (kind === "audiooutput" && outputNeedsMicrophone()) {
       const input = inspectState("audioinput", previous);
       if (
@@ -208,7 +225,17 @@ export function createMediaDeviceAccess(options: {
   const refresh = async () => {
     if (disposed) return;
     await batch(() => {
-      setFaults({});
+      // OS privacy denials require a successful capture to clear. Missing devices
+      // must be checked again so reconnecting one can enable its selector.
+      setFaults((previous) =>
+        automatic
+          ? Object.fromEntries(
+              Object.entries(previous).filter(
+                ([, fault]) => fault === "denied",
+              ),
+            )
+          : {},
+      );
       // A past picker result must not hide a later revocation or unplugged output.
       setSelectedOutput(undefined);
       return Promise.all([
@@ -234,11 +261,70 @@ export function createMediaDeviceAccess(options: {
     }
   };
 
+  const captureVersions = { audioinput: 0, videoinput: 0 };
+  const capture = async (
+    constraints: MediaStreamConstraints,
+  ): Promise<MediaStream> => {
+    const requested = (
+      ["audioinput", "videoinput"] as const
+    )
+      .filter((kind) =>
+        kind === "audioinput"
+          ? constraints.audio
+          : constraints.video,
+      )
+      .map((kind) => ({
+        kind,
+        version: ++captureVersions[kind],
+      }));
+    try {
+      const stream =
+        await navigator.mediaDevices.getUserMedia(
+          constraints,
+        );
+      if (!disposed) {
+        requested.forEach(({ kind, version }) => {
+          if (captureVersions[kind] === version)
+            clearFault(kind);
+        });
+        void options.refresh();
+      }
+      return stream;
+    } catch (cause) {
+      if (!disposed) {
+        await readPermissions();
+        if (!disposed)
+          requested.forEach(({ kind, version }) => {
+            if (captureVersions[kind] !== version) return;
+            const name =
+              cause instanceof Error ||
+              cause instanceof DOMException
+                ? cause.name
+                : "";
+            const fault =
+              name === "NotFoundError"
+                ? "unavailable"
+                : name === "SecurityError" ||
+                    (name === "NotAllowedError" &&
+                      permissions()[kind] !== "prompt")
+                  ? "denied"
+                  : undefined;
+            setFaults((previous) => ({
+              ...previous,
+              [kind]: fault,
+            }));
+          });
+      }
+      throw cause;
+    }
+  };
+
   const request = async (
     kind: MediaDeviceKind,
   ): Promise<MediaDeviceInfo | undefined> => {
     if (
       disposed ||
+      automatic ||
       requesting() ||
       state(kind) === "unsupported" ||
       state(kind) === "default-only"
@@ -333,6 +419,7 @@ export function createMediaDeviceAccess(options: {
     error,
     refresh,
     request,
+    capture,
     outputNeedsMicrophone,
     needsPermission: () =>
       kinds.some((kind) => state(kind) === "prompt"),

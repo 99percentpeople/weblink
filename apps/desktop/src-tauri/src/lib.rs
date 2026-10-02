@@ -1,9 +1,13 @@
-use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
+use tauri::{
+    webview::{NewWindowResponse, PermissionKind, PermissionResponse},
+    Manager, Url, WebviewWindowBuilder,
+};
 use tauri_plugin_opener::OpenerExt;
 mod application;
 mod capabilities;
 mod capture;
 mod keyboard;
+mod media_permissions;
 mod notifications;
 mod picture_in_picture;
 mod preview;
@@ -21,6 +25,24 @@ fn external_link(url: &Url) -> bool {
     matches!(url.scheme(), "http" | "https" | "mailto")
         && url.username().is_empty()
         && url.password().is_none()
+}
+
+fn media_permission(
+    kind: PermissionKind,
+    url: Option<&Url>,
+    local_url: &Url,
+    dev_url: Option<&Url>,
+) -> PermissionResponse {
+    if !matches!(kind, PermissionKind::Microphone | PermissionKind::Camera) {
+        return PermissionResponse::Default;
+    }
+    if url.is_some_and(|url| {
+        same_origin(url, local_url) || dev_url.is_some_and(|dev| same_origin(url, dev))
+    }) {
+        PermissionResponse::Allow
+    } else {
+        PermissionResponse::Deny
+    }
 }
 
 pub fn run() {
@@ -115,6 +137,12 @@ pub fn run() {
             } else {
                 "tauri://localhost"
             })?;
+            let media_local_url = local_url.clone();
+            let media_dev_url = dev_url.clone();
+            let mut media_origins = vec![local_url.clone()];
+            if let Some(dev) = &dev_url {
+                media_origins.push(dev.clone());
+            }
             let startup = application::autostart::application_startup_behavior(app.handle().clone())
                 .unwrap_or(application::autostart::StartupBehavior::Window);
             let hidden = application::autostart::starts_hidden(
@@ -130,7 +158,15 @@ pub fn run() {
             let builder = builder.additional_browser_args("--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows");
             #[cfg(target_os = "macos")]
             let builder = builder.background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
-            builder
+            let window = builder
+                .on_permission_request(move |webview, kind| {
+                    media_permission(
+                        kind,
+                        webview.url().ok().as_ref(),
+                        &media_local_url,
+                        media_dev_url.as_ref(),
+                    )
+                })
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
@@ -154,6 +190,7 @@ pub fn run() {
                     NewWindowResponse::Deny
                 })
                 .build()?;
+            media_permissions::configure(&window, &media_origins)?;
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -194,6 +231,58 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn media_capture_is_allowed_only_for_local_application_content() {
+        let local = Url::parse("https://tauri.localhost").unwrap();
+        let dev = Url::parse("http://127.0.0.1:1420").unwrap();
+        for kind in [PermissionKind::Camera, PermissionKind::Microphone] {
+            for url in [&local, &dev] {
+                assert_eq!(
+                    media_permission(kind, Some(url), &local, Some(&dev)),
+                    PermissionResponse::Allow
+                );
+            }
+            for url in [
+                "https://webl.ink",
+                "https://tauri.localhost.evil.test",
+                "http://tauri.localhost",
+                "https://tauri.localhost:1420",
+                "https://user@tauri.localhost",
+                "http://127.0.0.1:1421",
+            ] {
+                assert_eq!(
+                    media_permission(kind, Some(&Url::parse(url).unwrap()), &local, Some(&dev)),
+                    PermissionResponse::Deny
+                );
+            }
+            assert_eq!(
+                media_permission(kind, None, &local, Some(&dev)),
+                PermissionResponse::Deny
+            );
+            assert_eq!(
+                media_permission(kind, Some(&dev), &local, None),
+                PermissionResponse::Deny
+            );
+        }
+    }
+
+    #[test]
+    fn media_policy_does_not_grant_unrelated_permissions() {
+        let local = Url::parse("https://tauri.localhost").unwrap();
+        for kind in [
+            PermissionKind::DisplayCapture,
+            PermissionKind::ClipboardRead,
+            PermissionKind::Notifications,
+            PermissionKind::Geolocation,
+            PermissionKind::Other,
+        ] {
+            assert_eq!(
+                media_permission(kind, Some(&local), &local, None),
+                PermissionResponse::Default
+            );
+        }
+    }
 
     #[test]
     fn navigation_does_not_trust_similar_hosts_or_other_ports() {

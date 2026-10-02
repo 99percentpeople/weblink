@@ -10,6 +10,7 @@ import {
 } from "lucide-solid";
 import { t } from "@/i18n";
 import { cn } from "@/libs/cn";
+import { platform } from "@/libs/platform/runtime";
 import {
   Select,
   SelectContent,
@@ -226,7 +227,10 @@ export function MeetingDeviceField(props: {
             access() === "checking"
               ? "meeting.permission_checking"
               : access() === "default-only"
-                ? "meeting.output_default_only"
+                ? platform.mediaPermissionPolicy ===
+                  "automatic"
+                  ? "meeting.desktop_output_default_only"
+                  : "meeting.output_default_only"
                 : access() === "prompt"
                   ? "meeting.permission_needed"
                   : access() === "denied"
@@ -247,7 +251,11 @@ export function MeetingDeviceField(props: {
               : "meeting-device-hint"
           }
         >
-          {t("meeting.permission_disabled_hint")}
+          {t(
+            platform.mediaPermissionPolicy === "automatic"
+              ? "meeting.desktop_permission_disabled_hint"
+              : "meeting.permission_disabled_hint",
+          )}
         </span>
       </Show>
       <Show

@@ -21,6 +21,8 @@ export interface PlatformRuntime {
   readonly keyboard?: NativeKeyboard;
   readonly remoteControl?: NativeRemoteControl;
   readonly kind: "browser" | "desktop";
+  /** Automatic mode is provided only by a host that grants local media requests. */
+  readonly mediaPermissionPolicy?: "prompt" | "automatic";
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
   readonly screenShare?: NativeScreenShare;

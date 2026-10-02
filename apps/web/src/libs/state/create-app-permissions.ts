@@ -18,6 +18,7 @@ export interface AppPermissions {
 export function createAppPermissions(options: {
   notifications: SystemNotifications | undefined;
   outputSupported: Accessor<boolean>;
+  mediaPermissionPolicy?: "prompt" | "automatic";
 }): AppPermissions {
   const discovery = createMediaDevices();
   const media = createMediaDeviceAccess({
@@ -25,6 +26,7 @@ export function createAppPermissions(options: {
     refreshing: discovery.refreshing,
     refresh: discovery.updateDevices,
     outputSupported: options.outputSupported,
+    permissionPolicy: options.mediaPermissionPolicy,
   });
   return {
     notifications: createNotificationPermission(

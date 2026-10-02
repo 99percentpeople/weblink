@@ -55,6 +55,7 @@ export function createApplicationRoot(
   const permissions = createAppPermissions({
     notifications: platform.notifications,
     outputSupported: audio.value.outputSupported,
+    mediaPermissionPolicy: platform.mediaPermissionPolicy,
   });
   const stream = createLocalStreamService();
   onCleanup(() => stream.dispose());

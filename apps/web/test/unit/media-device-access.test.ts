@@ -50,6 +50,7 @@ function setup(
     query?: boolean;
     nativeOutput?: boolean;
     exposed?: boolean;
+    permissionPolicy?: "prompt" | "automatic";
   } = {},
 ) {
   const statuses = {
@@ -98,6 +99,7 @@ function setup(
       refreshing: discovery.refreshing,
       refresh: discovery.updateDevices,
       outputSupported,
+      permissionPolicy: options.permissionPolicy,
     });
     return { ...access, dispose };
   });
@@ -113,6 +115,124 @@ function setup(
 }
 
 describe("meeting device permissions", () => {
+  it("allows a reconnected desktop camera to be selected after refreshing without capturing it", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    f.enumerateDevices.mockResolvedValue([]);
+    await f.refresh();
+    f.getUserMedia.mockRejectedValueOnce(
+      new DOMException(
+        "Camera disconnected",
+        "NotFoundError",
+      ),
+    );
+    await expect(
+      f.capture({ video: true }),
+    ).rejects.toThrow("Camera disconnected");
+    await f.refresh();
+    expect(f.state("videoinput")).toBe("unavailable");
+    f.enumerateDevices.mockResolvedValue([
+      device("videoinput", "Reconnected camera"),
+    ]);
+    await f.refresh();
+    expect(f.state("videoinput")).toBe("granted");
+    expect(f.getUserMedia).toHaveBeenCalledOnce();
+    expect(f.query).not.toHaveBeenCalled();
+  });
+
+  it("lets the desktop host authorize media on use without queries or temporary capture", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    await f.refresh();
+    expect(f.query).not.toHaveBeenCalled();
+    expect(f.state("audioinput")).toBe("granted");
+    expect(f.state("videoinput")).toBe("granted");
+    expect(f.state("audiooutput")).toBe("default-only");
+    expect(f.needsPermission()).toBe(false);
+    await f.request("audioinput");
+    await f.request("videoinput");
+    await f.request("audiooutput");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+    expect(f.selectAudioOutput).not.toHaveBeenCalled();
+    const stream = temporary().stream;
+    f.getUserMedia.mockResolvedValue(stream);
+    expect(
+      await f.capture({ audio: true, video: false }),
+    ).toBe(stream);
+    expect(f.getUserMedia).toHaveBeenCalledOnce();
+    expect(f.query).not.toHaveBeenCalled();
+  });
+
+  it("still reports OS refusal and missing devices in automatic mode and recovers after a successful capture", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    await f.refresh();
+    const refusal = new DOMException(
+      "System privacy settings",
+      "NotAllowedError",
+    );
+    f.getUserMedia.mockRejectedValueOnce(refusal);
+    await expect(f.capture({ audio: true })).rejects.toBe(
+      refusal,
+    );
+    expect(f.state("audioinput")).toBe("denied");
+    expect(f.state("videoinput")).toBe("granted");
+    await f.refresh();
+    expect(f.state("audioinput")).toBe("denied");
+    const missing = new DOMException(
+      "Camera missing",
+      "NotFoundError",
+    );
+    f.getUserMedia.mockRejectedValueOnce(missing);
+    await expect(f.capture({ video: true })).rejects.toBe(
+      missing,
+    );
+    expect(f.state("videoinput")).toBe("unavailable");
+    f.getUserMedia.mockResolvedValue(temporary().stream);
+    await f.capture({ audio: true, video: true });
+    await vi.waitFor(() =>
+      expect(f.state("audioinput")).toBe("granted"),
+    );
+    expect(f.state("videoinput")).toBe("granted");
+    expect(f.query).not.toHaveBeenCalled();
+  });
+
+  it("does not replace newer capture access with a late failure", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    await f.refresh();
+    const old = deferred<MediaStream>();
+    f.getUserMedia.mockReturnValueOnce(old.promise);
+    const failed = expect(
+      f.capture({ audio: true }),
+    ).rejects.toThrow("Old failure");
+    f.getUserMedia.mockResolvedValueOnce(
+      temporary().stream,
+    );
+    await f.capture({ audio: true });
+    old.reject(
+      new DOMException("Old failure", "NotAllowedError"),
+    );
+    await failed;
+    expect(f.state("audioinput")).toBe("granted");
+  });
+
+  it("keeps desktop devices missing or unsupported without offering permission prompts", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    f.enumerateDevices.mockResolvedValue([]);
+    await f.refresh();
+    expect(f.state("audioinput")).toBe("unavailable");
+    expect(f.state("videoinput")).toBe("unavailable");
+    f.setOutputSupported(false);
+    expect(f.state("audiooutput")).toBe("unsupported");
+    expect(f.needsPermission()).toBe(false);
+  });
+
+  it("refreshes labelled desktop speakers without probing the microphone", async () => {
+    const f = setup({ permissionPolicy: "automatic" });
+    f.enumerateDevices.mockResolvedValue([
+      device("audiooutput"),
+    ]);
+    await f.refresh();
+    expect(f.state("audiooutput")).toBe("granted");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+  });
   it("queries each permission once and reuses its observer across refreshes", async () => {
     const f = setup();
     await f.refresh();

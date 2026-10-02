@@ -23,6 +23,7 @@ export const platform: PlatformRuntime = {
   application: nativeApplication,
   keyboard: nativeKeyboard,
   kind: "desktop",
+  mediaPermissionPolicy: "automatic",
   supportsServiceWorker: false,
   remoteControl: {
     open: () => invoke("remote_control_open"),
