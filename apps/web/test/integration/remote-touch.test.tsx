@@ -36,12 +36,19 @@ vi.mock("@/libs/application/session-service", () => ({
     getRemoteControl: () => fixture.control,
   },
 }));
-vi.mock("@/routes/home/components/video-display", () => ({
-  useVideoDisplay: () => ({
-    videoTrack: () => ({}),
-    videoRef: () => fixture.video,
+vi.mock(
+  "@/routes/home/components/video-display-context",
+  () => ({
+    useVideoDisplay: () => ({
+      videoTrack: () => ({}),
+      videoRef: () => fixture.video,
+    }),
   }),
-}));
+);
+vi.mock(
+  "@/routes/home/components/video-display",
+  () => ({}),
+);
 vi.mock("@/options", async () => {
   const { setAppState } =
     await import("@/libs/state/app-state");

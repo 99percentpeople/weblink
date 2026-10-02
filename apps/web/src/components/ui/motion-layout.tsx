@@ -1,12 +1,10 @@
+import { useViewScopes } from "@/libs/state/view-scopes";
 import type { Accessor, ParentProps } from "solid-js";
 import {
   createLayoutTransition,
   createLayoutValue,
 } from "@/libs/hooks/layout-transition";
-import {
-  createMotionLayoutRegistry,
-  MotionLayoutContext,
-} from "@/libs/hooks/motion-layout-registry";
+import { createMotionLayoutRegistry } from "@/libs/hooks/motion-layout-registry";
 
 export {
   createMotionLayoutRef,
@@ -41,6 +39,7 @@ export function MotionLayout(
     value: ReturnType<typeof createMotionLayout>;
   }>,
 ) {
+  const MotionLayoutContext = useViewScopes().motionLayout;
   return (
     <MotionLayoutContext.Provider
       value={props.value.registry}

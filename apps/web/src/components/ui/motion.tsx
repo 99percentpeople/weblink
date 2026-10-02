@@ -1,5 +1,6 @@
+import type { ExitHandler } from "./presence-scope";
+import { useViewScopes } from "@/libs/state/view-scopes";
 import {
-  createContext,
   createEffect,
   createSignal,
   onCleanup,
@@ -26,12 +27,6 @@ import {
 
 export type MotionTarget = DOMKeyframesDefinition;
 export type MotionTransition = AnimationOptions;
-type ExitHandler = () => Promise<unknown>;
-const PresenceContext = createContext<{
-  present(): boolean;
-  register(exit: ExitHandler): () => void;
-}>();
-
 /** Solid needs an explicit condition so children remain owned until exit ends. */
 export function AnimatePresence(
   props: ParentProps<{
@@ -39,6 +34,7 @@ export function AnimatePresence(
     onExitComplete?: () => void;
   }>,
 ) {
+  const PresenceContext = useViewScopes().presence;
   const reduced = createReducedMotion();
   const [mounted, setMounted] = createSignal(props.when);
   const exits = new Set<ExitHandler>();
@@ -119,7 +115,7 @@ function createMotionComponent(tag: HTMLTag) {
       "ref",
     ]);
     const reduced = createReducedMotion();
-    const presence = useContext(PresenceContext);
+    const presence = useContext(useViewScopes().presence);
     const layoutRef = createMotionLayoutRef(
       () => local,
       () => presence?.present() ?? true,

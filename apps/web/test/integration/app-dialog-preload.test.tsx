@@ -16,7 +16,7 @@ import {
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { AccountMenu } from "@/components/app/account-menu";
-import { AppDialogsProvider } from "@/components/app/app-dialogs";
+import { AppDialogsProvider } from "../support/app-dialogs-provider";
 import { ModalProvider } from "@/components/dialogs/base";
 
 vi.mock("@/components/app/remote-control-status", () => ({

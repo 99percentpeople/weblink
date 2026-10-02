@@ -28,10 +28,8 @@ import {
   createInitialAppState,
   setAppState,
 } from "@/libs/state/app-state";
-import {
-  MeetingSessionProvider,
-  useMeetingSession,
-} from "@/routes/home/components/meeting-session-context";
+import { MeetingSessionProvider } from "../support/meeting-session-provider";
+import { useMeetingSession } from "@/libs/state/meeting-session-context";
 import { platform } from "@/libs/platform/runtime";
 import type {
   NativePictureInPicture,
@@ -71,7 +69,7 @@ vi.mock("solid-sonner", () => ({
 vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
-vi.mock("@/components/app/room-actions", () => ({
+vi.mock("@/libs/state/room-actions-context", () => ({
   useRoomActions: () => ({
     join: fixture.join,
     busy: () => false,
@@ -88,7 +86,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
     leaveRoom: fixture.leave,
   }),
 }));
-vi.mock("@/libs/hooks/meeting-media-context", () => ({
+vi.mock("@/libs/state/meeting-media-context", () => ({
   useMeetingMedia: () => ({
     media: {
       microphoneOn: () => false,
@@ -105,7 +103,7 @@ vi.mock("@/libs/hooks/meeting-media-context", () => ({
     },
   }),
 }));
-vi.mock("@/routes/home/components/audio-player", () => ({
+vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     hasAudio: () => true,
     playState: () => true,

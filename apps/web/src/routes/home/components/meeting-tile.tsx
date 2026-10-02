@@ -43,10 +43,8 @@ import { reportMeetingPipError } from "./meeting-pip-error";
 import { VideoStatisticsOverlay } from "./video-statistics-overlay";
 import { appState } from "@/libs/state/app-state";
 import { sessionService } from "@/libs/application/session-service";
-import {
-  useVideoDisplay,
-  VideoDisplay,
-} from "./video-display";
+import { useVideoDisplay } from "@/routes/home/components/video-display-context";
+import { VideoDisplay } from "./video-display";
 
 export function MeetingTile(props: {
   ref?: (element: HTMLElement) => void;

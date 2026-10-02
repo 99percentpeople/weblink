@@ -36,11 +36,11 @@ import {
   X,
 } from "lucide-solid";
 import { AccountMenu } from "@/components/app/account-menu";
-import { useRoomActions } from "@/components/app/room-actions";
+import { useRoomActions } from "@/libs/state/room-actions-context";
 import { createMediaHashRoute } from "@/components/conversations/media-hash-route";
 import { t } from "@/i18n";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
-import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import {
   createMotionLayout,
   MotionLayout,
@@ -56,13 +56,13 @@ import {
 import { directConversationId } from "@/libs/domain/conversation";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
-import { useAudioPlayer } from "./components/audio-player";
+import { useAudioPlayer } from "@/libs/state/audio-player-context";
 import { MeetingControls } from "./components/meeting-controls";
 import {
   MeetingStage,
   type MeetingStageHandle,
 } from "./components/meeting-stage";
-import { useMeetingSession } from "./components/meeting-session-context";
+import { useMeetingSession } from "@/libs/state/meeting-session-context";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";

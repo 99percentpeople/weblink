@@ -24,7 +24,7 @@ import { joinUrl } from "@/components/dialogs/join-dialog";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { getInitials } from "@/libs/utils/name";
-import { useAppDialogs } from "./app-dialogs";
+import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { t } from "@/i18n";
 
 export function AccountMenu() {

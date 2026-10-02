@@ -18,7 +18,7 @@ import { IconSync } from "@/components/icons";
 import { appState } from "@/libs/state/app-state";
 import type { Conversation } from "@/libs/domain/conversation";
 import { useAppState } from "@/libs/state/app-state-context";
-import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import { MeetingDeviceField } from "@/routes/home/components/meeting-device-menu";
 import { t } from "@/i18n";
 import { RoomSettings } from "./room-settings";
@@ -39,7 +39,7 @@ function Metric(props: {
       <dt class="text-muted-foreground text-xs">
         {props.label}
       </dt>
-      <dd class="mt-1 text-sm [overflow-wrap:anywhere] tabular-nums">
+      <dd class="mt-1 text-sm tabular-nums [overflow-wrap:anywhere]">
         {props.children}
       </dd>
     </div>
@@ -151,28 +151,28 @@ export function RoomInfoPanel(props: {
         <TabsList aria-label={t("room_dialog.sections")}>
           <TabsTrigger
             value="info"
-            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
+            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
               sm:text-sm"
           >
             {t("room_dialog.info")}
           </TabsTrigger>
           <TabsTrigger
             value="members"
-            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
+            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
               sm:text-sm"
           >
             {t("room_dialog.members")}
           </TabsTrigger>
           <TabsTrigger
             value="devices"
-            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
+            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
               sm:text-sm"
           >
             {t("room_dialog.devices")}
           </TabsTrigger>
           <TabsTrigger
             value="settings"
-            class="h-auto min-h-8 min-w-0 flex-1 px-2 text-xs whitespace-normal
+            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
               sm:text-sm"
           >
             {t("room_dialog.settings")}

@@ -22,8 +22,8 @@ import {
   vi,
 } from "vitest";
 import Video from "@/routes/home";
-import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
-import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
+import { MeetingSessionProvider } from "../support/meeting-session-provider";
+import { MeetingMediaProvider } from "../support/meeting-media-provider";
 import { directConversationId } from "@/libs/domain/conversation";
 import { openMediaRoute } from "@/components/conversations/media-hash-route";
 
@@ -73,7 +73,7 @@ vi.mock("solid-sonner", () => ({
 vi.mock("@/components/app/account-menu", () => ({
   AccountMenu: () => null,
 }));
-vi.mock("@/components/app/room-actions", () => ({
+vi.mock("@/libs/state/room-actions-context", () => ({
   useRoomActions: () => ({
     join: fixture.joinRoom,
     edit: fixture.editRoom,
@@ -160,7 +160,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
     leaveRoom: fixture.leaveRoom,
   }),
 }));
-vi.mock("@/routes/home/components/audio-player", () => ({
+vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     playState: playingAudio,
     hasAudio: () => audibleMembers().length > 0,

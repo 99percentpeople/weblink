@@ -35,7 +35,7 @@ vi.mock("@/libs/application/session-service", () => ({
 vi.mock("@/libs/state/app-state", () => ({
   appState: { options: {} },
 }));
-vi.mock("@/routes/home/components/audio-player", () => ({
+vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     isSourceMuted: () => false,
     setSourceMuted() {},
@@ -47,17 +47,22 @@ vi.mock(
     RemoteControlOverlay: () => null,
   }),
 );
+vi.mock(
+  "@/routes/home/components/video-display-context",
+  () => ({
+    useVideoDisplay: () => ({
+      videoRef: () => fixture.video ?? null,
+      videoTrack: () => null,
+      audioTracks: () => [],
+    }),
+  }),
+);
 vi.mock("@/routes/home/components/video-display", () => ({
   VideoDisplay: (
     props: ParentProps<{
       ref?(element: HTMLDivElement): void;
     }>,
   ) => <div ref={props.ref}>{props.children}</div>,
-  useVideoDisplay: () => ({
-    videoRef: () => fixture.video ?? null,
-    videoTrack: () => null,
-    audioTracks: () => [],
-  }),
 }));
 vi.mock(
   "@/routes/home/components/meeting-tile-actions",

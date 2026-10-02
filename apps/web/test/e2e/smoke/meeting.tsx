@@ -1,4 +1,4 @@
-import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
+import { MeetingSessionProvider } from "../../support/meeting-session-provider";
 import { createRoot, type ParentProps } from "solid-js";
 import { render } from "solid-js/web";
 import {
@@ -6,15 +6,15 @@ import {
   Router,
   useNavigate,
 } from "@solidjs/router";
-import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
-import { RoomActionsProvider } from "@/components/app/room-actions";
-import { AppDialogsProvider } from "@/components/app/app-dialogs";
+import { MeetingMediaProvider } from "../../support/meeting-media-provider";
+import { RoomActionsProvider } from "../../support/room-actions-provider";
+import { AppDialogsProvider } from "../../support/app-dialogs-provider";
 import { ColorModeProvider } from "@kobalte/core";
 import { ModalProvider } from "@/components/dialogs/base";
 import Video from "@/routes/home";
 import Home from "../../support/chat-workspace";
 import ConversationPage from "../../support/conversation-page";
-import { AudioPlayerProvider } from "@/routes/home/components/audio-player";
+import { AudioPlayerProvider } from "../../support/audio-player-provider";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import { createMessageStores } from "@/libs/application/messaging/message-store";
 import type {
@@ -819,9 +819,9 @@ function Shell(props: ParentProps) {
                   >
                     <nav
                       aria-label="App navigation fixture"
-                      class="bg-background text-foreground flex
-                        h-(--mobile-header-height) w-(--desktop-header-width)
-                        shrink-0 items-center justify-center border-r font-semibold"
+                      class="bg-background text-foreground h-(--mobile-header-height)
+                        w-(--desktop-header-width) flex shrink-0 items-center
+                        justify-center border-r font-semibold"
                     >
                       W
                     </nav>

@@ -142,7 +142,7 @@ Application source paths in the sections below are relative to `apps/web/`.
     Selecting a disabled input only records a preference. Switching a live input
     acquires its replacement before releasing the old track, preserves mute
     state and leaves the other captures intact. Device enumeration never requests
-    capture permission by itself; the audio provider owns output routing.
+    capture permission by itself; the application audio controller owns output routing.
     `hooks/media-device-access.ts` combines permission queries with exposed device
     identities. Missing access exposes a header action that opens device settings;
     blocked access and absent/unsupported devices have separate states. Explicit
@@ -151,8 +151,8 @@ Application source paths in the sections below are relative to `apps/web/`.
     picker when available, otherwise an explained temporary microphone grant.
     Permission changes and window focus refresh the state; disposal releases
     listeners and any capture that resolves late.
-    `hooks/meeting-media-context.tsx` owns the shared controller and device
-    discovery beneath the audio provider and above the modal provider. Both the
+    `libs/state/create-meeting-media.ts` composes the shared controller and device
+    discovery in the application scope. Both the
     toolbar and room device dialog use that same state; closing either view
     preserves device choices and published media. Room changes cancel pending
     capture requests. The capture implementation lives in
@@ -161,13 +161,13 @@ Application source paths in the sections below are relative to `apps/web/`.
     replace their streams. Unapplied preferences survive stream updates and are
     used on the next toolbar activation, including unmuting a retained microphone.
     Explicit device changes in the toolbar can still replace an active source.
-    `components/meeting-session-context.tsx` lives above route pages and owns
+    `libs/state/create-meeting-session.ts` lives above route pages and owns
     source selection, pin state and independent thumbnail-rail and toolbar
     visibility, shared between Home and picture-in-picture. The toolbar has its
     own collapse/reveal control in every layout, including grid and single-source
     views; collapsing thumbnails never changes toolbar visibility. While the toolbar
     is collapsed, thumbnail toggles are hidden and only the toolbar reveal action
-    remains. Revealing the toolbar restores the toggles without changing rail state. The provider also owns the
+    remains. Revealing the toolbar restores the toggles without changing rail state. The controller also owns the
     Document Picture-in-Picture window. The window reuses the focus stage with a
     main source, a collapsible thumbnail rail and compact controls using the same
     media controller. PiP stays in focus mode; its toolbar has no grid toggle.
@@ -359,7 +359,11 @@ may select concrete infrastructure implementations.
 
 - `src/libs/state/`: reactive application state and UI-facing context.
   - `app-state.ts`: shared store shape, including room/client view state.
-  - `app-state-context.tsx`: thin composition/API surface consumed by UI.
+  - `*-context.ts`: stable context contracts and hooks consumed by UI.
+  - `application-bootstrap.ts` and `application-root.ts`: native root composition
+    and application resource ownership, outside component refresh boundaries.
+  - `create-*.ts`: UI-facing controller composition; views receive their existing
+    controllers through context or props.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and
@@ -524,7 +528,7 @@ may select concrete infrastructure implementations.
 ## Data flow (high level)
 
 1. UI components call functions from `AppStateContext`
-   (`src/libs/state/app-state-context.tsx`).
+   (`src/libs/state/app-state-context.ts`).
 2. The context delegates workflows to `src/libs/application/*`.
 3. Application services create/manage `src/libs/domain/*` primitives and select
    `src/libs/infrastructure/*` adapters where browser/backend implementation is
@@ -535,9 +539,22 @@ may select concrete infrastructure implementations.
 Application orchestration still uses the shared Solid stores; it is not yet a
 framework-independent layer. The strict portability boundary currently applies
 specifically to `domain/protocol`, not the entire application or WebRTC domain.
-The local media stream is now application-composed and injected through
-`AppStateProvider`; route/controller separation remains incremental follow-up
-work.
+The local media stream and UI-facing controllers are composed by
+`src/libs/state/application-root.ts` and injected through native Solid context
+scopes. The plain TypeScript entry (`src/bootstrap.ts`) and composition stay
+outside component refresh boundaries. They own initialization, local capture,
+room services, audio, meeting state and dialog controllers; `src/app.tsx` owns
+their views. Replacing a view detaches its DOM bindings without disposing the
+application services. Audio bindings restore the selected output device when
+their element is replaced.
+
+Context definitions and hooks live separately from provider views and factory
+implementations. Local video, tile-action, motion and grid scopes receive their
+context identities through `view-scopes.ts`; each view still provides its own
+scoped value. Definition and composition changes reach the entry through normal
+imports and trigger a native page rebuild. View changes use Solid refresh while
+retaining the existing application owner. New contexts must follow this
+ownership boundary rather than being created in a hot component module.
 
 ## Signaling and profile privacy
 

@@ -19,11 +19,11 @@ import userEvent from "@testing-library/user-event";
 import { createSignal } from "solid-js";
 import { createRoomInfoDialog } from "@/components/dialogs/room-info-dialog";
 import { ModalProvider } from "@/components/dialogs/base";
+import { MeetingMediaProvider } from "../support/meeting-media-provider";
 import {
-  MeetingMediaProvider,
   useMeetingMedia,
   type MeetingMediaContextValue,
-} from "@/libs/hooks/meeting-media-context";
+} from "@/libs/state/meeting-media-context";
 import { useAppState } from "@/libs/state/app-state-context";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import {
@@ -61,7 +61,7 @@ vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: vi.fn(),
 }));
-vi.mock("@/routes/home/components/audio-player", () => ({
+vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     outputDeviceId: () => "",
     outputSupported: () => true,

@@ -138,6 +138,19 @@ backed up under `.tmp/rsync-backups/` at the destination. Each target has its ow
 local sync inventory and process lock. Sync does not install dependencies or
 restart commands; running development watchers react to source changes.
 
+The browser and desktop Vite servers use separate dependency caches by mode.
+Vite 6 reads the workspace's text `bun.lock` to validate cached dependencies on
+startup. After dependency changes, run `bun install` on the receiving machine
+and restart its development commands; ordinary source sync needs no server
+restart. Vite's file watcher waits for replaced files to settle.
+
+`src/bootstrap.ts` and the plain TypeScript application composition own context
+identities and service lifetimes. UI components refresh below that owner, so
+view updates retain the meeting, local capture and application controllers.
+Changes to context definitions or application composition propagate to the
+entry and rebuild the page through Vite's native dependency handling. There is
+no custom context refresh or dependency-cache plugin.
+
 ## Signaling servers
 
 Initialize submodules and run `bun install` once at the root before these commands.

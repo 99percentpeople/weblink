@@ -7,7 +7,7 @@ import {
   vi,
 } from "vitest";
 import { createRoot } from "solid-js";
-import { createRoomActions } from "@/components/app/room-actions";
+import { createRoomActions } from "@/libs/state/create-room-actions";
 import {
   appState,
   setAppState,
@@ -18,12 +18,6 @@ const fixture = vi.hoisted(() => ({
   join: vi.fn(),
   error: vi.fn(),
 }));
-vi.mock("@/components/dialogs/join-dialog", () => ({
-  createRoomDialog: () => ({ open: fixture.open }),
-}));
-vi.mock("@/libs/state/app-state-context", () => ({
-  useAppState: () => ({ joinRoom: fixture.join }),
-}));
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.error },
 }));
@@ -32,7 +26,10 @@ let dispose: () => void;
 const setup = () =>
   createRoot((cleanup) => {
     dispose = cleanup;
-    return createRoomActions();
+    return createRoomActions({
+      state: { joinRoom: fixture.join },
+      dialog: { open: fixture.open },
+    });
   });
 
 beforeEach(() => {

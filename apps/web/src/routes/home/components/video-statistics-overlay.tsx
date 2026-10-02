@@ -2,7 +2,7 @@ import { createMemo, For, Show } from "solid-js";
 import { t } from "@/i18n";
 import { createVideoStatistics } from "@/libs/hooks/video-statistics";
 import type { VideoStatsBatch } from "@/libs/domain/video-stats";
-import { useVideoDisplay } from "./video-display";
+import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 
 const fixed = (value: number | undefined, unit: string) =>
   value === undefined ||

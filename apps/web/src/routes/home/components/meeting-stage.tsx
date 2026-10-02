@@ -27,7 +27,7 @@ import {
   type MeetingSource,
 } from "./meeting-sources";
 import { createMeetingGridLayout } from "./meeting-grid-layout";
-import { useAudioPlayer } from "./audio-player";
+import { useAudioPlayer } from "@/libs/state/audio-player-context";
 
 export type MeetingStageHandle = { measure(): void };
 

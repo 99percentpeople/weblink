@@ -1,3 +1,7 @@
+import type { ApplicationRuntime } from "@/libs/state/application-root";
+import { AudioPlayerView } from "@/components/app/audio-player";
+import { MeetingSessionView } from "@/components/app/meeting-session-provider";
+import { AppDialogsView } from "@/components/app/app-dialogs";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
 import { platform } from "@/libs/platform/runtime";
 import {
@@ -19,22 +23,13 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { AccountMenu } from "@/components/app/account-menu";
 import { RoomConnectionOverlay } from "@/components/app/room-connection-overlay";
-import {
-  AppDialogsProvider,
-  useAppDialogs,
-} from "@/components/app/app-dialogs";
-import {
-  RoomActionsProvider,
-  useRoomActions,
-} from "@/components/app/room-actions";
+import { useAppDialogs } from "@/libs/state/app-dialogs-context";
+import { useRoomActions } from "@/libs/state/room-actions-context";
 import { isHomePath } from "@/libs/application/home-navigation";
 import { resolveWallpaper } from "@/libs/wallpapers";
 import { setClientProfile } from "./libs/state/profile-store";
 import { optional } from "./libs/domain/utils/optional";
-import {
-  AppStateProvider,
-  useAppState,
-} from "@/libs/state/app-state-context";
+import { useAppState } from "@/libs/state/app-state-context";
 
 import { toast } from "solid-sonner";
 import createAboutDialog from "./components/dialogs/about-dialog";
@@ -65,16 +60,10 @@ import { t, isDictLoaded } from "./i18n";
 
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
-import { AudioPlayerProvider } from "./routes/home/components/audio-player";
 import { AppWakeLock } from "./components/app/wakelock";
 import { ApplicationCloseDialog } from "./components/app/application-close-dialog";
-import { createInitialization } from "@/libs/application/initialization";
 import { appState } from "@/libs/state/app-state";
-import { createLocalStreamService } from "@/libs/application/local-stream-service";
-import { MeetingMediaProvider } from "@/libs/hooks/meeting-media-context";
 import { ModalProvider } from "@/components/dialogs/base";
-import { MeetingSessionProvider } from "@/routes/home/components/meeting-session-context";
-import { createApplicationSettingsSync } from "@/libs/application/application-settings";
 
 const InnerApp = (props: ParentProps) => {
   const { conversationHistory } = useAppState();
@@ -366,55 +355,11 @@ const ErrorComponent = (props: {
   );
 };
 
-export default function App(props: RouteSectionProps) {
-  onMount(() => {
-    const dispose = platform.initialize();
-    onCleanup(dispose);
-  });
-  const localStreamService = createLocalStreamService();
-  onCleanup(() => localStreamService.dispose());
-  if (window.location.pathname === "/close-window") {
-    try {
-      window.close();
-    } catch (e) {
-      console.warn(e);
-    }
-    window.location.replace("about:blank");
-    return <></>;
-  }
-
-  void createInitialization().catch((err) => {
-    console.error(err);
-    toast.error(err?.message ?? String(err));
-  });
-
-  if (platform.application) {
-    const settings = createApplicationSettingsSync(
-      platform.application,
-      (error) => {
-        console.error(
-          "Could not update native application settings",
-          error,
-        );
-        toast.error(t("setting.application.update_failed"));
-      },
-    );
-    createEffect(() => {
-      const { closeBehavior, hideOnRemoteControl } =
-        appState.options.application;
-      const locale = appState.options.locale;
-      settings.update({
-        closeBehavior,
-        hideOnRemoteControl,
-        locale:
-          locale === "zh-cn" || locale === "zh-tw"
-            ? locale
-            : "en",
-      });
-    });
-    onCleanup(() => settings.close());
-  }
-
+export default function App(
+  props: RouteSectionProps & {
+    runtime: ApplicationRuntime;
+  },
+) {
   const wallpaper = createMemo(() =>
     resolveWallpaper(
       appState.options.backgroundPreset,
@@ -435,23 +380,15 @@ export default function App(props: RouteSectionProps) {
           }`}
         </Style>
         <Toaster />
-        <AppStateProvider
-          localStreamService={localStreamService}
-        >
-          <AudioPlayerProvider>
-            <MeetingMediaProvider>
-              <RoomActionsProvider>
-                <MeetingSessionProvider>
-                  <AppDialogsProvider>
-                    <ModalProvider>
-                      <InnerApp>{props.children}</InnerApp>
-                    </ModalProvider>
-                  </AppDialogsProvider>
-                </MeetingSessionProvider>
-              </RoomActionsProvider>
-            </MeetingMediaProvider>
-          </AudioPlayerProvider>
-        </AppStateProvider>
+        <AudioPlayerView player={props.runtime.audio} />
+        <ModalProvider>
+          <InnerApp>{props.children}</InnerApp>
+        </ModalProvider>
+        <AppDialogsView />
+        <MeetingSessionView
+          session={props.runtime.meeting}
+          confirmation={props.runtime.confirmation.Dialog}
+        />
       </MetaProvider>
     </>
   );

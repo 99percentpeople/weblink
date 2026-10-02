@@ -13,7 +13,7 @@ import type {
   PointerState,
 } from "@/libs/domain/remote-control/pointer";
 import { t } from "@/i18n";
-import { useVideoDisplay } from "./video-display";
+import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 import { MeetingTileAction } from "./meeting-tile-actions";
 
 export function createVideoRemoteControl() {

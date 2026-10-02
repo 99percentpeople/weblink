@@ -1,47 +1,26 @@
 import { appState } from "@/libs/state/app-state";
 import {
-  type Accessor,
   batch,
-  createContext,
   createEffect,
   createMemo,
   createSignal,
   onCleanup,
-  type ParentProps,
-  useContext,
 } from "solid-js";
 import {
   getRemoteAudioVideoTrackId,
   meetingAudioSourceId,
-} from "./meeting-audio-sources";
+} from "@/routes/home/components/meeting-audio-sources";
 
-const AudioPlayerContext = createContext<{
-  hasAudio: Accessor<boolean>;
-  playState: Accessor<boolean>;
-  setPlay: (state: boolean) => void;
-  hasPeerAudio(id: string): boolean;
-  isPeerMuted(id: string): boolean;
-  setPeerMuted(id: string, muted: boolean): void;
-  isSourceMuted(peerId: string, sourceId: string): boolean;
-  setSourceMuted(
-    peerId: string,
-    sourceId: string,
-    muted: boolean,
-  ): void;
-  outputDeviceId: Accessor<string>;
-  outputSupported: Accessor<boolean>;
-  outputBusy: Accessor<boolean>;
-  setOutputDevice(id: string): Promise<void>;
-}>();
+import type { AudioPlayerContextValue } from "./audio-player-context";
 
-export const useAudioPlayer = () => {
-  const context = useContext(AudioPlayerContext);
-  if (!context)
-    throw new Error("Audio player context not found");
-  return context;
-};
-
-export const AudioPlayerProvider = (props: ParentProps) => {
+export interface AudioPlayerController {
+  readonly value: AudioPlayerContextValue;
+  attach(element: HTMLAudioElement): void;
+  detach(element: HTMLAudioElement): void;
+  onPlaying(element: HTMLAudioElement): void;
+  onPause(element: HTMLAudioElement): void;
+}
+export function createAudioPlayer(): AudioPlayerController {
   const [tracks, setTracks] = createSignal<
     MediaStreamTrack[]
   >([]);
@@ -295,37 +274,49 @@ export const AudioPlayerProvider = (props: ParentProps) => {
     }
   });
 
-  return (
-    <AudioPlayerContext.Provider
-      value={{
-        hasAudio: createMemo(() => tracks().length > 0),
-        playState,
-        setPlay,
-        hasPeerAudio: (id) =>
-          !!peerTracks().get(id)?.length,
-        isPeerMuted,
-        setPeerMuted,
-        isSourceMuted,
-        setSourceMuted,
-        outputDeviceId,
-        outputSupported,
-        outputBusy,
-        setOutputDevice,
-      }}
-    >
-      <audio
-        ref={setAudioRef}
-        class="hidden"
-        onPlaying={() => {
-          if (!wantsAudio()) {
-            audioRef()?.pause();
-            return;
-          }
-          setPlayState(true);
-        }}
-        onPause={() => setPlayState(false)}
-      />
-      {props.children}
-    </AudioPlayerContext.Provider>
-  );
-};
+  return {
+    value: {
+      hasAudio: createMemo(() => tracks().length > 0),
+      playState,
+      setPlay,
+      hasPeerAudio: (id) => !!peerTracks().get(id)?.length,
+      isPeerMuted,
+      setPeerMuted,
+      isSourceMuted,
+      setSourceMuted,
+      outputDeviceId,
+      outputSupported,
+      outputBusy,
+      setOutputDevice,
+    },
+    attach(element) {
+      setAudioRef(element);
+      // A view can replace its DOM node without replacing the meeting owner.
+      const selected = outputDeviceId();
+      if (selected)
+        void setOutputDevice(selected).catch(() => {
+          if (audioRef() === element) setOutputDeviceId("");
+        });
+    },
+    detach(element) {
+      if (audioRef() !== element) return;
+      ++playbackVersion;
+      element.pause();
+      element.srcObject = null;
+      setAudioRef(undefined);
+      setPlayState(false);
+    },
+    onPlaying(element) {
+      if (audioRef() !== element) return;
+      if (!wantsAudio()) {
+        audioRef()?.pause();
+        return;
+      }
+      setPlayState(true);
+    },
+    onPause(element) {
+      if (audioRef() !== element) return;
+      setPlayState(false);
+    },
+  };
+}

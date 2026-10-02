@@ -1,7 +1,7 @@
 import * as Dialog from "@kobalte/core/dialog";
 import { MonitorUp } from "lucide-solid";
 import { Button } from "@/components/ui/button";
-import { useRoomActions } from "./room-actions";
+import { useRoomActions } from "@/libs/state/room-actions-context";
 import { useAppState } from "@/libs/state/app-state-context";
 import { t } from "@/i18n";
 

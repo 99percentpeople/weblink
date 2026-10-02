@@ -113,6 +113,8 @@ export default defineConfig(({ command, mode }) => {
   );
   return {
     envPrefix,
+    // Browser and desktop resolve different platform dependencies.
+    cacheDir: `node_modules/.vite/${mode}`,
     resolve: {
       alias: {
         ...(desktop
@@ -131,14 +133,26 @@ export default defineConfig(({ command, mode }) => {
               ),
             }
           : {}),
-        "@": "/src",
+        "@": fileURLToPath(
+          new URL("./src", import.meta.url),
+        ),
       },
     },
     server: {
       port: Number(process.env.WEBLINK_WEB_PORT || 5173),
       strictPort: true,
+      watch: {
+        ignored: ["**/.~tmp~/**"],
+        atomic: 1000,
+        awaitWriteFinish: {
+          stabilityThreshold: 300,
+          pollInterval: 50,
+        },
+      },
     },
     optimizeDeps: {
+      // The browser fixtures use different aliases and dependency graphs.
+      entries: ["index.html"],
       // Pre-bundle worker dependencies before their first use.
       include: [
         "hash-wasm",

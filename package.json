@@ -49,7 +49,8 @@
     "build:desktop": "bun run --cwd apps/desktop build",
     "check:desktop": "bun run --cwd apps/desktop lint && bun run --cwd apps/desktop check",
     "sync": "bun --env-file=.env scripts/sync.mjs",
-    "sync:watch": "bun --env-file=.env scripts/sync.mjs --watch"
+    "sync:watch": "bun --env-file=.env scripts/sync.mjs --watch",
+    "test:e2e:hmr": "bun run --cwd apps/web test:e2e:hmr"
   },
   "lint-staged": {
     "**/*.{js,jsx,mjs,ts,tsx,css,html,json,md,yml,yaml}": [

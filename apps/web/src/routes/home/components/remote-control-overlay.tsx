@@ -6,7 +6,7 @@ import {
   Show,
 } from "solid-js";
 import { videoPosition } from "@/libs/domain/remote-control/pointer";
-import { useVideoDisplay } from "./video-display";
+import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";

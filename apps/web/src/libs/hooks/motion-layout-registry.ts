@@ -1,5 +1,5 @@
+import { useViewScopes } from "@/libs/state/view-scopes";
 import {
-  createContext,
   createRenderEffect,
   onCleanup,
   useContext,
@@ -35,17 +35,12 @@ export function createMotionLayoutRegistry() {
   };
 }
 
-export const MotionLayoutContext =
-  createContext<
-    ReturnType<typeof createMotionLayoutRegistry>
-  >();
-
 /** Create in the element's Solid owner; repeated ref calls replace the registration. */
 export function createMotionLayoutRef(
   options: Accessor<MotionLayoutOptions>,
   present: Accessor<boolean> = () => true,
 ) {
-  const registry = useContext(MotionLayoutContext);
+  const registry = useContext(useViewScopes().motionLayout);
   let disposed = false;
   let currentOptions: MotionLayoutOptions = {};
   let currentPresent = true;

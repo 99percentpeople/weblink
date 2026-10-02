@@ -9,12 +9,12 @@ import {
 } from "lucide-solid";
 import { ClientAvatar } from "@/components/common/client-avatar";
 import { t } from "@/i18n";
-import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import {
   appState,
   type ClientInfo,
 } from "@/libs/state/app-state";
-import { useAudioPlayer } from "./audio-player";
+import { useAudioPlayer } from "@/libs/state/audio-player-context";
 
 const rowClass = "flex min-w-0 items-center gap-1 py-1";
 const identityClass =

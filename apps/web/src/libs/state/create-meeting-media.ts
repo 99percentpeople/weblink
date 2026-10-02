@@ -9,43 +9,31 @@ import {
   createNativeScreenStream,
   getNativeScreenPublication,
 } from "@/libs/application/native-screen-service";
-import { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
-import {
-  createContext,
-  createEffect,
-  on,
-  onCleanup,
-  useContext,
-  type ParentProps,
-} from "solid-js";
+import type { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
+import { createEffect, on, onCleanup } from "solid-js";
 import { createMeetingMediaController } from "@/libs/application/meeting-media-service";
 import { createLiveVideoSettings } from "@/libs/application/live-video-settings";
 import type { MeetingDeviceControls } from "@/libs/domain/meeting-devices";
-import { useAppState } from "@/libs/state/app-state-context";
-import { useAudioPlayer } from "@/routes/home/components/audio-player";
-import { createMediaDevices } from "./media-devices";
-import { createMediaDeviceAccess } from "./media-device-access";
+import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import type { AudioPlayerContextValue } from "./audio-player-context";
+import { createMediaDevices } from "@/libs/hooks/media-devices";
+import { createMediaDeviceAccess } from "@/libs/hooks/media-device-access";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 
-export type MeetingMediaContextValue = {
-  media: ReturnType<typeof createMeetingMediaController>;
-  devices: MeetingDeviceControls;
-};
-const MeetingMediaContext =
-  createContext<MeetingMediaContextValue>();
+import type { MeetingMediaContextValue } from "@/libs/state/meeting-media-context";
 
-export function useMeetingMedia(): MeetingMediaContextValue {
-  const context = useContext(MeetingMediaContext);
-  if (!context)
-    throw new Error("Meeting media context not found");
-  return context;
-}
-
-/** The toolbar and room dialog own views of the same application capture state. */
-export function MeetingMediaProvider(props: ParentProps) {
-  const state = useAppState();
-  const audio = useAudioPlayer();
+export function createMeetingMedia({
+  state,
+  audio,
+  nativePicker,
+}: {
+  state: AppStateContextProps;
+  audio: AudioPlayerContextValue;
+  nativePicker?: ReturnType<
+    typeof createNativeScreenDialog
+  >;
+}): MeetingMediaContextValue {
   const discovery = createMediaDevices();
   const access = createMediaDeviceAccess({
     devices: discovery.devices,
@@ -56,10 +44,6 @@ export function MeetingMediaProvider(props: ParentProps) {
   let disposed = false;
   let captureGeneration = 0;
   let pendingNative: AbortController | undefined;
-  const nativePicker =
-    platform.capture && platform.screenShare
-      ? createNativeScreenDialog(platform.capture)
-      : undefined;
   const browserDisplayMedia =
     typeof navigator.mediaDevices?.getDisplayMedia ===
     "function"
@@ -277,11 +261,5 @@ export function MeetingMediaProvider(props: ParentProps) {
       }
     },
   };
-  return (
-    <MeetingMediaContext.Provider
-      value={{ media, devices }}
-    >
-      {props.children}
-    </MeetingMediaContext.Provider>
-  );
+  return { media, devices };
 }

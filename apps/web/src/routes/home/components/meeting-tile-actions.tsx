@@ -1,12 +1,12 @@
+import type { TileActionProps } from "./meeting-tile-actions-scope";
+import { useViewScopes } from "@/libs/state/view-scopes";
 import {
-  createContext,
   createSignal,
   For,
   onCleanup,
   onMount,
   Show,
   useContext,
-  type Accessor,
   type ParentProps,
 } from "solid-js";
 import { Ellipsis } from "lucide-solid";
@@ -17,20 +17,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type TileActionProps = ParentProps<{
-  label: string;
-  title?: string;
-  active?: boolean;
-  disabled?: boolean;
-  order?: number;
-  keepFocus?: boolean;
-  onAction(): void;
-}>;
-const ActionsContext = createContext<{
-  compact: Accessor<boolean>;
-  register(action: TileActionProps): () => void;
-}>();
-
 /** Action owners and the invisible keyboard editor survive menu open/close. */
 export function MeetingTileActions(
   props: ParentProps<{
@@ -39,6 +25,7 @@ export function MeetingTileActions(
     portalMount?: HTMLElement;
   }>,
 ) {
+  const ActionsContext = useViewScopes().tileActions;
   const [touch, setTouch] = createSignal(false);
   const [open, setOpen] = createSignal(false);
   const [actions, setActions] = createSignal<
@@ -170,7 +157,7 @@ export function MeetingTileActions(
 }
 
 export function MeetingTileAction(props: TileActionProps) {
-  const context = useContext(ActionsContext);
+  const context = useContext(useViewScopes().tileActions);
   onMount(() => {
     if (context) onCleanup(context.register(props));
   });

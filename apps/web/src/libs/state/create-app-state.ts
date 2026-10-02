@@ -6,16 +6,12 @@ import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-tra
 import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
 import {
-  Component,
-  createContext,
   createEffect,
   createMemo,
   createSignal,
   type Accessor,
   onCleanup,
   onMount,
-  ParentProps,
-  useContext,
   untrack,
 } from "solid-js";
 import type {
@@ -57,7 +53,7 @@ import {
   SpeedTestService,
   type SpeedTestState,
 } from "@/libs/application/speed-test-service";
-import { createSpeedTestApproval } from "@/components/speed-test-approval";
+import type { SpeedTestApprovalController } from "@/components/speed-test-approval";
 import {
   createTaskService,
   type TaskService,
@@ -76,103 +72,14 @@ import { RoomFileSharingService } from "@/libs/application/messaging/room-file-s
 import { roomConversationId } from "@/libs/domain/conversation";
 import { getRoomNamespace } from "@/libs/application/room-identity";
 
-export interface AppStateContextProps {
-  conversationMessaging: Pick<
-    ConversationMessagingService,
-    "sendText" | "sendFile"
-  >;
-  conversationHistory: Pick<
-    ConversationHistoryService,
-    "cacheLocalTextBatch"
-  >;
-  joinRoom: (options?: ClientJoinOptions) => Promise<void>;
-  roomConflict: Accessor<boolean>;
-  leaveRoom: () => void;
-  activeRoomConversationId: Accessor<string | null>;
-  roomChatCapabilities: Accessor<
-    Readonly<
-      Record<
-        string,
-        "checking" | "supported" | "unsupported"
-      >
-    >
-  >;
-  sendRoomText: (text: string) => Promise<void>;
-  roomFileCapabilities: AppStateContextProps["roomChatCapabilities"];
-  sendRoomFile: (file: FileSource) => Promise<void>;
-  requestRoomFile: (
-    message: FileTransferMessage,
-  ) => Promise<void>;
-  requestFile: (
-    target: ClientID,
-    info: ChunkMetaData,
-    resume?: boolean,
-  ) => Promise<void>;
-  sendText: (
-    text: string,
-    target: ClientID | ClientID[],
-  ) => Promise<void>;
-  sendFile: (
-    file: FileSource,
-    target: ClientID | ClientID[],
-  ) => Promise<void>;
-  sendClipboard: (
-    text: string,
-    target: ClientID | ClientID[],
-  ) => Promise<void>;
-  catalog: Pick<FileCatalogService<PeerSession>, "watch">;
-  sharedFiles: Pick<
-    SharedFileTransfers,
-    "download" | "downloadTask"
-  >;
-  supportsSharedFiles(session: PeerSession): boolean;
-  retryMessage: (message: StoreMessage) => Promise<void>;
-  shareFile: (fileId: FileID, target: ClientID) => void;
-  resumeFile: (
-    fileId: FileID,
-    target: ClientID,
-  ) => Promise<void>;
-  pauseFile: (
-    fileId: FileID,
-    target: ClientID,
-  ) => Promise<void>;
-  tasks: TaskService;
-  getSpeedTestState: (
-    target: ClientID | null,
-  ) => SpeedTestState | undefined;
-  speedTestState: Accessor<SpeedTestState>;
-  startSpeedTest: (target: ClientID) => Promise<void>;
-  cancelSpeedTest: (target?: ClientID) => void;
-  approveSpeedTest: (target: ClientID) => void;
-  declineSpeedTest: (target: ClientID) => void;
-  localStream: Accessor<MediaStream | null>;
-  replaceLocalStream: (stream: MediaStream | null) => void;
-  clearLocalStream: () => void;
-  roomStatus: RoomStatus;
-}
+import type { AppStateContextProps } from "@/libs/state/app-state-context";
 
-const AppStateContext = createContext<
-  AppStateContextProps | undefined
->(undefined);
-
-export const useAppState = (): AppStateContextProps => {
-  const context = useContext(AppStateContext);
-  if (!context) {
-    throw new Error(
-      "useAppState must be used within a AppStateProvider",
-    );
-  }
-  return context;
-};
-
-export interface AppStateProviderProps extends ParentProps {
-  localStreamService: LocalStreamService;
-}
-
-export const AppStateProvider: Component<
-  AppStateProviderProps
-> = (props) => {
-  const localStream = props.localStreamService.stream;
+/** Services are owned by the application composition scope, independently of views. */
+export function createAppState(
+  localStreamService: LocalStreamService,
+  speedTestApproval: SpeedTestApprovalController,
+): AppStateContextProps {
+  const localStream = localStreamService.stream;
   const conversationHistory =
     new ConversationHistoryService(
       messageStores,
@@ -430,7 +337,6 @@ export const AppStateProvider: Component<
       status: "idle",
       peerId: null,
     });
-  const speedTestApproval = createSpeedTestApproval();
   const speedTests = new SpeedTestService({
     getConnection: (peerId) =>
       appState.session.sessions[peerId]?.peerConnection,
@@ -844,70 +750,59 @@ export const AppStateProvider: Component<
       files.pauseFile(session, fileId),
     );
 
-  return (
-    <AppStateContext.Provider
-      value={{
-        conversationMessaging,
-        conversationHistory,
-        joinRoom,
-        roomConflict,
-        leaveRoom,
-        activeRoomConversationId: () =>
-          currentRoom()?.conversationId ?? null,
-        roomChatCapabilities,
-        roomFileCapabilities,
-        sendRoomFile: async (file) => {
-          await conversationMessaging.sendFile(
-            currentRoom()?.conversationId ?? "",
-            file,
-          );
-        },
-        requestRoomFile: (message) =>
-          runFileAction(() =>
-            roomFiles.requestFile(message),
-          ),
-        sendRoomText: async (text) => {
-          await conversationMessaging.sendText(
-            currentRoom()?.conversationId ?? "",
-            text,
-          );
-        },
-        shareFile: (fileId, target) => {
-          void shareFile(fileId, target);
-        },
-        sendText,
-        sendFile,
-        sendClipboard,
-        catalog,
-        sharedFiles,
-        supportsSharedFiles: (session) =>
-          fileContent.supportsShared(session),
-        retryMessage,
-        requestFile,
-        resumeFile,
-        pauseFile,
-        tasks,
-        getSpeedTestState: tasks.latestSpeedTest,
-        speedTestState,
-        startSpeedTest: (target) =>
-          speedTests.start(target),
-        cancelSpeedTest: (target) =>
-          speedTests.cancel(target),
-        approveSpeedTest: (target) => {
-          speedTestApproval.accept(target);
-        },
-        declineSpeedTest: (target) => {
-          speedTestApproval.decline(target);
-        },
-        localStream,
-        replaceLocalStream: (stream) =>
-          props.localStreamService.replace(stream),
-        clearLocalStream: () =>
-          props.localStreamService.clear(),
-        roomStatus: appState.roomStatus,
-      }}
-    >
-      {props.children}
-    </AppStateContext.Provider>
-  );
-};
+  return {
+    conversationMessaging,
+    conversationHistory,
+    joinRoom,
+    roomConflict,
+    leaveRoom,
+    activeRoomConversationId: () =>
+      currentRoom()?.conversationId ?? null,
+    roomChatCapabilities,
+    roomFileCapabilities,
+    sendRoomFile: async (file) => {
+      await conversationMessaging.sendFile(
+        currentRoom()?.conversationId ?? "",
+        file,
+      );
+    },
+    requestRoomFile: (message) =>
+      runFileAction(() => roomFiles.requestFile(message)),
+    sendRoomText: async (text) => {
+      await conversationMessaging.sendText(
+        currentRoom()?.conversationId ?? "",
+        text,
+      );
+    },
+    shareFile: (fileId, target) => {
+      void shareFile(fileId, target);
+    },
+    sendText,
+    sendFile,
+    sendClipboard,
+    catalog,
+    sharedFiles,
+    supportsSharedFiles: (session) =>
+      fileContent.supportsShared(session),
+    retryMessage,
+    requestFile,
+    resumeFile,
+    pauseFile,
+    tasks,
+    getSpeedTestState: tasks.latestSpeedTest,
+    speedTestState,
+    startSpeedTest: (target) => speedTests.start(target),
+    cancelSpeedTest: (target) => speedTests.cancel(target),
+    approveSpeedTest: (target) => {
+      speedTestApproval.accept(target);
+    },
+    declineSpeedTest: (target) => {
+      speedTestApproval.decline(target);
+    },
+    localStream,
+    replaceLocalStream: (stream) =>
+      localStreamService.replace(stream),
+    clearLocalStream: () => localStreamService.clear(),
+    roomStatus: appState.roomStatus,
+  };
+}

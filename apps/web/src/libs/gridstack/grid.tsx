@@ -15,7 +15,7 @@ import {
   GridStackOptions,
   GridStackPosition,
 } from "gridstack";
-import { GridStackContext } from "./grid-context";
+import { useGridStackScope } from "./grid-context";
 import { Dynamic } from "solid-js/web";
 import clsx from "clsx";
 
@@ -127,6 +127,7 @@ export function GridStack(props: GridStackProps) {
     }
   });
 
+  const GridStackContext = useGridStackScope();
   return (
     <Dynamic
       component={local.as ?? "div"}

@@ -23,7 +23,7 @@ vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({ roomConflict: conflict }),
 }));
-vi.mock("@/components/app/room-actions", () => ({
+vi.mock("@/libs/state/room-actions-context", () => ({
   useRoomActions: () => ({ busy, takeover }),
 }));
 afterEach(() => {

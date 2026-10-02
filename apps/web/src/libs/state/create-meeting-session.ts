@@ -1,20 +1,12 @@
 import {
-  createContext,
   createEffect,
   createMemo,
   createSignal,
   on,
   onCleanup,
   untrack,
-  Show,
-  useContext,
-  type ParentProps,
 } from "solid-js";
-import {
-  useBeforeLeave,
-  useLocation,
-  useNavigate,
-} from "@solidjs/router";
+import { useBeforeLeave } from "@solidjs/router";
 import {
   HOME_PATH,
   isHomePath,
@@ -22,8 +14,8 @@ import {
 import { appState } from "@/libs/state/app-state";
 import { platform } from "@/libs/platform/runtime";
 import { setAppOptions } from "@/options";
-import { useAppState } from "@/libs/state/app-state-context";
-import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import type { MeetingMediaContextValue } from "@/libs/state/meeting-media-context";
 import { createReducedMotion } from "@/libs/hooks/reduced-motion";
 import {
   createDocumentPictureInPicture,
@@ -33,23 +25,32 @@ import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 import { sessionService } from "@/libs/application/session-service";
 import { createNativePictureInPicture } from "@/libs/application/native-picture-in-picture";
-import { createMeetingMainView } from "./meeting-main-view";
-import { createMeetingMainViewConfirmation } from "./meeting-main-view-dialog";
+import { createMeetingMainView } from "@/routes/home/components/meeting-main-view";
 import {
   createMeetingSources,
   selectMeetingFeaturedSource,
   selectMeetingVideoSource,
-} from "./meeting-sources";
-import { reportMeetingPipError } from "./meeting-pip-error";
-import { MeetingPipWindow } from "./meeting-pip-window";
-import type { MeetingPipControls } from "./meeting-controls";
-import "../index.css";
+} from "@/routes/home/components/meeting-sources";
+import { reportMeetingPipError } from "@/routes/home/components/meeting-pip-error";
+import type { MeetingPipControls } from "@/routes/home/components/meeting-controls";
 
-function createMeetingSession() {
-  const state = useAppState();
-  const { media } = useMeetingMedia();
-  const location = useLocation();
-  const navigate = useNavigate();
+import type { Location, Navigator } from "@solidjs/router";
+export function createMeetingSession({
+  state,
+  media: { media },
+  location,
+  navigate,
+  confirmation,
+}: {
+  state: AppStateContextProps;
+  media: MeetingMediaContextValue;
+  location: Location;
+  navigate: Navigator;
+  confirmation: {
+    confirm(mount?: HTMLElement): Promise<boolean>;
+    dismiss(): void;
+  };
+}) {
   const onMeetingPage = () => isHomePath(location.pathname);
   const [engaged, setEngaged] =
     createSignal(onMeetingPage());
@@ -199,14 +200,12 @@ function createMeetingSession() {
   onCleanup(() => {
     void nativePip?.close();
   });
-  const mainConfirmation =
-    createMeetingMainViewConfirmation();
   const mainView = createMeetingMainView({
     current: () => selected()?.id,
     valid: (id) =>
       !id || sources().some((source) => source.id === id),
     confirm: () =>
-      mainConfirmation.confirm(
+      confirmation.confirm(
         (document.fullscreenElement as HTMLElement | null) ??
           pip.window()?.document.body,
       ),
@@ -403,7 +402,7 @@ function createMeetingSession() {
         !next.some((source) => source.id === former.id)
       ) {
         mainView.remove(former.id);
-        mainConfirmation.dismiss();
+        confirmation.dismiss();
         pip.close();
       }
       // Preserve an implicit single main tile when another source joins. New
@@ -431,7 +430,7 @@ function createMeetingSession() {
   createEffect(
     on(
       () => selected()?.id,
-      () => mainConfirmation.dismiss(),
+      () => confirmation.dismiss(),
       { defer: true },
     ),
   );
@@ -471,7 +470,7 @@ function createMeetingSession() {
       (room, previous) => {
         if (room === previous) return;
         mainView.invalidate();
-        mainConfirmation.dismiss();
+        confirmation.dismiss();
         automaticReason = undefined;
         pip.close();
         setPinnedId(null);
@@ -525,7 +524,6 @@ function createMeetingSession() {
     pinnedId,
     setPinnedId: changePinnedId,
     mainView,
-    MainViewConfirmation: mainConfirmation.Dialog,
     railCollapsed,
     setRailCollapsed,
     toolbarCollapsed,
@@ -543,43 +541,4 @@ function createMeetingSession() {
     controls,
     leave,
   };
-}
-
-const MeetingSessionContext =
-  createContext<ReturnType<typeof createMeetingSession>>();
-
-export function useMeetingSession() {
-  const session = useContext(MeetingSessionContext);
-  if (!session)
-    throw new Error("Meeting session context not found");
-  return session;
-}
-
-/** Lives above the router's pages, so a PiP window survives leaving Home. */
-export function MeetingSessionProvider(props: ParentProps) {
-  const session = createMeetingSession();
-  return (
-    <MeetingSessionContext.Provider value={session}>
-      {props.children}
-      <session.MainViewConfirmation />
-      <Show when={session.pip.window()} keyed>
-        {(window) => (
-          <MeetingPipWindow
-            window={window}
-            sources={session.sources()}
-            featuredId={session.selected()?.id ?? null}
-            railCollapsed={session.railCollapsed()}
-            onRailCollapsedChange={session.setRailCollapsed}
-            toolbarCollapsed={session.toolbarCollapsed()}
-            onToolbarCollapsedChange={
-              session.setToolbarCollapsed
-            }
-            onSelect={session.setPinnedId}
-            controls={session.controls}
-            onLeave={session.leave}
-          />
-        )}
-      </Show>
-    </MeetingSessionContext.Provider>
-  );
 }

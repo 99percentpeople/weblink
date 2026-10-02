@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@solidjs/testing-library";
 import { reconcile } from "solid-js/store";
+import { createSignal, Show } from "solid-js";
+import { createAudioPlayer } from "@/libs/state/create-audio-player";
+import { AudioPlayerView } from "@/components/app/audio-player";
 import {
   afterEach,
   beforeEach,
@@ -9,10 +12,8 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  AudioPlayerProvider,
-  useAudioPlayer,
-} from "@/routes/home/components/audio-player";
+import { AudioPlayerProvider } from "../support/audio-player-provider";
+import { useAudioPlayer } from "@/libs/state/audio-player-context";
 import {
   setAppState,
   type ClientInfo,
@@ -140,6 +141,58 @@ afterEach(() => {
 });
 
 describe("meeting audio output selection", () => {
+  it("rebinds a replaced view without losing tracks, source mute or the selected speaker", async () => {
+    const sink = vi.fn().mockResolvedValue(undefined);
+    installSink(sink);
+    const received = track();
+    connect(new Stream([received]));
+    let show!: (visible: boolean) => void;
+    let controller!: ReturnType<typeof createAudioPlayer>;
+    const view = render(() => {
+      controller = createAudioPlayer();
+      const [visible, setVisible] = createSignal(true);
+      show = setVisible;
+      return (
+        <Show when={visible()}>
+          <AudioPlayerView player={controller} />
+        </Show>
+      );
+    });
+    await flush();
+    const original = view.container.querySelector("audio")!;
+    const stream = original.srcObject;
+    await controller.value.setOutputDevice("speaker-2");
+    controller.value.setPeerMuted("alice", true);
+    show(false);
+    expect(original.srcObject).toBeNull();
+    show(true);
+    await flush();
+    const replacement =
+      view.container.querySelector("audio")!;
+    expect(replacement).not.toBe(original);
+    expect(replacement.srcObject).toBe(stream);
+    expect(controller.value.outputDeviceId()).toBe(
+      "speaker-2",
+    );
+    expect(sink.mock.contexts.at(-1)).toBe(replacement);
+    expect(sink).toHaveBeenLastCalledWith("speaker-2");
+    expect(controller.value.isPeerMuted("alice")).toBe(
+      true,
+    );
+    expect(received.enabled).toBe(false);
+    expect(received.readyState).toBe("live");
+    expect(controller.value.playState()).toBe(true);
+    controller.onPause(original);
+    controller.detach(original);
+    expect(controller.value.playState()).toBe(true);
+    expect(replacement.srcObject).toBe(stream);
+    view.unmount();
+    expect(replacement.srcObject).toBeNull();
+    await expect(
+      controller.value.setOutputDevice(""),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("selects output without audio and keeps it for later tracks and reconnects", async () => {
     const sink = vi.fn().mockResolvedValue(undefined);
     installSink(sink);

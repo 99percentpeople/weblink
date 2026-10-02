@@ -116,6 +116,14 @@ draft clearing and downloaded file contents. It requires Node 22+, Bun and
 Chromium (`CHROMIUM_PATH` can select the browser). Profiles, Vite caches and server
 processes are disposable; it does not connect to a deployed signaling service.
 
+`bun run test:e2e:hmr` also requires `rsync`. It copies the app to a temporary
+receiving workspace and runs the real composition with two Chromium clients,
+local signaling, camera and microphone capture. Batched view sync must preserve
+the application owner, room, tracks and connected peers while RTP continues.
+Context and view definitions arriving together must rebuild through the native
+entry dependency without missing-context errors. It also checks root disposal
+and keeps the source workspace unchanged.
+
 `node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
 workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This
 checks the API compatibility path; it does not substitute for iPhone testing.
@@ -133,6 +141,7 @@ bun run test:e2e:tasks
 bun run test:e2e:chat
 bun run test:e2e:conversations
 bun run test:e2e:meeting
+bun run test:e2e:hmr
 bun run test:e2e:speed
 ```
 

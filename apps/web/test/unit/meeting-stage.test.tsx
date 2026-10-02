@@ -36,7 +36,7 @@ vi.mock("@/libs/application/session-service", () => ({
     getScreenControl: () => undefined,
   },
 }));
-vi.mock("@/routes/home/components/audio-player", () => ({
+vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     isSourceMuted: () => false,
     setSourceMuted: vi.fn(),
@@ -44,12 +44,17 @@ vi.mock("@/routes/home/components/audio-player", () => ({
     setPeerMuted() {},
   }),
 }));
-vi.mock("@/routes/home/components/video-display", () => ({
-  useVideoDisplay: () => ({
-    videoRef: () => undefined,
-    videoTrack: () => undefined,
-    audioTracks: () => [],
+vi.mock(
+  "@/routes/home/components/video-display-context",
+  () => ({
+    useVideoDisplay: () => ({
+      videoRef: () => undefined,
+      videoTrack: () => undefined,
+      audioTracks: () => [],
+    }),
   }),
+);
+vi.mock("@/routes/home/components/video-display", () => ({
   VideoDisplay: (
     props: ParentProps<{
       ref?: (node: HTMLDivElement) => void;

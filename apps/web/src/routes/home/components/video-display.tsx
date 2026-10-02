@@ -1,3 +1,4 @@
+import { useViewScopes } from "@/libs/state/view-scopes";
 import { Motion } from "@/components/ui/motion";
 import { layoutOverlay } from "@/components/ui/motion-layout";
 import { IconVolumeUpFilled } from "@/components/icons";
@@ -10,8 +11,6 @@ import {
   createEffect,
   createMemo,
   Show,
-  createContext,
-  useContext,
   createSignal,
   onCleanup,
 } from "solid-js";
@@ -22,22 +21,6 @@ import { Spinner } from "../../../components/common/spinner";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { getVisibleVideoDisplayTracks } from "./video-display-tracks";
-
-const VideoContext = createContext<{
-  videoRef: Accessor<HTMLVideoElement | null>;
-  videoTrack: Accessor<MediaStreamTrack | null>;
-  audioTracks: Accessor<MediaStreamTrack[]>;
-}>();
-
-export const useVideoDisplay = () => {
-  const context = useContext(VideoContext);
-  if (!context) {
-    throw new Error(
-      "useVideoDisplay must be used within a VideoDisplay",
-    );
-  }
-  return context;
-};
 
 export const VideoDisplay = (
   props: {
@@ -61,6 +44,7 @@ export const VideoDisplay = (
     ) => void;
   } & ParentProps,
 ) => {
+  const VideoContext = useViewScopes().video;
   const stream = createMemo(() => props.stream ?? null);
 
   const tracks = createMediaTracks(stream);
@@ -279,7 +263,7 @@ export const VideoDisplay = (
             <ClientAvatar
               as={Motion.span}
               layoutSize="avatar"
-              class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
+              class="meeting-video-avatar absolute left-1/2 top-1/2 size-20
                 -translate-x-1/2 -translate-y-1/2 text-2xl"
               avatar={props.avatar}
               name={props.name}
@@ -292,7 +276,7 @@ export const VideoDisplay = (
               <ClientAvatar
                 as={Motion.span}
                 layoutSize="avatar"
-                class="meeting-video-avatar absolute top-1/2 left-1/2 size-20
+                class="meeting-video-avatar absolute left-1/2 top-1/2 size-20
                   -translate-x-1/2 -translate-y-1/2 text-2xl"
                 avatar={props.avatar}
                 name={props.name}
@@ -375,12 +359,12 @@ export const VideoDisplay = (
         </Show>
         <div
           use:layoutOverlay={"name"}
-          class="absolute top-1 right-1 left-1 flex gap-1"
+          class="absolute left-1 right-1 top-1 flex gap-1"
         >
           <Badge
             variant="secondary"
             title={props.name}
-            class="max-w-full min-w-0 gap-1 bg-black/50 text-xs text-white
+            class="min-w-0 max-w-full gap-1 bg-black/50 text-xs text-white
               hover:bg-black/80"
           >
             <span class="truncate">{props.name}</span>

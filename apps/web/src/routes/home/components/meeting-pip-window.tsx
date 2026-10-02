@@ -1,12 +1,12 @@
 import { createEffect, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
-import { useMeetingMedia } from "@/libs/hooks/meeting-media-context";
+import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import { preparePictureInPictureDocument } from "@/libs/utils/picture-in-picture-document";
 import { Toaster } from "@/components/ui/sonner";
-import { useRoomActions } from "@/components/app/room-actions";
+import { useRoomActions } from "@/libs/state/room-actions-context";
 import { appState } from "@/libs/state/app-state";
 import { t } from "@/i18n";
-import { useAudioPlayer } from "./audio-player";
+import { useAudioPlayer } from "@/libs/state/audio-player-context";
 import {
   MeetingControls,
   type MeetingPipControls,
