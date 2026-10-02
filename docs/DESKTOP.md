@@ -697,22 +697,23 @@ Repeating the shortcut keeps an open keyboard open or requests it again after Ba
 Direct touches must begin inside the displayed video. Pointer capture retains them
 outside the picture until release, with coordinates clamped to the display edge;
 no scroll or window-drag conversion is applied.
-When the browser exposes the secure-context
-[VirtualKeyboard API](https://developer.chrome.com/docs/web-platform/virtual-keyboard),
-the editor uses manual keyboard policy and calls `show()` within the same tap after
-focusing. It stays inside the fullscreen container; showing the keyboard does not
+Explicit keyboard actions focus the editor with automatic keyboard policy on both
+HTTP and HTTPS. The optional secure-context
+[VirtualKeyboard API](https://developer.chrome.com/docs/web-platform/virtual-keyboard)
+only observes geometry; it does not drive keyboard show/hide. The editor stays
+inside the fullscreen container; showing the keyboard does not
 request an exit from fullscreen or change global viewport behavior. Keyboard geometry
 and visual viewport resizing track OS dismissal, including fullscreen Android Back
 when geometry events are absent. After a previously visible keyboard remains hidden
-for 180 ms, the editor releases focus so touching the screen cannot reopen it.
+for 180 ms, the editor releases focus and updates its visibility state, so touching
+the screen cannot reopen it. A transient zero rectangle does not end text input.
 Transient animation gaps, zoom and rotation do not dismiss input. Reopening cancels
 pending dismissal without issuing an intervening hide. A real DOM focus transfer,
 hidden page, control teardown or explicit dismissal releases input ownership and
 restores the editor's policy without hiding another input's keyboard. Both normal
 and fullscreen tiles keep playback and input active while their focused keyboard
 collapses the meeting grid; source removal and session teardown still disable them.
-Without that API, explicit keyboard actions use focus-based activation. On LAN HTTP,
-reopening after Android Back performs a fresh focus transition without ending the
+Reopening after Android Back performs a fresh focus transition without ending the
 text-input session or disrupting composition. Ordinary screen taps suppress automatic
 keyboard reopening, including floating keyboards that do not resize the viewport.
 The editor stages IME candidates locally and sends
@@ -721,7 +722,10 @@ without sending intermediate composition strings or replaying `InputEvent.data`.
 This follows the [composition and input lifecycle](https://www.w3.org/TR/input-events-2/).
 Backspace, Delete and Enter use physical strokes, and pasted line breaks and tabs
 become Enter and Tab. Physical keyboard shortcuts in the focused editor continue
-to use the remote computer's keyboard layout.
+to use the remote computer's keyboard layout. Invisible editing guards on both sides
+of the local caret allow repeated Left/Right and Backspace/Delete actions. IME
+selection-only cursor moves become remote arrow strokes only outside composition;
+the guards are never transmitted.
 
 Native `ready.textInput: true`, together with `keyboard: true`, opts into reliable
 `text` packets. Each contains at most 64 UTF-16 units, no control characters and no
@@ -743,7 +747,8 @@ Settings → Remote control stores viewer-side touch preferences. Trackpad mode
 uses relative single-finger motion, tap-to-click, two-finger right click/scroll,
 and configurable long-press drag or right click. Long press is triggered by the
 phone browser's `contextmenu` event, with no application timer or delay preference;
-it applies only to a stationary single-finger gesture. Mouse right clicks continue
+single-finger touch defaults are preserved so the browser can recognize it. It
+applies only to a stationary single-finger gesture. Mouse right clicks continue
 through pointer events, and direct touch leaves long-press recognition to Windows.
 Pointer/scroll speed, direction and gesture switches are local preferences. Changes release the current gesture and
 apply immediately.

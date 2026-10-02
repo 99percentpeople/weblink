@@ -1,6 +1,4 @@
 interface VirtualKeyboardAPI extends EventTarget {
-  show(): void;
-  hide(): void;
   readonly boundingRect: { height: number };
 }
 
@@ -82,17 +80,14 @@ export function createRemoteSoftKeyboard(
             policy,
           );
       };
-      const manual =
-        typeof api?.show === "function" &&
-        typeof api.hide === "function";
       const refocus = () => {
         if (
           hasComposition() ||
           doc.activeElement !== editor
         )
           return;
-        // On HTTP there is no virtualKeyboard.show(). After Android Back, an
-        // already focused editor needs a new focus transition to request IME.
+        // After Android Back, an already focused editor needs a new focus
+        // transition to request IME. Use the same path on HTTP and HTTPS.
         // The UI must keep its input session alive through this synchronous blur.
         refocusing = true;
         try {
@@ -170,8 +165,14 @@ export function createRemoteSoftKeyboard(
             onVisibilityChange(false);
           }, 180);
         }
-        if (changed && doc.activeElement === editor)
-          onVisibilityChange(visible);
+        // A temporary zero rectangle must not tear down the editor or discard
+        // a pending IME commit. Publish dismissal only after the timer verifies it.
+        if (
+          changed &&
+          visible &&
+          doc.activeElement === editor
+        )
+          onVisibilityChange(true);
       };
       const geometry = () => {
         if (api!.boundingRect.height > 0)
@@ -198,84 +199,33 @@ export function createRemoteSoftKeyboard(
         );
       };
       viewport?.addEventListener("resize", resized);
-      const releaseObservers = () => {
-        cancelDismiss();
-        viewport?.removeEventListener("resize", resized);
-      };
-      if (manual) {
-        editor.setAttribute(
-          "virtualkeyboardpolicy",
-          "manual",
-        );
-        api.addEventListener("geometrychange", geometry);
-      }
+      api?.addEventListener("geometrychange", geometry);
       const show = (repeat = false) => {
         cancelDismiss();
         viewportDismissed = false;
         onVisibilityChange(true);
-        if (!manual) {
-          // Only an explicit keyboard action enables the automatic IME path.
-          editor.setAttribute(
-            "virtualkeyboardpolicy",
-            "auto",
-          );
-          if (repeat) refocus();
-          return;
-        }
-        try {
-          api.show();
-        } catch {
-          release();
-          editor.blur();
-          editor.focus({ preventScroll: true });
-          session = {
-            editor,
-            show: () => {
-              cancelDismiss();
-              editor.setAttribute(
-                "virtualkeyboardpolicy",
-                "auto",
-              );
-              refocus();
-              onVisibilityChange(true);
-            },
-            release: () => {
-              releaseObservers();
-              restorePolicy();
-            },
-          };
-          viewport?.addEventListener("resize", resized);
-        }
+        // Keep native IME focus/commit behavior identical in secure and insecure
+        // contexts. The optional API only observes visibility, never drives IME.
+        editor.setAttribute(
+          "virtualkeyboardpolicy",
+          "auto",
+        );
+        if (repeat) refocus();
       };
       session = {
         editor,
         show: () => show(true),
         release() {
-          releaseObservers();
-          if (!manual) {
-            restorePolicy();
-            return;
-          }
-          api.removeEventListener(
+          cancelDismiss();
+          viewport?.removeEventListener("resize", resized);
+          api?.removeEventListener(
             "geometrychange",
             geometry,
           );
-          // Hide while manual policy and focus still belong to this editor.
-          if (doc.activeElement === editor) {
-            try {
-              api.hide();
-            } catch {
-              /* Focus/blur still works. */
-            }
-          }
           restorePolicy();
         },
       };
-      if (!manual)
-        editor.setAttribute(
-          "virtualkeyboardpolicy",
-          "auto",
-        );
+      editor.setAttribute("virtualkeyboardpolicy", "auto");
       editor.focus({ preventScroll: true });
       if (doc.activeElement !== editor) {
         release();

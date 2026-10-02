@@ -399,7 +399,14 @@ export function RemoteControlOverlay(props: {
   const nativeTouch = (event: TouchEvent) => {
     // The native events share lifecycle handling; only the validated three-finger
     // shortcut can complete on cancellation. Other gestures are just cancelled.
-    event.preventDefault();
+    // Preserve the browser's single-finger contextmenu recognition. touch-action
+    // blocks viewport panning; cancelling touchstart also suppresses long press.
+    if (
+      event.type === "touchend" ||
+      event.type === "touchcancel" ||
+      event.touches.length > 1
+    )
+      event.preventDefault();
     event.stopPropagation();
     switch (event.type) {
       case "touchstart":

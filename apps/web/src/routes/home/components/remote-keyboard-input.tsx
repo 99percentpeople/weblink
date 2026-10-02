@@ -19,6 +19,7 @@ import { sendRemoteText } from "@/libs/domain/remote-control/text";
 import { createRemoteSoftKeyboard } from "@/libs/hooks/remote-soft-keyboard";
 import { MeetingTileAction } from "./meeting-tile-actions";
 import {
+  REMOTE_TEXT_CARET,
   REMOTE_TEXT_SEED,
   RemoteTextInput,
 } from "@/libs/domain/remote-control/text-input";
@@ -67,7 +68,10 @@ export function RemoteKeyboardInput(props: {
     const element = editor();
     if (!element) return;
     element.value = REMOTE_TEXT_SEED;
-    element.setSelectionRange(1, 1);
+    element.setSelectionRange(
+      REMOTE_TEXT_CARET,
+      REMOTE_TEXT_CARET,
+    );
   };
   const report = (
     result: ReturnType<typeof sendRemoteText>,
@@ -158,6 +162,17 @@ export function RemoteKeyboardInput(props: {
     if (!available() || !element) return;
     const doc = element.ownerDocument;
     const life = new AbortController();
+    doc.addEventListener(
+      "selectionchange",
+      () => {
+        if (focused())
+          input.selectionChanged(
+            element.selectionStart,
+            element.selectionEnd,
+          );
+      },
+      { signal: life.signal },
+    );
     doc.addEventListener(
       "visibilitychange",
       () => {
@@ -261,15 +276,22 @@ export function RemoteKeyboardInput(props: {
             props.state !== "active"
           )
             return;
-          if (event.isComposing || event.key === "Process")
+          if (
+            input.hasComposition ||
+            event.isComposing ||
+            event.key === "Process"
+          )
             return;
           const shortcut =
             event.ctrlKey || event.altKey || event.metaKey;
+          // Software keyboards need not report a physical key position.
+          const code =
+            event.code && event.code !== "Unidentified"
+              ? event.code
+              : event.key;
           if (
             (shortcut &&
-              !/^(Control|Alt|Shift|Meta)/.test(
-                event.code,
-              )) ||
+              !/^(Control|Alt|Shift|Meta)/.test(code)) ||
             [
               "Escape",
               "Tab",
@@ -281,10 +303,10 @@ export function RemoteKeyboardInput(props: {
               "End",
               "PageUp",
               "PageDown",
-            ].includes(event.code)
+            ].includes(code)
           ) {
             event.preventDefault();
-            keys?.tap(event.code, [
+            keys?.tap(code, [
               ...(event.ctrlKey ? ["ControlLeft"] : []),
               ...(event.altKey ? ["AltLeft"] : []),
               ...(event.shiftKey ? ["ShiftLeft"] : []),

@@ -13,6 +13,7 @@ import {
   render,
   screen,
 } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { TouchContact } from "@/libs/domain/remote-control/touch-types";
 import { RemoteControlOverlay } from "@/routes/home/components/remote-control-overlay";
@@ -485,7 +486,7 @@ it("opens the keyboard in native touchcancel after a three-finger trackpad gestu
     touch("down", id, id * 40, 80);
     expect(
       nativeTouch("touchstart", id).defaultPrevented,
-    ).toBe(true);
+    ).toBe(id > 1);
     expect(editor).not.toHaveFocus();
   }
   touch("down", 3, 120, 80);
@@ -514,16 +515,50 @@ it("opens the keyboard in native touchcancel after a three-finger trackpad gestu
   expect(fixture.control.input).toHaveBeenCalled();
 });
 
-it("reopens HTTP IME repeatedly on trackpad touchcancel without restarting the active keyboard session", () => {
-  const { editor, keyboard } = renderKeyboardControl();
-  keyboard()?.show();
-  const show = vi.spyOn(keyboard()!, "show");
-  const focus = vi.spyOn(editor, "focus");
-  const blur = vi.spyOn(editor, "blur");
-  const resetCount =
-    fixture.control.resetInput.mock.calls.length;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // Android Back can leave this exact editor focused, with no viewport event.
+it.each([false, true])(
+  "reopens IME on trackpad touchcancel without resetting the keyboard session (secure API=%s)",
+  (withAPI) => {
+    if (withAPI)
+      Object.defineProperty(navigator, "virtualKeyboard", {
+        configurable: true,
+        value: Object.assign(new EventTarget(), {
+          boundingRect: { height: 0 },
+        }),
+      });
+    const { editor, keyboard } = renderKeyboardControl();
+    keyboard()?.show();
+    const show = vi.spyOn(keyboard()!, "show");
+    const focus = vi.spyOn(editor, "focus");
+    const blur = vi.spyOn(editor, "blur");
+    const resetCount =
+      fixture.control.resetInput.mock.calls.length;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      // Android Back can leave this exact editor focused, with no viewport event.
+      for (const id of [1, 2, 3]) {
+        touch("down", id, id * 40, 80);
+        nativeTouch("touchstart", id);
+      }
+      for (const id of [1, 2, 3])
+        touch("cancel", id, id * 40, 80);
+      nativeTouch("touchcancel");
+      expect(editor).toHaveFocus();
+      expect(show).toHaveBeenCalledTimes(attempt + 1);
+      expect(focus).toHaveBeenCalledTimes(attempt + 1);
+      expect(blur).toHaveBeenCalledTimes(attempt + 1);
+      expect(
+        fixture.control.resetInput,
+      ).toHaveBeenCalledTimes(resetCount);
+      touch("down", 4, 100, 80);
+      nativeTouch("touchstart", 1);
+      touch("up", 4, 100, 80);
+      nativeTouch("touchend");
+      expect(show).toHaveBeenCalledTimes(attempt + 1);
+      expect(
+        editor.getAttribute("virtualkeyboardpolicy"),
+      ).toBe("manual");
+    }
+    fireEvent.compositionStart(editor);
+    editor.value = "待输入";
     for (const id of [1, 2, 3]) {
       touch("down", id, id * 40, 80);
       nativeTouch("touchstart", id);
@@ -531,38 +566,14 @@ it("reopens HTTP IME repeatedly on trackpad touchcancel without restarting the a
     for (const id of [1, 2, 3])
       touch("cancel", id, id * 40, 80);
     nativeTouch("touchcancel");
+    expect(editor.value).toBe("待输入");
     expect(editor).toHaveFocus();
-    expect(show).toHaveBeenCalledTimes(attempt + 1);
-    expect(focus).toHaveBeenCalledTimes(attempt + 1);
-    expect(blur).toHaveBeenCalledTimes(attempt + 1);
+    expect(focus).toHaveBeenCalledTimes(5);
     expect(
       fixture.control.resetInput,
     ).toHaveBeenCalledTimes(resetCount);
-    touch("down", 4, 100, 80);
-    nativeTouch("touchstart", 1);
-    touch("up", 4, 100, 80);
-    nativeTouch("touchend");
-    expect(show).toHaveBeenCalledTimes(attempt + 1);
-    expect(
-      editor.getAttribute("virtualkeyboardpolicy"),
-    ).toBe("manual");
-  }
-  fireEvent.compositionStart(editor);
-  editor.value = "待输入";
-  for (const id of [1, 2, 3]) {
-    touch("down", id, id * 40, 80);
-    nativeTouch("touchstart", id);
-  }
-  for (const id of [1, 2, 3])
-    touch("cancel", id, id * 40, 80);
-  nativeTouch("touchcancel");
-  expect(editor.value).toBe("待输入");
-  expect(editor).toHaveFocus();
-  expect(focus).toHaveBeenCalledTimes(5);
-  expect(fixture.control.resetInput).toHaveBeenCalledTimes(
-    resetCount,
-  );
-});
+  },
+);
 
 it.each([1, 2, 4])(
   "does not open the keyboard when %i contacts are cancelled",
@@ -902,16 +913,18 @@ it.each(["geometry", "viewport"])(
     }
     expect(
       screen.getByRole("button", {
-        name: "remote_control.keyboard_show",
+        name: "remote_control.keyboard_hide",
       }),
     ).toBeDefined();
     // The tap can arrive before the final IME animation/dismissal timer settles.
     touch("down", 1, 60, 80);
     touch("up", 1, 60, 80);
     vi.advanceTimersByTime(250);
-    expect(surface()).toHaveFocus();
     expect(editor).not.toHaveFocus();
-    expect(api.show).toHaveBeenCalledOnce();
+    touch("down", 2, 60, 80);
+    touch("up", 2, 60, 80);
+    expect(surface()).toHaveFocus();
+    expect(api.show).not.toHaveBeenCalled();
     expect(document.fullscreenElement).toBe(container);
   },
 );
@@ -930,4 +943,178 @@ it("does not preserve another editor's focus and unregisters the shortcut on tea
   expect(view.keyboard()).toBeUndefined();
   expect(other).toHaveFocus();
   other.remove();
+});
+
+it("preserves native long press and holds a trackpad drag through movement until lift", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  touch("down", 1, 60, 80);
+  expect(
+    nativeTouch("touchstart", 1).defaultPrevented,
+  ).toBe(false);
+  const menu = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.assign(menu, { pointerType: "touch" });
+  fireEvent(surface(), menu);
+  expect(menu.defaultPrevented).toBe(true);
+  expect(fixture.control.input).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "button",
+      button: 0,
+      down: true,
+    }),
+  );
+  touch("move", 1, 80, 90);
+  expect(nativeTouch("touchmove", 1).defaultPrevented).toBe(
+    false,
+  );
+  expect(fixture.control.move).toHaveBeenCalled();
+  fireEvent(surface(), menu);
+  touch("up", 1, 80, 90);
+  nativeTouch("touchend");
+  expect(
+    fixture.control.input.mock.calls.map(([e]: any[]) => [
+      e.button,
+      e.down,
+    ]),
+  ).toEqual([
+    [0, true],
+    [0, false],
+  ]);
+});
+
+it("keeps direct contacts held through a local context menu without emulating a mouse press", () => {
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "performance",
+    ],
+  });
+  setAppState("options", "remoteTouch", "mode", "direct");
+  render(() => <RemoteControlOverlay enabled />);
+  touch("down", 1, 60, 80);
+  nativeTouch("touchstart", 1);
+  vi.advanceTimersByTime(500);
+  fireEvent.contextMenu(surface());
+  vi.advanceTimersByTime(500);
+  touch("move", 1, 80, 90);
+  touch("up", 1, 80, 90);
+  const events = fixture.control.input.mock.calls.map(
+    ([e]: any[]) => e,
+  );
+  expect(events.every((e: any) => e.type === "touch")).toBe(
+    true,
+  );
+  expect(
+    events.map((e: any) => e.contacts[0].phase),
+  ).toEqual(["down", ...Array(21).fill("update"), "up"]);
+  expect(fixture.control.resetInput).not.toHaveBeenCalled();
+});
+
+it.each(["", "Unidentified"])(
+  "forwards IME keys with code '%s' and selection-only navigation repeatedly",
+  (code) => {
+    const { editor, keyboard } = renderKeyboardControl();
+    keyboard()?.show();
+    fixture.control.input.mockClear();
+    for (const key of [
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowRight",
+    ]) {
+      expect(fireEvent.keyDown(editor, { key, code })).toBe(
+        false,
+      );
+    }
+    for (const position of [0, 2, 2]) {
+      editor.setSelectionRange(position, position);
+      document.dispatchEvent(new Event("selectionchange"));
+      expect(editor.selectionStart).toBe(1);
+      document.dispatchEvent(new Event("selectionchange"));
+    }
+    expect(
+      fixture.control.input.mock.calls.map(([e]: any[]) => [
+        e.scanCode,
+        e.down,
+      ]),
+    ).toEqual(
+      [0x4b, 0x4d, 0x4d, 0x4b, 0x4d, 0x4d].flatMap(
+        (code) => [
+          [code, true],
+          [code, false],
+        ],
+      ),
+    );
+    fixture.control.input.mockClear();
+    fireEvent.compositionStart(editor);
+    fireEvent.keyDown(editor, {
+      key: "ArrowRight",
+      code: "",
+    });
+    editor.setSelectionRange(2, 2);
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(fixture.control.input).not.toHaveBeenCalled();
+  },
+);
+
+it("keeps a pending Chinese commit alive through transient secure-context keyboard geometry", () => {
+  vi.useFakeTimers();
+  const api = Object.assign(new EventTarget(), {
+    boundingRect: { height: 0 },
+    show: vi.fn(),
+    hide: vi.fn(),
+  });
+  Object.defineProperty(navigator, "virtualKeyboard", {
+    configurable: true,
+    value: api,
+  });
+  const [visible, setVisible] = createSignal(true);
+  const [keyboard, setKeyboard] =
+    createSignal<RemoteKeyboardInputHandle>();
+  const enabled = () =>
+    visible() || keyboard()?.focused() === true;
+  render(() => (
+    <RemoteKeyboardInput
+      control={fixture.control}
+      state="active"
+      enabled={enabled()}
+      registerKeyboard={(handle) => {
+        setKeyboard(handle);
+        return () => setKeyboard(undefined);
+      }}
+    />
+  ));
+  keyboard()?.show();
+  const editor = screen.getByRole(
+    "textbox",
+  ) as HTMLTextAreaElement;
+  setVisible(false);
+  api.boundingRect.height = 300;
+  api.dispatchEvent(new Event("geometrychange"));
+  fireEvent.compositionStart(editor);
+  editor.value = "\u200b中文\u200b";
+  fireEvent.input(editor, {
+    inputType: "insertCompositionText",
+    isComposing: true,
+  });
+  fireEvent.compositionEnd(editor, { data: "中文" });
+  api.boundingRect.height = 0;
+  api.dispatchEvent(new Event("geometrychange"));
+  expect(editor).toHaveFocus();
+  expect(editor.isConnected).toBe(true);
+  vi.advanceTimersByTime(50);
+  expect(fixture.control.input).toHaveBeenLastCalledWith({
+    type: "text",
+    text: "中文",
+  });
+  api.boundingRect.height = 300;
+  api.dispatchEvent(new Event("geometrychange"));
+  vi.advanceTimersByTime(200);
+  expect(editor).toHaveFocus();
+  expect(api.show).not.toHaveBeenCalled();
+  expect(api.hide).not.toHaveBeenCalled();
 });

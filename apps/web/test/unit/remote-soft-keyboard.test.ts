@@ -65,27 +65,18 @@ function setup(api?: KeyboardAPI) {
   return { editor, screen, keyboard, visibility };
 }
 describe("remote system keyboard", () => {
-  it("focuses the fullscreen editor and requests the OS keyboard in the same gesture with manual policy", () => {
+  it("uses native focus for a secure-context editor and observes geometry without driving the IME", () => {
     const api = new KeyboardAPI();
     const { editor, screen, keyboard } = setup(api);
-    api.show.mockImplementation(() => {
-      expect(document.activeElement).toBe(editor);
-      expect(
-        editor.getAttribute("virtualkeyboardpolicy"),
-      ).toBe("manual");
-      expect(document.fullscreenElement).toBe(screen);
-    });
     keyboard.show();
-    expect(api.show).toHaveBeenCalledOnce();
-    api.hide.mockImplementation(() => {
-      expect(document.activeElement).toBe(editor);
-      expect(
-        editor.getAttribute("virtualkeyboardpolicy"),
-      ).toBe("manual");
-    });
+    expect(document.activeElement).toBe(editor);
+    expect(
+      editor.getAttribute("virtualkeyboardpolicy"),
+    ).toBe("auto");
     keyboard.hide();
     keyboard.hide();
-    expect(api.hide).toHaveBeenCalledOnce();
+    expect(api.show).not.toHaveBeenCalled();
+    expect(api.hide).not.toHaveBeenCalled();
     expect(document.activeElement).not.toBe(editor);
     expect(
       editor.hasAttribute("virtualkeyboardpolicy"),
@@ -124,7 +115,7 @@ describe("remote system keyboard", () => {
     ).toBe(false);
     expect(document.activeElement).not.toBe(editor);
   });
-  it("reports OS dismissal without hiding or blurring and can reopen the focused editor", () => {
+  it("defers a transient dismissal and can reopen the focused editor", () => {
     const api = new KeyboardAPI();
     const { editor, keyboard, visibility } = setup(api);
     keyboard.show();
@@ -133,14 +124,11 @@ describe("remote system keyboard", () => {
     expect(visibility).not.toHaveBeenCalled();
     api.resize(320);
     api.resize(0);
-    expect(visibility.mock.calls).toEqual([
-      [true],
-      [false],
-    ]);
+    expect(visibility.mock.calls).toEqual([[true]]);
     expect(api.hide).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
     keyboard.show();
-    expect(api.show).toHaveBeenCalledTimes(2);
+    expect(api.show).not.toHaveBeenCalled();
     expect(api.hide).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
     visibility.mockClear();
@@ -159,18 +147,14 @@ describe("remote system keyboard", () => {
       expect(document.fullscreenElement).toBe(screen);
       expect(api.hide).not.toHaveBeenCalled();
     }
-    expect(visibility.mock.calls).toEqual([
-      [true],
-      [false],
-      [true],
-    ]);
+    expect(visibility.mock.calls).toEqual([[true], [true]]);
   });
   it("repeated show requests never schedule a hide before showing", () => {
     const api = new KeyboardAPI();
     const { editor, keyboard } = setup(api);
     keyboard.show();
     keyboard.show();
-    expect(api.show).toHaveBeenCalledTimes(2);
+    expect(api.show).not.toHaveBeenCalled();
     expect(api.hide).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
   });
@@ -196,20 +180,6 @@ describe("remote system keyboard", () => {
     api.resize(0);
     expect(visibility).not.toHaveBeenCalled();
   });
-  it("restores automatic keyboard policy when the browser rejects explicit show", () => {
-    const api = new KeyboardAPI();
-    const { editor, keyboard } = setup(api);
-    api.show.mockImplementation(() => {
-      throw new Error("unavailable");
-    });
-    expect(() => keyboard.show()).not.toThrow();
-    expect(
-      editor.hasAttribute("virtualkeyboardpolicy"),
-    ).toBe(false);
-    expect(document.activeElement).toBe(editor);
-    keyboard.hide();
-    expect(document.activeElement).not.toBe(editor);
-  });
   it("ignores an editor removed with its screen", () => {
     const api = new KeyboardAPI();
     const { editor, keyboard } = setup(api);
@@ -234,7 +204,7 @@ describe("remote system keyboard", () => {
     vi.advanceTimersByTime(200);
     expect(document.activeElement).not.toBe(editor);
     expect(visibility).toHaveBeenLastCalledWith(false);
-    expect(api.hide).toHaveBeenCalledOnce();
+    expect(api.hide).not.toHaveBeenCalled();
   });
 
   it.each([true, false])(
@@ -251,8 +221,8 @@ describe("remote system keyboard", () => {
       keyboard.show();
       viewport.resize(480);
       viewport.resize(800);
-      expect(visibility).toHaveBeenLastCalledWith(false);
       vi.advanceTimersByTime(200);
+      expect(visibility).toHaveBeenLastCalledWith(false);
       expect(document.activeElement).not.toBe(editor);
       expect(document.fullscreenElement).toBe(screen);
       visibility.mockClear();
@@ -294,10 +264,10 @@ describe("remote system keyboard", () => {
     viewport.resize(480);
     viewport.resize(800);
     expect(api.boundingRect.height).toBe(300);
-    expect(visibility).toHaveBeenLastCalledWith(false);
     vi.advanceTimersByTime(200);
+    expect(visibility).toHaveBeenLastCalledWith(false);
     expect(document.activeElement).not.toBe(editor);
-    expect(api.hide).toHaveBeenCalledOnce();
+    expect(api.hide).not.toHaveBeenCalled();
   });
 
   it("cancels pending dismissal when explicitly reopening the keyboard", () => {
@@ -310,6 +280,6 @@ describe("remote system keyboard", () => {
     vi.advanceTimersByTime(200);
     expect(document.activeElement).toBe(editor);
     expect(api.hide).not.toHaveBeenCalled();
-    expect(api.show).toHaveBeenCalledTimes(2);
+    expect(api.show).not.toHaveBeenCalled();
   });
 });

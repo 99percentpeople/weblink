@@ -12,6 +12,7 @@ import {
   validRemoteText,
 } from "@/libs/domain/remote-control/text";
 import {
+  REMOTE_TEXT_CARET,
   REMOTE_TEXT_SEED,
   RemoteTextInput,
 } from "@/libs/domain/remote-control/text-input";
@@ -106,6 +107,13 @@ describe("remote text packets", () => {
   });
 });
 
+function staged(text: string) {
+  return (
+    REMOTE_TEXT_SEED.slice(0, REMOTE_TEXT_CARET) +
+    text +
+    REMOTE_TEXT_SEED.slice(REMOTE_TEXT_CARET)
+  );
+}
 function editor() {
   let value = REMOTE_TEXT_SEED;
   const commit = vi.fn(),
@@ -136,7 +144,7 @@ describe("soft keyboard edit lifecycle", () => {
     expect(
       e.input.beforeInput("historyUndo", false, true),
     ).toBe(true);
-    e.write(REMOTE_TEXT_SEED + "previous input");
+    e.write(staged("previous input"));
     e.input.input("historyUndo", false);
     expect(e.commit).not.toHaveBeenCalled();
     expect(e.value()).toBe(REMOTE_TEXT_SEED);
@@ -146,7 +154,7 @@ describe("soft keyboard edit lifecycle", () => {
     expect(
       e.input.beforeInput("insertText", false, true),
     ).toBe(false);
-    e.write(REMOTE_TEXT_SEED + "a");
+    e.write(staged("a"));
     e.input.input("insertText", false);
     e.input.input("insertText", false); // no DOM mutation: never replay InputEvent.data
     expect(e.commit.mock.calls).toEqual([["a"]]);
@@ -174,10 +182,10 @@ describe("soft keyboard edit lifecycle", () => {
     (type) => {
       const e = editor();
       e.input.compositionStart();
-      e.write(REMOTE_TEXT_SEED + "zhong");
+      e.write(staged("zhong"));
       e.input.input("insertCompositionText", true);
       expect(e.commit).not.toHaveBeenCalled();
-      e.write(REMOTE_TEXT_SEED + "中😀");
+      e.write(staged("中😀"));
       e.input.compositionEnd();
       expect(e.input.beforeInput(type, false, true)).toBe(
         false,
@@ -193,7 +201,7 @@ describe("soft keyboard edit lifecycle", () => {
   it("handles final input before compositionend, cancellation and successive compositions", () => {
     const e = editor();
     e.input.compositionStart();
-    e.write(REMOTE_TEXT_SEED + "文");
+    e.write(staged("文"));
     e.input.input("insertText", false);
     e.input.compositionEnd();
     e.input.compositionStart(); // previous commit flushes before new composition
@@ -243,11 +251,59 @@ describe("soft keyboard edit lifecycle", () => {
     e.input.input("insertFromPaste", false);
     expect(e.commit.mock.calls).toEqual([["剪贴板😀\n"]]);
     e.input.compositionStart();
-    e.write(REMOTE_TEXT_SEED + "未提交");
+    e.write(staged("未提交"));
     e.input.compositionEnd();
     e.input.reset();
     vi.runAllTimers();
     expect(e.commit).toHaveBeenCalledTimes(1);
     expect(e.value()).toBe(REMOTE_TEXT_SEED);
   });
+});
+
+it("forwards repeated selection-only IME navigation in both directions without sending guards", () => {
+  const e = editor();
+  for (const position of [0, 2, 2, 0]) {
+    e.input.selectionChanged(position, position);
+    e.input.selectionChanged(
+      REMOTE_TEXT_CARET,
+      REMOTE_TEXT_CARET,
+    );
+  }
+  expect(e.key.mock.calls).toEqual([
+    ["ArrowLeft"],
+    ["ArrowRight"],
+    ["ArrowRight"],
+    ["ArrowLeft"],
+  ]);
+  expect(e.commit).not.toHaveBeenCalled();
+  expect(e.value()).toBe(REMOTE_TEXT_SEED);
+});
+it("keeps composition, text mutations and range selections local", () => {
+  const e = editor();
+  e.input.selectionChanged(0, 2);
+  e.write(staged("中文"));
+  e.input.selectionChanged(0, 0);
+  e.input.compositionStart();
+  e.write(REMOTE_TEXT_SEED);
+  e.input.selectionChanged(2, 2);
+  expect(e.key).not.toHaveBeenCalled();
+  e.input.reset();
+});
+it("strips surviving guards when an IME replaces the local surrounding text", () => {
+  const e = editor();
+  for (const value of [
+    staged("中"),
+    "\u200b文",
+    "字\u200b",
+    "😀",
+  ]) {
+    e.write(value);
+    e.input.input("insertText", false);
+  }
+  expect(e.commit.mock.calls).toEqual([
+    ["中"],
+    ["文"],
+    ["字"],
+    ["😀"],
+  ]);
 });

@@ -1,6 +1,8 @@
-// A removable character lets mobile keyboards emit repeated Backspace on an
-// otherwise empty editor. It is never sent to the remote computer.
-export const REMOTE_TEXT_SEED = "\u200b";
+// Keep editable context on both sides: Android IMEs can suppress Right/Delete
+// at the end of an editor. Neither guard is sent to the remote computer.
+const GUARD = "\u200b";
+export const REMOTE_TEXT_SEED = GUARD + GUARD;
+export const REMOTE_TEXT_CARET = 1;
 
 /** IME staging only. The DOM editor is the source of truth, not InputEvent.data. */
 export class RemoteTextInput {
@@ -14,7 +16,14 @@ export class RemoteTextInput {
       read(): string;
       reset(): void;
       commit(text: string): void;
-      key(code: "Backspace" | "Delete" | "Enter"): void;
+      key(
+        code:
+          | "Backspace"
+          | "Delete"
+          | "Enter"
+          | "ArrowLeft"
+          | "ArrowRight",
+      ): void;
     },
   ) {}
   compositionStart(): void {
@@ -72,6 +81,22 @@ export class RemoteTextInput {
     if (text) this.port.commit(text);
     this.port.reset();
   }
+  /** Some IME editing panels move the local selection without keyboard events. */
+  selectionChanged(start: number, end: number): void {
+    if (
+      this.hasComposition ||
+      this.port.read() !== REMOTE_TEXT_SEED ||
+      start !== end ||
+      start === REMOTE_TEXT_CARET
+    )
+      return;
+    this.port.key(
+      start < REMOTE_TEXT_CARET
+        ? "ArrowLeft"
+        : "ArrowRight",
+    );
+    this.port.reset();
+  }
   private editKey(type: string) {
     if (type === "deleteContentBackward")
       return "Backspace";
@@ -84,9 +109,10 @@ export class RemoteTextInput {
   }
   private commitValue(): void {
     const value = this.port.read();
-    const text = value.startsWith(REMOTE_TEXT_SEED)
+    let text = value.startsWith(GUARD)
       ? value.slice(1)
       : value;
+    if (text.endsWith(GUARD)) text = text.slice(0, -1);
     if (text) this.port.commit(text);
   }
   private finish(): void {
