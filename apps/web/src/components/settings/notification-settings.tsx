@@ -4,7 +4,7 @@ import {
   LoaderCircle,
   RotateCw,
 } from "lucide-solid";
-import { createNotificationPermission } from "@/libs/hooks/notification-permission";
+import { useAppState } from "@/libs/state/app-state-context";
 import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
@@ -26,7 +26,7 @@ export default function NotificationSettings() {
     busy,
     refresh,
     requestPermission,
-  } = createNotificationPermission();
+  } = useAppState().permissions.notifications;
   const keys = [
     "enabled",
     "backgroundOnly",

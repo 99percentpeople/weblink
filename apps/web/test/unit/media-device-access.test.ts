@@ -113,6 +113,64 @@ function setup(
 }
 
 describe("meeting device permissions", () => {
+  it("queries each permission once and reuses its observer across refreshes", async () => {
+    const f = setup();
+    await f.refresh();
+    expect(f.query).toHaveBeenCalledTimes(3);
+    await f.refresh();
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() =>
+      expect(f.query).toHaveBeenCalledTimes(3),
+    );
+    f.statuses.camera.change("denied");
+    expect(f.state("videoinput")).toBe("denied");
+    expect(f.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("does not repeatedly query unsupported permission descriptors", async () => {
+    const f = setup();
+    f.query.mockRejectedValue(
+      new TypeError("Unsupported permission"),
+    );
+    await f.refresh();
+    await f.refresh();
+    expect(f.query).toHaveBeenCalledTimes(3);
+    expect(f.state("videoinput")).toBe("prompt");
+  });
+
+  it("does not attach a permission observer that resolves after disposal", async () => {
+    const f = setup();
+    const pending = deferred<Permission>();
+    f.query.mockReturnValue(pending.promise);
+    const refreshing = f.refresh();
+    await vi.waitFor(() =>
+      expect(f.query).toHaveBeenCalledTimes(3),
+    );
+    f.dispose();
+    const status = new Permission();
+    const listen = vi.spyOn(status, "addEventListener");
+    pending.resolve(status);
+    await refreshing;
+    expect(listen).not.toHaveBeenCalled();
+  });
+
+  it("retries transient permission query failures on the next refresh", async () => {
+    const f = setup();
+    f.query.mockImplementationOnce(() => {
+      throw new DOMException(
+        "Document inactive",
+        "InvalidStateError",
+      );
+    });
+    await f.refresh();
+    expect(f.query).toHaveBeenCalledTimes(3);
+    await f.refresh();
+    expect(f.query).toHaveBeenCalledTimes(4);
+    f.statuses.microphone.change("denied");
+    expect(f.state("audioinput")).toBe("denied");
+  });
+
   it("keeps default output available without probing a missing microphone", async () => {
     const f = setup();
     f.enumerateDevices.mockResolvedValue([

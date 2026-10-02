@@ -73,11 +73,13 @@ import { roomConversationId } from "@/libs/domain/conversation";
 import { getRoomNamespace } from "@/libs/application/room-identity";
 
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import type { AppPermissions } from "./create-app-permissions";
 
 /** Services are owned by the application composition scope, independently of views. */
 export function createAppState(
   localStreamService: LocalStreamService,
   speedTestApproval: SpeedTestApprovalController,
+  permissions: AppPermissions,
 ): AppStateContextProps {
   const localStream = localStreamService.stream;
   const conversationHistory =
@@ -753,6 +755,7 @@ export function createAppState(
     );
 
   return {
+    permissions,
     conversationMessaging,
     conversationHistory,
     joinRoom,

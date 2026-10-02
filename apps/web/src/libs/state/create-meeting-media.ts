@@ -16,8 +16,6 @@ import { createLiveVideoSettings } from "@/libs/application/live-video-settings"
 import type { MeetingDeviceControls } from "@/libs/domain/meeting-devices";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { AudioPlayerContextValue } from "./audio-player-context";
-import { createMediaDevices } from "@/libs/hooks/media-devices";
-import { createMediaDeviceAccess } from "@/libs/hooks/media-device-access";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 
@@ -34,13 +32,7 @@ export function createMeetingMedia({
     typeof createNativeScreenDialog
   >;
 }): MeetingMediaContextValue {
-  const discovery = createMediaDevices();
-  const access = createMediaDeviceAccess({
-    devices: discovery.devices,
-    refreshing: discovery.refreshing,
-    refresh: discovery.updateDevices,
-    outputSupported: audio.outputSupported,
-  });
+  const access = state.permissions.media;
   let disposed = false;
   let captureGeneration = 0;
   let pendingNative: AbortController | undefined;
@@ -212,7 +204,7 @@ export function createMeetingMedia({
     ),
   );
   createEffect(on(media.error, report));
-  createEffect(on(discovery.error, report));
+  createEffect(on(access.discoveryError, report));
   createEffect(on(access.error, report));
   createEffect(
     on([media.microphoneOn, media.cameraOn], (enabled) => {
@@ -242,7 +234,7 @@ export function createMeetingMedia({
       },
     },
     list: access.devices,
-    refreshing: discovery.refreshing,
+    refreshing: access.refreshing,
     refresh: () => {
       void access.refresh();
     },

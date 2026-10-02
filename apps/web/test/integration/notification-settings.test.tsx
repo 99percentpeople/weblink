@@ -10,10 +10,10 @@ import {
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@solidjs/testing-library";
+import { renderWithPermissions as render } from "../support/render-with-permissions";
 import { reconcile } from "solid-js/store";
 import type { NotificationCapabilities } from "@weblink/platform";
 import NotificationSettings from "@/components/settings/notification-settings";
@@ -126,7 +126,7 @@ it("does not let an older query overwrite a newer focus refresh", async () => {
     "setting.notifications.permission_granted",
   );
 });
-it("releases its focus listener when settings are closed", async () => {
+it("releases its focus listener when the application scope is disposed", async () => {
   const view = render(() => <NotificationSettings />);
   await screen.findByText(
     "setting.notifications.permission_granted",

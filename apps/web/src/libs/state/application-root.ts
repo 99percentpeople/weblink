@@ -20,6 +20,7 @@ import {
 } from "./meeting-session-context";
 import { AppDialogsContext } from "./app-dialogs-context";
 import { createAppState } from "./create-app-state";
+import { createAppPermissions } from "./create-app-permissions";
 import {
   createAudioPlayer,
   type AudioPlayerController,
@@ -50,18 +51,23 @@ export function createApplicationRoot(
   props: RouteSectionProps,
 ) {
   initializeApplication();
+  const audio = createAudioPlayer();
+  const permissions = createAppPermissions({
+    notifications: platform.notifications,
+    outputSupported: audio.value.outputSupported,
+  });
   const stream = createLocalStreamService();
   onCleanup(() => stream.dispose());
   const state = createAppState(
     stream,
     createSpeedTestApproval(),
+    permissions,
   );
   return provideContext(
     ViewScopesContext,
     defaultViewScopes,
     () =>
       provideContext(AppStateContext, state, () => {
-        const audio = createAudioPlayer();
         return provideContext(
           AudioPlayerContext,
           audio.value,

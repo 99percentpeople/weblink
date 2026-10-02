@@ -1,8 +1,12 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
-import type { NotificationCapabilities } from "@weblink/platform";
-import { platform } from "@/libs/platform/runtime";
+import type {
+  NotificationCapabilities,
+  SystemNotifications,
+} from "@weblink/platform";
 
-export function createNotificationPermission() {
+export function createNotificationPermission(
+  notifications: SystemNotifications | undefined,
+) {
   const [capabilities, setCapabilities] =
     createSignal<NotificationCapabilities>();
   const [status, setStatus] = createSignal<
@@ -14,12 +18,13 @@ export function createNotificationPermission() {
   let disposed = false;
 
   const refresh = async () => {
+    if (disposed) return;
     const version = ++refreshVersion;
     if (!capabilities()) setStatus("loading");
     setFailure("");
     try {
-      const value = platform.notifications
-        ? await platform.notifications.capabilities()
+      const value = notifications
+        ? await notifications.capabilities()
         : {
             permission: "unavailable" as const,
             actions: false,
@@ -60,7 +65,7 @@ export function createNotificationPermission() {
       { signal: controller.signal },
     );
     stopWatching =
-      platform.notifications?.onPermissionChange?.(changed);
+      notifications?.onPermissionChange?.(changed);
   });
   onCleanup(() => {
     disposed = true;
@@ -69,13 +74,12 @@ export function createNotificationPermission() {
   });
 
   const requestPermission = async () => {
-    if (!platform.notifications || busy() || disposed)
-      return;
+    if (!notifications || busy() || disposed) return;
     setBusy(true);
     try {
       // No asynchronous work before this call: browsers require a user gesture.
       const permission =
-        await platform.notifications.requestPermission();
+        await notifications.requestPermission();
       if (!disposed) await refresh();
       return permission;
     } finally {

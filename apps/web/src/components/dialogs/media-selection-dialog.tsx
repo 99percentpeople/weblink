@@ -27,10 +27,6 @@ import {
 } from "@/components/ui/tooltip";
 import { createStore } from "solid-js/store";
 import { Button } from "@/components/ui/button";
-import {
-  createMicrophones,
-  createCameras,
-} from "@/libs/utils/devices";
 import { catchError } from "@/libs/catch";
 import { toast } from "solid-sonner";
 import {
@@ -40,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPermission } from "@solid-primitives/permission";
 import {
   Switch,
   SwitchControl,
@@ -117,9 +112,18 @@ const [enableUserProgramAudio, setEnableUserProgramAudio] =
   });
 
 export const createMediaSelectionDialog = () => {
-  const { localStream } = useAppState();
-  const cameras = createCameras();
-  const microphones = createMicrophones();
+  const { localStream, permissions } = useAppState();
+  const media = permissions.media;
+  const cameras = createMemo(() =>
+    media
+      .devices()
+      .filter((device) => device.kind === "videoinput"),
+  );
+  const microphones = createMemo(() =>
+    media
+      .devices()
+      .filter((device) => device.kind === "audioinput"),
+  );
 
   const availableCameras = createMemo(() => {
     return cameras()
@@ -146,9 +150,9 @@ export const createMediaSelectionDialog = () => {
   const [stream, setStream] =
     createSignal<MediaStream | null>(null);
 
-  const cameraPermission = createPermission("camera");
-  const microphonePermission =
-    createPermission("microphone");
+  const cameraPermission = () => media.state("videoinput");
+  const microphonePermission = () =>
+    media.state("audioinput");
 
   const canUseScreenSpeaker = createMemo(() => {
     return enableScreenSpeaker();
@@ -447,49 +451,11 @@ export const createMediaSelectionDialog = () => {
   const { open: openVideoConstraintsDialog } =
     createPresetVideoConstraintsDialog();
 
-  const requestMicrophonePermission = async () => {
-    if (!("mediaDevices" in navigator)) {
-      toast.error(
-        "Your browser does not support media devices",
-      );
-      return;
-    }
-    const [err, local] = await catchError(
-      navigator.mediaDevices.getUserMedia({
-        audio: true,
-      }),
-    );
-    if (err) {
-      toast.error(err.message);
-      return;
-    }
-    local.getTracks().forEach((track) => {
-      track.stop();
-      local?.removeTrack(track);
-    });
-  };
+  const requestMicrophonePermission = () =>
+    media.request("audioinput");
 
-  const requestCameraPermission = async () => {
-    if (!("mediaDevices" in navigator)) {
-      toast.error(
-        "Your browser does not support media devices",
-      );
-      return;
-    }
-    const [err, local] = await catchError(
-      navigator.mediaDevices.getUserMedia({
-        video: true,
-      }),
-    );
-    if (err) {
-      toast.error(err.message);
-      return;
-    }
-    local.getTracks().forEach((track) => {
-      track.stop();
-      local?.removeTrack(track);
-    });
-  };
+  const requestCameraPermission = () =>
+    media.request("videoinput");
 
   const { open, close, submit } = createDialog<MediaStream>(
     {

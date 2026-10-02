@@ -364,6 +364,12 @@ may select concrete infrastructure implementations.
     and application resource ownership, outside component refresh boundaries.
   - `create-*.ts`: UI-facing controller composition; views receive their existing
     controllers through context or props.
+  - `create-app-permissions.ts`: AppState's shared notification and media permission
+    signals, available through `useAppState().permissions`. The application root
+    initializes them once; settings, header controls and media pickers subscribe
+    without querying on mount. Permission changes, returning to the page and
+    explicit requests refresh the shared results. Device discovery never starts
+    capture; permission observers are released with the application scope.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and

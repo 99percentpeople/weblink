@@ -10,11 +10,13 @@ import {
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderWithoutPermissions,
   screen,
   waitFor,
   within,
 } from "@solidjs/testing-library";
+import { createSignal, Show } from "solid-js";
+import { renderWithPermissions as render } from "../support/render-with-permissions";
 import { reconcile } from "solid-js/store";
 import { NotificationPermissionButton } from "@/components/app/notification-permission-button";
 import NotificationSettings from "@/components/settings/notification-settings";
@@ -166,7 +168,9 @@ it("does not query native permissions or render a button on desktop", () => {
     browserNotifications,
     "capabilities",
   );
-  render(() => <NotificationPermissionButton />);
+  renderWithoutPermissions(() => (
+    <NotificationPermissionButton />
+  ));
   expect(
     screen.queryByRole("button"),
   ).not.toBeInTheDocument();
@@ -343,4 +347,81 @@ it("does not attach a late permission observer after unmount", async () => {
   pending.resolve(permissionStatus);
   await pending.promise;
   expect(addListener).not.toHaveBeenCalled();
+});
+
+it("reuses application permission state when settings reopen and keeps it current while views are closed", async () => {
+  const capabilities = vi.spyOn(
+    browserNotifications,
+    "capabilities",
+  );
+  const [open, setOpen] = createSignal(false);
+  render(() => (
+    <>
+      <NotificationPermissionButton />
+      <Show when={open()}>
+        <NotificationSettings />
+      </Show>
+    </>
+  ));
+  await screen.findByRole("button", { name: allow });
+  expect(capabilities).toHaveBeenCalledOnce();
+  setOpen(true);
+  await screen.findByText(
+    "setting.notifications.permission_default",
+  );
+  setOpen(false);
+  setOpen(true);
+  await screen.findByText(
+    "setting.notifications.permission_default",
+  );
+  expect(capabilities).toHaveBeenCalledOnce();
+  setOpen(false);
+  browser.permission = "denied";
+  fireEvent.focus(window);
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button"),
+    ).not.toBeInTheDocument(),
+  );
+  expect(capabilities).toHaveBeenCalledTimes(2);
+  setOpen(true);
+  await screen.findByText(
+    "setting.notifications.browser_blocked",
+  );
+  expect(capabilities).toHaveBeenCalledTimes(2);
+});
+
+it("shares a single busy signal and prevents concurrent requests across views", async () => {
+  const pending = deferred<NotificationPermission>();
+  browser.requestPermission.mockReturnValue(
+    pending.promise,
+  );
+  render(() => (
+    <>
+      <NotificationPermissionButton />
+      <NotificationSettings />
+    </>
+  ));
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: allow }),
+    ).toHaveLength(2),
+  );
+  const buttons = screen.getAllByRole("button", {
+    name: allow,
+  });
+  fireEvent.click(buttons[0]);
+  buttons.forEach((button) =>
+    expect(button).toBeDisabled(),
+  );
+  fireEvent.click(buttons[1]);
+  expect(browser.requestPermission).toHaveBeenCalledOnce();
+  browser.permission = "granted";
+  pending.resolve("granted");
+  await screen.findByText(
+    "setting.notifications.permission_granted",
+  );
+  expect(
+    screen.queryByRole("button", { name: allow }),
+  ).not.toBeInTheDocument();
 });

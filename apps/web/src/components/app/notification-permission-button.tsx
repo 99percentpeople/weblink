@@ -3,12 +3,13 @@ import { BellRing, LoaderCircle } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
-import { createNotificationPermission } from "@/libs/hooks/notification-permission";
+import { useAppState } from "@/libs/state/app-state-context";
 import { platform } from "@/libs/platform/runtime";
 
 export function NotificationPermissionButton() {
   if (platform.kind !== "browser") return null;
-  const permission = createNotificationPermission();
+  const permission =
+    useAppState().permissions.notifications;
   const label = () =>
     t(
       permission.busy()

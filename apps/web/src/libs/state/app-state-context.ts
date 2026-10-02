@@ -22,7 +22,9 @@ import type {
   StoreMessage,
 } from "@/libs/domain/message";
 import type { RoomStatus } from "./app-state";
+import type { AppPermissions } from "./create-app-permissions";
 export interface AppStateContextProps {
+  permissions: AppPermissions;
   conversationMessaging: Pick<
     ConversationMessagingService,
     "sendText" | "sendFile"

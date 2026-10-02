@@ -1,4 +1,5 @@
 import { createRoot, type ParentProps } from "solid-js";
+import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { render } from "solid-js/web";
 import {
   Route,
@@ -206,14 +207,20 @@ function Shell(props: ParentProps) {
 
 async function main() {
   let disposeTasks!: () => void;
-  const tasks = createRoot((dispose) => {
+  const { tasks, permissions } = createRoot((dispose) => {
     disposeTasks = dispose;
-    return createTaskService({
-      clientId: () => "self",
-      messages: () => appState.message.messages,
-      caches: () => appState.cache.cacheInfo,
-      transfers: () => ({}),
-    });
+    return {
+      permissions: createAppPermissions({
+        notifications: undefined,
+        outputSupported: () => false,
+      }),
+      tasks: createTaskService({
+        clientId: () => "self",
+        messages: () => appState.message.messages,
+        caches: () => appState.cache.cacheInfo,
+        transfers: () => ({}),
+      }),
+    };
   });
   const unexpected = async () => {
     throw new Error(
@@ -221,6 +228,7 @@ async function main() {
     );
   };
   setChatTestContext({
+    permissions,
     conversationHistory: {
       cacheLocalTextBatch: unexpected,
     },

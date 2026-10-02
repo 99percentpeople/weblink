@@ -1,4 +1,5 @@
 import { createRoot, createSignal, Show } from "solid-js";
+import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { render } from "solid-js/web";
 import { ModalProvider } from "@/components/dialogs/base";
 import clientInfoDialog from "@/components/dialogs/client-info-dialog";
@@ -72,14 +73,20 @@ async function main() {
     peerId: null,
   });
   let disposeTasks!: () => void;
-  const tasks = createRoot((dispose) => {
+  const { tasks, permissions } = createRoot((dispose) => {
     disposeTasks = dispose;
-    return createTaskService({
-      clientId: () => "self",
-      messages: () => appState.message.messages,
-      caches: () => appState.cache.cacheInfo,
-      transfers: () => ({}),
-    });
+    return {
+      permissions: createAppPermissions({
+        notifications: undefined,
+        outputSupported: () => false,
+      }),
+      tasks: createTaskService({
+        clientId: () => "self",
+        messages: () => appState.message.messages,
+        caches: () => appState.cache.cacheInfo,
+        transfers: () => ({}),
+      }),
+    };
   });
   let approve!: (allow: boolean) => void;
   const initiator = new SpeedTestService({
@@ -180,6 +187,7 @@ async function main() {
       );
     };
     setTaskTestContext({
+      permissions,
       conversationMessaging: {
         sendText: unexpected,
         sendFile: unexpected,

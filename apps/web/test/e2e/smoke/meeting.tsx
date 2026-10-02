@@ -1,5 +1,6 @@
 import { MeetingSessionProvider } from "../../support/meeting-session-provider";
 import { createRoot, type ParentProps } from "solid-js";
+import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { render } from "solid-js/web";
 import {
   Route,
@@ -857,12 +858,20 @@ async function main() {
   const stores = createMessageStores(repository);
   await stores.initialize();
   const local = createLocalStreamService();
-  const tasks = createRoot(() =>
-    createTaskService({
-      clientId: () => "self",
-      messages: () => appState.message.messages,
-      caches: () => appState.cache.cacheInfo,
-      transfers: () => ({}),
+  const { tasks, permissions: appPermissions } = createRoot(
+    () => ({
+      permissions: createAppPermissions({
+        notifications: undefined,
+        outputSupported: () =>
+          typeof HTMLMediaElement.prototype.setSinkId ===
+          "function",
+      }),
+      tasks: createTaskService({
+        clientId: () => "self",
+        messages: () => appState.message.messages,
+        caches: () => appState.cache.cacheInfo,
+        transfers: () => ({}),
+      }),
     }),
   );
   let sentCount = 0;
@@ -937,6 +946,7 @@ async function main() {
     );
   };
   setChatTestContext({
+    permissions: appPermissions,
     conversationHistory: {
       cacheLocalTextBatch: unexpected,
     },
@@ -1252,6 +1262,7 @@ async function main() {
     },
   );
   const scenarios: string[] = [];
+  await appPermissions.media.refresh();
   const query = location.search;
   history.replaceState({}, "", `/video${query}`);
   render(

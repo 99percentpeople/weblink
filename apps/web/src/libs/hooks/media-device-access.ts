@@ -55,6 +55,10 @@ export function createMediaDeviceAccess(options: {
     MediaDeviceKind,
     AbortController
   >();
+  const observations = new Map<
+    MediaDeviceKind,
+    Promise<PermissionStatus | undefined>
+  >();
   const outputDevices = () =>
     navigator.mediaDevices as OutputDevices | undefined;
   const outputNeedsMicrophone = () =>
@@ -77,46 +81,63 @@ export function createMediaDeviceAccess(options: {
       [kind]: undefined,
     }));
 
+  const observePermission = (kind: MediaDeviceKind) => {
+    const existing = observations.get(kind);
+    if (existing) return existing;
+    const observation = Promise.resolve().then(async () => {
+      if (disposed) return;
+      try {
+        const status = await navigator.permissions?.query({
+          name: permissionNames[kind] as PermissionName,
+        });
+        if (disposed || !status) return;
+        const controller = new AbortController();
+        listeners.set(kind, controller);
+        const update = () => {
+          setPermissions((previous) => ({
+            ...previous,
+            [kind]: status.state,
+          }));
+        };
+        status.addEventListener(
+          "change",
+          () => {
+            clearFault(kind);
+            if (
+              kind === "audiooutput" &&
+              status.state !== "granted"
+            )
+              setSelectedOutput(undefined);
+            update();
+            void options.refresh();
+          },
+          { signal: controller.signal },
+        );
+        return status;
+      } catch (error) {
+        // Some browsers implement capture but not these permission descriptors.
+        // Exposed device labels and explicit capture results remain usable evidence.
+        // Retry transient failures, but do not query an unsupported descriptor again.
+        if (!(error instanceof TypeError))
+          observations.delete(kind);
+      }
+    });
+    observations.set(kind, observation);
+    return observation;
+  };
+
   const readPermissions = async () => {
+    if (disposed) return;
     const current = ++generation;
     await Promise.all(
       kinds.map(async (kind) => {
-        try {
-          const status = await navigator.permissions?.query(
-            {
-              name: permissionNames[kind] as PermissionName,
-            },
-          );
-          if (disposed || current !== generation || !status)
-            return;
-          listeners.get(kind)?.abort();
-          const controller = new AbortController();
-          listeners.set(kind, controller);
-          const update = () => {
-            setPermissions((previous) => ({
-              ...previous,
-              [kind]: status.state,
-            }));
-          };
-          update();
-          status.addEventListener(
-            "change",
-            () => {
-              clearFault(kind);
-              if (
-                kind === "audiooutput" &&
-                status.state !== "granted"
-              )
-                setSelectedOutput(undefined);
-              update();
-              void options.refresh();
-            },
-            { signal: controller.signal },
-          );
-        } catch {
-          // Some browsers implement capture but not these permission descriptors.
-          // Exposed device labels and explicit capture results remain usable evidence.
-        }
+        const status = await observePermission(kind);
+        if (disposed || current !== generation || !status)
+          return;
+        setPermissions((previous) => ({
+          ...previous,
+          [kind]: status.state,
+        }));
       }),
     );
     if (!disposed && current === generation)
@@ -290,6 +311,14 @@ export function createMediaDeviceAccess(options: {
     window.addEventListener("focus", () => void refresh(), {
       signal: controller.signal,
     });
+    document.addEventListener(
+      "visibilitychange",
+      () => {
+        if (document.visibilityState === "visible")
+          void refresh();
+      },
+      { signal: controller.signal },
+    );
     onCleanup(() => controller.abort());
   });
   onCleanup(() => {
