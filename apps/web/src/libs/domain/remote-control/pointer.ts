@@ -116,6 +116,7 @@ export class RemotePointer extends EventTarget {
   private target?: ControlTarget;
   private generation?: string;
   private epoch?: string;
+  private activationSequence = 0;
   private sequence = 0;
   private moves = 0;
   private activationDeadline = 0;
@@ -373,6 +374,7 @@ export class RemotePointer extends EventTarget {
     if (this.congested) return;
     this.activationPending = true;
     this.epoch = createUuid();
+    ++this.activationSequence;
     this.sequence = 0;
     this.moves = 0;
     this.desired = true;
@@ -443,6 +445,7 @@ export class RemotePointer extends EventTarget {
         generation: this.generation,
         geometryRevision: this.target!.geometryRevision,
         inputEpoch: this.epoch,
+        activationSequence: this.activationSequence,
         sequence: movement ? ++this.moves : ++this.sequence,
         after: movement ? this.sequence : 0,
         event,

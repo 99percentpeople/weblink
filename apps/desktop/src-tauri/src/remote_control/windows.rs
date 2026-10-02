@@ -229,7 +229,7 @@ impl Host {
                         if status.input_suspended {
                             active.sequencer.suspend();
                         }
-                        if transition || status.input_suspended {
+                        if transition || status.input_suspended || !active.sequencer.active() {
                             peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":epoch,"active":active.sequencer.active()}));
                         }
                     }

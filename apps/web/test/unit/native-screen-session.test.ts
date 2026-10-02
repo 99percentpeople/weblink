@@ -666,6 +666,100 @@ it("adds native control only for an eligible display and a capable authenticated
   expect(window.closePeer).toHaveBeenCalledTimes(1);
 });
 
+it("announces local control capabilities before publishing when the peer hello arrives during initialization", async () => {
+  const capabilities = deferred<{
+    request: boolean;
+    host: boolean;
+  }>();
+  const session = new NativeScreenSession({
+    loadControlCapabilities: () => capabilities.promise,
+    controlContext: async () => ({
+      ownerId: "owner",
+      peerGeneration: "peer",
+      clientId: "viewer",
+    }),
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+  });
+  const pub = { ...publication(), controlEligible: true };
+  session.setPublication(pub);
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  await flush();
+  expect(pub.offer).not.toHaveBeenCalled();
+  capabilities.resolve({ request: true, host: true });
+  await flush();
+  expect(channel.sent.map((v) => v.type)).toEqual([
+    "hello",
+    "offer",
+  ]);
+  expect(channel.sent[0].remoteControl.host).toBe(true);
+  expect(channel.sent[1].control).toBe(true);
+  session.reset();
+});
+
+it("adds control to an existing display when the viewer advertises request support later", async () => {
+  const session = new NativeScreenSession({
+    controlCapabilities: { request: true, host: true },
+    controlContext: async () => ({
+      ownerId: "owner",
+      peerGeneration: "peer",
+      clientId: "viewer",
+    }),
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+  });
+  const display = {
+    ...publication("display"),
+    controlEligible: true,
+  };
+  const window = publication("window");
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  session.setPublications([display, window]);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    multiScreen: true,
+  });
+  await flush();
+  const first = channel.sent.find(
+    (v) => v.type === "offer" && v.sourceId === "display",
+  );
+  expect(first.control).toBeUndefined();
+  const hello = {
+    type: "hello",
+    receiveScreen: true,
+    multiScreen: true,
+    remoteControl: { request: true, host: false },
+  };
+  channel.receive(hello);
+  await flush();
+  expect(display.closePeer).toHaveBeenCalledWith(first.id);
+  expect(
+    channel.sent
+      .filter(
+        (v) =>
+          v.type === "offer" && v.sourceId === "display",
+      )
+      .at(-1).control,
+  ).toBe(true);
+  expect(window.offer).toHaveBeenCalledOnce();
+  channel.receive(hello);
+  await flush();
+  expect(display.offer).toHaveBeenCalledTimes(2);
+  session.reset();
+});
+
 it("does not attach input after owner preparation finishes for an obsolete channel", async () => {
   const pending = deferred<{
     ownerId: string;
@@ -704,6 +798,53 @@ it("does not attach input after owner preparation finishes for an obsolete chann
   expect(
     channel.sent.filter((v) => v.type === "offer"),
   ).toEqual([]);
+});
+
+it("ignores a stale capability read after a newer permission refresh", async () => {
+  const initial = deferred<{
+    request: boolean;
+    host: boolean;
+  }>();
+  const load = vi
+    .fn()
+    .mockReturnValueOnce(initial.promise)
+    .mockResolvedValue({ request: true, host: false });
+  const context = vi.fn(async () => undefined);
+  const session = new NativeScreenSession({
+    loadControlCapabilities: load,
+    controlContext: context,
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+  });
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  session.setPublication({
+    ...publication(),
+    controlEligible: true,
+  });
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  await session.refreshControlCapabilities();
+  await flush();
+  initial.resolve({ request: true, host: true });
+  await flush();
+  expect(
+    channel.sent.filter((v) => v.type === "hello"),
+  ).toEqual([
+    expect.objectContaining({
+      remoteControl: { request: true, host: false },
+    }),
+  ]);
+  expect(
+    channel.sent.find((v) => v.type === "offer").control,
+  ).toBeUndefined();
+  expect(context).not.toHaveBeenCalled();
+  session.reset();
 });
 
 it("retries a failed control transport for the same shared source and binds a fresh controller", async () => {

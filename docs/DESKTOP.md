@@ -480,6 +480,10 @@ that same request is current.
 
 For mutually capable peers, the native media offer includes `weblink-control`
 (ordered/reliable) and `weblink-pointer` (unordered, no retransmission) channels.
+The local capability hello precedes publication. Later capability changes rebuild
+affected display transports so an existing view-only share can gain control;
+unrelated window shares keep their connections. Superseded capability reads cannot
+overwrite a newer permission decision.
 Input goes directly from those native callbacks to bounded native queues, without
 per-event Tauri IPC. The latter is reserved for local owner lifetime, confirmation
 and status. Messages are limited to 4 KiB, reliable queues to 128 entries and send
@@ -497,6 +501,12 @@ the old input epoch. After a fresh heartbeat the controller automatically reques
 a new activation epoch if the user still intends to control; interrupted input is
 never replayed. An explicit end/revoke cannot be undone by a late heartbeat or
 activation acknowledgement.
+Controllers include a required `activationSequence` on input packets. Each
+fresh epoch advances this counter; the native host retains its high-water mark
+and rejects retired counters, with no fixed recovery count or growing replay
+history. A reliable input sequence gap
+releases held input and reports the epoch inactive, allowing heartbeat-driven
+recovery instead of leaving healthy heartbeats attached to unusable input.
 
 Temporary ICE disconnection and DataChannel backpressure do not close control.
 While the reliable sender is congested, input is interrupted and unsent gestures

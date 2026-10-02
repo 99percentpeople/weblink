@@ -195,6 +195,8 @@ export class NativeScreenSession {
   private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
   private listeners?: AbortController;
+  private helloSent = false;
+  private capabilitiesRevision = 0;
   private ready = false;
   private trickleIce = false;
   private multiScreen = false;
@@ -265,10 +267,14 @@ export class NativeScreenSession {
     this.channel = channel;
     const listeners = (this.listeners =
       new AbortController());
-    const hello = (capabilities?: ControlCapabilities) => {
+    const hello = (
+      revision: number,
+      capabilities?: ControlCapabilities,
+    ) => {
       if (
         this.channel !== channel ||
-        listeners.signal.aborted
+        listeners.signal.aborted ||
+        revision !== this.capabilitiesRevision
       )
         return;
       this.localCapabilities = capabilities;
@@ -288,17 +294,22 @@ export class NativeScreenSession {
             }
           : {}),
       });
+      this.helloSent = true;
+      this.publishSelected();
     };
     const open = () => {
+      const revision = ++this.capabilitiesRevision;
       if (this.port.loadControlCapabilities)
         void this.port
           .loadControlCapabilities()
-          .then(hello)
+          .then((capabilities) =>
+            hello(revision, capabilities),
+          )
           .catch((error) => {
             this.port.error(error);
-            hello();
+            hello(revision);
           });
-      else hello(this.port.controlCapabilities);
+      else hello(revision, this.port.controlCapabilities);
     };
     channel.addEventListener("open", open, {
       signal: listeners.signal,
@@ -322,12 +333,20 @@ export class NativeScreenSession {
 
   async refreshControlCapabilities() {
     const channel = this.channel;
-    const capabilities =
-      await this.port.loadControlCapabilities?.();
+    if (!channel || channel.readyState !== "open") return;
+    const revision = ++this.capabilitiesRevision;
+    let capabilities: ControlCapabilities | undefined;
+    try {
+      capabilities = this.port.loadControlCapabilities
+        ? await this.port.loadControlCapabilities()
+        : this.port.controlCapabilities;
+    } catch (error) {
+      this.port.error(error);
+    }
     if (
-      !channel ||
       channel !== this.channel ||
-      channel.readyState !== "open"
+      channel.readyState !== "open" ||
+      revision !== this.capabilitiesRevision
     )
       return;
     const changed =
@@ -343,13 +362,15 @@ export class NativeScreenSession {
         ? { requestScreen: true as const }
         : {}),
     });
+    this.helloSent = true;
     if (changed) {
       for (const entry of this.publications.values()) {
+        if (!entry.publication.controlEligible) continue;
         this.stopOutgoing(entry);
         entry.retries = 0;
       }
-      this.publishSelected();
     }
+    this.publishSelected();
   }
 
   setPublication(publication?: NativeScreenPublication) {
@@ -386,6 +407,8 @@ export class NativeScreenSession {
     this.port.cancelScreenRequest?.();
     this.screenControl.setAvailable(false);
     this.localCapabilities = undefined;
+    this.helloSent = false;
+    ++this.capabilitiesRevision;
     this.listeners?.abort();
     this.listeners = undefined;
     const channel = this.channel;
@@ -478,6 +501,7 @@ export class NativeScreenSession {
   private async publish(entry: Publication) {
     if (
       !this.ready ||
+      !this.helloSent ||
       !this.selected(entry) ||
       entry.outgoing ||
       entry.timer ||
@@ -517,6 +541,7 @@ export class NativeScreenSession {
         this.port.relayOnly(),
       ] as const;
       const context =
+        this.localCapabilities?.host &&
         this.controlCapabilities?.request &&
         entry.publication.controlEligible
           ? await this.port.controlContext?.()
@@ -590,6 +615,8 @@ export class NativeScreenSession {
   }
   private async handle(value: Signal) {
     if (value.type === "hello") {
+      const couldRequest =
+        this.controlCapabilities?.request === true;
       this.controlCapabilities = parseControlCapabilities(
         value.remoteControl,
       );
@@ -610,6 +637,18 @@ export class NativeScreenSession {
         this.controlCapabilities = parseControlCapabilities(
           value.remoteControl,
         );
+        this.publishSelected();
+      } else if (
+        couldRequest !==
+        (this.controlCapabilities?.request === true)
+      ) {
+        // Capability loading and policy updates can finish after viewing starts.
+        // Rebuild eligible transports so their offer and data channels agree.
+        for (const entry of this.publications.values()) {
+          if (!entry.publication.controlEligible) continue;
+          this.stopOutgoing(entry);
+          entry.retries = 0;
+        }
         this.publishSelected();
       }
       return;

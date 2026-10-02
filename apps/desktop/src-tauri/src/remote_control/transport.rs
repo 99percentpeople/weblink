@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn input_overflow_keeps_channel_and_revocation_but_drops_old_gestures() {
         let endpoint = Endpoint::new();
-        let packet = json!({"type":"input","grantId":"g","generation":"m","geometryRevision":"r","inputEpoch":"e","sequence":2,"event":{"type":"wheel","x":0.5,"y":0.5,"horizontal":0,"vertical":120}}).to_string();
+        let packet = json!({"type":"input","grantId":"g","generation":"m","geometryRevision":"r","inputEpoch":"e","activationSequence":1,"sequence":2,"event":{"type":"wheel","x":0.5,"y":0.5,"horizontal":0,"vertical":120}}).to_string();
         for _ in 0..CAPACITY {
             endpoint.message(false, packet.as_bytes());
         }

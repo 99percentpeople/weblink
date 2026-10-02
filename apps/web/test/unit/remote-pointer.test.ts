@@ -616,6 +616,44 @@ it("recovers native input interruption without reapproval but never resumes ende
   expect(c.state()).toBe("viewing");
   expect(r.sent.at(-1).event?.type).not.toBe("activate");
 });
+it("numbers repeated input recoveries monotonically within the same approval", () => {
+  const { c, r, m, approve, activate } = setup(
+    undefined,
+    true,
+    false,
+    true,
+  );
+  approve();
+  let current = activate();
+  expect(current.activationSequence).toBe(1);
+  for (let n = 2; n <= 1024; n++) {
+    c.resetInput();
+    const next = r.sent.at(-1);
+    expect(next.activationSequence).toBe(n);
+    expect(next.inputEpoch).not.toBe(current.inputEpoch);
+    r.receive({
+      type: "state",
+      grantId: "grant",
+      inputEpoch: next.inputEpoch,
+      active: true,
+    });
+    expect(c.state()).toBe("active");
+    c.input({
+      type: "button",
+      button: 0,
+      down: false,
+      x: 0.5,
+      y: 0.5,
+    });
+    expect(r.sent.at(-1).activationSequence).toBe(n);
+    c.input({ type: "move", x: 0.5, y: 0.5 });
+    expect(m.sent.at(-1).activationSequence).toBe(n);
+    current = next;
+  }
+  expect(
+    r.sent.filter((p) => p.type === "request"),
+  ).toHaveLength(1);
+});
 it("retries an unacknowledged activation using a fresh epoch without ending persistent consent", () => {
   const { c, r, approve } = setup(
     undefined,

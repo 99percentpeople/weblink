@@ -4,10 +4,7 @@ use crate::{
     protocol::{valid_id, MAX_MESSAGE_BYTES},
 };
 use serde::Deserialize;
-use std::{
-    collections::HashSet,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 const MAX_SEQUENCE: u64 = 9_007_199_254_740_991;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -17,6 +14,8 @@ pub struct Packet {
     pub generation: String,
     pub geometry_revision: String,
     pub input_epoch: String,
+    /// Monotonic within this grant, shared by every packet in an input epoch.
+    pub activation_sequence: u64,
     pub sequence: u64,
     #[serde(default)]
     pub after: u64,
@@ -146,6 +145,7 @@ pub fn parse(data: &[u8]) -> Option<Packet> {
     .into_iter()
     .all(|s| valid_id(s))
         && (1..=MAX_SEQUENCE).contains(&p.sequence)
+        && (1..=MAX_SEQUENCE).contains(&p.activation_sequence)
         && p.after <= MAX_SEQUENCE
         && p.event.valid())
     .then_some(p)
@@ -158,7 +158,7 @@ pub struct Sequencer {
     generation: String,
     revision: String,
     epoch: Option<String>,
-    used: HashSet<String>,
+    activation_sequence: u64,
     reliable: u64,
     movement: u64,
     pending: Option<(Packet, Instant)>,
@@ -171,7 +171,7 @@ impl Sequencer {
             generation,
             revision,
             epoch: None,
-            used: HashSet::new(),
+            activation_sequence: 0,
             reliable: 0,
             movement: 0,
             pending: None,
@@ -192,7 +192,7 @@ impl Sequencer {
         self.accept_at(p, movement, Instant::now())
     }
     pub fn accept_at(&mut self, p: Packet, movement: bool, received: Instant) -> Vec<Event> {
-        if received.elapsed() > Duration::from_millis(100) || !p.event.valid() {
+        if !p.event.valid() {
             return vec![];
         }
         if p.grant_id != self.grant
@@ -201,18 +201,32 @@ impl Sequencer {
         {
             return vec![];
         }
+        if received.elapsed() > Duration::from_millis(100) {
+            if !movement
+                && self.active
+                && self.epoch.as_ref() == Some(&p.input_epoch)
+                && p.activation_sequence == self.activation_sequence
+            {
+                self.suspend();
+                return vec![Event::ReleaseAll];
+            }
+            return vec![];
+        }
         if matches!(p.event, PointerEvent::Activate) {
-            if movement
-                || self.used.contains(&p.input_epoch)
-                || self.used.len() >= 256
-                || p.sequence != 1
-                || p.after != 0
+            if movement || p.sequence != 1 || p.after != 0 {
+                return vec![];
+            }
+            if !(1..=MAX_SEQUENCE).contains(&p.activation_sequence)
+                || p.activation_sequence <= self.activation_sequence
+                || self.epoch.as_ref() == Some(&p.input_epoch)
             {
                 return vec![];
             }
+            // A high-water mark rejects every retired activation without a
+            // per-grant recovery limit or an ever-growing replay history.
+            self.activation_sequence = p.activation_sequence;
             // A fresh reliable activation can replace an unacknowledged epoch.
-            // Always release its input first; previously used epochs remain rejected.
-            self.used.insert(p.input_epoch.clone());
+            // Always release its input first; retired activation counters remain rejected.
             self.epoch = Some(p.input_epoch);
             self.reliable = 1;
             self.movement = 0;
@@ -220,7 +234,10 @@ impl Sequencer {
             self.active = true;
             return vec![Event::ReleaseAll];
         }
-        if !self.active || self.epoch.as_ref() != Some(&p.input_epoch) {
+        if !self.active
+            || self.epoch.as_ref() != Some(&p.input_epoch)
+            || p.activation_sequence != self.activation_sequence
+        {
             return vec![];
         }
         if movement {
@@ -238,10 +255,16 @@ impl Sequencer {
             return vec![p.event.input()];
         }
         if matches!(p.event, PointerEvent::Move { .. })
-            || p.sequence != self.reliable + 1
             || p.after != 0
+            || p.sequence <= self.reliable
         {
             return vec![];
+        }
+        if p.sequence != self.reliable + 1 {
+            // A dropped reliable event otherwise strands this epoch forever:
+            // heartbeats remain healthy while all subsequent input is rejected.
+            self.suspend();
+            return vec![Event::ReleaseAll];
         }
         self.reliable = p.sequence;
         let mut events = vec![p.event.input()];
@@ -272,6 +295,7 @@ mod tests {
             generation: "connection".into(),
             geometry_revision: "geometry".into(),
             input_epoch: "epoch".into(),
+            activation_sequence: 1,
             sequence,
             after: 0,
             event,
@@ -281,8 +305,97 @@ mod tests {
         Sequencer::new("grant".into(), "connection".into(), "geometry".into())
     }
     #[test]
+    fn ordered_activations_recover_beyond_256_interruptions_without_reauthorizing() {
+        let mut s = sequencer();
+        let activation = |n| {
+            parse(
+                serde_json::json!({
+                    "type":"input", "grantId":"grant", "generation":"connection",
+                    "geometryRevision":"geometry", "inputEpoch":format!("epoch-{n}"),
+                    "activationSequence":n, "sequence":1, "event":{"type":"activate"}
+                })
+                .to_string()
+                .as_bytes(),
+            )
+            .unwrap()
+        };
+        for n in 1..=1024 {
+            assert_eq!(
+                s.accept(activation(n), false),
+                vec![Event::ReleaseAll],
+                "activation {n}"
+            );
+            let mut key = packet(
+                2,
+                PointerEvent::Wheel {
+                    x: 0.5,
+                    y: 0.5,
+                    horizontal: 0,
+                    vertical: 120,
+                },
+            );
+            key.input_epoch = format!("epoch-{n}");
+            key.activation_sequence = n;
+            assert_eq!(s.accept(key, false).len(), 1);
+            s.suspend();
+        }
+        // Replayed activations, including ones older than a bounded history, cannot resume input.
+        assert!(s.accept(activation(1), false).is_empty());
+        assert!(s.accept(activation(1024), false).is_empty());
+        assert!(s
+            .accept(packet(1, PointerEvent::Activate), false)
+            .is_empty());
+        assert_eq!(s.accept(activation(1025), false), vec![Event::ReleaseAll]);
+        let mut retired = packet(2, PointerEvent::Pause);
+        retired.input_epoch = "epoch-1025".into();
+        assert!(s.accept(retired.clone(), false).is_empty());
+        retired.activation_sequence = 0;
+        assert!(s.accept(retired.clone(), false).is_empty());
+        assert!(s.active());
+        retired.activation_sequence = 1025;
+        assert_eq!(s.accept(retired, false), vec![Event::ReleaseAll]);
+        assert!(!s.active());
+    }
+    #[test]
+    fn reliable_gap_releases_input_and_requires_a_new_epoch() {
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        let press = packet(
+            3,
+            PointerEvent::Button {
+                x: 0.5,
+                y: 0.5,
+                button: 0,
+                down: true,
+            },
+        );
+        assert_eq!(s.accept(press, false), vec![Event::ReleaseAll]);
+        assert!(!s.active());
+        assert!(s.accept(packet(2, PointerEvent::Pause), false).is_empty());
+        let mut resume = packet(1, PointerEvent::Activate);
+        resume.input_epoch = "recovered".into();
+        resume.activation_sequence = 2;
+        assert_eq!(s.accept(resume, false), vec![Event::ReleaseAll]);
+        assert!(s.active());
+    }
+    #[test]
+    fn input_that_expires_at_sequencing_releases_instead_of_stranding_the_epoch() {
+        let mut s = sequencer();
+        s.accept(packet(1, PointerEvent::Activate), false);
+        let stale = Instant::now() - Duration::from_millis(101);
+        let mut movement = packet(1, PointerEvent::Move { x: 0.5, y: 0.5 });
+        movement.after = 1;
+        assert!(s.accept_at(movement, true, stale).is_empty());
+        assert!(s.active());
+        assert_eq!(
+            s.accept_at(packet(2, PointerEvent::Pause), false, stale),
+            vec![Event::ReleaseAll]
+        );
+        assert!(!s.active());
+    }
+    #[test]
     fn text_is_bounded_unicode_on_the_current_reliable_input_epoch() {
-        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"text","text":"中😀"}});
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":2,"event":{"type":"text","text":"中😀"}});
         let p = parse(value.to_string().as_bytes()).unwrap();
         let mut s = sequencer();
         assert!(s.accept(p.clone(), false).is_empty());
@@ -311,7 +424,7 @@ mod tests {
     }
     #[test]
     fn keyboard_packets_validate_scan_codes_and_require_ordered_authorized_input() {
-        let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"key","scanCode":29,"extended":true,"down":true}});
+        let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":2,"event":{"type":"key","scanCode":29,"extended":true,"down":true}});
         let key = parse(value.to_string().as_bytes()).unwrap();
         let mut s = sequencer();
         assert!(s.accept(key.clone(), false).is_empty());
@@ -385,7 +498,7 @@ mod tests {
     }
     #[test]
     fn relative_gestures_are_bounded_and_reliable_only() {
-        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"trackpad","action":{"type":"move","x":-0.1,"y":0.2}}});
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":2,"event":{"type":"trackpad","action":{"type":"move","x":-0.1,"y":0.2}}});
         let p = parse(value.to_string().as_bytes()).unwrap();
         let mut s = sequencer();
         s.accept(packet(1, PointerEvent::Activate), false);
@@ -428,6 +541,7 @@ mod tests {
             .is_empty());
         let mut resume = packet(1, PointerEvent::Activate);
         resume.input_epoch = "fresh".into();
+        resume.activation_sequence = 2;
         assert_eq!(s.accept(resume, false), vec![Event::ReleaseAll]);
         assert!(s.active());
     }
@@ -438,6 +552,7 @@ mod tests {
         assert_eq!(s.accept(first.clone(), false), vec![Event::ReleaseAll]);
         let mut next = first.clone();
         next.input_epoch = "retry".into();
+        next.activation_sequence = 2;
         assert_eq!(s.accept(next, false), vec![Event::ReleaseAll]);
         assert!(s.accept(first, false).is_empty());
         assert!(s.accept(packet(2, PointerEvent::Pause), false).is_empty());
@@ -458,7 +573,7 @@ mod tests {
         {
             let mut action = gesture;
             action["type"] = serde_json::json!("pan");
-            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":i+2,"event":{"type":"trackpad","action":action}});
+            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":i+2,"event":{"type":"trackpad","action":action}});
             let p = parse(value.to_string().as_bytes()).unwrap();
             assert!(s.accept(p.clone(), true).is_empty());
             assert!(matches!(
@@ -472,13 +587,13 @@ mod tests {
             serde_json::json!({"type":"pan","phase":"update","x":0}),
             serde_json::json!({"type":"pan","phase":"unknown"}),
         ] {
-            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":5,"event":{"type":"trackpad","action":action}});
+            let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":5,"event":{"type":"trackpad","action":action}});
             assert!(parse(value.to_string().as_bytes()).is_none());
         }
     }
     #[test]
     fn touch_frames_are_bounded_ordered_and_cannot_use_the_motion_channel() {
-        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","sequence":2,"event":{"type":"touch","contacts":[{"id":1,"x":0.2,"y":0.3,"phase":"down"}]}});
+        let mut value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":2,"event":{"type":"touch","contacts":[{"id":1,"x":0.2,"y":0.3,"phase":"down"}]}});
         let p = parse(value.to_string().as_bytes()).unwrap();
         let mut s = sequencer();
         s.accept(packet(1, PointerEvent::Activate), false);
@@ -539,6 +654,7 @@ mod tests {
             .is_empty());
         let mut p = packet(1, PointerEvent::Activate);
         p.input_epoch = "next".into();
+        p.activation_sequence = 2;
         p.grant_id = "old".into();
         assert!(s.accept(p.clone(), false).is_empty());
         p.grant_id = "grant".into();
@@ -560,8 +676,25 @@ mod tests {
     }
     #[test]
     fn wire_rejects_invalid_coordinates_huge_sequences_and_channel_confusion() {
-        let base = serde_json::json!({"type":"input","grantId":"g","generation":"c","geometryRevision":"r","inputEpoch":"e","sequence":1,"event":{"type":"move","x":0.5,"y":0.5}});
+        let base = serde_json::json!({"type":"input","grantId":"g","generation":"c","geometryRevision":"r","inputEpoch":"e","activationSequence":1,"sequence":1,"event":{"type":"move","x":0.5,"y":0.5}});
         assert!(parse(base.to_string().as_bytes()).is_some());
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!(MAX_SEQUENCE + 1),
+        ] {
+            let mut value = base.clone();
+            value["activationSequence"] = invalid;
+            assert!(parse(value.to_string().as_bytes()).is_none());
+        }
+        let mut missing = base.clone();
+        missing
+            .as_object_mut()
+            .unwrap()
+            .remove("activationSequence");
+        assert!(parse(missing.to_string().as_bytes()).is_none());
         let mut value = base.clone();
         value["event"]["x"] = serde_json::json!(1.1);
         assert!(parse(value.to_string().as_bytes()).is_none());
