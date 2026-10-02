@@ -138,7 +138,10 @@ export function RemoteKeyboardInput(props: {
     const keyboard = new RemoteKeyboard(
       {
         input: (event) => c.input(event),
-        cancel: () => c.cancel(),
+        cancel: () => {
+          close();
+          c.resetInput();
+        },
       },
       config,
     );

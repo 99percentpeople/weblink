@@ -290,15 +290,27 @@
       "touch_heading": "触摸",
       "keyboard": {
         "title": "转发键盘输入",
-        "description": "点击控制画面后，按对方的键盘布局转发支持的物理按键。浏览器和系统保留的快捷键仍由本机处理。焦点移开时释放按键，不结束控制。"
+        "description": "本地光标模式下，点击画面后按对方的键盘布局转发物理按键；捕获模式下，仅在捕获时转发。可通过 Header 中的开关快速关闭。手动打开的软键盘在两种模式下均可使用。"
       },
       "exit_shortcut": {
-        "title": "结束控制快捷键",
-        "description": "控制画面获得焦点时生效，关闭键盘转发后仍可使用。Escape 会转发给对方。被控端始终可用 Ctrl+Alt+Shift+F10 收回控制。"
+        "title": "退出光标和键盘捕获快捷键",
+        "description": "释放键盘输入和已捕获的光标，远控连接保持。关闭键盘转发后仍可使用此快捷键。",
+        "browser": "也可按 Escape 释放捕获。",
+        "native": "转发系统快捷键时，Escape 会发送到远端，请使用上方快捷键释放输入。",
+        "webview": "使用网页按键处理时，也可按 Escape 释放捕获。",
+        "host": "本机作为 Windows 被控端时，可按 Ctrl+Alt+Shift+F10 收回控制。"
       },
       "system_keyboard": {
         "title": "转发系统快捷键",
-        "description": "仅 Windows 桌面端：控制画面聚焦时转发支持的系统快捷键。关闭后使用网页按键处理；Ctrl+Alt+Del 仍由本机系统处理。"
+        "description": "控制远程画面时转发支持的系统快捷键。关闭后使用网页按键处理；Ctrl+Alt+Del 仍由本机系统处理。"
+      },
+      "pointer_heading": "指针",
+      "pointer": {
+        "title": "指针行为",
+        "local": "本地光标",
+        "capture": "捕获并隐藏本地光标",
+        "local_description": "使用本地光标定位远程画面，点击画面后转发键盘输入，可通过 Header 中的键盘开关快速关闭。",
+        "capture_description": "点击远程画面后捕获并隐藏本地光标，仅在捕获时转发物理键盘。使用退出快捷键同时释放光标和键盘，远控连接保持。"
       }
     },
     "permissions": {
@@ -1123,7 +1135,7 @@
     "revoke_failed": "无法收回控制，请在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
     "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",
     "reconnecting": "正在恢复控制连接",
-    "surface": "远程控制；按 {{shortcut}} 结束控制。",
+    "surface": "远程控制；按 {{shortcut}} 释放光标和键盘。",
     "request": "请求控制",
     "waiting": "等待对方批准",
     "cancel": "取消请求",
@@ -1140,6 +1152,9 @@
     "keyboard_input": "向远端输入文字",
     "text_too_long": "输入过长，请分段发送。",
     "text_failed": "输入未能完整发送，请检查远端内容后重试。",
-    "system_keyboard_stopped": "系统键盘转发已停止。请重新点击控制画面，或在“远程控制”设置中关闭系统快捷键转发。"
+    "system_keyboard_stopped": "系统键盘转发已停止。请重新点击控制画面，或在“远程控制”设置中关闭系统快捷键转发。",
+    "capture_failed": "无法捕获指针。请重新点击远程画面，或在“远程控制”设置中选择“本地光标”。",
+    "capture_unavailable": "对端不支持指针捕获，请在“远程控制”设置中选择“本地光标”。",
+    "capture_hint": "点击捕获指针，按 {{shortcut}} 释放光标和键盘。"
   }
 }

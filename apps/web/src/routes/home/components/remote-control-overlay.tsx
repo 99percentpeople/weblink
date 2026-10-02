@@ -18,6 +18,8 @@ import {
   exitControlShortcutLabel,
   resolveRemoteKeyboardOptions,
 } from "@/libs/domain/remote-control/keyboard-options";
+import { createRemotePointerCapture } from "@/libs/hooks/remote-pointer-capture";
+import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { createVideoRemoteControl } from "./remote-control-action";
 import { platform } from "@/libs/platform/runtime";
@@ -29,7 +31,9 @@ export function RemoteControlOverlay(props: {
 }) {
   const video = useVideoDisplay();
   const { control, state } = createVideoRemoteControl();
-  let surface: HTMLDivElement | undefined;
+  const [surface, setSurface] =
+    createSignal<HTMLDivElement>();
+  let captureClick = false;
   const held = new Set<number>();
   const fingers = new Set<number>();
   const threeFingerTap = new ThreeFingerTap();
@@ -56,6 +60,10 @@ export function RemoteControlOverlay(props: {
       disposed = true;
     });
   });
+  const captureMode = () =>
+    resolveRemotePointerOptions(
+      appState.options.remotePointer,
+    ).mode === "capture";
   const touchOptions = createMemo(() =>
     resolveRemoteTouchOptions(appState.options.remoteTouch),
   );
@@ -79,8 +87,8 @@ export function RemoteControlOverlay(props: {
     const ids = [...fingers];
     fingers.clear();
     for (const id of ids) {
-      if (surface?.hasPointerCapture(id))
-        surface.releasePointerCapture(id);
+      if (surface()?.hasPointerCapture(id))
+        surface()!.releasePointerCapture(id);
     }
   };
   const resetInput = () => {
@@ -89,14 +97,60 @@ export function RemoteControlOverlay(props: {
     keyboard?.clear();
     control()?.resetInput();
   };
+  const capture = createRemotePointerCapture({
+    element: surface,
+    enabled: () =>
+      props.enabled &&
+      state() === "active" &&
+      captureMode(),
+    released: resetInput,
+    failed: () =>
+      toast.error(t("remote_control.capture_failed")),
+  });
+  const captured = () =>
+    capture.active() &&
+    surface()?.ownerDocument.pointerLockElement ===
+      surface();
+  const keyboardActive = () =>
+    props.enabled &&
+    focused() &&
+    state() === "active" &&
+    (!captureMode() || captured());
+  const stopInput = () => {
+    captureClick = false;
+    const wasCaptured = capture.active();
+    capture.release();
+    if (!wasCaptured) resetInput();
+  };
+  const releaseControls = () => {
+    const element = surface();
+    if (
+      element &&
+      element.ownerDocument.activeElement === element
+    )
+      element.blur(); // onBlur releases pointer capture and held input together.
+    else stopInput();
+  };
+  const contentSize = () => {
+    const v = video.videoRef();
+    if (!v || !v.videoWidth || !v.videoHeight)
+      return { width: 0, height: 0 };
+    const rect = v.getBoundingClientRect();
+    const scale = Math.min(
+      rect.width / v.videoWidth,
+      rect.height / v.videoHeight,
+    );
+    return {
+      width: v.videoWidth * scale,
+      height: v.videoHeight * scale,
+    };
+  };
   createEffect(() => {
     const c = control(),
       options = keyboardOptions();
     if (
+      !keyboardActive() ||
       !nativeKeys() ||
-      !props.enabled ||
-      !focused() ||
-      state() !== "active" ||
       !c ||
       !platform.keyboard
     )
@@ -107,19 +161,19 @@ export function RemoteControlOverlay(props: {
       options.exitShortcut,
       {
         current: () =>
-          props.enabled &&
-          focused() &&
+          keyboardActive() &&
           c === control() &&
           c.state() === "active" &&
           !!nativeKeys() &&
-          surface?.ownerDocument.activeElement ===
-            surface &&
-          !surface?.ownerDocument.hidden,
+          surface()?.ownerDocument.activeElement ===
+            surface() &&
+          !surface()?.ownerDocument.hidden,
         input: (event) => c.input(event),
         reset: () => c.resetInput(),
-        cancel: () => c.cancel(),
+        cancel: releaseControls,
         stopped: (failed) => {
-          setFocused(false);
+          if (focused() || capture.active())
+            releaseControls();
           if (failed)
             toast.error(
               t("remote_control.system_keyboard_stopped"),
@@ -136,11 +190,7 @@ export function RemoteControlOverlay(props: {
     const keys = new RemoteKeyboard(
       {
         input: (event) => c.input(event),
-        cancel: () => {
-          clearTouches();
-          held.clear();
-          c.cancel();
-        },
+        cancel: releaseControls,
       },
       options,
     );
@@ -179,20 +229,7 @@ export function RemoteControlOverlay(props: {
             );
           }
         },
-        size: () => {
-          const v = video.videoRef();
-          if (!v || !v.videoWidth || !v.videoHeight)
-            return { width: 0, height: 0 };
-          const rect = v.getBoundingClientRect();
-          const scale = Math.min(
-            rect.width / v.videoWidth,
-            rect.height / v.videoHeight,
-          );
-          return {
-            width: v.videoWidth * scale,
-            height: v.videoHeight * scale,
-          };
-        },
+        size: contentSize,
       },
       options,
     );
@@ -218,6 +255,7 @@ export function RemoteControlOverlay(props: {
       "change",
       () => {
         if (c.state() !== "active") {
+          capture.release();
           held.clear();
           keyboard?.clear();
           clearTouches();
@@ -229,7 +267,7 @@ export function RemoteControlOverlay(props: {
       "blur",
       () => {
         setFocused(false);
-        resetInput();
+        stopInput();
       },
       {
         signal: life.signal,
@@ -238,7 +276,7 @@ export function RemoteControlOverlay(props: {
     ownerWindow.addEventListener(
       "focus",
       () => {
-        if (ownerDocument.activeElement === surface)
+        if (ownerDocument.activeElement === surface())
           setFocused(true);
       },
       { signal: life.signal },
@@ -248,19 +286,20 @@ export function RemoteControlOverlay(props: {
       () => {
         if (ownerDocument.hidden) {
           setFocused(false);
-          resetInput();
+          stopInput();
         }
       },
       { signal: life.signal },
     );
     onCleanup(() => {
+      capture.release();
       c.resetInput();
       life.abort();
       held.clear();
     });
   });
   createEffect(() => {
-    if (!props.enabled) resetInput();
+    if (!props.enabled) stopInput();
   });
   const point = (event: MouseEvent, clamp = false) => {
     const v = video.videoRef();
@@ -337,7 +376,7 @@ export function RemoteControlOverlay(props: {
       }
       if (state() !== "active") return true;
       fingers.add(id);
-      surface?.setPointerCapture(id);
+      surface()?.setPointerCapture(id);
     } else if (fingers.has(id)) {
       const consumed = threeFingerTap.consumed;
       let showKeyboard = false;
@@ -365,8 +404,8 @@ export function RemoteControlOverlay(props: {
         trackpad?.up(id, event.clientX, event.clientY);
       if (phase === "up") {
         fingers.delete(id);
-        if (surface?.hasPointerCapture(id))
-          surface.releasePointerCapture(id);
+        if (surface()?.hasPointerCapture(id))
+          surface()!.releasePointerCapture(id);
         if (showKeyboard) {
           if (nativeTouchEvents)
             pendingKeyboard = props.keyboard?.();
@@ -424,6 +463,7 @@ export function RemoteControlOverlay(props: {
   const button = (event: PointerEvent, down: boolean) => {
     if (
       state() !== "active" ||
+      captureMode() ||
       fingers.size > 0 ||
       event.pointerType !== "mouse" ||
       event.button < 0 ||
@@ -439,7 +479,7 @@ export function RemoteControlOverlay(props: {
     event.stopPropagation();
     if (down) {
       held.add(event.button);
-      surface?.setPointerCapture(event.pointerId);
+      surface()?.setPointerCapture(event.pointerId);
     } else held.delete(event.button);
     control()?.input({
       type: "button",
@@ -450,9 +490,31 @@ export function RemoteControlOverlay(props: {
     if (
       !down &&
       held.size === 0 &&
-      surface?.hasPointerCapture(event.pointerId)
+      surface()?.hasPointerCapture(event.pointerId)
     )
-      surface.releasePointerCapture(event.pointerId);
+      surface()!.releasePointerCapture(event.pointerId);
+  };
+  const capturedButton = (
+    event: MouseEvent,
+    down: boolean,
+  ) => {
+    if (
+      !captured() ||
+      state() !== "active" ||
+      fingers.size ||
+      event.button < 0 ||
+      event.button > 4
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (down) held.add(event.button);
+    else if (!held.delete(event.button)) return;
+    control()?.trackpad({
+      type: "button",
+      button: event.button,
+      down,
+    });
   };
   return (
     <Show when={props.enabled && state() !== "unavailable"}>
@@ -462,7 +524,7 @@ export function RemoteControlOverlay(props: {
         }
       >
         <div
-          ref={surface}
+          ref={setSurface}
           tabIndex={0}
           role="application"
           aria-label={t("remote_control.surface", {
@@ -470,6 +532,15 @@ export function RemoteControlOverlay(props: {
               keyboardOptions().exitShortcut,
             ),
           })}
+          title={
+            captureMode()
+              ? t("remote_control.capture_hint", {
+                  shortcut: exitControlShortcutLabel(
+                    keyboardOptions().exitShortcut,
+                  ),
+                })
+              : undefined
+          }
           class="focus-visible:ring-primary absolute inset-0 z-10
             outline-none focus-visible:ring-2 focus-visible:ring-inset"
           style={{
@@ -483,10 +554,14 @@ export function RemoteControlOverlay(props: {
           onFocus={() => setFocused(true)}
           onBlur={() => {
             setFocused(false);
-            resetInput();
+            stopInput();
           }}
           onKeyDown={(e) => {
-            if (e.target !== e.currentTarget) return;
+            if (
+              e.target !== e.currentTarget ||
+              !keyboardActive()
+            )
+              return;
             const native = nativeKeys();
             if (native) keyboard?.exit(e);
             if (native || keyboard?.down(e)) {
@@ -496,6 +571,7 @@ export function RemoteControlOverlay(props: {
           }}
           onKeyUp={(e) => {
             if (
+              keyboardActive() &&
               e.target === e.currentTarget &&
               (nativeKeys() || keyboard?.up(e))
             ) {
@@ -523,6 +599,14 @@ export function RemoteControlOverlay(props: {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (!captureClick) return;
+            captureClick = false;
+            if (control()?.supportsRelativePointer())
+              capture.request();
+            else
+              toast.error(
+                t("remote_control.capture_unavailable"),
+              );
           }}
           onAuxClick={(e) => {
             e.preventDefault();
@@ -536,7 +620,7 @@ export function RemoteControlOverlay(props: {
               keyboard.suppressAutomaticShow();
               e.preventDefault();
             } else {
-              surface?.focus({ preventScroll: true });
+              surface()?.focus({ preventScroll: true });
               setFocused(true);
             }
             if (!touch(e, "down")) button(e, true);
@@ -544,6 +628,33 @@ export function RemoteControlOverlay(props: {
           onMouseDown={(e) => {
             if (props.keyboard?.()?.focused())
               e.preventDefault();
+            if (!captureMode()) return;
+            captureClick =
+              !captured() &&
+              e.button === 0 &&
+              state() === "active" &&
+              !fingers.size;
+            capturedButton(e, true);
+          }}
+          onMouseUp={(e) => capturedButton(e, false)}
+          onMouseMove={(e) => {
+            if (
+              !captured() ||
+              state() !== "active" ||
+              fingers.size
+            )
+              return;
+            const { width, height } = contentSize();
+            if (
+              width > 0 &&
+              height > 0 &&
+              (e.movementX || e.movementY)
+            )
+              control()?.trackpad({
+                type: "move",
+                x: e.movementX / width,
+                y: e.movementY / height,
+              });
           }}
           on:touchstart={nativeTouch}
           on:touchmove={nativeTouch}
@@ -562,19 +673,25 @@ export function RemoteControlOverlay(props: {
           }}
           onPointerMove={(e) => {
             if (touch(e, "move")) return;
-            if (e.pointerType !== "mouse" || fingers.size)
+            if (
+              captureMode() ||
+              e.pointerType !== "mouse" ||
+              fingers.size
+            )
               return;
             const p = point(e);
             if (p) control()?.move(p);
             else if (held.size) resetInput();
           }}
           onPointerLeave={() => {
-            if (held.size) resetInput();
+            if (!captured() && held.size) resetInput();
           }}
           onWheel={(e) => {
             if (fingers.size) return;
+            if (captureMode() && !captured()) return;
             const p = point(e);
-            if (!p || state() !== "active") return;
+            if ((!captured() && !p) || state() !== "active")
+              return;
             e.preventDefault();
             e.stopPropagation();
             const unit =
@@ -588,12 +705,13 @@ export function RemoteControlOverlay(props: {
                 -1200,
                 Math.min(1200, Math.round(v * unit)),
               );
-            control()?.input({
-              type: "wheel",
-              ...p,
+            const wheel = {
+              type: "wheel" as const,
               horizontal: delta(e.deltaX),
               vertical: -delta(e.deltaY),
-            });
+            };
+            if (captured()) control()?.trackpad(wheel);
+            else control()?.input({ ...wheel, ...p! });
           }}
         />
       </Show>

@@ -11,6 +11,7 @@ export {
   forgetRoomConfig,
 } from "@/libs/state/permission-options";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
+import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { resolveApplicationOptions } from "@/libs/domain/application-options";
@@ -117,6 +118,9 @@ export function initializeAppOptions() {
         application: resolveApplicationOptions(
           parsed.application,
           legacyPip,
+        ),
+        remotePointer: resolveRemotePointerOptions(
+          parsed.remotePointer,
         ),
         remoteTouch: resolveRemoteTouchOptions(
           parsed.remoteTouch,

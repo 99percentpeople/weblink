@@ -290,15 +290,27 @@
       "touch_heading": "Touch",
       "keyboard": {
         "title": "Forward keyboard input",
-        "description": "Click the controlled screen to forward supported physical keys using the remote keyboard layout. Browser and system reserved shortcuts remain local. Moving focus away releases held keys without ending control."
+        "description": "In Local cursor mode, clicking the screen forwards supported physical keys using the remote keyboard layout. Capture mode forwards keys only while captured. Use the header switch to turn forwarding off. The manually opened on-screen keyboard works in both modes."
       },
       "exit_shortcut": {
-        "title": "End control shortcut",
-        "description": "Works while the controlled screen has focus, even when keyboard forwarding is off. Escape is forwarded to the remote computer. The host can always revoke with Ctrl+Alt+Shift+F10."
+        "title": "Release pointer and keyboard shortcut",
+        "description": "Release keyboard input and any captured pointer without ending the control connection. The shortcut also works when keyboard forwarding is off.",
+        "browser": "You can also press Escape to release capture.",
+        "native": "With system shortcut forwarding enabled, Escape is sent to the remote computer. Use the shortcut above to release input.",
+        "webview": "When using browser key handling, Escape also releases capture.",
+        "host": "When this Windows computer is being controlled, press Ctrl+Alt+Shift+F10 to revoke control."
       },
       "system_keyboard": {
         "title": "Forward system shortcuts",
-        "description": "Windows desktop only: capture supported system shortcuts while the remote screen is focused. Turn this off to use browser key handling. Ctrl+Alt+Del remains local."
+        "description": "Forward supported system shortcuts while controlling the remote screen. Turn this off to use browser key handling. Ctrl+Alt+Del remains local."
+      },
+      "pointer_heading": "Pointer",
+      "pointer": {
+        "title": "Pointer behavior",
+        "local": "Local cursor",
+        "capture": "Capture and hide local cursor",
+        "local_description": "Use the local cursor to point at the remote screen. Click the screen to forward keyboard input; the header switch can turn forwarding off.",
+        "capture_description": "Click the remote screen to capture and hide the local cursor. Only while captured are physical keys forwarded. Use the release shortcut to free both the pointer and keyboard; the control connection stays active."
       }
     },
     "permissions": {
@@ -1123,7 +1135,7 @@
     "revoke_failed": "Could not revoke control. Use Ctrl+Alt+Shift+F10 on the host to stop it.",
     "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
     "reconnecting": "Reconnecting control",
-    "surface": "Remote control; press {{shortcut}} to end control.",
+    "surface": "Remote control; press {{shortcut}} to release the pointer and keyboard.",
     "request": "Request control",
     "waiting": "Waiting for approval",
     "cancel": "Cancel request",
@@ -1140,6 +1152,9 @@
     "keyboard_input": "Type on the remote computer",
     "text_too_long": "Text is too long. Send it in smaller parts.",
     "text_failed": "Input could not be fully sent. Check the remote text before trying again.",
-    "system_keyboard_stopped": "System keyboard forwarding stopped. Click the remote screen to try again, or turn off system shortcuts in Remote control settings."
+    "system_keyboard_stopped": "System keyboard forwarding stopped. Click the remote screen to try again, or turn off system shortcuts in Remote control settings.",
+    "capture_failed": "Could not capture the pointer. Click the remote screen to retry, or choose Local cursor in Remote control settings.",
+    "capture_unavailable": "This host does not support pointer capture. Choose Local cursor in Remote control settings.",
+    "capture_hint": "Click to capture the pointer. Press {{shortcut}} to release the pointer and keyboard."
   }
 }

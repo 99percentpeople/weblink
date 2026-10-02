@@ -625,24 +625,37 @@ labelled entries. Its portal stays inside the fullscreen container when fullscre
 Approval activates input automatically; there is no user-facing pause mode. Blur,
 hidden view, lost drag capture and settings changes release the current gesture
 using a fresh acknowledged epoch, without ending consent. The configured viewer
-shortcut ends control; Escape is forwarded when keyboard input is supported.
+shortcut releases captured pointer and keyboard input without ending consent.
 The existing video node, audio routing and statistics remain owned by the player.
 
-### Keyboard input
+### Pointer capture and keyboard input
 
-Settings → Remote control controls keyboard forwarding and the viewer's exit shortcut
-(Ctrl+Alt+Shift+Q by default, optionally Ctrl+Alt+Shift+X). The shortcut works while
-the control surface has focus, including when forwarding is disabled. The host's
-independent Ctrl+Alt+Shift+F10 emergency revocation remains unchanged.
-Pointer and keyboard forwarding are enabled by default after approval. The keyboard
+Settings → Remote control provides two pointer behaviors. **Local cursor** is the
+default: mouse coordinates map to the displayed video, and focusing the screen enables
+physical keyboard forwarding. The header keyboard switch can disable it immediately.
+**Capture and hide local cursor** uses [Pointer Lock](https://w3c.github.io/pointerlock/)
+after clicking the remote surface. The capture click is consumed locally. Movement,
+buttons and wheel then use the existing relative-pointer channel at the host's current
+cursor position; the frozen local coordinates are not sent. An unsupported or rejected
+capture leaves keyboard input local and allows another explicit attempt.
+
+In capture mode, physical keyboard forwarding requires an actual pointer lock on the
+active surface; keyboard input stops together with pointer capture.
+The shared release shortcut (Ctrl+Alt+Shift+Q by default, optionally Ctrl+Alt+Shift+X)
+releases pointer and keyboard capture together, including when keyboard forwarding is
+disabled. It preserves the approved control connection. Browser Escape may also unlock.
+Blur, hidden documents, mode changes, lost control and teardown release capture and
+held input. A late lock completion is released; returning focus never recaptures.
+The host's independent Ctrl+Alt+Shift+F10 emergency revocation remains unchanged.
+The keyboard forwarding preference is enabled by default. The keyboard
 switch in the room header appears only while controlling a remote screen that supports
 keyboard input; hosting a share or merely viewing one does not display it.
 It toggles the same saved preference immediately;
 disabling it releases keyboard input and closes the soft keyboard, while pointer
 control and consent remain active.
 
-Click the active remote surface to focus it. Local chat, settings and other inputs
-do not forward keys. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
+Focus the active remote surface (and capture it in capture mode) to forward physical keys. Local chat, settings and
+other inputs do not forward keys. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
 map to the existing Windows scan-code whitelist and use the remote keyboard layout.
 The receiver injects them through the existing [scan-code input path](https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-keybdinput).
 Letters, digits, editing/navigation keys, F1–F12, left/right modifiers and the numeric
@@ -659,7 +672,8 @@ the keyboard preference releases owned keys immediately without ending consent.
 
 On Windows Tauri, Settings → Remote control also exposes system-shortcut forwarding,
 enabled by default. It uses a controller-side native keyboard hook only while the
-approved remote surface is focused and the shared keyboard toggle is on. The
+approved remote surface has focus, owns pointer lock if capture mode is selected, and
+the shared keyboard toggle is on. The
 foreground native window must also match. In that interval, supported scan codes,
 including Alt/Win combinations, come from the native channel; DOM handlers do not
 send a second copy. Local editors, dialogs and the soft-keyboard editor use their
@@ -677,14 +691,16 @@ After stopping, the hook can drain only previously captured key releases for up
 to two seconds; it never captures new background presses. A failed capture requires
 another click on the remote screen, and does not revoke pointer control.
 
-The chosen exit chord is recognized natively and its final key is not forwarded.
+The chosen exit chord is recognized natively, releases pointer lock and keyboard
+capture together, and its final key is not forwarded.
 Ctrl+Alt+Shift+F10 also ends controller input and invokes the local host's emergency
 revocation if this app is hosting control at the same time. This does not add secure
 desktop or Ctrl+Alt+Del support. Real Windows shortcut behavior requires manual
 acceptance; compilation and ownership tests do not prove OS shortcut interception.
 
-The keyboard action on an actively controlled screen synchronously focuses an
-invisible text editor within that screen, including in fullscreen. Mobile browsers
+In either pointer mode, the keyboard action on an actively controlled screen
+synchronously focuses an invisible text editor within that screen, including in
+fullscreen. This explicit soft-keyboard path does not require pointer lock. Mobile browsers
 open their system keyboard from this user gesture; there is no custom input panel
 or key toolbar. The editor remains focusable, without taking space or intercepting
 pointer input. The tile action menu stays visible on touch devices, including

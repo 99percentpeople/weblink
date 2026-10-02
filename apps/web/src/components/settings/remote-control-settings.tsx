@@ -31,11 +31,19 @@ import {
   type TouchMode,
 } from "@/libs/domain/remote-control/touch-options";
 
+import {
+  resolveRemotePointerOptions,
+  type RemotePointerMode,
+} from "@/libs/domain/remote-control/pointer-options";
 import RemoteKeyboardSettings from "./remote-keyboard-settings";
 
 export default function RemoteControlSettings() {
   const options = () =>
     resolveRemoteTouchOptions(appState.options.remoteTouch);
+  const pointer = () =>
+    resolveRemotePointerOptions(
+      appState.options.remotePointer,
+    );
   const prefix = "setting.remote_control.";
   const toggle = (
     key:
@@ -69,6 +77,43 @@ export default function RemoteControlSettings() {
       <h3 id="remote-control-settings" class="h3">
         {t("app_menu.settings_remote_control")}
       </h3>
+      <h4 class="h3">{t(`${prefix}pointer_heading`)}</h4>
+      <div class="flex flex-col gap-2">
+        <Label id="remote-pointer-mode">
+          {t(`${prefix}pointer.title`)}
+        </Label>
+        <Select<RemotePointerMode>
+          modal
+          disallowEmptySelection
+          options={["local", "capture"]}
+          value={pointer().mode}
+          onChange={(value) =>
+            value &&
+            setAppOptions("remotePointer", "mode", value)
+          }
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {t(`${prefix}pointer.${props.item.rawValue}`)}
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger aria-labelledby="remote-pointer-mode">
+            <SelectValue<RemotePointerMode>>
+              {(state) =>
+                t(
+                  `${prefix}pointer.${state.selectedOption()}`,
+                )
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p class="muted">
+          {t(
+            `${prefix}pointer.${pointer().mode}_description`,
+          )}
+        </p>
+      </div>
       <h4 class="h3">{t(`${prefix}keyboard_heading`)}</h4>
       <RemoteKeyboardSettings />
       <h4 class="h3">{t(`${prefix}touch_heading`)}</h4>

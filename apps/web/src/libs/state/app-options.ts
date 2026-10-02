@@ -23,6 +23,11 @@ import {
   type RemoteKeyboardOptions,
 } from "@/libs/domain/remote-control/keyboard-options";
 
+import {
+  defaultRemotePointerOptions,
+  type RemotePointerOptions,
+} from "@/libs/domain/remote-control/pointer-options";
+
 export type Locale = string;
 export type ConnectionOptions = IceServerOptions;
 export type { TurnServerOptions, CompressionLevel };
@@ -78,6 +83,7 @@ export type AppOption = {
   notifications: NotificationOptions;
   application: ApplicationOptions;
   permissionHistoryImported: boolean;
+  remotePointer: RemotePointerOptions;
   remoteTouch: RemoteTouchOptions;
   remoteKeyboard: RemoteKeyboardOptions;
   // Receiver
@@ -234,6 +240,7 @@ export const getDefaultAppOptions = (): AppOption => {
     clientConfigs: {},
     permissionHistoryImported: false,
     roomConfigs: {},
+    remotePointer: { ...defaultRemotePointerOptions },
     remoteTouch: { ...defaultRemoteTouchOptions },
     remoteKeyboard: { ...defaultRemoteKeyboardOptions },
     application: { ...defaultApplicationOptions },

@@ -790,54 +790,58 @@ it.each(["shortcut", "keyboard"])(
   },
 );
 
-it("keeps the soft-keyboard editor focused through pointer gestures and sends subsequent text", () => {
-  const { editor, keyboard } = renderKeyboardControl();
-  keyboard()?.show();
-  touch("down", 1, 60, 80);
-  touch("move", 1, 80, 90);
-  touch("up", 1, 80, 90);
-  expect(editor).toHaveFocus();
-  expect(fixture.control.move).toHaveBeenCalled();
-  const mouse = new MouseEvent("pointerdown", {
-    bubbles: true,
-    cancelable: true,
-    clientX: 100,
-    clientY: 80,
-    button: 0,
-  });
-  Object.assign(mouse, {
-    pointerType: "mouse",
-    pointerId: 10,
-  });
-  fireEvent(surface(), mouse);
-  expect(mouse.defaultPrevented).toBe(true);
-  expect(editor).toHaveFocus();
-  // Some browsers also dispatch compatibility mouse events.
-  expect(fireEvent.mouseDown(surface())).toBe(false);
-  fireEvent.wheel(surface(), {
-    clientX: 100,
-    clientY: 80,
-    deltaY: 120,
-  });
-  expect(editor).toHaveFocus();
-  editor.value = "hello";
-  fireEvent.input(editor, {
-    inputType: "insertText",
-    data: "hello",
-  });
-  expect(fixture.control.input).toHaveBeenLastCalledWith({
-    type: "text",
-    text: "hello",
-  });
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "remote_control.keyboard_hide",
-    }),
-  );
-  expect(editor).not.toHaveFocus();
-  touch("down", 2, 60, 80);
-  expect(surface()).toHaveFocus();
-});
+it.each(["local", "capture"] as const)(
+  "keeps the soft-keyboard editor focused through pointer gestures and sends subsequent text (%s)",
+  (mode) => {
+    setAppState("options", "remotePointer", "mode", mode);
+    const { editor, keyboard } = renderKeyboardControl();
+    keyboard()?.show();
+    touch("down", 1, 60, 80);
+    touch("move", 1, 80, 90);
+    touch("up", 1, 80, 90);
+    expect(editor).toHaveFocus();
+    expect(fixture.control.move).toHaveBeenCalled();
+    const mouse = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      clientY: 80,
+      button: 0,
+    });
+    Object.assign(mouse, {
+      pointerType: "mouse",
+      pointerId: 10,
+    });
+    fireEvent(surface(), mouse);
+    expect(mouse.defaultPrevented).toBe(true);
+    expect(editor).toHaveFocus();
+    // Some browsers also dispatch compatibility mouse events.
+    expect(fireEvent.mouseDown(surface())).toBe(false);
+    fireEvent.wheel(surface(), {
+      clientX: 100,
+      clientY: 80,
+      deltaY: 120,
+    });
+    expect(editor).toHaveFocus();
+    editor.value = "hello";
+    fireEvent.input(editor, {
+      inputType: "insertText",
+      data: "hello",
+    });
+    expect(fixture.control.input).toHaveBeenLastCalledWith({
+      type: "text",
+      text: "hello",
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "remote_control.keyboard_hide",
+      }),
+    );
+    expect(editor).not.toHaveFocus();
+    touch("down", 2, 60, 80);
+    expect(surface()).toHaveFocus();
+  },
+);
 
 it.each(["trackpad", "direct"] as const)(
   "suppresses automatic keyboard reopening during %s input on HTTP, even without a resize or blur",
@@ -945,44 +949,48 @@ it("does not preserve another editor's focus and unregisters the shortcut on tea
   other.remove();
 });
 
-it("preserves native long press and holds a trackpad drag through movement until lift", () => {
-  render(() => <RemoteControlOverlay enabled />);
-  touch("down", 1, 60, 80);
-  expect(
-    nativeTouch("touchstart", 1).defaultPrevented,
-  ).toBe(false);
-  const menu = new MouseEvent("contextmenu", {
-    bubbles: true,
-    cancelable: true,
-  });
-  Object.assign(menu, { pointerType: "touch" });
-  fireEvent(surface(), menu);
-  expect(menu.defaultPrevented).toBe(true);
-  expect(fixture.control.input).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      type: "button",
-      button: 0,
-      down: true,
-    }),
-  );
-  touch("move", 1, 80, 90);
-  expect(nativeTouch("touchmove", 1).defaultPrevented).toBe(
-    false,
-  );
-  expect(fixture.control.move).toHaveBeenCalled();
-  fireEvent(surface(), menu);
-  touch("up", 1, 80, 90);
-  nativeTouch("touchend");
-  expect(
-    fixture.control.input.mock.calls.map(([e]: any[]) => [
-      e.button,
-      e.down,
-    ]),
-  ).toEqual([
-    [0, true],
-    [0, false],
-  ]);
-});
+it.each(["local", "capture"] as const)(
+  "preserves native long press and holds a trackpad drag through movement until lift (%s)",
+  (mode) => {
+    setAppState("options", "remotePointer", "mode", mode);
+    render(() => <RemoteControlOverlay enabled />);
+    touch("down", 1, 60, 80);
+    expect(
+      nativeTouch("touchstart", 1).defaultPrevented,
+    ).toBe(false);
+    const menu = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.assign(menu, { pointerType: "touch" });
+    fireEvent(surface(), menu);
+    expect(menu.defaultPrevented).toBe(true);
+    expect(fixture.control.input).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "button",
+        button: 0,
+        down: true,
+      }),
+    );
+    touch("move", 1, 80, 90);
+    expect(
+      nativeTouch("touchmove", 1).defaultPrevented,
+    ).toBe(false);
+    expect(fixture.control.move).toHaveBeenCalled();
+    fireEvent(surface(), menu);
+    touch("up", 1, 80, 90);
+    nativeTouch("touchend");
+    expect(
+      fixture.control.input.mock.calls.map(([e]: any[]) => [
+        e.button,
+        e.down,
+      ]),
+    ).toEqual([
+      [0, true],
+      [0, false],
+    ]);
+  },
+);
 
 it("keeps direct contacts held through a local context menu without emulating a mouse press", () => {
   vi.useFakeTimers({
@@ -1117,4 +1125,20 @@ it("keeps a pending Chinese commit alive through transient secure-context keyboa
   expect(editor).toHaveFocus();
   expect(api.show).not.toHaveBeenCalled();
   expect(api.hide).not.toHaveBeenCalled();
+});
+
+it("uses the shared exit shortcut to close explicit keyboard input without ending control", () => {
+  const { editor, keyboard } = renderKeyboardControl();
+  keyboard()?.show();
+  fixture.control.resetInput.mockClear();
+  fireEvent.keyDown(editor, {
+    code: "KeyQ",
+    key: "Q",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  expect(editor).not.toHaveFocus();
+  expect(fixture.control.resetInput).toHaveBeenCalled();
+  expect(fixture.control.cancel).not.toHaveBeenCalled();
 });

@@ -33,19 +33,27 @@ export default function RemoteKeyboardSettings() {
   // Discover native support without suspending the settings dialog.
   const [systemKeyboard, setSystemKeyboard] =
     createSignal(false);
+  const [hostShortcut, setHostShortcut] =
+    createSignal(false);
   let disposed = false;
   onCleanup(() => {
     disposed = true;
   });
   onMount(async () => {
-    if (!platform.keyboard) return;
+    if (platform.kind !== "desktop") return;
     const capabilities = await platform
       .getCapabilities()
       .catch(() => undefined);
-    if (!disposed)
+    if (!disposed) {
       setSystemKeyboard(
-        capabilities?.systemKeyboard === true,
+        !!platform.keyboard &&
+          capabilities?.systemKeyboard === true,
       );
+      setHostShortcut(
+        capabilities?.os === "windows" &&
+          capabilities.remoteInput,
+      );
+    }
   });
   const keyboard = () =>
     resolveRemoteKeyboardOptions(
@@ -144,7 +152,20 @@ export default function RemoteKeyboardSettings() {
         <p class="muted">
           {t(
             "setting.remote_control.exit_shortcut.description",
+          )}{" "}
+          {t(
+            platform.kind === "browser"
+              ? "setting.remote_control.exit_shortcut.browser"
+              : systemKeyboard() &&
+                  keyboard().enabled &&
+                  keyboard().systemKeys
+                ? "setting.remote_control.exit_shortcut.native"
+                : "setting.remote_control.exit_shortcut.webview",
           )}
+          <Show when={hostShortcut()}>
+            {" "}
+            {t("setting.remote_control.exit_shortcut.host")}
+          </Show>
         </p>
       </div>
     </>
