@@ -262,6 +262,9 @@ export interface NativeVideoStats {
   width: number;
   height: number;
   bytes: number;
+  targetBitrate?: number;
+  encoderBitrate?: number;
+  availableOutgoingBitrate?: number;
   frames: number;
   encodeFrames: number;
   encodeSeconds: number;

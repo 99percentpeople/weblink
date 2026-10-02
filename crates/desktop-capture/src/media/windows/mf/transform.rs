@@ -1,4 +1,4 @@
-//! Windows hardware H.264 transforms. Every instance stays on its owning MTA thread.
+//! Windows hardware H.264/HEVC transforms. Every instance stays on its owning MTA thread.
 use super::super::super::EncoderInfo;
 use crate::media::latency::CodecControl;
 use std::{mem::ManuallyDrop, ptr, sync::Arc};
@@ -48,11 +48,50 @@ impl Drop for Activations {
         }
     }
 }
-fn activations() -> Result<Vec<(EncoderInfo, IMFActivate)>> {
+#[derive(Clone, Copy)]
+enum Codec {
+    H264,
+    Hevc,
+}
+impl Codec {
+    fn mime(self) -> &'static str {
+        match self {
+            Self::H264 => "video/h264",
+            Self::Hevc => "video/h265",
+        }
+    }
+    fn subtype(self) -> windows::core::GUID {
+        match self {
+            Self::H264 => MFVideoFormat_H264,
+            Self::Hevc => MFVideoFormat_HEVC,
+        }
+    }
+    fn profile(self) -> u32 {
+        match self {
+            Self::H264 => eAVEncH264VProfile_Base.0 as u32,
+            Self::Hevc => eAVEncH265VProfile_Main_420_8.0 as u32,
+        }
+    }
+    fn encoded(self) -> libwebrtc::video_frame::EncodedVideoCodec {
+        match self {
+            Self::H264 => libwebrtc::video_frame::EncodedVideoCodec::H264,
+            Self::Hevc => libwebrtc::video_frame::EncodedVideoCodec::H265,
+        }
+    }
+}
+struct Configuration {
+    codec: Codec,
+    width: u32,
+    height: u32,
+    fps: u32,
+    bitrate: u32,
+    bitrate_limit: u32,
+}
+fn activations(codec: Codec) -> Result<Vec<(EncoderInfo, IMFActivate)>> {
     let mut list = Activations(ptr::null_mut(), 0);
     let output = MFT_REGISTER_TYPE_INFO {
         guidMajorType: MFMediaType_Video,
-        guidSubtype: MFVideoFormat_H264,
+        guidSubtype: codec.subtype(),
     };
     unsafe {
         MFTEnumEx(
@@ -79,7 +118,7 @@ fn activations() -> Result<Vec<(EncoderInfo, IMFActivate)>> {
             activation.GetAllocatedString(&MFT_FRIENDLY_NAME_Attribute, &mut name, &mut len)?;
         }
         let label = if name.is_null() {
-            "Windows hardware H.264".into()
+            "Windows hardware video".into()
         } else {
             unsafe { String::from_utf16_lossy(std::slice::from_raw_parts(name.0, len as usize)) }
         };
@@ -88,10 +127,14 @@ fn activations() -> Result<Vec<(EncoderInfo, IMFActivate)>> {
         }
         encoders.push((
             EncoderInfo {
-                id: format!("mf:{clsid:?}"),
+                // Preserve existing H.264 IDs; disambiguate shared multi-codec MFT CLSIDs.
+                id: match codec {
+                    Codec::H264 => format!("mf:{clsid:?}"),
+                    Codec::Hevc => format!("mf:{clsid:?}:h265"),
+                },
                 name: label,
                 hardware: true,
-                codecs: vec!["video/h264".into()],
+                codecs: vec![codec.mime().into()],
             },
             activation.clone(),
         ));
@@ -101,16 +144,30 @@ fn activations() -> Result<Vec<(EncoderInfo, IMFActivate)>> {
 
 pub fn detect() -> crate::Result<Vec<EncoderInfo>> {
     let _runtime = Runtime::new().map_err(|e| e.to_string())?;
-    Ok(activations()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter_map(|(info, activation)| {
+    let mut encoders = Vec::new();
+    for codec in [Codec::H264, Codec::Hevc] {
+        // Missing registration for one codec must not hide another working codec.
+        for (info, activation) in activations(codec).unwrap_or_default() {
             // Activation and type negotiation exclude stale registrations and missing drivers.
-            Transform::create(activation, 320, 180, 30, 1_000_000, Arc::new(|| {}))
-                .ok()
-                .map(|_| info)
-        })
-        .collect())
+            if Transform::create(
+                activation,
+                Configuration {
+                    codec,
+                    width: 320,
+                    height: 180,
+                    fps: 30,
+                    bitrate: 1_000_000,
+                    bitrate_limit: 1_000_000,
+                },
+                Arc::new(|| {}),
+            )
+            .is_ok()
+            {
+                encoders.push(info);
+            }
+        }
+    }
+    Ok(encoders)
 }
 
 pub struct Packet {
@@ -119,6 +176,7 @@ pub struct Packet {
     pub keyframe: bool,
 }
 pub struct Transform {
+    pub codec: libwebrtc::video_frame::EncodedVideoCodec,
     transform: IMFTransform,
     activation: IMFActivate,
     events: super::events::Events,
@@ -138,24 +196,46 @@ impl Transform {
         height: u32,
         fps: u32,
         bitrate: u32,
+        bitrate_limit: u32,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> crate::Result<Self> {
-        let (_, activation) = activations()
+        let codec = if id.ends_with(":h265") {
+            Codec::Hevc
+        } else {
+            Codec::H264
+        };
+        let (_, activation) = activations(codec)
             .map_err(|e| e.to_string())?
             .into_iter()
             .find(|(info, _)| info.id == id)
             .ok_or("Selected hardware encoder is unavailable")?;
-        Self::create(activation, width, height, fps, bitrate, wake)
-            .map_err(|e| format!("Hardware encoder initialization failed: {e}"))
+        Self::create(
+            activation,
+            Configuration {
+                codec,
+                width,
+                height,
+                fps,
+                bitrate,
+                bitrate_limit,
+            },
+            wake,
+        )
+        .map_err(|e| format!("Hardware encoder initialization failed: {e}"))
     }
     fn create(
         activation: IMFActivate,
-        width: u32,
-        height: u32,
-        fps: u32,
-        bitrate: u32,
+        configuration: Configuration,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
+        let Configuration {
+            codec,
+            width,
+            height,
+            fps,
+            bitrate,
+            bitrate_limit,
+        } = configuration;
         unsafe {
             let transform: IMFTransform = activation.ActivateObject()?;
             // Activation must also be shut down when configuration fails.
@@ -201,36 +281,61 @@ impl Transform {
                         eAVEncCommonRateControlMode_CBR.0 as u32,
                         false,
                     ));
+                    // Favor real-time screen interaction over compression efficiency.
+                    // Optional: a missing driver control must not disable hardware.
+                    configuration.push(set_control(
+                        api,
+                        "qualityVsSpeed",
+                        &CODECAPI_AVEncCommonQualityVsSpeed,
+                        33,
+                        false,
+                    ));
+                    // Some drivers latch HRD at SetOutputType and silently ignore
+                    // later writes. Reserve one frame at the configured ceiling,
+                    // not the conservative startup bandwidth estimate; otherwise
+                    // a fixed buffer prevents quality recovering as bandwidth grows.
+                    configuration.push(set_control(
+                        api,
+                        "bufferBytes",
+                        &CODECAPI_AVEncCommonBufferSize,
+                        buffer_bytes(bitrate_limit, fps),
+                        false,
+                    ));
                 }
                 let mut input = [0];
                 let mut output = [0];
                 // Fixed-stream MFTs may return E_NOTIMPL; their stream IDs are zero.
                 let _ = transform.GetStreamIDs(&mut input, &mut output);
                 let output_type = MFCreateMediaType()?;
-                set_video_type(&output_type, &MFVideoFormat_H264, width, height, fps)?;
+                set_video_type(&output_type, &codec.subtype(), width, height, fps)?;
                 output_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
-                output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base.0 as u32)?;
+                output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, codec.profile())?;
                 transform.SetOutputType(output[0], &output_type, 0)?;
                 let input_type = MFCreateMediaType()?;
                 set_video_type(&input_type, &MFVideoFormat_NV12, width, height, fps)?;
                 input_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)?;
                 transform.SetInputType(input[0], &input_type, 0)?;
                 if let Some(api) = &controls {
-                    // The driver's default HRD/VBV can retain a large scene-cut
-                    // burst. H.264 expresses this buffer in bytes (not bits).
-                    // Optional: some MFTs expose no configurable buffer size.
-                    configuration.push(set_control(
-                        api,
-                        "bufferBytes",
-                        &CODECAPI_AVEncCommonBufferSize,
-                        buffer_bytes(bitrate, fps),
-                        false,
-                    ));
+                    // Other vendors may require negotiated types before accepting
+                    // this optional setting. Keep both paths and read back at runtime.
+                    if let Some(control) = configuration
+                        .iter_mut()
+                        .find(|c| c.name == "bufferBytes" && !c.accepted)
+                    {
+                        *control = set_control(
+                            api,
+                            "bufferBytes",
+                            &CODECAPI_AVEncCommonBufferSize,
+                            buffer_bytes(bitrate_limit, fps),
+                            false,
+                        );
+                    }
                 }
                 let events = super::events::Events::start(transform.cast()?, wake)?;
                 transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
                 transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
                 Ok(Self {
+                    codec: codec.encoded(),
                     transform: transform.clone(),
                     activation: activation.clone(),
                     events,
@@ -269,6 +374,7 @@ impl Transform {
                     "bFrames" => &CODECAPI_AVEncMPVDefaultBPictureCount,
                     "gopFrames" => &CODECAPI_AVEncMPVGOPSize,
                     "rateControl" => &CODECAPI_AVEncCommonRateControlMode,
+                    "qualityVsSpeed" => &CODECAPI_AVEncCommonQualityVsSpeed,
                     "bufferBytes" => &CODECAPI_AVEncCommonBufferSize,
                     _ => continue,
                 };
@@ -298,20 +404,8 @@ impl Transform {
             .ok_or("Hardware encoder has no rate control")?;
         unsafe { api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bitrate)) }
             .map_err(|e| format!("Hardware encoder bitrate update failed: {e}"))?;
-        let status = set_control(
-            api,
-            "bufferBytes",
-            &CODECAPI_AVEncCommonBufferSize,
-            buffer_bytes(bitrate, self.fps),
-            false,
-        );
-        if let Some(control) = self
-            .configuration
-            .iter_mut()
-            .find(|c| c.name == "bufferBytes")
-        {
-            *control = status;
-        }
+        // HRD capacity follows the configured ceiling for this transform's lifetime.
+        // Feedback changes only the target rate; changing the ceiling reopens the MFT.
         Ok(())
     }
     pub fn request_keyframe(&self) -> crate::Result<()> {
@@ -423,9 +517,11 @@ fn set_control(
         error: result.err().map(|e| e.to_string()),
     }
 }
-fn buffer_bytes(bitrate: u32, fps: u32) -> u32 {
-    // Keep at least one frame of capacity for deliberately low frame rates.
-    (bitrate / 8 / 10).max(bitrate / 8 / fps.max(1)).max(128)
+fn buffer_bytes(bitrate_limit: u32, fps: u32) -> u32 {
+    // H.264's HRD size is in bytes. Round up to retain a full frame's budget.
+    u64::from(bitrate_limit)
+        .div_ceil(8 * u64::from(fps.max(1)))
+        .max(128) as u32
 }
 impl Drop for Transform {
     fn drop(&mut self) {

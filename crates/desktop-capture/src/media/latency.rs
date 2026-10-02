@@ -21,6 +21,8 @@ pub struct EncoderPipelineStats {
     pub frames: u64,
     pub fresh_frames: u64,
     pub replaced_inputs: u64,
+    pub rate_limited_inputs: u64,
+    pub encoded_bytes: u64,
     pub in_flight: usize,
     pub max_in_flight: usize,
     pub queue: StageStats,

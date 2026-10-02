@@ -84,7 +84,9 @@ export class SessionService {
       Object.values(this.sessions).map((session) => ({
         pc: session.peerConnection,
         native: this.nativeScreens.get(session),
-        name: this.clientViewData[session.clientId]?.name,
+        name:
+          this.clientViewData[session.clientId]?.name ??
+          session.clientId,
       })),
     );
   }

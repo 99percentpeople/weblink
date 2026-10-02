@@ -7,6 +7,10 @@ export interface VideoStatsSample {
   width?: number;
   height?: number;
   bytes?: number;
+  /** Instantaneous sender budgets in bits per second, not byte counters. */
+  targetBitrate?: number;
+  encoderBitrate?: number;
+  availableOutgoingBitrate?: number;
   frames?: number;
   encodeFrames?: number;
   encodeSeconds?: number;
@@ -35,6 +39,9 @@ export interface VideoStatsValue {
   width?: number;
   height?: number;
   bitrate?: number;
+  targetBitrate?: number;
+  encoderBitrate?: number;
+  availableOutgoingBitrate?: number;
   fps?: number;
   encodeMs?: number;
   decodeMs?: number;
@@ -71,6 +78,11 @@ export function videoStatsValue(
     implementation: sample.implementation,
     width: sample.width || undefined,
     height: sample.height || undefined,
+    targetBitrate: number(sample.targetBitrate),
+    encoderBitrate: number(sample.encoderBitrate),
+    availableOutgoingBitrate: number(
+      sample.availableOutgoingBitrate,
+    ),
     roundTripMs:
       number(sample.roundTripSeconds) === undefined
         ? undefined
@@ -202,6 +214,16 @@ export async function readBrowserVideoStats(
           ? s.bytesSent
           : s.bytesReceived,
       ),
+      targetBitrate:
+        direction === "send"
+          ? number(s.targetBitrate)
+          : undefined,
+      // A receiver's outgoing estimate describes its return path, not the
+      // remote sender's video budget. Do not label it as incoming bandwidth.
+      availableOutgoingBitrate:
+        direction === "send"
+          ? number(pair?.availableOutgoingBitrate)
+          : undefined,
       frames: number(
         direction === "send"
           ? s.framesEncoded

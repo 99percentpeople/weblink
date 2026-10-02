@@ -39,6 +39,43 @@ it("uses interval deltas for bitrate, FPS and actual per-frame processing time",
   expect(value.decodeMs).toBe(2);
   expect(value.jitterMs).toBeCloseTo(10);
 });
+it("keeps actual traffic separate from instantaneous transport and encoder budgets", () => {
+  for (const fps of [60, 120]) {
+    const now = {
+      ...sample,
+      timestamp: 3500,
+      // A delayed mobile poll must use the actual 2.5-second interval.
+      bytes: sample.bytes! + 34_375_000,
+      frames: sample.frames! + fps * 2.5,
+      targetBitrate: 140_000_000,
+      encoderBitrate: 130_000_000,
+      availableOutgoingBitrate: 150_000_000,
+    };
+    expect(videoStatsValue(now, sample)).toMatchObject({
+      bitrate: 110_000_000,
+      fps,
+      targetBitrate: 140_000_000,
+      encoderBitrate: 130_000_000,
+      availableOutgoingBitrate: 150_000_000,
+    });
+    // Estimates need no counter baseline, and never replace measured traffic.
+    expect(videoStatsValue(now)).toMatchObject({
+      targetBitrate: 140_000_000,
+      encoderBitrate: 130_000_000,
+      availableOutgoingBitrate: 150_000_000,
+    });
+    expect(videoStatsValue(now).bitrate).toBeUndefined();
+  }
+  const invalid = videoStatsValue({
+    ...sample,
+    targetBitrate: NaN,
+    encoderBitrate: -1,
+    availableOutgoingBitrate: Infinity,
+  });
+  expect(invalid.targetBitrate).toBeUndefined();
+  expect(invalid.encoderBitrate).toBeUndefined();
+  expect(invalid.availableOutgoingBitrate).toBeUndefined();
+});
 it("does not invent rates before a baseline, after reset or when unavailable", () => {
   expect(videoStatsValue(sample).bitrate).toBeUndefined();
   expect(
@@ -133,6 +170,7 @@ it("reads packet queue counters and RTT only from the selected track transport",
       transportId: "transport",
       packetsSent: 500,
       totalPacketSendDelay: 0.75,
+      targetBitrate: 12_000_000,
     },
     {
       id: "transport",
@@ -143,11 +181,13 @@ it("reads packet queue counters and RTT only from the selected track transport",
       id: "other",
       type: "candidate-pair",
       currentRoundTripTime: 2,
+      availableOutgoingBitrate: 1_000_000,
     },
     {
       id: "selected",
       type: "candidate-pair",
       currentRoundTripTime: 0.008,
+      availableOutgoingBitrate: 15_000_000,
     },
   ];
   const pc = {
@@ -167,6 +207,8 @@ it("reads packet queue counters and RTT only from the selected track transport",
   expect(sample.packetsSent).toBe(500);
   expect(sample.sendDelaySeconds).toBe(0.75);
   expect(sample.roundTripSeconds).toBe(0.008);
+  expect(sample.targetBitrate).toBe(12_000_000);
+  expect(sample.availableOutgoingBitrate).toBe(15_000_000);
   entries.splice(3, 1);
   expect(
     (await readBrowserVideoStats(pc, track, "send"))[0]
@@ -205,7 +247,25 @@ it("reads only the selected receiver and excludes audio and repair payloads", as
             codecId: "codec",
             framesDecoded: 7,
             bytesReceived: 99,
+            transportId: "transport",
+            targetBitrate: 90_000_000,
             totalDecodeTime: 0.002,
+          },
+        ],
+        [
+          "transport",
+          {
+            id: "transport",
+            type: "transport",
+            selectedCandidatePairId: "pair",
+          },
+        ],
+        [
+          "pair",
+          {
+            id: "pair",
+            type: "candidate-pair",
+            availableOutgoingBitrate: 100_000_000,
           },
         ],
         [
@@ -250,6 +310,10 @@ it("reads only the selected receiver and excludes audio and repair payloads", as
     decodeSeconds: 0.002,
   });
   expect(result[0].encodeSeconds).toBeUndefined();
+  expect(result[0].targetBitrate).toBeUndefined();
+  expect(
+    result[0].availableOutgoingBitrate,
+  ).toBeUndefined();
   expect(unrelated).not.toHaveBeenCalled();
   expect(
     await readBrowserVideoStats(pc, track, "send"),

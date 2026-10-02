@@ -131,9 +131,22 @@ export class ScreenReceiver {
     this.remoteReady = true;
     for (const candidate of this.candidates.splice(0))
       await this.addIceCandidate(candidate);
-    await this.pc.setLocalDescription(
-      await this.pc.createAnswer(),
-    );
+    const answer = await this.pc.createAnswer();
+    const video = answer.sdp
+      ?.split(/(?=^m=)/m)
+      .find((section) => section.startsWith("m=video "));
+    if (
+      /^m=video /m.test(sdp) &&
+      (!video ||
+        /^m=video 0(?:\s|\/)/.test(video) ||
+        /^a=(inactive|sendonly)\r?$/m.test(video))
+    ) {
+      this.close();
+      throw new Error(
+        "This receiver cannot decode the selected video codec. Choose a compatible format such as H.264 on the sharing device.",
+      );
+    }
+    await this.pc.setLocalDescription(answer);
     if (!this.onCandidate)
       await this.waitFor(
         () => this.pc.iceGatheringState === "complete",

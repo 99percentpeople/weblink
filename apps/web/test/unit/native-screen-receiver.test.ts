@@ -149,3 +149,51 @@ it("reports a terminal control channel failure to the media retry owner, but not
   intentional.close();
   expect(failed).toHaveBeenCalledOnce();
 });
+
+it.each([
+  "m=video 0 UDP/TLS/RTP/SAVPF 104\r\na=inactive\r\n",
+  "m=video 9 UDP/TLS/RTP/SAVPF 104\r\na=inactive\r\n",
+  "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n",
+])(
+  "rejects an incompatible video answer before waiting for ICE: %s",
+  async (sdp) => {
+    const screen = new ScreenReceiver({}, vi.fn(), vi.fn());
+    Object.assign(screen.pc, {
+      setRemoteDescription: vi.fn(async () => {}),
+      createAnswer: vi.fn(async () => ({
+        type: "answer",
+        sdp,
+      })),
+      setLocalDescription: vi.fn(),
+    });
+    await expect(
+      screen.answer(
+        "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 104\r\na=rtpmap:104 H265/90000\r\n",
+      ),
+    ).rejects.toThrow("cannot decode");
+    expect(
+      screen.pc.setLocalDescription,
+    ).not.toHaveBeenCalled();
+    expect(screen.pc.close).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(["H264", "H265"])(
+  "accepts negotiated %s video without changing the browser codec choice",
+  async (codec) => {
+    const screen = new ScreenReceiver({}, vi.fn(), vi.fn());
+    const sdp = `v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 104\r\na=recvonly\r\na=rtpmap:104 ${codec}/90000\r\n`;
+    Object.assign(screen.pc, {
+      iceGatheringState: "complete",
+      localDescription: { sdp },
+      setRemoteDescription: vi.fn(async () => {}),
+      createAnswer: vi.fn(async () => ({
+        type: "answer",
+        sdp,
+      })),
+      setLocalDescription: vi.fn(async () => {}),
+    });
+    expect(await screen.answer(sdp)).toBe(sdp);
+    screen.close();
+  },
+);

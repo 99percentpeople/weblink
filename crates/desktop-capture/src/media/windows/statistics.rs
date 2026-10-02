@@ -53,12 +53,9 @@ impl MediaSession {
                     }
                     _ => None,
                 });
-                let round_trip_seconds = report.iter().find_map(|stat| match stat {
-                    RtcStats::CandidatePair(pair)
-                        if Some(&pair.rtc.id) == pair_id
-                            && pair.candidate_pair.responses_received > 0 =>
-                    {
-                        Some(pair.candidate_pair.current_round_trip_time)
+                let pair = report.iter().find_map(|stat| match stat {
+                    RtcStats::CandidatePair(pair) if Some(&pair.rtc.id) == pair_id => {
+                        Some(&pair.candidate_pair)
                     }
                     _ => None,
                 });
@@ -70,6 +67,11 @@ impl MediaSession {
                     width: s.outbound.frame_width,
                     height: s.outbound.frame_height,
                     bytes: s.sent.bytes_sent,
+                    // The binding defaults absent numeric stats to zero.
+                    target_bitrate: positive_bitrate(s.outbound.target_bitrate),
+                    encoder_bitrate: hardware.as_ref().and_then(|s| s.bitrate),
+                    available_outgoing_bitrate: pair
+                        .and_then(|p| positive_bitrate(p.available_outgoing_bitrate)),
                     frames: s.outbound.frames_encoded,
                     encode_frames,
                     encode_seconds,
@@ -80,9 +82,15 @@ impl MediaSession {
                     fresh_frames: hardware.as_ref().map(|s| s.capture_to_encode.count),
                     packets_sent: s.sent.packets_sent,
                     send_delay_seconds: s.outbound.total_packet_send_delay,
-                    round_trip_seconds,
+                    round_trip_seconds: pair
+                        .filter(|p| p.responses_received > 0)
+                        .map(|p| p.current_round_trip_time),
                 })
             })
             .collect())
     }
+}
+
+fn positive_bitrate(value: f64) -> Option<f64> {
+    (value.is_finite() && value > 0.0).then_some(value)
 }

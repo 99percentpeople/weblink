@@ -612,3 +612,133 @@ fn software_cached_frames_keep_cadence_and_follow_live_fps() {
         assert!(media.latest.lock().unwrap().is_none());
     });
 }
+
+#[test]
+fn hardware_selection_matches_codec_and_preserves_h264_default() {
+    let encoders = || {
+        vec![
+            EncoderInfo {
+                id: "mf:hevc".into(),
+                name: "HEVC".into(),
+                hardware: true,
+                codecs: vec!["video/h265".into()],
+            },
+            EncoderInfo {
+                id: "mf:h264".into(),
+                name: "H264".into(),
+                hardware: true,
+                codecs: vec!["video/h264".into()],
+            },
+        ]
+    };
+    let mut options = MediaOptions::default();
+    assert_eq!(
+        select_hardware_encoder(&options, encoders())
+            .unwrap()
+            .unwrap()
+            .id,
+        "mf:h264"
+    );
+    options.codec = Some("video/h265".into());
+    assert_eq!(
+        select_hardware_encoder(&options, encoders())
+            .unwrap()
+            .unwrap()
+            .id,
+        "mf:hevc"
+    );
+    options.encoder = "mf:h264".into();
+    assert!(select_hardware_encoder(&options, encoders()).is_err());
+    options.encoder = "mf:hevc".into();
+    options.codec = None;
+    assert_eq!(
+        select_hardware_encoder(&options, encoders())
+            .unwrap()
+            .unwrap()
+            .codecs,
+        ["video/h265"]
+    );
+    options.encoder = "auto".into();
+    options.codec = Some("video/vp9".into());
+    assert!(select_hardware_encoder(&options, encoders())
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn external_hevc_factory_is_scoped_and_cancelled_offers_release_media() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let codecs = |factory: &PeerConnectionFactory| {
+            factory
+                .get_rtp_sender_capabilities(MediaType::Video)
+                .codecs
+                .into_iter()
+                .map(|c| c.mime_type.to_lowercase())
+                .collect::<Vec<_>>()
+        };
+        let before = codecs(&PeerConnectionFactory::default());
+        for _ in 0..3 {
+            let factory =
+                PeerConnectionFactory::with_external_hevc_video_send_options(Default::default())
+                    .unwrap();
+            assert!(codecs(&factory).contains(&"video/h265".into()));
+            drop(factory);
+            assert_eq!(codecs(&PeerConnectionFactory::default()), before);
+        }
+        assert!(
+            PeerConnectionFactory::with_external_hevc_video_send_options(
+                libwebrtc::peer_connection_factory::VideoSendOptions {
+                    min_playout_delay_ms: 1,
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+        for info in mf::detect()
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.codecs.contains(&"video/h265".into()))
+        {
+            for _ in 0..3 {
+                let media = MediaSession::new(MediaOptions {
+                    encoder: info.id.clone(),
+                    codec: Some("video/h265".into()),
+                    ..Default::default()
+                })
+                .unwrap();
+                let weak = Arc::downgrade(&media);
+                let offer = media
+                    .offer("cancelled-hevc".into(), vec![], false, false)
+                    .await
+                    .unwrap();
+                assert!(offer.contains("H265/90000"), "{offer}");
+                assert!(!offer.contains("H264/90000"));
+                // Exercise the actual sender implementation list, not only SDP
+                // advertisement: missing HEVC implementations otherwise accept
+                // the answer but never configure a send codec or emit RTP.
+                let answer = offer
+                    .replace("a=sendonly", "a=recvonly")
+                    .replace("a=setup:actpass", "a=setup:active");
+                media.answer("cancelled-hevc", &answer).await.unwrap();
+                let connection = media
+                    .peers
+                    .lock()
+                    .unwrap()
+                    .get("cancelled-hevc")
+                    .unwrap()
+                    .connection
+                    .clone();
+                assert!(connection.senders().iter().any(|sender| sender
+                    .parameters()
+                    .codecs
+                    .iter()
+                    .any(|c| c.mime_type.eq_ignore_ascii_case("video/h265"))));
+                media.close();
+                drop(media);
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                assert!(weak.upgrade().is_none());
+            }
+        }
+    });
+}

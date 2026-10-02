@@ -86,6 +86,12 @@ beforeEach(() => {
       hardware: true,
       codecs: ["video/h264"],
     },
+    {
+      id: "mf:test:h265",
+      name: "GPU H.265",
+      hardware: true,
+      codecs: ["video/h265"],
+    },
   ]);
   native.backends.mockResolvedValue({
     screen: [
@@ -97,6 +103,7 @@ beforeEach(() => {
   native.codecs.mockResolvedValue([
     "video/vp8",
     "video/h264",
+    "video/h265",
   ]);
   vi.stubGlobal("RTCRtpSender", {
     getCapabilities: (kind: string) => ({
@@ -525,6 +532,7 @@ it.each([
     "setting.meeting_settings.stream.preferred_video_codec.auto (GPU)",
   ],
   ["mf:test", "video/h264", "H.264 (GPU)"],
+  ["mf:test:h265", "video/h265", "H.265 (GPU)"],
 ] as const)(
   "preserves saved encoding %s / %s when opening settings",
   async (encoder, codec, name) => {
@@ -607,5 +615,28 @@ it("keeps screen and window capture backend preferences independent", async () =
   );
   expect(
     screen.queryByRole("option", { name: "DXGI" }),
+  ).toBeNull();
+});
+
+it("selects probed HEVC hardware without offering unsupported HEVC software", async () => {
+  render(() => <MeetingSettings />);
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.265 (GPU)",
+  );
+  expect(appState.options.nativeScreenEncoder).toBe(
+    "mf:test:h265",
+  );
+  expect(appState.options.nativeScreenCodec).toBe(
+    "video/h265",
+  );
+  const trigger = screen.getByRole("button", {
+    name: /setting.meeting_settings.native_encoder/,
+  });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  expect(
+    screen.queryByRole("option", {
+      name: "H.265",
+    }),
   ).toBeNull();
 });

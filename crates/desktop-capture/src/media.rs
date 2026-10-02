@@ -137,6 +137,12 @@ pub struct VideoStats {
     pub width: u32,
     pub height: u32,
     pub bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_bitrate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_bitrate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_outgoing_bitrate: Option<f64>,
     pub frames: u32,
     pub encode_frames: u64,
     pub encode_seconds: f64,

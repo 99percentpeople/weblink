@@ -1,8 +1,12 @@
 import { createMemo, For, Show } from "solid-js";
+import { toast } from "solid-sonner";
+import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 import { createVideoStatistics } from "@/libs/hooks/video-statistics";
 import type { VideoStatsBatch } from "@/libs/domain/video-stats";
 import { useVideoDisplay } from "@/routes/home/components/video-display-context";
+import { copyText } from "@/libs/utils/copy-text";
+import { Copy } from "lucide-solid";
 
 const fixed = (value: number | undefined, unit: string) =>
   value === undefined ||
@@ -86,6 +90,21 @@ export function VideoStatisticsOverlay(props: {
           ]
             .filter(Boolean)
             .join(" · "),
+          ...(
+            [
+              ["target_bitrate", row.targetBitrate],
+              ["encoder_bitrate", row.encoderBitrate],
+              [
+                "bandwidth_estimate",
+                row.availableOutgoingBitrate,
+              ],
+            ] as const
+          ).map(([kind, value]) => {
+            const text = bitrate(value);
+            return text
+              ? `${t(`video.statistics.${kind}`)} ${text}`
+              : undefined;
+          }),
           [
             dropped
               ? `${t("video.statistics.player_dropped")} ${dropped}`
@@ -122,10 +141,28 @@ export function VideoStatisticsOverlay(props: {
             .filter(Boolean)
             .join(" · "),
         ].filter((line): line is string => Boolean(line));
-        return { ...row, lines };
+        const title = `${t(`video.statistics.${row.direction}`)}${
+          row.preview
+            ? ` · ${t("video.statistics.preview")}`
+            : row.peer
+              ? ` · ${row.peer}`
+              : ""
+        }`;
+        return { ...row, title, lines };
       })
       .filter((row) => row.lines.length > 0);
   });
+  const copy = async () => {
+    const text = [
+      `${t("video.statistics.title")} · ${new Date().toISOString()}`,
+      ...visibleRows().map((row) =>
+        [row.title, ...row.lines].join("\n"),
+      ),
+    ].join("\n\n");
+    if (await copyText(text)) {
+      toast.success(t("common.notification.copy_success"));
+    }
+  };
   return (
     <Show when={videoTrack() && visibleRows().length > 0}>
       <div
@@ -141,12 +178,7 @@ export function VideoStatisticsOverlay(props: {
           {(row) => (
             <div class="py-0.5">
               <div class="truncate text-white/70">
-                {t(`video.statistics.${row.direction}`)}
-                {row.preview
-                  ? ` · ${t("video.statistics.preview")}`
-                  : row.peer
-                    ? ` · ${row.peer}`
-                    : ""}
+                {row.title}
               </div>
               <For each={row.lines}>
                 {(line) => (
@@ -156,6 +188,22 @@ export function VideoStatisticsOverlay(props: {
             </div>
           )}
         </For>
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          class="pointer-events-auto h-7 px-0 text-[10px] text-white
+            hover:bg-white/15 hover:text-white"
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            void copy();
+          }}
+        >
+          <Copy />
+          {t("video.statistics.copy")}
+        </Button>
       </div>
     </Show>
   );

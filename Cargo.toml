@@ -3,8 +3,8 @@ members = ["apps/desktop/src-tauri", "crates/desktop-capture", "crates/desktop-i
 resolver = "2"
 
 [patch.crates-io]
-libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "7a9b0458282577a92e7bd9fd4c577729c7bf0797" }
-webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "7a9b0458282577a92e7bd9fd4c577729c7bf0797" }
+libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "40d325ebeda3567cf25dc742b6062bd7c5c9cc9a" }
+webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "40d325ebeda3567cf25dc742b6062bd7c5c9cc9a" }
 
 [profile.release]
 codegen-units = 1

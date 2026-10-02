@@ -35,6 +35,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const AUDIO_BITRATE_BPS: u64 = 128_000;
+
 // Capture is single-source; every peer has its own congestion-controlled encoder/transport.
 // Production preview reads raw frames; legacy/test receivers still use independent peers.
 pub struct MediaSession {
@@ -71,12 +73,24 @@ impl MediaSession {
             id: "software".into(),
             name: "Software".into(),
             hardware: false,
-            codecs: Self::codecs(),
+            codecs: Self::software_codecs(),
         }];
         encoders.extend(mf::detect().unwrap_or_default());
         Ok(encoders)
     }
     pub fn codecs() -> Vec<String> {
+        let mut codecs = Self::software_codecs();
+        codecs.extend(
+            mf::detect()
+                .unwrap_or_default()
+                .into_iter()
+                .flat_map(|e| e.codecs),
+        );
+        codecs.sort();
+        codecs.dedup();
+        codecs
+    }
+    fn software_codecs() -> Vec<String> {
         let mut codecs: Vec<_> = PeerConnectionFactory::default()
             .get_rtp_sender_capabilities(MediaType::Video)
             .codecs
@@ -96,13 +110,7 @@ impl MediaSession {
 
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
-        let encoder_id = if options.encoder == "software"
-            || (options.encoder == "auto"
-                && options
-                    .codec
-                    .as_deref()
-                    .is_some_and(|codec| codec != "video/h264"))
-        {
+        let hardware = if options.encoder == "software" {
             None
         } else {
             let encoders = if options.encoder == "auto" {
@@ -110,53 +118,41 @@ impl MediaSession {
             } else {
                 mf::detect()?
             };
-            if options.encoder == "auto" {
-                encoders.first().map(|encoder| encoder.id.clone())
-            } else {
-                Some(
-                    encoders
-                        .into_iter()
-                        .find(|encoder| encoder.id == options.encoder)
-                        .ok_or("Selected hardware encoder is unavailable")?
-                        .id,
-                )
-            }
+            select_hardware_encoder(&options, encoders)?
         };
-        if encoder_id.is_some() {
-            if options
+        if let Some(encoder) = &hardware {
+            options
                 .codec
-                .as_deref()
-                .is_some_and(|codec| codec != "video/h264")
-            {
-                return Err("Selected hardware encoder only supports H.264".into());
-            }
-            options.codec = Some("video/h264".into());
-        }
-        if options
+                .get_or_insert_with(|| encoder.codecs[0].clone());
+        } else if options
             .codec
             .as_ref()
-            .is_some_and(|codec| !Self::codecs().contains(codec))
+            .is_some_and(|codec| !Self::software_codecs().contains(codec))
         {
             return Err("Selected native video codec is unavailable".into());
         }
+        let encoder_id = hardware.map(|encoder| encoder.id);
+        let send_options = libwebrtc::peer_connection_factory::VideoSendOptions {
+            min_playout_delay_ms: 0,
+            max_playout_delay_ms: Some(0),
+            pacing_factor: Some(1.5),
+            software_h264_external_frame_dropper: true,
+        };
+        let factory = PeerConnectionFactory::with_screen_video_send_options(
+            send_options,
+            encoder_id.is_some() && options.codec.as_deref() == Some("video/h265"),
+        )
+        .map_err(|e| e.to_string())?;
         // Bundled OpenH264's screen-content preset can overshoot the short-term
         // budget on scene cuts. Its real-time preset responds to rate control;
         // resolution/degradation and screen identity are still set explicitly.
         let screencast = options.codec.as_deref() != Some("video/h264");
         let session = Arc::new(Self {
-            // A zero minimum with a positive maximum selects Chromium's low
-            // latency renderer, which still assumes 60 FPS. Use the smallest
-            // positive RTP delay unit so high-FPS streams keep timestamp-based
-            // scheduling, while retaining the 50 ms receiver timing hint.
-            factory: PeerConnectionFactory::with_video_send_options(
-                libwebrtc::peer_connection_factory::VideoSendOptions {
-                    min_playout_delay_ms: 10,
-                    max_playout_delay_ms: Some(50),
-                    pacing_factor: Some(1.5),
-                    software_h264_external_frame_dropper: true,
-                },
-            )
-            .map_err(|e| e.to_string())?,
+            // 0..0 asks the receiver to decode and present complete frames
+            // immediately, without a second presentation queue. In Chromium,
+            // 0..positive selects a renderer that assumes 60 FPS; a positive
+            // minimum instead adds timestamp-based scheduling and late drops.
+            factory,
             source: NativeVideoSource::new(VideoResolution::default(), screencast),
             preview_source: NativeVideoSource::new(VideoResolution::default(), screencast),
             audio: options.audio.then(audio::Loopback::start).transpose()?,
@@ -301,7 +297,23 @@ impl MediaSession {
                 .set_parameters(parameters)
                 .map_err(|e| e.to_string())?;
         }
-        Ok(())
+        Self::configure_transport_bitrate(&peer.connection, options)
+    }
+
+    fn configure_transport_bitrate(
+        connection: &PeerConnection,
+        options: &MediaOptions,
+    ) -> Result<()> {
+        let has_audio = connection
+            .senders()
+            .iter()
+            .any(|sender| matches!(sender.track(), Some(MediaStreamTrack::Audio(_))));
+        // RTP encoding limits alone do not set the transport's probe ceiling.
+        // Budget the audio sender too, without imposing a minimum or start rate.
+        let maximum = options.max_bitrate + if has_audio { AUDIO_BITRATE_BPS } else { 0 };
+        connection
+            .set_max_bitrate(u32::try_from(maximum).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())
     }
 
     fn degradation_preference(options: &MediaOptions, preview: bool) -> DegradationPreference {
@@ -661,7 +673,7 @@ impl MediaSession {
                             direction: RtpTransceiverDirection::SendOnly,
                             stream_ids: vec![id.clone()],
                             send_encodings: vec![RtpEncodingParameters {
-                                max_bitrate: Some(128_000),
+                                max_bitrate: Some(AUDIO_BITRATE_BPS),
                                 ..Default::default()
                             }],
                         },
@@ -677,6 +689,7 @@ impl MediaSession {
                         .filter(|c| {
                             (c.mime_type.eq_ignore_ascii_case(codec)
                                 && (hardware.is_none()
+                                    || codec != "video/h264"
                                     || c.sdp_fmtp_line
                                         .as_deref()
                                         .is_some_and(|line| line.contains("profile-level-id=42"))))
@@ -699,7 +712,10 @@ impl MediaSession {
                 let mut parameters = sender.parameters();
                 parameters
                     .set_degradation_preference(Self::degradation_preference(&options, preview));
-                sender.set_parameters(parameters).map_err(|e| e.to_string())
+                sender
+                    .set_parameters(parameters)
+                    .map_err(|e| e.to_string())?;
+                Self::configure_transport_bitrate(&pc, &options)
             })();
             if let Err(error) = configured {
                 pc.close();
@@ -910,5 +926,32 @@ impl FrameSink for MediaSession {
             .copy_at(&frame, captured_at)?;
         self.notify.notify_one();
         Ok(())
+    }
+}
+
+// Automatic selection keeps H.264 as the broadly compatible default. Explicit
+// codec requests select only a matching hardware encoder, never silently change codec.
+fn select_hardware_encoder(
+    options: &MediaOptions,
+    encoders: Vec<EncoderInfo>,
+) -> Result<Option<EncoderInfo>> {
+    let requested = options.codec.as_deref().unwrap_or("video/h264");
+    if options.encoder == "auto" {
+        Ok(encoders
+            .into_iter()
+            .find(|e| e.codecs.iter().any(|c| c == requested)))
+    } else {
+        let encoder = encoders
+            .into_iter()
+            .find(|e| e.id == options.encoder)
+            .ok_or("Selected hardware encoder is unavailable")?;
+        if options
+            .codec
+            .as_ref()
+            .is_some_and(|c| !encoder.codecs.contains(c))
+        {
+            return Err("Selected hardware encoder does not support the requested codec".into());
+        }
+        Ok(Some(encoder))
     }
 }

@@ -1,14 +1,15 @@
 //! One hardware encoder per receiver, with bounded latest-frame delivery.
 mod events;
 mod transform;
-use super::super::{bitrate::BitrateController, MediaOptions};
+use super::super::{
+    bitrate::{BitrateController, FrameBudget},
+    MediaOptions,
+};
 use crate::media::latency::{CodecControl, Distribution, EncoderPipelineStats};
 use crate::Result;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,
-    video_frame::{
-        EncodedFrameType, EncodedVideoCodec, EncodedVideoFrame, I420Buffer, VideoBuffer,
-    },
+    video_frame::{EncodedFrameType, EncodedVideoFrame, I420Buffer, VideoBuffer},
     video_source::{native::NativeVideoSource, VideoResolution},
 };
 use std::{
@@ -29,7 +30,7 @@ pub struct Frame {
 impl Frame {
     pub fn from_i420(buffer: &I420Buffer, captured_at: Option<Instant>) -> Self {
         let (width, height) = (buffer.width() as usize, buffer.height() as usize);
-        // MediaOptions::dimensions normalizes capture output for NV12/H.264.
+        // MediaOptions::dimensions normalizes capture output for NV12.
         assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
         let (y, u, v) = buffer.data();
         let (sy, su, sv) = buffer.strides();
@@ -80,10 +81,13 @@ pub struct Encoder {
 pub struct EncodeStatistics {
     pub frames: u64,
     pub seconds: f64,
+    pub bitrate: Option<u32>,
     pub queue: Distribution,
     pub capture_to_encode: Distribution,
     encode: Distribution,
     replaced_inputs: u64,
+    rate_limited_inputs: u64,
+    encoded_bytes: u64,
     in_flight: usize,
     max_in_flight: usize,
     controls: Vec<CodecControl>,
@@ -95,6 +99,8 @@ impl EncodeStatistics {
             frames: self.frames,
             fresh_frames: self.capture_to_encode.count,
             replaced_inputs: self.replaced_inputs,
+            rate_limited_inputs: self.rate_limited_inputs,
+            encoded_bytes: self.encoded_bytes,
             in_flight: self.in_flight,
             max_in_flight: self.max_in_flight,
             queue: self.queue.snapshot(),
@@ -108,6 +114,15 @@ struct InputTiming {
     submitted_at: Instant,
     ready_at: Instant,
     captured_at: Option<Instant>,
+}
+
+// The source owns the notification, which only weakly references Pending.
+// Clear it on every worker exit, including transform initialization failures.
+struct RateControlSubscription(NativeVideoSource);
+impl Drop for RateControlSubscription {
+    fn drop(&mut self) {
+        self.0.set_rate_control_wakeup(None);
+    }
 }
 impl Encoder {
     pub fn new(id: String, options: MediaOptions, preview: bool) -> Result<Self> {
@@ -198,6 +213,7 @@ fn run(
     } else {
         BitrateController::new(options.max_bitrate as u32)
     };
+    let mut frame_budget = FrameBudget::new(rate_control.current());
     // Capture owns the FPS cap. Do not add a second, independently phased clock
     // or feed libwebrtc's observed static FPS back into capture cadence.
     let weak_work = Arc::downgrade(&work);
@@ -207,6 +223,8 @@ fn run(
             work.1.notify_one();
         }
     });
+    let _rate_subscription = RateControlSubscription(output.clone());
+    output.set_rate_control_wakeup(Some(wake.clone()));
     let mut keyframe = true;
     // Bound outstanding timings to the transform's accepted inputs. Reconfiguration
     // discards outstanding frames; cumulative completed-frame counters survive it.
@@ -225,9 +243,11 @@ fn run(
         {
             if let Some(next) = next_options {
                 rate_control.set_limit(next.max_bitrate as u32);
-                if next.frame_rate != options.frame_rate {
-                    // MF frame-rate media types are fixed for a transform. Reopen
-                    // only the encoder; keep the source, RTP sender and audio alive.
+                if next.frame_rate != options.frame_rate || next.max_bitrate != options.max_bitrate
+                {
+                    // Frame rate and HRD capacity can be fixed at initialization.
+                    // Reopen only on explicit setting changes, never BWE feedback;
+                    // keep the source, RTP sender and audio alive.
                     encoder = None;
                     in_flight.clear();
                     statistics
@@ -252,15 +272,19 @@ fn run(
             rate_control.observe(rate.target_bitrate_bps);
         }
         if let Some(bitrate) = rate_control.poll(started.elapsed()) {
-            if let Some(encoder) = &mut encoder {
+            frame_budget.set_bitrate(bitrate, started.elapsed());
+            // MF requires a positive target; zero pauses admission instead.
+            // Request an IDR on resume if frames in flight were transport-dropped.
+            if bitrate == 0 {
+                keyframe = true;
+            } else if let Some(encoder) = &mut encoder {
                 encoder.set_bitrate(bitrate)?;
-                statistics
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .controls = encoder.control_status();
+                // Fixed controls are read once when the transform opens. Avoid
+                // repeated driver queries on the rate-feedback path.
+                statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate = Some(bitrate);
             }
         }
-        if let Some(frame) = &latest {
+        if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
             if encoder.as_ref().is_none_or(|encoder| {
                 (encoder.width, encoder.height) != (frame.width, frame.height)
             }) {
@@ -273,12 +297,13 @@ fn run(
                     frame.height,
                     options.frame_rate,
                     rate_control.current(),
+                    options.max_bitrate as u32,
                     wake.clone(),
                 )?);
-                statistics
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .controls = encoder.as_ref().unwrap().control_status();
+                let controls = encoder.as_ref().unwrap().control_status();
+                let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                stats.bitrate = Some(rate_control.current());
+                stats.controls = controls;
                 keyframe = true;
             }
         }
@@ -288,6 +313,11 @@ fn run(
                 .map_err(|e| format!("Hardware encoder output failed: {e}"))?
             {
                 if !packet.bytes.is_empty() {
+                    frame_budget.record_output(packet.bytes.len(), started.elapsed());
+                    statistics
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .encoded_bytes += packet.bytes.len() as u64;
                     if let Some(input_at) = in_flight.remove(&packet.timestamp_us) {
                         let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
                         stats.frames += 1;
@@ -304,7 +334,7 @@ fn run(
                         stats.in_flight = in_flight.len();
                     }
                     output.capture_encoded_frame(&EncodedVideoFrame {
-                        codec: EncodedVideoCodec::H264,
+                        codec: encoder.codec,
                         payload: &packet.bytes,
                         timestamp_us: packet.timestamp_us,
                         frame_type: if packet.keyframe {
@@ -322,6 +352,15 @@ fn run(
             }
             if encoder.ready() {
                 if let Some(frame) = latest.take() {
+                    // MF drivers can exceed their accepted bitrate target. Skip raw
+                    // inputs before encoding so the emitted reference chain stays intact.
+                    if !frame_budget.can_encode(started.elapsed()) {
+                        statistics
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .rate_limited_inputs += 1;
+                        continue;
+                    }
                     if keyframe {
                         encoder.request_keyframe()?;
                         keyframe = false;
@@ -381,51 +420,67 @@ mod tests {
 
     #[test]
     fn event_driven_encoder_reconfigures_and_keeps_static_repeats_out_of_capture_latency() {
-        let Some(info) = detect().unwrap().into_iter().next() else {
-            return;
-        };
-        for _ in 0..2 {
-            let mut options = MediaOptions {
-                frame_rate: 60,
-                ..Default::default()
-            };
-            let encoder = Encoder::new(info.id.clone(), options.clone(), false).unwrap();
-            let pending = Arc::downgrade(&encoder.pending);
-            for fps in [60, 30, 60] {
-                options.frame_rate = fps;
-                encoder.update_options(options.clone());
-                for _ in 0..3 {
-                    let start = encoder.statistics().frames;
-                    let deadline = Instant::now() + Duration::from_secs(5);
-                    let buffer = I420Buffer::new_black(if fps == 60 { 320 } else { 640 }, 180);
-                    encoder.submit(Arc::new(Frame::from_i420(&buffer, Some(Instant::now()))));
-                    while encoder.statistics().frames == start && Instant::now() < deadline {
-                        thread::sleep(Duration::from_millis(5));
-                        assert!(encoder.error().is_none(), "{:?}", encoder.error());
+        for info in detect().unwrap() {
+            for _ in 0..2 {
+                let mut options = MediaOptions {
+                    frame_rate: 60,
+                    ..Default::default()
+                };
+                let encoder = Encoder::new(info.id.clone(), options.clone(), false).unwrap();
+                let pending = Arc::downgrade(&encoder.pending);
+                // Include ceiling-only changes: drivers can ignore HRD writes on a
+                // running transform, so the new budget must reach a reopened encoder.
+                for (fps, ceiling) in [
+                    (60, 8_000_000),
+                    (60, 1_500_000),
+                    (60, 12_000_000),
+                    (30, 12_000_000),
+                    (60, 8_000_000),
+                ] {
+                    options.frame_rate = fps;
+                    options.max_bitrate = ceiling;
+                    encoder.update_options(options.clone());
+                    for _ in 0..3 {
+                        let start = encoder.statistics().frames;
+                        let deadline = Instant::now() + Duration::from_secs(5);
+                        let buffer = I420Buffer::new_black(if fps == 60 { 320 } else { 640 }, 180);
+                        encoder.submit(Arc::new(Frame::from_i420(&buffer, Some(Instant::now()))));
+                        while encoder.statistics().frames == start && Instant::now() < deadline {
+                            thread::sleep(Duration::from_millis(5));
+                            assert!(encoder.error().is_none(), "{:?}", encoder.error());
+                        }
+                        assert!(encoder.statistics().frames > start);
                     }
-                    assert!(encoder.statistics().frames > start);
+                    let stats = encoder.statistics();
+                    let buffer = stats
+                        .controls
+                        .iter()
+                        .find(|c| c.name == "bufferBytes")
+                        .unwrap();
+                    assert_eq!(buffer.requested, (ceiling as u32).div_ceil(8 * fps));
+                    assert_eq!(stats.in_flight, 0);
                 }
+                // Every fresh input has completed; now repeat only cached pixels.
+                let fresh = encoder.statistics().capture_to_encode.count;
+                let before = encoder.statistics().frames;
+                for _ in 0..10 {
+                    encoder.submit(Arc::new(Frame::from_i420(
+                        &I420Buffer::new_black(320, 180),
+                        None,
+                    )));
+                    thread::sleep(Duration::from_millis(20));
+                }
+                assert!(encoder.statistics().frames > before);
+                assert_eq!(encoder.statistics().capture_to_encode.count, fresh);
+                let stats = encoder.statistics();
+                assert_eq!(stats.queue.count, stats.frames);
+                encoder.close();
+                drop(encoder);
+                assert!(
+                    pending.upgrade().is_none(),
+                    "MFT callback retained the encoder worker"
+                );
             }
-            // Every fresh input has completed; now repeat only cached pixels.
-            let fresh = encoder.statistics().capture_to_encode.count;
-            let before = encoder.statistics().frames;
-            for _ in 0..10 {
-                encoder.submit(Arc::new(Frame::from_i420(
-                    &I420Buffer::new_black(320, 180),
-                    None,
-                )));
-                thread::sleep(Duration::from_millis(20));
-            }
-            assert!(encoder.statistics().frames > before);
-            assert_eq!(encoder.statistics().capture_to_encode.count, fresh);
-            let stats = encoder.statistics();
-            assert_eq!(stats.queue.count, stats.frames);
-            encoder.close();
-            drop(encoder);
-            assert!(
-                pending.upgrade().is_none(),
-                "MFT callback retained the encoder worker"
-            );
         }
     }
 

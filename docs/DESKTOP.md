@@ -267,11 +267,11 @@ and capture backend changes apply to the next share. Audio consent and mute stat
 are preserved. Invalid live limits are rejected before commit; constraint and sender
 parameter failures are reported to the user.
 
-Software formats come from libwebrtc's sender capabilities. Hardware H.264 encoders
+Software formats come from libwebrtc's sender capabilities. Hardware H.264 and HEVC encoders
 come from Media Foundation hardware-transform enumeration followed by activation
 and input/output type negotiation, not GPU model names. Auto prefers an available
-hardware encoder when H.264 or automatic codec selection is requested; other
-explicit formats use software. Settings combines encoder and format into one
+H.264 hardware encoder by default; an explicit format selects a matching hardware
+encoder when available, otherwise a supported software encoder. Settings combines encoder and format into one
 selector with Auto and the detected hardware/software format combinations.
 Existing preferences remain readable; unavailable saved combinations are marked
 instead of silently replaced. Each remote peer owns its hardware transform and
@@ -282,19 +282,70 @@ combinations still apply. The Windows local preview does not create an encoder o
 WebRTC connection; encoder selection and bitrate govern remote publication.
 Camera and microphone still use browser codec preferences. Saved bitrate and browser
 codec preferences retain their existing storage keys.
+The Media Foundation path is vendor-neutral: AMD, Intel and NVIDIA hardware
+depend on the installed GPU and driver exposing a compatible H.264 or HEVC transform.
+A CPU brand alone does not establish hardware encoding support. HEVC uses Main
+8-bit NV12 input and the H.265 RTP codec. Only a session with an activated HEVC
+transform opts into the Cargo fork's external-HEVC factory; normal/software factories
+do not advertise an encoder they cannot provide. Existing H.264 encoder IDs stay
+stable; HEVC IDs include a codec suffix for multi-codec driver registrations.
+Receivers must negotiate H.265 support. A rejected video answer fails promptly
+with a compatible-format suggestion, without waiting for ICE or silently switching
+formats. Native AV1 hardware publication is not implemented.
+
+Browser/WebView decoding follows the runtime's negotiated receiver capabilities,
+not the sender's GPU or Windows media-file codec extensions. A runtime must expose
+H.265 in WebRTC to receive HEVC; browser and WebView versions can differ. WebRTC
+does not expose a per-receiver switch that forces GPU decoding. Keep browser GPU
+acceleration enabled and inspect the actual decoder implementation and decode
+time in stream statistics when available. Chromium can hide the implementation
+and hardware-efficiency fields in receive-only contexts; missing fields do not
+prove software decoding. Native screen receivers already request zero additional
+audio/video jitter buffering, subject to the browser's loss-recovery and A/V sync
+requirements. Experimental codec flags are not enabled by the application.
+
+Each native peer sets both its video RTP encoding limit and its transport-wide
+maximum. The transport budget follows the configured video maximum plus the
+128 kbps audio allowance when that peer sends audio, on creation and live updates.
+These settings share the existing rollback path. An RTP encoding limit alone does
+not update GoogCC's probe ceiling: without a finite transport maximum, the bundled
+engine defaults bandwidth probes to 5 Mbps. This is a probing limit, not a hard
+media throughput cap. Native screen factories also opt into periodic ALR probes
+so recovery can continue during low activity, with the engine's default cadence
+and scale. No minimum bitrate is forced and changing the ceiling does not reset
+the starting estimate. Available bandwidth remains an estimate of that peer's
+path, rather than the link speed or a promise to send at the configured maximum.
 
 Hardware encoding keeps the selected frame cadence independent of WebRTC's
 observed input frame rate, so motion can resume after static content. Remote peers
-start conservatively, apply bandwidth reductions immediately and recover confirmed
-increases in bounded steps while suppressing small estimate changes.
-The encoder target stays within the peer's latest positive bandwidth allocation
+start conservatively and apply bandwidth reductions immediately. Upward updates
+are coalesced over 50 ms and then follow the latest allocation directly, without
+an additional multiplicative recovery ramp. Targets are quantized down in 16 kbps
+steps, preserving smaller positive allocations.
+The encoder target stays within the peer's latest bandwidth allocation
 and configured bitrate cap; WebRTC retains congestion control and pacing. These
 limits govern the target rate, not the size of individual keyframe bursts. Where
-the driver supports it, the H.264 encoder requests a 100 ms VBV buffer (at least
-one frame) to reduce large scene-cut bursts. Lowering
-the live bitrate ceiling takes effect immediately; raising it retains gradual,
-feedback-driven recovery. Frame-rate changes recreate only the hardware transform
-when its fixed media type requires it; the RTP session stays connected.
+the driver supports it, the hardware encoder requests a one-frame HRD/VBV budget
+at the configured bitrate ceiling before negotiating media types. Some drivers
+latch this capacity at initialization and silently ignore later writes. Using
+the ceiling instead of the conservative startup estimate leaves room for bitrate
+recovery. A driver that rejects the early request gets another attempt after type
+negotiation. Hardware also requests the low-complexity quality/speed setting (33),
+favoring interactive latency at a potential cost to compression efficiency.
+Both controls are optional and their readback remains visible in diagnostics. Lowering
+the live bitrate ceiling takes effect immediately; raising it waits for new
+transport feedback. Explicit frame-rate or bitrate-ceiling changes recreate
+only the hardware transform to refresh its fixed media type and buffer budget;
+the RTP session stays connected. Ordinary bandwidth feedback updates the target
+bitrate on the running transform without restarting it.
+
+After the first encoded frame binds the source to its sender, transport rate
+feedback reaches the source independently of subsequent frames and wakes the
+hardware worker. The notification holds only a weak worker reference and is
+cleared on all worker exits. A zero allocation pauses raw input without writing
+an invalid zero bitrate to MF; positive feedback resumes it and requests a fresh
+keyframe. Existing byte debt survives pause and recovery. Fixed codec controls
+are read back on transform initialization, not on every rate update.
 
 The **Show stream statistics** action is available in the main picture's controls
 when it has video. Its overlay is temporary state for that picture, defaults to
@@ -302,7 +353,14 @@ off, and is discarded when the picture is removed or replaced. It is not saved
 in application preferences. The overlay samples only while displayed. It keeps
 each peer and local preview separate; rates and
 per-frame processing times use successive counter differences. Unavailable values
-remain absent. Native hardware encode time measures accepted MF input to output,
+remain absent. Actual bitrate is RTP payload byte growth over the report interval,
+independent of display FPS. Sender rows separately show the WebRTC target, the
+last bitrate successfully applied to MF, and the selected transport's outgoing
+bandwidth estimate when available. These are budgets, not measured traffic or
+guaranteed capacity. Each receiver has its own encoder and congestion feedback;
+compare its sender row with that same receiver, not another peer's bitrate. A
+receiving browser's outgoing bandwidth estimate describes the reverse path and
+is not displayed as incoming video capacity. Native hardware encode time measures accepted MF input to output,
 including driver and output-delivery latency, rather than WebRTC's encoded-frame passthrough.
 Hardware input wait is measured separately. Capture-to-encoded time starts at
 arrival in the application's capture callback; cached static repeats are excluded.
@@ -338,22 +396,39 @@ after large scene changes. OpenH264 still controls quantization; WebRTC retains
 its frame dropper, bitrate adjustment, congestion control and pacing. Limited
 bandwidth can still reduce frame rate or quality according to the selected
 degradation preference. This policy is scoped to the native screen factory's
-software H.264 backend; other codecs and hardware pass-through keep their behavior.
+software H.264 backend. Hardware pass-through disables the encoder-input rate
+dropper because its inputs are already compressed reference frames. Hardware
+workers apply transport bitrate feedback to MF and account for actual encoded
+bytes with a bounded 50 ms burst allowance. When a driver overshoots its accepted
+target, raw inputs are skipped before encoding; completed encoded references are
+preserved. Idle time cannot bank an unbounded burst, and bitrate reductions retain
+existing byte debt. Pipeline diagnostics expose `encodedBytes` and
+`rateLimitedInputs` separately from input replacement and player drops. This
+preserves bitrate limits rather than promising the requested FPS for arbitrarily
+complex content at insufficient bandwidth.
+The configured `maxBitrate` is the video bitrate ceiling; the current encoder
+budget follows transport feedback up to that ceiling. Live setting changes update
+both the RTP sender and hardware worker. There is no additional fixed Mbps cap:
+the 50 ms burst allowance is converted to bytes at the current budget, and startup
+estimates do not prevent later recovery toward the user's selected maximum.
 Native screen receivers
 request minimal playout buffering where the browser supports it; network jitter,
 encoding and decoding can still add delay.
 Native senders additionally advertise a negotiated RTP playout-delay range of
-10–50 ms. A zero minimum with a positive maximum selects Chromium's low-latency
-renderer, whose [fixed 60 FPS frame-duration assumption](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/mediastream/low_latency_video_renderer_algorithm.h)
-can discard decoded frames from higher-rate streams. The smallest positive RTP delay unit keeps
-timestamp-based scheduling while retaining a bounded playout hint. Receivers
-without the extension keep their normal buffering. This is a hint,
-not an end-to-end deadline or a guarantee of smooth playback on a jittery link.
+0–0 ms for interactive screen viewing. Chromium then decodes complete frames and
+presents the latest frame without an additional presentation queue. A zero minimum
+with a positive maximum selects its low-latency renderer, whose
+[fixed 60 FPS frame-duration assumption](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/mediastream/low_latency_video_renderer_algorithm.h)
+can discard decoded frames from higher-rate streams; a positive minimum instead
+adds timestamp-based presentation scheduling. Receivers without the extension
+keep their normal buffering. This hint prioritizes freshness over jitter smoothing
+and audio/video synchronization delay; packet arrival, decode and display refresh
+still limit playback. It is not an end-to-end deadline or a zero-drop guarantee.
 The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
 encoder bitrate limits, congestion control and retransmission remain active.
 Both options belong to the native screen session's factory, not process-global
 settings. The binding changes and upstream versions are documented in the fork's
-[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/7a9b0458282577a92e7bd9fd4c577729c7bf0797/WEBLINK.md).
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/40d325ebeda3567cf25dc742b6062bd7c5c9cc9a/WEBLINK.md).
 Update the fork first, then the full Cargo revision and lockfile together; normal
 builds never follow the branch tip. Preserve upstream license notices and verify
 native-to-browser RTP when upgrading the bindings.
@@ -491,7 +566,7 @@ to validate video delivery and resize before writing `done`; no personal desktop
 content is used by either harness. `display_self_test` separately exercises the
 available screen backends and their stop/restart lifecycle in an interactive
 Windows session. It counts borrowed GPU frames without reading, saving, encoding
-or exporting display pixels. Windows unit tests exercise synthetic hardware H.264
+or exporting display pixels. Windows unit tests exercise synthetic hardware H.264 and HEVC
 when an activated hardware transform is available; this is distinct from proving
 all vendors, driver versions or a sustained target frame rate.
 
