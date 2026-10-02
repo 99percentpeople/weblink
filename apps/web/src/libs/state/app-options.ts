@@ -1,3 +1,7 @@
+import {
+  defaultNotificationOptions,
+  type NotificationOptions,
+} from "@/libs/domain/notification-options";
 import type {
   IceServerOptions,
   TurnServerOptions,
@@ -71,6 +75,7 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  notifications: NotificationOptions;
   application: ApplicationOptions;
   permissionHistoryImported: boolean;
   remoteTouch: RemoteTouchOptions;
@@ -110,7 +115,6 @@ export type AppOption = {
   roomConfigs: Record<string, RoomConfig | undefined>;
 
   // Stream
-  showStreamStats: boolean;
   videoResolution:
     | "480p"
     | "720p"
@@ -233,12 +237,12 @@ export const getDefaultAppOptions = (): AppOption => {
     remoteTouch: { ...defaultRemoteTouchOptions },
     remoteKeyboard: { ...defaultRemoteKeyboardOptions },
     application: { ...defaultApplicationOptions },
+    notifications: { ...defaultNotificationOptions },
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",
     videoResolution: "1080p",
     videoFrameRate: 30,
-    showStreamStats: false,
     nativeScreenCodec: null,
     nativeScreenEncoder: "auto",
     nativeScreenCaptureBackend: "auto",

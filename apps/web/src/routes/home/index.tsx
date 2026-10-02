@@ -27,15 +27,14 @@ import {
   ArrowLeft,
   Columns2,
   Minimize2,
-  PanelRightClose,
   Info,
   MessageSquare,
-  PanelRightOpen,
   ShieldAlert,
   Users,
   X,
 } from "lucide-solid";
 import { AccountMenu } from "@/components/app/account-menu";
+import { NotificationPermissionButton } from "@/components/app/notification-permission-button";
 import { useRoomActions } from "@/libs/state/room-actions-context";
 import { createMediaHashRoute } from "@/components/conversations/media-hash-route";
 import { t } from "@/i18n";
@@ -656,6 +655,7 @@ export default function Home() {
                 <span>{t("meeting.get_permission")}</span>
               </button>
             </Show>
+            <NotificationPermissionButton />
             <button
               type="button"
               class="meeting-icon-button meeting-member-count"
@@ -665,30 +665,6 @@ export default function Home() {
             >
               <Users />
               <span>{clients().length + 1}</span>
-            </button>
-            <button
-              type="button"
-              class="meeting-icon-button meeting-panel-toggle"
-              aria-expanded={rightOpen()}
-              aria-controls="meeting-side-panel"
-              aria-label={
-                rightOpen()
-                  ? t("meeting.hide_panel")
-                  : t("meeting.show_panel")
-              }
-              title={
-                rightOpen()
-                  ? t("meeting.hide_panel")
-                  : t("meeting.show_panel")
-              }
-              onClick={() => setPanelOpen(!rightOpen())}
-            >
-              <Show
-                when={rightOpen()}
-                fallback={<PanelRightOpen />}
-              >
-                <PanelRightClose />
-              </Show>
             </button>
             <AccountMenu />
           </div>
@@ -1084,6 +1060,8 @@ export default function Home() {
             audio.setPlay(!audio.playState())
           }
           spotlight={Boolean(pinnedId())}
+          panelOpen={rightOpen()}
+          onTogglePanel={() => setPanelOpen(!rightOpen())}
           onToggleLayout={
             sources().length > 1
               ? () =>

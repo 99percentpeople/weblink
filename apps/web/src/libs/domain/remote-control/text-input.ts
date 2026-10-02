@@ -6,6 +6,9 @@ export const REMOTE_TEXT_SEED = "\u200b";
 export class RemoteTextInput {
   private composing = false;
   private finishing?: ReturnType<typeof setTimeout>;
+  get hasComposition(): boolean {
+    return this.composing || this.finishing !== undefined;
+  }
   constructor(
     private readonly port: {
       read(): string;

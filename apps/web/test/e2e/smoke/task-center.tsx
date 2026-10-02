@@ -190,6 +190,7 @@ async function main() {
       tasks,
       getSpeedTestState: tasks.latestSpeedTest,
       speedTestState: state,
+      speedTestApproval: () => undefined,
       startSpeedTest: (peer) => initiator.start(peer),
       cancelSpeedTest: (peer) => initiator.cancel(peer),
       approveSpeedTest: () => {},

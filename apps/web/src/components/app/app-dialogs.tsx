@@ -3,11 +3,13 @@ import {
   AppDialogsContext,
   type AppDialogs,
 } from "@/libs/state/app-dialogs-context";
+import { SystemNotificationBridge } from "./system-notifications";
 import { RemoteControlStatus } from "./remote-control-status";
 export function AppDialogsView() {
   return (
     <>
       <RemoteControlStatus />
+      <SystemNotificationBridge />
     </>
   );
 }

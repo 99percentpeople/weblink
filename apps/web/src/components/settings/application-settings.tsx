@@ -44,12 +44,18 @@ export default function ApplicationSettings() {
     if (!disposed) setCapabilities(detected);
   });
   const [autostart, setAutostart] = createSignal<boolean>();
+  const [startupBehavior, setStartupBehavior] =
+    createSignal<"tray" | "window">("tray");
   const [startupBusy, setStartupBusy] = createSignal(false);
   const startup = platform.application?.autostart;
   onMount(async () => {
     if (!startup) return;
     try {
-      const enabled = await startup.enabled();
+      const [enabled, behavior] = await Promise.all([
+        startup.enabled(),
+        startup.behavior(),
+      ]);
+      if (!disposed) setStartupBehavior(behavior);
       if (!disposed) setAutostart(enabled);
     } catch (error) {
       console.warn(
@@ -170,6 +176,67 @@ export default function ApplicationSettings() {
           </Switch>
           <p class="muted">
             {t("setting.application.autostart_description")}
+          </p>
+        </div>
+        <div class="flex flex-col gap-2">
+          <Label id="startup-behavior">
+            {t(
+              "setting.application.startup_behavior.title",
+            )}
+          </Label>
+          <Select<"tray" | "window">
+            modal
+            disallowEmptySelection
+            options={["tray", "window"]}
+            disabled={
+              startupBusy() || autostart() === undefined
+            }
+            optionDisabled={(value) =>
+              value === "tray" &&
+              !capabilities()?.systemTray
+            }
+            value={startupBehavior()}
+            onChange={async (value) => {
+              if (!startup || !value || startupBusy())
+                return;
+              setStartupBusy(true);
+              try {
+                await startup.setBehavior(value);
+                if (!disposed) setStartupBehavior(value);
+              } catch {
+                if (!disposed)
+                  toast.error(
+                    t(
+                      "setting.application.autostart_failed",
+                    ),
+                  );
+              } finally {
+                if (!disposed) setStartupBusy(false);
+              }
+            }}
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>
+                {t(
+                  `setting.application.startup_behavior.${props.item.rawValue}`,
+                )}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger aria-labelledby="startup-behavior">
+              <SelectValue<"tray" | "window">>
+                {(state) =>
+                  t(
+                    `setting.application.startup_behavior.${state.selectedOption()}`,
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+          <p class="muted">
+            {t(
+              "setting.application.startup_behavior.description",
+            )}
           </p>
         </div>
       </Show>

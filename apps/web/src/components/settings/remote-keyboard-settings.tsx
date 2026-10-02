@@ -76,6 +76,35 @@ export default function RemoteKeyboardSettings() {
           {t("setting.remote_control.keyboard.description")}
         </p>
       </div>
+      <Show when={systemKeyboard()}>
+        <div class="flex flex-col gap-2">
+          <Switch
+            class="flex w-full items-center justify-between gap-3"
+            checked={keyboard().systemKeys}
+            onChange={(value) =>
+              setAppOptions(
+                "remoteKeyboard",
+                "systemKeys",
+                value,
+              )
+            }
+          >
+            <SwitchLabel>
+              {t(
+                "setting.remote_control.system_keyboard.title",
+              )}
+            </SwitchLabel>
+            <SwitchControl>
+              <SwitchThumb />
+            </SwitchControl>
+          </Switch>
+          <p class="muted">
+            {t(
+              "setting.remote_control.system_keyboard.description",
+            )}
+          </p>
+        </div>
+      </Show>
       <div class="flex flex-col gap-2">
         <Label id="exit-control-shortcut">
           {t("setting.remote_control.exit_shortcut.title")}
@@ -118,35 +147,6 @@ export default function RemoteKeyboardSettings() {
           )}
         </p>
       </div>
-      <Show when={systemKeyboard()}>
-        <div class="flex flex-col gap-2">
-          <Switch
-            class="flex w-full items-center justify-between gap-3"
-            checked={keyboard().systemKeys}
-            onChange={(value) =>
-              setAppOptions(
-                "remoteKeyboard",
-                "systemKeys",
-                value,
-              )
-            }
-          >
-            <SwitchLabel>
-              {t(
-                "setting.remote_control.system_keyboard.title",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <p class="muted">
-            {t(
-              "setting.remote_control.system_keyboard.description",
-            )}
-          </p>
-        </div>
-      </Show>
     </>
   );
 }

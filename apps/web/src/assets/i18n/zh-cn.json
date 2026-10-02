@@ -247,10 +247,6 @@
           "title": "首选音频编码器",
           "description": "在协商音频流时优先使用该编码器。仅对新建连接生效。",
           "auto": "自动"
-        },
-        "statistics": {
-          "title": "显示串流统计叠加层",
-          "description": "在视频上显示可获取的实时编码、码率、分辨率、帧率及处理耗时。"
         }
       },
       "native_capture": "原生屏幕共享",
@@ -275,6 +271,12 @@
       "twoFingerRightClick": "双指轻点模拟右键",
       "twoFingerScroll": "双指滑动滚动",
       "naturalScroll": "自然滚动",
+      "three_finger_tap": {
+        "title": "三指轻点",
+        "keyboard": "打开键盘",
+        "none": "不使用快捷操作",
+        "description": "在触控板模式下，用三根手指轻点控制画面即可打开键盘。需开启键盘控制。"
+      },
       "long_press": {
         "title": "单指长按行为",
         "drag": "按住并拖动",
@@ -340,7 +342,45 @@
       "close_failed": "未能完成此操作，请重试。",
       "tray_unavailable": "系统托盘不可用。关闭窗口时会询问是否退出，自动隐藏不会生效。",
       "update_failed": "应用设置未能生效，请重试。",
-      "automatic_pip_unavailable": "当前浏览器或桌面运行环境不支持自动画中画。"
+      "automatic_pip_unavailable": "当前浏览器或桌面运行环境不支持自动画中画。",
+      "startup_behavior": {
+        "title": "开机启动后的行为",
+        "tray": "后台驻留托盘",
+        "window": "显示主窗口",
+        "description": "仅用于系统登录后自动启动。手动打开 Weblink 时会显示主窗口。"
+      }
+    },
+    "notifications": {
+      "enabled": "启用系统通知",
+      "backgroundOnly": "仅在窗口未聚焦时通知",
+      "messages": "新消息",
+      "controlRequests": "远程控制请求",
+      "speedTestRequests": "测速请求",
+      "transfers": "文件传输完成",
+      "preview": "显示消息和文件内容预览",
+      "sound": "通知声音",
+      "permission_default": "尚未授予通知权限。",
+      "permission_granted": "已允许系统通知。",
+      "permission_denied": "通知已被阻止，请在浏览器或系统通知设置中允许。",
+      "permission_unavailable": "当前环境不支持系统通知。",
+      "permission_failed": "无法申请通知权限。",
+      "allow": "允许通知",
+      "requesting": "正在请求权限…",
+      "browser_blocked": "通知已被阻止，请在浏览器的网站权限设置中，将此网站的通知改为允许。",
+      "native_description": "Weblink 运行期间，可在 Windows 通知中直接回复消息、同意或拒绝远程控制和测速请求。",
+      "basic_description": "Weblink 打开期间接收通知。点击可打开对应会话或请求，支持操作按钮时可直接同意或拒绝。",
+      "new_message": "收到新消息",
+      "reply": "发送",
+      "reply_placeholder": "输入回复",
+      "reply_failed": "回复未发送，内容已保留在对应会话草稿中。",
+      "delivery_failed": "回复已保存，但发送失败，请打开会话重试。",
+      "open": "打开会话",
+      "transfer_completed": "文件传输完成",
+      "loading": "正在读取系统通知状态…",
+      "load_failed": "读取系统通知状态失败，请重试。",
+      "retry": "重试",
+      "error_details": "查看错误详情",
+      "permission_unknown": "系统尚未提供此应用的通知状态，通知将按系统设置处理。"
     }
   },
   "cache": {
@@ -403,6 +443,8 @@
       "retry": "重试"
     },
     "statistics": {
+      "show_overlay": "显示串流统计叠加层",
+      "hide_overlay": "隐藏串流统计叠加层",
       "display": "呈现",
       "submitted": "预览提交",
       "player_dropped": "播放器丢帧",
@@ -794,6 +836,7 @@
     "in_room": "已加入房间",
     "preview": "会前预览",
     "hide_panel": "收起侧栏",
+    "panel": "侧栏",
     "show_panel": "显示侧栏",
     "close_panels": "关闭侧栏",
     "conversations": "会话",
@@ -940,7 +983,8 @@
     "settings_meeting": "音视频",
     "settings_remote_control": "远程控制",
     "settings_permissions": "客户端与房间",
-    "settings_application": "应用"
+    "settings_application": "应用",
+    "settings_notifications": "通知"
   },
   "file_library": {
     "search": "搜索文件…",

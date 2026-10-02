@@ -12,6 +12,7 @@ import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
 import { Trackpad } from "@/libs/domain/remote-control/trackpad";
 import { DirectTouch } from "@/libs/domain/remote-control/direct-touch";
+import { ThreeFingerTap } from "@/libs/domain/remote-control/three-finger-tap";
 import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import {
   exitControlShortcutLabel,
@@ -21,14 +22,22 @@ import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-op
 import { createVideoRemoteControl } from "./remote-control-action";
 import { platform } from "@/libs/platform/runtime";
 import { NativeKeyboardForwarder } from "@/libs/application/native-keyboard";
+import type { RemoteKeyboardInputHandle } from "./remote-keyboard-input";
 export function RemoteControlOverlay(props: {
   enabled: boolean;
+  keyboard?: () => RemoteKeyboardInputHandle | undefined;
 }) {
   const video = useVideoDisplay();
   const { control, state } = createVideoRemoteControl();
   let surface: HTMLDivElement | undefined;
   const held = new Set<number>();
   const fingers = new Set<number>();
+  const threeFingerTap = new ThreeFingerTap();
+  let shortcutEnabled = false;
+  let nativeTouchEvents = false;
+  let pendingKeyboard:
+    | RemoteKeyboardInputHandle
+    | undefined;
   let trackpad: Trackpad | undefined;
   let direct: DirectTouch | undefined;
   let keyboard: RemoteKeyboard | undefined;
@@ -61,6 +70,10 @@ export function RemoteControlOverlay(props: {
     keyboardOptions().systemKeys &&
     control()?.supportsKeyboard();
   const clearTouches = () => {
+    threeFingerTap.cancel();
+    shortcutEnabled = false;
+    nativeTouchEvents = false;
+    pendingKeyboard = undefined;
     trackpad?.cancel();
     direct?.cancel();
     const ids = [...fingers];
@@ -249,7 +262,7 @@ export function RemoteControlOverlay(props: {
   createEffect(() => {
     if (!props.enabled) resetInput();
   });
-  const point = (event: MouseEvent) => {
+  const point = (event: MouseEvent, clamp = false) => {
     const v = video.videoRef();
     if (!v) return;
     return videoPosition(
@@ -258,19 +271,36 @@ export function RemoteControlOverlay(props: {
       v.videoHeight,
       event.clientX,
       event.clientY,
+      clamp,
     );
   };
   const touch = (
     event: PointerEvent,
-    phase: "down" | "move" | "up",
+    phase: "down" | "move" | "up" | "cancel",
   ) => {
     if (event.pointerType !== "touch") return false;
+    if (phase === "cancel") {
+      if (fingers.has(event.pointerId)) {
+        const native = nativeTouchEvents;
+        cancelTouch();
+        if (!native) showPendingKeyboard();
+      }
+      return true;
+    }
     if (state() !== "active") return true;
     event.preventDefault();
     event.stopPropagation();
     const id = event.pointerId;
     const isDirect = touchOptions().mode === "direct";
     if (phase === "down") {
+      if (!fingers.size) {
+        nativeTouchEvents = false;
+        pendingKeyboard = undefined;
+        shortcutEnabled =
+          !isDirect &&
+          touchOptions().threeFingerTap === "keyboard" &&
+          props.keyboard?.()?.available() === true;
+      }
       if (isDirect && !control()?.supportsTouch()) {
         toast.error(
           t("setting.remote_control.unavailable"),
@@ -279,9 +309,28 @@ export function RemoteControlOverlay(props: {
       }
       const p = point(event);
       if (isDirect && !p) return true;
-      const accepted = isDirect
-        ? direct?.down(id, p!)
-        : trackpad?.down(id, event.clientX, event.clientY);
+      const wasConsumed = threeFingerTap.consumed;
+      if (shortcutEnabled)
+        threeFingerTap.down(
+          id,
+          event.clientX,
+          event.clientY,
+        );
+      if (threeFingerTap.consumed && !wasConsumed) {
+        // Cancel remote contacts before the local shortcut moves focus to IME.
+        trackpad?.cancel();
+        direct?.cancel();
+        if (state() !== "active") return true;
+      }
+      const accepted =
+        threeFingerTap.consumed ||
+        (isDirect
+          ? direct?.down(id, p!)
+          : trackpad?.down(
+              id,
+              event.clientX,
+              event.clientY,
+            ));
       if (!accepted) {
         resetInput();
         return true;
@@ -290,24 +339,80 @@ export function RemoteControlOverlay(props: {
       fingers.add(id);
       surface?.setPointerCapture(id);
     } else if (fingers.has(id)) {
-      if (isDirect) {
-        const p = point(event);
+      const consumed = threeFingerTap.consumed;
+      let showKeyboard = false;
+      if (phase === "move")
+        threeFingerTap.move(
+          id,
+          event.clientX,
+          event.clientY,
+        );
+      else
+        showKeyboard = threeFingerTap.up(
+          id,
+          event.clientX,
+          event.clientY,
+        );
+      if (!consumed && isDirect) {
+        const p = point(event, true);
         if (!p) {
-          resetInput();
-          return true;
-        }
-        if (phase === "move") direct?.move(id, p);
+          direct?.cancel();
+        } else if (phase === "move") direct?.move(id, p);
         else direct?.up(id, p);
-      } else if (phase === "move")
+      } else if (!consumed && phase === "move")
         trackpad?.move(id, event.clientX, event.clientY);
-      else trackpad?.up(id, event.clientX, event.clientY);
+      else if (!consumed)
+        trackpad?.up(id, event.clientX, event.clientY);
       if (phase === "up") {
         fingers.delete(id);
         if (surface?.hasPointerCapture(id))
           surface.releasePointerCapture(id);
+        if (showKeyboard) {
+          if (nativeTouchEvents)
+            pendingKeyboard = props.keyboard?.();
+          else props.keyboard?.()?.show();
+        }
       }
     }
     return true;
+  };
+  const showPendingKeyboard = () => {
+    const keyboard = pendingKeyboard;
+    pendingKeyboard = undefined;
+    if (
+      props.enabled &&
+      keyboard === props.keyboard?.() &&
+      keyboard?.available()
+    )
+      keyboard.show();
+  };
+  const cancelTouch = () => {
+    const action = threeFingerTap.finish()
+      ? props.keyboard?.()
+      : undefined;
+    // The third contact already cancelled the remote gesture. Keep an existing
+    // IME composition alive instead of restarting the control session for it.
+    if (action && !held.size) clearTouches();
+    else resetInput();
+    pendingKeyboard = action;
+  };
+  const nativeTouch = (event: TouchEvent) => {
+    // The native events share lifecycle handling; only the validated three-finger
+    // shortcut can complete on cancellation. Other gestures are just cancelled.
+    event.preventDefault();
+    event.stopPropagation();
+    switch (event.type) {
+      case "touchstart":
+        if (fingers.size) nativeTouchEvents = true;
+        break;
+      case "touchend":
+        if (!event.touches.length) showPendingKeyboard();
+        break;
+      case "touchcancel":
+        if (fingers.size) cancelTouch();
+        showPendingKeyboard();
+        break;
+    }
   };
   const button = (event: PointerEvent, down: boolean) => {
     if (
@@ -417,14 +522,33 @@ export function RemoteControlOverlay(props: {
             e.stopPropagation();
           }}
           onPointerDown={(e) => {
-            surface?.focus({ preventScroll: true });
-            setFocused(true);
+            // Pointer input can run while the text editor owns keyboard input.
+            // Both explicit focus and the browser's default focus would hide IME.
+            const keyboard = props.keyboard?.();
+            if (keyboard?.focused()) {
+              keyboard.suppressAutomaticShow();
+              e.preventDefault();
+            } else {
+              surface?.focus({ preventScroll: true });
+              setFocused(true);
+            }
             if (!touch(e, "down")) button(e, true);
           }}
+          onMouseDown={(e) => {
+            if (props.keyboard?.()?.focused())
+              e.preventDefault();
+          }}
+          on:touchstart={nativeTouch}
+          on:touchmove={nativeTouch}
+          on:touchend={nativeTouch}
+          on:touchcancel={nativeTouch}
           onPointerUp={(e) => {
             if (!touch(e, "up")) button(e, false);
           }}
-          onPointerCancel={resetInput}
+          onPointerCancel={(e) => {
+            if (!touch(e, "cancel") && held.size)
+              resetInput();
+          }}
           onLostPointerCapture={(e) => {
             if (held.size || fingers.has(e.pointerId))
               resetInput();

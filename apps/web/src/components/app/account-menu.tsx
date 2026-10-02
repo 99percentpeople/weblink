@@ -49,7 +49,12 @@ export function AccountMenu() {
     }
   };
   return (
-    <DropdownMenu placement="bottom-end">
+    <DropdownMenu
+      placement="bottom-end"
+      onOpenChange={(open) => {
+        if (open) dialogs.preloadSettings();
+      }}
+    >
       <DropdownMenuTrigger
         class="account-menu-trigger"
         aria-label={t("app_menu.title")}

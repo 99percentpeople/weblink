@@ -5,10 +5,16 @@ import type {
 } from "@weblink/platform";
 
 export const nativeApplication: NativeApplication = {
+  show: () => invoke("application_show"),
   autostart: {
     enabled: () => invoke("application_autostart_enabled"),
     setEnabled: (enabled) =>
       invoke("application_autostart_set", { enabled }),
+    behavior: () => invoke("application_startup_behavior"),
+    setBehavior: (behavior) =>
+      invoke("application_startup_set_behavior", {
+        behavior,
+      }),
   },
   configure: (options) =>
     invoke("application_configure", { options }),

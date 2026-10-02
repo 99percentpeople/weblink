@@ -21,12 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
 import { formatBitSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
 import { setAppOptions } from "@/options";
@@ -175,29 +169,6 @@ export default function MeetingSettings() {
       <h3 id="stream" class="h3">
         {t("setting.meeting_settings.stream.title")}
       </h3>
-      <div class="flex flex-col gap-2">
-        <Switch
-          class="flex items-center justify-between"
-          checked={appState.options.showStreamStats}
-          onChange={(checked) =>
-            setAppOptions("showStreamStats", checked)
-          }
-        >
-          <SwitchLabel>
-            {t(
-              "setting.meeting_settings.stream.statistics.title",
-            )}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t(
-            "setting.meeting_settings.stream.statistics.description",
-          )}
-        </p>
-      </div>
       <label class="flex flex-col gap-2">
         <Slider
           minValue={128 * 1024}

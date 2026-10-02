@@ -22,6 +22,7 @@ import {
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
 import { AccountMenu } from "@/components/app/account-menu";
+import { NotificationPermissionButton } from "@/components/app/notification-permission-button";
 import { RoomConnectionOverlay } from "@/components/app/room-connection-overlay";
 import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { useRoomActions } from "@/libs/state/room-actions-context";
@@ -272,7 +273,10 @@ const InnerApp = (props: ParentProps) => {
               <IconHome />
               {t("404.home")}
             </Button>
-            <AccountMenu />
+            <div class="flex items-center gap-2">
+              <NotificationPermissionButton />
+              <AccountMenu />
+            </div>
           </header>
         </Show>
         <div class="app-page-content">

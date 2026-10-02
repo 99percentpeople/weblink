@@ -473,6 +473,15 @@ it("maps only video content, with no DPI multiplier or letterbox clicks", () => 
   expect(
     videoPosition(rect, 1080, 1920, 101, 700),
   ).toBeUndefined();
+  expect(
+    videoPosition(rect, 1920, 1080, -100, 1400, true),
+  ).toEqual({ x: 0, y: 1 });
+  expect(
+    videoPosition(rect, 1920, 1080, 600, 250, true),
+  ).toEqual({ x: 0.5, y: 0 });
+  expect(
+    videoPosition(rect, 0, 0, 600, 700, true),
+  ).toBeUndefined();
 });
 
 it("negotiates native touch support and sends contacts only on ordered input", () => {

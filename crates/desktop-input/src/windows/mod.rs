@@ -3,6 +3,7 @@ mod device;
 mod environment;
 mod pan;
 mod safety;
+mod session;
 mod touch;
 use crate::{
     authorization::{Binding, Grant, RequestResult},

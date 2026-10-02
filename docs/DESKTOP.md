@@ -67,6 +67,24 @@ do not become the packaged signaling endpoint.
 
 ## Runtime boundaries
 
+- The Rust shell is organized by feature. `lib.rs` assembles services and application
+  lifetime; `capabilities.rs` queries feature implementation availability. Input and
+  keyboard availability do not grant OS access: starting an operation must still
+  check its native environment. Capability queries do not create input actors or hooks.
+- `remote_control/` contains shared IPC, owner lifetime, host protocol/consent,
+  bounded transport queues and local capture binding. Its orchestration compiles on
+  every host. `desktop-input::session::Session` is the native actor boundary;
+  Windows retains its serialized queue, authorization engine, safety hooks and
+  input-release behavior. An unimplemented backend cannot open an input owner.
+- `preview` and `keyboard` expose common command signatures and select their
+  native implementations inside the feature. Windows preview uses WebView2 shared
+  buffers. Notifications use the Windows backend for permission queries, presentation
+  and actions. Only Windows is a supported desktop target; other platforms retain
+  unavailable implementations for host compilation and shared-logic tests.
+- Native capture and media still share `desktop-capture`; D3D frames, encoding,
+  source enumeration and physical desktop geometry currently target Windows.
+  Extracting shared control orchestration does not make these media/input contracts
+  portable or provide macOS/Linux capture support.
 - Desktop version starts at `0.1.0`, independently of the website. Update
   `apps/desktop/package.json` and its Rust crate version together. Tauri reads
   the JS manifest version and Vite uses it for About and `version.json`.
@@ -126,7 +144,10 @@ Picture-in-picture preferences live in Application settings and import the forme
 meeting preference. Browsers keep their existing PiP lifecycle and permission rules;
 the automatic toggle is disabled where document PiP is unsupported. On desktop,
 PiP turns the main window into a resizable, always-on-top window with a custom drag
-bar, the browser PiP's featured-view/thumbnail layout and compact meeting controls.
+bar and compact meeting controls, retaining the current grid or featured layout.
+Manual entry remains available without a pinned source or live video, including
+multi-participant avatar grids. The toolbar entry reflects native window support,
+not the current main-view selection; only automatic entry requires live video.
 It retains the same renderer, media players and control session. Window bounds animate
 on entry and return, and follow the system reduced-motion preference. Native frames
 are cancellable and only one is queued at a time; hiding or reloading restores bounds
@@ -145,6 +166,67 @@ launch-at-login switch. Auto-join keeps its existing profile value and room beha
 Launch at login reads the OS registration rather than storing a second preference;
 only changing that switch enables or disables registration. Keyboard forwarding and
 exit shortcuts remain in Remote control settings alongside touch input preferences.
+
+Login startup uses `--autostart`. Its native configuration defaults to hiding in
+an available tray and can instead show the main window; manual launches always
+show the window. An unavailable tray or unreadable startup configuration falls
+back to a visible window. Changing the startup display preference does not enable
+OS registration.
+
+## System notifications
+
+Notification preferences are shared by the Web and desktop UI: messages, control
+requests, speed-test requests and completed file transfers are enabled by default, only while the
+window is unfocused. Content preview and sound can be disabled separately. Browser
+permission is requested only by explicit header or settings actions. New-message events follow
+durable insertion; loading history, duplicate delivery and ACKs do not notify.
+Transfer completion requires an observed state transition in the current session.
+
+Message previews include the sender's avatar and name; group titles also identify
+the room. UI fallback avatars use a shared SVG with consistent gradients, initials
+and glyph alignment; notifications rasterize that same SVG to a small PNG. Disabling previews hides identity as well
+as message content. Avatars are bounded PNG data URLs; the desktop validates and
+materializes them locally for the OS and removes them when the notification ends.
+An invalid image falls back without suppressing the message. Windows displays the
+avatar in its circular app-logo slot; browser icon presentation follows the OS.
+The Windows notification source separately registers the bundled Weblink icon in
+the app identity, leaving the sender avatar in the content area. Its PNG stays in
+the application's local data directory across individual notification lifetimes.
+Web notifications supply a separate monochrome app badge where supported, and use
+the app icon for notices without a sender avatar; the browser controls source branding.
+
+The browser uses Web Notifications, with Service Worker actions when available;
+otherwise clicking opens the application conversation. Worker actions target the
+creating page and subscription, never another tab. Windows uses native WinRT
+Toast notifications with inline message replies and approve/decline buttons.
+Windows notification status queries are read-only. For a fresh unpackaged app,
+`ToastNotifier.Setting` can return `ERROR_NOT_FOUND` before its first notification.
+That maps to `unknown`, distinct from granted, denied and unavailable. The first
+real notification may still be dispatched without a permission prompt; Windows
+enforces its own notification settings. Only dispatch registers the app identity.
+No temporary notification is sent to discover status. Other native failures remain
+errors; settings distinguish loading, retryable failure and unsupported environments.
+Other desktop systems report notifications as unavailable. OS notification settings
+can suppress presentation or sound on Windows.
+
+Actions require a live subscription and unexpired notification. Approval also
+rechecks the exact pending consent through the existing control service; cancelling
+that request retracts its notification. Actions are consumed once before asynchronous
+work. Replies use the regular messaging service and never clear another draft;
+failed local acceptance retains the reply in the conversation draft. Delivery
+failure after acceptance belongs to the stored message and its existing retry flow.
+Speed-test notifications share the exact pending approval with the in-app toast and
+panel, including its original 20-second deadline. Approve/decline settles that
+request once; opening the notification only opens the peer's speed-test panel.
+Cancellation, connection loss, expiry or an in-app response retracts the notification.
+A late action cannot approve a newer request from the same peer. Speed-test alerts
+have their own category switch and follow the common permission, focus, preview and
+sound preferences; disabling alerts does not disable in-app approval.
+Declining from either the in-app toast or a system notification closes the request
+without opening the speed-test panel.
+Reloading/closing releases callbacks and retracts notifications on Windows and in
+browsers.
+This is notification of live local events, not push delivery while the app is closed.
 
 ## Native screen sharing
 
@@ -205,8 +287,11 @@ the live bitrate ceiling takes effect immediately; raising it retains gradual,
 feedback-driven recovery. Frame-rate changes recreate only the hardware transform
 when its fixed media type requires it; the RTP session stays connected.
 
-The optional **Audio & video → Show stream statistics** overlay samples only
-while displayed. It keeps each peer and local preview separate; rates and
+The **Show stream statistics** action is available in the main picture's controls
+when it has video. Its overlay is temporary state for that picture, defaults to
+off, and is discarded when the picture is removed or replaced. It is not saved
+in application preferences. The overlay samples only while displayed. It keeps
+each peer and local preview separate; rates and
 per-frame processing times use successive counter differences. Unavailable values
 remain absent. Native hardware encode time measures accepted MF input to output,
 including driver and output-delivery latency, rather than WebRTC's encoded-frame passthrough.
@@ -596,20 +681,40 @@ or key toolbar. The editor remains focusable, without taking space or intercepti
 pointer input. The tile action menu stays visible on touch devices, including
 landscape phones. The editor outlives menu content, and keyboard selection prevents
 menu close from restoring focus to its trigger. Hiding the keyboard does not end control.
+Pointer interactions with that same controlled screen retain the editor's focus,
+so clicking, dragging and scrolling can continue alongside text input. Other editors,
+dialogs and explicit keyboard dismissal retain their normal focus behavior.
+The configurable **Three-finger tap** shortcut defaults to **Show keyboard** in
+trackpad mode only. Direct mode forwards all contacts as native touch. Local gestures
+share contact, movement and timing detection. The shortcut requires exactly three
+overlapping contacts, at most 20 CSS pixels of movement and completion within 600 ms.
+The third contact cancels pending trackpad input. A valid three-finger sequence can
+complete on native `touchend` or `touchcancel`, because Android may cancel it instead
+of delivering releases. Other cancelled gestures, drags, holds and four-finger
+sequences do not open the keyboard or fall back to a click. Keyboard activation
+stays synchronous with the native event; pointer-only runtimes use pointer completion.
+Repeating the shortcut keeps an open keyboard open or requests it again after Back.
+Direct touches must begin inside the displayed video. Pointer capture retains them
+outside the picture until release, with coordinates clamped to the display edge;
+no scroll or window-drag conversion is applied.
 When the browser exposes the secure-context
 [VirtualKeyboard API](https://developer.chrome.com/docs/web-platform/virtual-keyboard),
 the editor uses manual keyboard policy and calls `show()` within the same tap after
 focusing. It stays inside the fullscreen container; showing the keyboard does not
-request an exit from fullscreen or change global viewport behavior. Reported keyboard
-geometry only updates the toggle; a zero rectangle never blurs the editor or calls
-`hide()`. Text forwarding follows actual editor focus, so transient geometry and
-window focus changes cannot close the input session. Reopening an already focused
-editor does not issue an intervening hide. A real DOM focus transfer, hidden page,
-control teardown or explicit dismissal releases input ownership and restores the
-editor's policy without hiding another input's keyboard. A fullscreen tile also
-keeps playback and input active if the keyboard collapses the underlying meeting
-grid; source removal and session teardown still disable them.
-Browsers without that API retain normal focus-based keyboard behavior.
+request an exit from fullscreen or change global viewport behavior. Keyboard geometry
+and visual viewport resizing track OS dismissal, including fullscreen Android Back
+when geometry events are absent. After a previously visible keyboard remains hidden
+for 180 ms, the editor releases focus so touching the screen cannot reopen it.
+Transient animation gaps, zoom and rotation do not dismiss input. Reopening cancels
+pending dismissal without issuing an intervening hide. A real DOM focus transfer,
+hidden page, control teardown or explicit dismissal releases input ownership and
+restores the editor's policy without hiding another input's keyboard. Both normal
+and fullscreen tiles keep playback and input active while their focused keyboard
+collapses the meeting grid; source removal and session teardown still disable them.
+Without that API, explicit keyboard actions use focus-based activation. On LAN HTTP,
+reopening after Android Back performs a fresh focus transition without ending the
+text-input session or disrupting composition. Ordinary screen taps suppress automatic
+keyboard reopening, including floating keyboards that do not resize the viewport.
 The editor stages IME candidates locally and sends
 only the committed value; it handles final input on either side of `compositionend`
 without sending intermediate composition strings or replaying `InputEvent.data`.

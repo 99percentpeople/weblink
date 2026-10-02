@@ -536,6 +536,50 @@ describe("native PiP on a meeting tile", () => {
   });
 });
 
+it("keeps non-fullscreen keyboard input alive when IME collapses the meeting layout", () => {
+  class Control extends EventTarget {
+    state = () => "active";
+    supportsText = () => true;
+    supportsKeyboard = () => true;
+    input = vi.fn(() => true);
+    resetInput = vi.fn();
+    cancel = vi.fn();
+  }
+  fixture.control = new Control();
+  const [visible, setVisible] = createSignal(true);
+  const [active, setActive] = createSignal(true);
+  const track = new Track("keyboard-video");
+  const stream = new Stream([
+    track as unknown as MediaStreamTrack,
+  ]) as unknown as MediaStream;
+  render(() => (
+    <MeetingTile
+      name="Host"
+      stream={stream}
+      pinned
+      layoutVisible={visible()}
+      playbackActive={active()}
+    />
+  ));
+  const video = document.querySelector("video");
+  const editor = screen.getByRole("textbox");
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.keyboard_show",
+    }),
+  );
+  expect(document.activeElement).toBe(editor);
+  expect(document.fullscreenElement).toBeNull();
+  setVisible(false);
+  expect(screen.getByRole("textbox")).toBe(editor);
+  expect(document.activeElement).toBe(editor);
+  expect(screen.getByRole("application")).toBeDefined();
+  expect(document.querySelector("video")).toBe(video);
+  setActive(false);
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(document.activeElement).not.toBe(editor);
+});
+
 it("keeps one remote control action across request, cancellation, active control and recovery", () => {
   class Control extends EventTarget {
     value = "viewing";

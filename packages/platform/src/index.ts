@@ -1,3 +1,6 @@
+import type { SystemNotifications } from "./notifications";
+export type * from "./notifications";
+
 export interface RuntimeCapabilities {
   runtime: "browser" | "desktop";
   os: string;
@@ -12,6 +15,7 @@ export interface RuntimeCapabilities {
 }
 
 export interface PlatformRuntime {
+  readonly notifications?: SystemNotifications;
   readonly pictureInPicture?: NativePictureInPicture;
   readonly application?: NativeApplication;
   readonly keyboard?: NativeKeyboard;
@@ -31,9 +35,12 @@ export interface NativeApplicationOptions {
 }
 
 export interface NativeApplication {
+  show(): Promise<void>;
   readonly autostart?: {
     enabled(): Promise<boolean>;
     setEnabled(enabled: boolean): Promise<boolean>;
+    behavior(): Promise<"tray" | "window">;
+    setBehavior(behavior: "tray" | "window"): Promise<void>;
   };
   configure(
     options: NativeApplicationOptions,

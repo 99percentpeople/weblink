@@ -247,10 +247,6 @@
           "title": "首選音訊編碼器",
           "description": "在協商音訊串流時優先使用該編碼器。僅對新建連接生效。",
           "auto": "自動"
-        },
-        "statistics": {
-          "title": "顯示串流統計疊加層",
-          "description": "在影片上顯示可取得的即時編碼、位元率、解析度、幀率及處理耗時。"
         }
       },
       "native_capture": "原生螢幕分享",
@@ -275,6 +271,12 @@
       "twoFingerRightClick": "雙指輕點模擬右鍵",
       "twoFingerScroll": "雙指滑動捲動",
       "naturalScroll": "自然捲動",
+      "three_finger_tap": {
+        "title": "三指輕點",
+        "keyboard": "開啟鍵盤",
+        "none": "不使用快捷操作",
+        "description": "在觸控板模式下，用三根手指輕點控制畫面即可開啟鍵盤。需開啟鍵盤控制。"
+      },
       "long_press": {
         "title": "單指長按行為",
         "drag": "按住並拖動",
@@ -340,7 +342,45 @@
       "close_failed": "無法完成此操作，請重試。",
       "tray_unavailable": "系統匣無法使用。關閉視窗時會詢問是否結束，自動隱藏不會生效。",
       "update_failed": "無法套用應用程式設定，請重試。",
-      "automatic_pip_unavailable": "目前瀏覽器或桌面執行環境不支援自動子母畫面。"
+      "automatic_pip_unavailable": "目前瀏覽器或桌面執行環境不支援自動子母畫面。",
+      "startup_behavior": {
+        "title": "開機啟動後的行為",
+        "tray": "背景常駐系統匣",
+        "window": "顯示主視窗",
+        "description": "僅用於系統登入後自動啟動。手動開啟 Weblink 時會顯示主視窗。"
+      }
+    },
+    "notifications": {
+      "enabled": "啟用系統通知",
+      "backgroundOnly": "僅在視窗未聚焦時通知",
+      "messages": "新訊息",
+      "controlRequests": "遠端控制請求",
+      "speedTestRequests": "測速請求",
+      "transfers": "檔案傳輸完成",
+      "preview": "顯示訊息和檔案內容預覽",
+      "sound": "通知音效",
+      "permission_default": "尚未授予通知權限。",
+      "permission_granted": "已允許系統通知。",
+      "permission_denied": "通知已被封鎖，請在瀏覽器或系統通知設定中允許。",
+      "permission_unavailable": "目前環境不支援系統通知。",
+      "permission_failed": "無法申請通知權限。",
+      "allow": "允許通知",
+      "requesting": "正在請求權限…",
+      "browser_blocked": "通知已被封鎖，請在瀏覽器的網站權限設定中，將此網站的通知改為允許。",
+      "native_description": "Weblink 執行期間，可在 Windows 通知中直接回覆訊息、同意或拒絕遠端控制和測速請求。",
+      "basic_description": "Weblink 開啟期間接收通知。點擊可開啟對應對話或請求，支援操作按鈕時可直接同意或拒絕。",
+      "new_message": "收到新訊息",
+      "reply": "傳送",
+      "reply_placeholder": "輸入回覆",
+      "reply_failed": "回覆未傳送，內容已保留在對應會話草稿中。",
+      "delivery_failed": "回覆已儲存，但傳送失敗，請開啟會話重試。",
+      "open": "開啟會話",
+      "transfer_completed": "檔案傳輸完成",
+      "loading": "正在讀取系統通知狀態…",
+      "load_failed": "讀取系統通知狀態失敗，請重試。",
+      "retry": "重試",
+      "error_details": "查看錯誤詳情",
+      "permission_unknown": "系統尚未提供此應用程式的通知狀態，通知將依系統設定處理。"
     }
   },
   "cache": {
@@ -403,6 +443,8 @@
       "retry": "重試"
     },
     "statistics": {
+      "show_overlay": "顯示串流統計疊加層",
+      "hide_overlay": "隱藏串流統計疊加層",
       "display": "呈現",
       "submitted": "預覽提交",
       "player_dropped": "播放器掉幀",
@@ -794,6 +836,7 @@
     "in_room": "已加入房間",
     "preview": "會前預覽",
     "hide_panel": "收起側欄",
+    "panel": "側欄",
     "show_panel": "顯示側欄",
     "close_panels": "關閉側欄",
     "conversations": "對話",
@@ -940,7 +983,8 @@
     "settings_meeting": "音視訊",
     "settings_remote_control": "遠端控制",
     "settings_permissions": "用戶端與房間",
-    "settings_application": "應用"
+    "settings_application": "應用",
+    "settings_notifications": "通知"
   },
   "file_library": {
     "search": "搜尋檔案…",

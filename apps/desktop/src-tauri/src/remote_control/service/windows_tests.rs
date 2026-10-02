@@ -1,5 +1,6 @@
 use super::*;
 use ::windows::Win32::UI::WindowsAndMessaging::{WM_LBUTTONUP, WM_MOUSEWHEEL};
+use std::time::Instant;
 use weblink_desktop_capture::{
     media::{MediaOptions, MediaSession},
     SourceKind,
@@ -67,7 +68,12 @@ fn browser_pointer_attended() {
         .find(|d| d.source_id == source.id)
         .unwrap()
         .bounds;
-    let owner = service.start(Some(window.handle())).unwrap();
+    let owner = service
+        .start(|| {
+            weblink_desktop_input::windows::Worker::start(Some(window.handle()))
+                .map(|worker| Box::new(worker) as Box<dyn weblink_desktop_input::session::Session>)
+        })
+        .unwrap();
     let point = |x, y| {
         let (x, y) = window.point(x, y).unwrap();
         serde_json::json!({"x":(x-rect.left) as f64/(rect.width-1) as f64,"y":(y-rect.top) as f64/(rect.height-1) as f64})

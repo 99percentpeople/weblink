@@ -1,11 +1,11 @@
-import type { ValidComponent } from "solid-js";
-import { splitProps } from "solid-js";
+import type { JSX, ValidComponent } from "solid-js";
+import { createMemo, Show, splitProps } from "solid-js";
 
 import * as ImagePrimitive from "@kobalte/core/image";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 
 import { cn } from "@/libs/cn";
-import { getAvatarFallbackStyle } from "@/libs/utils/avatar";
+import { getAvatarFallbackImage } from "@/libs/utils/avatar";
 
 type AvatarRootProps<T extends ValidComponent = "span"> =
   ImagePrimitive.ImageRootProps<T> & {
@@ -55,6 +55,7 @@ type AvatarFallbackProps<
 > = ImagePrimitive.ImageFallbackProps<T> & {
   class?: string | undefined;
   seed?: string | undefined;
+  children?: JSX.Element;
 };
 
 const AvatarFallback = <T extends ValidComponent = "span">(
@@ -62,22 +63,36 @@ const AvatarFallback = <T extends ValidComponent = "span">(
 ) => {
   const [local, others] = splitProps(
     props as AvatarFallbackProps,
-    ["class", "seed"],
+    ["class", "seed", "children"],
+  );
+  const image = createMemo(() =>
+    local.seed !== undefined
+      ? getAvatarFallbackImage(local.seed)
+      : undefined,
   );
   return (
     <ImagePrimitive.Fallback
       class={cn(
-        `bg-muted flex size-full items-center justify-center
-        rounded-full select-none`,
+        `bg-muted flex size-full select-none items-center
+        justify-center rounded-full`,
         local.class,
       )}
-      style={
-        local.seed
-          ? getAvatarFallbackStyle(local.seed)
-          : undefined
-      }
       {...others}
-    />
+    >
+      <Show when={image()} fallback={local.children}>
+        {(source) => (
+          <>
+            <img
+              src={source()}
+              alt=""
+              aria-hidden="true"
+              class="size-full"
+            />
+            <span class="sr-only">{local.children}</span>
+          </>
+        )}
+      </Show>
+    </ImagePrimitive.Fallback>
   );
 };
 

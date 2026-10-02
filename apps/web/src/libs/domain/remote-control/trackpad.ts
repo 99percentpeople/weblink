@@ -7,12 +7,7 @@ import type {
   TrackpadEvent,
   TrackpadPan,
 } from "./trackpad-types";
-type Finger = {
-  x: number;
-  y: number;
-  startX: number;
-  startY: number;
-};
+import { TouchGesture } from "./touch-gesture";
 export interface TrackpadPort {
   move(position: PointerPosition): void;
   input(event: PointerEvent): void;
@@ -26,9 +21,7 @@ export interface TrackpadPort {
 }
 /** Browser-independent gesture state. A two-finger gesture never falls back to a one-finger tap. */
 export class Trackpad {
-  private fingers = new Map<number, Finger>();
-  private started = 0;
-  private peak = 0;
+  private gesture = new TouchGesture();
   private tap = false;
   private dragging = false;
   private cursor: PointerPosition = { x: 0.5, y: 0.5 };
@@ -41,23 +34,20 @@ export class Trackpad {
     private readonly options: RemoteTouchOptions,
   ) {}
   down(id: number, x: number, y: number): boolean {
-    if (this.fingers.has(id)) return false;
-    if (this.fingers.size >= 2) {
+    if (this.gesture.has(id)) return false;
+    if (this.gesture.size >= 2) {
       this.cancel();
       return false;
     }
-    if (!this.fingers.size) {
+    if (!this.gesture.size) {
       this.cursor = { ...this.port.position() };
-      this.started = performance.now();
       this.tap = true;
-      this.peak = 0;
       this.scrollOrigin = undefined;
       this.scrolling = false;
     }
-    this.fingers.set(id, { x, y, startX: x, startY: y });
-    this.peak = Math.max(this.peak, this.fingers.size);
-    if (this.fingers.size === 2) {
-      this.scrollOrigin = this.center();
+    this.gesture.down(id, x, y);
+    if (this.gesture.size === 2) {
+      this.scrollOrigin = this.gesture.center();
       this.scrollPrevious = { x: 0, y: 0 };
       this.scrolling =
         this.options.twoFingerScroll && !!this.port.pan;
@@ -72,8 +62,8 @@ export class Trackpad {
   contextMenu() {
     if (
       !this.tap ||
-      this.fingers.size !== 1 ||
-      this.peak !== 1
+      this.gesture.size !== 1 ||
+      this.gesture.peak !== 1
     )
       return;
     this.tap = false;
@@ -84,18 +74,13 @@ export class Trackpad {
       this.click(2);
   }
   move(id: number, x: number, y: number) {
-    const finger = this.fingers.get(id);
-    if (!finger) return;
-    const dx = x - finger.x,
-      dy = y - finger.y;
-    finger.x = x;
-    finger.y = y;
-    if (
-      Math.hypot(x - finger.startX, y - finger.startY) > 8
-    ) {
+    const delta = this.gesture.move(id, x, y);
+    if (!delta) return;
+    const { x: dx, y: dy } = delta;
+    if (this.gesture.movement > 8) {
       this.tap = false;
     }
-    if (this.peak === 1) {
+    if (this.gesture.peak === 1) {
       const { width, height } = this.port.size();
       if (!(width > 0 && height > 0)) return;
       if (this.port.relative) {
@@ -133,7 +118,7 @@ export class Trackpad {
       };
       this.port.move(this.cursor);
     } else if (
-      this.fingers.size === 2 &&
+      this.gesture.size === 2 &&
       this.options.twoFingerScroll
     ) {
       // Sample the latest centroid after both pointer events have arrived.
@@ -146,26 +131,26 @@ export class Trackpad {
     }
   }
   up(id: number, x: number, y: number) {
-    if (!this.fingers.has(id)) return;
+    if (!this.gesture.has(id)) return;
     this.move(id, x, y);
     this.flushScroll();
     if (this.scrolling) {
       this.scrolling = false;
       this.port.pan?.({ phase: "end" });
     }
-    this.fingers.delete(id);
-    if (this.fingers.size) return;
+    this.gesture.up(id, x, y);
+    if (this.gesture.size) return;
     this.release();
-    if (
-      this.tap &&
-      performance.now() - this.started <= 300
-    ) {
+    if (this.tap && this.gesture.isTap(300, 8)) {
       if (
-        this.peak === 2 &&
+        this.gesture.peak === 2 &&
         this.options.twoFingerRightClick
       )
         this.click(2);
-      else if (this.peak === 1 && this.options.tapToClick)
+      else if (
+        this.gesture.peak === 1 &&
+        this.options.tapToClick
+      )
         this.click(0);
     }
     this.tap = false;
@@ -198,26 +183,19 @@ export class Trackpad {
     this.scrolling = false;
     if (scrolling) this.port.pan?.({ phase: "cancel" });
     this.release();
-    this.fingers.clear();
+    this.gesture.clear();
     this.tap = false;
-  }
-  private center(): PointerPosition {
-    const fingers = [...this.fingers.values()];
-    return {
-      x: (fingers[0].x + fingers[1].x) / 2,
-      y: (fingers[0].y + fingers[1].y) / 2,
-    };
   }
   private flushScroll() {
     clearTimeout(this.scrollTimer);
     this.scrollTimer = undefined;
     if (
       !this.scrolling ||
-      this.fingers.size !== 2 ||
+      this.gesture.size !== 2 ||
       !this.scrollOrigin
     )
       return;
-    const center = this.center();
+    const center = this.gesture.center();
     const scale =
       this.options.scrollSpeed *
       (this.options.naturalScroll ? 1 : -1);

@@ -26,6 +26,8 @@ import {
   LoaderCircle,
   PictureInPicture2,
   PanelTopOpen,
+  PanelRightClose,
+  PanelRightOpen,
   RectangleEllipsis,
   ScreenShareOff,
   Volume2,
@@ -78,6 +80,8 @@ export function MeetingControls(props: {
   onToggleAudio(): void;
   spotlight: boolean;
   onToggleLayout?(): void;
+  panelOpen?: boolean;
+  onTogglePanel?(): void;
   joined: boolean;
   onLeave(): void;
   onJoin?(): void;
@@ -423,6 +427,41 @@ export function MeetingControls(props: {
                     <Grid2X2 />
                   </Show>
                   <span>{t("meeting.layout")}</span>
+                </button>
+              </ControlSlot>
+            </Show>
+            <Show when={props.onTogglePanel}>
+              <ControlSlot visible={!props.compact}>
+                <button
+                  type="button"
+                  class="meeting-control"
+                  classList={{
+                    "is-active": props.panelOpen,
+                  }}
+                  aria-expanded={props.panelOpen}
+                  aria-controls="meeting-side-panel"
+                  aria-label={t(
+                    props.panelOpen
+                      ? "meeting.hide_panel"
+                      : "meeting.show_panel",
+                  )}
+                  title={t(
+                    props.panelOpen
+                      ? "meeting.hide_panel"
+                      : "meeting.show_panel",
+                  )}
+                  onClick={() => {
+                    closeMenu();
+                    props.onTogglePanel?.();
+                  }}
+                >
+                  <Show
+                    when={props.panelOpen}
+                    fallback={<PanelRightOpen />}
+                  >
+                    <PanelRightClose />
+                  </Show>
+                  <span>{t("meeting.panel")}</span>
                 </button>
               </ControlSlot>
             </Show>

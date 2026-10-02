@@ -4,7 +4,11 @@ import {
   RemoteControlAction,
 } from "./remote-control-action";
 import { RemoteControlOverlay } from "./remote-control-overlay";
-import { RemoteKeyboardInput } from "./remote-keyboard-input";
+import {
+  RemoteKeyboardInput,
+  type RemoteKeyboardInputHandle,
+  type RegisterRemoteKeyboardInput,
+} from "./remote-keyboard-input";
 import type { MeetingPipControls } from "./meeting-controls";
 import type {
   RegisterMeetingMainFeatures,
@@ -24,6 +28,7 @@ import {
   Show,
 } from "solid-js";
 import {
+  Activity,
   EyeOff,
   Maximize2,
   Minimize2,
@@ -41,7 +46,6 @@ import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { reportMeetingPipError } from "./meeting-pip-error";
 import { VideoStatisticsOverlay } from "./video-statistics-overlay";
-import { appState } from "@/libs/state/app-state";
 import { sessionService } from "@/libs/application/session-service";
 import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 import { VideoDisplay } from "./video-display";
@@ -74,20 +78,37 @@ export function MeetingTile(props: {
 }) {
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
+  const [keyboardInput, setKeyboardInput] =
+    createSignal<RemoteKeyboardInputHandle>();
+  const registerKeyboard: RegisterRemoteKeyboardInput = (
+    keyboard,
+  ) => {
+    setKeyboardInput(keyboard);
+    return () => {
+      if (keyboardInput() === keyboard)
+        setKeyboardInput(undefined);
+    };
+  };
   // Fullscreen the display container so its cover and controls remain usable.
   const fullscreen = createFullscreen(displayRef);
-  // The OS keyboard can collapse the grid behind a fullscreen surface. That
-  // must not unmount its editor or disable its input/playback owners.
+  // IME can collapse the grid even outside fullscreen. Keep its focused editor
+  // and playback alive through that resize, while still honoring source removal.
   const playbackActive = () =>
     props.playbackActive !== false &&
     (fullscreen.isThisElementFullscreen() ||
-      props.layoutVisible !== false);
+      props.layoutVisible !== false ||
+      keyboardInput()?.focused() === true);
   const [previewRevealed, setPreviewRevealed] =
+    createSignal(false);
+  const [statisticsVisible, setStatisticsVisible] =
     createSignal(false);
   createEffect(
     on(
       () => [props.sourceId, props.trackId],
-      () => setPreviewRevealed(false),
+      () => {
+        setPreviewRevealed(false);
+        setStatisticsVisible(false);
+      },
     ),
   );
   const previewCovered = createMemo(
@@ -148,6 +169,7 @@ export function MeetingTile(props: {
           muted
         >
           <RemoteControlOverlay
+            keyboard={keyboardInput}
             enabled={
               props.pinned &&
               !props.local &&
@@ -156,10 +178,7 @@ export function MeetingTile(props: {
             }
           />
           <Show
-            when={
-              appState.options.showStreamStats &&
-              playbackActive()
-            }
+            when={statisticsVisible() && playbackActive()}
           >
             <VideoStatisticsOverlay
               local={props.local}
@@ -217,11 +236,16 @@ export function MeetingTile(props: {
               playbackActive={playbackActive()}
               audioMuted={props.audioMuted}
               onToggleAudio={props.onToggleAudio}
+              statisticsVisible={statisticsVisible()}
+              onToggleStatistics={() =>
+                setStatisticsVisible((visible) => !visible)
+              }
               pinned={props.pinned}
               onPin={props.onPin}
               onActivate={props.onActivate}
               desktopPip={props.desktopPip}
               registerFeatures={props.registerFeatures}
+              registerKeyboard={registerKeyboard}
               onStop={props.onStop}
               name={props.name}
             />
@@ -241,6 +265,9 @@ function TileActions(props: {
   playbackActive?: boolean;
   audioMuted?: boolean;
   onToggleAudio?: () => void;
+  statisticsVisible: boolean;
+  onToggleStatistics(): void;
+  registerKeyboard: RegisterRemoteKeyboardInput;
   pinned: boolean;
   onPin?(): void;
   onActivate?(action: () => void): void;
@@ -249,7 +276,8 @@ function TileActions(props: {
   onStop?: () => void;
   name: string;
 }) {
-  const { videoRef, audioTracks } = useVideoDisplay();
+  const { videoRef, videoTrack, audioTracks } =
+    useVideoDisplay();
   const videoControl = createVideoRemoteControl();
   const remote = createControlState(
     () =>
@@ -309,6 +337,8 @@ function TileActions(props: {
   };
   const showPip = () =>
     (props.desktopPip || isMobile()) && pip.isSupported();
+  const showStatisticsAction = () =>
+    props.pinned && Boolean(videoTrack());
 
   const hasActions = createMemo(
     () =>
@@ -320,6 +350,7 @@ function TileActions(props: {
         props.onToggleAudio,
       ) ||
       Boolean(showPip()) ||
+      showStatisticsAction() ||
       Boolean(videoRef() && fullscreen.isSupported()) ||
       Boolean(props.onPin),
   );
@@ -430,6 +461,7 @@ function TileActions(props: {
                 control={control()}
                 state={videoControl.state()}
                 enabled={props.playbackActive !== false}
+                registerKeyboard={props.registerKeyboard}
               />
             )}
           </Show>
@@ -533,6 +565,19 @@ function TileActions(props: {
               >
                 <Minimize2 />
               </Show>
+            </MeetingTileAction>
+          </Show>
+          <Show when={showStatisticsAction()}>
+            <MeetingTileAction
+              active={props.statisticsVisible}
+              label={t(
+                props.statisticsVisible
+                  ? "video.statistics.hide_overlay"
+                  : "video.statistics.show_overlay",
+              )}
+              onAction={props.onToggleStatistics}
+            >
+              <Activity />
             </MeetingTileAction>
           </Show>
           <Show when={props.onPin}>

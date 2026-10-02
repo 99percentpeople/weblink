@@ -1,44 +1,13 @@
-use serde::Serialize;
 use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 mod application;
+mod capabilities;
 mod capture;
 mod keyboard;
+mod notifications;
 mod picture_in_picture;
 mod preview;
 mod remote_control;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RuntimeCapabilities {
-    runtime: &'static str,
-    os: &'static str,
-    version: String,
-    native_screen_capture: bool,
-    display_refresh_rates: Vec<u32>,
-    remote_input: bool,
-    system_keyboard: bool,
-    system_tray: bool,
-}
-
-#[tauri::command]
-async fn runtime_capabilities(
-    app: tauri::AppHandle,
-    service: tauri::State<'_, capture::Service>,
-) -> Result<RuntimeCapabilities, String> {
-    let (native_screen_capture, display_refresh_rates) =
-        capture::run(service, |s| Ok((s.supported(), s.display_refresh_rates()))).await?;
-    Ok(RuntimeCapabilities {
-        runtime: "desktop",
-        os: std::env::consts::OS,
-        version: app.package_info().version.to_string(),
-        native_screen_capture,
-        display_refresh_rates,
-        remote_input: cfg!(windows),
-        system_keyboard: cfg!(windows),
-        system_tray: app.state::<application::Service>().ready(),
-    })
-}
 
 fn same_origin(left: &Url, right: &Url) -> bool {
     left.scheme() == right.scheme()
@@ -56,6 +25,7 @@ fn external_link(url: &Url) -> bool {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(notifications::Service::default())
         .manage(std::sync::Arc::new(
             weblink_desktop_capture::CaptureService::new()
                 .expect("could not start capture service"),
@@ -64,9 +34,11 @@ pub fn run() {
         .manage(std::sync::Arc::new(keyboard::Service::default()))
         .manage(application::Service::default())
         .manage(picture_in_picture::Service::default())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            application::show(app);
+        .plugin(tauri_plugin_autostart::Builder::new().args(["--autostart"]).build())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if !args.iter().any(|arg| arg == "--autostart") {
+                application::show(app);
+            }
         }))
         .plugin(
             tauri_plugin_opener::Builder::new()
@@ -74,10 +46,20 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            runtime_capabilities,
+            capabilities::runtime_capabilities,
+            notifications::notifications_capabilities,
+            notifications::notifications_request_permission,
+            notifications::notifications_watch,
+            notifications::notifications_unwatch,
+            notifications::notifications_show,
+            notifications::notifications_dismiss,
+
             application::application_configure,
+            application::application_show,
             application::autostart::application_autostart_enabled,
             application::autostart::application_autostart_set,
+            application::autostart::application_startup_behavior,
+            application::autostart::application_startup_set_behavior,
             picture_in_picture::pip_watch,
             picture_in_picture::pip_unwatch,
             picture_in_picture::pip_configure,
@@ -133,7 +115,15 @@ pub fn run() {
             } else {
                 "tauri://localhost"
             })?;
-            let builder = WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?;
+            let startup = application::autostart::application_startup_behavior(app.handle().clone())
+                .unwrap_or(application::autostart::StartupBehavior::Window);
+            let hidden = application::autostart::starts_hidden(
+                std::env::args().any(|arg| arg == "--autostart"),
+                startup,
+                app.state::<application::Service>().ready(),
+            );
+            let builder = WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                .visible(!hidden).focused(!hidden);
             // Native media/signaling keep their renderer-owned leases in tray mode.
             // The Tauri background_throttling option does not support Windows.
             #[cfg(windows)]
@@ -144,6 +134,7 @@ pub fn run() {
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
+                        webview.state::<notifications::Service>().clear();
                         if let Some(window) = webview.app_handle().get_webview_window("main") {
                             webview.state::<picture_in_picture::Service>().reset(&window);
                         }
@@ -180,6 +171,7 @@ pub fn run() {
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
                 app.state::<picture_in_picture::Service>().shutdown();
                 app.state::<application::Service>().shutdown();
+                app.state::<notifications::Service>().clear();
                 app.state::<remote_control::Shared>().close();
             }
             if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
@@ -191,6 +183,7 @@ pub fn run() {
             }
             if matches!(event, tauri::RunEvent::Exit) {
                 app.state::<application::Service>().shutdown();
+                app.state::<notifications::Service>().clear();
                 app.state::<keyboard::Shared>().close();
                 app.state::<remote_control::Shared>().close();
                 app.state::<capture::Service>().shutdown();

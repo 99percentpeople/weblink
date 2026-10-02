@@ -1,3 +1,4 @@
+import { nativeNotifications } from "./notifications";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createRawPreview } from "./preview";
@@ -18,6 +19,7 @@ import {
 
 export const platform: PlatformRuntime = {
   pictureInPicture: nativePictureInPicture,
+  notifications: nativeNotifications,
   application: nativeApplication,
   keyboard: nativeKeyboard,
   kind: "desktop",

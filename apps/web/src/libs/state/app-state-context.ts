@@ -9,6 +9,7 @@ import type { FileCatalogService } from "@/libs/application/file-catalog-service
 import type { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import type { TaskService } from "@/libs/application/task-service";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
+import type { SpeedTestApprovalRequest } from "@/components/speed-test-approval";
 import type {
   ChunkMetaData,
   FileSource,
@@ -86,6 +87,9 @@ export interface AppStateContextProps {
     target: ClientID | null,
   ) => SpeedTestState | undefined;
   speedTestState: Accessor<SpeedTestState>;
+  speedTestApproval: Accessor<
+    SpeedTestApprovalRequest | undefined
+  >;
   startSpeedTest: (target: ClientID) => Promise<void>;
   cancelSpeedTest: (target?: ClientID) => void;
   approveSpeedTest: (target: ClientID) => void;

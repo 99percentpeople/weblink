@@ -1,3 +1,4 @@
+import NotificationSettings from "./notification-settings";
 import { For, Match, Switch } from "solid-js";
 import {
   Tabs,
@@ -21,6 +22,7 @@ import AboutSettings from "./about-settings";
 export const settingsSections = [
   "appearance",
   "application",
+  "notifications",
   "connection",
   "transfer",
   "meeting",
@@ -83,6 +85,9 @@ export default function SettingsContent(props: {
               </Match>
               <Match when={section === "application"}>
                 <ApplicationSettings />
+              </Match>
+              <Match when={section === "notifications"}>
+                <NotificationSettings />
               </Match>
               <Match when={section === "connection"}>
                 <ConnectionSettings />

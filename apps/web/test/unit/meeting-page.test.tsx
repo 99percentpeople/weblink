@@ -1573,7 +1573,9 @@ describe("meeting page navigation and panels", () => {
     expect(screen.queryByRole("tabpanel")).toBeNull();
     const stage = screen.getByLabelText("meeting.stage");
     const sources = screen.getAllByRole("article");
-    const toggle = screen.getByRole("button", {
+    const toggle = within(
+      screen.getByLabelText("meeting.controls"),
+    ).getByRole("button", {
       name: "meeting.show_panel",
     });
     expect(toggle).toHaveAttribute(

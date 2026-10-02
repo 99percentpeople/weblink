@@ -3,16 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 #[cfg(windows)]
-mod windows;
-#[cfg(windows)]
-pub use windows::Service;
+#[path = "keyboard/windows.rs"]
+mod backend;
 #[cfg(not(windows))]
-#[derive(Default)]
-pub struct Service {}
-#[cfg(not(windows))]
-impl Service {
-    pub fn close(&self) {}
-}
+#[path = "keyboard/unavailable.rs"]
+mod backend;
+pub use backend::{supported, Service};
 pub type Shared = Arc<Service>;
 
 #[derive(Clone, Copy, Deserialize)]
@@ -50,28 +46,14 @@ pub async fn keyboard_start(
     if window.label() != "main" || !weblink_desktop_input::protocol::valid_id(&session_id) {
         return Err("Local main window and valid keyboard session required".into());
     }
-    #[cfg(windows)]
-    {
-        use tauri::Manager;
-        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
-        let host = window
-            .state::<crate::remote_control::Shared>()
-            .inner()
-            .clone();
-        let s = service.inner().clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            s.start(session_id, hwnd, exit_shortcut, events, move || {
-                host.emergency_revoke()
-            })
-        })
-        .await
-        .map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (service, session_id, exit_shortcut, events);
-        Err("System keyboard forwarding requires Windows".into())
-    }
+    backend::start(
+        window,
+        service.inner().clone(),
+        session_id,
+        exit_shortcut,
+        events,
+    )
+    .await
 }
 #[tauri::command]
 pub fn keyboard_renew(
@@ -83,15 +65,7 @@ pub fn keyboard_renew(
     if window.label() != "main" {
         return Err("Local main window required".into());
     }
-    #[cfg(windows)]
-    {
-        service.renew(&session_id, sequence)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (service, session_id, sequence);
-        Err("System keyboard unavailable".into())
-    }
+    service.renew(&session_id, sequence)
 }
 #[tauri::command]
 pub fn keyboard_stop(
@@ -102,13 +76,6 @@ pub fn keyboard_stop(
     if window.label() != "main" {
         return Err("Local main window required".into());
     }
-    #[cfg(windows)]
-    {
-        service.stop(&session_id);
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (service, session_id);
-    }
+    service.stop(&session_id);
     Ok(())
 }

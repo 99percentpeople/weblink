@@ -226,6 +226,7 @@ async function main() {
     },
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
+    speedTestApproval: () => undefined,
     speedTestState: () => ({
       status: "idle",
       peerId: null,

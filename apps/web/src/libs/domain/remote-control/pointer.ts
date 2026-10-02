@@ -46,13 +46,14 @@ export type PointerState =
   | "requesting"
   | "activating"
   | "active";
-/** Only absolute coordinates inside the displayed video content; letterboxing is not interactive. */
+/** Start inside the video; captured touches can continue at its nearest edge. */
 export function videoPosition(
   rect: Pick<DOMRect, "left" | "top" | "width" | "height">,
   width: number,
   height: number,
   x: number,
   y: number,
+  clamp = false,
 ): PointerPosition | undefined {
   if (
     ![
@@ -76,6 +77,11 @@ export function videoPosition(
     h = height * scale;
   const px = (x - rect.left - (rect.width - w) / 2) / w,
     py = (y - rect.top - (rect.height - h) / 2) / h;
+  if (clamp)
+    return {
+      x: Math.max(0, Math.min(1, px)),
+      y: Math.max(0, Math.min(1, py)),
+    };
   if (px < 0 || py < 0 || px > 1 || py > 1) return;
   return { x: px, y: py };
 }

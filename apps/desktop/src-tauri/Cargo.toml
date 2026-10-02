@@ -22,11 +22,15 @@ uuid = { version = "1", features = ["v4"] }
 weblink-desktop-input = { path = "../../../crates/desktop-input" }
 weblink-desktop-capture = { path = "../../../crates/desktop-capture" }
 tauri-plugin-autostart = "=2.6.0"
+base64 = "0.22"
+png = "0.18"
+tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+winreg = "0.55"
 webview2-com = "=0.39.1"
 windows-core = "0.62.2"
-windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader"] }
+windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader", "UI_Notifications", "Data_Xml_Dom", "Foundation_Collections"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 log = "0.4"

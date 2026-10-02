@@ -4,7 +4,11 @@ import {
   getDefaultProfile,
   normalizeStoredProfile,
 } from "@/libs/state/profile-store";
-import { getAvatarFallbackStyle } from "@/libs/utils/avatar";
+import {
+  getAvatarFallbackColors,
+  getAvatarFallbackSvg,
+  getAvatarFallbackImage,
+} from "@/libs/utils/avatar";
 import { getInitials } from "@/libs/utils/name";
 
 describe("avatar fallback", () => {
@@ -32,12 +36,12 @@ describe("avatar fallback", () => {
   });
 
   it("renders deterministic local colors from the display name", () => {
-    expect(getAvatarFallbackStyle("Alice")).toEqual(
-      getAvatarFallbackStyle("Alice"),
+    expect(getAvatarFallbackColors("Alice")).toEqual(
+      getAvatarFallbackColors("Alice"),
     );
-    expect(
-      getAvatarFallbackStyle("Alice").background,
-    ).not.toBe(getAvatarFallbackStyle("Bob").background);
+    expect(getAvatarFallbackColors("Alice")).not.toEqual(
+      getAvatarFallbackColors("Bob"),
+    );
   });
 
   it("uses compact initials for western and CJK names", () => {
@@ -45,5 +49,46 @@ describe("avatar fallback", () => {
     expect(getInitials("Alice")).toBe("AL");
     expect(getInitials("张三")).toBe("张三");
     expect(getInitials("")).toBe("?");
+  });
+});
+
+describe("shared SVG avatars", () => {
+  it("keeps names as text, including XML special characters", () => {
+    const document = new DOMParser().parseFromString(
+      getAvatarFallbackSvg("& <script>"),
+      "image/svg+xml",
+    );
+    expect(
+      document.querySelector("parsererror"),
+    ).toBeNull();
+    expect(document.documentElement.localName).toBe("svg");
+    expect(document.querySelector("script")).toBeNull();
+    expect(
+      document.querySelector("text")?.textContent,
+    ).toBe("&<");
+  });
+  it.each([
+    "Alice Smith",
+    "张三",
+    "",
+    "🙂",
+    "A\u0000",
+    "\uD800",
+  ])("provides a reusable SVG image for %s", (name) => {
+    const source = getAvatarFallbackImage(name);
+    expect(source.startsWith("data:image/svg+xml,")).toBe(
+      true,
+    );
+    expect(decodeURIComponent(source.split(",")[1])).toBe(
+      getAvatarFallbackSvg(name),
+    );
+    expect(getAvatarFallbackImage(name)).toBe(source);
+    const document = new DOMParser().parseFromString(
+      decodeURIComponent(source.split(",")[1]),
+      "image/svg+xml",
+    );
+    expect(
+      document.querySelector("parsererror"),
+    ).toBeNull();
   });
 });

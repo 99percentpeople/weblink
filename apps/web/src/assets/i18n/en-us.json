@@ -247,10 +247,6 @@
           "title": "Preferred Audio Codec",
           "description": "Prefer using this codec when negotiating the audio stream. Takes effect for new connections.",
           "auto": "Auto"
-        },
-        "statistics": {
-          "title": "Show stream statistics",
-          "description": "Show available live codec, bitrate, resolution, frame rate and processing time over videos."
         }
       },
       "native_capture": "Native screen sharing",
@@ -275,6 +271,12 @@
       "twoFingerRightClick": "Two-finger tap to right-click",
       "twoFingerScroll": "Two-finger scrolling",
       "naturalScroll": "Natural scrolling",
+      "three_finger_tap": {
+        "title": "Three-finger tap",
+        "keyboard": "Show keyboard",
+        "none": "No shortcut",
+        "description": "Tap the control surface with three fingers in trackpad mode to open the keyboard. Keyboard control must be enabled."
+      },
       "long_press": {
         "title": "One-finger press and hold",
         "drag": "Hold to drag",
@@ -340,7 +342,45 @@
       "close_failed": "Could not complete this action. Please try again.",
       "tray_unavailable": "System tray is unavailable. Closing the window will ask whether to quit; automatic hiding is disabled.",
       "update_failed": "Could not apply application settings. Please try again.",
-      "automatic_pip_unavailable": "Automatic picture-in-picture is unavailable in this browser or desktop runtime."
+      "automatic_pip_unavailable": "Automatic picture-in-picture is unavailable in this browser or desktop runtime.",
+      "startup_behavior": {
+        "title": "On system startup",
+        "tray": "Stay in the system tray",
+        "window": "Show the main window",
+        "description": "Applies when the system launches Weblink at login. Opening Weblink manually shows the main window."
+      }
+    },
+    "notifications": {
+      "enabled": "Enable system notifications",
+      "backgroundOnly": "Only notify when the window is not focused",
+      "messages": "New messages",
+      "controlRequests": "Remote control requests",
+      "speedTestRequests": "Speed test requests",
+      "transfers": "File transfer completed",
+      "preview": "Show message and file previews",
+      "sound": "Notification sound",
+      "permission_default": "Notification permission has not been granted.",
+      "permission_granted": "System notifications are allowed.",
+      "permission_denied": "Notifications are blocked. Enable them in your browser or system notification settings.",
+      "permission_unavailable": "System notifications are unavailable in this environment.",
+      "permission_failed": "Could not request notification permission.",
+      "allow": "Allow notifications",
+      "requesting": "Requesting permission…",
+      "browser_blocked": "Notifications are blocked. Open this site’s permissions in your browser and allow notifications.",
+      "native_description": "While Weblink is running, reply to messages and approve or decline remote control and speed test requests directly in Windows notifications.",
+      "basic_description": "Receive notifications while Weblink is open. Click to open the conversation or request; approve and decline buttons appear where supported.",
+      "new_message": "New message",
+      "reply": "Send",
+      "reply_placeholder": "Type a reply",
+      "reply_failed": "Reply was not sent. Your text has been kept in the conversation draft.",
+      "delivery_failed": "Reply saved, but delivery failed. Open the conversation to retry.",
+      "open": "Open conversation",
+      "transfer_completed": "File transfer completed",
+      "loading": "Checking notification availability…",
+      "load_failed": "Could not read system notification status. Please retry.",
+      "retry": "Retry",
+      "error_details": "Error details",
+      "permission_unknown": "The system has not provided a notification status yet. Notifications will follow system settings."
     }
   },
   "cache": {
@@ -403,6 +443,8 @@
       "retry": "Retry"
     },
     "statistics": {
+      "show_overlay": "Show stream statistics",
+      "hide_overlay": "Hide stream statistics",
       "display": "Presentation",
       "submitted": "Submitted",
       "player_dropped": "Player dropped",
@@ -794,6 +836,7 @@
     "in_room": "In room",
     "preview": "Meeting preview",
     "hide_panel": "Hide side panel",
+    "panel": "Side panel",
     "show_panel": "Show side panel",
     "close_panels": "Close side panels",
     "conversations": "Conversations",
@@ -940,7 +983,8 @@
     "settings_meeting": "Audio & video",
     "settings_remote_control": "Remote control",
     "settings_permissions": "Clients & rooms",
-    "settings_application": "Application"
+    "settings_application": "Application",
+    "settings_notifications": "Notifications"
   },
   "file_library": {
     "search": "Search files…",

@@ -179,14 +179,13 @@ export function createMeetingSession({
       window.removeEventListener("focus", focus);
     });
   }
-  // Keep native eligibility current without moving/recreating the meeting tree.
+  // Native PiP presents the whole meeting window, including an unpinned grid
+  // or an avatar-only preview. Only automatic entry requires live video.
   createEffect(() => {
     if (!nativePip) return;
-    const source = selected();
     nativePip.configure({
       reducedMotion: reducedMotion(),
       eligible:
-        !!source &&
         onMeetingPage() &&
         engaged() &&
         !state.roomConflict(),
@@ -496,7 +495,8 @@ export function createMeetingSession({
     if (!onMeetingPage()) navigate(HOME_PATH);
   };
   const controls: MeetingPipControls = {
-    supported: () => pip.supported() && !!selected(),
+    supported: () =>
+      pip.supported() && (!!nativePip || !!selected()),
     active: pip.active,
     busy: pip.busy,
     automatic,
@@ -509,7 +509,10 @@ export function createMeetingSession({
     toggle: () => {
       automaticReason = undefined;
       if (pip.active()) pip.close();
-      else if (selected() && !state.roomConflict()) {
+      else if (
+        (nativePip || selected()) &&
+        !state.roomConflict()
+      ) {
         // An explicit request also resumes the local preview after leaving a room.
         setEngaged(true);
         dismissed = false;

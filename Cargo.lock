@@ -4894,7 +4894,9 @@ dependencies = [
 name = "weblink-desktop"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "log",
+ "png 0.18.1",
  "serde",
  "serde_json",
  "tauri",
@@ -4902,6 +4904,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "tempfile",
  "tokio",
  "uuid",
  "weblink-desktop-capture",
@@ -4909,6 +4912,7 @@ dependencies = [
  "webview2-com",
  "windows 0.62.2",
  "windows-core 0.62.2",
+ "winreg 0.55.0",
 ]
 
 [[package]]

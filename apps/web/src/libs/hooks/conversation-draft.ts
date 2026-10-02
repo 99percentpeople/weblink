@@ -52,3 +52,29 @@ export function createConversationDraft(
     },
   };
 }
+
+/** Keep an unaccepted notification reply without discarding an existing draft. */
+export function appendConversationDraft(
+  conversationId: string,
+  text: string,
+): void {
+  const key = `conversation-draft:${conversationId}`;
+  let previous = "";
+  try {
+    const stored = JSON.parse(
+      sessionStorage.getItem(key) ?? '""',
+    );
+    if (typeof stored === "string") previous = stored;
+  } catch {
+    /* A corrupt draft must not discard the reply. */
+  }
+  const value = previous ? `${previous}\n${text}` : text;
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* The mounted composer can still retain it. */
+  }
+  window.dispatchEvent(
+    new CustomEvent(changed, { detail: { key, value } }),
+  );
+}

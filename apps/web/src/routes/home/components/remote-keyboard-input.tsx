@@ -23,11 +23,22 @@ import {
   RemoteTextInput,
 } from "@/libs/domain/remote-control/text-input";
 
+export interface RemoteKeyboardInputHandle {
+  available(): boolean;
+  focused(): boolean;
+  suppressAutomaticShow(): void;
+  show(): void;
+}
+export type RegisterRemoteKeyboardInput = (
+  keyboard: RemoteKeyboardInputHandle,
+) => () => void;
+
 /** A real editor focused directly by the user's gesture also works in fullscreen. */
 export function RemoteKeyboardInput(props: {
   control: RemotePointer;
   state: PointerState;
   enabled: boolean;
+  registerKeyboard?: RegisterRemoteKeyboardInput;
 }) {
   const options = createMemo(() =>
     resolveRemoteKeyboardOptions(
@@ -46,15 +57,17 @@ export function RemoteKeyboardInput(props: {
     );
   };
   const [open, setOpen] = createSignal(false);
-  let editor!: HTMLTextAreaElement;
+  const [editor, setEditor] =
+    createSignal<HTMLTextAreaElement>();
   let keys: RemoteKeyboard | undefined;
   const focused = () =>
-    !!editor &&
-    editor.ownerDocument.activeElement === editor;
+    !!editor() &&
+    editor()!.ownerDocument.activeElement === editor();
   const resetEditor = () => {
-    if (!editor) return;
-    editor.value = REMOTE_TEXT_SEED;
-    editor.setSelectionRange(1, 1);
+    const element = editor();
+    if (!element) return;
+    element.value = REMOTE_TEXT_SEED;
+    element.setSelectionRange(1, 1);
   };
   const report = (
     result: ReturnType<typeof sendRemoteText>,
@@ -70,7 +83,7 @@ export function RemoteKeyboardInput(props: {
     }
   };
   const input = new RemoteTextInput({
-    read: () => editor?.value ?? REMOTE_TEXT_SEED,
+    read: () => editor()?.value ?? REMOTE_TEXT_SEED,
     reset: resetEditor,
     commit: (value) => {
       if (
@@ -107,11 +120,12 @@ export function RemoteKeyboardInput(props: {
   };
   const close = () => {
     unfocus();
-    editor?.blur();
+    editor()?.blur();
   };
   const softKeyboard = createRemoteSoftKeyboard(
-    () => editor,
+    editor,
     setOpen,
+    () => input.hasComposition,
   );
   createEffect(() => {
     const c = props.control;
@@ -140,8 +154,9 @@ export function RemoteKeyboardInput(props: {
     reset();
   });
   createEffect(() => {
-    if (!available()) return;
-    const doc = editor.ownerDocument;
+    const element = editor();
+    if (!available() || !element) return;
+    const doc = element.ownerDocument;
     const life = new AbortController();
     doc.addEventListener(
       "visibilitychange",
@@ -153,14 +168,30 @@ export function RemoteKeyboardInput(props: {
     onCleanup(() => life.abort());
   });
   onCleanup(close);
+  const show = () => {
+    if (!available()) return;
+    if (!focused()) reset();
+    // Keep this synchronous with the tap: mobile keyboards require a user gesture.
+    softKeyboard.show();
+  };
   const toggle = () => {
     if (open()) close();
-    else {
-      reset();
-      // Keep this synchronous with the tap: mobile keyboards require a user gesture.
-      softKeyboard.show();
-    }
+    else show();
   };
+  createEffect(() => {
+    if (props.registerKeyboard)
+      onCleanup(
+        props.registerKeyboard({
+          available,
+          // IME may already be hidden while its final resize animation runs.
+          // A screen tap should then focus the surface, not revive the editor.
+          focused: () => open() && focused(),
+          suppressAutomaticShow:
+            softKeyboard.suppressAutomaticShow,
+          show,
+        }),
+      );
+  });
   return (
     <Show when={available()}>
       <MeetingTileAction
@@ -180,7 +211,7 @@ export function RemoteKeyboardInput(props: {
       </MeetingTileAction>
       {/* Keep a focusable editor in the fullscreen surface; never use hidden/display:none. */}
       <textarea
-        ref={editor}
+        ref={setEditor}
         rows={1}
         value={REMOTE_TEXT_SEED}
         tabIndex={-1}
@@ -190,7 +221,8 @@ export function RemoteKeyboardInput(props: {
         onBlur={() => {
           // Native IME/window focus changes can leave this editor focused.
           // Only a real DOM focus transfer ends the text-input session.
-          if (!focused()) unfocus();
+          if (!focused() && !softKeyboard.restoringFocus())
+            unfocus();
         }}
         aria-label={t("remote_control.keyboard_input")}
         inputmode="text"

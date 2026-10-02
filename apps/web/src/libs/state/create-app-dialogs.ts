@@ -1,6 +1,8 @@
 import {
   createComponent,
   createSignal,
+  onCleanup,
+  onMount,
   Show,
   Suspense,
 } from "solid-js";
@@ -19,6 +21,25 @@ const FileManager = preload(
 );
 
 export function createAppDialogs() {
+  const preloadSettings = () => {
+    void SettingsContent.preload().catch(() => undefined);
+  };
+  onMount(() => {
+    // SettingsContent imports every section; warm the whole dialog without
+    // mounting sections or starting their permission/capability queries.
+    if (typeof window.requestIdleCallback === "function") {
+      const idle = window.requestIdleCallback(
+        preloadSettings,
+        {
+          timeout: 2000,
+        },
+      );
+      onCleanup(() => window.cancelIdleCallback(idle));
+    } else {
+      const timer = window.setTimeout(preloadSettings, 500);
+      onCleanup(() => window.clearTimeout(timer));
+    }
+  });
   const [section, setSection] =
     createSignal<SettingsSection>("appearance");
   const [settingsOpen, setSettingsOpen] =
@@ -74,10 +95,8 @@ export function createAppDialogs() {
       }),
   });
   return {
-    // Intent-based warmups are best effort; opening still uses Suspense.
-    preloadSettings: () => {
-      void SettingsContent.preload().catch(() => undefined);
-    },
+    // Warmups are best effort; opening still uses Suspense.
+    preloadSettings,
     preloadFiles: () => {
       void FileManager.preload().catch(() => undefined);
     },

@@ -324,12 +324,17 @@ it("restores old preferences with safe defaults and validates persisted values",
     resolveRemoteTouchOptions({ longPressDelay: 1000 }),
   ).not.toHaveProperty("longPressDelay");
   expect(
+    resolveRemoteTouchOptions({ threeFingerTap: "none" })
+      .threeFingerTap,
+  ).toBe("none");
+  expect(
     resolveRemoteTouchOptions({
       mode: "direct",
       pointerSpeed: 10,
       scrollSpeed: 0,
       tapToClick: "false",
       longPress: "invalid",
+      threeFingerTap: "invalid",
       longPressDelay: -5,
     }),
   ).toMatchObject({
@@ -338,6 +343,7 @@ it("restores old preferences with safe defaults and validates persisted values",
     scrollSpeed: 0.25,
     tapToClick: true,
     longPress: "drag",
+    threeFingerTap: "keyboard",
   });
 });
 

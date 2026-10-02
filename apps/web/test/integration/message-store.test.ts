@@ -31,6 +31,53 @@ beforeEach(() => {
 });
 
 describe("MessageStores persistence boundary", () => {
+  it("emits newly stored messages once, after persistence, never for hydration or failed writes", async () => {
+    const persisted = deferred<void>();
+    const putMessage = vi.fn(() => persisted.promise);
+    const store = new MessageStores(
+      createRepository({ putMessage }),
+    );
+    const listener = vi.fn();
+    const unsubscribe = store.onMessageStored(listener);
+    await store.initialize();
+    expect(listener).not.toHaveBeenCalled();
+    const message = {
+      id: "notification-message",
+      type: "text" as const,
+      client: "peer",
+      target: "self",
+      data: "Hello",
+      createdAt: 1,
+    };
+    const first = store.addMessage(message);
+    const duplicate = store.addMessage(message);
+    await vi.waitFor(() =>
+      expect(putMessage).toHaveBeenCalledOnce(),
+    );
+    expect(listener).not.toHaveBeenCalled();
+    persisted.resolve();
+    await Promise.all([first, duplicate]);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0]).toMatchObject(
+      message,
+    );
+    putMessage.mockRejectedValueOnce(
+      new Error("disk full"),
+    );
+    await expect(
+      store.addMessage({
+        ...message,
+        id: "failed-message",
+      }),
+    ).rejects.toThrow("disk full");
+    expect(listener).toHaveBeenCalledOnce();
+    unsubscribe();
+    await store.addMessage({
+      ...message,
+      id: "unsubscribed",
+    });
+    expect(listener).toHaveBeenCalledOnce();
+  });
   it("defers client and local message writes until the repository snapshot is loaded", async () => {
     const snapshot =
       deferred<

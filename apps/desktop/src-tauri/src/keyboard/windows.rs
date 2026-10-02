@@ -346,6 +346,32 @@ fn run(
     }
 }
 
+/// Implementation availability only; starting still verifies focus and native access.
+pub fn supported() -> bool {
+    true
+}
+pub async fn start(
+    window: tauri::WebviewWindow,
+    service: Arc<Service>,
+    session_id: String,
+    exit_shortcut: ExitShortcut,
+    events: Channel<KeyboardEvent>,
+) -> Result<(), String> {
+    use tauri::Manager;
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
+    let host = window
+        .state::<crate::remote_control::Shared>()
+        .inner()
+        .clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.start(session_id, hwnd, exit_shortcut, events, move || {
+            host.emergency_revoke()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,6 +7,7 @@ pub mod keyboard_capture;
 mod mailbox;
 pub mod pan;
 pub mod protocol;
+pub mod session;
 pub mod touch;
 pub mod trackpad;
 #[cfg(target_os = "windows")]

@@ -1,5 +1,6 @@
 import {
   afterEach,
+  beforeEach,
   describe,
   expect,
   it,
@@ -17,6 +18,7 @@ class KeyboardAPI extends EventTarget {
   }
 }
 const cleanups: (() => void)[] = [];
+beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   cleanups.splice(0).forEach((close) => close());
   Reflect.deleteProperty(
@@ -24,8 +26,20 @@ afterEach(() => {
     "virtualKeyboard",
   );
   Reflect.deleteProperty(document, "fullscreenElement");
+  Reflect.deleteProperty(window, "visualViewport");
   document.body.replaceChildren();
+  vi.useRealTimers();
 });
+
+class Viewport extends EventTarget {
+  width = 400;
+  height = 800;
+  scale = 1;
+  resize(height: number) {
+    this.height = height;
+    this.dispatchEvent(new Event("resize"));
+  }
+}
 function setup(api?: KeyboardAPI) {
   if (api)
     Object.defineProperty(
@@ -83,9 +97,31 @@ describe("remote system keyboard", () => {
     keyboard.show();
     expect(document.activeElement).toBe(editor);
     expect(
+      editor.getAttribute("virtualkeyboardpolicy"),
+    ).toBe("auto");
+    keyboard.hide();
+    expect(document.activeElement).not.toBe(editor);
+  });
+  it("blocks automatic reopening on HTTP without relying on floating-keyboard geometry", () => {
+    const { editor, keyboard } = setup();
+    keyboard.show();
+    // Android Back may leave focus and all viewport measurements unchanged.
+    // A remote pointer gesture must not ask Android to show IME again.
+    keyboard.suppressAutomaticShow();
+    expect(document.activeElement).toBe(editor);
+    expect(
+      editor.getAttribute("virtualkeyboardpolicy"),
+    ).toBe("manual");
+    keyboard.show();
+    expect(
+      editor.getAttribute("virtualkeyboardpolicy"),
+    ).toBe("auto");
+    expect(document.activeElement).toBe(editor);
+    keyboard.suppressAutomaticShow();
+    keyboard.hide();
+    expect(
       editor.hasAttribute("virtualkeyboardpolicy"),
     ).toBe(false);
-    keyboard.hide();
     expect(document.activeElement).not.toBe(editor);
   });
   it("reports OS dismissal without hiding or blurring and can reopen the focused editor", () => {
@@ -180,5 +216,100 @@ describe("remote system keyboard", () => {
     editor.remove();
     keyboard.show();
     expect(api.show).not.toHaveBeenCalled();
+  });
+
+  it("releases focus after sustained OS dismissal but not a transient zero geometry", () => {
+    const api = new KeyboardAPI();
+    const { editor, keyboard, visibility } = setup(api);
+    keyboard.show();
+    api.resize(300);
+    api.resize(0);
+    vi.advanceTimersByTime(100);
+    expect(document.activeElement).toBe(editor);
+    api.resize(300);
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).toBe(editor);
+    expect(api.hide).not.toHaveBeenCalled();
+    api.resize(0);
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).not.toBe(editor);
+    expect(visibility).toHaveBeenLastCalledWith(false);
+    expect(api.hide).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])(
+    "detects fullscreen Back via viewport restoration when geometry events are absent (api=%s)",
+    (withAPI) => {
+      const viewport = new Viewport();
+      Object.defineProperty(window, "visualViewport", {
+        configurable: true,
+        value: viewport,
+      });
+      const api = withAPI ? new KeyboardAPI() : undefined;
+      const { editor, screen, keyboard, visibility } =
+        setup(api);
+      keyboard.show();
+      viewport.resize(480);
+      viewport.resize(800);
+      expect(visibility).toHaveBeenLastCalledWith(false);
+      vi.advanceTimersByTime(200);
+      expect(document.activeElement).not.toBe(editor);
+      expect(document.fullscreenElement).toBe(screen);
+      visibility.mockClear();
+      viewport.resize(480);
+      expect(visibility).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps focus through opening animation gaps and viewport zoom or rotation", () => {
+    const viewport = new Viewport();
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: viewport,
+    });
+    const { editor, keyboard } = setup();
+    keyboard.show();
+    viewport.resize(480);
+    viewport.resize(800);
+    vi.advanceTimersByTime(100);
+    viewport.resize(500);
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).toBe(editor);
+    viewport.width = 800;
+    viewport.resize(400);
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).toBe(editor);
+  });
+
+  it("trusts a restored viewport when fullscreen keyboard geometry remains stale", () => {
+    const viewport = new Viewport();
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: viewport,
+    });
+    const api = new KeyboardAPI();
+    const { editor, keyboard, visibility } = setup(api);
+    keyboard.show();
+    api.resize(300);
+    viewport.resize(480);
+    viewport.resize(800);
+    expect(api.boundingRect.height).toBe(300);
+    expect(visibility).toHaveBeenLastCalledWith(false);
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).not.toBe(editor);
+    expect(api.hide).toHaveBeenCalledOnce();
+  });
+
+  it("cancels pending dismissal when explicitly reopening the keyboard", () => {
+    const api = new KeyboardAPI();
+    const { editor, keyboard } = setup(api);
+    keyboard.show();
+    api.resize(300);
+    api.resize(0);
+    keyboard.show();
+    vi.advanceTimersByTime(200);
+    expect(document.activeElement).toBe(editor);
+    expect(api.hide).not.toHaveBeenCalled();
+    expect(api.show).toHaveBeenCalledTimes(2);
   });
 });

@@ -27,6 +27,7 @@ import {
 import {
   resolveRemoteTouchOptions,
   type LongPressAction,
+  type ThreeFingerTapAction,
   type TouchMode,
 } from "@/libs/domain/remote-control/touch-options";
 
@@ -36,6 +37,30 @@ export default function RemoteControlSettings() {
   const options = () =>
     resolveRemoteTouchOptions(appState.options.remoteTouch);
   const prefix = "setting.remote_control.";
+  const toggle = (
+    key:
+      | "tapToClick"
+      | "twoFingerRightClick"
+      | "twoFingerScroll"
+      | "naturalScroll",
+  ) => (
+    <Switch
+      class="flex w-full items-center justify-between gap-3"
+      checked={options()[key]}
+      onChange={(value) =>
+        setAppOptions("remoteTouch", key, value)
+      }
+      disabled={
+        key === "naturalScroll" &&
+        !options().twoFingerScroll
+      }
+    >
+      <SwitchLabel>{t(`${prefix}${key}`)}</SwitchLabel>
+      <SwitchControl>
+        <SwitchThumb />
+      </SwitchControl>
+    </Switch>
+  );
   return (
     <section
       class="settings-section"
@@ -109,66 +134,7 @@ export default function RemoteControlSettings() {
             <SliderThumb />
           </SliderTrack>
         </Slider>
-        <Slider
-          minValue={0.25}
-          maxValue={3}
-          step={0.05}
-          value={[options().scrollSpeed]}
-          disabled={!options().twoFingerScroll}
-          onChange={(value) =>
-            setAppOptions(
-              "remoteTouch",
-              "scrollSpeed",
-              value[0],
-            )
-          }
-          getValueLabel={({ values }) =>
-            `${values[0].toFixed(2)}×`
-          }
-          class="gap-2"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <SliderLabel>
-              {t(`${prefix}scroll_speed`)}
-            </SliderLabel>
-            <SliderValueLabel />
-          </div>
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
-        <For
-          each={
-            [
-              "tapToClick",
-              "twoFingerRightClick",
-              "twoFingerScroll",
-              "naturalScroll",
-            ] as const
-          }
-        >
-          {(key) => (
-            <Switch
-              class="flex w-full items-center justify-between gap-3"
-              checked={options()[key]}
-              onChange={(value) =>
-                setAppOptions("remoteTouch", key, value)
-              }
-              disabled={
-                key === "naturalScroll" &&
-                !options().twoFingerScroll
-              }
-            >
-              <SwitchLabel>
-                {t(`${prefix}${key}`)}
-              </SwitchLabel>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-          )}
-        </For>
+        {toggle("tapToClick")}
         <div class="flex flex-col gap-2">
           <Label id="remote-long-press">
             {t(`${prefix}long_press.title`)}
@@ -205,6 +171,86 @@ export default function RemoteControlSettings() {
             </SelectTrigger>
             <SelectContent />
           </Select>
+        </div>
+        <For
+          each={
+            [
+              "twoFingerRightClick",
+              "twoFingerScroll",
+              "naturalScroll",
+            ] as const
+          }
+        >
+          {toggle}
+        </For>
+        <Slider
+          minValue={0.25}
+          maxValue={3}
+          step={0.05}
+          value={[options().scrollSpeed]}
+          disabled={!options().twoFingerScroll}
+          onChange={(value) =>
+            setAppOptions(
+              "remoteTouch",
+              "scrollSpeed",
+              value[0],
+            )
+          }
+          getValueLabel={({ values }) =>
+            `${values[0].toFixed(2)}×`
+          }
+          class="gap-2"
+        >
+          <div class="flex w-full items-center justify-between gap-3">
+            <SliderLabel>
+              {t(`${prefix}scroll_speed`)}
+            </SliderLabel>
+            <SliderValueLabel />
+          </div>
+          <SliderTrack>
+            <SliderFill />
+            <SliderThumb />
+          </SliderTrack>
+        </Slider>
+        <div class="flex flex-col gap-2">
+          <Label id="remote-three-finger-tap">
+            {t(`${prefix}three_finger_tap.title`)}
+          </Label>
+          <Select<ThreeFingerTapAction>
+            modal
+            disallowEmptySelection
+            value={options().threeFingerTap}
+            onChange={(value) =>
+              value &&
+              setAppOptions(
+                "remoteTouch",
+                "threeFingerTap",
+                value,
+              )
+            }
+            options={["keyboard", "none"]}
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>
+                {t(
+                  `${prefix}three_finger_tap.${props.item.rawValue}`,
+                )}
+              </SelectItem>
+            )}
+          >
+            <SelectTrigger aria-labelledby="remote-three-finger-tap">
+              <SelectValue<ThreeFingerTapAction>>
+                {(state) =>
+                  t(
+                    `${prefix}three_finger_tap.${state.selectedOption()}`,
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
+          <p class="muted">
+            {t(`${prefix}three_finger_tap.description`)}
+          </p>
         </div>
       </Show>
       <p class="muted">{t(`${prefix}changes`)}</p>

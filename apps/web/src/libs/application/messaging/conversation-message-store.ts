@@ -12,6 +12,7 @@ import { deliveryStatus } from "./message-delivery";
 import { snapshotStoreMessage } from "./message-snapshot";
 
 export interface ConversationMessageStoreDependencies {
+  onStored?(message: StoreMessage): void;
   messages: StoreMessage[];
   conversations: Conversation[];
   initialize(): Promise<void>;
@@ -187,6 +188,14 @@ export class ConversationMessageStore {
           );
         }),
       );
+      try {
+        this.dependencies.onStored?.(snapshot);
+      } catch (error) {
+        console.warn(
+          "Message stored listener failed",
+          error,
+        );
+      }
     })();
     this.pendingMessages.set(message.id, {
       message: snapshot,

@@ -1,4 +1,8 @@
 import {
+  handleNotificationClick,
+  handleNotificationMessage,
+} from "./libs/platform/notification-worker";
+import {
   cleanupOutdatedCaches,
   createHandlerBoundToURL,
   precacheAndRoute,
@@ -9,6 +13,17 @@ import {
 } from "workbox-routing";
 
 declare let self: ServiceWorkerGlobalScope;
+
+self.addEventListener("notificationclick", (event) =>
+  event.waitUntil(
+    handleNotificationClick(event, self.clients),
+  ),
+);
+self.addEventListener("message", (event) =>
+  event.waitUntil(
+    handleNotificationMessage(event, self.registration),
+  ),
+);
 
 // @ts-ignore
 self.__WB_DISABLE_DEV_LOGS = true;

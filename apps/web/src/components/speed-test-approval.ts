@@ -1,14 +1,28 @@
 import { toast } from "solid-sonner";
+import { createSignal, type Accessor } from "solid-js";
 import { t } from "@/i18n";
 import { SPEED_TEST_APPROVAL_MS } from "@/libs/domain/speed-test-protocol";
-import type { ClientID } from "@/libs/domain/ids";
+import {
+  createUuid,
+  type ClientID,
+} from "@/libs/domain/ids";
 import {
   CLIENT_INFO_DIALOG_TAB_VISIBLE_EVENT,
   requestClientInfoDialog,
   type ClientInfoDialogTabVisibleDetail,
 } from "@/components/dialogs/client-info-dialog-events";
 
+export interface SpeedTestApprovalRequest {
+  readonly id: string;
+  readonly peerId: ClientID;
+  readonly name: string;
+  readonly expiresAt: number;
+  /** Respond only to this exact request, including when a peer requests again. */
+  respond(accepted: boolean): boolean;
+}
+
 export interface SpeedTestApprovalController {
+  pending: Accessor<SpeedTestApprovalRequest | undefined>;
   request: (
     peerId: ClientID,
     name: string,
@@ -20,11 +34,14 @@ export interface SpeedTestApprovalController {
 
 /**
  * One approval request is surfaced as a clickable toast entry point.
- * The toast actions and the peer speed-test UI settle the same promise.
+ * Toast, panel and system notification actions settle the same promise.
  */
 export function createSpeedTestApproval(): SpeedTestApprovalController {
+  const [pending, setPending] =
+    createSignal<SpeedTestApprovalRequest>();
   let current:
     | {
+        id: string;
         peerId: ClientID;
         finish: (accepted: boolean) => void;
       }
@@ -41,6 +58,8 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
     current?.finish(false);
 
     return new Promise((resolve) => {
+      const id = createUuid();
+      const expiresAt = Date.now() + SPEED_TEST_APPROVAL_MS;
       let settled = false;
       let requestToast: string | number | undefined;
       let ignoreRequestToastDismiss = false;
@@ -63,11 +82,18 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
         clearTimeout(timer);
         signal.removeEventListener("abort", onAbort);
         removeToastEntryListeners();
-        if (current?.peerId === peerId) current = undefined;
+        if (current?.id === id) {
+          current = undefined;
+          setPending(undefined);
+        }
         if (requestToast !== undefined)
           toast.dismiss(requestToast);
 
-        resolve(accepted && !signal.aborted);
+        resolve(
+          accepted &&
+            !signal.aborted &&
+            Date.now() < expiresAt,
+        );
       };
 
       const dismissRequestToast = () => {
@@ -92,7 +118,8 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
       const respondFromToast = (accepted: boolean) => {
         if (settled) return;
         ignoreRequestToastDismiss = true;
-        requestClientInfoDialog(peerId, "speed");
+        if (accepted)
+          requestClientInfoDialog(peerId, "speed");
         finish(accepted);
       };
 
@@ -149,7 +176,7 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
         SPEED_TEST_APPROVAL_MS,
       );
 
-      current = { peerId, finish };
+      current = { id, peerId, finish };
       signal.addEventListener("abort", onAbort, {
         once: true,
       });
@@ -180,6 +207,19 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
           onAutoClose: () => finish(false),
         },
       );
+      setPending({
+        id,
+        peerId,
+        name,
+        expiresAt,
+        respond(accepted) {
+          if (settled || current?.id !== id) return false;
+          const live =
+            !signal.aborted && Date.now() < expiresAt;
+          finish(accepted && live);
+          return live;
+        },
+      });
     });
   };
 
@@ -187,12 +227,13 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
     peerId: ClientID,
     accepted: boolean,
   ): boolean => {
-    if (!current || current.peerId !== peerId) return false;
-    current.finish(accepted);
-    return true;
+    const request = pending();
+    if (!request || request.peerId !== peerId) return false;
+    return request.respond(accepted);
   };
 
   return {
+    pending,
     request,
     accept: (peerId) => respond(peerId, true),
     decline: (peerId) => respond(peerId, false),

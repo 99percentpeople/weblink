@@ -2,9 +2,18 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "notifications_capabilities",
+            "notifications_request_permission",
+            "notifications_watch",
+            "notifications_unwatch",
+            "notifications_show",
+            "notifications_dismiss",
             "application_configure",
+            "application_show",
             "application_autostart_enabled",
             "application_autostart_set",
+            "application_startup_behavior",
+            "application_startup_set_behavior",
             "pip_watch",
             "pip_unwatch",
             "pip_configure",

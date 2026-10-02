@@ -3,6 +3,7 @@ export type LongPressAction =
   | "drag"
   | "right-click"
   | "none";
+export type ThreeFingerTapAction = "keyboard" | "none";
 export interface RemoteTouchOptions {
   mode: TouchMode;
   pointerSpeed: number;
@@ -12,6 +13,7 @@ export interface RemoteTouchOptions {
   twoFingerScroll: boolean;
   naturalScroll: boolean;
   longPress: LongPressAction;
+  threeFingerTap: ThreeFingerTapAction;
 }
 export const defaultRemoteTouchOptions: Readonly<RemoteTouchOptions> =
   {
@@ -23,6 +25,7 @@ export const defaultRemoteTouchOptions: Readonly<RemoteTouchOptions> =
     twoFingerScroll: true,
     naturalScroll: true,
     longPress: "drag",
+    threeFingerTap: "keyboard",
   };
 /** Stored preferences are untrusted and older clients may omit new fields. */
 export function resolveRemoteTouchOptions(
@@ -57,6 +60,8 @@ export function resolveRemoteTouchOptions(
     twoFingerRightClick: boolean("twoFingerRightClick"),
     twoFingerScroll: boolean("twoFingerScroll"),
     naturalScroll: boolean("naturalScroll"),
+    threeFingerTap:
+      v.threeFingerTap === "none" ? "none" : "keyboard",
     longPress:
       v.longPress === "right-click" ||
       v.longPress === "none"

@@ -351,9 +351,11 @@ export function createAppState(
     approve: (peerId, signal) =>
       speedTestApproval.request(
         peerId,
-        appState.message.clients.find(
-          (client) => client.clientId === peerId,
-        )?.name ?? peerId,
+        appState.session.clientViewData[peerId]?.name ??
+          appState.message.clients.find(
+            (client) => client.clientId === peerId,
+          )?.name ??
+          peerId,
         signal,
       ),
   });
@@ -791,6 +793,7 @@ export function createAppState(
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
     speedTestState,
+    speedTestApproval: speedTestApproval.pending,
     startSpeedTest: (target) => speedTests.start(target),
     cancelSpeedTest: (target) => speedTests.cancel(target),
     approveSpeedTest: (target) => {

@@ -316,6 +316,11 @@ pub fn application_configure(
     Ok(())
 }
 
+#[tauri::command]
+pub fn application_show(app: tauri::AppHandle) {
+    show(&app);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

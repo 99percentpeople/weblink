@@ -44,14 +44,6 @@
 .meeting-icon-button svg {
   @apply size-4.25;
 }
-.meeting-panel-toggle {
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-.meeting-panel-toggle[aria-expanded="true"] {
-  @apply bg-accent text-primary;
-}
 .meeting-member-count {
   @apply gap-1.75 w-auto px-2 py-0 text-[12px];
 }

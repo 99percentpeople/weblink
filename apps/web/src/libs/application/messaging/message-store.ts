@@ -44,6 +44,17 @@ import {
 } from "./message-projection";
 
 export class MessageStores {
+  private readonly storedListeners = new Set<
+    (message: StoreMessage) => void
+  >();
+  onMessageStored(
+    listener: (message: StoreMessage) => void,
+  ): () => void {
+    this.storedListeners.add(listener);
+    return () => {
+      this.storedListeners.delete(listener);
+    };
+  }
   readonly messages: StoreMessage[] =
     appState.message.messages;
   readonly clients: Client[] = appState.message.clients;
@@ -108,6 +119,18 @@ export class MessageStores {
     this.durableMessages = new ConversationMessageStore(
       repository,
       {
+        onStored: (message) => {
+          for (const listener of this.storedListeners) {
+            try {
+              listener(message);
+            } catch (error) {
+              console.warn(
+                "Message notification failed",
+                error,
+              );
+            }
+          }
+        },
         conversations: this.conversations,
         messages: this.messages,
         initialize: () => this.initialize(),

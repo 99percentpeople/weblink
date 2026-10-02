@@ -609,20 +609,3 @@ it("keeps screen and window capture backend preferences independent", async () =
     screen.queryByRole("option", { name: "DXGI" }),
   ).toBeNull();
 });
-
-it("defaults stream statistics off and updates the preference without replacing settings", async () => {
-  render(() => <MeetingSettings />);
-  const toggle = screen.getByRole("switch", {
-    name: "setting.meeting_settings.stream.statistics.title",
-  });
-  expect(appState.options.showStreamStats).toBe(false);
-  fireEvent.click(toggle);
-  expect(appState.options.showStreamStats).toBe(true);
-  expect(
-    screen.getByRole("switch", {
-      name: "setting.meeting_settings.stream.statistics.title",
-    }),
-  ).toBe(toggle);
-  fireEvent.click(toggle);
-  expect(appState.options.showStreamStats).toBe(false);
-});

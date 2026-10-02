@@ -1,3 +1,4 @@
+import { resolveNotificationOptions } from "@/libs/domain/notification-options";
 import {
   setClientConfig,
   setRoomConfig,
@@ -95,9 +96,11 @@ export function initializeAppOptions() {
         raw,
       ) as Partial<AppOption> & {
         channelsNumber?: unknown;
+        showStreamStats?: unknown;
       };
       const {
         channelsNumber: _legacyChannelsNumber,
+        showStreamStats: _removedStreamStats,
         ...parsed
       } = parsedValue;
       const legacyBufferedAmount =
@@ -108,6 +111,9 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        notifications: resolveNotificationOptions(
+          parsed.notifications,
+        ),
         application: resolveApplicationOptions(
           parsed.application,
           legacyPip,

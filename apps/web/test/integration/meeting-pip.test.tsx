@@ -31,6 +31,8 @@ import {
 import { MeetingSessionProvider } from "../support/meeting-session-provider";
 import { useMeetingSession } from "@/libs/state/meeting-session-context";
 import { platform } from "@/libs/platform/runtime";
+import { useMeetingMedia } from "@/libs/state/meeting-media-context";
+import { MeetingControls } from "@/routes/home/components/meeting-controls";
 import type {
   NativePictureInPicture,
   NativePipOptions,
@@ -338,7 +340,7 @@ afterEach(() => {
 });
 
 describe("PiP room re-entry", () => {
-  function nativeWindow() {
+  function nativeWindow(withVideo = true) {
     let options: NativePipOptions = {
       eligible: false,
       automatic: false,
@@ -375,8 +377,20 @@ describe("PiP room re-entry", () => {
     const capture = sharedStream(
       new FakeTrack(true, "local-screen"),
     );
-    setAppState("session", "localStream", capture);
-    const view = setup();
+    setAppState(
+      "session",
+      "localStream",
+      withVideo ? capture : null,
+    );
+    if (!withVideo)
+      setAppState(
+        "session",
+        "clientViewData",
+        "bob",
+        "stream",
+        undefined,
+      );
+    const view = setup(undefined, withVideo);
     const selectLocal = () =>
       session.setPinnedId(
         session.sources().find((source) => source.local)!
@@ -387,6 +401,107 @@ describe("PiP room re-entry", () => {
     );
     return { ...view, native, api, selectLocal, capture };
   }
+
+  function toolbar() {
+    return render(() => (
+      <MeetingControls
+        media={useMeetingMedia().media}
+        pip={session.controls}
+        compact={session.nativePip?.active()}
+        playingAudio={false}
+        hasAudio={false}
+        onToggleAudio={() => {}}
+        spotlight={false}
+        joined
+        onLeave={session.leave}
+      />
+    ));
+  }
+
+  it.each([false, true])(
+    "keeps native toolbar entry available in an unpinned grid (video=%s)",
+    async (withVideo) => {
+      const f = nativeWindow(withVideo);
+      session.setPinnedId(null);
+      expect(session.sources().length).toBeGreaterThan(1);
+      expect(session.selected()).toBeUndefined();
+      const ui = toolbar();
+      session.controls.setAutomatic(true);
+      await waitFor(() =>
+        expect(f.native.configure).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            eligible: true,
+            automatic: withVideo,
+          }),
+        ),
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        fireEvent.click(
+          ui.getByRole("button", {
+            name: "common.action.picture_in_picture",
+          }),
+        );
+        await waitFor(() =>
+          expect(session.pip.active()).toBe(true),
+        );
+        expect(session.selected()).toBeUndefined();
+        fireEvent.click(
+          ui.getByRole("button", {
+            name: "meeting.pip_return",
+          }),
+        );
+        await waitFor(() =>
+          expect(session.pip.active()).toBe(false),
+        );
+        await waitFor(() =>
+          expect(session.pip.busy()).toBe(false),
+        );
+      }
+      expect(f.native.enter).toHaveBeenCalledTimes(2);
+      expect(f.requestWindow).not.toHaveBeenCalled();
+      expect(fixture.clear).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps native entry visible across participant and video changes without bypassing room conflicts", async () => {
+    const f = nativeWindow(false);
+    const ui = toolbar();
+    const button = () =>
+      ui.getByRole("button", {
+        name: "common.action.picture_in_picture",
+      });
+    expect(button()).toBeInTheDocument();
+    // A single avatar used to enable PiP, while another participant hid it.
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      undefined!,
+    );
+    expect(button()).toBeInTheDocument();
+    setAppState("session", "clientViewData", "bob", {
+      clientId: "bob",
+      name: "Bob",
+      createdAt: Date.now(),
+      avatar: null,
+      onlineStatus: "online",
+      messageChannel: true,
+    });
+    expect(session.selected()).toBeUndefined();
+    expect(button()).toBeInTheDocument();
+    setAppState("session", "localStream", f.capture);
+    expect(button()).toBeInTheDocument();
+    setAppState("session", "localStream", null);
+    expect(button()).toBeInTheDocument();
+    setRoomConflict(true);
+    fireEvent.click(button());
+    await waitFor(() =>
+      expect(f.native.configure).toHaveBeenLastCalledWith(
+        expect.objectContaining({ eligible: false }),
+      ),
+    );
+    expect(f.native.enter).not.toHaveBeenCalled();
+  });
 
   it("rearms native PiP after leaving and rejoining on the same page", async () => {
     const f = nativeWindow();
