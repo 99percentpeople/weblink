@@ -391,7 +391,13 @@ async function main() {
       });
     }
     await vite?.close();
-    await rm(profile, { recursive: true, force: true });
+    // Chromium children can still finish profile writes after the main process exits.
+    await rm(profile, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 }
 
