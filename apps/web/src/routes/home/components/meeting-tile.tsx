@@ -176,7 +176,8 @@ export function MeetingTile(props: {
           <RemoteControlOverlay
             keyboard={keyboardInput}
             enabled={
-              props.pinned &&
+              (props.pinned ||
+                fullscreen.isThisElementFullscreen()) &&
               !props.local &&
               !props.compact &&
               playbackActive()

@@ -809,11 +809,24 @@ The existing video node, audio routing and statistics remain owned by the player
 ### Pointer capture and keyboard input
 
 In Local cursor mode, an approved controller's mouse over the video content hides
-the cursor composed into the shared screen video. Leaving the video, touch input,
-loss of focus, capture mode, input suspension and ending control restore it. This
+the cursor composed into the shared screen video. Captured mouse drags keep it
+hidden until all buttons are released, including outside the video, where input
+coordinates clamp to its nearest edge. Fullscreen and viewport changes recheck a
+stationary pointer after layout; fullscreen remote tiles accept input even when
+not pinned. Leaving the video without dragging, touch input, window focus loss,
+capture mode, input suspension and ending control restore the cursor. This
 applies to the shared capture (including its preview and other viewers), not the
-host's physical cursor. DXGI recomposes retained frames; supported WGC display
-sessions toggle cursor capture without restarting the stream. The optional
+host's physical cursor. DXGI can include the pointer in the desktop pixels during
+window drags. With the capture backend set to Auto, its first cursor-hide request
+starts a WGC display capture with
+cursor capture disabled before the first frame. The handover preserves the capture
+ID, media, preview and peer connections; status reports WGC as the active backend.
+WGC remains active until that share ends, and subsequent cursor changes only toggle
+its capture property. Failed handover leaves the original capture running. Explicit
+DXGI never switches to WGC: it hides only the separate pointer, so a pointer already
+embedded in the desktop image can remain visible. Explicit WGC stays on WGC and
+uses its cursor setting directly. Backend selection is retained per share when it
+starts; settings changes apply to subsequent shares. The optional
 `cursorVisibility` capability keeps older hosts compatible; cursor updates require
 the current grant, media generation, geometry and active input epoch.
 

@@ -238,7 +238,9 @@ impl Session for DxgiSession {
         true
     }
     fn set_cursor_visible(&self, _: bool) -> Result<()> {
-        // DXGI supplies a separate cursor; MediaSession controls its composition.
+        // MediaSession hides the separate pointer. Explicit DXGI stays on this
+        // path even if Windows embeds a pointer in the texture; only Auto may
+        // replace this session with WGC to exclude those pixels as well.
         Ok(())
     }
     fn is_finished(&self) -> bool {

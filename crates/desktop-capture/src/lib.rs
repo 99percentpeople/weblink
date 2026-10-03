@@ -8,6 +8,7 @@ use std::{
 };
 
 mod backend;
+mod cursor;
 pub mod geometry;
 pub mod media;
 #[cfg(windows)]
@@ -128,6 +129,8 @@ struct Frames {
     height: u32,
     last: Option<Instant>,
     closed: bool,
+    /// Apply before capture starts, so queued startup frames cannot contain a cursor.
+    cursor_hidden: bool,
     media: Option<Arc<media::MediaSession>>,
     #[cfg(windows)]
     sink: Option<Arc<dyn surface::FrameSink>>,
@@ -143,6 +146,10 @@ trait Session {
     }
     fn set_cursor_visible(&self, _: bool) -> Result<()> {
         Err("Cursor visibility is unavailable for this capture".into())
+    }
+    /// Publish a retained startup frame after attaching a replacement session's sink.
+    fn flush_pending_frame(&self) -> Result<()> {
+        Ok(())
     }
     /// Called on the service worker, never while holding the frame statistics lock.
     fn stop(self: Box<Self>) -> Result<()>;
@@ -174,6 +181,8 @@ trait Backend {
 
 struct Active {
     status: CaptureStatus,
+    /// Preserve the user's choice separately from the currently running backend.
+    requested_backend: CaptureMethod,
     session: Box<dyn Session>,
     frames: Arc<Mutex<Frames>>,
     started: Instant,
@@ -299,6 +308,7 @@ impl<B: Backend> Engine<B> {
             id,
             Active {
                 status: status.clone(),
+                requested_backend: options.backend,
                 session,
                 frames,
                 started,
@@ -473,20 +483,6 @@ impl<B: Backend> Engine<B> {
                     .clone()
             })
             .ok_or_else(|| "Native share is no longer active".to_string())
-    }
-
-    fn set_cursor_visible(&self, id: &str, visible: bool) -> Result<()> {
-        let active = self.active.get(id).ok_or("Capture stopped")?;
-        active.session.set_cursor_visible(visible)?;
-        if let Some(media) = &active
-            .frames
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .media
-        {
-            media.set_cursor_visible(visible);
-        }
-        Ok(())
     }
 
     fn reply_started(

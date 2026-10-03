@@ -55,6 +55,12 @@ export function RemoteControlOverlay(props: {
   let keyboard: RemoteKeyboard | undefined;
   const [focused, setFocused] = createSignal(false);
   const [mouseInside, setMouseInside] = createSignal(false);
+  const [mouseDragging, setMouseDragging] =
+    createSignal(false);
+  let mousePosition:
+    | Pick<MouseEvent, "clientX" | "clientY">
+    | undefined;
+  let windowActive = true;
   const [systemKeyboard, setSystemKeyboard] =
     createSignal(false);
   createEffect(() => {
@@ -82,7 +88,7 @@ export function RemoteControlOverlay(props: {
         props.enabled &&
         state() === "active" &&
         !captureMode() &&
-        mouseInside();
+        (mouseInside() || mouseDragging());
       // Inactive mirrors of this stream must not restore another surface's cursor.
       if (hide || hiding) c.setCursorVisible(!hide);
       hiding = hide;
@@ -121,6 +127,7 @@ export function RemoteControlOverlay(props: {
   const resetInput = () => {
     clearTouches();
     held.clear();
+    setMouseDragging(false);
     keyboard?.clear();
     control()?.resetInput();
   };
@@ -144,13 +151,14 @@ export function RemoteControlOverlay(props: {
     state() === "active" &&
     (!captureMode() || captured());
   const stopInput = () => {
-    setMouseInside(false);
     captureClick = false;
     const wasCaptured = capture.active();
     capture.release();
     if (!wasCaptured) resetInput();
   };
   const releaseControls = () => {
+    mousePosition = undefined;
+    setMouseInside(false);
     setFocused(false);
     const element = surface();
     if (
@@ -288,6 +296,7 @@ export function RemoteControlOverlay(props: {
         if (c.state() !== "active") {
           capture.release();
           held.clear();
+          setMouseDragging(false);
           keyboard?.clear();
           clearTouches();
         }
@@ -297,7 +306,9 @@ export function RemoteControlOverlay(props: {
     ownerWindow.addEventListener(
       "blur",
       () => {
+        windowActive = false;
         setFocused(false);
+        setMouseInside(false);
         stopInput();
       },
       {
@@ -307,8 +318,10 @@ export function RemoteControlOverlay(props: {
     ownerWindow.addEventListener(
       "focus",
       () => {
+        windowActive = true;
         if (ownerDocument.activeElement === surface())
           setFocused(true);
+        refreshMouse();
       },
       { signal: life.signal },
     );
@@ -317,6 +330,8 @@ export function RemoteControlOverlay(props: {
       () => {
         if (ownerDocument.hidden) {
           setFocused(false);
+          mousePosition = undefined;
+          setMouseInside(false);
           stopInput();
         }
       },
@@ -332,7 +347,10 @@ export function RemoteControlOverlay(props: {
   createEffect(() => {
     if (!interactive()) releaseControls();
   });
-  const point = (event: MouseEvent, clamp = false) => {
+  const point = (
+    event: Pick<MouseEvent, "clientX" | "clientY">,
+    clamp = false,
+  ) => {
     const v = video.videoRef();
     if (!v) return;
     return videoPosition(
@@ -346,10 +364,69 @@ export function RemoteControlOverlay(props: {
   };
   const updateMouse = (event: PointerEvent) => {
     if (!interactive()) return;
+    mousePosition =
+      event.pointerType === "mouse"
+        ? { clientX: event.clientX, clientY: event.clientY }
+        : undefined;
     setMouseInside(
-      event.pointerType === "mouse" && !!point(event),
+      windowActive &&
+        event.pointerType === "mouse" &&
+        !!point(event),
     );
   };
+  const refreshMouse = () => {
+    const element = surface();
+    if (!element || !mousePosition) return;
+    const doc = element.ownerDocument;
+    const hit = doc.elementFromPoint(
+      mousePosition.clientX,
+      mousePosition.clientY,
+    );
+    setMouseInside(
+      windowActive &&
+        !doc.hidden &&
+        !!hit &&
+        element.contains(hit) &&
+        !!point(mousePosition),
+    );
+  };
+  createEffect(() => {
+    const element = surface();
+    if (!element || !props.enabled) return;
+    const doc = element.ownerDocument;
+    const win = doc.defaultView ?? window;
+    const life = new AbortController();
+    let frame = 0;
+    const refresh = () => {
+      win.cancelAnimationFrame(frame);
+      frame = win.requestAnimationFrame(refreshMouse);
+    };
+    // Fullscreen can move the surface under a stationary pointer. Track toolbar
+    // movement too, then hit-test after the browser has applied the new layout.
+    doc.addEventListener(
+      "pointermove",
+      (event) => {
+        mousePosition =
+          event.pointerType === "mouse"
+            ? {
+                clientX: event.clientX,
+                clientY: event.clientY,
+              }
+            : undefined;
+      },
+      { capture: true, signal: life.signal },
+    );
+    doc.addEventListener("fullscreenchange", refresh, {
+      signal: life.signal,
+    });
+    win.addEventListener("resize", refresh, {
+      signal: life.signal,
+    });
+    onCleanup(() => {
+      win.cancelAnimationFrame(frame);
+      life.abort();
+    });
+  });
   const touch = (
     event: PointerEvent,
     phase: "down" | "move" | "up" | "cancel",
@@ -524,7 +601,7 @@ export function RemoteControlOverlay(props: {
       event.button > 4
     )
       return;
-    const p = point(event);
+    const p = point(event, !down && held.size > 0);
     if (!p) {
       resetInput();
       return;
@@ -535,6 +612,8 @@ export function RemoteControlOverlay(props: {
       held.add(event.button);
       surface()?.setPointerCapture(event.pointerId);
     } else held.delete(event.button);
+    if (!down) updateMouse(event);
+    setMouseDragging(held.size > 0);
     control()?.input({
       type: "button",
       ...p,
@@ -747,13 +826,12 @@ export function RemoteControlOverlay(props: {
             fingers.size
           )
             return;
-          const p = point(e);
+          const p = point(e, held.size > 0);
           if (p) control()?.move(p);
           else if (held.size) resetInput();
         }}
         onPointerLeave={() => {
           setMouseInside(false);
-          if (!captured() && held.size) resetInput();
         }}
         onPointerEnter={updateMouse}
         onWheel={(e) => {

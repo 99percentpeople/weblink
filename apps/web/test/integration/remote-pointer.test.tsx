@@ -12,6 +12,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@solidjs/testing-library";
 import { createSignal, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
@@ -116,6 +117,10 @@ beforeEach(() => {
     get: () => locked,
   });
   Object.assign(document, { exitPointerLock: exit });
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn(() => screen.queryByRole("application")),
+  });
   Object.assign(HTMLElement.prototype, {
     requestPointerLock: request,
     setPointerCapture() {},
@@ -132,6 +137,7 @@ afterEach(() => {
   Reflect.deleteProperty(document, "pointerLockElement");
   Reflect.deleteProperty(document, "exitPointerLock");
   Reflect.deleteProperty(document, "hidden");
+  Reflect.deleteProperty(document, "elementFromPoint");
   Reflect.deleteProperty(
     HTMLElement.prototype,
     "requestPointerLock",
@@ -420,6 +426,128 @@ it("keeps the host cursor visible before, during and after pointer capture", () 
       ([visible]: boolean[]) => visible,
     ),
   ).toBe(true);
+});
+it("keeps the remote cursor hidden and the button held when dragging beyond the video", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("down");
+  fixture.control.resetInput.mockClear();
+  const drag = (phase: string) => {
+    const event = new MouseEvent(`pointer${phase}`, {
+      bubbles: true,
+      cancelable: true,
+      clientX: 250,
+      clientY: 20,
+      button: 0,
+    });
+    Object.assign(event, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+    fireEvent(surface(), event);
+  };
+  drag("move");
+  fireEvent.pointerLeave(surface());
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  expect(fixture.control.move).toHaveBeenLastCalledWith({
+    x: 1,
+    y: 0,
+  });
+  expect(fixture.control.resetInput).not.toHaveBeenCalled();
+  drag("up");
+  expect(fixture.control.input).toHaveBeenLastCalledWith({
+    type: "button",
+    x: 1,
+    y: 0,
+    button: 0,
+    down: false,
+  });
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+  expect(fixture.control.resetInput).not.toHaveBeenCalled();
+});
+it("does not flash the remote cursor when a captured drag ends back inside the video", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("down");
+  fireEvent.pointerLeave(surface());
+  fixture.control.setCursorVisible.mockClear();
+  mouse("up");
+  expect(
+    fixture.control.setCursorVisible.mock.calls.every(
+      ([visible]: boolean[]) => !visible,
+    ),
+  ).toBe(true);
+  fireEvent.pointerLeave(surface());
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+});
+it("restores the remote cursor if a drag loses pointer capture outside the video", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("down");
+  fireEvent.pointerLeave(surface());
+  fixture.control.resetInput.mockClear();
+  fireEvent.lostPointerCapture(surface(), { pointerId: 1 });
+  expect(fixture.control.resetInput).toHaveBeenCalledOnce();
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+});
+it.each(["fullscreenchange", "resize"])(
+  "rechecks a stationary mouse after %s changes the control surface",
+  async (event) => {
+    render(() => <RemoteControlOverlay enabled />);
+    mouse("move");
+    fireEvent.pointerLeave(surface());
+    expect(
+      fixture.control.setCursorVisible,
+    ).toHaveBeenLastCalledWith(true);
+    const toolbar = document.createElement("button");
+    document.body.append(toolbar);
+    const movement = new MouseEvent("pointermove", {
+      bubbles: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    Object.assign(movement, { pointerType: "mouse" });
+    fireEvent(toolbar, movement);
+    fireEvent(
+      event === "resize" ? window : document,
+      new Event(event),
+    );
+    await waitFor(() =>
+      expect(
+        fixture.control.setCursorVisible,
+      ).toHaveBeenLastCalledWith(false),
+    );
+    vi.mocked(document.elementFromPoint).mockReturnValue(
+      toolbar,
+    );
+    fireEvent(
+      event === "resize" ? window : document,
+      new Event(event),
+    );
+    await waitFor(() =>
+      expect(
+        fixture.control.setCursorVisible,
+      ).toHaveBeenLastCalledWith(true),
+    );
+    toolbar.remove();
+  },
+);
+it("does not rehide the cursor when a pending fullscreen refresh runs after window blur", async () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("move");
+  fireEvent(document, new Event("fullscreenchange"));
+  fireEvent(window, new Event("blur"));
+  await waitFor(() =>
+    expect(document.elementFromPoint).toHaveBeenCalled(),
+  );
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
 });
 it("waits for a successful capture before enabling pointer and physical keyboard input", () => {
   setAppState(

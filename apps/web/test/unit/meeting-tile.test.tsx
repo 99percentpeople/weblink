@@ -536,6 +536,27 @@ describe("native PiP on a meeting tile", () => {
   });
 });
 
+it("enables remote input for an unpinned fullscreen tile and releases it on exit", () => {
+  class Control extends EventTarget {
+    state = () => "active";
+    supportsText = () => false;
+    supportsKeyboard = () => false;
+    resetInput = vi.fn();
+    setCursorVisible = vi.fn();
+  }
+  const control = (fixture.control = new Control());
+  const view = setup(false);
+  view.setLocal(false);
+  expect(screen.queryByRole("application")).toBeNull();
+  activateFullscreen(view.display);
+  expect(screen.getByRole("application")).toBeDefined();
+  expect(view.pinned()).toBe(false);
+  control.resetInput.mockClear();
+  activateFullscreen(null);
+  expect(screen.queryByRole("application")).toBeNull();
+  expect(control.resetInput).toHaveBeenCalled();
+});
+
 it("keeps non-fullscreen keyboard input alive when IME collapses the meeting layout", () => {
   class Control extends EventTarget {
     state = () => "active";

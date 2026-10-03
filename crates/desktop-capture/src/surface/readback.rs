@@ -26,6 +26,16 @@ pub(crate) struct Readback {
     pub composed: Vec<u8>,
 }
 impl Readback {
+    pub(crate) fn frame(&self) -> Option<TextureFrame<'_>> {
+        Some(TextureFrame {
+            device: self.device.as_ref()?,
+            context: self.context.as_ref()?,
+            texture: self.texture.as_ref()?,
+            rotation: self.rotation,
+            cursor: self.cursor.as_ref(),
+        })
+    }
+
     pub fn copy(&mut self, frame: &TextureFrame<'_>) -> Result<()> {
         self.copy_at(frame, std::time::Instant::now())
     }

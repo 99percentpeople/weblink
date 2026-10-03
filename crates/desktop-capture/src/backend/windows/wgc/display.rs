@@ -1,6 +1,6 @@
 //! Display WGC retains its session so cursor capture can change without restarting video.
 use crate::{
-    surface::{Rotation, TextureFrame},
+    surface::{readback::Readback, Rotation, TextureFrame},
     Frames, Result, Session,
 };
 use std::sync::{Arc, Mutex};
@@ -55,6 +55,11 @@ pub(in super::super) fn start(
     let session = pool
         .CreateCaptureSession(&item)
         .map_err(|e| e.to_string())?;
+    let cursor_hidden = frames
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cursor_hidden;
+    let pending = Arc::new(Mutex::new(cursor_hidden.then(Readback::default)));
     let mut capture = DisplaySession {
         pool,
         session,
@@ -62,7 +67,14 @@ pub(in super::super) fn start(
         frames: frames.clone(),
         arrived: None,
         closed: None,
+        pending: pending.clone(),
     };
+    // Configure exclusion before StartCapture: changing it afterwards can leave
+    // a cursor in frames that were already queued by the compositor.
+    capture
+        .session
+        .SetIsCursorCaptureEnabled(!cursor_hidden)
+        .map_err(|e| e.to_string())?;
     if super::borderless_capture(std::time::Duration::from_secs(30))
         .is_ok_and(|setting| setting == DrawBorderSettings::WithoutBorder)
     {
@@ -123,16 +135,30 @@ pub(in super::super) fn start(
                             surface.cast().map_err(|e| e.to_string())?;
                         let texture: ID3D11Texture2D =
                             unsafe { access.GetInterface() }.map_err(|e| e.to_string())?;
-                        Frames::deliver(
-                            &callback_frames,
-                            TextureFrame {
-                                device: &device,
-                                context: &context,
-                                texture: &texture,
-                                rotation: Rotation::Identity,
-                                cursor: None,
-                            },
-                        )?;
+                        let texture = TextureFrame {
+                            device: &device,
+                            context: &context,
+                            texture: &texture,
+                            rotation: Rotation::Identity,
+                            cursor: None,
+                        };
+                        // Retain one startup GPU frame until DXGI is retired and
+                        // the sink attaches, even if the desktop stays static.
+                        // Serialize replay with delivery so an older cached frame
+                        // cannot overwrite a newer live frame.
+                        let mut pending = pending.lock().unwrap_or_else(|e| e.into_inner());
+                        if callback_frames
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .sink
+                            .is_some()
+                        {
+                            *pending = None;
+                        } else if let Some(retained) = pending.as_mut() {
+                            retained.copy(&texture)?;
+                        }
+                        Frames::deliver(&callback_frames, texture)?;
+                        drop(pending);
                         if next_size != *current_size {
                             let direct3d =
                                 create_direct3d_device(&device).map_err(|e| e.to_string())?;
@@ -171,6 +197,7 @@ struct DisplaySession {
     frames: Arc<Mutex<Frames>>,
     arrived: Option<i64>,
     closed: Option<i64>,
+    pending: Arc<Mutex<Option<Readback>>>,
 }
 impl Session for DisplaySession {
     fn is_finished(&self) -> bool {
@@ -183,6 +210,21 @@ impl Session for DisplaySession {
         self.session
             .SetIsCursorCaptureEnabled(visible)
             .map_err(|e| e.to_string())
+    }
+    fn flush_pending_frame(&self) -> Result<()> {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let sink = self
+            .frames
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sink
+            .clone();
+        if let (Some(retained), Some(sink)) = (pending.take(), sink) {
+            if let Some(frame) = retained.frame() {
+                sink.frame(frame)?;
+            }
+        }
+        Ok(())
     }
     fn stop(self: Box<Self>) -> Result<()> {
         Ok(())
@@ -205,6 +247,44 @@ impl Drop for DisplaySession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "Requires an unlocked interactive Windows desktop; captures only in memory"]
+    fn wgc_hidden_startup_replays_a_retained_frame_when_the_sink_attaches() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct Sink(AtomicUsize);
+        impl crate::surface::FrameSink for Sink {
+            fn frame(&self, frame: TextureFrame<'_>) -> Result<()> {
+                assert!(frame.cursor.is_none());
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        let _runtime = crate::backend::NativeBackend::new();
+        let frames = Arc::new(Mutex::new(Frames {
+            cursor_hidden: true,
+            ..Default::default()
+        }));
+        let capture = start(Monitor::primary().unwrap(), frames.clone()).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while frames.lock().unwrap().count == 0 {
+            assert!(!capture.is_finished());
+            assert!(
+                std::time::Instant::now() < deadline,
+                "No hidden WGC frame arrived"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let sink = Arc::new(Sink(AtomicUsize::new(0)));
+        frames.lock().unwrap().sink = Some(sink.clone());
+        capture.flush_pending_frame().unwrap();
+        assert!(
+            sink.0.load(Ordering::SeqCst) > 0,
+            "Initial static frame was lost"
+        );
+        capture.stop().unwrap();
+        assert!(frames.lock().unwrap().closed);
+    }
 
     #[test]
     #[ignore = "Requires an unlocked interactive Windows desktop; captures only in memory"]
