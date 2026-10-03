@@ -543,6 +543,7 @@ it("keeps non-fullscreen keyboard input alive when IME collapses the meeting lay
     supportsKeyboard = () => true;
     input = vi.fn(() => true);
     resetInput = vi.fn();
+    setCursorVisible = vi.fn();
     cancel = vi.fn();
   }
   fixture.control = new Control();
@@ -591,6 +592,7 @@ it("keeps one remote control action across request, cancellation, active control
     request = vi.fn(() => this.update("requesting"));
     cancel = vi.fn(() => this.update("viewing"));
     resetInput = vi.fn();
+    setCursorVisible = vi.fn();
     supportsKeyboard = () => false;
     supportsText = () => false;
   }

@@ -82,6 +82,7 @@ function setup(fullscreen = false, virtualKeyboard = true) {
     input: vi.fn(() => true),
     cancel: vi.fn(),
     resetInput: vi.fn(),
+    setCursorVisible: vi.fn(),
   } as unknown as RemotePointer;
   const action = vi.fn();
   const [host, setHost] = createSignal<HTMLDivElement>();

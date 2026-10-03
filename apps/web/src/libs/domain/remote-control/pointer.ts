@@ -87,6 +87,30 @@ export function videoPosition(
   return { x: px, y: py };
 }
 export class RemotePointer extends EventTarget {
+  private cursorVisibilityAvailable = false;
+  private cursorVisible = true;
+  /** The host owns cursor composition; old hosts keep their existing behavior. */
+  setCursorVisible(visible: boolean): void {
+    const state = this.session?.state;
+    if (
+      !this.cursorVisibilityAvailable ||
+      !this.active ||
+      state?.type !== "granted" ||
+      this.cursorVisible === visible
+    )
+      return;
+    if (
+      this.send({
+        type: "cursor",
+        grantId: state.grantId,
+        generation: this.generation,
+        geometryRevision: this.target!.geometryRevision,
+        inputEpoch: this.epoch,
+        visible,
+      })
+    )
+      this.cursorVisible = visible;
+  }
   private textAvailable = false;
   supportsText(): boolean {
     return this.textAvailable;
@@ -286,6 +310,8 @@ export class RemotePointer extends EventTarget {
       this.touchAvailable =
         v.touchContacts === MAX_TOUCH_CONTACTS;
       this.relativeAvailable = v.relativePointer === true;
+      this.cursorVisibilityAvailable =
+        v.cursorVisibility === true;
       this.persistent = v.persistentControl === true;
       this.panAvailable = v.touchpadPan === true;
       this.generation = v.generation;
@@ -402,6 +428,7 @@ export class RemotePointer extends EventTarget {
     this.suspend();
   }
   private suspend() {
+    this.cursorVisible = true;
     this.active = false;
     this.activationPending = false;
     this.epoch = undefined;

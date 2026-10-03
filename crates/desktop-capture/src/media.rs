@@ -275,6 +275,7 @@ pub use windows::MediaSession;
 pub struct MediaSession;
 #[cfg(not(windows))]
 impl MediaSession {
+    pub fn set_cursor_visible(&self, _: bool) {}
     pub fn pipeline_stats(&self) -> pipeline::PipelineStats {
         Default::default()
     }

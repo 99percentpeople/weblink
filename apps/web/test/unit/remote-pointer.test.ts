@@ -51,6 +51,7 @@ function setup(
   persistentControl?: boolean,
   keyboard?: unknown,
   textInput?: unknown,
+  cursorVisibility?: unknown,
 ) {
   const c = new RemotePointer("source", "media");
   controllers.push(c);
@@ -73,6 +74,7 @@ function setup(
     persistentControl,
     keyboard,
     textInput,
+    cursorVisibility,
   });
   const approve = () => {
     c.request();
@@ -113,6 +115,54 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("negotiates cursor visibility and binds changes to the active input epoch", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    c.setCursorVisible(false);
+    expect(r.sent).toHaveLength(0);
+    approve();
+    const activation = activate();
+    c.setCursorVisible(false);
+    expect(r.sent.at(-1)).toEqual({
+      type: "cursor",
+      grantId: "grant",
+      generation: "media",
+      geometryRevision: "geometry",
+      inputEpoch: activation.inputEpoch,
+      visible: false,
+    });
+    const count = r.sent.length;
+    c.setCursorVisible(false);
+    expect(r.sent).toHaveLength(count);
+    c.setCursorVisible(true);
+    expect(r.sent.at(-1).visible).toBe(true);
+    c.setCursorVisible(false);
+    c.resetInput();
+    const next = activate();
+    c.setCursorVisible(false);
+    expect(r.sent.at(-1)).toMatchObject({
+      type: "cursor",
+      inputEpoch: next.inputEpoch,
+      visible: false,
+    });
+    expect(next.inputEpoch).not.toBe(activation.inputEpoch);
+  });
+  it("leaves older hosts unchanged when cursor visibility is not advertised", () => {
+    const { c, r, approve, activate } = setup();
+    approve();
+    activate();
+    const count = r.sent.length;
+    c.setCursorVisible(false);
+    c.setCursorVisible(true);
+    expect(r.sent).toHaveLength(count);
+  });
   it.each(TOUCH_SAMPLE_RATES)(
     "samples absolute and relative touchpad movement at %i Hz",
     (sampleRate) => {

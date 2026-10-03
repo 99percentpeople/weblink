@@ -57,6 +57,7 @@ pub struct MediaSession {
     notify: Arc<tokio::sync::Notify>,
     error: Mutex<Option<String>>,
     closed: AtomicBool,
+    cursor_visible: AtomicBool,
     started: Instant,
     pipeline: Mutex<super::pipeline::Timings>,
     peer_errors: Mutex<std::collections::VecDeque<String>>,
@@ -69,6 +70,16 @@ struct MediaPeer {
 }
 
 impl MediaSession {
+    pub fn set_cursor_visible(&self, visible: bool) {
+        if self.cursor_visible.swap(visible, Ordering::AcqRel) != visible {
+            let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
+            // Recompose even a stationary desktop, preserving its cursor metadata.
+            if readback.cursor.is_some() {
+                readback.dirty = true;
+                self.notify.notify_one();
+            }
+        }
+    }
     pub fn encoders() -> Result<Vec<EncoderInfo>> {
         let mut encoders = vec![EncoderInfo {
             id: "software".into(),
@@ -195,6 +206,7 @@ impl MediaSession {
             notify: Arc::new(tokio::sync::Notify::new()),
             error: Mutex::new(None),
             closed: AtomicBool::new(false),
+            cursor_visible: AtomicBool::new(true),
             started: Instant::now(),
             pipeline: Mutex::new(Default::default()),
             peer_errors: Mutex::new(Default::default()),
@@ -460,7 +472,10 @@ impl MediaSession {
         let (raw_width, raw_height) = readback.output_size;
         let scale_fallback = readback.scale_error.clone();
         timing.mark(1);
-        let cursor = readback.cursor.clone();
+        let cursor = readback
+            .cursor
+            .clone()
+            .filter(|_| self.cursor_visible.load(Ordering::Acquire));
         let mut composed = std::mem::take(&mut readback.composed);
         let bgra = readback.map()?;
         timing.mark(2);

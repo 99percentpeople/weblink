@@ -733,6 +733,15 @@ The existing video node, audio routing and statistics remain owned by the player
 
 ### Pointer capture and keyboard input
 
+In Local cursor mode, an approved controller's mouse over the video content hides
+the cursor composed into the shared screen video. Leaving the video, touch input,
+loss of focus, capture mode, input suspension and ending control restore it. This
+applies to the shared capture (including its preview and other viewers), not the
+host's physical cursor. DXGI recomposes retained frames; supported WGC display
+sessions toggle cursor capture without restarting the stream. The optional
+`cursorVisibility` capability keeps older hosts compatible; cursor updates require
+the current grant, media generation, geometry and active input epoch.
+
 Settings → Remote control provides two pointer behaviors. **Local cursor** is the
 default: mouse coordinates map to the displayed video, and focusing the screen enables
 physical keyboard forwarding. The header keyboard switch can disable it immediately.

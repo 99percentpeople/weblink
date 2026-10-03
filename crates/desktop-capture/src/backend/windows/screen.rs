@@ -46,7 +46,7 @@ pub(super) fn start(
         .find(|m| id(*m) == source.id)
         .ok_or("Display disconnected")?;
     match method {
-        CaptureMethod::Wgc => super::wgc::start(monitor, frames),
+        CaptureMethod::Wgc => super::wgc::start_display(monitor, frames),
         CaptureMethod::Dxgi => super::dxgi::start(monitor.as_raw_hmonitor() as usize, frames),
         CaptureMethod::Auto => Err("Capture backend must be resolved before starting".into()),
     }

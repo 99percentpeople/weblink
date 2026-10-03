@@ -138,6 +138,12 @@ struct Frames {
 
 trait Session {
     fn is_finished(&self) -> bool;
+    fn cursor_visibility_supported(&self) -> bool {
+        false
+    }
+    fn set_cursor_visible(&self, _: bool) -> Result<()> {
+        Err("Cursor visibility is unavailable for this capture".into())
+    }
     /// Called on the service worker, never while holding the frame statistics lock.
     fn stop(self: Box<Self>) -> Result<()>;
 }
@@ -469,6 +475,20 @@ impl<B: Backend> Engine<B> {
             .ok_or_else(|| "Native share is no longer active".to_string())
     }
 
+    fn set_cursor_visible(&self, id: &str, visible: bool) -> Result<()> {
+        let active = self.active.get(id).ok_or("Capture stopped")?;
+        active.session.set_cursor_visible(visible)?;
+        if let Some(media) = &active
+            .frames
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .media
+        {
+            media.set_cursor_visible(visible);
+        }
+        Ok(())
+    }
+
     fn reply_started(
         &mut self,
         result: Result<CaptureStatus>,
@@ -489,6 +509,8 @@ type CaptureSink = Arc<dyn surface::FrameSink>;
 type CaptureSink = ();
 
 enum Command {
+    CursorSupported(String, mpsc::Sender<bool>),
+    CursorVisible(String, bool, mpsc::Sender<Result<()>>),
     DisplayLayout(mpsc::Sender<Result<geometry::DisplayLayout>>),
     DisplayGeometry(String, mpsc::Sender<Result<geometry::DisplayLayout>>),
     Capabilities(mpsc::Sender<CaptureCapabilities>),
@@ -531,6 +553,17 @@ impl CaptureService {
                 loop {
                     engine.tick(Instant::now());
                     match receiver.recv_timeout(Duration::from_millis(250)) {
+                        Ok(Command::CursorSupported(id, reply)) => {
+                            let _ = reply.send(
+                                engine
+                                    .active
+                                    .get(&id)
+                                    .is_some_and(|a| a.session.cursor_visibility_supported()),
+                            );
+                        }
+                        Ok(Command::CursorVisible(id, visible, reply)) => {
+                            let _ = reply.send(engine.set_cursor_visible(&id, visible));
+                        }
                         Ok(Command::DisplayLayout(reply)) => {
                             let _ = reply.send(engine.display_layout());
                         }
@@ -659,6 +692,14 @@ impl CaptureService {
     }
     pub fn media(&self, session_id: String) -> Result<Arc<media::MediaSession>> {
         self.request(|r| Command::Media(session_id, r))?
+    }
+    pub fn cursor_visibility_supported(&self, session_id: String) -> bool {
+        self.request(|r| Command::CursorSupported(session_id, r))
+            .unwrap_or(false)
+    }
+    /// Changes the shared video only; the host's physical cursor remains visible.
+    pub fn set_cursor_visible(&self, session_id: String, visible: bool) -> Result<()> {
+        self.request(|r| Command::CursorVisible(session_id, visible, r))?
     }
     pub fn stop(&self, session_id: String) -> Result<CaptureStatus> {
         self.request(|r| Command::Stop(session_id, r))?

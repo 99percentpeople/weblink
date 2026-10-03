@@ -83,6 +83,7 @@ class Control extends EventTarget {
   input = vi.fn(() => true);
   move = vi.fn();
   resetInput = vi.fn();
+  setCursorVisible = vi.fn();
   cancel = vi.fn();
 }
 beforeEach(() => {

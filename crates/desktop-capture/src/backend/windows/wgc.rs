@@ -1,4 +1,6 @@
 use crate::{Frames, Result, Session};
+mod display;
+pub(super) use display::start as start_display;
 use std::{
     sync::{mpsc, Arc, Mutex},
     time::Duration,

@@ -21,6 +21,21 @@ pub(super) struct Peer {
     pub(super) capture: Arc<dyn GeometrySource>,
     pub(super) ready: bool,
     pub(super) last_geometry: Instant,
+    cursor_visibility: bool,
+    cursor_visible: bool,
+}
+impl Peer {
+    fn set_cursor_visible(&mut self, visible: bool) {
+        if self.cursor_visibility
+            && self.cursor_visible != visible
+            && self
+                .capture
+                .set_cursor_visible(&self.binding, visible)
+                .is_ok()
+        {
+            self.cursor_visible = visible;
+        }
+    }
 }
 pub(super) struct Consent {
     pub(super) view: Pending,
@@ -58,6 +73,8 @@ impl Host {
         self.peers.insert(
             media,
             Peer {
+                cursor_visibility: capture.cursor_visibility_supported(&binding),
+                cursor_visible: true,
                 binding,
                 endpoint: endpoint.clone(),
                 capture,
@@ -79,7 +96,8 @@ impl Host {
     }
     pub(super) fn end_grant(&mut self) {
         if let Some(active) = self.active.take() {
-            if let Some(peer) = self.peers.get(&active.grant.binding.target.media_id) {
+            if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
+                peer.set_cursor_visible(true);
                 peer.endpoint.send(&Signal::Revoke {
                     grant_id: active.grant.id.clone(),
                     reason: protocol::RevocationReason::Local,
@@ -116,7 +134,8 @@ impl Host {
         }
         if let Some(active) = self.active.as_mut().filter(|a| a.sequencer.active()) {
             active.sequencer.suspend();
-            if let Some(peer) = self.peers.get(&active.grant.binding.target.media_id) {
+            if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
+                peer.set_cursor_visible(true);
                 peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":active.sequencer.epoch(),"active":false}));
             }
         }
@@ -162,6 +181,7 @@ impl Host {
                     "target": peer.binding.target,
                     "generation": id,
                     "relativePointer": true,
+                    "cursorVisibility": peer.cursor_visibility,
                     "persistentControl": true,
                     "keyboard": true,
                     "textInput": true,
@@ -210,7 +230,7 @@ impl Host {
     }
     fn message(&mut self, id: &str, movement: bool, data: &[u8], at: Instant) {
         self.synchronize_input();
-        let Some(peer) = self.peers.get(id) else {
+        let Some(peer) = self.peers.get_mut(id) else {
             return;
         };
         if !peer.ready {
@@ -246,6 +266,9 @@ impl Host {
                     if status.grant.as_ref() == Some(&active.grant) {
                         if status.input_suspended {
                             active.sequencer.suspend();
+                        }
+                        if !active.sequencer.active() {
+                            peer.set_cursor_visible(true);
                         }
                         if transition || status.input_suspended || !active.sequencer.active() {
                             peer.endpoint.send(&serde_json::json!({"type":"state","grantId":active.grant.id,"inputEpoch":epoch,"active":active.sequencer.active()}));
@@ -299,6 +322,24 @@ impl Host {
         let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) else {
             return;
         };
+        if value["type"] == "cursor" {
+            let status = self.worker.status();
+            if let Some(visible) = value["visible"].as_bool().filter(|_| {
+                self.active.as_ref().is_some_and(|a| {
+                    a.grant.binding == peer.binding
+                        && value["grantId"] == a.grant.id
+                        && value["generation"] == id
+                        && value["geometryRevision"] == peer.binding.target.geometry_revision
+                        && value["inputEpoch"].as_str() == a.sequencer.epoch()
+                        && a.sequencer.active()
+                        && status.grant.as_ref() == Some(&a.grant)
+                        && !status.input_suspended
+                })
+            }) {
+                peer.set_cursor_visible(visible);
+            }
+            return;
+        }
         if value["type"] == "heartbeat" {
             if let Some(active) = self.active.as_ref().filter(|a| {
                 a.grant.binding == peer.binding

@@ -51,6 +51,7 @@ export function RemoteControlOverlay(props: {
   let direct: DirectTouch | undefined;
   let keyboard: RemoteKeyboard | undefined;
   const [focused, setFocused] = createSignal(false);
+  const [mouseInside, setMouseInside] = createSignal(false);
   const [systemKeyboard, setSystemKeyboard] =
     createSignal(false);
   createEffect(() => {
@@ -69,6 +70,24 @@ export function RemoteControlOverlay(props: {
     resolveRemotePointerOptions(
       appState.options.remotePointer,
     ).mode === "capture";
+  createEffect(() => {
+    const c = control();
+    if (!c) return;
+    let hiding = false;
+    createEffect(() => {
+      const hide =
+        props.enabled &&
+        state() === "active" &&
+        !captureMode() &&
+        mouseInside();
+      // Inactive mirrors of this stream must not restore another surface's cursor.
+      if (hide || hiding) c.setCursorVisible(!hide);
+      hiding = hide;
+    });
+    onCleanup(() => {
+      if (hiding) c.setCursorVisible(true);
+    });
+  });
   const touchOptions = createMemo(() =>
     resolveRemoteTouchOptions(appState.options.remoteTouch),
   );
@@ -122,6 +141,7 @@ export function RemoteControlOverlay(props: {
     state() === "active" &&
     (!captureMode() || captured());
   const stopInput = () => {
+    setMouseInside(false);
     captureClick = false;
     const wasCaptured = capture.active();
     capture.release();
@@ -318,6 +338,11 @@ export function RemoteControlOverlay(props: {
       event.clientX,
       event.clientY,
       clamp,
+    );
+  };
+  const updateMouse = (event: PointerEvent) => {
+    setMouseInside(
+      event.pointerType === "mouse" && !!point(event),
     );
   };
   const touch = (
@@ -636,6 +661,7 @@ export function RemoteControlOverlay(props: {
             e.stopPropagation();
           }}
           onPointerDown={(e) => {
+            updateMouse(e);
             // Pointer input can run while the text editor owns keyboard input.
             // Both explicit focus and the browser's default focus would hide IME.
             const keyboard = props.keyboard?.();
@@ -687,6 +713,7 @@ export function RemoteControlOverlay(props: {
             if (!touch(e, "up")) button(e, false);
           }}
           onPointerCancel={(e) => {
+            setMouseInside(false);
             if (!touch(e, "cancel") && held.size)
               resetInput();
           }}
@@ -695,6 +722,7 @@ export function RemoteControlOverlay(props: {
               resetInput();
           }}
           onPointerMove={(e) => {
+            updateMouse(e);
             if (e.pointerType === "touch") {
               e.preventDefault();
               e.stopPropagation();
@@ -713,8 +741,10 @@ export function RemoteControlOverlay(props: {
             else if (held.size) resetInput();
           }}
           onPointerLeave={() => {
+            setMouseInside(false);
             if (!captured() && held.size) resetInput();
           }}
+          onPointerEnter={updateMouse}
           onWheel={(e) => {
             if (fingers.size) return;
             if (captureMode() && !captured()) return;

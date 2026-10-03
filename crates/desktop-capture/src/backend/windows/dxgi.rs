@@ -234,6 +234,13 @@ impl DxgiSession {
     }
 }
 impl Session for DxgiSession {
+    fn cursor_visibility_supported(&self) -> bool {
+        true
+    }
+    fn set_cursor_visible(&self, _: bool) -> Result<()> {
+        // DXGI supplies a separate cursor; MediaSession controls its composition.
+        Ok(())
+    }
     fn is_finished(&self) -> bool {
         self.worker.as_ref().is_none_or(|w| w.is_finished())
     }

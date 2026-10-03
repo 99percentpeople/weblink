@@ -13,7 +13,7 @@ import {
   render,
   screen,
 } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { NativeKeyboardEvent } from "@weblink/platform";
 import { RemoteControlOverlay } from "@/routes/home/components/remote-control-overlay";
@@ -77,6 +77,7 @@ class Control extends EventTarget {
   move = vi.fn();
   input = vi.fn(() => true);
   resetInput = vi.fn();
+  setCursorVisible = vi.fn();
   cancel = vi.fn();
 }
 let locked: Element | null;
@@ -239,6 +240,120 @@ it("forwards absolute pointer input and focused keyboard input by default in loc
     horizontal: 0,
     vertical: -20,
   });
+});
+it("does not let an inactive mirror restore the active surface's cursor", () => {
+  const [mirror, setMirror] = createSignal(false);
+  render(() => (
+    <>
+      <RemoteControlOverlay enabled />
+      <Show when={mirror()}>
+        <RemoteControlOverlay enabled={false} />
+      </Show>
+    </>
+  ));
+  mouse("move");
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  fixture.control.setCursorVisible.mockClear();
+  setMirror(true);
+  setMirror(false);
+  expect(
+    fixture.control.setCursorVisible,
+  ).not.toHaveBeenCalled();
+});
+it("hides the host cursor only over video content with a local mouse", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("move");
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  const letterbox = new MouseEvent("pointermove", {
+    bubbles: true,
+    clientX: 100,
+    clientY: 10,
+  });
+  Object.assign(letterbox, { pointerType: "mouse" });
+  fireEvent(surface(), letterbox);
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+  mouse("move");
+  fireEvent.pointerLeave(surface());
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+  mouse("move");
+  const touch = new MouseEvent("pointermove", {
+    bubbles: true,
+    clientX: 100,
+    clientY: 100,
+  });
+  Object.assign(touch, { pointerType: "touch" });
+  fireEvent(surface(), touch);
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+});
+it.each([
+  "blur",
+  "hidden",
+  "disabled",
+  "revoked",
+  "unmount",
+])("restores the host cursor on %s", (reason) => {
+  const [enabled, setEnabled] = createSignal(true);
+  const view = render(() => (
+    <RemoteControlOverlay enabled={enabled()} />
+  ));
+  mouse("move");
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  if (reason === "blur")
+    fireEvent(window, new Event("blur"));
+  if (reason === "hidden") {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent(document, new Event("visibilitychange"));
+  }
+  if (reason === "disabled") setEnabled(false);
+  if (reason === "revoked") {
+    fixture.control.value = "viewing";
+    fixture.control.dispatchEvent(new Event("change"));
+  }
+  if (reason === "unmount") view.unmount();
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+});
+it("keeps the host cursor visible before, during and after pointer capture", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("move");
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  setAppState(
+    "options",
+    "remotePointer",
+    "mode",
+    "capture",
+  );
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+  fixture.control.setCursorVisible.mockClear();
+  mouse("move");
+  capture();
+  mouse("move");
+  key("KeyQ", exitKeys);
+  expect(
+    fixture.control.setCursorVisible.mock.calls.every(
+      ([visible]: boolean[]) => visible,
+    ),
+  ).toBe(true);
 });
 it("waits for a successful capture before enabling pointer and physical keyboard input", () => {
   setAppState(

@@ -137,8 +137,15 @@ impl Drop for TestSession {
         self.shutdown();
     }
 }
-struct Source(AtomicBool);
+struct Source(AtomicBool, AtomicBool);
 impl GeometrySource for Source {
+    fn cursor_visibility_supported(&self, _: &Binding) -> bool {
+        true
+    }
+    fn set_cursor_visible(&self, _: &Binding, visible: bool) -> Result<(), String> {
+        self.1.store(visible, Ordering::Release);
+        Ok(())
+    }
     fn is_current(&self, _: &Binding) -> bool {
         self.0.load(Ordering::Acquire)
     }
@@ -203,7 +210,7 @@ impl Rig {
         let owner = service
             .start(|| Ok(Box::new(TestSession::new(state.clone()))))
             .unwrap();
-        let source = Arc::new(Source(AtomicBool::new(true)));
+        let source = Arc::new(Source(AtomicBool::new(true), AtomicBool::new(true)));
         let endpoint = service
             .owner(&owner)
             .unwrap()
@@ -294,6 +301,91 @@ impl Rig {
             state.iter().rfind(|o| matches!(o, Observation::Input(_))),
             Some(&Observation::Input(Action::Key { key, down: false }))
         );
+    }
+}
+
+#[test]
+fn cursor_visibility_requires_current_approved_input_and_restores_on_every_end() {
+    for reason in [
+        "pause",
+        "interrupt",
+        "revoke",
+        "disconnect",
+        "capture",
+        "shutdown",
+    ] {
+        let rig = Rig::new();
+        let packet = |grant: &str| {
+            json!({"type":"cursor", "grantId":grant,
+            "generation":"media", "geometryRevision":"layout", "inputEpoch":"epoch-1", "visible":false})
+        };
+        rig.send(packet("unapproved"));
+        assert!(rig.source.1.load(Ordering::Acquire));
+        let grant = rig.approve();
+        rig.send(packet(&grant));
+        assert!(rig.source.1.load(Ordering::Acquire));
+        rig.input(&grant, 1, 1, json!({"type":"activate"}));
+        for (field, wrong) in [
+            ("grantId", json!("wrong")),
+            ("generation", json!("wrong")),
+            ("geometryRevision", json!("wrong")),
+            ("inputEpoch", json!("old")),
+            ("visible", json!(0)),
+        ] {
+            let mut invalid = packet(&grant);
+            invalid[field] = wrong;
+            rig.send(invalid);
+            assert!(
+                rig.source.1.load(Ordering::Acquire),
+                "accepted invalid {field}"
+            );
+        }
+        rig.endpoint
+            .message(true, &serde_json::to_vec(&packet(&grant)).unwrap());
+        rig.tick();
+        assert!(rig.source.1.load(Ordering::Acquire));
+        rig.send(packet(&grant));
+        assert!(!rig.source.1.load(Ordering::Acquire));
+        let mut show = packet(&grant);
+        show["visible"] = json!(true);
+        rig.send(show);
+        assert!(rig.source.1.load(Ordering::Acquire));
+        rig.send(packet(&grant));
+        match reason {
+            "pause" => rig.input(&grant, 1, 2, json!({"type":"pause"})),
+            "interrupt" => {
+                rig.service
+                    .owner(&rig.owner)
+                    .unwrap()
+                    .host
+                    .lock()
+                    .unwrap()
+                    .worker
+                    .interrupt()
+                    .unwrap();
+                rig.tick();
+            }
+            "revoke" => rig.service.revoke(&rig.owner).unwrap(),
+            "disconnect" => {
+                rig.endpoint.closed();
+                rig.tick();
+            }
+            "capture" => rig.service.stop_capture("capture"),
+            "shutdown" => rig.service.close(),
+            _ => unreachable!(),
+        }
+        assert!(
+            rig.source.1.load(Ordering::Acquire),
+            "cursor stayed hidden after {reason}"
+        );
+        if matches!(reason, "pause" | "interrupt") {
+            rig.input(&grant, 2, 1, json!({"type":"activate"}));
+            rig.send(packet(&grant));
+            assert!(
+                rig.source.1.load(Ordering::Acquire),
+                "retired epoch hid cursor"
+            );
+        }
     }
 }
 

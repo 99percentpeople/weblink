@@ -568,6 +568,87 @@ fn dxgi_readback_reaches_preview_and_remote_after_restart() {
     });
 }
 
+#[test]
+fn cursor_visibility_recomposes_a_static_frame_without_losing_its_shape() {
+    use crate::surface::{Cursor, CursorShape};
+    use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let media = MediaSession::new(MediaOptions {
+            encoder: "software".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let pixels = [0u8; 8 * 8 * 4];
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: 8,
+            Height: 8,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            ..Default::default()
+        };
+        let data = D3D11_SUBRESOURCE_DATA {
+            pSysMem: pixels.as_ptr().cast(),
+            SysMemPitch: 32,
+            SysMemSlicePitch: 0,
+        };
+        let mut texture = None;
+        unsafe { device.CreateTexture2D(&desc, Some(&data), Some(&mut texture)) }.unwrap();
+        let cursor = Cursor {
+            visible: true,
+            width: 2,
+            height: 2,
+            pitch: 8,
+            shape: CursorShape::Color,
+            bytes: Arc::new(vec![255; 16]),
+            ..Default::default()
+        };
+        media
+            .frame(TextureFrame {
+                device: &device,
+                context: &context,
+                texture: &texture.unwrap(),
+                rotation: Rotation::Identity,
+                cursor: Some(&cursor),
+            })
+            .unwrap();
+        let pixel = || {
+            media
+                .latest
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .buffer
+                .data()
+                .0[0]
+        };
+        media.flush().unwrap();
+        let visible = pixel();
+        media.set_cursor_visible(false);
+        media.flush().unwrap();
+        assert!(
+            pixel() < visible,
+            "cursor was still composed into the video"
+        );
+        media.set_cursor_visible(true);
+        media.flush().unwrap();
+        assert_eq!(
+            pixel(),
+            visible,
+            "cursor was not restored on the retained desktop frame"
+        );
+        media.close();
+    });
+}
+
 // Exercise the cached-frame path, not direct publish_frame calls: its cadence
 // determines the software encoder's initial per-frame budget after a static scene.
 #[test]

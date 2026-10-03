@@ -10,8 +10,16 @@ use weblink_desktop_input::{
 
 pub(super) trait GeometrySource: Send + Sync {
     fn is_current(&self, binding: &Binding) -> bool;
+    fn cursor_visibility_supported(&self, binding: &Binding) -> bool;
+    fn set_cursor_visible(&self, binding: &Binding, visible: bool) -> Result<(), String>;
 }
 impl GeometrySource for CaptureService {
+    fn cursor_visibility_supported(&self, binding: &Binding) -> bool {
+        self.cursor_visibility_supported(binding.capture_session_id.clone())
+    }
+    fn set_cursor_visible(&self, binding: &Binding, visible: bool) -> Result<(), String> {
+        self.set_cursor_visible(binding.capture_session_id.clone(), visible)
+    }
     fn is_current(&self, binding: &Binding) -> bool {
         self.display_geometry(binding.capture_session_id.clone())
             .is_ok_and(|layout| layout.revision == binding.target.geometry_revision)

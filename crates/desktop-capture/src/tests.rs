@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 #[derive(Default, Clone)]
 struct Fake {
+    cursor_visible: Rc<Cell<bool>>,
     stops: Rc<Cell<usize>>,
     finished: Rc<Cell<bool>>,
     available: Rc<Cell<bool>>,
@@ -87,6 +88,13 @@ impl Backend for Fake {
     }
 }
 impl Session for Fake {
+    fn cursor_visibility_supported(&self) -> bool {
+        true
+    }
+    fn set_cursor_visible(&self, visible: bool) -> Result<()> {
+        self.cursor_visible.set(visible);
+        Ok(())
+    }
     fn is_finished(&self) -> bool {
         self.finished.get()
     }
@@ -112,6 +120,22 @@ fn start(engine: &mut Engine<Fake>) -> String {
         .unwrap()
         .session_id
         .unwrap()
+}
+
+#[test]
+fn cursor_visibility_is_scoped_to_a_live_capture_without_restarting_it() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    let heartbeat = engine.active[&id].heartbeat;
+    engine.set_cursor_visible(&id, false).unwrap();
+    assert!(!fake.cursor_visible.get());
+    engine.set_cursor_visible(&id, true).unwrap();
+    assert!(fake.cursor_visible.get());
+    assert_eq!(fake.stops.get(), 0);
+    assert_eq!(engine.active[&id].heartbeat, heartbeat);
+    engine.stop(&id, Instant::now()).unwrap();
+    assert!(engine.set_cursor_visible(&id, false).is_err());
+    assert!(fake.cursor_visible.get());
 }
 
 #[test]
