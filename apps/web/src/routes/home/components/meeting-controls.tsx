@@ -34,6 +34,7 @@ import {
   VolumeX,
 } from "lucide-solid";
 import { t } from "@/i18n";
+import { platform } from "@/libs/platform/runtime";
 import type { createMeetingMediaController } from "./meeting-media";
 import { MeetingCollapseButton } from "./meeting-collapse-button";
 import {
@@ -535,7 +536,10 @@ export function MeetingControls(props: {
             onClick={() => {
               if (props.joined) props.onLeave();
               else {
-                if (props.compact)
+                if (
+                  props.compact &&
+                  platform.kind !== "desktop"
+                )
                   props.pip?.returnToMeeting();
                 props.onJoin?.();
               }

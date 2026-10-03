@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   NativeApplication,
   NativeCloseRequest,
@@ -6,6 +7,7 @@ import type {
 
 export const nativeApplication: NativeApplication = {
   show: () => invoke("application_show"),
+  requestClose: () => getCurrentWindow().close(),
   autostart: {
     enabled: () => invoke("application_autostart_enabled"),
     setEnabled: (enabled) =>

@@ -100,7 +100,10 @@ export function ApplicationCloseDialog(props: {
         if (!open) void respond("cancel");
       }}
     >
-      <DialogContent class="max-w-md" aria-busy={busy()}>
+      <DialogContent
+        class="flex max-w-md flex-col"
+        aria-busy={busy()}
+      >
         <DialogHeader>
           <DialogTitle>
             {t("setting.application.close_confirm_title")}

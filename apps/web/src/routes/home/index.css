@@ -263,7 +263,11 @@
   outline-color: white;
 }
 .meeting-tile:hover .meeting-tile-actions,
-.meeting-tile:focus-within .meeting-tile-actions {
+.meeting-tile:focus-within .meeting-tile-actions,
+.meeting-tile-video:fullscreen:hover .meeting-tile-actions,
+.meeting-tile-video:fullscreen:focus-within
+  .meeting-tile-actions {
+  /* Fullscreen letterboxing extends beyond the original tile's hover area. */
   @apply opacity-100;
 }
 @media (hover: none), (pointer: coarse) {

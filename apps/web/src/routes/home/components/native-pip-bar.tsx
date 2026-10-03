@@ -12,6 +12,7 @@ export function NativePipBar(props: {
   name: string;
   onDrag(): void;
   onRestore(): void;
+  onClose(): void;
   transitioning?: boolean;
 }) {
   return (
@@ -68,11 +69,9 @@ export function NativePipBar(props: {
       <button
         type="button"
         class="meeting-icon-button"
-        title={t("common.action.exit_picture_in_picture")}
-        aria-label={t(
-          "common.action.exit_picture_in_picture",
-        )}
-        onClick={props.onRestore}
+        title={t("common.action.close")}
+        aria-label={t("common.action.close")}
+        onClick={props.onClose}
       >
         <X />
       </button>

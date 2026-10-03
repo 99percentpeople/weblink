@@ -96,6 +96,7 @@ struct State {
     options: Options,
     normal: Option<Bounds>,
     snapshot: Option<Snapshot>,
+    suspended: bool,
     armed: bool,
     background_revision: u64,
     revision: u64,
@@ -113,6 +114,7 @@ impl State {
             && options.automatic
             && (!self.options.eligible || !self.options.automatic)
             && self.snapshot.is_none()
+            && !self.suspended
             && focused
         {
             self.armed = true;
@@ -128,7 +130,7 @@ impl State {
     }
     fn status(&self) -> Status {
         Status {
-            active: self.snapshot.is_some(),
+            active: self.snapshot.is_some() && !self.suspended,
             transitioning: self.motion.is_some(),
             revision: self.revision,
             title_bar_height: self.title_bar_height.unwrap_or(36.0),
@@ -148,6 +150,16 @@ impl State {
         for waiter in self.waiters.drain(..) {
             let _ = waiter.try_send(result.clone());
         }
+    }
+    fn suspend(&mut self) {
+        // Keep the native rectangle and frame untouched throughout hiding.
+        // The original snapshot is restored only when the window is shown again.
+        self.suspended = true;
+        self.motion = None;
+        self.armed = false;
+        self.background_revision = self.background_revision.wrapping_add(1);
+        self.changed();
+        self.settle(Ok(()));
     }
     fn begin_motion(&mut self, window: &WebviewWindow, from: Bounds, to: Bounds, finish: Finish) {
         self.motion_id = self.motion_id.wrapping_add(1);
@@ -200,6 +212,9 @@ impl State {
         }
     }
     fn enter(&mut self, window: &WebviewWindow, automatic: bool) -> Result<(), String> {
+        if self.suspended {
+            return Err("Window is hidden".into());
+        }
         if self.snapshot.is_some() {
             return Ok(());
         }
@@ -308,6 +323,11 @@ impl State {
     fn restore(&mut self, window: &WebviewWindow, focus: bool) -> Result<(), String> {
         // Invalidates queued frames before restoring, hiding or releasing the page.
         self.motion = None;
+        // Late page/configuration cleanup must not move the disappearing window.
+        if self.suspended {
+            self.settle(Ok(()));
+            return Ok(());
+        }
         let Some(snapshot) = self.snapshot.as_ref() else {
             return Ok(());
         };
@@ -387,10 +407,17 @@ impl Service {
         let Ok(mut state) = self.0.try_lock() else {
             return false;
         };
+        let suspended = std::mem::replace(&mut state.suspended, false);
         if state.snapshot.is_none() {
             return false;
         }
-        if let Err(error) = state.leave(window, focus) {
+        // Showing from the tray restores before visibility, without an animation.
+        let result = if suspended {
+            state.restore(window, focus)
+        } else {
+            state.leave(window, focus)
+        };
+        if let Err(error) = result {
             eprintln!("could not restore window: {error}");
         }
         true
@@ -400,15 +427,11 @@ impl Service {
         state.motion = None;
         state.settle(Err("Window closed".into()));
     }
-    pub fn suspend(&self, window: &WebviewWindow) {
+    pub fn suspend(&self) {
         let Ok(mut state) = self.0.try_lock() else {
             return;
         };
-        state.armed = false;
-        state.background_revision = state.background_revision.wrapping_add(1);
-        if let Err(error) = state.restore(window, false) {
-            eprintln!("could not restore window before hiding: {error}");
-        }
+        state.suspend();
     }
     pub fn reset(&self, window: &WebviewWindow) {
         let Ok(mut state) = self.0.try_lock() else {
@@ -427,7 +450,10 @@ impl Service {
         if matches!(event, tauri::WindowEvent::Focused(_)) {
             state.background_revision = state.background_revision.wrapping_add(1);
         }
-        if matches!(event, tauri::WindowEvent::Focused(true)) && state.snapshot.is_none() {
+        if matches!(event, tauri::WindowEvent::Focused(true))
+            && state.snapshot.is_none()
+            && !state.suspended
+        {
             state.armed = true;
         }
         if matches!(
@@ -445,6 +471,7 @@ impl Service {
             && state.options.automatic
             && state.options.eligible
             && state.snapshot.is_none()
+            && !state.suspended
             && window.is_visible().unwrap_or(false)
         {
             // One attempt per foreground/background cycle; failures do not loop.
@@ -467,6 +494,7 @@ impl Service {
                         || !state.options.eligible
                         || !state.options.automatic
                         || state.snapshot.is_some()
+                        || state.suspended
                         || window.is_focused().unwrap_or(true)
                         || !window.is_visible().unwrap_or(false)
                         || !window
@@ -496,7 +524,7 @@ pub fn pip_watch(
     state.restore(&window, false)?;
     state.options = Options::default();
     state.watcher = Some((watch_id, events));
-    state.armed = window.is_focused().unwrap_or(false);
+    state.armed = !state.suspended && window.is_focused().unwrap_or(false);
     state.observe(&window);
     state.notify();
     Ok(())
@@ -571,7 +599,7 @@ pub fn pip_drag(
 ) -> Result<(), String> {
     let state = service.0.lock().unwrap_or_else(|e| e.into_inner());
     state.owns(&watch_id)?;
-    if state.snapshot.is_some() && state.motion.is_none() {
+    if state.snapshot.is_some() && !state.suspended && state.motion.is_none() {
         window.start_dragging().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -653,6 +681,63 @@ mod tests {
             serde_json::json!({"eligible":true,"automatic":true,"extra":true})
         )
         .is_err());
+    }
+    #[test]
+    fn hiding_cancels_motion_and_settles_commands_without_discarding_the_snapshot() {
+        let service = Service::default();
+        let (send, mut receive) = tauri::async_runtime::channel(1);
+        {
+            let mut state = service.0.lock().unwrap();
+            let bounds = Bounds {
+                size: (1280, 800).into(),
+                position: (0, 0).into(),
+            };
+            state.snapshot = Some(Snapshot {
+                bounds,
+                presented: bounds,
+                maximized: false,
+                decorated: true,
+                topmost: false,
+                resizable: true,
+                maximizable: true,
+            });
+            state.motion = Some(Transition::new(1, bounds, bounds, Finish::Enter));
+            state.armed = true;
+            state.waiters.push(send);
+        }
+        // Suspension deliberately requires no native window or geometry calls.
+        service.suspend();
+        let state = service.0.lock().unwrap();
+        assert!(
+            state.snapshot.is_some(),
+            "retain restoration for the next show"
+        );
+        assert!(state.suspended);
+        assert!(!state.armed);
+        assert!(!state.status().active);
+        assert!(!state.status().transitioning);
+        assert!(state.waiters.is_empty());
+        assert_eq!(state.background_revision, 1);
+        let status = receive.try_recv().unwrap().unwrap();
+        assert!(!status.active && !status.transitioning);
+    }
+    #[test]
+    fn late_configuration_cannot_rearm_a_suspended_window() {
+        let mut state = State::default();
+        state.suspend();
+        let enabled = Options {
+            eligible: true,
+            automatic: true,
+            reduced_motion: false,
+        };
+        // Focus/eligibility IPC may have been queued before hiding the window.
+        state.configure(enabled, true);
+        assert!(!state.armed);
+        assert!(state.suspended);
+        state.configure(Options::default(), false);
+        state.configure(enabled, false);
+        assert!(!state.armed);
+        assert!(state.suspended);
     }
     #[test]
     fn shutdown_releases_pending_commands_and_invalidates_motion() {

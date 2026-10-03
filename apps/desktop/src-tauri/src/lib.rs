@@ -198,9 +198,8 @@ pub fn run() {
         .expect("could not build Weblink desktop")
         .run(|app, event| {
             if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
-                if label == "main" {
-                    let pip = app.get_webview_window("main").is_some_and(|window| app.state::<picture_in_picture::Service>().restore(&window, true));
-                    if pip || app.state::<application::Service>().handle_close(app) { api.prevent_close(); }
+                if label == "main" && app.state::<application::Service>().handle_close(app) {
+                    api.prevent_close();
                 }
             }
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed, .. } if label == "main") {

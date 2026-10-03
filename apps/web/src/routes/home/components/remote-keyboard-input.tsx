@@ -17,6 +17,8 @@ import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { sendRemoteText } from "@/libs/domain/remote-control/text";
 import { createRemoteSoftKeyboard } from "@/libs/hooks/remote-soft-keyboard";
+import { createIsMobile } from "@/libs/hooks/create-mobile";
+import { platform } from "@/libs/platform/runtime";
 import { MeetingTileAction } from "./meeting-tile-actions";
 import {
   REMOTE_TEXT_CARET,
@@ -41,6 +43,7 @@ export function RemoteKeyboardInput(props: {
   enabled: boolean;
   registerKeyboard?: RegisterRemoteKeyboardInput;
 }) {
+  const isMobile = createIsMobile();
   const options = createMemo(() =>
     resolveRemoteKeyboardOptions(
       appState.options.remoteKeyboard,
@@ -212,21 +215,25 @@ export function RemoteKeyboardInput(props: {
   });
   return (
     <Show when={available()}>
-      <MeetingTileAction
-        label={t(
-          open()
-            ? "remote_control.keyboard_hide"
-            : "remote_control.keyboard_show",
-        )}
-        active={open()}
-        order={1}
-        keepFocus
-        onAction={toggle}
+      <Show
+        when={isMobile() && platform.kind !== "desktop"}
       >
-        <Show when={open()} fallback={<Keyboard />}>
-          <KeyboardOff />
-        </Show>
-      </MeetingTileAction>
+        <MeetingTileAction
+          label={t(
+            open()
+              ? "remote_control.keyboard_hide"
+              : "remote_control.keyboard_show",
+          )}
+          active={open()}
+          order={1}
+          keepFocus
+          onAction={toggle}
+        >
+          <Show when={open()} fallback={<Keyboard />}>
+            <KeyboardOff />
+          </Show>
+        </MeetingTileAction>
+      </Show>
       {/* Keep a focusable editor in the fullscreen surface; never use hidden/display:none. */}
       <textarea
         ref={setEditor}

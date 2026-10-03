@@ -22,11 +22,19 @@ import {
   vi,
 } from "vitest";
 import Video from "@/routes/home";
+import { ApplicationCloseDialog } from "@/components/app/application-close-dialog";
 import { MeetingSessionProvider } from "../support/meeting-session-provider";
 import { MeetingMediaProvider } from "../support/meeting-media-provider";
 import { directConversationId } from "@/libs/domain/conversation";
 import { openMediaRoute } from "@/components/conversations/media-hash-route";
 import type { AppPermissions } from "@/libs/state/create-app-permissions";
+import { platform } from "@/libs/platform/runtime";
+import type {
+  NativeApplication,
+  NativeCloseRequest,
+  NativePictureInPicture,
+  NativePipState,
+} from "@weblink/platform";
 
 const fixture = vi.hoisted(() => ({
   permissions: undefined as AppPermissions | undefined,
@@ -296,6 +304,7 @@ vi.mock("@/routes/home/components/video-display", () => ({
   ),
 }));
 
+const originalPlatformKind = platform.kind;
 let animationStyle: HTMLStyleElement;
 beforeEach(() => {
   // Obsolete linking preferences must not affect the independent controls.
@@ -326,6 +335,7 @@ beforeEach(() => {
       ),
   );
   vi.stubGlobal("focus", vi.fn());
+  vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query.includes("prefers-reduced-motion"),
     media: query,
@@ -348,9 +358,187 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(platform, "pictureInPicture");
+  Reflect.deleteProperty(platform, "application");
+  Object.defineProperty(platform, "kind", {
+    configurable: true,
+    value: originalPlatformKind,
+  });
   animationStyle.remove();
   localStorage.removeItem("meeting-toolbar-follows-rail");
   vi.unstubAllGlobals();
+});
+
+function renderNativeWindow(withCloseDialog = false) {
+  let emit!: (state: NativePipState) => void;
+  const update = (active: boolean) =>
+    emit({
+      active,
+      transitioning: false,
+      titleBarHeight: 31,
+    });
+  const native = {
+    configure: vi.fn(async () => {}),
+    enter: vi.fn(async () => update(true)),
+    exit: vi.fn(async () => update(false)),
+    drag: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+  };
+  const pip: NativePictureInPicture = {
+    watch: async (onState) => {
+      emit = onState;
+      update(true);
+      return native;
+    },
+  };
+  let onCloseRequest:
+    | ((request: NativeCloseRequest) => void)
+    | undefined;
+  const requestClose = vi.fn(async () => {
+    onCloseRequest?.({
+      id: "close-request",
+      trayAvailable: true,
+    });
+  });
+  const respond = vi.fn(async () => {});
+  const application: NativeApplication = {
+    show: vi.fn(async () => {}),
+    requestClose,
+    configure: vi.fn(async () => {}),
+    watchCloseRequests: vi.fn(async (onRequest) => {
+      onCloseRequest = onRequest;
+      return { respond, close: vi.fn(async () => {}) };
+    }),
+  };
+  Object.defineProperties(platform, {
+    kind: { configurable: true, value: "desktop" },
+    pictureInPicture: { configurable: true, value: pip },
+    application: { configurable: true, value: application },
+  });
+  render(() => (
+    <MeetingMediaProvider>
+      <MeetingSessionProvider>
+        <Video />
+        <Show when={withCloseDialog}>
+          <ApplicationCloseDialog
+            application={application}
+          />
+        </Show>
+      </MeetingSessionProvider>
+    </MeetingMediaProvider>
+  ));
+  return { native, application, requestClose, respond };
+}
+
+describe("native PiP window controls", () => {
+  it("keeps close confirmation and cancellation in the compact window", async () => {
+    const f = renderNativeWindow(true);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "common.action.close",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "setting.application.close_confirm_title",
+    });
+    expect(f.application.show).not.toHaveBeenCalled();
+    expect(f.native.exit).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "common.action.cancel",
+      }),
+    );
+    await waitFor(() =>
+      expect(f.respond).toHaveBeenCalledWith(
+        "close-request",
+        "cancel",
+        false,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "common.action.close",
+      }),
+    ).toBeEnabled();
+    expect(f.native.exit).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+  });
+
+  it("opens joining a room without returning from native PiP", async () => {
+    setCurrentRoomId(undefined);
+    const f = renderNativeWindow();
+    await screen.findByRole("button", {
+      name: "common.action.close",
+    });
+    fireEvent.click(
+      within(
+        screen.getByLabelText("meeting.controls"),
+      ).getByRole("button", { name: "meeting.join_room" }),
+    );
+    expect(fixture.joinRoom).toHaveBeenCalledOnce();
+    expect(f.native.exit).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+  });
+
+  it("requests window closing independently of returning to the meeting", async () => {
+    const f = renderNativeWindow();
+    const close = await screen.findByRole("button", {
+      name: "common.action.close",
+    });
+    fireEvent.click(close);
+    expect(f.requestClose).toHaveBeenCalledOnce();
+    expect(f.native.exit).not.toHaveBeenCalled();
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    expect(fixture.clearLocalStream).not.toHaveBeenCalled();
+    expect(fixture.leaveRoom).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "meeting.pip_return",
+      })[0],
+    );
+    await waitFor(() =>
+      expect(f.native.exit).toHaveBeenCalledOnce(),
+    );
+    expect(fixture.navigate).toHaveBeenCalledWith("/");
+    expect(f.requestClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps PiP usable when a close request fails", async () => {
+    const f = renderNativeWindow();
+    f.requestClose.mockRejectedValueOnce(
+      new Error("Window unavailable"),
+    );
+    const warn = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+    try {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "common.action.close",
+        }),
+      );
+      await waitFor(() =>
+        expect(fixture.pipError).toHaveBeenCalledWith(
+          "setting.application.close_failed",
+        ),
+      );
+      expect(f.native.exit).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "common.action.close",
+        }),
+      );
+      expect(f.requestClose).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("meeting page navigation and panels", () => {

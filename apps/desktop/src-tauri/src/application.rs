@@ -108,10 +108,13 @@ impl Service {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .request(self.ready());
-                // A taskbar close can target a minimized window. Restore it so
-                // the Web dialog is reachable, after releasing the request lock.
+                // A taskbar close can target a minimized window. Make the prompt
+                // reachable without changing its current PiP presentation.
                 if requested {
-                    show(app);
+                    self.manual_visibility();
+                    if let Some(window) = app.get_webview_window("main") {
+                        focus_window(&window);
+                    }
                 }
                 requested
             }
@@ -199,10 +202,14 @@ fn show_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         app.state::<crate::picture_in_picture::Service>()
             .restore(&window, false);
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        focus_window(&window);
     }
+}
+
+fn focus_window(window: &tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
 }
 
 pub fn hide(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -214,9 +221,9 @@ fn hide_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let window = app
         .get_webview_window("main")
         .ok_or(tauri::Error::WindowNotFound)?;
-    app.state::<crate::picture_in_picture::Service>()
-        .suspend(&window);
     window.hide()?;
+    // Cancel PiP motion without moving/resizing the disappearing native window.
+    app.state::<crate::picture_in_picture::Service>().suspend();
     // Captured controller keys require foreground focus; the native host stays alive.
     app.state::<crate::keyboard::Shared>().close();
     Ok(())

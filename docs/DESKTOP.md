@@ -163,10 +163,16 @@ multi-participant avatar grids. The toolbar entry reflects native window support
 not the current main-view selection; only automatic entry requires live video.
 It retains the same renderer, media players and control session. Window bounds animate
 on entry and return, and follow the system reduced-motion preference. Native frames
-are cancellable and only one is queued at a time; hiding or reloading restores bounds
-immediately and invalidates pending frames. Returning or
-closing the small window restores its previous size, position and window flags;
-closing the small window does not quit. Tray Show also restores the main window.
+are cancellable and only one is queued at a time; hiding invalidates pending frames
+without changing the compact bounds or frame. Restoration is deferred until the next
+show, before the window becomes visible; reloading a visible window restores immediately.
+The return button restores the previous
+size, position and window flags. The close button and native close requests follow
+the same Application close behavior as the main window: ask, hide to the tray or
+quit. Tray Show also restores the main window.
+Dialogs, including close confirmation and joining a room, stay in the compact
+window. Cancelling close keeps PiP active; closing to the tray preserves the compact
+native bounds and flags until the main window is shown again.
 Source removal, room leave and page reload release native presentation ownership.
 
 Desktop automatic PiP activates when an eligible video view loses foreground focus

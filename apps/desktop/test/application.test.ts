@@ -5,7 +5,11 @@ import {
   it,
   vi,
 } from "vitest";
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import {
+  clearMocks,
+  mockIPC,
+  mockWindows,
+} from "@tauri-apps/api/mocks";
 import type { Channel } from "@tauri-apps/api/core";
 import type { NativeCloseRequest } from "@weblink/platform";
 import { nativeApplication } from "../src/application";
@@ -17,6 +21,23 @@ interface CloseWatchArguments {
 
 describe("application close platform adapter", () => {
   afterEach(clearMocks);
+
+  it("requests normal native window closing and reports failures", async () => {
+    const ipc = vi.fn();
+    mockIPC(ipc);
+    mockWindows("main");
+    await nativeApplication.requestClose();
+    expect(ipc).toHaveBeenLastCalledWith(
+      "plugin:window|close",
+      { label: "main" },
+    );
+    ipc.mockRejectedValueOnce(
+      new Error("Window unavailable"),
+    );
+    await expect(
+      nativeApplication.requestClose(),
+    ).rejects.toThrow("Window unavailable");
+  });
 
   it("binds replies and remembered choices to the current page and request", async () => {
     const ipc = vi.fn();

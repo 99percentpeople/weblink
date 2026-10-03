@@ -38,6 +38,8 @@ export interface NativeApplicationOptions {
 
 export interface NativeApplication {
   show(): Promise<void>;
+  /** Request normal window closing, including the configured close behavior. */
+  requestClose(): Promise<void>;
   readonly autostart?: {
     enabled(): Promise<boolean>;
     setEnabled(enabled: boolean): Promise<boolean>;

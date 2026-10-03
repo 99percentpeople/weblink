@@ -116,6 +116,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, "visualViewport");
   Reflect.deleteProperty(document, "fullscreenElement");
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 function surface() {
@@ -448,6 +449,8 @@ it("reports unsupported native scrolling once per gesture without wheel fallback
 });
 
 function renderKeyboardControl() {
+  vi.stubGlobal("innerWidth", 390);
+  window.dispatchEvent(new Event("resize"));
   let keyboard: RemoteKeyboardInputHandle | undefined;
   const view = render(() => {
     const { state } = createControlState(

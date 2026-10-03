@@ -21,6 +21,7 @@ import {
 } from "@/routes/home/components/meeting-tile-actions";
 import { RemoteKeyboardInput } from "@/routes/home/components/remote-keyboard-input";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
+import { platform } from "@/libs/platform/runtime";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
@@ -41,11 +42,14 @@ class KeyboardAPI extends EventTarget {
   hide = vi.fn();
 }
 let animationStyle: HTMLStyleElement;
+const runtimeKind = platform.kind;
 beforeEach(() => {
   animationStyle = document.createElement("style");
   animationStyle.textContent =
     "* { animation-name: none !important; }";
   document.head.append(animationStyle);
+  vi.stubGlobal("innerWidth", 390);
+  window.dispatchEvent(new Event("resize"));
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -67,6 +71,9 @@ afterEach(async () => {
   animationStyle.remove();
   Reflect.deleteProperty(navigator, "virtualKeyboard");
   Reflect.deleteProperty(document, "fullscreenElement");
+  Object.defineProperty(platform, "kind", {
+    value: runtimeKind,
+  });
   vi.unstubAllGlobals();
 });
 
@@ -172,6 +179,53 @@ function setup(fullscreen = false, virtualKeyboard = true) {
 }
 
 describe("meeting action menu keyboard focus", () => {
+  it.each([
+    { runtime: "browser", width: 1440 },
+    { runtime: "desktop", width: 1440 },
+    { runtime: "desktop", width: 480 },
+  ] as const)(
+    "omits the keyboard menu action on $runtime at $width",
+    async ({ runtime, width }) => {
+      Object.defineProperty(platform, "kind", {
+        value: runtime,
+      });
+      vi.stubGlobal("innerWidth", width);
+      window.dispatchEvent(new Event("resize"));
+      const f = setup();
+      await f.openMenu();
+      expect(
+        screen.queryByRole("menuitem", {
+          name: "remote_control.keyboard_show",
+        }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("menuitem", {
+          name: "Other action",
+        }),
+      ).toBeDefined();
+    },
+  );
+
+  it("removes the keyboard menu action after leaving mobile mode without replacing the editor", async () => {
+    const f = setup();
+    await f.openMenu();
+    expect(
+      screen.getByRole("menuitem", {
+        name: "remote_control.keyboard_show",
+      }),
+    ).toBeDefined();
+    vi.stubGlobal("innerWidth", 1440);
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("menuitem", {
+          name: "remote_control.keyboard_show",
+        }),
+      ).toBeNull(),
+    );
+    expect(screen.getByRole("textbox")).toBe(f.editor);
+  });
+
   it.each([
     { fullscreen: false, virtualKeyboard: false },
     { fullscreen: false, virtualKeyboard: true },

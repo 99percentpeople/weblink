@@ -62,6 +62,7 @@ import {
   type MeetingStageHandle,
 } from "./components/meeting-stage";
 import { useMeetingSession } from "@/libs/state/meeting-session-context";
+import { platform } from "@/libs/platform/runtime";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";
@@ -120,6 +121,14 @@ export default function Home() {
   // so its rail follows them instead of freezing a FLIP snapshot until the end.
   const nativePipActive = () =>
     meeting.nativePip?.active() === true;
+  const requestWindowClose = async () => {
+    try {
+      await platform.application?.requestClose();
+    } catch (error) {
+      console.warn("Could not close window", error);
+      toast.error(t("setting.application.close_failed"));
+    }
+  };
   const {
     clients,
     sources,
@@ -532,6 +541,7 @@ export default function Home() {
             }
             onDrag={() => void meeting.nativePip?.drag()}
             onRestore={meeting.controls.returnToMeeting}
+            onClose={() => void requestWindowClose()}
             transitioning={meeting.nativePip?.transitioning()}
           />
         </AnimatePresence>
