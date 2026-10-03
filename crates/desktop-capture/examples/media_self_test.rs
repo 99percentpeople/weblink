@@ -30,6 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_bitrate: if burst { 8_000_000 } else { 1_000_000 },
             degradation_preference: "maintain-resolution".into(),
             encoder: std::env::args().nth(3).unwrap_or_else(|| "software".into()),
+            ..Default::default()
         };
         println!("native codecs: {:?}; settings: {:?}", MediaSession::codecs(), options);
         assert!(MediaSession::new(MediaOptions { codec: Some("video/unsupported".into()), ..options.clone() }).is_err());

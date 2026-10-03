@@ -63,6 +63,7 @@ export type MeetingVideoSettings = Pick<
       | "nativeScreenEncoder"
       | "nativeColorMatrix"
       | "nativeColorRange"
+      | "nativeColorFormat"
     >
   > &
   MeetingAudioSettings;
@@ -77,6 +78,15 @@ export function nativeScreenOptions(
   )
     ? videoResolutions[options.videoResolution]
     : videoResolutions["1080p"];
+  const colorFormat =
+    options.nativeColorFormat === "rgb" ||
+    options.nativeColorFormat === "yuv444"
+      ? options.nativeColorFormat
+      : "yuv420";
+  const fullChroma = colorFormat !== "yuv420";
+  const codec = fullChroma
+    ? "video/vp9"
+    : (options.nativeScreenCodec ?? null);
   return {
     ...nativeAudioOptions(options),
     maxWidth,
@@ -99,18 +109,22 @@ export function nativeScreenOptions(
           ),
         )
       : 25 * 1024 * 1024,
-    codec: options.nativeScreenCodec ?? null,
-    encoder: options.nativeScreenEncoder ?? "auto",
+    codec,
+    encoder: fullChroma
+      ? "software"
+      : (options.nativeScreenEncoder ?? "auto"),
+    colorFormat,
     colorMatrix:
-      options.nativeScreenCodec === "video/vp8"
+      codec === "video/vp8"
         ? "bt601"
         : options.nativeColorMatrix === "bt601" ||
             options.nativeColorMatrix === "bt709"
           ? options.nativeColorMatrix
           : "auto",
     colorRange:
-      options.nativeScreenCodec !== "video/vp8" &&
-      options.nativeColorRange === "full"
+      fullChroma ||
+      (codec !== "video/vp8" &&
+        options.nativeColorRange === "full")
         ? "full"
         : "limited",
     degradationPreference: [

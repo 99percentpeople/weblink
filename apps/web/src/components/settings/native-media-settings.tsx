@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import CaptureBackendSelect from "@/components/capture-backend-select";
 import NativeColorSettings from "./native-color-settings";
 import { appState } from "@/libs/state/app-state";
+import { nativeScreenOptions } from "@/libs/application/meeting-video-settings";
 import { setAppOptions } from "@/options";
 import { t } from "@/i18n";
 
@@ -98,10 +99,13 @@ export default function NativeMediaSettings(props: {
             : "software",
     };
   };
+  const effective = createMemo(() =>
+    nativeScreenOptions(appState.options),
+  );
   const selected = createMemo(() =>
     encodingOption(
-      appState.options.nativeScreenEncoder ?? "auto",
-      appState.options.nativeScreenCodec ?? null,
+      effective().encoder ?? "auto",
+      effective().codec ?? null,
     ),
   );
   const options = createMemo(() => {
@@ -189,7 +193,8 @@ export default function NativeMediaSettings(props: {
           value={selected()}
           disabled={
             props.available.failed ||
-            props.available.encodingLoading
+            props.available.encodingLoading ||
+            effective().colorFormat !== "yuv420"
           }
           options={options()}
           optionValue="id"

@@ -247,11 +247,13 @@ export interface NativeScreenOptions {
   /** Colour conversion for the next native share. */
   colorMatrix?: NativeColorMatrix;
   colorRange?: NativeColorRange;
+  colorFormat?: NativeColorFormat;
   degradationPreference: RTCDegradationPreference;
 }
 
 export type NativeColorMatrix = "auto" | "bt601" | "bt709";
 export type NativeColorRange = "limited" | "full";
+export type NativeColorFormat = "yuv420" | "yuv444" | "rgb";
 
 /** Validation ceiling, not a promise of capture/encoder throughput. */
 export const MAX_NATIVE_FRAME_RATE = 1000;
@@ -275,6 +277,7 @@ export interface NativeVideoStats {
   colorSpace?: VideoColorSpaceInit;
   bitDepth?: number;
   chromaSubsampling?: string;
+  colorFormat?: NativeColorFormat;
   width: number;
   height: number;
   bytes: number;

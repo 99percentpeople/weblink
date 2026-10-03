@@ -185,6 +185,44 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
   expect(ended).not.toHaveBeenCalled();
   expect(scheduled).toBeUndefined();
 });
+it("presents full-resolution RGB planes with identity color metadata", async () => {
+  const colorSpace = {
+    matrix: "rgb",
+    primaries: "bt709",
+    transfer: "iec61966-2-1",
+    fullRange: true,
+  };
+  mockIPC(async (command, args: any) => {
+    if (command === "capture_preview_open")
+      listener?.({
+        additionalData: {
+          kind: "weblink-preview",
+          id: args.previewId,
+        },
+        getBuffer: () => shared,
+      });
+    if (command === "capture_preview_frame")
+      return {
+        sequence: 1,
+        width: 2,
+        height: 2,
+        timestamp: 1,
+        format: "BGRA",
+        colorSpace,
+      };
+  });
+  const preview = await createRawPreview(
+    "rgb",
+    false,
+    vi.fn(),
+  );
+  expect(draw.mock.calls[0][0].settings).toMatchObject({
+    format: "BGRA",
+    colorSpace,
+  });
+  preview.close();
+  expect(release).toHaveBeenCalledOnce();
+});
 it("aborting an opening preview releases a late mapping before closing its native owner", async () => {
   const controller = new AbortController();
   let complete!: () => void;

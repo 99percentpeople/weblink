@@ -1,7 +1,9 @@
 use super::*;
+use libwebrtc::video_frame::I420Buffer;
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
+mod color;
 mod latency_probe;
 
 #[test]
@@ -668,7 +670,7 @@ fn software_cached_frames_keep_cadence_and_follow_live_fps() {
         let receiver = connect(&media, "cached", true).await.unwrap();
         *media.latest.lock().unwrap() = Some(Arc::new(VideoFrame::new(
             VideoRotation::VideoRotation0,
-            I420Buffer::new_black(640, 480),
+            I420Buffer::new_black(640, 480).into(),
         )));
         tokio::time::timeout(Duration::from_secs(10), async {
             while decoded(&receiver).await < 5 {

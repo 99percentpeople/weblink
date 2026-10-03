@@ -258,7 +258,7 @@
       "color_description": "Applies to the next share. Conversion and playback use matching colour tags. Full range preserves more luma levels but requires receiver support.",
       "color_vp8": "VP8 uses BT.601 limited range. Other codecs restore your selected settings.",
       "color_format": "Output colour format",
-      "color_hdr_unavailable": "The current stream supports 8-bit SDR. 10-bit HDR and YUV 4:4:4 are not yet supported.",
+      "color_full_chroma": "RGB and YUV 4:4:4 use full range and VP9 software encoding to preserve color detail at every pixel. Higher CPU usage may reduce frame rates at high resolutions. The receiver must support VP9 4:4:4. Restart sharing to apply changes.",
       "audio": {
         "title": "Audio capture",
         "auto": "Auto",

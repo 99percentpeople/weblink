@@ -258,7 +258,7 @@
       "color_description": "下次共享時生效。轉換與播放使用相同色彩標記；完整範圍保留更多亮度階，但需要接收端正確支援。",
       "color_vp8": "VP8 使用 BT.601 有限範圍。切換其他編碼後恢復所選設定。",
       "color_format": "輸出色彩格式",
-      "color_hdr_unavailable": "目前支援 8 位 SDR 串流，尚不支援 10 位 HDR 或 YUV 4:4:4。",
+      "color_full_chroma": "RGB 與 YUV 4:4:4 使用全範圍與 VP9 軟體編碼，保留每個像素的色彩細節。CPU 使用量較高，可能降低高解析度下的幀率。接收端需支援 VP9 4:4:4。變更後重新分享生效。",
       "audio": {
         "title": "音訊擷取",
         "auto": "自動",

@@ -1,5 +1,6 @@
 import { Show } from "solid-js";
 import type {
+  NativeColorFormat,
   NativeColorMatrix,
   NativeColorRange,
 } from "@weblink/platform";
@@ -21,8 +22,14 @@ export default function NativeColorSettings() {
     t(`setting.meeting_settings.${key}`);
   const selected = () =>
     nativeScreenOptions(appState.options);
-  const vp8 = () =>
-    appState.options.nativeScreenCodec === "video/vp8";
+  const vp8 = () => selected().codec === "video/vp8";
+  const rgb = () => selected().colorFormat === "rgb";
+  const formatLabel = (value: NativeColorFormat) =>
+    ({
+      yuv420: "YUV 4:2:0",
+      yuv444: "YUV 4:4:4",
+      rgb: "RGB",
+    })[value] + " · 8-bit · SDR";
   const matrixLabel = (value: NativeColorMatrix) =>
     value === "auto"
       ? label("color_auto")
@@ -34,11 +41,40 @@ export default function NativeColorSettings() {
   return (
     <>
       <div class="flex flex-col gap-2">
+        <Label>{label("color_format")}</Label>
+        <Select<NativeColorFormat>
+          modal
+          value={selected().colorFormat}
+          options={["yuv420", "yuv444", "rgb"]}
+          onChange={(value) =>
+            value &&
+            setAppOptions("nativeColorFormat", value)
+          }
+          itemComponent={(item) => (
+            <SelectItem item={item.item}>
+              {formatLabel(item.item.rawValue)}
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger aria-label={label("color_format")}>
+            <SelectValue<NativeColorFormat>>
+              {(state) =>
+                formatLabel(state.selectedOption())
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <Show when={selected().colorFormat !== "yuv420"}>
+          <p class="muted">{label("color_full_chroma")}</p>
+        </Show>
+      </div>
+      <div class="flex flex-col gap-2">
         <Label>{label("color_matrix")}</Label>
         <Select<NativeColorMatrix>
           modal
           value={selected().colorMatrix}
-          disabled={vp8()}
+          disabled={vp8() || rgb()}
           options={["auto", "bt709", "bt601"]}
           onChange={(value) =>
             value &&
@@ -53,7 +89,9 @@ export default function NativeColorSettings() {
           <SelectTrigger aria-label={label("color_matrix")}>
             <SelectValue<NativeColorMatrix>>
               {(state) =>
-                matrixLabel(state.selectedOption())
+                rgb()
+                  ? "RGB"
+                  : matrixLabel(state.selectedOption())
               }
             </SelectValue>
           </SelectTrigger>
@@ -65,7 +103,9 @@ export default function NativeColorSettings() {
         <Select<NativeColorRange>
           modal
           value={selected().colorRange}
-          disabled={vp8()}
+          disabled={
+            vp8() || selected().colorFormat !== "yuv420"
+          }
           options={["limited", "full"]}
           onChange={(value) =>
             value &&
@@ -90,13 +130,6 @@ export default function NativeColorSettings() {
         <Show when={vp8()}>
           <p class="muted">{label("color_vp8")}</p>
         </Show>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label>{label("color_format")}</Label>
-        <p>YUV 4:2:0 · 8-bit · SDR</p>
-        <p class="muted">
-          {label("color_hdr_unavailable")}
-        </p>
       </div>
     </>
   );

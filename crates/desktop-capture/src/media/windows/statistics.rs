@@ -19,6 +19,11 @@ impl MediaSession {
             .get(id)
             .map(|encoder| encoder.statistics());
         let timestamp = self.started.elapsed().as_secs_f64() * 1000.0;
+        let options = self
+            .options
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         Ok(report
             .iter()
             .filter_map(|stat| {
@@ -64,13 +69,10 @@ impl MediaSession {
                     timestamp,
                     codec,
                     implementation,
-                    color_space: self
-                        .options
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .color_space(),
+                    color_space: options.color_space(),
+                    color_format: options.color_format,
                     bit_depth: 8,
-                    chroma_subsampling: "4:2:0",
+                    chroma_subsampling: options.color_format.chroma_subsampling(),
                     width: s.outbound.frame_width,
                     height: s.outbound.frame_height,
                     bytes: s.sent.bytes_sent,

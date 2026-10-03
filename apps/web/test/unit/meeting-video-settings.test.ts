@@ -7,6 +7,55 @@ import {
 } from "@/libs/application/meeting-video-settings";
 
 describe("meeting capture settings", () => {
+  it("selects full-chroma software encoding without overwriting hardware or YUV preferences", () => {
+    const saved = {
+      ...getDefaultAppOptions(),
+      nativeScreenCodec: "video/h265",
+      nativeScreenEncoder: "mf:test",
+      nativeColorMatrix: "bt601" as const,
+      nativeColorRange: "limited" as const,
+    };
+    for (const nativeColorFormat of [
+      "rgb",
+      "yuv444",
+    ] as const) {
+      expect(
+        nativeScreenOptions({
+          ...saved,
+          nativeColorFormat,
+        }),
+      ).toMatchObject({
+        codec: "video/vp9",
+        encoder: "software",
+        colorFormat: nativeColorFormat,
+        colorRange: "full",
+      });
+    }
+    expect(nativeScreenOptions(saved)).toMatchObject({
+      codec: "video/h265",
+      encoder: "mf:test",
+      colorFormat: "yuv420",
+      colorMatrix: "bt601",
+      colorRange: "limited",
+    });
+    expect(
+      nativeScreenOptions({
+        ...saved,
+        nativeColorFormat: "invalid",
+      } as any).colorFormat,
+    ).toBe("yuv420");
+    expect(
+      nativeScreenOptions({
+        ...saved,
+        nativeScreenCodec: "video/vp8",
+        nativeColorFormat: "yuv444",
+        nativeColorRange: "full",
+      }),
+    ).toMatchObject({
+      codec: "video/vp9",
+      colorRange: "full",
+    });
+  });
   it("uses the same selected limits for camera, display capture and native capture", () => {
     const options = {
       ...getDefaultAppOptions(),
@@ -33,6 +82,7 @@ describe("meeting capture settings", () => {
       encoder: "auto",
       colorMatrix: "auto",
       colorRange: "limited",
+      colorFormat: "yuv420",
       degradationPreference: "balanced",
     });
   });

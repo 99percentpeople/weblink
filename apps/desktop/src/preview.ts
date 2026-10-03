@@ -22,6 +22,7 @@ interface Frame {
   width: number;
   height: number;
   colorSpace?: VideoColorSpaceInit;
+  format?: "I420" | "I444" | "BGRA";
 }
 
 /** One request at a time is the ownership handshake: Rust must not overwrite the
@@ -143,11 +144,15 @@ export async function createRawPreview(
       frame.height < 2 ||
       frame.height > 2160 ||
       frame.width % 2 ||
-      frame.height % 2
+      frame.height % 2 ||
+      (frame.format !== undefined &&
+        frame.format !== "I420" &&
+        frame.format !== "I444" &&
+        frame.format !== "BGRA")
     )
       throw new Error("Invalid native preview frame");
     const pixels = new VideoFrame(buffer, {
-      format: "I420",
+      format: frame.format ?? "I420",
       codedWidth: frame.width,
       codedHeight: frame.height,
       timestamp: Math.round(performance.now() * 1000),

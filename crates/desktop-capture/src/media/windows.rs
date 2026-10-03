@@ -3,6 +3,8 @@ mod audio;
 mod compose;
 mod control;
 mod mf;
+mod pixels;
+use pixels::Pixels;
 mod statistics;
 #[cfg(test)]
 mod tests;
@@ -11,7 +13,6 @@ use crate::surface::{FrameSink, Rotation, TextureFrame};
 use crate::Result;
 use libwebrtc::{
     media_stream_track::MediaStreamTrack,
-    native::yuv_helper::argb_to_i420_with_matrix,
     peer_connection::{IceGatheringState, OfferOptions, PeerConnection, PeerConnectionState},
     peer_connection_factory::{
         native::PeerConnectionFactoryExt, ContinualGatheringPolicy, IceTransportsType,
@@ -22,7 +23,7 @@ use libwebrtc::{
     rtp_sender::VideoEncoderBackend,
     rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit},
     session_description::{SdpType, SessionDescription},
-    video_frame::{I420Buffer, VideoFrame, VideoRotation},
+    video_frame::{VideoFrame, VideoRotation},
     video_source::{native::NativeVideoSource, VideoResolution},
     MediaType,
 };
@@ -49,7 +50,7 @@ pub struct MediaSession {
     peers: Mutex<HashMap<String, MediaPeer>>,
     hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
     encoder_id: Option<String>,
-    latest: Mutex<Option<Arc<VideoFrame<I420Buffer>>>>,
+    latest: Mutex<Option<Arc<VideoFrame<Pixels>>>>,
     latest_sequence: AtomicU64,
     last_sent: Mutex<Instant>,
     readback: Mutex<Readback>,
@@ -144,6 +145,11 @@ impl MediaSession {
 
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
+        if options.color_format.full_chroma() {
+            options.codec = Some("video/vp9".into());
+            options.encoder = "software".into();
+            options.color_range = super::color::ColorRange::Full;
+        }
         let hardware = if options.encoder == "software" {
             None
         } else {
@@ -522,14 +528,7 @@ impl MediaSession {
             bgra.stride()
         };
         timing.mark(3);
-        let mut buffer = I420Buffer::new(width, height);
-        // libyuv ARGB means BGRA byte order on little-endian Windows.
-        argb_to_i420_with_matrix(
-            bytes,
-            stride,
-            &mut buffer,
-            options.color_space().yuv_matrix(),
-        );
+        let mut buffer = Pixels::from_bgra(bytes, stride, width, height, &options);
         drop(bgra);
         readback.composed = composed;
         readback.dirty = false;
@@ -582,40 +581,63 @@ impl MediaSession {
         };
         drop(latest);
         let buffer = &frame.buffer;
+        let options = self
+            .options
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let rgb = options.color_format == super::color::ColorFormat::Rgb;
         let (y, u, v) = buffer.data();
         let (sy, su, sv) = buffer.strides();
-        super::preview::pack_i420(
-            target,
-            buffer.width() as usize,
-            buffer.height() as usize,
-            [(y, sy as usize), (u, su as usize), (v, sv as usize)],
-        )?;
+        if rgb {
+            let Pixels::I444(planes) = buffer else {
+                return Err("Invalid RGB preview planes".into());
+            };
+            if target.len() < buffer.width() as usize * buffer.height() as usize * 4 {
+                return Err("Preview exceeds shared buffer".into());
+            }
+            // Chromium's raw I444 renderer ignores identity matrix metadata.
+            // Present packed RGB while the encoder retains full G/B/R planes.
+            libwebrtc::native::yuv_helper::gbr_to_argb(planes, target, buffer.width() * 4);
+        } else {
+            super::preview::pack_planar(
+                target,
+                buffer.width() as usize,
+                buffer.height() as usize,
+                [(y, sy as usize), (u, su as usize), (v, sv as usize)],
+                buffer.format() == "I444",
+            )?;
+        }
         Ok(Some(super::preview::PreviewFrame {
             sequence,
             width: buffer.width(),
             height: buffer.height(),
             timestamp: self.started.elapsed().as_secs_f64() * 1000.0,
-            color_space: self
-                .options
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .color_space(),
+            format: if rgb { "BGRA" } else { buffer.format() },
+            color_space: options.color_space(),
         }))
     }
 
     #[cfg(test)]
-    fn publish_frame(&self, frame: &VideoFrame<I420Buffer>) {
+    fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
         self.publish_frame_at(frame, Some(Instant::now()));
     }
 
-    fn publish_frame_at(&self, frame: &VideoFrame<I420Buffer>, captured_at: Option<Instant>) {
+    fn publish_frame_at<T: AsRef<dyn VideoBuffer>>(
+        &self,
+        frame: &VideoFrame<T>,
+        captured_at: Option<Instant>,
+    ) {
         // Both adapters borrow the same converted pixels; capture/readback and
         // BGRA conversion still happen only once per frame.
         self.source.capture_frame(frame);
         self.preview_source.capture_frame(frame);
         let hardware = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
         if !hardware.is_empty() {
-            let frame = Arc::new(mf::Frame::from_i420(&frame.buffer, captured_at));
+            let Some(buffer) = frame.buffer.as_ref().as_i420() else {
+                return;
+            };
+            let frame = Arc::new(mf::Frame::from_i420(buffer, captured_at));
             for encoder in hardware.values() {
                 encoder.submit(frame.clone());
             }
@@ -767,8 +789,8 @@ impl MediaSession {
                             .map_err(|e| e.to_string())?;
                     }
                 }
-                if options.codec.is_some() || !options.vp8_color_compatible() {
-                    let codecs = self
+                {
+                    let codecs: Vec<_> = self
                         .factory
                         .get_rtp_sender_capabilities(MediaType::Video)
                         .codecs
@@ -780,6 +802,11 @@ impl MediaSession {
                                 .is_none_or(|codec| c.mime_type.eq_ignore_ascii_case(codec))
                                 && (options.vp8_color_compatible()
                                     || !c.mime_type.eq_ignore_ascii_case("video/vp8"))
+                                && (!c.mime_type.eq_ignore_ascii_case("video/vp9")
+                                    || c.sdp_fmtp_line
+                                        .as_deref()
+                                        .is_some_and(super::color::vp9_profile1)
+                                        == options.color_format.full_chroma())
                                 && (hardware.is_none()
                                     || options.codec.as_deref() != Some("video/h264")
                                     || c.sdp_fmtp_line
@@ -791,6 +818,13 @@ impl MediaSession {
                                 )
                         })
                         .collect();
+                    if options.color_format.full_chroma()
+                        && !codecs
+                            .iter()
+                            .any(|c| c.mime_type.eq_ignore_ascii_case("video/vp9"))
+                    {
+                        return Err("VP9 4:4:4 encoder is unavailable".into());
+                    }
                     transceiver
                         .set_codec_preferences(codecs)
                         .map_err(|e| e.to_string())?;
@@ -913,6 +947,13 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
+        if options.color_format.full_chroma() && !super::color::accepts_full_chroma(sdp) {
+            self.close_peer(id);
+            return Err(
+                "The receiver does not support VP9 4:4:4 / RGB. Select YUV 4:2:0 to connect."
+                    .into(),
+            );
+        }
         let sdp = super::starting_bitrate_sdp(sdp, options.max_bitrate, preview);
         let description =
             SessionDescription::parse(&sdp, SdpType::Answer).map_err(|e| e.to_string())?;
