@@ -19,6 +19,10 @@ Cargo also fetches the patched WebRTC bindings from the
 [Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/weblink-native-media),
 pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
 No vendored source or separate dependency preparation step is needed.
+The fork keeps only `main` for official upstream history and `weblink-native-media`
+for Weblink changes. Rebase the complete Weblink patch series onto updated `main`
+so our commits always follow the official commits; verify the patches with
+`git range-diff` and refresh both pinned dependency files after validation.
 After initializing Git submodules, run from the root:
 
 ```sh
@@ -398,7 +402,9 @@ resolution while the screen is static. Capture
 coalesces new content for a single conversion worker. Only the newest pending GPU frame
 is retained; the conversion worker owns the frame-rate cap. Software input follows
 an absolute cadence, while hardware capture starts promptly after idle and skips
-missed deadlines. Hardware MFT input/output readiness wakes its worker through
+missed deadlines. An already-due hardware frame bypasses the timer; only future
+frame deadlines await the cadence limit, avoiding timer-tick rounding on ready frames.
+Hardware MFT input/output readiness wakes its worker through
 Media Foundation events; there is no second encoder FPS gate or output polling
 timer. Each encoder keeps only its latest pending input. Reconfiguration and
 shutdown release callback state without retaining the capture session. On Windows versions supporting
@@ -448,7 +454,7 @@ The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
 encoder bitrate limits, congestion control and retransmission remain active.
 Both options belong to the native screen session's factory, not process-global
 settings. The binding changes and upstream versions are documented in the fork's
-[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/40d325ebeda3567cf25dc742b6062bd7c5c9cc9a/WEBLINK.md).
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/062d494b80b73df4b01b8320f456bf4334ee3608/WEBLINK.md).
 Update the fork first, then the full Cargo revision and lockfile together; normal
 builds never follow the branch tip. Preserve upstream license notices and verify
 native-to-browser RTP when upgrading the bindings.
@@ -486,6 +492,22 @@ was honored. Unsupported optional controls remain diagnostic and do not silently
 disable otherwise usable hardware encoders.
 Preparation times measure CPU submission; GPU completion wait appears in Map.
 These diagnostics exclude network transit and presentation latency.
+
+An opt-in synthetic benchmark exercises 1080p GPU readback, hardware H.264,
+RTP and a native receiver in the same process at 60 and 120 FPS:
+
+```sh
+cargo test --locked -p weblink-desktop-capture --lib synthetic_native_stream_latency -- --ignored --nocapture
+```
+
+It requires a working H.264 hardware encoder and prints `LATENCY_PROBE` JSON.
+Run serially with other GPU workloads idle. The pattern is precomputed, each
+stream warms up for three seconds, and RTP/receiver counters cover the remaining
+seven seconds. Pipeline distributions retain their latest 120 samples. Compare
+the same machine, build profile and workload; these intervals and overlapping
+stage times must not be summed as end-to-end latency. This benchmark captures no
+desktop pixels and excludes OS capture, a real network path, browser rendering
+and display scan-out. It checks delivery, without asserting timing thresholds.
 
 DXGI enables D3D immediate-context thread protection before duplication starts:
 DXGI acquisition/release and the asynchronous GPU readback worker share this

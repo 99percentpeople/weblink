@@ -2,6 +2,7 @@ use super::*;
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
+mod latency_probe;
 
 #[test]
 #[ignore = "Requires Windows process-loopback support; initializes clients without recording"]

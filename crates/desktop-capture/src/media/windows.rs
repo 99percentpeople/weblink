@@ -250,7 +250,12 @@ impl MediaSession {
                     if now >= capture_deadline + interval {
                         capture_deadline = now;
                     }
-                    tokio::time::sleep_until(capture_deadline).await;
+                    // An elapsed deadline is already admissible. Registering a
+                    // fresh timer can round it up to the next timer tick and
+                    // delay a frame which needs no rate-limit wait.
+                    if now < capture_deadline {
+                        tokio::time::sleep_until(capture_deadline).await;
+                    }
                     capture_deadline += interval;
                 }
                 let Some(session) = weak.upgrade() else { break };
