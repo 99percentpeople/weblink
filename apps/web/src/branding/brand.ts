@@ -101,9 +101,9 @@ export function getBrandArtwork(
 
   if (variant === "logo") {
     return {
-      viewBox: "0 0 452 144",
-      width: 452,
-      height: 144,
+      viewBox: "17 30 435 91",
+      width: 435,
+      height: 91,
       markup: `${definitions}
   <g transform="translate(-30 -38) scale(.44)">${symbol}</g>
   <text x="184" y="95" fill="currentColor" font-family="${escapeXml(wordmark.fontFamily)}" font-size="${wordmark.fontSize}" font-weight="${wordmark.fontWeight}" letter-spacing="${wordmark.letterSpacing}">${escapeXml(BRAND.name)}</text>`,
@@ -111,8 +111,11 @@ export function getBrandArtwork(
   }
 
   if (hasBackground) {
+    // Fit the circular background instead of keeping a transparent outer border.
+    const inset = 256 - BRAND.circleRadius;
+    const diameter = BRAND.circleRadius * 2;
     return {
-      viewBox: "0 0 512 512",
+      viewBox: `${inset} ${inset} ${diameter} ${diameter}`,
       width: 512,
       height: 512,
       markup: `${definitions}${variant === "pwa" ? `\n  <rect width="512" height="512" fill="${colors.backgroundEnd}"/>` : ""}
@@ -122,9 +125,9 @@ export function getBrandArtwork(
   }
 
   return {
-    viewBox: "80 124 352 264",
-    width: 352,
-    height: 264,
+    viewBox: "107 155 298 205",
+    width: 298,
+    height: 205,
     markup: `${definitions}\n  ${symbol}`,
   };
 }

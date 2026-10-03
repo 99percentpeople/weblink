@@ -2,7 +2,7 @@ import { minimal2023Preset } from "@vite-pwa/assets-generator/config";
 import type { Preset } from "@vite-pwa/assets-generator/config";
 import { BRAND } from "../src/branding/brand";
 
-/** No extra padding: the approved SVG already contains its safe area. */
+/** Raster outputs use the SVG bounds directly without adding another border. */
 export const brandPwaPreset: Preset = {
   ...minimal2023Preset,
   transparent: {
