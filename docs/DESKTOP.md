@@ -394,8 +394,12 @@ offers with incompatible explicit colour settings exclude VP8.
 
 The colour-format setting offers 8-bit SDR YUV 4:2:0, YUV 4:4:4 and RGB. The latter
 two require single-layer VP9 Profile 1 software encoding and a compatible receiver;
-unsupported answers fail explicitly. Effective codec/encoder/range settings change
-without overwriting saved 4:2:0 preferences. Restart sharing to apply colour changes.
+unsupported answers fail explicitly. Select the encoder/codec first; its advanced
+options expose only formats implemented by that pipeline. Only explicitly selected
+software VP9 offers 4:4:4/RGB. Other selections, including automatic encoding, use
+4:2:0. Changing encoding resets an incompatible colour format to 4:2:0; colour
+selection never changes the encoder or codec. Saved matrix/range preferences are
+preserved when the selected format restricts them. Restart sharing to apply changes.
 RGB carries G/B/R planes with identity matrix and sRGB transfer; YUV 4:4:4 keeps
 BT.601/BT.709 selection. Both use full range: Chromium's limited-range I444 display
 path can distort chroma even when decoded planes and metadata are correct. Local

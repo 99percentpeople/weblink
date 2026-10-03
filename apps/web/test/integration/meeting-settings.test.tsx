@@ -27,6 +27,7 @@ import { createSignal, Show, Suspense } from "solid-js";
 import { reconcile } from "solid-js/store";
 import MeetingSettings from "@/components/settings/meeting-settings";
 import VideoCaptureSettings from "@/components/settings/video-capture-settings";
+import { nativeScreenOptions } from "@/libs/application/meeting-video-settings";
 import AdvancedSettings from "@/components/settings/advanced-settings";
 import {
   appState,
@@ -89,7 +90,7 @@ beforeEach(() => {
       id: "software",
       name: "Software",
       hardware: false,
-      codecs: ["video/vp8", "video/h264"],
+      codecs: ["video/vp8", "video/h264", "video/vp9"],
     },
     {
       id: "mf:test",
@@ -609,6 +610,102 @@ it("selects a supported encoder and codec together without changing browser pref
   expect(appState.options.nativeScreenCodec).toBeNull();
   expect(appState.options.preferredVideoCodec).toBe(
     "video/vp9",
+  );
+});
+
+it("selects encoding first, filters advanced colour choices and resets incompatible formats", async () => {
+  render(() => <MeetingSettings />);
+  const field = (name: string) =>
+    screen.getByRole("button", {
+      name: new RegExp(`setting.meeting_settings.${name}`),
+    });
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.265 (GPU)",
+  );
+  expect(
+    screen.getByText(
+      "setting.meeting_settings.native_advanced",
+    ),
+  ).toBeInTheDocument();
+  expect(field("color_format")).toBeDisabled();
+  expect(field("color_format")).toHaveTextContent(
+    "YUV 4:2:0",
+  );
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "VP9",
+  );
+  await choose(
+    "setting.meeting_settings.color_format",
+    "RGB · 8-bit · SDR",
+  );
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    encoder: "software",
+    codec: "video/vp9",
+    colorFormat: "rgb",
+    colorRange: "full",
+  });
+  expect(field("native_encoder")).toBeEnabled();
+  expect(field("color_matrix")).toHaveTextContent("RGB");
+  expect(field("color_matrix")).toBeDisabled();
+  expect(field("color_range")).toBeDisabled();
+  await choose(
+    "setting.meeting_settings.color_format",
+    "YUV 4:4:4 · 8-bit · SDR",
+  );
+  expect(field("color_matrix")).toBeEnabled();
+  expect(field("color_range")).toBeDisabled();
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.265 (GPU)",
+  );
+  expect(appState.options.nativeColorFormat).toBe("yuv420");
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    encoder: "mf:test:h265",
+    codec: "video/h265",
+    colorFormat: "yuv420",
+  });
+  expect(field("color_format")).toBeDisabled();
+  expect(field("color_range")).toBeEnabled();
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "VP8",
+  );
+  expect(field("color_matrix")).toHaveTextContent("BT.601");
+  expect(field("color_matrix")).toBeDisabled();
+  expect(field("color_range")).toHaveTextContent(
+    "setting.meeting_settings.color_range_limited",
+  );
+  expect(field("color_range")).toBeDisabled();
+});
+
+it("does not replace a saved hardware codec because of a stale RGB preference", async () => {
+  setAppState("options", {
+    nativeScreenCodec: "video/h265",
+    nativeScreenEncoder: "mf:test:h265",
+    nativeColorFormat: "rgb",
+  });
+  render(() => <MeetingSettings />);
+  const encoder = await screen.findByRole("button", {
+    name: /setting.meeting_settings.native_encoder/,
+  });
+  await waitFor(() => expect(encoder).toBeEnabled());
+  expect(encoder).toHaveTextContent("H.265 (GPU)");
+  expect(
+    screen.getByRole("button", {
+      name: /setting.meeting_settings.color_format/,
+    }),
+  ).toHaveTextContent("YUV 4:2:0");
+  expect(appState.options.nativeScreenCodec).toBe(
+    "video/h265",
+  );
+  expect(appState.options.nativeScreenEncoder).toBe(
+    "mf:test:h265",
   );
 });
 

@@ -146,8 +146,6 @@ impl MediaSession {
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
         if options.color_format.full_chroma() {
-            options.codec = Some("video/vp9".into());
-            options.encoder = "software".into();
             options.color_range = super::color::ColorRange::Full;
         }
         let hardware = if options.encoder == "software" {

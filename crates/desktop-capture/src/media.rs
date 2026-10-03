@@ -75,8 +75,7 @@ impl Default for MediaOptions {
 impl MediaOptions {
     pub fn validate(&self) -> crate::Result<()> {
         if self.color_format.full_chroma()
-            && (self.codec.as_deref().is_some_and(|c| c != "video/vp9")
-                || !matches!(self.encoder.as_str(), "auto" | "software"))
+            && (self.codec.as_deref() != Some("video/vp9") || self.encoder != "software")
         {
             return Err("RGB and YUV 4:4:4 require VP9 software encoding".into());
         }

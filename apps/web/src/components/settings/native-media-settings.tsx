@@ -99,13 +99,10 @@ export default function NativeMediaSettings(props: {
             : "software",
     };
   };
-  const effective = createMemo(() =>
-    nativeScreenOptions(appState.options),
-  );
   const selected = createMemo(() =>
     encodingOption(
-      effective().encoder ?? "auto",
-      effective().codec ?? null,
+      appState.options.nativeScreenEncoder ?? "auto",
+      appState.options.nativeScreenCodec ?? null,
     ),
   );
   const options = createMemo(() => {
@@ -193,8 +190,7 @@ export default function NativeMediaSettings(props: {
           value={selected()}
           disabled={
             props.available.failed ||
-            props.available.encodingLoading ||
-            effective().colorFormat !== "yuv420"
+            props.available.encodingLoading
           }
           options={options()}
           optionValue="id"
@@ -203,9 +199,17 @@ export default function NativeMediaSettings(props: {
           optionGroupChildren="options"
           onChange={(value) => {
             if (!value || value.disabled) return;
+            const next = {
+              ...appState.options,
+              nativeScreenEncoder: value.encoder,
+              nativeScreenCodec: value.codec,
+            };
             setAppOptions({
               nativeScreenEncoder: value.encoder,
               nativeScreenCodec: value.codec,
+              nativeColorFormat:
+                nativeScreenOptions(next).colorFormat ??
+                "yuv420",
             });
           }}
           itemComponent={(item) => (
@@ -243,7 +247,20 @@ export default function NativeMediaSettings(props: {
           </p>
         </Show>
       </div>
-      <NativeColorSettings />
+      <Show
+        when={
+          !props.available.encodingLoading &&
+          !props.available.failed &&
+          !selected().disabled
+        }
+      >
+        <div class="flex flex-col gap-5">
+          <h4 class="font-medium">
+            {label("native_advanced")}
+          </h4>
+          <NativeColorSettings />
+        </div>
+      </Show>
     </div>
   );
 }

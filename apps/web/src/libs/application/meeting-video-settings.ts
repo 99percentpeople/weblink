@@ -1,5 +1,6 @@
 import {
   MAX_NATIVE_FRAME_RATE,
+  type NativeColorFormat,
   type NativeScreenOptions,
 } from "@weblink/platform";
 import type { AppOption } from "@/libs/state/app-options";
@@ -68,6 +69,20 @@ export type MeetingVideoSettings = Pick<
   > &
   MeetingAudioSettings;
 
+/** Formats implemented by the current native pipelines, not the codec specifications.
+ * Keep in sync with MediaOptions::validate. Automatic encoding stays at 4:2:0. */
+export function nativeColorFormats(
+  options: Pick<
+    MeetingVideoSettings,
+    "nativeScreenEncoder" | "nativeScreenCodec"
+  >,
+): NativeColorFormat[] {
+  return options.nativeScreenEncoder === "software" &&
+    options.nativeScreenCodec === "video/vp9"
+    ? ["yuv420", "yuv444", "rgb"]
+    : ["yuv420"];
+}
+
 /** Treat persisted values as untrusted; keep the browser and native limits aligned. */
 export function nativeScreenOptions(
   options: MeetingVideoSettings,
@@ -78,15 +93,15 @@ export function nativeScreenOptions(
   )
     ? videoResolutions[options.videoResolution]
     : videoResolutions["1080p"];
-  const colorFormat =
-    options.nativeColorFormat === "rgb" ||
-    options.nativeColorFormat === "yuv444"
-      ? options.nativeColorFormat
-      : "yuv420";
+  const requestedFormat =
+    options.nativeColorFormat ?? "yuv420";
+  const colorFormat = nativeColorFormats(options).includes(
+    requestedFormat,
+  )
+    ? requestedFormat
+    : "yuv420";
   const fullChroma = colorFormat !== "yuv420";
-  const codec = fullChroma
-    ? "video/vp9"
-    : (options.nativeScreenCodec ?? null);
+  const codec = options.nativeScreenCodec ?? null;
   return {
     ...nativeAudioOptions(options),
     maxWidth,
@@ -110,9 +125,7 @@ export function nativeScreenOptions(
         )
       : 25 * 1024 * 1024,
     codec,
-    encoder: fullChroma
-      ? "software"
-      : (options.nativeScreenEncoder ?? "auto"),
+    encoder: options.nativeScreenEncoder ?? "auto",
     colorFormat,
     colorMatrix:
       codec === "video/vp8"

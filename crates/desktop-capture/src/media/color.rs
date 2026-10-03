@@ -192,12 +192,26 @@ mod tests {
         let options = super::super::MediaOptions {
             color_format: ColorFormat::Rgb,
             color_matrix: ColorMatrix::Bt601,
+            codec: Some("video/vp9".into()),
+            encoder: "software".into(),
             ..Default::default()
         };
         options.validate().unwrap();
         let color = serde_json::to_value(options.color_space()).unwrap();
         assert_eq!(color["matrix"], "rgb");
         assert_eq!(color["fullRange"], true);
+        assert!(super::super::MediaOptions {
+            codec: None,
+            ..options.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(super::super::MediaOptions {
+            encoder: "auto".into(),
+            ..options.clone()
+        }
+        .validate()
+        .is_err());
         assert!(super::super::MediaOptions {
             codec: Some("video/h265".into()),
             ..options.clone()

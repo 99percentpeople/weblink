@@ -5,6 +5,8 @@ async fn full_chroma_session(format: ColorFormat) {
     let media = MediaSession::new(MediaOptions {
         color_format: format,
         color_range: ColorRange::Full,
+        codec: Some("video/vp9".into()),
+        encoder: "software".into(),
         max_width: 640,
         max_height: 360,
         frame_rate: 30,
