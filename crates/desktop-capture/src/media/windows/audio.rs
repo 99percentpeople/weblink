@@ -1,5 +1,6 @@
-//! WASAPI PCM stays on a native worker and is fed directly to WebRTC/Opus.
+//! WASAPI PCM stays on a native worker and is fed directly to WebRTC.
 mod activation;
+use crate::media::{AudioCaptureFormat, AUDIO_CHANNEL_COUNTS, AUDIO_SAMPLE_RATES};
 use crate::Result;
 use libwebrtc::{
     audio_frame::AudioFrame,
@@ -24,10 +25,6 @@ use windows::Win32::{
     },
 };
 
-const RATE: u32 = 48_000;
-const CHANNELS: u32 = 2;
-const SAMPLES: usize = (RATE / 100 * CHANNELS) as usize;
-
 pub(super) struct Loopback {
     pub source: NativeAudioSource,
     stop: Arc<AtomicBool>,
@@ -37,8 +34,8 @@ pub(super) struct Loopback {
 }
 
 impl Loopback {
-    pub fn start() -> Result<Self> {
-        let source = NativeAudioSource::new(AudioSourceOptions::default(), RATE, CHANNELS, 0);
+    pub fn start(rate: u32, channels: u32) -> Result<Self> {
+        let source = NativeAudioSource::new(AudioSourceOptions::default(), rate, channels, 0);
         let stop = Arc::new(AtomicBool::new(false));
         let enabled = Arc::new(AtomicBool::new(true));
         let worker_enabled = enabled.clone();
@@ -57,6 +54,8 @@ impl Loopback {
                     &worker_enabled,
                     &runtime,
                     &ready,
+                    rate,
+                    channels,
                 );
                 if let Err(error) = result {
                     let _ = ready.try_send(Err(error.clone()));
@@ -115,24 +114,13 @@ impl Drop for Started {
     }
 }
 
-fn run(
-    source: &NativeAudioSource,
-    stop: &AtomicBool,
-    enabled: &AtomicBool,
-    runtime: &tokio::runtime::Handle,
-    ready: &mpsc::SyncSender<Result<()>>,
-) -> Result<()> {
-    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
-        .ok()
-        .map_err(|e| e.to_string())?;
-    let _apartment = Apartment;
-    let client = activation::excluding_current_process()?;
+fn initialize(client: &IAudioClient, rate: u32, channels: u32) -> windows::core::Result<()> {
     let format = WAVEFORMATEX {
         wFormatTag: 1, // PCM signed 16-bit, resampled by the shared audio engine.
-        nChannels: CHANNELS as u16,
-        nSamplesPerSec: RATE,
-        nAvgBytesPerSec: RATE * CHANNELS * 2,
-        nBlockAlign: (CHANNELS * 2) as u16,
+        nChannels: channels as u16,
+        nSamplesPerSec: rate,
+        nAvgBytesPerSec: rate * channels * 2,
+        nBlockAlign: (channels * 2) as u16,
         wBitsPerSample: 16,
         cbSize: 0,
     };
@@ -148,7 +136,53 @@ fn run(
             None,
         )
     }
-    .map_err(|e| format!("Could not initialize system audio: {e}"))?;
+}
+
+/// Process loopback has no reliable GetMixFormat/IsFormatSupported inventory.
+/// Initialize a fresh client with the same conversion flags as real capture for
+/// each candidate. Never Start, request a capture buffer, or read audio here.
+pub(super) fn supported_formats() -> Result<Vec<AudioCaptureFormat>> {
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
+        .ok()
+        .map_err(|e| e.to_string())?;
+    let _apartment = Apartment;
+    let mut formats = Vec::new();
+    for rate in AUDIO_SAMPLE_RATES {
+        for channels in AUDIO_CHANNEL_COUNTS {
+            let client = activation::excluding_current_process()?;
+            match initialize(&client, rate, channels) {
+                Ok(()) => formats.push(AudioCaptureFormat {
+                    sample_rate: rate,
+                    channel_count: channels,
+                }),
+                Err(error) if error.code() == AUDCLNT_E_UNSUPPORTED_FORMAT => {}
+                Err(error) => return Err(format!("Could not query system audio formats: {error}")),
+            }
+        }
+    }
+    if formats.is_empty() {
+        return Err("No supported system audio capture formats".into());
+    }
+    Ok(formats)
+}
+
+fn run(
+    source: &NativeAudioSource,
+    stop: &AtomicBool,
+    enabled: &AtomicBool,
+    runtime: &tokio::runtime::Handle,
+    ready: &mpsc::SyncSender<Result<()>>,
+    rate: u32,
+    channels: u32,
+) -> Result<()> {
+    let frame_samples = (rate / 100 * channels) as usize;
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
+        .ok()
+        .map_err(|e| e.to_string())?;
+    let _apartment = Apartment;
+    let client = activation::excluding_current_process()?;
+    initialize(&client, rate, channels)
+        .map_err(|e| format!("Could not initialize system audio: {e}"))?;
     let event =
         Event(unsafe { CreateEventW(None, false, false, None) }.map_err(|e| e.to_string())?);
     unsafe { client.SetEventHandle(event.0) }.map_err(|e| e.to_string())?;
@@ -156,8 +190,8 @@ fn run(
     unsafe { client.Start() }.map_err(|e| e.to_string())?;
     let _started = Started(client);
     ready.send(Ok(())).map_err(|e| e.to_string())?;
-    let mut queue = VecDeque::with_capacity(SAMPLES * 4);
-    let mut samples = [0i16; SAMPLES];
+    let mut queue = VecDeque::with_capacity(frame_samples * 4);
+    let mut samples = vec![0i16; frame_samples];
     while !stop.load(Ordering::Acquire) {
         match unsafe { WaitForSingleObject(event.0, 50) } {
             WAIT_TIMEOUT => continue,
@@ -167,13 +201,13 @@ fn run(
         while !stop.load(Ordering::Acquire)
             && unsafe { capture.GetNextPacketSize() }.map_err(|e| e.to_string())? > 0
         {
-            read_packet(&capture, &mut queue)?;
+            read_packet(&capture, &mut queue, rate, channels)?;
             // Bound latency after suspension or a stalled callback to 100 ms.
-            if queue.len() > SAMPLES * 10 {
-                let excess = (queue.len() - SAMPLES * 10) / SAMPLES * SAMPLES;
+            if queue.len() > frame_samples * 10 {
+                let excess = (queue.len() - frame_samples * 10) / frame_samples * frame_samples;
                 queue.drain(..excess);
             }
-            while queue.len() >= SAMPLES && !stop.load(Ordering::Acquire) {
+            while queue.len() >= frame_samples && !stop.load(Ordering::Acquire) {
                 for sample in &mut samples {
                     *sample = queue.pop_front().unwrap();
                 }
@@ -183,9 +217,9 @@ fn run(
                 runtime
                     .block_on(source.capture_frame(&AudioFrame {
                         data: Cow::Borrowed(&samples),
-                        sample_rate: RATE,
-                        num_channels: CHANNELS,
-                        samples_per_channel: RATE / 100,
+                        sample_rate: rate,
+                        num_channels: channels,
+                        samples_per_channel: rate / 100,
                     }))
                     .map_err(|e| e.to_string())?;
             }
@@ -194,20 +228,25 @@ fn run(
     Ok(())
 }
 
-fn read_packet(capture: &IAudioCaptureClient, queue: &mut VecDeque<i16>) -> Result<()> {
+fn read_packet(
+    capture: &IAudioCaptureClient,
+    queue: &mut VecDeque<i16>,
+    rate: u32,
+    channels: u32,
+) -> Result<()> {
     let mut data = std::ptr::null_mut();
     let mut frames = 0;
     let mut flags = 0;
     unsafe { capture.GetBuffer(&mut data, &mut frames, &mut flags, None, None) }
         .map_err(|e| e.to_string())?;
     let result = (|| {
-        if frames > RATE {
+        if frames > rate {
             return Err("System audio packet exceeds one second".to_string());
         }
         if flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 != 0 {
             queue.clear();
         }
-        let count = frames as usize * CHANNELS as usize;
+        let count = frames as usize * channels as usize;
         // Silent WASAPI buffers may be null. Never dereference them.
         if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 {
             queue.extend(std::iter::repeat_n(0, count));

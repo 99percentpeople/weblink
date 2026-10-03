@@ -1,3 +1,5 @@
+import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { platform } from "@/libs/platform/runtime";
 import { createRoot, createSignal, Show } from "solid-js";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { render } from "solid-js/web";
@@ -73,21 +75,28 @@ async function main() {
     peerId: null,
   });
   let disposeTasks!: () => void;
-  const { tasks, permissions } = createRoot((dispose) => {
-    disposeTasks = dispose;
-    return {
-      permissions: createAppPermissions({
+  const { tasks, permissions, mediaCapabilities } =
+    createRoot((dispose) => {
+      disposeTasks = dispose;
+      const permissions = createAppPermissions({
         notifications: undefined,
         outputSupported: () => false,
-      }),
-      tasks: createTaskService({
-        clientId: () => "self",
-        messages: () => appState.message.messages,
-        caches: () => appState.cache.cacheInfo,
-        transfers: () => ({}),
-      }),
-    };
-  });
+      });
+      return {
+        permissions,
+        mediaCapabilities: createAppMediaCapabilities({
+          platform,
+          permissions: permissions.media,
+          stream: () => appState.session.localStream,
+        }),
+        tasks: createTaskService({
+          clientId: () => "self",
+          messages: () => appState.message.messages,
+          caches: () => appState.cache.cacheInfo,
+          transfers: () => ({}),
+        }),
+      };
+    });
   let approve!: (allow: boolean) => void;
   const initiator = new SpeedTestService({
     getConnection: () => a,
@@ -188,6 +197,7 @@ async function main() {
     };
     setTaskTestContext({
       permissions,
+      mediaCapabilities,
       conversationMessaging: {
         sendText: unexpected,
         sendFile: unexpected,

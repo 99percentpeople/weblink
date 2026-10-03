@@ -1,3 +1,5 @@
+import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { platform } from "@/libs/platform/runtime";
 import { MeetingSessionProvider } from "../../support/meeting-session-provider";
 import { createRoot, type ParentProps } from "solid-js";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
@@ -858,13 +860,23 @@ async function main() {
   const stores = createMessageStores(repository);
   await stores.initialize();
   const local = createLocalStreamService();
-  const { tasks, permissions: appPermissions } = createRoot(
-    () => ({
-      permissions: createAppPermissions({
-        notifications: undefined,
-        outputSupported: () =>
-          typeof HTMLMediaElement.prototype.setSinkId ===
-          "function",
+  const {
+    tasks,
+    permissions: appPermissions,
+    mediaCapabilities,
+  } = createRoot(() => {
+    const permissions = createAppPermissions({
+      notifications: undefined,
+      outputSupported: () =>
+        typeof HTMLMediaElement.prototype.setSinkId ===
+        "function",
+    });
+    return {
+      permissions,
+      mediaCapabilities: createAppMediaCapabilities({
+        platform,
+        permissions: permissions.media,
+        stream: local.stream,
       }),
       tasks: createTaskService({
         clientId: () => "self",
@@ -872,8 +884,8 @@ async function main() {
         caches: () => appState.cache.cacheInfo,
         transfers: () => ({}),
       }),
-    }),
-  );
+    };
+  });
   let sentCount = 0;
   let sentFiles = 0;
   let requestedFiles = 0;
@@ -947,6 +959,7 @@ async function main() {
   };
   setChatTestContext({
     permissions: appPermissions,
+    mediaCapabilities,
     conversationHistory: {
       cacheLocalTextBatch: unexpected,
     },

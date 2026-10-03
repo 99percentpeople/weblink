@@ -80,6 +80,8 @@ export function createApplicationRoot(
                 platform.capture && platform.screenShare
                   ? createNativeScreenDialog(
                       platform.capture,
+                      state.mediaCapabilities
+                        .captureBackends,
                     )
                   : undefined,
             });

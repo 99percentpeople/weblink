@@ -1,4 +1,5 @@
 import { resolveNotificationOptions } from "@/libs/domain/notification-options";
+import { resolveAudioSampling } from "@/libs/application/meeting-audio-settings";
 import {
   setClientConfig,
   setRoomConfig,
@@ -112,6 +113,7 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        ...resolveAudioSampling(parsed),
         notifications: resolveNotificationOptions(
           parsed.notifications,
         ),

@@ -1,4 +1,5 @@
 import { meetingVideoConstraints } from "@/libs/application/meeting-video-settings";
+import { meetingAudioConstraints } from "@/libs/application/meeting-audio-settings";
 import {
   createEffect,
   createMemo,
@@ -193,7 +194,10 @@ export const createMediaSelectionDialog = () => {
     device: MediaDeviceInfoType | null,
     constraints: MediaTrackConstraints,
   ) => {
-    const audioConstraints = { ...constraints };
+    const audioConstraints = {
+      ...constraints,
+      ...meetingAudioConstraints(appState.options),
+    };
 
     if (device?.deviceId) {
       audioConstraints.deviceId = {
@@ -255,7 +259,12 @@ export const createMediaSelectionDialog = () => {
         },
         audio:
           enableSpeaker && !screenAudioInput
-            ? { ...appState.media.constraints.speaker }
+            ? {
+                ...appState.media.constraints.speaker,
+                ...meetingAudioConstraints(
+                  appState.options,
+                ),
+              }
             : false,
       }),
     );

@@ -35,6 +35,7 @@ fn main() {
             "capture_display_layout",
             "capture_thumbnail",
             "capture_codecs",
+            "capture_audio_formats",
             "capture_backends",
             "capture_encoders",
             "capture_start",

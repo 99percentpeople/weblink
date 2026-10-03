@@ -4,6 +4,7 @@ import { useAppState } from "@/libs/state/app-state-context";
 import { useAudioPlayer } from "@/libs/state/audio-player-context";
 import { createMeetingMedia } from "@/libs/state/create-meeting-media";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
+import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
 import { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
 import { MeetingMediaProvider as InjectMedia } from "@/components/app/meeting-media-provider";
 
@@ -17,12 +18,20 @@ export function MeetingMediaProvider(props: ParentProps) {
     outputSupported: audio.outputSupported,
     mediaPermissionPolicy: platform.mediaPermissionPolicy,
   });
+  state.mediaCapabilities ??= createAppMediaCapabilities({
+    platform,
+    permissions: state.permissions.media,
+    stream: state.localStream,
+  });
   const value = createMeetingMedia({
     state,
     audio,
     nativePicker:
       platform.capture && platform.screenShare
-        ? createNativeScreenDialog(platform.capture)
+        ? createNativeScreenDialog(
+            platform.capture,
+            state.mediaCapabilities.captureBackends,
+          )
         : undefined,
   });
   return (

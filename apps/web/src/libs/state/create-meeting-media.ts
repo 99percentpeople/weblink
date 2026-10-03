@@ -1,4 +1,5 @@
 import { appState } from "@/libs/state/app-state";
+import { meetingAudioConstraints } from "@/libs/application/meeting-audio-settings";
 import { sessionService } from "@/libs/application/session-service";
 import {
   meetingVideoConstraints,
@@ -44,21 +45,23 @@ export function createMeetingMedia({
             video: meetingVideoConstraints(
               appState.options,
             ),
-            audio: true,
+            audio: {
+              ...appState.media.constraints.speaker,
+              ...meetingAudioConstraints(appState.options),
+            },
             systemAudio: "include",
           } as DisplayMediaStreamOptions)
       : undefined;
   const getDisplayMedia = nativePicker
     ? async () => {
         const generation = captureGeneration;
-        const capabilities =
-          await platform.getCapabilities();
+        await state.mediaCapabilities.ready();
         if (disposed || generation !== captureGeneration)
           throw new DOMException(
             "Capture cancelled",
             "AbortError",
           );
-        if (!capabilities.nativeScreenCapture) {
+        if (!state.mediaCapabilities.captureSupported()) {
           if (browserDisplayMedia)
             return browserDisplayMedia();
           throw new Error(t("meeting.media_unavailable"));
@@ -111,6 +114,7 @@ export function createMeetingMedia({
         audio: constraints.audio
           ? {
               ...appState.media.constraints.microphone,
+              ...meetingAudioConstraints(appState.options),
               ...(typeof constraints.audio === "object"
                 ? constraints.audio
                 : {}),
@@ -131,6 +135,11 @@ export function createMeetingMedia({
     },
   });
   createEffect(media.sync);
+  createEffect(() =>
+    state.mediaCapabilities?.setMicrophoneId(
+      media.selectedMicrophoneId(),
+    ),
+  );
   const shareDefaultScreen = async (
     signal: AbortSignal,
   ) => {

@@ -215,10 +215,25 @@ pub async fn capture_close_peer(
 }
 
 #[tauri::command]
-pub async fn capture_codecs() -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(weblink_desktop_capture::media::MediaSession::codecs)
+pub async fn capture_codecs(kind: Option<String>) -> Result<Vec<String>, String> {
+    let query = match kind.as_deref().unwrap_or("video") {
+        "video" => weblink_desktop_capture::media::MediaSession::codecs,
+        "audio" => weblink_desktop_capture::media::MediaSession::audio_codecs,
+        _ => return Err("Invalid media kind".into()),
+    };
+    tauri::async_runtime::spawn_blocking(query)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn capture_audio_formats(
+) -> Result<Vec<weblink_desktop_capture::media::AudioCaptureFormat>, String> {
+    tauri::async_runtime::spawn_blocking(
+        weblink_desktop_capture::media::MediaSession::audio_formats,
+    )
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

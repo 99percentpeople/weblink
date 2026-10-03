@@ -224,37 +224,60 @@
       }
     },
     "meeting_settings": {
-      "resolution": "Maximum resolution",
-      "frame_rate": "Maximum frame rate",
-      "capture_description": "Resolution, frame rate, bitrate and degradation preference also apply to active streams. Limits depend on the source and available resources. Codec, encoder and capture backend changes apply to the next share.",
+      "resolution": "Video resolution limit",
+      "frame_rate": "Video frame rate limit",
+      "capture_description": "Used for cameras and screen sharing. Quality changes apply immediately.",
       "native_unavailable": "Native codec capabilities could not be loaded.",
       "stream": {
-        "title": "Video Call Settings",
+        "title": "Video quality",
         "video_max_bitrate": {
-          "title": "Video Max Bitrate",
-          "description": "Max video bitrate of the stream"
+          "title": "Video send bitrate limit"
         },
         "degradation_preference": {
-          "title": "Degradation Preference",
-          "description": "When the network condition is poor, the application will prioritize video quality or frame rate"
+          "title": "When resources are limited, prioritize",
+          "balanced": "Balance detail and smoothness",
+          "maintain-framerate": "Smooth motion (frame rate)",
+          "maintain-resolution": "Sharp detail (resolution)"
         },
         "preferred_video_codec": {
-          "title": "Browser video codec preference",
-          "description": "Prefer using this codec when negotiating the video stream. Takes effect for new connections.",
-          "auto": "Auto"
-        },
-        "preferred_audio_codec": {
-          "title": "Preferred Audio Codec",
-          "description": "Prefer using this codec when negotiating the audio stream. Takes effect for new connections.",
+          "title": "Preferred browser video codec",
           "auto": "Auto"
         }
       },
-      "native_capture": "Native screen sharing",
-      "native_encoder": "Native video encoding",
+      "native_capture": "Screen capture and encoding",
+      "native_encoder": "Screen sharing video encoding",
       "native_encoder_auto": "Automatic (prefer compatible hardware)",
       "hardware": "Hardware",
       "software": "Software",
-      "native_encoder_description": "Choose a format and hardware or software encoder. Hardware options are detected from the current driver. Receivers must support the format; changes apply to the next share."
+      "native_encoder_description": "Choose desktop capture methods and video codecs for the next share.",
+      "audio": {
+        "title": "Audio capture",
+        "auto": "Auto",
+        "unavailable": "Currently unavailable",
+        "codec": {
+          "title": "Preferred audio codec",
+          "unsupported": "Audio codec capabilities are unavailable. A compatible codec will be negotiated automatically."
+        },
+        "sample_rate": {
+          "title": "Audio sample rate"
+        },
+        "channels": {
+          "title": "Audio channels",
+          "mono": "Mono",
+          "stereo": "Stereo (two channels)"
+        },
+        "description": "Choose a supported sample rate and channel count for the next capture.",
+        "sampling_loading": "Loading audio formats…",
+        "codecs_loading": "Loading audio codecs…",
+        "sampling_failed": "System audio formats are currently unavailable.",
+        "sampling_unknown": "Sampling options are not available yet. Use Auto."
+      },
+      "encoders_loading": "Detecting video encoders…",
+      "backends_loading": "Loading capture methods…",
+      "backends_unavailable": "Capture methods are currently unavailable.",
+      "browser_encoding": "Browser encoding",
+      "browser_encoding_description": "Used for cameras, microphones, and browser screen sharing on subsequent connection negotiation.",
+      "native_audio_codec": "Native audio codec"
     },
     "remote_control": {
       "description": "Choose how this device’s touch gestures control a remote screen.",

@@ -21,12 +21,12 @@ pub(super) fn supported() -> bool {
     GraphicsCaptureApi::is_supported().unwrap_or(false)
 }
 
-fn thumbnail_border() -> Result<DrawBorderSettings> {
+fn borderless_capture(timeout: Duration) -> Result<DrawBorderSettings> {
     if !GraphicsCaptureApi::is_border_settings_supported().map_err(|e| e.to_string())? {
-        return Err("This Windows version does not support borderless previews".into());
+        return Err("This Windows version does not support borderless capture".into());
     }
     // WithoutBorder alone can be silently ignored when access is denied.
-    // Obtain OS approval before starting any temporary WGC session.
+    // Obtain OS approval before requesting a borderless WGC session.
     let request = GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless)
         .map_err(|e| e.to_string())?;
     let (reply, access) = mpsc::sync_channel(1);
@@ -35,15 +35,15 @@ fn thumbnail_border() -> Result<DrawBorderSettings> {
             let _ = reply.send(result);
         })
         .map_err(|e| e.to_string())?;
-    let status = match access.recv_timeout(Duration::from_secs(2)) {
+    let status = match access.recv_timeout(timeout) {
         Ok(result) => result.map_err(|e| e.to_string())?,
         Err(_) => {
             let _ = request.Cancel();
-            return Err("Borderless preview access timed out".into());
+            return Err("Borderless capture access timed out".into());
         }
     };
     if status != AppCapabilityAccessStatus::Allowed {
-        return Err("Windows did not allow borderless previews".into());
+        return Err("Windows did not allow borderless capture".into());
     }
     Ok(DrawBorderSettings::WithoutBorder)
 }
@@ -54,9 +54,11 @@ pub(super) fn start<T: TryInto<GraphicsCaptureItemType> + Send + 'static>(
 ) -> Result<Box<dyn Session>> {
     let thumbnail = frames.lock().unwrap_or_else(|e| e.into_inner()).thumbnail;
     let border = if thumbnail {
-        thumbnail_border()?
+        borderless_capture(Duration::from_secs(2))?
     } else {
-        DrawBorderSettings::Default
+        // Older Windows versions and denied OS access must not break sharing.
+        // Temporary thumbnails still fail rather than flashing a capture border.
+        borderless_capture(Duration::from_secs(30)).unwrap_or(DrawBorderSettings::Default)
     };
     // The default WGC interval can undershoot 60 fps on high-refresh displays.
     // Let WGC deliver updates promptly and pace conversion in MediaSession.

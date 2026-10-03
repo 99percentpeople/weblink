@@ -1,8 +1,5 @@
-import type {
-  CaptureCapabilities,
-  NativeEncoder,
-} from "@weblink/platform";
-import { createMemo } from "solid-js";
+import type { NativeMediaCapabilitiesSnapshot } from "@/libs/state/create-app-media-capabilities";
+import { createMemo, Show } from "solid-js";
 import {
   Select,
   SelectContent,
@@ -17,12 +14,8 @@ import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import { t } from "@/i18n";
 
-export interface NativeMediaSettingsCapabilities {
-  codecs: string[];
-  encoders: NativeEncoder[];
-  backends: CaptureCapabilities;
-  failed: boolean;
-}
+export type NativeMediaSettingsCapabilities =
+  NativeMediaCapabilitiesSnapshot;
 interface EncodingOption {
   id: string;
   encoder: string;
@@ -91,9 +84,10 @@ export default function NativeMediaSettings(props: {
       ),
       encoder,
       codec,
-      label: disabled
-        ? `${text} (${t("meeting.native_screen.unavailable")})`
-        : text,
+      label:
+        disabled && !props.available.encodingLoading
+          ? `${text} (${t("meeting.native_screen.unavailable")})`
+          : text,
       disabled,
       group:
         encoder === "auto" || codec === null || !item
@@ -144,6 +138,14 @@ export default function NativeMediaSettings(props: {
   return (
     <div class="flex flex-col gap-5">
       <h3 class="h3">{label("native_capture")}</h3>
+      <p class="muted">
+        {label("native_encoder_description")}
+      </p>
+      <Show when={props.available.backendsLoading}>
+        <p class="muted" role="status">
+          {label("backends_loading")}
+        </p>
+      </Show>
       <CaptureBackendSelect
         kind="monitor"
         backends={props.available.backends.screen}
@@ -151,7 +153,10 @@ export default function NativeMediaSettings(props: {
           appState.options.nativeScreenCaptureBackend ??
           "auto"
         }
-        disabled={props.available.failed}
+        disabled={
+          props.available.backendsLoading ||
+          props.available.backendsFailed
+        }
         onChange={(value) =>
           setAppOptions("nativeScreenCaptureBackend", value)
         }
@@ -163,17 +168,28 @@ export default function NativeMediaSettings(props: {
           appState.options.nativeWindowCaptureBackend ??
           "auto"
         }
-        disabled={props.available.failed}
+        disabled={
+          props.available.backendsLoading ||
+          props.available.backendsFailed
+        }
         onChange={(value) =>
           setAppOptions("nativeWindowCaptureBackend", value)
         }
       />
+      <Show when={props.available.backendsFailed}>
+        <p class="muted" role="status">
+          {label("backends_unavailable")}
+        </p>
+      </Show>
       <div class="flex flex-col gap-2">
         <Label>{label("native_encoder")}</Label>
         <Select<EncodingOption, EncodingGroup>
           modal
           value={selected()}
-          disabled={props.available.failed}
+          disabled={
+            props.available.failed ||
+            props.available.encodingLoading
+          }
           options={options()}
           optionValue="id"
           optionTextValue="label"
@@ -206,13 +222,20 @@ export default function NativeMediaSettings(props: {
           </SelectTrigger>
           <SelectContent />
         </Select>
-        <p class="muted">
-          {label(
+        <Show
+          when={
+            props.available.encodingLoading ||
             props.available.failed
-              ? "native_unavailable"
-              : "native_encoder_description",
-          )}
-        </p>
+          }
+        >
+          <p class="muted" role="status">
+            {label(
+              props.available.encodingLoading
+                ? "encoders_loading"
+                : "native_unavailable",
+            )}
+          </p>
+        </Show>
       </div>
     </div>
   );

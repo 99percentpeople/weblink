@@ -11,6 +11,17 @@ mod bitrate;
 // Keep in sync with MAX_NATIVE_FRAME_RATE in @weblink/platform.
 pub const MAX_FRAME_RATE: u32 = 1000;
 
+// Formats supported by the application's PCM/WebRTC path; Windows probes each pair.
+pub const AUDIO_SAMPLE_RATES: [u32; 5] = [8000, 16000, 32000, 44100, 48000];
+pub const AUDIO_CHANNEL_COUNTS: [u32; 2] = [1, 2];
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioCaptureFormat {
+    pub sample_rate: u32,
+    pub channel_count: u32,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncoderInfo {
@@ -24,6 +35,9 @@ pub struct EncoderInfo {
 #[serde(rename_all = "camelCase", default)]
 pub struct MediaOptions {
     pub audio: bool,
+    pub audio_sample_rate: u32,
+    pub audio_channel_count: u32,
+    pub audio_codec: Option<String>,
     pub max_width: u32,
     pub max_height: u32,
     pub frame_rate: u32,
@@ -37,6 +51,9 @@ impl Default for MediaOptions {
     fn default() -> Self {
         Self {
             audio: false,
+            audio_sample_rate: 48_000,
+            audio_channel_count: 2,
+            audio_codec: None,
             max_width: 1920,
             max_height: 1080,
             frame_rate: 30,
@@ -50,6 +67,11 @@ impl Default for MediaOptions {
 
 impl MediaOptions {
     pub fn validate(&self) -> crate::Result<()> {
+        if !AUDIO_SAMPLE_RATES.contains(&self.audio_sample_rate)
+            || !AUDIO_CHANNEL_COUNTS.contains(&self.audio_channel_count)
+        {
+            return Err("Invalid native audio settings".into());
+        }
         if self.encoder != "auto"
             && self.encoder != "software"
             && !(self.encoder.starts_with("mf:") && self.encoder.len() <= 64)
@@ -265,6 +287,12 @@ impl MediaSession {
     pub fn codecs() -> Vec<String> {
         vec![]
     }
+    pub fn audio_codecs() -> Vec<String> {
+        vec![]
+    }
+    pub fn audio_formats() -> crate::Result<Vec<AudioCaptureFormat>> {
+        Err("Native system audio currently requires Windows".into())
+    }
     pub fn new(_: MediaOptions) -> crate::Result<std::sync::Arc<Self>> {
         Err("Native screen sharing currently requires Windows".into())
     }
@@ -384,6 +412,39 @@ mod tests {
         assert!(audio.contains("a=candidate:audio\r\n"));
         assert!(!audio.contains("candidate:video"));
         assert_eq!(sdp.matches("a=end-of-candidates").count(), 2);
+    }
+    #[test]
+    fn audio_sampling_is_validated_and_legacy_options_keep_defaults() {
+        let legacy: MediaOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy.audio_sample_rate, 48_000);
+        assert_eq!(legacy.audio_channel_count, 2);
+        assert!(!legacy.audio);
+        for rate in [8000, 16000, 32000, 44100, 48000] {
+            for channels in [1, 2] {
+                let options = MediaOptions {
+                    audio_sample_rate: rate,
+                    audio_channel_count: channels,
+                    ..Default::default()
+                };
+                assert!(options.validate().is_ok());
+            }
+        }
+        for rate in [0, 1, 96000, u32::MAX] {
+            assert!(MediaOptions {
+                audio_sample_rate: rate,
+                ..Default::default()
+            }
+            .validate()
+            .is_err());
+        }
+        for channels in [0, 3, u32::MAX] {
+            assert!(MediaOptions {
+                audio_channel_count: channels,
+                ..Default::default()
+            }
+            .validate()
+            .is_err());
+        }
     }
     #[test]
     fn bounded_configuration_and_aspect_ratio() {

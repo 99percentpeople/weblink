@@ -109,6 +109,28 @@ impl MediaSession {
         codecs
     }
 
+    pub fn audio_formats() -> Result<Vec<super::AudioCaptureFormat>> {
+        audio::supported_formats()
+    }
+
+    pub fn audio_codecs() -> Vec<String> {
+        let mut codecs: Vec<_> = PeerConnectionFactory::default()
+            .get_rtp_sender_capabilities(MediaType::Audio)
+            .codecs
+            .into_iter()
+            .map(|codec| codec.mime_type.to_lowercase())
+            .filter(|codec| {
+                !matches!(
+                    codec.as_str(),
+                    "audio/red" | "audio/cn" | "audio/telephone-event"
+                )
+            })
+            .collect();
+        codecs.sort();
+        codecs.dedup();
+        codecs
+    }
+
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
         let hardware = if options.encoder == "software" {
@@ -156,7 +178,12 @@ impl MediaSession {
             factory,
             source: NativeVideoSource::new(VideoResolution::default(), screencast),
             preview_source: NativeVideoSource::new(VideoResolution::default(), screencast),
-            audio: options.audio.then(audio::Loopback::start).transpose()?,
+            audio: options
+                .audio
+                .then(|| {
+                    audio::Loopback::start(options.audio_sample_rate, options.audio_channel_count)
+                })
+                .transpose()?,
             peers: Mutex::new(HashMap::new()),
             hardware: Mutex::new(HashMap::new()),
             encoder_id,
@@ -690,18 +717,32 @@ impl MediaSession {
                     let track = self
                         .factory
                         .create_audio_track(&format!("screen-audio-{id}"), audio.source.clone());
-                    pc.add_transceiver(
-                        MediaStreamTrack::Audio(track),
-                        RtpTransceiverInit {
-                            direction: RtpTransceiverDirection::SendOnly,
-                            stream_ids: vec![id.clone()],
-                            send_encodings: vec![RtpEncodingParameters {
-                                max_bitrate: Some(AUDIO_BITRATE_BPS),
-                                ..Default::default()
-                            }],
-                        },
-                    )
-                    .map_err(|e| e.to_string())?;
+                    let audio_transceiver = pc
+                        .add_transceiver(
+                            MediaStreamTrack::Audio(track),
+                            RtpTransceiverInit {
+                                direction: RtpTransceiverDirection::SendOnly,
+                                stream_ids: vec![id.clone()],
+                                send_encodings: vec![RtpEncodingParameters {
+                                    max_bitrate: Some(AUDIO_BITRATE_BPS),
+                                    ..Default::default()
+                                }],
+                            },
+                        )
+                        .map_err(|e| e.to_string())?;
+                    if let Some(codec) = &options.audio_codec {
+                        let mut codecs = self
+                            .factory
+                            .get_rtp_sender_capabilities(MediaType::Audio)
+                            .codecs;
+                        // Stable preference ordering keeps all negotiated fallbacks available.
+                        codecs.sort_by_key(|candidate| {
+                            !candidate.mime_type.eq_ignore_ascii_case(codec)
+                        });
+                        audio_transceiver
+                            .set_codec_preferences(codecs)
+                            .map_err(|e| e.to_string())?;
+                    }
                 }
                 if let Some(codec) = options.codec.as_ref() {
                     let codecs = self

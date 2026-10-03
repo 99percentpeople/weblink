@@ -103,6 +103,7 @@ pub fn run() {
             capture::capture_display_layout,
             capture::capture_thumbnail,
             capture::capture_codecs,
+            capture::capture_audio_formats,
             capture::capture_backends,
             capture::capture_encoders,
             capture::capture_start,

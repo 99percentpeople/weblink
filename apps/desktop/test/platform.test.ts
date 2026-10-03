@@ -269,9 +269,14 @@ describe("desktop platform boundary", () => {
       frameRate: 144,
       maxBitrate: 5_000_000,
       codec: "video/h264",
+      audioSampleRate: 16000,
+      audioChannelCount: 1 as const,
+      audioCodec: "audio/opus",
       degradationPreference: "balanced" as const,
     };
     await platform.screenShare!.codecs();
+    await platform.screenShare!.codecs("audio");
+    await platform.screenShare!.audioFormats!();
     await platform.screenShare!.encoders();
     await platform.capture!.backends();
     await platform.screenShare!.start("source", options, {
@@ -285,7 +290,9 @@ describe("desktop platform boundary", () => {
       true,
     );
     expect(ipc.mock.calls).toEqual([
-      ["capture_codecs", {}],
+      ["capture_codecs", { kind: "video" }],
+      ["capture_codecs", { kind: "audio" }],
+      ["capture_audio_formats", {}],
       ["capture_encoders", {}],
       ["capture_backends", {}],
       [

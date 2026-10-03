@@ -144,6 +144,10 @@ function setup(
     track: MediaStreamTrack,
   ) => "camera" | "screen" | undefined,
   getAudioSource?: PeerSessionMediaOptions["getAudioSource"],
+  getCodecOptions: PeerSessionMediaOptions["getCodecOptions"] = () => ({
+    preferredVideoCodec: null,
+    preferredAudioCodec: null,
+  }),
 ) {
   const state = { pc: null as PeerConnection | null };
   const remote =
@@ -155,10 +159,7 @@ function setup(
     targetClientId: () => "peer",
     getPeerConnection: () =>
       state.pc ? asPc(state.pc) : null,
-    getCodecOptions: () => ({
-      preferredVideoCodec: null,
-      preferredAudioCodec: null,
-    }),
+    getCodecOptions,
     getVideoSourceKind,
     getAudioSource,
     notifyStreamState: notify,
@@ -188,6 +189,48 @@ beforeEach(() => {
   vi.stubGlobal("RTCRtpSender", undefined);
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it("prefers the selected audio codec with fallbacks and restores automatic ordering", () => {
+  const opus = { mimeType: "audio/opus", clockRate: 48000 };
+  const pcma = { mimeType: "audio/PCMA", clockRate: 8000 };
+  vi.stubGlobal("RTCRtpSender", {
+    getCapabilities: () => ({ codecs: [opus, pcma] }),
+  });
+  let preferredAudioCodec: string | null = "audio/pcma";
+  const { controller, bind } = setup(
+    undefined,
+    undefined,
+    () => ({
+      preferredVideoCodec: null,
+      preferredAudioCodec,
+    }),
+  );
+  const pc = new PeerConnection();
+  const setCodecPreferences = vi.fn();
+  pc.transceivers.push(
+    Object.assign(
+      {
+        mid: "audio",
+        sender: { track: null },
+        receiver: {
+          track: asTrack(new Track("audio", "remote")),
+        },
+      },
+      { setCodecPreferences },
+    ),
+  );
+  bind(pc);
+  expect(setCodecPreferences).toHaveBeenLastCalledWith([
+    pcma,
+    opus,
+  ]);
+  preferredAudioCodec = null;
+  controller.setStream(
+    asStream(media(new Track("audio", "mic"))),
+  );
+  expect(setCodecPreferences).toHaveBeenLastCalledWith([]);
+  controller.dispose();
+});
 
 describe("multiple video sources in a peer session", () => {
   it("sends audio owners by MID and refreshes audio-only changes", () => {

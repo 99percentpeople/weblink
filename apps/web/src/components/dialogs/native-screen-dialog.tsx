@@ -47,6 +47,7 @@ export interface NativeScreenSelection {
 
 export function createNativeScreenDialog(
   capture: NativeCapture,
+  captureBackends: () => Promise<CaptureCapabilities>,
 ) {
   const [sources, setSources] = createSignal<
     CaptureSource[]
@@ -120,7 +121,7 @@ export function createNativeScreenDialog(
     try {
       const [next, available] = await Promise.all([
         capture.sources(),
-        capture.backends(),
+        captureBackends(),
       ]);
       if (disposed || token !== generation) return;
       setSources(next);

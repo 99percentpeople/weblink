@@ -204,16 +204,14 @@ export class PeerSessionMediaController {
       kind: "audio" | "video",
       preferredMimeType: string,
     ) => {
-      if (!preferredMimeType) return;
-
       const codecs =
         RTCRtpSender.getCapabilities(kind)?.codecs;
       if (!codecs || codecs.length === 0) return;
 
-      const ordered = orderCodecs(
-        codecs,
-        preferredMimeType,
-      );
+      // An empty list restores the browser default after selecting Auto.
+      const ordered = preferredMimeType
+        ? orderCodecs(codecs, preferredMimeType)
+        : [];
 
       for (const transceiver of pc.getTransceivers()) {
         const transceiverKind =

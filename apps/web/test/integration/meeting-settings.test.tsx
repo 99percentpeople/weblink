@@ -1,3 +1,12 @@
+import { platform } from "@/libs/platform/runtime";
+import {
+  AppStateContext,
+  type AppStateContextProps,
+} from "@/libs/state/app-state-context";
+import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import type { AppPermissions } from "@/libs/state/create-app-permissions";
+import type { JSX } from "solid-js";
+import type { NativeEncoder } from "@weblink/platform";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import {
@@ -10,7 +19,7 @@ import {
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
 } from "@solidjs/testing-library";
@@ -27,6 +36,7 @@ import {
 const native = vi.hoisted(() => ({
   capabilities: vi.fn(),
   codecs: vi.fn(),
+  audioFormats: vi.fn(),
   encoders: vi.fn(),
   backends: vi.fn(),
   enabled: true,
@@ -44,6 +54,7 @@ vi.mock("@/libs/platform/runtime", () => ({
       return native.enabled
         ? {
             codecs: native.codecs,
+            audioFormats: native.audioFormats,
             encoders: native.encoders,
           }
         : undefined;
@@ -100,6 +111,15 @@ beforeEach(() => {
     ],
     window: [{ id: "wgc", name: "WGC" }],
   });
+  native.audioFormats.mockResolvedValue(
+    [8000, 16000, 32000, 44100, 48000].flatMap(
+      (sampleRate) =>
+        [1, 2].map((channelCount) => ({
+          sampleRate,
+          channelCount,
+        })),
+    ),
+  );
   native.codecs.mockResolvedValue([
     "video/vp8",
     "video/h264",
@@ -131,10 +151,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
+function render(view: () => JSX.Element) {
+  return renderView(() => {
+    const mediaCapabilities = createAppMediaCapabilities({
+      platform,
+      permissions: {
+        devices: () => [],
+        state: () => "prompt",
+      } as unknown as AppPermissions["media"],
+      stream: () => appState.session.localStream,
+    });
+    return (
+      <AppStateContext.Provider
+        value={
+          { mediaCapabilities } as AppStateContextProps
+        }
+      >
+        {view()}
+      </AppStateContext.Provider>
+    );
+  });
+}
 const choose = async (name: string, value: string) => {
   const trigger = await screen.findByRole("button", {
     name: new RegExp(name),
   });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   const option = await screen.findByRole("option", {
     name: value,
@@ -175,7 +217,8 @@ it("uses native capabilities for exact screen encoding without changing browser 
     "video/h264",
   );
   expect(appState.options.preferredVideoCodec).toBeNull();
-  expect(native.codecs).toHaveBeenCalledOnce();
+  expect(native.encoders).toHaveBeenCalledOnce();
+  expect(native.codecs).toHaveBeenCalledWith("audio");
 });
 it("hides native encoding controls when native capture is unavailable", async () => {
   native.capabilities.mockResolvedValue({
@@ -249,11 +292,20 @@ it("keeps the dialog interactive throughout capability and codec loading", async
     runtime: "desktop";
     nativeScreenCapture: boolean;
   }>();
-  const codecs = deferred<string[]>();
+  const encoders = deferred<NativeEncoder[]>();
   native.capabilities.mockReturnValue(capabilities.promise);
-  native.codecs.mockReturnValue(codecs.promise);
+  native.encoders.mockReturnValue(encoders.promise);
   const shell = mountSettingsShell();
   shell.open();
+  const nativeEncoder = screen.getByRole("button", {
+    name: /setting.meeting_settings.native_encoder/,
+  });
+  expect(nativeEncoder).toBeDisabled();
+  expect(
+    screen.getByText(
+      "setting.meeting_settings.encoders_loading",
+    ),
+  ).toBeInTheDocument();
   await waitFor(() =>
     expect(native.capabilities).toHaveBeenCalledOnce(),
   );
@@ -271,15 +323,36 @@ it("keeps the dialog interactive throughout capability and codec loading", async
     nativeScreenCapture: true,
   });
   await waitFor(() =>
-    expect(native.codecs).toHaveBeenCalledOnce(),
+    expect(native.encoders).toHaveBeenCalledOnce(),
   );
   expect(shell.fallback).not.toHaveBeenCalled();
   expect(resolution).toBeInTheDocument();
-  codecs.resolve(["video/h264"]);
+  // Cheap capture queries become usable without waiting for hardware probes.
+  await choose(
+    "meeting.native_screen.screen_backend",
+    "DXGI",
+  );
+  expect(nativeEncoder).toBeDisabled();
+  encoders.resolve([
+    {
+      id: "software",
+      name: "Software",
+      hardware: false,
+      codecs: ["video/h264"],
+    },
+  ]);
   await screen.findByRole("button", {
     name: /setting.meeting_settings.native_encoder/,
   });
   expect(shell.fallback).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(nativeEncoder).not.toBeDisabled(),
+  );
+  expect(
+    screen.getByRole("button", {
+      name: /setting.meeting_settings.native_encoder/,
+    }),
+  ).toBe(nativeEncoder);
   expect(
     screen.getByRole("button", {
       name: /setting.meeting_settings.resolution/,
@@ -303,9 +376,14 @@ it("does not suspend or query native capabilities in a browser", async () => {
   expect(shell.fallback).not.toHaveBeenCalled();
   expect(native.capabilities).not.toHaveBeenCalled();
   expect(native.codecs).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", {
+      name: /setting.meeting_settings.native_audio_codec/,
+    }),
+  ).toBeNull();
 });
 
-it("does not continue querying codecs after leaving the tab", async () => {
+it("finishes shared discovery after leaving the tab and reuses it on reopen", async () => {
   const capabilities = deferred<{
     runtime: "desktop";
     nativeScreenCapture: boolean;
@@ -322,15 +400,29 @@ it("does not continue querying codecs after leaving the tab", async () => {
     nativeScreenCapture: true,
   });
   await capabilities.promise;
-  expect(native.codecs).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(native.codecs).toHaveBeenCalledWith("audio"),
+  );
   expect(
     screen.queryByRole("button", {
       name: /setting.meeting_settings.native_encoder/,
     }),
   ).toBeNull();
+  shell.open();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", {
+        name: /setting.meeting_settings.native_encoder/,
+      }),
+    ).not.toBeDisabled(),
+  );
+  expect(native.capabilities).toHaveBeenCalledOnce();
+  expect(native.encoders).toHaveBeenCalledOnce();
+  expect(native.backends).toHaveBeenCalledOnce();
+  expect(native.audioFormats).toHaveBeenCalledOnce();
 });
 
-it.each(["capabilities", "codecs"] as const)(
+it.each(["capabilities", "encoders"] as const)(
   "keeps a failed %s query inside the meeting page",
   async (query) => {
     native[query].mockRejectedValue(
@@ -338,7 +430,7 @@ it.each(["capabilities", "codecs"] as const)(
     );
     const shell = mountSettingsShell();
     shell.open();
-    if (query === "codecs") {
+    if (query === "encoders") {
       await screen.findByText(
         "setting.meeting_settings.native_unavailable",
       );
@@ -351,11 +443,13 @@ it.each(["capabilities", "codecs"] as const)(
       await waitFor(() =>
         expect(native.capabilities).toHaveBeenCalledOnce(),
       );
-      expect(
-        screen.queryByText(
-          "setting.meeting_settings.native_encoder",
-        ),
-      ).toBeNull();
+      await waitFor(() =>
+        expect(
+          screen.queryByText(
+            "setting.meeting_settings.native_encoder",
+          ),
+        ).toBeNull(),
+      );
       expect(native.codecs).not.toHaveBeenCalled();
     }
     expect(shell.fallback).not.toHaveBeenCalled();
@@ -383,6 +477,7 @@ it("offers high frame rates from connected displays and preserves the selected n
   const trigger = screen.getByRole("button", {
     name: /setting.meeting_settings.frame_rate/,
   });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   expect(
     screen.queryByRole("option", { name: "165 FPS" }),
@@ -431,6 +526,7 @@ it("hides native encoding if a desktop bundle is opened without native runtime s
   const trigger = screen.getByRole("button", {
     name: /setting.meeting_settings.frame_rate/,
   });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   expect(
     screen.queryByRole("option", { name: "144 FPS" }),
@@ -482,6 +578,7 @@ it("selects a supported encoder and codec together without changing browser pref
   const trigger = screen.getByRole("button", {
     name: /setting.meeting_settings.native_encoder/,
   });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   expect(
     screen.queryByRole("option", {
@@ -544,6 +641,7 @@ it.each([
     const trigger = await screen.findByRole("button", {
       name: /setting.meeting_settings.native_encoder/,
     });
+    await waitFor(() => expect(trigger).not.toBeDisabled());
     expect(trigger).toHaveTextContent(name);
     expect(appState.options.nativeScreenEncoder).toBe(
       encoder,
@@ -566,6 +664,7 @@ it.each([
     const trigger = await screen.findByRole("button", {
       name: /setting.meeting_settings.native_encoder/,
     });
+    await waitFor(() => expect(trigger).not.toBeDisabled());
     expect(trigger).toHaveTextContent(
       "meeting.native_screen.unavailable",
     );
@@ -573,6 +672,7 @@ it.each([
       encoder,
     );
     expect(appState.options.nativeScreenCodec).toBe(codec);
+    await waitFor(() => expect(trigger).not.toBeDisabled());
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     expect(
       screen.getByRole("option", {
@@ -633,10 +733,135 @@ it("selects probed HEVC hardware without offering unsupported HEVC software", as
   const trigger = screen.getByRole("button", {
     name: /setting.meeting_settings.native_encoder/,
   });
+  await waitFor(() => expect(trigger).not.toBeDisabled());
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   expect(
     screen.queryByRole("option", {
       name: "H.265",
     }),
   ).toBeNull();
+});
+
+it("saves audio codec, sample rate and channels independently and restores automatic defaults", async () => {
+  render(() => <MeetingSettings />);
+  await choose(
+    "setting.meeting_settings.audio.codec.title",
+    "Opus",
+  );
+  await choose(
+    "setting.meeting_settings.audio.sample_rate.title",
+    "48 kHz",
+  );
+  await choose(
+    "setting.meeting_settings.audio.channels.title",
+    "setting.meeting_settings.audio.channels.mono",
+  );
+  expect(appState.options.preferredAudioCodec).toBe(
+    "audio/opus",
+  );
+  expect(appState.options.audioSampleRate).toBe(48000);
+  expect(appState.options.audioChannelCount).toBe(1);
+  expect(appState.options.preferredVideoCodec).toBeNull();
+  cleanup();
+  render(() => <MeetingSettings />);
+  expect(
+    screen.getByRole("button", {
+      name: /audio.sample_rate.title/,
+    }),
+  ).toHaveTextContent("48 kHz");
+  for (const name of ["codec", "sample_rate", "channels"]) {
+    await choose(
+      `setting.meeting_settings.audio.${name}.title`,
+      "setting.meeting_settings.audio.auto",
+    );
+  }
+  expect(appState.options.preferredAudioCodec).toBeNull();
+  expect(appState.options.audioSampleRate).toBeNull();
+  expect(appState.options.audioChannelCount).toBeNull();
+});
+
+it("discovers native audio codecs separately from video capabilities", async () => {
+  native.codecs.mockImplementation(async (kind?: string) =>
+    kind === "audio"
+      ? [
+          "audio/opus",
+          "audio/PCMA",
+          "audio/red",
+          "audio/CN",
+        ]
+      : ["video/h264"],
+  );
+  render(() => <MeetingSettings />);
+  await waitFor(() =>
+    expect(native.codecs).toHaveBeenCalledWith("audio"),
+  );
+  await choose(
+    "setting.meeting_settings.native_audio_codec",
+    "G.711 A-law (PCMA)",
+  );
+  expect(appState.options.nativeAudioCodec).toBe(
+    "audio/pcma",
+  );
+  expect(appState.options.preferredAudioCodec).toBeNull();
+  await choose(
+    "setting.meeting_settings.audio.codec.title",
+    "Opus",
+  );
+  expect(appState.options.preferredAudioCodec).toBe(
+    "audio/opus",
+  );
+  expect(appState.options.nativeAudioCodec).toBe(
+    "audio/pcma",
+  );
+  const trigger = screen.getByRole("button", {
+    name: /setting.meeting_settings.audio.codec.title/,
+  });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  expect(
+    screen.queryByRole("option", {
+      name: "G.711 A-law (PCMA)",
+    }),
+  ).toBeNull();
+});
+
+it("keeps an unavailable saved audio codec visible without overwriting it", async () => {
+  native.kind = "browser";
+  setAppState(
+    "options",
+    "preferredAudioCodec",
+    "audio/pcma",
+  );
+  render(() => <MeetingSettings />);
+  const trigger = screen.getByRole("button", {
+    name: /audio.codec.title/,
+  });
+  expect(trigger).toHaveTextContent(
+    "G.711 A-law (PCMA) (setting.meeting_settings.audio.unavailable)",
+  );
+  await waitFor(() => expect(trigger).not.toBeDisabled());
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  expect(
+    screen.getByRole("option", {
+      name: /audio.unavailable/,
+    }),
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(appState.options.preferredAudioCodec).toBe(
+    "audio/pcma",
+  );
+});
+
+it("leaves audio preferences usable when capability discovery is unavailable", async () => {
+  vi.stubGlobal("RTCRtpSender", undefined);
+  native.codecs.mockRejectedValue(new Error("Unavailable"));
+  render(() => <MeetingSettings />);
+  expect(
+    screen.getAllByText(
+      "setting.meeting_settings.audio.codec.unsupported",
+    )[0],
+  ).toBeInTheDocument();
+  await choose(
+    "setting.meeting_settings.audio.sample_rate.title",
+    "16 kHz",
+  );
+  expect(appState.options.audioSampleRate).toBe(16000);
 });

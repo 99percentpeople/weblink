@@ -3,6 +3,10 @@ import {
   type NativeScreenOptions,
 } from "@weblink/platform";
 import type { AppOption } from "@/libs/state/app-options";
+import {
+  nativeAudioOptions,
+  type MeetingAudioSettings,
+} from "./meeting-audio-settings";
 
 export const videoResolutions = {
   "480p": [854, 480],
@@ -53,7 +57,8 @@ export type MeetingVideoSettings = Pick<
   | "nativeScreenCodec"
   | "degradationPreference"
 > &
-  Partial<Pick<AppOption, "nativeScreenEncoder">>;
+  Partial<Pick<AppOption, "nativeScreenEncoder">> &
+  MeetingAudioSettings;
 
 /** Treat persisted values as untrusted; keep the browser and native limits aligned. */
 export function nativeScreenOptions(
@@ -66,6 +71,7 @@ export function nativeScreenOptions(
     ? videoResolutions[options.videoResolution]
     : videoResolutions["1080p"];
   return {
+    ...nativeAudioOptions(options),
     maxWidth,
     maxHeight,
     frameRate: Number.isFinite(options.videoFrameRate)

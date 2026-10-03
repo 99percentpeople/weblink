@@ -1,3 +1,8 @@
+import {
+  AppStateContext,
+  type AppStateContextProps,
+} from "@/libs/state/app-state-context";
+import type { JSX } from "solid-js";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import {
@@ -10,7 +15,7 @@ import {
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
 } from "@solidjs/testing-library";
@@ -33,6 +38,23 @@ vi.mock("@/libs/platform/runtime", () => ({
   },
 }));
 
+function render(view: () => JSX.Element) {
+  let supported = false;
+  const mediaCapabilities = {
+    ready: async () => {
+      supported = (await api.capabilities())
+        .nativeScreenCapture;
+    },
+    captureSupported: () => supported,
+  };
+  return renderView(() => (
+    <AppStateContext.Provider
+      value={{ mediaCapabilities } as AppStateContextProps}
+    >
+      {view()}
+    </AppStateContext.Provider>
+  ));
+}
 const source = {
   id: "selected-window",
   kind: "window",

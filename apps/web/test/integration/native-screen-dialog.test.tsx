@@ -77,7 +77,10 @@ function mount() {
   const accepted = vi.fn(),
     cancelled = vi.fn();
   function Owner() {
-    const dialog = createNativeScreenDialog(capture);
+    const dialog = createNativeScreenDialog(
+      capture,
+      capture.backends,
+    );
     return (
       <button
         onClick={() =>

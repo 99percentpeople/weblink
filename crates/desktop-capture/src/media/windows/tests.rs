@@ -4,6 +4,21 @@ use libwebrtc::{
 };
 
 #[test]
+#[ignore = "Requires Windows process-loopback support; initializes clients without recording"]
+fn discovers_process_loopback_formats_without_starting_capture() {
+    let formats = MediaSession::audio_formats().expect("Windows audio format discovery failed");
+    assert!(!formats.is_empty());
+    assert!(formats
+        .iter()
+        .any(|format| format.sample_rate == 48000 && format.channel_count == 2));
+    for format in &formats {
+        assert!(crate::media::AUDIO_SAMPLE_RATES.contains(&format.sample_rate));
+        assert!(crate::media::AUDIO_CHANNEL_COUNTS.contains(&format.channel_count));
+    }
+    println!("Available process-loopback formats: {formats:?}");
+}
+
+#[test]
 fn sender_timing_rejects_invalid_rtp_ranges_and_pacing_before_native_startup() {
     use libwebrtc::peer_connection_factory::VideoSendOptions;
     for (min, max) in [
@@ -210,6 +225,7 @@ fn preview_keeps_1440p_with_software_and_available_hardware_encoding() {
                 ),
                 encoder: encoder.into(),
                 degradation_preference: "maintain-framerate".into(),
+                ..Default::default()
             })
             .unwrap();
             let preview = connect(&media, "full-preview", true).await.unwrap();

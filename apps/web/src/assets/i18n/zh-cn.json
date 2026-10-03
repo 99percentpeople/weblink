@@ -224,37 +224,60 @@
       }
     },
     "meeting_settings": {
-      "resolution": "最高分辨率",
-      "frame_rate": "最高帧率",
-      "capture_description": "分辨率、帧率、码率和画质优先策略会同步应用于正在运行的串流，实际效果受来源和可用资源限制。编码格式、编码器和捕获后端的更改在下次共享时生效。",
+      "resolution": "视频分辨率上限",
+      "frame_rate": "视频帧率上限",
+      "capture_description": "用于摄像头和屏幕共享，画质设置即时应用。",
       "native_unavailable": "无法读取原生编码能力。",
       "stream": {
-        "title": "视频通话设置",
+        "title": "视频画质",
         "video_max_bitrate": {
-          "title": "视频最大比特率",
-          "description": "视频通话的最大比特率"
+          "title": "视频发送码率上限"
         },
         "degradation_preference": {
-          "title": "降级偏好",
-          "description": "在视频通话中，当网络条件较差时，应用程序将优先考虑视频质量还是帧率"
+          "title": "网络受限时优先保留",
+          "balanced": "平衡清晰度与流畅度",
+          "maintain-framerate": "流畅度（优先保帧率）",
+          "maintain-resolution": "清晰度（优先保分辨率）"
         },
         "preferred_video_codec": {
           "title": "浏览器视频优先编码",
-          "description": "在协商视频流时优先使用该编码器。仅对新建连接生效。",
-          "auto": "自动"
-        },
-        "preferred_audio_codec": {
-          "title": "首选音频编码器",
-          "description": "在协商音频流时优先使用该编码器。仅对新建连接生效。",
           "auto": "自动"
         }
       },
-      "native_capture": "原生屏幕共享",
-      "native_encoder": "原生视频编码",
+      "native_capture": "屏幕采集与编码",
+      "native_encoder": "屏幕共享视频编码",
       "native_encoder_auto": "自动（优先兼容的硬件编码器）",
       "hardware": "硬件编码",
       "software": "软件编码",
-      "native_encoder_description": "选择编码格式及硬件或软件编码器。硬件选项根据当前驱动检测，接收端也需支持所选格式；下次共享时生效。"
+      "native_encoder_description": "选择桌面端的采集方式和视频编码，下次共享时生效。",
+      "audio": {
+        "title": "音频采集",
+        "auto": "自动",
+        "unavailable": "当前不可用",
+        "codec": {
+          "title": "优先音频编码",
+          "unsupported": "暂时无法读取音频编码能力，将自动协商兼容的编码。"
+        },
+        "sample_rate": {
+          "title": "音频采样率"
+        },
+        "channels": {
+          "title": "音频声道",
+          "mono": "单声道",
+          "stereo": "立体声（双声道）"
+        },
+        "description": "根据音源能力选择采样率和声道，下次采集时生效。",
+        "sampling_loading": "正在读取音频格式…",
+        "codecs_loading": "正在读取音频编码…",
+        "sampling_failed": "系统音频格式暂不可用。",
+        "sampling_unknown": "音源尚未提供采样选项，可保持自动。"
+      },
+      "encoders_loading": "正在检测视频编码器…",
+      "backends_loading": "正在读取采集方式…",
+      "backends_unavailable": "采集方式暂不可用。",
+      "browser_encoding": "浏览器编码",
+      "browser_encoding_description": "用于摄像头、麦克风及浏览器屏幕共享，后续连接协商时生效。",
+      "native_audio_codec": "原生音频编码"
     },
     "remote_control": {
       "description": "设置本机触摸手势如何控制远端画面。",

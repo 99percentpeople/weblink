@@ -1,20 +1,12 @@
-import {
-  createEffect,
-  createSignal,
-  For,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { createEffect, For, Show } from "solid-js";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import {
   defaultVideoFrameRates,
-  displayVideoFrameRates,
   videoResolutions,
 } from "@/libs/application/meeting-video-settings";
-import { platform } from "@/libs/platform/runtime";
+import { useAppState } from "@/libs/state/app-state-context";
 import {
   Select,
   SelectContent,
@@ -26,34 +18,13 @@ import { Label } from "@/components/ui/label";
 
 export default function VideoCaptureSettings(props: {
   frameRates?: readonly number[] | null;
+  showDescription?: boolean;
 }) {
-  const [detected, setDetected] = createSignal<
-    readonly number[] | null
-  >(null);
-  const frameRates = () => props.frameRates ?? detected();
-  let disposed = false;
-  onCleanup(() => {
-    disposed = true;
-  });
-  onMount(async () => {
-    // The meeting page supplies its existing capability query; standalone
-    // capture dialogs discover their own rates without suspending their parent.
-    if (props.frameRates !== undefined) return;
-    let rates: readonly number[] = defaultVideoFrameRates;
-    try {
-      if (platform.kind === "desktop") {
-        const capabilities =
-          await platform.getCapabilities();
-        if (capabilities.runtime === "desktop")
-          rates = displayVideoFrameRates(
-            capabilities.displayRefreshRates,
-          );
-      }
-    } catch {
-      /* Keep the common rates when system information is unavailable. */
-    }
-    if (!disposed) setDetected(rates);
-  });
+  const capabilities = useAppState().mediaCapabilities;
+  const frameRates = () =>
+    props.frameRates === undefined
+      ? capabilities.frameRates()
+      : props.frameRates;
   createEffect(() => {
     const rates = frameRates();
     if (!rates?.length) return;
@@ -133,7 +104,12 @@ export default function VideoCaptureSettings(props: {
                 </SelectTrigger>
                 <SelectContent />
               </Select>
-              <Show when={kind === "frame_rate"}>
+              <Show
+                when={
+                  kind === "frame_rate" &&
+                  props.showDescription !== false
+                }
+              >
                 <p class="muted">
                   {t(
                     "setting.meeting_settings.capture_description",

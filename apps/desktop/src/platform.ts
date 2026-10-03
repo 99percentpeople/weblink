@@ -85,7 +85,12 @@ export const platform: PlatformRuntime = {
         sessionId,
         enabled,
       }),
-    codecs: () => invoke<string[]>("capture_codecs"),
+    codecs: (kind = "video") =>
+      invoke<string[]>("capture_codecs", { kind }),
+    audioFormats: () =>
+      invoke<
+        import("@weblink/platform").AudioCaptureFormat[]
+      >("capture_audio_formats"),
     encoders: () =>
       invoke<NativeEncoder[]>("capture_encoders"),
     start: (sourceId, options, capture) =>

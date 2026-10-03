@@ -23,8 +23,10 @@ import type {
 } from "@/libs/domain/message";
 import type { RoomStatus } from "./app-state";
 import type { AppPermissions } from "./create-app-permissions";
+import type { AppMediaCapabilities } from "./create-app-media-capabilities";
 export interface AppStateContextProps {
   permissions: AppPermissions;
+  mediaCapabilities: AppMediaCapabilities;
   conversationMessaging: Pick<
     ConversationMessagingService,
     "sendText" | "sendFile"

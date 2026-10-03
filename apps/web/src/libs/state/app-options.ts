@@ -129,6 +129,7 @@ export type AppOption = {
     | "2160p";
   videoFrameRate: number;
   nativeScreenCodec: string | null;
+  nativeAudioCodec: string | null;
   nativeScreenEncoder: string;
   nativeScreenCaptureBackend: import("@weblink/platform").CaptureBackend;
   nativeWindowCaptureBackend: import("@weblink/platform").CaptureBackend;
@@ -136,6 +137,8 @@ export type AppOption = {
   degradationPreference: RTCDegradationPreference;
   preferredVideoCodec: string | null;
   preferredAudioCodec: string | null;
+  audioSampleRate: number | null;
+  audioChannelCount: 1 | 2 | null;
 };
 
 export function parseTurnServers(
@@ -251,10 +254,13 @@ export const getDefaultAppOptions = (): AppOption => {
     videoResolution: "1080p",
     videoFrameRate: 30,
     nativeScreenCodec: null,
+    nativeAudioCodec: null,
     nativeScreenEncoder: "auto",
     nativeScreenCaptureBackend: "auto",
     nativeWindowCaptureBackend: "auto",
     preferredVideoCodec: null,
     preferredAudioCodec: null,
+    audioSampleRate: null,
+    audioChannelCount: null,
   } satisfies AppOption;
 };

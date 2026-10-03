@@ -22,6 +22,9 @@ describe("meeting capture settings", () => {
       frameRate: { ideal: 60, max: 60 },
     });
     expect(nativeScreenOptions(options)).toEqual({
+      audioSampleRate: 48000,
+      audioChannelCount: 2,
+      audioCodec: null,
       maxWidth: 1280,
       maxHeight: 720,
       frameRate: 60,

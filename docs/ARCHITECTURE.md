@@ -370,6 +370,14 @@ may select concrete infrastructure implementations.
     without querying on mount. Permission changes, returning to the page and
     explicit requests refresh the shared results. Device discovery never starts
     capture; permission observers are released with the application scope.
+  - `create-app-media-capabilities.ts`: AppState owns codec, capture-backend,
+    display-rate and audio-format discovery through `mediaCapabilities`.
+    Settings and pickers reuse the snapshot and in-flight queries; reopening a
+    view never invalidates it. Device, permission and track changes update the
+    relevant audio capabilities, and focus refreshes display information.
+    Browser audio formats come from exposed input/track capabilities; Windows
+    validates application-supported PCM pairs on process-loopback clients without
+    starting recording. Browser and native audio codec preferences are separate.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and

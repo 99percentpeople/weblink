@@ -231,6 +231,11 @@ export function isExternalLink(url: URL): boolean {
 export interface NativeScreenOptions {
   /** Capture system playback only after explicit picker consent. */
   audio?: boolean;
+  /** Capture format; automatic defaults are 48 kHz and two channels. */
+  audioSampleRate?: number;
+  audioChannelCount?: 1 | 2;
+  /** Preferred codec, retaining compatible alternatives during negotiation. */
+  audioCodec?: string | null;
   maxWidth: number;
   maxHeight: number;
   frameRate: number;
@@ -318,6 +323,11 @@ export interface NativeRemoteControl {
   ): Promise<void>;
 }
 
+export interface AudioCaptureFormat {
+  sampleRate: number;
+  channelCount: 1 | 2;
+}
+
 export interface NativeScreenShare {
   /** Raw local presentation. Remote publication remains native WebRTC. */
   preview?(
@@ -338,7 +348,9 @@ export interface NativeScreenShare {
     sessionId: string,
     enabled: boolean,
   ): Promise<void>;
-  codecs(): Promise<string[]>;
+  codecs(kind?: "audio" | "video"): Promise<string[]>;
+  /** Probes supported capture formats without starting audio capture. */
+  audioFormats?(): Promise<AudioCaptureFormat[]>;
   encoders(): Promise<NativeEncoder[]>;
   start(
     sourceId: string,

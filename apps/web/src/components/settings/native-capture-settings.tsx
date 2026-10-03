@@ -10,6 +10,7 @@ import type {
   CaptureStatus,
 } from "@weblink/platform";
 import { platform } from "@/libs/platform/runtime";
+import { useAppState } from "@/libs/state/app-state-context";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 
@@ -17,6 +18,7 @@ const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 export default function NativeCaptureSettings() {
+  const capabilities = useAppState().mediaCapabilities;
   const capture = platform.capture;
   const [available, setAvailable] = createSignal(false);
   const [sources, setSources] = createSignal<
@@ -146,8 +148,9 @@ export default function NativeCaptureSettings() {
   onMount(async () => {
     if (!capture) return;
     try {
-      const caps = await platform.getCapabilities();
-      if (disposed || !caps.nativeScreenCapture) return;
+      await capabilities.ready();
+      if (disposed || !capabilities.captureSupported())
+        return;
       setAvailable(true);
       await refresh();
     } catch (cause) {

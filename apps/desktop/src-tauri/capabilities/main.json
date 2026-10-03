@@ -31,6 +31,7 @@
     "allow-capture-display-layout",
     "allow-capture-thumbnail",
     "allow-capture-codecs",
+    "allow-capture-audio-formats",
     "allow-capture-backends",
     "allow-capture-encoders",
     "allow-capture-start",
