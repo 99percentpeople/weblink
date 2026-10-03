@@ -5,7 +5,7 @@ mod compose;
 mod control;
 mod mf;
 mod pixels;
-use pixels::Pixels;
+use pixels::from_bgra;
 mod statistics;
 #[cfg(test)]
 mod tests;
@@ -51,7 +51,7 @@ pub struct MediaSession {
     peers: Mutex<HashMap<String, MediaPeer>>,
     hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
     encoder_id: Option<String>,
-    latest: Mutex<Option<Arc<VideoFrame<Pixels>>>>,
+    latest: Mutex<Option<Arc<VideoFrame<libwebrtc::video_frame::I420Buffer>>>>,
     latest_sequence: AtomicU64,
     last_sent: Mutex<Instant>,
     readback: Mutex<Readback>,
@@ -149,9 +149,6 @@ impl MediaSession {
 
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
-        if options.color_format.full_chroma() {
-            options.color_range = super::color::ColorRange::Full;
-        }
         let hardware = if options.encoder == "software" {
             None
         } else {
@@ -403,34 +400,19 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let rgb = options.color_format == super::color::ColorFormat::Rgb;
         let (y, u, v) = buffer.data();
         let (sy, su, sv) = buffer.strides();
-        if rgb {
-            let Pixels::I444(planes) = buffer else {
-                return Err("Invalid RGB preview planes".into());
-            };
-            if target.len() < buffer.width() as usize * buffer.height() as usize * 4 {
-                return Err("Preview exceeds shared buffer".into());
-            }
-            // Chromium's raw I444 renderer ignores identity matrix metadata.
-            // Present packed RGB while the encoder retains full G/B/R planes.
-            libwebrtc::native::yuv_helper::gbr_to_argb(planes, target, buffer.width() * 4);
-        } else {
-            super::preview::pack_planar(
-                target,
-                buffer.width() as usize,
-                buffer.height() as usize,
-                [(y, sy as usize), (u, su as usize), (v, sv as usize)],
-                buffer.format() == "I444",
-            )?;
-        }
+        super::preview::pack_i420(
+            target,
+            buffer.width() as usize,
+            buffer.height() as usize,
+            [(y, sy as usize), (u, su as usize), (v, sv as usize)],
+        )?;
         Ok(Some(super::preview::PreviewFrame {
             sequence,
             width: buffer.width(),
             height: buffer.height(),
             timestamp: self.started.elapsed().as_secs_f64() * 1000.0,
-            format: if rgb { "BGRA" } else { buffer.format() },
             color_space: options.color_space(),
         }))
     }
@@ -619,11 +601,6 @@ impl MediaSession {
                                 .is_none_or(|codec| c.mime_type.eq_ignore_ascii_case(codec))
                                 && (options.vp8_color_compatible()
                                     || !c.mime_type.eq_ignore_ascii_case("video/vp8"))
-                                && (!c.mime_type.eq_ignore_ascii_case("video/vp9")
-                                    || c.sdp_fmtp_line
-                                        .as_deref()
-                                        .is_some_and(super::color::vp9_profile1)
-                                        == options.color_format.full_chroma())
                                 && (hardware.is_none()
                                     || options.codec.as_deref() != Some("video/h264")
                                     || c.sdp_fmtp_line
@@ -635,13 +612,6 @@ impl MediaSession {
                                 )
                         })
                         .collect();
-                    if options.color_format.full_chroma()
-                        && !codecs
-                            .iter()
-                            .any(|c| c.mime_type.eq_ignore_ascii_case("video/vp9"))
-                    {
-                        return Err("VP9 4:4:4 encoder is unavailable".into());
-                    }
                     transceiver
                         .set_codec_preferences(codecs)
                         .map_err(|e| e.to_string())?;
@@ -764,13 +734,6 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        if options.color_format.full_chroma() && !super::color::accepts_full_chroma(sdp) {
-            self.close_peer(id);
-            return Err(
-                "The receiver does not support VP9 4:4:4 / RGB. Select YUV 4:2:0 to connect."
-                    .into(),
-            );
-        }
         let sdp = super::starting_bitrate_sdp(sdp, options.max_bitrate, preview);
         let description =
             SessionDescription::parse(&sdp, SdpType::Answer).map_err(|e| e.to_string())?;

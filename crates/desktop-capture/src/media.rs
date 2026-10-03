@@ -48,7 +48,6 @@ pub struct MediaOptions {
     pub readback_buffers: u32,
     pub color_matrix: color::ColorMatrix,
     pub color_range: color::ColorRange,
-    pub color_format: color::ColorFormat,
     pub degradation_preference: String,
 }
 
@@ -68,7 +67,6 @@ impl Default for MediaOptions {
             readback_buffers: 2,
             color_matrix: Default::default(),
             color_range: Default::default(),
-            color_format: Default::default(),
             degradation_preference: "balanced".into(),
         }
     }
@@ -76,11 +74,6 @@ impl Default for MediaOptions {
 
 impl MediaOptions {
     pub fn validate(&self) -> crate::Result<()> {
-        if self.color_format.full_chroma()
-            && (self.codec.as_deref() != Some("video/vp9") || self.encoder != "software")
-        {
-            return Err("RGB and YUV 4:4:4 require VP9 software encoding".into());
-        }
         if self.codec.as_deref() == Some("video/vp8") && !self.vp8_color_compatible() {
             return Err("VP8 requires BT.601 limited-range video".into());
         }
@@ -175,7 +168,6 @@ pub struct VideoStats {
     pub codec: String,
     pub implementation: String,
     pub color_space: color::ColorDescription,
-    pub color_format: color::ColorFormat,
     pub bit_depth: u8,
     pub chroma_subsampling: &'static str,
     pub width: u32,

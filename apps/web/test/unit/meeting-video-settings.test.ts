@@ -3,95 +3,36 @@ import { getDefaultAppOptions } from "@/libs/state/app-options";
 import {
   displayVideoFrameRates,
   meetingVideoConstraints,
-  nativeColorFormats,
   nativeScreenOptions,
 } from "@/libs/application/meeting-video-settings";
 
 describe("meeting capture settings", () => {
-  it("keeps encoding authoritative when sanitizing saved colour preferences", () => {
-    const saved = {
-      ...getDefaultAppOptions(),
-      nativeScreenCodec: "video/h265",
-      nativeScreenEncoder: "mf:test",
-      nativeColorMatrix: "bt601" as const,
-      nativeColorRange: "limited" as const,
-    };
-    for (const nativeColorFormat of [
-      "rgb",
-      "yuv444",
-    ] as const) {
-      expect(
-        nativeScreenOptions({
-          ...saved,
-          nativeScreenCodec: "video/vp9",
-          nativeScreenEncoder: "software",
-          nativeColorFormat,
-        }),
-      ).toMatchObject({
-        codec: "video/vp9",
-        encoder: "software",
-        colorFormat: nativeColorFormat,
-        colorRange: "full",
-      });
-    }
-    expect(
-      nativeScreenOptions({
-        ...saved,
-        nativeColorFormat: "rgb",
-      }),
-    ).toMatchObject({
-      codec: "video/h265",
-      encoder: "mf:test",
-      colorFormat: "yuv420",
-      colorMatrix: "bt601",
-      colorRange: "limited",
-    });
-    expect(
-      nativeScreenOptions({
-        ...saved,
-        nativeColorFormat: "invalid",
-      } as any).colorFormat,
-    ).toBe("yuv420");
-    expect(
-      nativeScreenOptions({
-        ...saved,
-        nativeScreenCodec: "video/vp8",
-        nativeColorFormat: "yuv444",
-        nativeColorRange: "full",
-      }),
-    ).toMatchObject({
-      codec: "video/vp8",
-      encoder: "mf:test",
-      colorFormat: "yuv420",
-      colorMatrix: "bt601",
-      colorRange: "limited",
-    });
-  });
   it.each([
     ["auto", null],
-    ["auto", "video/vp9"],
-    ["software", null],
+    ["software", "video/vp9"],
     ["software", "video/h264"],
-    ["software", "video/av1"],
     ["mf:test", "video/h265"],
-    ["mf:test", "video/vp9"],
-  ])(
-    "offers only implemented formats for %s / %s",
+  ] as const)(
+    "ignores removed full-chroma preferences for %s / %s",
     (nativeScreenEncoder, nativeScreenCodec) => {
-      const options = {
-        ...getDefaultAppOptions(),
-        nativeScreenEncoder: nativeScreenEncoder!,
-        nativeScreenCodec,
-        nativeColorFormat: "rgb" as const,
-      };
-      expect(nativeColorFormats(options)).toEqual([
-        "yuv420",
-      ]);
-      expect(nativeScreenOptions(options)).toMatchObject({
-        encoder: nativeScreenEncoder,
-        codec: nativeScreenCodec,
-        colorFormat: "yuv420",
-      });
+      for (const nativeColorFormat of ["rgb", "yuv444"]) {
+        const saved = {
+          ...getDefaultAppOptions(),
+          nativeScreenEncoder,
+          nativeScreenCodec,
+          nativeColorMatrix: "bt709" as const,
+          nativeColorRange: "limited" as const,
+          nativeColorFormat,
+        };
+        const resolved = nativeScreenOptions(saved);
+        expect(resolved).toMatchObject({
+          encoder: nativeScreenEncoder,
+          codec: nativeScreenCodec,
+          colorMatrix: "bt709",
+          colorRange: "limited",
+        });
+        expect(resolved).not.toHaveProperty("colorFormat");
+      }
     },
   );
   it("uses the same selected limits for camera, display capture and native capture", () => {
@@ -121,7 +62,6 @@ describe("meeting capture settings", () => {
       readbackBuffers: 2,
       colorMatrix: "auto",
       colorRange: "limited",
-      colorFormat: "yuv420",
       degradationPreference: "balanced",
     });
   });

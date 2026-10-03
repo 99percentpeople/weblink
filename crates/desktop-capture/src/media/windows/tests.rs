@@ -4,7 +4,6 @@ use libwebrtc::video_frame::{I420Buffer, VideoRotation};
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
-mod color;
 mod latency_probe;
 
 // Synchronously drain a synthetic frame in tests that inspect converted pixels.
@@ -166,6 +165,54 @@ async fn decoded(receiver: &Receiver) -> u32 {
             }
         })
         .sum()
+}
+
+#[test]
+fn standard_vp9_still_encodes_i420_without_the_custom_full_chroma_encoder() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let media = MediaSession::new(MediaOptions {
+            codec: Some("video/vp9".into()),
+            encoder: "software".into(),
+            max_width: 320,
+            max_height: 180,
+            ..Default::default()
+        })
+        .unwrap();
+        let weak = Arc::downgrade(&media);
+        let offer = media
+            .offer("probe".into(), vec![], false, false)
+            .await
+            .unwrap();
+        assert!(offer.contains("profile-id=0"));
+        assert!(!offer.contains("profile-id=1"));
+        media.close_peer("probe");
+        let receiver = connect(&media, "vp9", false).await.unwrap();
+        let frame = VideoFrame::new(
+            VideoRotation::VideoRotation0,
+            I420Buffer::new_black(320, 180),
+        );
+        tokio::time::timeout(Duration::from_secs(8), async {
+            loop {
+                media.publish_frame(&frame);
+                if decoded(&receiver).await >= 3 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(33)).await;
+            }
+        })
+        .await
+        .expect("Standard VP9 frames failed to decode");
+        let stats = media.stats("vp9").await.unwrap();
+        assert!(stats
+            .iter()
+            .any(|s| s.codec.eq_ignore_ascii_case("video/vp9") && s.chroma_subsampling == "4:2:0"));
+        media.close();
+        assert!(media.peers.lock().unwrap().is_empty());
+        drop(receiver);
+        drop(media);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(weak.upgrade().is_none());
+    });
 }
 
 #[test]
@@ -688,7 +735,7 @@ fn software_cached_frames_keep_cadence_and_follow_live_fps() {
         let receiver = connect(&media, "cached", true).await.unwrap();
         *media.latest.lock().unwrap() = Some(Arc::new(VideoFrame::new(
             VideoRotation::VideoRotation0,
-            I420Buffer::new_black(640, 480).into(),
+            I420Buffer::new_black(640, 480),
         )));
         tokio::time::timeout(Duration::from_secs(10), async {
             while decoded(&receiver).await < 5 {

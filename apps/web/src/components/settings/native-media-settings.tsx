@@ -238,17 +238,9 @@ export default function NativeMediaSettings(props: {
           optionGroupChildren="options"
           onChange={(value) => {
             if (!value || value.disabled) return;
-            const next = {
-              ...appState.options,
-              nativeScreenEncoder: value.encoder,
-              nativeScreenCodec: value.codec,
-            };
             setAppOptions({
               nativeScreenEncoder: value.encoder,
               nativeScreenCodec: value.codec,
-              nativeColorFormat:
-                nativeScreenOptions(next).colorFormat ??
-                "yuv420",
             });
           }}
           itemComponent={(item) => (

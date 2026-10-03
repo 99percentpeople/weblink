@@ -392,25 +392,18 @@ VP8 stays BT.601 limited range. Its UI selection preserves other-codec colour
 preferences, while incompatible direct native requests are rejected. Unrestricted
 offers with incompatible explicit colour settings exclude VP8.
 
-The colour-format setting offers 8-bit SDR YUV 4:2:0, YUV 4:4:4 and RGB. The latter
-two require single-layer VP9 Profile 1 software encoding and a compatible receiver;
-unsupported answers fail explicitly. Select the encoder/codec first; its advanced
-options expose only formats implemented by that pipeline. Only explicitly selected
-software VP9 offers 4:4:4/RGB. Other selections, including automatic encoding, use
-4:2:0. Changing encoding resets an incompatible colour format to 4:2:0; colour
-selection never changes the encoder or codec. Saved matrix/range preferences are
-preserved when the selected format restricts them. Restart sharing to apply changes.
-RGB carries G/B/R planes with identity matrix and sRGB transfer; YUV 4:4:4 keeps
-BT.601/BT.709 selection. Both use full range: Chromium's limited-range I444 display
-path can distort chroma even when decoded planes and metadata are correct. Local
-RGB preview uses packed BGRA because raw I444 identity-matrix presentation is also
-inconsistent in Chromium. Capture, source adaptation and scaling retain full chroma.
-Software encoding costs more CPU; high-resolution 120 FPS is not guaranteed.
+The current capture and transport path is 8-bit YUV 4:2:0 SDR. Full range retains
+256 luma levels instead of limited range's 220, but does not provide 10-bit precision
+or recover chroma detail lost to subsampling/compression. HDR and 4:4:4 are not
+advertised as enabled formats. HDR requires a float/10-bit capture path, matching
+encoder profile, negotiated decoder support and HDR presentation or tone mapping;
+an HDR colour tag alone cannot implement that pipeline. Copied native statistics
+include the actual colour description, bit depth and chroma subsampling.
 
-Full chroma preserves colour detail at each pixel but remains lossy compression,
-and 8-bit full range does not provide 10-bit gradient precision. HDR is not enabled.
-Copied native statistics include the effective colour format/description, bit depth
-and chroma subsampling. Legacy settings and ordinary offers default to YUV 4:2:0.
+Select the encoder/codec first; its advanced options show the supported matrix
+and range. Changing colour preferences never changes the encoder or codec.
+Legacy RGB/4:4:4 preferences are ignored; all native shares use YUV 4:2:0.
+Restart sharing to apply colour or encoding changes.
 
 The **Show stream statistics** action is available in the main picture's controls
 when it has video. Its overlay is temporary state for that picture, defaults to

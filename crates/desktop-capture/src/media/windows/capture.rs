@@ -1,6 +1,6 @@
 //! Bounded reusable readbacks overlap GPU copies with CPU conversion. Capture keeps
 //! one latest source and never waits for a staging texture to become readable.
-use super::{compose, MediaSession, Pixels};
+use super::{compose, from_bgra, MediaSession};
 use crate::{
     media::{pipeline::Clock, MediaOptions},
     surface::{readback::PendingReadback, Cursor, Rotation},
@@ -165,7 +165,7 @@ impl MediaSession {
                 bgra.stride()
             };
             frame.timing.mark(3);
-            let mut buffer = Pixels::from_bgra(bytes, stride, width, height, &frame.options);
+            let mut buffer = from_bgra(bytes, stride, width, height, &frame.options);
             drop(bgra);
             frame.timing.mark(4);
             let (scaled_width, scaled_height) = frame.options.dimensions(width, height);

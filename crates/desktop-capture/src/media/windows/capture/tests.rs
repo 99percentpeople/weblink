@@ -3,6 +3,7 @@ use crate::{
     media::VideoSettings,
     surface::{readback::Readback, FrameSink, TextureFrame},
 };
+use libwebrtc::prelude::VideoBuffer;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 
 fn texture(device: &ID3D11Device, size: (u32, u32), value: u8) -> ID3D11Texture2D {

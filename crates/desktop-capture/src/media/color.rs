@@ -3,71 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ColorFormat {
-    #[default]
-    Yuv420,
-    Yuv444,
-    Rgb,
-}
-
-impl ColorFormat {
-    pub fn full_chroma(self) -> bool {
-        self != Self::Yuv420
-    }
-    pub fn chroma_subsampling(self) -> &'static str {
-        if self.full_chroma() {
-            "4:4:4"
-        } else {
-            "4:2:0"
-        }
-    }
-}
-
-#[cfg(any(windows, test))]
-pub(super) fn vp9_profile1(fmtp: &str) -> bool {
-    fmtp.split(';').any(|parameter| {
-        parameter
-            .split_once('=')
-            .is_some_and(|(key, value)| key.trim() == "profile-id" && value.trim() == "1")
-    })
-}
-
-/// Require an accepted receiving video section with VP9 Profile 1. Never silently
-/// negotiate a subsampled codec for a full-chroma source.
-#[cfg(any(windows, test))]
-pub(super) fn accepts_full_chroma(sdp: &str) -> bool {
-    sdp.split("m=").skip(1).any(|section| {
-        let lines: Vec<_> = section.lines().map(str::trim).collect();
-        let Some(first) = lines.first() else {
-            return false;
-        };
-        let header: Vec<_> = first.split_whitespace().collect();
-        if header.first() != Some(&"video")
-            || header.get(1) == Some(&"0")
-            || header.len() < 4
-            || lines.contains(&"a=inactive")
-            || lines.contains(&"a=sendonly")
-        {
-            return false;
-        }
-        lines
-            .iter()
-            .filter_map(|line| line.strip_prefix("a=rtpmap:"))
-            .filter_map(|line| line.split_once(' '))
-            .any(|(payload, codec)| {
-                codec.eq_ignore_ascii_case("VP9/90000")
-                    && header[3..].contains(&payload)
-                    && lines.iter().any(|line| {
-                        line.strip_prefix("a=fmtp:")
-                            .and_then(|line| line.split_once(' '))
-                            .is_some_and(|(pt, fmtp)| pt == payload && vp9_profile1(fmtp))
-                    })
-            })
-    })
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
 pub enum ColorMatrix {
     #[default]
     Auto,
@@ -95,20 +30,9 @@ pub struct ColorDescription {
 
 impl super::MediaOptions {
     pub fn color_space(&self) -> ColorDescription {
-        if self.color_format == ColorFormat::Rgb {
-            return ColorDescription {
-                matrix: "rgb",
-                primaries: "bt709",
-                transfer: "iec61966-2-1",
-                full_range: true,
-            };
-        }
         // Unrestricted software offers may negotiate VP8, which requires BT.601.
         let bt709 = match self.color_matrix {
-            ColorMatrix::Auto => {
-                self.color_format.full_chroma()
-                    || self.codec.as_deref().is_some_and(|c| c != "video/vp8")
-            }
+            ColorMatrix::Auto => self.codec.as_deref().is_some_and(|c| c != "video/vp8"),
             ColorMatrix::Bt601 => false,
             ColorMatrix::Bt709 => true,
         };
@@ -116,9 +40,7 @@ impl super::MediaOptions {
             matrix: if bt709 { "bt709" } else { "smpte170m" },
             primaries: "bt709",
             transfer: "iec61966-2-1",
-            // Chromium renders limited-range I444 with incorrect chroma scaling.
-            // Full-chroma modes use full range for correct native/browser display.
-            full_range: self.color_format.full_chroma() || self.color_range == ColorRange::Full,
+            full_range: self.color_range == ColorRange::Full,
         }
     }
 
@@ -143,11 +65,7 @@ impl ColorDescription {
         libwebrtc::video_source::VideoColorSpace {
             primaries: 1,
             transfer: 13,
-            matrix: match self.matrix {
-                "rgb" => 0,
-                "bt709" => 1,
-                _ => 6,
-            },
+            matrix: if self.matrix == "bt709" { 1 } else { 6 },
             full_range: self.full_range,
         }
     }
@@ -187,58 +105,6 @@ impl ColorDescription {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn full_chroma_requires_matching_profile_and_rgb_overrides_yuv_metadata() {
-        let options = super::super::MediaOptions {
-            color_format: ColorFormat::Rgb,
-            color_matrix: ColorMatrix::Bt601,
-            codec: Some("video/vp9".into()),
-            encoder: "software".into(),
-            ..Default::default()
-        };
-        options.validate().unwrap();
-        let color = serde_json::to_value(options.color_space()).unwrap();
-        assert_eq!(color["matrix"], "rgb");
-        assert_eq!(color["fullRange"], true);
-        assert!(super::super::MediaOptions {
-            codec: None,
-            ..options.clone()
-        }
-        .validate()
-        .is_err());
-        assert!(super::super::MediaOptions {
-            encoder: "auto".into(),
-            ..options.clone()
-        }
-        .validate()
-        .is_err());
-        assert!(super::super::MediaOptions {
-            codec: Some("video/h265".into()),
-            ..options.clone()
-        }
-        .validate()
-        .is_err());
-        assert!(super::super::MediaOptions {
-            encoder: "mf:test".into(),
-            ..options
-        }
-        .validate()
-        .is_err());
-        let accepted = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 35\r\na=recvonly\r\na=rtpmap:35 VP9/90000\r\na=fmtp:35 profile-id = 1\r\n";
-        assert!(accepts_full_chroma(accepted));
-        for rejected in [
-            accepted.replace("video 9", "video 0"),
-            accepted.replace("recvonly", "inactive"),
-            accepted.replace("recvonly", "sendonly"),
-            accepted.replace("profile-id = 1", "profile-id=0"),
-            accepted.replace("a=fmtp:35", "a=fmtp:36"),
-            accepted.replace("SAVPF 35", "SAVPF 36"),
-            "m=audio 9 UDP/TLS/RTP/SAVPF 35\r\na=fmtp:35 profile-id=1\r\n".into(),
-            "m=".into(),
-        ] {
-            assert!(!accepts_full_chroma(&rejected), "{rejected}");
-        }
-    }
     #[test]
     fn automatic_matrix_keeps_vp8_compatible_and_metadata_matches_conversion() {
         for (codec, matrix) in [

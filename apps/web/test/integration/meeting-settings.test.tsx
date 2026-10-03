@@ -634,7 +634,7 @@ it("selects a supported encoder and codec together without changing browser pref
   );
 });
 
-it("selects encoding first, filters advanced colour choices and resets incompatible formats", async () => {
+it("selects encoding first and keeps SDR advanced options compatible with that codec", async () => {
   render(() => <MeetingSettings />);
   const field = (name: string) =>
     screen.getByRole("button", {
@@ -649,50 +649,40 @@ it("selects encoding first, filters advanced colour choices and resets incompati
       "setting.meeting_settings.native_advanced",
     ),
   ).toBeInTheDocument();
-  expect(field("color_format")).toBeDisabled();
-  expect(field("color_format")).toHaveTextContent(
-    "YUV 4:2:0",
-  );
+  expect(
+    screen.getByText("YUV 4:2:0 · 8-bit · SDR"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: /setting.meeting_settings.color_format/,
+    }),
+  ).not.toBeInTheDocument();
+  expect(field("color_matrix")).toBeEnabled();
+  expect(field("color_range")).toBeEnabled();
   await choose(
     "setting.meeting_settings.native_encoder",
     "VP9",
   );
   await choose(
-    "setting.meeting_settings.color_format",
-    "RGB · 8-bit · SDR",
+    "setting.meeting_settings.color_matrix",
+    "BT.709",
+  );
+  await choose(
+    "setting.meeting_settings.color_range",
+    "setting.meeting_settings.color_range_full",
   );
   expect(
     nativeScreenOptions(appState.options),
   ).toMatchObject({
     encoder: "software",
     codec: "video/vp9",
-    colorFormat: "rgb",
+    colorMatrix: "bt709",
     colorRange: "full",
   });
-  expect(field("native_encoder")).toBeEnabled();
-  expect(field("color_matrix")).toHaveTextContent("RGB");
-  expect(field("color_matrix")).toBeDisabled();
-  expect(field("color_range")).toBeDisabled();
-  await choose(
-    "setting.meeting_settings.color_format",
-    "YUV 4:4:4 · 8-bit · SDR",
-  );
-  expect(field("color_matrix")).toBeEnabled();
-  expect(field("color_range")).toBeDisabled();
-  await choose(
-    "setting.meeting_settings.native_encoder",
-    "H.265 (GPU)",
-  );
-  expect(appState.options.nativeColorFormat).toBe("yuv420");
   expect(
-    nativeScreenOptions(appState.options),
-  ).toMatchObject({
-    encoder: "mf:test:h265",
-    codec: "video/h265",
-    colorFormat: "yuv420",
-  });
-  expect(field("color_format")).toBeDisabled();
-  expect(field("color_range")).toBeEnabled();
+    screen.getByText("YUV 4:2:0 · 8-bit · SDR"),
+  ).toBeInTheDocument();
+  expect(field("native_encoder")).toBeEnabled();
   await choose(
     "setting.meeting_settings.native_encoder",
     "VP8",
@@ -703,14 +693,27 @@ it("selects encoding first, filters advanced colour choices and resets incompati
     "setting.meeting_settings.color_range_limited",
   );
   expect(field("color_range")).toBeDisabled();
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.265 (GPU)",
+  );
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    encoder: "mf:test:h265",
+    codec: "video/h265",
+    colorMatrix: "bt709",
+    colorRange: "full",
+  });
 });
 
 it("does not replace a saved hardware codec because of a stale RGB preference", async () => {
-  setAppState("options", {
+  const legacy = {
     nativeScreenCodec: "video/h265",
     nativeScreenEncoder: "mf:test:h265",
     nativeColorFormat: "rgb",
-  });
+  };
+  setAppState("options", legacy);
   render(() => <MeetingSettings />);
   const encoder = await screen.findByRole("button", {
     name: /setting.meeting_settings.native_encoder/,
@@ -718,10 +721,11 @@ it("does not replace a saved hardware codec because of a stale RGB preference", 
   await waitFor(() => expect(encoder).toBeEnabled());
   expect(encoder).toHaveTextContent("H.265 (GPU)");
   expect(
-    screen.getByRole("button", {
-      name: /setting.meeting_settings.color_format/,
-    }),
-  ).toHaveTextContent("YUV 4:2:0");
+    screen.getByText("YUV 4:2:0 · 8-bit · SDR"),
+  ).toBeInTheDocument();
+  expect(
+    nativeScreenOptions(appState.options),
+  ).not.toHaveProperty("colorFormat");
   expect(appState.options.nativeScreenCodec).toBe(
     "video/h265",
   );
