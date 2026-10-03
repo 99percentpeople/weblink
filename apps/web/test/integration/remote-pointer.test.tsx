@@ -241,6 +241,71 @@ it("forwards absolute pointer input and focused keyboard input by default in loc
     vertical: -20,
   });
 });
+it.each(["local", "capture"] as const)(
+  "reuses the input surface across control toggles without retaining input in %s mode",
+  (mode) => {
+    setAppState("options", "remotePointer", "mode", mode);
+    render(() => <RemoteControlOverlay enabled />);
+    const element = surface();
+    if (mode === "capture") capture();
+    else mouse("down");
+    key();
+    fixture.control.resetInput.mockClear();
+
+    fixture.control.value = "viewing";
+    fixture.control.dispatchEvent(new Event("change"));
+    expect(element.isConnected).toBe(true);
+    expect(screen.queryByRole("application")).toBeNull();
+    expect(element.tabIndex).toBe(-1);
+    expect(document.activeElement).not.toBe(element);
+    expect(locked).toBeNull();
+    expect(fixture.control.resetInput).toHaveBeenCalled();
+    fixture.control.input.mockClear();
+    fixture.control.move.mockClear();
+    fixture.control.trackpad.mockClear();
+
+    // Already queued events must not forward input through the inert surface.
+    for (const phase of ["down", "move", "up"]) {
+      const event = new MouseEvent(`pointer${phase}`, {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+        button: 0,
+      });
+      Object.assign(event, {
+        pointerType: "mouse",
+        pointerId: 1,
+      });
+      fireEvent(element, event);
+    }
+    fireEvent.keyDown(element, { code: "KeyA", key: "a" });
+    fireEvent.wheel(element, {
+      clientX: 100,
+      clientY: 100,
+      deltaY: 20,
+    });
+    fireEvent.click(element);
+    expect(fixture.control.input).not.toHaveBeenCalled();
+    expect(fixture.control.move).not.toHaveBeenCalled();
+    expect(fixture.control.trackpad).not.toHaveBeenCalled();
+
+    fixture.control.value = "active";
+    fixture.control.dispatchEvent(new Event("change"));
+    expect(surface()).toBe(element);
+    expect(element.tabIndex).toBe(0);
+    key();
+    expect(fixture.control.input).not.toHaveBeenCalled();
+    if (mode === "capture") capture();
+    else click();
+    key();
+    expect(fixture.control.input).toHaveBeenLastCalledWith({
+      type: "key",
+      scanCode: 0x1e,
+      extended: false,
+      down: true,
+    });
+  },
+);
 it("does not let an inactive mirror restore the active surface's cursor", () => {
   const [mirror, setMirror] = createSignal(false);
   render(() => (

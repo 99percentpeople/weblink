@@ -413,26 +413,28 @@ export const VideoDisplay = (
             )}
           </div>
         </Show>
-        <div
-          use:layoutOverlay={"name"}
-          class="absolute left-1 right-1 top-1 flex gap-1"
-        >
-          <Badge
-            variant="secondary"
-            title={props.name}
-            class="min-w-0 max-w-full gap-1 bg-black/50 text-xs text-white
-              hover:bg-black/80"
+        <div class="meeting-video-overlays absolute inset-0">
+          <div
+            use:layoutOverlay={"name"}
+            class="absolute left-1 right-1 top-1 flex gap-1"
           >
-            <span class="truncate">{props.name}</span>
-            <IconVolumeUpFilled
-              class={cn(
-                "size-4 shrink-0",
-                anySpeaking() ? "block" : "hidden",
-              )}
-            />
-          </Badge>
+            <Badge
+              variant="secondary"
+              title={props.name}
+              class="min-w-0 max-w-full gap-1 bg-black/50 text-xs text-white
+                hover:bg-black/80"
+            >
+              <span class="truncate">{props.name}</span>
+              <IconVolumeUpFilled
+                class={cn(
+                  "size-4 shrink-0",
+                  anySpeaking() ? "block" : "hidden",
+                )}
+              />
+            </Badge>
+          </div>
+          {props.children}
         </div>
-        {props.children}
       </div>
     </VideoContext.Provider>
   );

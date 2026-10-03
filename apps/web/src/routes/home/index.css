@@ -142,6 +142,10 @@
 .meeting-tile-video {
   @apply absolute inset-0;
 }
+.meeting-tile-video:fullscreen > .meeting-video-overlays {
+  /* Keep letterbox UI in a full-surface layer above WebView2's video plane. */
+  transform: translateZ(0);
+}
 .meeting-tile-video:fullscreen:has(
     .meeting-tile-focus-target:focus-visible
   )::after {
