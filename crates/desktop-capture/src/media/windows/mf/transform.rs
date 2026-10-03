@@ -86,6 +86,7 @@ struct Configuration {
     fps: u32,
     bitrate: u32,
     bitrate_limit: u32,
+    color: crate::media::color::ColorDescription,
 }
 fn activations(codec: Codec) -> Result<Vec<(EncoderInfo, IMFActivate)>> {
     let mut list = Activations(ptr::null_mut(), 0);
@@ -158,6 +159,7 @@ pub fn detect() -> crate::Result<Vec<EncoderInfo>> {
                     fps: 30,
                     bitrate: 1_000_000,
                     bitrate_limit: 1_000_000,
+                    color: crate::media::MediaOptions::default().color_space(),
                 },
                 Arc::new(|| {}),
             )
@@ -188,6 +190,7 @@ pub struct Transform {
     fps: u32,
     ready: u32,
     configuration: Vec<CodecControl>,
+    color: crate::media::color::ColorDescription,
 }
 impl Transform {
     pub fn open(
@@ -197,6 +200,7 @@ impl Transform {
         fps: u32,
         bitrate: u32,
         bitrate_limit: u32,
+        color: crate::media::color::ColorDescription,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> crate::Result<Self> {
         let codec = if id.ends_with(":h265") {
@@ -218,6 +222,7 @@ impl Transform {
                 fps,
                 bitrate,
                 bitrate_limit,
+                color,
             },
             wake,
         )
@@ -235,6 +240,7 @@ impl Transform {
             fps,
             bitrate,
             bitrate_limit,
+            color,
         } = configuration;
         unsafe {
             let transform: IMFTransform = activation.ActivateObject()?;
@@ -308,11 +314,13 @@ impl Transform {
                 let _ = transform.GetStreamIDs(&mut input, &mut output);
                 let output_type = MFCreateMediaType()?;
                 set_video_type(&output_type, &codec.subtype(), width, height, fps)?;
+                color.apply_mf(&output_type)?;
                 output_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
                 output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, codec.profile())?;
                 transform.SetOutputType(output[0], &output_type, 0)?;
                 let input_type = MFCreateMediaType()?;
                 set_video_type(&input_type, &MFVideoFormat_NV12, width, height, fps)?;
+                color.apply_mf(&input_type)?;
                 input_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)?;
                 transform.SetInputType(input[0], &input_type, 0)?;
                 if let Some(api) = &controls {
@@ -347,6 +355,7 @@ impl Transform {
                     fps,
                     ready: 0,
                     configuration,
+                    color,
                 })
             };
             let result = configure();
@@ -481,12 +490,14 @@ impl Transform {
             let mut data = ptr::null_mut();
             let mut len = 0;
             buffer.Lock(&mut data, None, Some(&mut len))?;
-            let bytes = if len == 0 {
+            let mut bytes = if len == 0 {
                 Vec::new()
             } else {
                 std::slice::from_raw_parts(data, len as usize).to_vec()
             };
             buffer.Unlock()?;
+            super::bitstream_color::normalize(&mut bytes, self.codec, self.color)
+                .map_err(|reason| windows::core::Error::new(MF_E_INVALIDMEDIATYPE, reason))?;
             let keyframe = sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap_or(0) != 0;
             Ok(Some(Packet {
                 bytes,

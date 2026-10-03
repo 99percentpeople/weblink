@@ -64,6 +64,13 @@ impl MediaSession {
                     timestamp,
                     codec,
                     implementation,
+                    color_space: self
+                        .options
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .color_space(),
+                    bit_depth: 8,
+                    chroma_subsampling: "4:2:0",
                     width: s.outbound.frame_width,
                     height: s.outbound.frame_height,
                     bytes: s.sent.bytes_sent,

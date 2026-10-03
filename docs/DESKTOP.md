@@ -377,6 +377,29 @@ an invalid zero bitrate to MF; positive feedback resumes it and requests a fresh
 keyframe. Existing byte debt survives pause and recovery. Fixed codec controls
 are read back on transform initialization, not on every rate update.
 
+Native screen colour settings apply to the next share. Automatic conversion uses
+the BT.709 YUV matrix for a selected H.264/H.265/VP9/AV1 codec and BT.601 when an
+unrestricted software offer can negotiate VP8. Explicit BT.601/BT.709 and limited
+or full range use matching libyuv conversion, raw-preview metadata, MF input/output
+attributes and RTP colour metadata. The RGB primaries and transfer remain sRGB;
+choosing BT.709 changes the YUV matrix, not the source gamut or transfer curve.
+Hardware H.264/H.265 SPS colour descriptions are normalized before transmission:
+accepting MF attributes does not guarantee that a driver writes matching VUI
+tags. This changes only metadata, preserves picture/timing data and performs no
+additional encoding. Unsupported or truncated SPS syntax fails the encoder with
+an explicit error instead of transmitting contradictory colour descriptions.
+VP8 stays BT.601 limited range. Its UI selection preserves other-codec colour
+preferences, while incompatible direct native requests are rejected. Unrestricted
+offers with incompatible explicit colour settings exclude VP8.
+
+The current capture and transport path is 8-bit YUV 4:2:0 SDR. Full range retains
+256 luma levels instead of limited range's 220, but does not provide 10-bit precision
+or recover chroma detail lost to subsampling/compression. HDR and 4:4:4 are not
+advertised as enabled formats. HDR requires a float/10-bit capture path, matching
+encoder profile, negotiated decoder support and HDR presentation or tone mapping;
+an HDR colour tag alone cannot implement that pipeline. Copied native statistics
+include the actual colour description, bit depth and chroma subsampling.
+
 The **Show stream statistics** action is available in the main picture's controls
 when it has video. Its overlay is temporary state for that picture, defaults to
 off, and is discarded when the picture is removed or replaced. It is not saved

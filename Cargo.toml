@@ -1,10 +1,11 @@
 [workspace]
 members = ["apps/desktop/src-tauri", "crates/desktop-capture", "crates/desktop-input"]
+exclude = ["vender/rust-sdks"]
 resolver = "2"
 
 [patch.crates-io]
-libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "062d494b80b73df4b01b8320f456bf4334ee3608" }
-webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "062d494b80b73df4b01b8320f456bf4334ee3608" }
+libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "4c8b6fd80790fbf358299d8df265b6de6b86501d" }
+webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "4c8b6fd80790fbf358299d8df265b6de6b86501d" }
 
 [profile.release]
 codegen-units = 1

@@ -244,8 +244,14 @@ export interface NativeScreenOptions {
   maxBitrate: number;
   codec: string | null;
   encoder?: string;
+  /** Colour conversion for the next native share. */
+  colorMatrix?: NativeColorMatrix;
+  colorRange?: NativeColorRange;
   degradationPreference: RTCDegradationPreference;
 }
+
+export type NativeColorMatrix = "auto" | "bt601" | "bt709";
+export type NativeColorRange = "limited" | "full";
 
 /** Validation ceiling, not a promise of capture/encoder throughput. */
 export const MAX_NATIVE_FRAME_RATE = 1000;
@@ -266,6 +272,9 @@ export interface NativeVideoStats {
   timestamp: number;
   codec: string;
   implementation: string;
+  colorSpace?: VideoColorSpaceInit;
+  bitDepth?: number;
+  chromaSubsampling?: string;
   width: number;
   height: number;
   bytes: number;

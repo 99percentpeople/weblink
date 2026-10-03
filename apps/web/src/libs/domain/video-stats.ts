@@ -4,6 +4,9 @@ export interface VideoStatsSample {
   timestamp: number;
   codec?: string;
   implementation?: string;
+  colorSpace?: VideoColorSpaceInit;
+  bitDepth?: number;
+  chromaSubsampling?: string;
   width?: number;
   height?: number;
   bytes?: number;

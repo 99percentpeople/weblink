@@ -131,6 +131,8 @@ export type AppOption = {
   nativeScreenCodec: string | null;
   nativeAudioCodec: string | null;
   nativeScreenEncoder: string;
+  nativeColorMatrix: import("@weblink/platform").NativeColorMatrix;
+  nativeColorRange: import("@weblink/platform").NativeColorRange;
   nativeScreenCaptureBackend: import("@weblink/platform").CaptureBackend;
   nativeWindowCaptureBackend: import("@weblink/platform").CaptureBackend;
   videoMaxBitrate: number;
@@ -256,6 +258,8 @@ export const getDefaultAppOptions = (): AppOption => {
     nativeScreenCodec: null,
     nativeAudioCodec: null,
     nativeScreenEncoder: "auto",
+    nativeColorMatrix: "auto",
+    nativeColorRange: "limited",
     nativeScreenCaptureBackend: "auto",
     nativeWindowCaptureBackend: "auto",
     preferredVideoCodec: null,

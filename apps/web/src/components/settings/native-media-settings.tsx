@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import CaptureBackendSelect from "@/components/capture-backend-select";
+import NativeColorSettings from "./native-color-settings";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import { t } from "@/i18n";
@@ -237,6 +238,7 @@ export default function NativeMediaSettings(props: {
           </p>
         </Show>
       </div>
+      <NativeColorSettings />
     </div>
   );
 }

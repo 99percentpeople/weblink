@@ -21,6 +21,7 @@ interface Frame {
   sequence: number;
   width: number;
   height: number;
+  colorSpace?: VideoColorSpaceInit;
 }
 
 /** One request at a time is the ownership handshake: Rust must not overwrite the
@@ -150,7 +151,7 @@ export async function createRawPreview(
       codedWidth: frame.width,
       codedHeight: frame.height,
       timestamp: Math.round(performance.now() * 1000),
-      colorSpace: {
+      colorSpace: frame.colorSpace ?? {
         matrix: "smpte170m",
         primaries: "bt709",
         transfer: "iec61966-2-1",

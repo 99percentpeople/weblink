@@ -11,7 +11,7 @@ use crate::surface::{FrameSink, Rotation, TextureFrame};
 use crate::Result;
 use libwebrtc::{
     media_stream_track::MediaStreamTrack,
-    native::yuv_helper::argb_to_i420,
+    native::yuv_helper::argb_to_i420_with_matrix,
     peer_connection::{IceGatheringState, OfferOptions, PeerConnection, PeerConnectionState},
     peer_connection_factory::{
         native::PeerConnectionFactoryExt, ContinualGatheringPolicy, IceTransportsType,
@@ -181,14 +181,20 @@ impl MediaSession {
         // budget on scene cuts. Its real-time preset responds to rate control;
         // resolution/degradation and screen identity are still set explicitly.
         let screencast = options.codec.as_deref() != Some("video/h264");
+        let source = NativeVideoSource::new(VideoResolution::default(), screencast);
+        let preview_source = NativeVideoSource::new(VideoResolution::default(), screencast);
+        let color = options.color_space().rtc();
+        if !source.set_color_space(Some(color)) || !preview_source.set_color_space(Some(color)) {
+            return Err("Invalid native video color space".into());
+        }
         let session = Arc::new(Self {
             // 0..0 asks the receiver to decode and present complete frames
             // immediately, without a second presentation queue. In Chromium,
             // 0..positive selects a renderer that assumes 60 FPS; a positive
             // minimum instead adds timestamp-based scheduling and late drops.
             factory,
-            source: NativeVideoSource::new(VideoResolution::default(), screencast),
-            preview_source: NativeVideoSource::new(VideoResolution::default(), screencast),
+            source,
+            preview_source,
             audio: options
                 .audio
                 .then(|| {
@@ -517,20 +523,12 @@ impl MediaSession {
         };
         timing.mark(3);
         let mut buffer = I420Buffer::new(width, height);
-        let (sy, su, sv) = buffer.strides();
-        let (y, u, v) = buffer.data_mut();
         // libyuv ARGB means BGRA byte order on little-endian Windows.
-        argb_to_i420(
+        argb_to_i420_with_matrix(
             bytes,
             stride,
-            y,
-            sy,
-            u,
-            su,
-            v,
-            sv,
-            width as i32,
-            height as i32,
+            &mut buffer,
+            options.color_space().yuv_matrix(),
         );
         drop(bgra);
         readback.composed = composed;
@@ -597,6 +595,11 @@ impl MediaSession {
             width: buffer.width(),
             height: buffer.height(),
             timestamp: self.started.elapsed().as_secs_f64() * 1000.0,
+            color_space: self
+                .options
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .color_space(),
         }))
     }
 
@@ -764,16 +767,21 @@ impl MediaSession {
                             .map_err(|e| e.to_string())?;
                     }
                 }
-                if let Some(codec) = options.codec.as_ref() {
+                if options.codec.is_some() || !options.vp8_color_compatible() {
                     let codecs = self
                         .factory
                         .get_rtp_sender_capabilities(MediaType::Video)
                         .codecs
                         .into_iter()
                         .filter(|c| {
-                            (c.mime_type.eq_ignore_ascii_case(codec)
+                            (options
+                                .codec
+                                .as_ref()
+                                .is_none_or(|codec| c.mime_type.eq_ignore_ascii_case(codec))
+                                && (options.vp8_color_compatible()
+                                    || !c.mime_type.eq_ignore_ascii_case("video/vp8"))
                                 && (hardware.is_none()
-                                    || codec != "video/h264"
+                                    || options.codec.as_deref() != Some("video/h264")
                                     || c.sdp_fmtp_line
                                         .as_deref()
                                         .is_some_and(|line| line.contains("profile-level-id=42"))))

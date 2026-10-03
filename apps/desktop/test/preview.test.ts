@@ -119,6 +119,12 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
           width: 2,
           height: 2,
           timestamp: 1,
+          colorSpace: {
+            matrix: "bt709",
+            primaries: "bt709",
+            transfer: "iec61966-2-1",
+            fullRange: true,
+          },
         };
       peak = Math.max(peak, ++inFlight);
       const result = await new Promise((resolve) => {
@@ -135,6 +141,14 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
     ended,
   );
   expect(draw).toHaveBeenCalledOnce();
+  expect(draw.mock.calls[0][0].settings.colorSpace).toEqual(
+    {
+      matrix: "bt709",
+      primaries: "bt709",
+      transfer: "iec61966-2-1",
+      fullRange: true,
+    },
+  );
   expect(preview.stats()).toMatchObject({
     width: 2,
     height: 2,

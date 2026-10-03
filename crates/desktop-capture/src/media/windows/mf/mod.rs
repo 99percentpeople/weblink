@@ -1,4 +1,7 @@
 //! One hardware encoder per receiver, with bounded latest-frame delivery.
+mod bitstream_color;
+#[cfg(test)]
+mod color_probe;
 mod events;
 mod transform;
 use super::super::{
@@ -127,6 +130,9 @@ impl Drop for RateControlSubscription {
 impl Encoder {
     pub fn new(id: String, options: MediaOptions, preview: bool) -> Result<Self> {
         let source = NativeVideoSource::new_encoded(VideoResolution::default());
+        if !source.set_color_space(Some(options.color_space().rtc())) {
+            return Err("Invalid hardware video color space".into());
+        }
         let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let error = Arc::new(Mutex::new(None));
         let output = source.clone();
@@ -298,6 +304,7 @@ fn run(
                     options.frame_rate,
                     rate_control.current(),
                     options.max_bitrate as u32,
+                    options.color_space(),
                     wake.clone(),
                 )?);
                 let controls = encoder.as_ref().unwrap().control_status();

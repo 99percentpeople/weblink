@@ -57,7 +57,14 @@ export type MeetingVideoSettings = Pick<
   | "nativeScreenCodec"
   | "degradationPreference"
 > &
-  Partial<Pick<AppOption, "nativeScreenEncoder">> &
+  Partial<
+    Pick<
+      AppOption,
+      | "nativeScreenEncoder"
+      | "nativeColorMatrix"
+      | "nativeColorRange"
+    >
+  > &
   MeetingAudioSettings;
 
 /** Treat persisted values as untrusted; keep the browser and native limits aligned. */
@@ -94,6 +101,18 @@ export function nativeScreenOptions(
       : 25 * 1024 * 1024,
     codec: options.nativeScreenCodec ?? null,
     encoder: options.nativeScreenEncoder ?? "auto",
+    colorMatrix:
+      options.nativeScreenCodec === "video/vp8"
+        ? "bt601"
+        : options.nativeColorMatrix === "bt601" ||
+            options.nativeColorMatrix === "bt709"
+          ? options.nativeColorMatrix
+          : "auto",
+    colorRange:
+      options.nativeScreenCodec !== "video/vp8" &&
+      options.nativeColorRange === "full"
+        ? "full"
+        : "limited",
     degradationPreference: [
       "balanced",
       "maintain-framerate",

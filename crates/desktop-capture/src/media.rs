@@ -1,5 +1,6 @@
 //! Independent send-only WebRTC connections for one explicitly selected source.
 use serde::{Deserialize, Serialize};
+pub mod color;
 pub mod control;
 pub mod latency;
 pub mod pipeline;
@@ -44,6 +45,8 @@ pub struct MediaOptions {
     pub max_bitrate: u64,
     pub codec: Option<String>,
     pub encoder: String,
+    pub color_matrix: color::ColorMatrix,
+    pub color_range: color::ColorRange,
     pub degradation_preference: String,
 }
 
@@ -60,6 +63,8 @@ impl Default for MediaOptions {
             max_bitrate: 25 * 1024 * 1024,
             codec: None,
             encoder: "auto".into(),
+            color_matrix: Default::default(),
+            color_range: Default::default(),
             degradation_preference: "balanced".into(),
         }
     }
@@ -67,6 +72,9 @@ impl Default for MediaOptions {
 
 impl MediaOptions {
     pub fn validate(&self) -> crate::Result<()> {
+        if self.codec.as_deref() == Some("video/vp8") && !self.vp8_color_compatible() {
+            return Err("VP8 requires BT.601 limited-range video".into());
+        }
         if !AUDIO_SAMPLE_RATES.contains(&self.audio_sample_rate)
             || !AUDIO_CHANNEL_COUNTS.contains(&self.audio_channel_count)
         {
@@ -156,6 +164,9 @@ pub struct VideoStats {
     pub timestamp: f64,
     pub codec: String,
     pub implementation: String,
+    pub color_space: color::ColorDescription,
+    pub bit_depth: u8,
+    pub chroma_subsampling: &'static str,
     pub width: u32,
     pub height: u32,
     pub bytes: u64,

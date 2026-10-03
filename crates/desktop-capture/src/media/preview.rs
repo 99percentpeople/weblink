@@ -10,6 +10,7 @@ pub struct PreviewFrame {
     pub width: u32,
     pub height: u32,
     pub timestamp: f64,
+    pub color_space: super::color::ColorDescription,
 }
 
 #[cfg(any(windows, test))]

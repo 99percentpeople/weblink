@@ -62,6 +62,8 @@ describe("live video settings", () => {
       videoFrameRate: 60,
       preferredVideoCodec: "video/vp9",
       nativeScreenCodec: "video/h264",
+      nativeColorMatrix: "bt709" as const,
+      nativeColorRange: "full" as const,
     };
     controller.sync(stream(video), codecOnly);
     await tick();
@@ -84,6 +86,8 @@ describe("live video settings", () => {
       ...options(),
       nativeScreenCodec: "video/vp9",
       nativeScreenEncoder: "software",
+      nativeColorMatrix: "bt709",
+      nativeColorRange: "full",
       videoMaxBitrate: 2_000_000,
       degradationPreference: "maintain-resolution",
     });

@@ -31,6 +31,8 @@ describe("meeting capture settings", () => {
       maxBitrate: 4_000_000,
       codec: "video/h264",
       encoder: "auto",
+      colorMatrix: "auto",
+      colorRange: "limited",
       degradationPreference: "balanced",
     });
   });
@@ -73,6 +75,37 @@ describe("meeting capture settings", () => {
     expect(nativeScreenOptions(options).codec).toBeNull();
     expect(options.preferredVideoCodec).toBe("video/vp9");
     expect(options.preferredAudioCodec).toBe("audio/opus");
+  });
+  it("validates colour preferences and preserves them when VP8 uses its compatible format", () => {
+    const options = {
+      ...getDefaultAppOptions(),
+      nativeColorMatrix: "bt709" as const,
+      nativeColorRange: "full" as const,
+    };
+    expect(nativeScreenOptions(options)).toMatchObject({
+      colorMatrix: "bt709",
+      colorRange: "full",
+    });
+    expect(
+      nativeScreenOptions({
+        ...options,
+        nativeScreenCodec: "video/vp8",
+      }),
+    ).toMatchObject({
+      colorMatrix: "bt601",
+      colorRange: "limited",
+    });
+    expect(options.nativeColorRange).toBe("full");
+    expect(
+      nativeScreenOptions({
+        ...options,
+        nativeColorMatrix: "invalid",
+        nativeColorRange: "invalid",
+      } as any),
+    ).toMatchObject({
+      colorMatrix: "auto",
+      colorRange: "limited",
+    });
   });
 });
 
