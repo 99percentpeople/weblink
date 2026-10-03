@@ -74,7 +74,7 @@ import { getRoomNamespace } from "@/libs/application/room-identity";
 
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { AppPermissions } from "./create-app-permissions";
-import { createAppMediaCapabilities } from "./create-app-media-capabilities";
+import { createAppSettings } from "./create-app-settings";
 import { platform } from "@/libs/platform/runtime";
 
 /** Services are owned by the application composition scope, independently of views. */
@@ -84,7 +84,7 @@ export function createAppState(
   permissions: AppPermissions,
 ): AppStateContextProps {
   const localStream = localStreamService.stream;
-  const mediaCapabilities = createAppMediaCapabilities({
+  const settings = createAppSettings({
     platform,
     permissions: permissions.media,
     stream: localStream,
@@ -763,7 +763,7 @@ export function createAppState(
 
   return {
     permissions,
-    mediaCapabilities,
+    ...settings,
     conversationMessaging,
     conversationHistory,
     joinRoom,

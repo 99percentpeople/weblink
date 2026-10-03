@@ -24,9 +24,14 @@ import type {
 import type { RoomStatus } from "./app-state";
 import type { AppPermissions } from "./create-app-permissions";
 import type { AppMediaCapabilities } from "./create-app-media-capabilities";
+import type { AppStartup } from "./create-app-startup";
+import type { AppCaptureSources } from "./create-app-capture-sources";
 export interface AppStateContextProps {
   permissions: AppPermissions;
   mediaCapabilities: AppMediaCapabilities;
+  runtimeCapabilities: AppMediaCapabilities["runtimeCapabilities"];
+  startup: AppStartup;
+  captureSources: AppCaptureSources;
   conversationMessaging: Pick<
     ConversationMessagingService,
     "sendText" | "sendFile"

@@ -1,14 +1,11 @@
 import {
+  createEffect,
   createSignal,
   For,
   onCleanup,
-  onMount,
   Show,
 } from "solid-js";
-import type {
-  CaptureSource,
-  CaptureStatus,
-} from "@weblink/platform";
+import type { CaptureStatus } from "@weblink/platform";
 import { platform } from "@/libs/platform/runtime";
 import { useAppState } from "@/libs/state/app-state-context";
 import { Button } from "@/components/ui/button";
@@ -18,15 +15,25 @@ const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 export default function NativeCaptureSettings() {
-  const capabilities = useAppState().mediaCapabilities;
+  const {
+    mediaCapabilities: capabilities,
+    captureSources,
+  } = useAppState();
   const capture = platform.capture;
-  const [available, setAvailable] = createSignal(false);
-  const [sources, setSources] = createSignal<
-    CaptureSource[]
-  >([]);
+  const sources = captureSources.sources;
   const [selected, setSelected] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
+  const sourceBusy = () =>
+    busy() || captureSources.refreshing();
+  const visibleError = () =>
+    error() ?? captureSources.error();
+  createEffect(() => {
+    if (
+      !sources().some((source) => source.id === selected())
+    )
+      setSelected("");
+  });
   const [status, setStatus] = createSignal<CaptureStatus>();
   let disposed = false;
   let ownedId: string | null = null;
@@ -85,25 +92,19 @@ export default function NativeCaptureSettings() {
     }, 500);
   }
 
-  async function refresh() {
-    if (!capture) return;
-    setBusy(true);
+  function refresh() {
     setError(undefined);
-    try {
-      const next = await capture.sources();
-      if (disposed) return;
-      setSources(next);
-      if (!next.some((source) => source.id === selected()))
-        setSelected("");
-    } catch (cause) {
-      if (!disposed) setError(message(cause));
-    } finally {
-      if (!disposed) setBusy(false);
-    }
+    void captureSources.refresh();
   }
 
   async function start() {
-    if (!capture || !selected() || busy() || running())
+    if (
+      !capture ||
+      !capabilities.captureSupported() ||
+      !selected() ||
+      sourceBusy() ||
+      running()
+    )
       return;
     setBusy(true);
     setError(undefined);
@@ -145,22 +146,6 @@ export default function NativeCaptureSettings() {
     }
   }
 
-  onMount(async () => {
-    if (!capture) return;
-    try {
-      await capabilities.ready();
-      if (disposed || !capabilities.captureSupported())
-        return;
-      setAvailable(true);
-      await refresh();
-    } catch (cause) {
-      if (!disposed) {
-        setAvailable(true);
-        setError(message(cause));
-      }
-    }
-  });
-
   onCleanup(() => {
     disposed = true;
     generation++;
@@ -170,7 +155,9 @@ export default function NativeCaptureSettings() {
   });
 
   return (
-    <Show when={available()}>
+    <Show
+      when={capabilities.captureSupported() || running()}
+    >
       <div class="flex flex-col gap-3">
         <h4 class="h4">{label("title")}</h4>
         <p class="muted">{label("description")}</p>
@@ -182,7 +169,7 @@ export default function NativeCaptureSettings() {
             class="bg-background border-input h-10 w-full rounded-md border
               px-3 text-sm"
             value={selected()}
-            disabled={busy() || running()}
+            disabled={sourceBusy() || running()}
             onChange={(event) =>
               setSelected(event.currentTarget.value)
             }
@@ -192,7 +179,10 @@ export default function NativeCaptureSettings() {
             </option>
             <For each={sources()}>
               {(source) => (
-                <option value={source.id}>
+                <option
+                  value={source.id}
+                  selected={selected() === source.id}
+                >
                   {label(source.kind)} · {source.name} (
                   {source.width} × {source.height})
                 </option>
@@ -203,13 +193,15 @@ export default function NativeCaptureSettings() {
         <div class="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={busy() || running()}
+            disabled={sourceBusy() || running()}
             onClick={() => void refresh()}
           >
             {label("refresh")}
           </Button>
           <Button
-            disabled={busy() || running() || !selected()}
+            disabled={
+              sourceBusy() || running() || !selected()
+            }
             onClick={() => void start()}
           >
             {label("start")}
@@ -255,7 +247,7 @@ export default function NativeCaptureSettings() {
           )}
         </Show>
         <p class="muted">{label("hint")}</p>
-        <Show when={error()}>
+        <Show when={visibleError()}>
           {(text) => (
             <p
               class="text-destructive text-sm"

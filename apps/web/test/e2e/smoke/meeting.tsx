@@ -1,4 +1,4 @@
-import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { createAppSettings } from "@/libs/state/create-app-settings";
 import { platform } from "@/libs/platform/runtime";
 import { MeetingSessionProvider } from "../../support/meeting-session-provider";
 import { createRoot, type ParentProps } from "solid-js";
@@ -863,7 +863,7 @@ async function main() {
   const {
     tasks,
     permissions: appPermissions,
-    mediaCapabilities,
+    settings,
   } = createRoot(() => {
     const permissions = createAppPermissions({
       notifications: undefined,
@@ -873,7 +873,7 @@ async function main() {
     });
     return {
       permissions,
-      mediaCapabilities: createAppMediaCapabilities({
+      settings: createAppSettings({
         platform,
         permissions: permissions.media,
         stream: local.stream,
@@ -959,7 +959,7 @@ async function main() {
   };
   setChatTestContext({
     permissions: appPermissions,
-    mediaCapabilities,
+    ...settings,
     conversationHistory: {
       cacheLocalTextBatch: unexpected,
     },

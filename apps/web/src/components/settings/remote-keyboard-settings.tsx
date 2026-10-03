@@ -1,12 +1,8 @@
-import {
-  createSignal,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { Show } from "solid-js";
 import { t } from "@/i18n";
 import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
+import { useAppState } from "@/libs/state/app-state-context";
 import { setAppOptions } from "@/options";
 import { Label } from "@/components/ui/label";
 import {
@@ -30,31 +26,13 @@ import {
 } from "@/libs/domain/remote-control/keyboard-options";
 
 export default function RemoteKeyboardSettings() {
-  // Discover native support without suspending the settings dialog.
-  const [systemKeyboard, setSystemKeyboard] =
-    createSignal(false);
-  const [hostShortcut, setHostShortcut] =
-    createSignal(false);
-  let disposed = false;
-  onCleanup(() => {
-    disposed = true;
-  });
-  onMount(async () => {
-    if (platform.kind !== "desktop") return;
-    const capabilities = await platform
-      .getCapabilities()
-      .catch(() => undefined);
-    if (!disposed) {
-      setSystemKeyboard(
-        !!platform.keyboard &&
-          capabilities?.systemKeyboard === true,
-      );
-      setHostShortcut(
-        capabilities?.os === "windows" &&
-          capabilities.remoteInput,
-      );
-    }
-  });
+  const capabilities = useAppState().runtimeCapabilities;
+  const systemKeyboard = () =>
+    !!platform.keyboard &&
+    capabilities()?.systemKeyboard === true;
+  const hostShortcut = () =>
+    capabilities()?.os === "windows" &&
+    capabilities()?.remoteInput;
   const keyboard = () =>
     resolveRemoteKeyboardOptions(
       appState.options.remoteKeyboard,

@@ -19,6 +19,7 @@ import type { NativeKeyboardEvent } from "@weblink/platform";
 import { RemoteControlOverlay } from "@/routes/home/components/remote-control-overlay";
 import { RemoteKeyboardToggle } from "@/routes/home/components/remote-keyboard-toggle";
 import RemoteControlSettings from "@/components/settings/remote-control-settings";
+import { SettingsStateProvider } from "../helpers/settings-state";
 import { platform } from "@/libs/platform/runtime";
 import {
   appState,
@@ -695,7 +696,11 @@ it.each(["local", "capture"] as const)(
   },
 );
 it("provides both pointer behaviors in Remote control settings", async () => {
-  render(() => <RemoteControlSettings />);
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
   const select = screen.getByRole("button", {
     name: /setting.remote_control.pointer.title/,
   });
@@ -711,7 +716,11 @@ it("provides both pointer behaviors in Remote control settings", async () => {
 });
 
 it("shows browser release help without Windows-only shortcuts", () => {
-  render(() => <RemoteControlSettings />);
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
   expect(
     screen.getByText(/exit_shortcut.browser/),
   ).toBeVisible();
@@ -743,7 +752,11 @@ it("adapts Windows release help to native keyboard support and forwarding settin
     remoteInput: true,
     systemKeyboard: true,
   });
-  render(() => <RemoteControlSettings />);
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
   expect(
     await screen.findByText(/exit_shortcut.native/),
   ).toBeVisible();

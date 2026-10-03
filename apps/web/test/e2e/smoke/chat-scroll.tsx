@@ -1,4 +1,4 @@
-import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { createAppSettings } from "@/libs/state/create-app-settings";
 import { platform } from "@/libs/platform/runtime";
 import { createRoot, type ParentProps } from "solid-js";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
@@ -209,8 +209,8 @@ function Shell(props: ParentProps) {
 
 async function main() {
   let disposeTasks!: () => void;
-  const { tasks, permissions, mediaCapabilities } =
-    createRoot((dispose) => {
+  const { tasks, permissions, settings } = createRoot(
+    (dispose) => {
       disposeTasks = dispose;
       const permissions = createAppPermissions({
         notifications: undefined,
@@ -218,7 +218,7 @@ async function main() {
       });
       return {
         permissions,
-        mediaCapabilities: createAppMediaCapabilities({
+        settings: createAppSettings({
           platform,
           permissions: permissions.media,
           stream: () => appState.session.localStream,
@@ -230,7 +230,8 @@ async function main() {
           transfers: () => ({}),
         }),
       };
-    });
+    },
+  );
   const unexpected = async () => {
     throw new Error(
       "Unexpected network/file operation in chat smoke test",
@@ -238,7 +239,7 @@ async function main() {
   };
   setChatTestContext({
     permissions,
-    mediaCapabilities,
+    ...settings,
     conversationHistory: {
       cacheLocalTextBatch: unexpected,
     },

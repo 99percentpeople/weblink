@@ -1,17 +1,11 @@
 import { t } from "@/i18n";
-import { toast } from "solid-sonner";
 import { setClientProfile } from "@/libs/state/profile-store";
-import {
-  createSignal,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
-import type { RuntimeCapabilities } from "@weblink/platform";
+import { Show } from "solid-js";
 import type { ApplicationCloseBehavior } from "@/libs/domain/application-options";
 import { platform } from "@/libs/platform/runtime";
 import type { DocumentPictureInPictureAPI } from "@/libs/hooks/document-picture-in-picture";
 import { appState } from "@/libs/state/app-state";
+import { useAppState } from "@/libs/state/app-state-context";
 import { setAppOptions } from "@/options";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,45 +23,8 @@ import {
 } from "@/components/ui/switch";
 
 export default function ApplicationSettings() {
-  // Capability discovery must not replace the settings shell with its Suspense fallback.
-  const [capabilities, setCapabilities] =
-    createSignal<RuntimeCapabilities>();
-  let disposed = false;
-  onCleanup(() => {
-    disposed = true;
-  });
-  onMount(async () => {
-    if (platform.kind !== "desktop") return;
-    const detected = await platform
-      .getCapabilities()
-      .catch(() => undefined);
-    if (!disposed) setCapabilities(detected);
-  });
-  const [autostart, setAutostart] = createSignal<boolean>();
-  const [startupBehavior, setStartupBehavior] =
-    createSignal<"tray" | "window">("tray");
-  const [startupBusy, setStartupBusy] = createSignal(false);
-  const startup = platform.application?.autostart;
-  onMount(async () => {
-    if (!startup) return;
-    try {
-      const [enabled, behavior] = await Promise.all([
-        startup.enabled(),
-        startup.behavior(),
-      ]);
-      if (!disposed) setStartupBehavior(behavior);
-      if (!disposed) setAutostart(enabled);
-    } catch (error) {
-      console.warn(
-        "Could not read autostart status",
-        error,
-      );
-      if (!disposed)
-        toast.error(
-          t("setting.application.autostart_failed"),
-        );
-    }
-  });
+  const { runtimeCapabilities: capabilities, startup } =
+    useAppState();
   const pipSupported =
     !!platform.pictureInPicture ||
     (platform.kind === "browser" &&
@@ -136,36 +93,18 @@ export default function ApplicationSettings() {
           )}
         </p>
       </div>
-      <Show when={startup}>
+      <Show when={startup.supported}>
         <div class="flex flex-col gap-2">
           <Switch
             class="flex w-full items-center justify-between gap-3"
-            checked={autostart() === true}
+            checked={startup.enabled() === true}
             disabled={
-              startupBusy() || autostart() === undefined
+              startup.busy() ||
+              startup.enabled() === undefined
             }
-            onChange={async (enabled) => {
-              if (!startup || startupBusy()) return;
-              setStartupBusy(true);
-              try {
-                const actual =
-                  await startup.setEnabled(enabled);
-                if (!disposed) setAutostart(actual);
-              } catch (error) {
-                console.warn(
-                  "Could not update autostart",
-                  error,
-                );
-                if (!disposed)
-                  toast.error(
-                    t(
-                      "setting.application.autostart_failed",
-                    ),
-                  );
-              } finally {
-                if (!disposed) setStartupBusy(false);
-              }
-            }}
+            onChange={(enabled) =>
+              void startup.setEnabled(enabled)
+            }
           >
             <SwitchLabel>
               {t("setting.application.autostart")}
@@ -189,30 +128,16 @@ export default function ApplicationSettings() {
             disallowEmptySelection
             options={["tray", "window"]}
             disabled={
-              startupBusy() || autostart() === undefined
+              startup.busy() ||
+              startup.enabled() === undefined
             }
             optionDisabled={(value) =>
               value === "tray" &&
               !capabilities()?.systemTray
             }
-            value={startupBehavior()}
-            onChange={async (value) => {
-              if (!startup || !value || startupBusy())
-                return;
-              setStartupBusy(true);
-              try {
-                await startup.setBehavior(value);
-                if (!disposed) setStartupBehavior(value);
-              } catch {
-                if (!disposed)
-                  toast.error(
-                    t(
-                      "setting.application.autostart_failed",
-                    ),
-                  );
-              } finally {
-                if (!disposed) setStartupBusy(false);
-              }
+            value={startup.behavior()}
+            onChange={(value) => {
+              if (value) void startup.setBehavior(value);
             }}
             itemComponent={(props) => (
               <SelectItem item={props.item}>
@@ -239,6 +164,11 @@ export default function ApplicationSettings() {
             )}
           </p>
         </div>
+      </Show>
+      <Show when={startup.failed()}>
+        <p class="text-destructive text-sm" role="alert">
+          {t("setting.application.autostart_failed")}
+        </p>
       </Show>
       <Show when={platform.application}>
         <div class="flex flex-col gap-2">

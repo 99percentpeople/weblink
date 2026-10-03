@@ -111,6 +111,21 @@ it("discovers once per app and reuses it across consumers and unchanged focus ev
   expect(api.audioFormats).toHaveBeenCalledOnce();
   expect(api.codecs).toHaveBeenCalledOnce();
   expect(state.frameRates()).toContain(144);
+  expect(state.runtimeCapabilities()).toMatchObject({
+    runtime: "desktop",
+    displayRefreshRates: [144],
+  });
+});
+
+it("retains shared runtime capabilities after a failed focus refresh", async () => {
+  const { state, api } = fixture();
+  await state.ready();
+  const previous = state.runtimeCapabilities();
+  api.getCapabilities.mockRejectedValueOnce(
+    new Error("IPC unavailable"),
+  );
+  await state.refresh();
+  expect(state.runtimeCapabilities()).toBe(previous);
 });
 it("refreshes audio formats for audio device changes while reusing other native capabilities", async () => {
   const { state, api, setDevices } = fixture();

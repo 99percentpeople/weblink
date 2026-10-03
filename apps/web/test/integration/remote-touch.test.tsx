@@ -23,6 +23,7 @@ import {
   type RemoteKeyboardInputHandle,
 } from "@/routes/home/components/remote-keyboard-input";
 import RemoteControlSettings from "@/components/settings/remote-control-settings";
+import { SettingsStateProvider } from "../helpers/settings-state";
 import {
   appState,
   createInitialAppState,
@@ -228,7 +229,11 @@ it("does not silently emulate touch as mouse for an older host", () => {
   );
 });
 it("persists gesture choices and preserves them across direct mode", async () => {
-  render(() => <RemoteControlSettings />);
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
   expect(appState.options.remoteTouch.threeFingerTap).toBe(
     "keyboard",
   );
@@ -309,7 +314,11 @@ it("persists gesture choices and preserves them across direct mode", async () =>
 });
 
 it("offers sampling rates in both modes and remembers the direct touch property switch", async () => {
-  render(() => <RemoteControlSettings />);
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
   expect(appState.options.remoteTouch.sampleRate).toBe(120);
   fireEvent.keyDown(
     screen.getByRole("button", {

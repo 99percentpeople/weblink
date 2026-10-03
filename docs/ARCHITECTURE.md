@@ -378,6 +378,13 @@ may select concrete infrastructure implementations.
     Browser audio formats come from exposed input/track capabilities; Windows
     validates application-supported PCM pairs on process-loopback clients without
     starting recording. Browser and native audio codec preferences are separate.
+  - `create-app-settings.ts` composes the shared settings discovery. Application
+    and remote-keyboard settings consume the same `runtimeCapabilities` snapshot
+    as media discovery. `create-app-startup.ts` owns native startup preferences
+    and pending writes; `create-app-capture-sources.ts` retains the capture source
+    list. Focus and explicit refresh update these snapshots without clearing
+    previous values. Closing settings does not discard discovery or startup
+    writes; diagnostic capture sessions and polling still stop with their view.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and

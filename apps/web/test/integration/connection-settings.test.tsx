@@ -19,6 +19,7 @@ import { reconcile } from "solid-js/store";
 import type { JSX } from "solid-js";
 import { toast } from "solid-sonner";
 import ApplicationSettings from "@/components/settings/application-settings";
+import { SettingsStateProvider } from "../helpers/settings-state";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import {
   appState,
@@ -242,7 +243,11 @@ describe("connection settings", () => {
       true,
     );
 
-    render(() => <ApplicationSettings />);
+    render(() => (
+      <SettingsStateProvider>
+        <ApplicationSettings />
+      </SettingsStateProvider>
+    ));
     const autoJoin = screen.getByRole("switch", {
       name: "setting.connection.auto_join.title",
     });

@@ -1,9 +1,6 @@
-import {
-  AppStateContext,
-  type AppStateContextProps,
-} from "@/libs/state/app-state-context";
-import type { JSX } from "solid-js";
 // @vitest-environment jsdom
+import { createSignal, Show, type JSX } from "solid-js";
+import { SettingsStateProvider } from "../helpers/settings-state";
 import "@testing-library/jest-dom/vitest";
 import {
   afterEach,
@@ -39,20 +36,8 @@ vi.mock("@/libs/platform/runtime", () => ({
 }));
 
 function render(view: () => JSX.Element) {
-  let supported = false;
-  const mediaCapabilities = {
-    ready: async () => {
-      supported = (await api.capabilities())
-        .nativeScreenCapture;
-    },
-    captureSupported: () => supported,
-  };
   return renderView(() => (
-    <AppStateContext.Provider
-      value={{ mediaCapabilities } as AppStateContextProps}
-    >
-      {view()}
-    </AppStateContext.Provider>
+    <SettingsStateProvider>{view()}</SettingsStateProvider>
   ));
 }
 const source = {
@@ -95,7 +80,9 @@ const begin = async () => {
 beforeEach(() => {
   vi.resetAllMocks();
   api.capabilities.mockResolvedValue({
+    runtime: "desktop",
     nativeScreenCapture: true,
+    displayRefreshRates: [],
   });
   api.sources.mockResolvedValue([source]);
   api.start.mockResolvedValue(active);
@@ -212,10 +199,70 @@ it("shows start failures and permits retry without losing the selected source", 
 
 it("does not enumerate or expose capture when the runtime lacks support", async () => {
   api.capabilities.mockResolvedValue({
+    runtime: "desktop",
     nativeScreenCapture: false,
+    displayRefreshRates: [],
   });
   const view = render(() => <NativeCaptureSettings />);
   await Promise.resolve();
   expect(view.container).toBeEmptyDOMElement();
   expect(api.sources).not.toHaveBeenCalled();
+});
+
+it("keeps discovered sources ready when the settings panel is reopened", async () => {
+  const [open, setOpen] = createSignal(true);
+  render(() => (
+    <Show when={open()}>
+      <NativeCaptureSettings />
+    </Show>
+  ));
+  await choose();
+  setOpen(false);
+  setOpen(true);
+  expect(screen.getByRole("combobox")).toBeEnabled();
+  expect(
+    screen.getByRole("option", { name: /Test window/ }),
+  ).toBeVisible();
+  expect(api.capabilities).toHaveBeenCalledOnce();
+  expect(api.sources).toHaveBeenCalledOnce();
+  expect(api.start).not.toHaveBeenCalled();
+});
+
+it("keeps the selected source during background refresh and clears it if the source disappears", async () => {
+  render(() => <NativeCaptureSettings />);
+  await choose();
+  api.sources.mockResolvedValue([{ ...source }]);
+  fireEvent.click(button("refresh"));
+  await waitFor(() =>
+    expect(button("start")).toBeEnabled(),
+  );
+  expect(screen.getByRole("combobox")).toHaveValue(
+    source.id,
+  );
+  api.sources.mockResolvedValue([]);
+  fireEvent.click(button("refresh"));
+  await waitFor(() =>
+    expect(button("refresh")).toBeEnabled(),
+  );
+  expect(screen.getByRole("combobox")).toHaveValue("");
+  expect(button("start")).toBeDisabled();
+});
+
+it("keeps Stop reachable if capture support disappears during a diagnostic session", async () => {
+  render(() => <NativeCaptureSettings />);
+  await begin();
+  api.capabilities.mockResolvedValue({
+    runtime: "desktop",
+    nativeScreenCapture: false,
+    displayRefreshRates: [],
+  });
+  window.dispatchEvent(new Event("focus"));
+  await waitFor(() =>
+    expect(api.capabilities).toHaveBeenCalledTimes(2),
+  );
+  expect(button("stop")).toBeEnabled();
+  fireEvent.click(button("stop"));
+  await waitFor(() =>
+    expect(api.stop).toHaveBeenCalledWith(active.sessionId),
+  );
 });

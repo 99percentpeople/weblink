@@ -12,6 +12,7 @@ import type {
   CaptureCapabilities,
   NativeEncoder,
   PlatformRuntime,
+  RuntimeCapabilities,
 } from "@weblink/platform";
 import type { AppPermissions } from "./create-app-permissions";
 import { browserAudioCodecs } from "@/libs/application/meeting-audio-settings";
@@ -41,6 +42,8 @@ export function createAppMediaCapabilities(options: {
   stream: Accessor<MediaStream | null>;
 }) {
   const runtime = options.platform;
+  const [runtimeCapabilities, setRuntimeCapabilities] =
+    createSignal<RuntimeCapabilities>();
   const [native, setNative] =
     createSignal<NativeMediaCapabilitiesSnapshot | null>(
       runtime.kind === "desktop"
@@ -238,6 +241,7 @@ export function createAppMediaCapabilities(options: {
       .getCapabilities()
       .then((capabilities) => {
         if (disposed) return;
+        setRuntimeCapabilities(capabilities);
         const desktop = capabilities.runtime === "desktop";
         runtimeLoaded = true;
         setCaptureSupported(
@@ -395,6 +399,7 @@ export function createAppMediaCapabilities(options: {
       return snapshot.backends;
     };
   return {
+    runtimeCapabilities,
     native,
     frameRates,
     audioCodecs,

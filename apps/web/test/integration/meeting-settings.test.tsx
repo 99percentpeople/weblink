@@ -3,7 +3,7 @@ import {
   AppStateContext,
   type AppStateContextProps,
 } from "@/libs/state/app-state-context";
-import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { createAppSettings } from "@/libs/state/create-app-settings";
 import type { AppPermissions } from "@/libs/state/create-app-permissions";
 import type { JSX } from "solid-js";
 import type { NativeEncoder } from "@weblink/platform";
@@ -40,6 +40,7 @@ const native = vi.hoisted(() => ({
   audioFormats: vi.fn(),
   encoders: vi.fn(),
   backends: vi.fn(),
+  sources: vi.fn(),
   enabled: true,
   kind: "desktop",
 }));
@@ -50,7 +51,10 @@ vi.mock("@/libs/platform/runtime", () => ({
       return native.kind;
     },
     getCapabilities: native.capabilities,
-    capture: { backends: native.backends },
+    capture: {
+      backends: native.backends,
+      sources: native.sources,
+    },
     get screenShare() {
       return native.enabled
         ? {
@@ -79,6 +83,7 @@ vi.mock("@/libs/application/ice-server-service", () => ({
 beforeEach(() => {
   native.enabled = true;
   native.kind = "desktop";
+  native.sources.mockResolvedValue([]);
   setAppState(reconcile(createInitialAppState()));
   native.capabilities.mockResolvedValue({
     runtime: "desktop",
@@ -154,7 +159,7 @@ afterEach(() => {
 });
 function render(view: () => JSX.Element) {
   return renderView(() => {
-    const mediaCapabilities = createAppMediaCapabilities({
+    const settings = createAppSettings({
       platform,
       permissions: {
         devices: () => [],
@@ -164,9 +169,7 @@ function render(view: () => JSX.Element) {
     });
     return (
       <AppStateContext.Provider
-        value={
-          { mediaCapabilities } as AppStateContextProps
-        }
+        value={settings as AppStateContextProps}
       >
         {view()}
       </AppStateContext.Provider>

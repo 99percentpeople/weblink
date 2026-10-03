@@ -1,4 +1,4 @@
-import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
+import { createAppSettings } from "@/libs/state/create-app-settings";
 import { platform } from "@/libs/platform/runtime";
 import { createRoot, createSignal, Show } from "solid-js";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
@@ -75,8 +75,8 @@ async function main() {
     peerId: null,
   });
   let disposeTasks!: () => void;
-  const { tasks, permissions, mediaCapabilities } =
-    createRoot((dispose) => {
+  const { tasks, permissions, settings } = createRoot(
+    (dispose) => {
       disposeTasks = dispose;
       const permissions = createAppPermissions({
         notifications: undefined,
@@ -84,7 +84,7 @@ async function main() {
       });
       return {
         permissions,
-        mediaCapabilities: createAppMediaCapabilities({
+        settings: createAppSettings({
           platform,
           permissions: permissions.media,
           stream: () => appState.session.localStream,
@@ -96,7 +96,8 @@ async function main() {
           transfers: () => ({}),
         }),
       };
-    });
+    },
+  );
   let approve!: (allow: boolean) => void;
   const initiator = new SpeedTestService({
     getConnection: () => a,
@@ -197,7 +198,7 @@ async function main() {
     };
     setTaskTestContext({
       permissions,
-      mediaCapabilities,
+      ...settings,
       conversationMessaging: {
         sendText: unexpected,
         sendFile: unexpected,
