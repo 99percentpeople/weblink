@@ -6,6 +6,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
+    thread::Thread,
     time::Instant,
 };
 use weblink_desktop_capture::media::control::{Port, SendResult, Sender};
@@ -24,10 +25,19 @@ pub(super) struct Endpoint {
     sender: Mutex<Option<Arc<dyn Sender>>>,
     queue: Mutex<Queue>,
     outbound: Mutex<VecDeque<serde_json::Value>>,
+    wake: Option<Thread>,
 }
 impl Endpoint {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(wake: Option<Thread>) -> Self {
+        Self {
+            wake,
+            ..Self::default()
+        }
+    }
+    fn wake(&self) {
+        if let Some(worker) = &self.wake {
+            worker.unpark();
+        }
     }
     pub fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
@@ -120,6 +130,7 @@ impl Endpoint {
 impl Port for Endpoint {
     fn opened(&self, sender: Arc<dyn Sender>) {
         *self.sender.lock().unwrap_or_else(|e| e.into_inner()) = Some(sender);
+        self.wake();
     }
     fn message(&self, movement: bool, data: &[u8]) {
         if self.is_closed() {
@@ -142,6 +153,7 @@ impl Port for Endpoint {
             }
         }
         if input && q.interrupted {
+            self.wake();
             return;
         }
         if movement {
@@ -149,9 +161,13 @@ impl Port for Endpoint {
         } else {
             q.reliable.push_back((Instant::now(), data.to_vec()));
         }
+        drop(q);
+        self.wake();
     }
     fn closed(&self) {
-        self.closed.store(true, Ordering::Release);
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            self.wake();
+        }
     }
 }
 
@@ -178,8 +194,38 @@ mod tests {
         fn close(&self) {}
     }
     #[test]
+    fn channel_events_wake_a_consumer_even_before_it_parks() {
+        use std::{sync::mpsc, thread, time::Duration};
+        for event in ["open", "input", "close"] {
+            let start = Arc::new(AtomicBool::new(false));
+            let go = start.clone();
+            let (done, completed) = mpsc::channel();
+            let worker = thread::spawn(move || {
+                // No blocking library calls before park: they may consume the
+                // thread's unpark token themselves.
+                while !start.load(Ordering::Acquire) {
+                    thread::yield_now();
+                }
+                thread::park_timeout(Duration::from_secs(2));
+                done.send(()).unwrap();
+            });
+            let endpoint = Endpoint::new(Some(worker.thread().clone()));
+            // Arrival before park must leave a token, rather than losing the wake
+            // and waiting for the periodic safety/liveness deadline.
+            match event {
+                "open" => endpoint.opened(Arc::new(Fake::default())),
+                "input" => endpoint.message(true, b"movement"),
+                _ => endpoint.closed(),
+            }
+            go.store(true, Ordering::Release);
+            let woken = completed.recv_timeout(Duration::from_secs(1));
+            worker.join().unwrap();
+            assert!(woken.is_ok(), "{event} did not wake the control consumer");
+        }
+    }
+    #[test]
     fn congestion_preserves_consent_order_and_coalesces_liveness() {
-        let endpoint = Endpoint::new();
+        let endpoint = Endpoint::new(None);
         let sender = Arc::new(Fake::default());
         sender.busy.store(true, Ordering::Release);
         endpoint.opened(sender.clone());
@@ -206,7 +252,7 @@ mod tests {
     }
     #[test]
     fn input_overflow_keeps_channel_and_revocation_but_drops_old_gestures() {
-        let endpoint = Endpoint::new();
+        let endpoint = Endpoint::new(None);
         let packet = json!({"type":"input","grantId":"g","generation":"m","geometryRevision":"r","inputEpoch":"e","activationSequence":1,"sequence":2,"event":{"type":"wheel","x":0.5,"y":0.5,"horizontal":0,"vertical":120}}).to_string();
         for _ in 0..CAPACITY {
             endpoint.message(false, packet.as_bytes());

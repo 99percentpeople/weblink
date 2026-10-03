@@ -75,6 +75,11 @@ impl MediaSession {
                     frames: s.outbound.frames_encoded,
                     encode_frames,
                     encode_seconds,
+                    capture_frames: self
+                        .latest_sequence
+                        .load(std::sync::atomic::Ordering::Relaxed),
+                    replaced_inputs: hardware.as_ref().map(|s| s.replaced_inputs),
+                    rate_limited_inputs: hardware.as_ref().map(|s| s.rate_limited_inputs),
                     encoder_queue_seconds: hardware.as_ref().map(|s| s.queue.seconds),
                     capture_to_encode_seconds: hardware
                         .as_ref()

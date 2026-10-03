@@ -534,16 +534,19 @@ export class RemotePointer extends EventTarget {
     else if (p) this.input({ type: "move", ...p });
   }
   private scheduleMove(sampleRate: TouchSampleRate) {
+    const remaining =
+      1000 / sampleRate -
+      (performance.now() - this.lastMove);
+    // A fresh event after the sampling deadline is already admissible.
+    // A zero-delay timer needlessly defers it behind other main-thread work.
+    if (remaining <= 0) {
+      this.flushMove();
+      return;
+    }
     if (this.moveTimer) return;
     this.moveTimer = setTimeout(
       () => this.flushMove(),
-      Math.max(
-        0,
-        Math.ceil(
-          1000 / sampleRate -
-            (performance.now() - this.lastMove),
-        ),
-      ),
+      Math.ceil(remaining),
     );
   }
   private tick() {

@@ -14,6 +14,20 @@ export interface VideoStatsSample {
   frames?: number;
   encodeFrames?: number;
   encodeSeconds?: number;
+  captureFrames?: number;
+  replacedInputs?: number;
+  rateLimitedInputs?: number;
+  receivedFrames?: number;
+  droppedFrames?: number;
+  packetsReceived?: number;
+  packetsLost?: number;
+  nackCount?: number;
+  pliCount?: number;
+  freezeCount?: number;
+  freezeSeconds?: number;
+  interFrameSeconds?: number;
+  /** Sum of squared decoder frame intervals, in seconds squared. */
+  squaredInterFrameSeconds?: number;
   decodeSeconds?: number;
   jitterSeconds?: number;
   jitterFrames?: number;
@@ -232,6 +246,18 @@ export async function readBrowserVideoStats(
       encodeFrames: number(s.framesEncoded),
       encodeSeconds: number(s.totalEncodeTime),
       decodeSeconds: number(s.totalDecodeTime),
+      receivedFrames: number(s.framesReceived),
+      droppedFrames: number(s.framesDropped),
+      packetsReceived: number(s.packetsReceived),
+      packetsLost: number(s.packetsLost),
+      nackCount: number(s.nackCount),
+      pliCount: number(s.pliCount),
+      freezeCount: number(s.freezeCount),
+      freezeSeconds: number(s.totalFreezesDuration),
+      interFrameSeconds: number(s.totalInterFrameDelay),
+      squaredInterFrameSeconds: number(
+        s.totalSquaredInterFrameDelay,
+      ),
       jitterSeconds: number(s.jitterBufferDelay),
       jitterFrames: number(s.jitterBufferEmittedCount),
       packetsSent: number(s.packetsSent),

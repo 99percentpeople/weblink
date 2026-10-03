@@ -39,6 +39,22 @@ vi.mock("@/libs/hooks/video-statistics", () => ({
       targetBitrate: 6_000_000,
       encoderBitrate: 5_800_000,
       availableOutgoingBitrate: 7_000_000,
+      counters: {
+        current: {
+          id: "native",
+          timestamp: 2000,
+          captureFrames: 120,
+          replacedInputs: 2,
+          rateLimitedInputs: 4,
+        },
+        previous: {
+          id: "native",
+          timestamp: 1000,
+          captureFrames: 60,
+          replacedInputs: 1,
+          rateLimitedInputs: 3,
+        },
+      },
     },
     {
       direction: "send",
@@ -95,6 +111,9 @@ it("copies every peer's complete snapshot without triggering the video action", 
     "video.statistics.display · video.statistics.preview",
   );
   expect(click).not.toHaveBeenCalled();
+  expect(text).toContain('"captureFrames": 120');
+  expect(text).toContain('"rateLimitedInputs": 4');
+  expect(text).toContain('"previous"');
 });
 
 it("does not report success when clipboard copying is unavailable", async () => {

@@ -168,6 +168,12 @@ pub struct VideoStats {
     pub frames: u32,
     pub encode_frames: u64,
     pub encode_seconds: f64,
+    /// Newly converted frames available to local preview, excluding static repeats.
+    pub capture_frames: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced_inputs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limited_inputs: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoder_queue_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]

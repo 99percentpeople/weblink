@@ -158,6 +158,7 @@ export function VideoStatisticsOverlay(props: {
       ...visibleRows().map((row) =>
         [row.title, ...row.lines].join("\n"),
       ),
+      JSON.stringify(rows(), null, 2),
     ].join("\n\n");
     if (await copyText(text)) {
       toast.success(t("common.notification.copy_success"));

@@ -392,6 +392,15 @@ Packet-send queue delay uses packet counts, not frame counts. RTT belongs to the
 selected ICE candidate pair. Neither RTT nor a sum of these overlapping stage
 measurements is a glass-to-glass latency measurement. Only small counters cross
 Tauri IPC; statistics never change capture, transport or borrowed track lifetimes.
+Copying statistics includes the latest two raw counter samples for each stream.
+Native `captureFrames` counts converted frames available to preview, excluding
+static repeats. Hardware `replacedInputs` counts pending inputs replaced by newer
+frames; `rateLimitedInputs` counts inputs skipped to respect the encoder budget.
+Receiver frame, packet loss, NACK, PLI and freeze counters remain separate from
+player drops. Cumulative decoder frame intervals and their squared sum also
+preserve timing variation that average FPS hides. Compare interval deltas while
+the source is moving; a static desktop can legitimately send fewer frames than
+the configured FPS.
 
 Native capture retains the original GPU texture and reuses its staging resources.
 For unrotated sources, a D3D11 shader scales to the selected dimensions before CPU
@@ -706,7 +715,10 @@ unrelated window shares keep their connections. Superseded capability reads cann
 overwrite a newer permission decision.
 Input goes directly from those native callbacks to bounded native queues, without
 per-event Tauri IPC. The latter is reserved for local owner lifetime, confirmation
-and status. Messages are limited to 4 KiB, reliable queues to 128 entries and send
+and status. Channel arrivals wake the host worker immediately; its periodic wait
+only services safety and liveness when no messages arrive. Pointer samples already
+due are sent directly, while earlier samples coalesce until their next deadline.
+Messages are limited to 4 KiB, reliable queues to 128 entries and send
 buffers to 16 KiB. Pointer moves coalesce to at most 120 updates/s. Each input is
 bound to its grant, connection, geometry revision and activation epoch. Buttons
 and wheels include their position; moves have independent sequence numbers and a

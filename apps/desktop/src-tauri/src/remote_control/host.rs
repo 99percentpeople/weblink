@@ -47,6 +47,7 @@ pub(super) struct Active {
     pub(super) sequencer: Sequencer,
 }
 pub(super) struct Host {
+    pub(super) wake: Option<std::thread::Thread>,
     pub(super) worker: Box<dyn Session>,
     pub(super) peers: HashMap<String, Peer>,
     pub(super) pending: Option<Consent>,
@@ -61,7 +62,7 @@ impl Host {
     ) -> Result<Arc<Endpoint>, String> {
         let binding = target.binding.clone();
         let media = binding.target.media_id.clone();
-        let endpoint = Arc::new(Endpoint::new());
+        let endpoint = Arc::new(Endpoint::new(self.wake.clone()));
         if self.peers.contains_key(&media)
             || !self
                 .worker

@@ -273,6 +273,9 @@ export interface NativeVideoStats {
   frames: number;
   encodeFrames: number;
   encodeSeconds: number;
+  captureFrames?: number;
+  replacedInputs?: number;
+  rateLimitedInputs?: number;
   encoderQueueSeconds?: number;
   captureToEncodeSeconds?: number;
   freshFrames?: number;

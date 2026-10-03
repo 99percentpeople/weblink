@@ -30,6 +30,7 @@ impl Owner {
     fn shutdown(&self) {
         self.alive.store(false, Ordering::Release);
         if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            t.thread().unpark();
             let _ = t.join();
         }
     }
@@ -87,6 +88,7 @@ impl Service {
             id: uuid::Uuid::new_v4().to_string(),
             alive: AtomicBool::new(true),
             host: Mutex::new(Host {
+                wake: None,
                 worker,
                 peers: HashMap::new(),
                 pending: None,
@@ -116,10 +118,14 @@ impl Service {
                     }
                     owner.host.lock().unwrap_or_else(|e| e.into_inner()).tick();
                     drop(owner);
-                    thread::sleep(Duration::from_millis(4));
+                    // Channel arrivals wake this wait immediately. The timeout
+                    // still services safety/liveness state without incoming input.
+                    // unpark retains a token when arrival races with this park.
+                    thread::park_timeout(Duration::from_millis(4));
                 }
             })
             .map_err(|e| e.to_string())?;
+        owner.host.lock().unwrap_or_else(|e| e.into_inner()).wake = Some(thread.thread().clone());
         *owner.thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(thread);
         let id = owner.id.clone();
         *slot = Some(owner);

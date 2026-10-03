@@ -20,6 +20,11 @@ export interface VideoStatisticsRow
   direction: "send" | "receive" | "capture" | "display";
   preview?: boolean;
   peer?: string;
+  /** Two bounded snapshots preserve drop/loss counters for copied diagnostics. */
+  counters?: {
+    current: VideoStatsSample;
+    previous?: VideoStatsSample;
+  };
 }
 
 /** A displayed overlay owns its sampler, never its borrowed video/capture. */
@@ -82,6 +87,10 @@ export function createVideoStatistics(
                 direction: batch.direction,
                 preview: batch.preview,
                 peer: batch.peer,
+                counters: {
+                  current: sample,
+                  previous: before,
+                },
               };
             });
           });

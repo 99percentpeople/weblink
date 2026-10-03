@@ -91,9 +91,14 @@ it("resets baselines on a track change and does not sample hidden documents", as
   });
   await vi.advanceTimersByTimeAsync(1000);
   expect(values()[0].fps).toBe(30);
+  expect(values()[0].counters).toMatchObject({
+    current: { timestamp: 2000, frames: 60 },
+    previous: { timestamp: 1000, frames: 30 },
+  });
   setTrack({ readyState: "live" } as MediaStreamTrack);
   await vi.advanceTimersByTimeAsync(0);
   expect(values()[0].fps).toBeUndefined();
+  expect(values()[0].counters?.previous).toBeUndefined();
   visibility.mockReturnValue(true);
   const calls = read.mock.calls.length;
   await vi.advanceTimersByTimeAsync(3000);

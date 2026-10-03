@@ -178,6 +178,42 @@ struct Rig {
     state: Arc<DeviceState>,
     sender: Arc<TestSender>,
 }
+#[test]
+#[ignore = "Opt-in control handoff timing with mock injection; no OS input"]
+fn control_handoff_latency() {
+    let rig = Rig::new();
+    let grant = rig.approve();
+    rig.input(&grant, 1, 1, json!({"type":"activate"}));
+    let mut waits = Vec::new();
+    for sequence in 1..=120 {
+        std::thread::sleep(Duration::from_millis(8));
+        let before = rig.state.observations.lock().unwrap().len();
+        let data = serde_json::to_vec(&json!({
+            "type":"input", "grantId":grant, "generation":"media", "geometryRevision":"layout",
+            "inputEpoch":"epoch-1", "activationSequence":1, "sequence":sequence, "after":1,
+            "event":{"type":"move", "x":0.5, "y":0.5}
+        }))
+        .unwrap();
+        let started = Instant::now();
+        rig.endpoint.message(true, &data);
+        while rig.state.observations.lock().unwrap().len() == before {
+            assert!(
+                started.elapsed() < Duration::from_secs(1),
+                "Movement was not injected"
+            );
+            std::thread::yield_now();
+        }
+        waits.push(started.elapsed().as_secs_f64() * 1000.0);
+    }
+    waits.sort_by(f64::total_cmp);
+    println!(
+        "CONTROL_HANDOFF samples={} mean_ms={:.3} p95_ms={:.3} max_ms={:.3}",
+        waits.len(),
+        waits.iter().sum::<f64>() / waits.len() as f64,
+        waits[113],
+        waits[119]
+    );
+}
 fn target(owner: &str, capture: &str, media: &str) -> TrustedTarget {
     let rect = Rect {
         left: 0,

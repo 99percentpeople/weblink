@@ -115,6 +115,53 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("sends the newest move if main-thread work delayed its timer past the deadline", () => {
+    const { c, m, approve, activate } = setup();
+    approve();
+    activate();
+    const now = vi.spyOn(performance, "now");
+    try {
+      now.mockReturnValue(100);
+      c.move({ x: 0.1, y: 0.2 });
+      now.mockReturnValue(101);
+      c.move({ x: 0.3, y: 0.4 });
+      expect(m.sent).toHaveLength(1);
+      // Time passes while the movement timer has not had a chance to run.
+      now.mockReturnValue(110);
+      c.move({ x: 0.8, y: 0.9 });
+      expect(m.sent).toHaveLength(2);
+      expect(m.sent[1].event).toMatchObject({
+        x: 0.8,
+        y: 0.9,
+      });
+      vi.advanceTimersByTime(20);
+      expect(m.sent).toHaveLength(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+  it("sends an already-due move immediately and coalesces the next sample", () => {
+    const { c, m, approve, activate } = setup();
+    approve();
+    activate();
+    vi.advanceTimersByTime(100);
+    c.move({ x: 0.1, y: 0.2 });
+    expect(m.sent).toHaveLength(1);
+    expect(m.sent[0].event).toMatchObject({
+      x: 0.1,
+      y: 0.2,
+    });
+    c.move({ x: 0.3, y: 0.4 });
+    c.move({ x: 0.8, y: 0.9 });
+    vi.advanceTimersByTime(8);
+    expect(m.sent).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(m.sent).toHaveLength(2);
+    expect(m.sent[1].event).toMatchObject({
+      x: 0.8,
+      y: 0.9,
+    });
+  });
   it("negotiates cursor visibility and binds changes to the active input epoch", () => {
     const { c, r, approve, activate } = setup(
       10,
