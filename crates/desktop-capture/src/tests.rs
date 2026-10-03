@@ -292,8 +292,10 @@ fn closing_one_source_and_expiring_one_lease_leave_other_captures_running() {
     let live = start(&mut engine);
     let now = Instant::now();
     engine.active[&closed].frames.lock().unwrap().closed = true;
-    engine.status(&live, now + Duration::from_secs(9)).unwrap();
-    engine.tick(now + Duration::from_secs(11));
+    engine
+        .status(&live, now + LEASE - Duration::from_secs(1))
+        .unwrap();
+    engine.tick(now + LEASE + Duration::from_secs(1));
     assert_eq!(fake.stops.get(), 2);
     assert_eq!(
         engine.status(&closed, now).unwrap().stop_reason,
@@ -305,7 +307,7 @@ fn closing_one_source_and_expiring_one_lease_leave_other_captures_running() {
     );
     assert_eq!(
         engine
-            .status(&live, now + Duration::from_secs(12))
+            .status(&live, now + LEASE + Duration::from_secs(2))
             .unwrap()
             .state,
         CaptureState::Running
@@ -371,7 +373,7 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
     assert!(engine
         .status("stale", now + Duration::from_secs(18))
         .is_err());
-    engine.tick(now + Duration::from_secs(19));
+    engine.tick(now + Duration::from_secs(9) + LEASE);
     assert_eq!(
         engine.stopped.back().unwrap().stop_reason,
         Some(StopReason::ClientDisconnected)
@@ -380,12 +382,36 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
     // A late heartbeat cannot resurrect an expired session.
     assert_eq!(
         engine
-            .status(&id, now + Duration::from_secs(20))
+            .status(&id, now + Duration::from_secs(10) + LEASE)
             .unwrap()
             .state,
         CaptureState::Stopped
     );
     assert!(engine.active.is_empty());
+}
+
+#[test]
+fn renderer_pause_can_resume_capture_but_expired_or_stopped_capture_never_restarts() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    let now = engine.active[&id].started;
+    assert_eq!(
+        engine
+            .status(&id, now + Duration::from_secs(20))
+            .unwrap()
+            .state,
+        CaptureState::Running
+    );
+    assert_eq!(fake.stops.get(), 0);
+    engine.stop(&id, now + Duration::from_secs(21)).unwrap();
+    assert_eq!(
+        engine
+            .status(&id, now + Duration::from_secs(22))
+            .unwrap()
+            .state,
+        CaptureState::Stopped
+    );
+    assert_eq!(fake.stops.get(), 1);
 }
 
 #[test]

@@ -33,6 +33,11 @@ import { useMeetingSession } from "@/libs/state/meeting-session-context";
 import { platform } from "@/libs/platform/runtime";
 import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import { MeetingControls } from "@/routes/home/components/meeting-controls";
+import { ScreenControlRequest } from "@/libs/domain/native-screen/control-request";
+import type {
+  PointerState,
+  RemotePointer,
+} from "@/libs/domain/remote-control/pointer";
 import type {
   NativePictureInPicture,
   NativePipOptions,
@@ -42,7 +47,10 @@ import type {
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     remoteControl: { status: () => ({ clientId: null }) },
-    getScreenControl: () => undefined,
+    getScreenControl: (clientId: string) =>
+      fixture.getScreenControl(clientId),
+    getRemoteControl: (track: MediaStreamTrack) =>
+      fixture.getRemoteControl(track),
   },
 }));
 vi.mock(
@@ -62,6 +70,14 @@ const fixture = vi.hoisted(() => ({
   sharingBusy: vi.fn(() => false),
   sound: vi.fn(),
   error: vi.fn(),
+  getScreenControl:
+    vi.fn<
+      (clientId: string) => ScreenControlRequest | undefined
+    >(),
+  getRemoteControl:
+    vi.fn<
+      (track: MediaStreamTrack) => RemotePointer | undefined
+    >(),
 }));
 const [roomConflict, setRoomConflict] = createSignal(false);
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
@@ -269,6 +285,8 @@ beforeEach(() => {
     "meeting-auto-picture-in-picture",
   );
   vi.clearAllMocks();
+  fixture.getScreenControl.mockReset();
+  fixture.getRemoteControl.mockReset();
   fixture.leave.mockReset();
   fixture.sharingBusy.mockReturnValue(false);
   vi.stubGlobal("MediaStream", FakeStream);
@@ -567,6 +585,177 @@ describe("PiP room re-entry", () => {
     expect(mediaAction).toBeTypeOf("function");
     expect(f.requestWindow).not.toHaveBeenCalled();
     expect(f.history.get()).toBe("/");
+  });
+});
+
+describe("avatar control handoff", () => {
+  function setupRequest() {
+    const send = vi.fn();
+    const request = new ScreenControlRequest(send);
+    request.setAvailable(true);
+    fixture.getScreenControl.mockImplementation((id) =>
+      id === "bob" ? request : undefined,
+    );
+    class Pointer extends EventTarget {
+      value: PointerState = "viewing";
+      state = () => this.value;
+      request = vi.fn(() => this.update("requesting"));
+      cancel = vi.fn(() => this.update("viewing"));
+      update(state: PointerState) {
+        this.value = state;
+        this.dispatchEvent(new Event("change"));
+      }
+    }
+    const pointer = new Pointer();
+    const track = new FakeTrack(true, "controlled-screen");
+    fixture.getRemoteControl.mockImplementation((value) =>
+      value.id === track.id
+        ? (pointer as unknown as RemotePointer)
+        : undefined,
+    );
+    setAppState(
+      "session",
+      "clientViewData",
+      "bob",
+      "stream",
+      undefined,
+    );
+    // An existing share prevents first-screen auto-selection from masking the handoff.
+    setAppState(
+      "session",
+      "localStream",
+      sharedStream(new FakeTrack(true, "existing-screen")),
+    );
+    const view = setup(undefined, false);
+    const previous = session.selected()!.id;
+    const publish = () =>
+      setAppState(
+        "session",
+        "clientViewData",
+        "bob",
+        "nativeScreenViews",
+        [
+          {
+            sourceId: "approved",
+            stream: sharedStream(track),
+          },
+        ],
+      );
+    const approve = () => {
+      request.result({
+        type: "control-result",
+        id: send.mock.calls.at(-1)![0].id,
+        sourceId: "approved",
+      });
+      request.attach(
+        "approved",
+        pointer as unknown as RemotePointer,
+      );
+    };
+    return {
+      ...view,
+      request,
+      pointer,
+      previous,
+      publish,
+      approve,
+      send,
+    };
+  }
+
+  it.each([true, false])(
+    "keeps the current view until the requested screen is available (screen first=%s)",
+    (screenFirst) => {
+      const f = setupRequest();
+      f.request.request();
+      expect(session.selected()?.id).toBe(f.previous);
+      if (screenFirst) f.publish();
+      else f.approve();
+      expect(session.selected()?.id).toBe(f.previous);
+      if (screenFirst) f.approve();
+      else f.publish();
+      const controlled = session
+        .sources()
+        .find(
+          (source) =>
+            source.track?.id === "controlled-screen",
+        )!;
+      expect(session.selected()?.id).toBe(controlled.id);
+      expect(f.pointer.request).toHaveBeenCalledOnce();
+
+      f.pointer.update("active");
+      session.setPinnedId(f.previous);
+      setAppState(
+        "session",
+        "clientViewData",
+        "bob",
+        "name",
+        "Bob updated",
+      );
+      f.pointer.update("unavailable");
+      f.pointer.update("active");
+      expect(session.selected()?.id).toBe(f.previous);
+
+      f.request.cancel();
+      f.request.request();
+      expect(session.selected()?.id).toBe(f.previous);
+      f.approve();
+      expect(session.selected()?.id).toBe(controlled.id);
+      f.request.cancel();
+    },
+  );
+
+  it.each(["deny", "cancel"])(
+    "keeps the current view after %s and ignores a late screen",
+    (action) => {
+      const f = setupRequest();
+      f.request.request();
+      const id = f.send.mock.calls[0][0].id;
+      if (action === "deny")
+        f.request.result({ type: "control-result", id });
+      else f.request.cancel();
+      f.request.result({
+        type: "control-result",
+        id,
+        sourceId: "approved",
+      });
+      f.request.attach(
+        "approved",
+        f.pointer as unknown as RemotePointer,
+      );
+      f.publish();
+      expect(session.selected()?.id).toBe(f.previous);
+      expect(f.pointer.request).not.toHaveBeenCalled();
+    },
+  );
+
+  it("waits for existing presentation cleanup only when the approved screen arrives", async () => {
+    const f = setupRequest();
+    const stop = vi.fn(async () => true);
+    session.mainView.register(f.previous, {
+      active: () => true,
+      stop,
+    });
+    f.request.request();
+    expect(
+      document.querySelector('[role="dialog"]'),
+    ).toBeNull();
+    f.publish();
+    f.approve();
+    expect(session.selected()?.id).toBe(f.previous);
+    const dialog = within(document.body);
+    fireEvent.click(
+      await dialog.findByRole("button", {
+        name: "meeting.leave_main_confirm",
+      }),
+    );
+    await waitFor(() =>
+      expect(session.selected()?.track?.id).toBe(
+        "controlled-screen",
+      ),
+    );
+    expect(stop).toHaveBeenCalledOnce();
+    f.request.cancel();
   });
 });
 

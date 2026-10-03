@@ -263,13 +263,13 @@ async function scenario(
         undefined,
         options,
       );
-    const pa = await a.addClient({
+    let pa = await a.addClient({
       clientId: "web",
       createdAt: 2,
       name: "Web",
       avatar: null,
     });
-    const pb = await b.addClient({
+    let pb = await b.addClient({
       clientId: "native",
       createdAt: time,
       name: "Native",
@@ -286,6 +286,9 @@ async function scenario(
           nativeScreenStream:
             appState.session.clientViewData.native
               ?.nativeScreenStream,
+          nativeScreenViews:
+            appState.session.clientViewData.native
+              ?.nativeScreenViews,
         },
       ]);
     });
@@ -311,7 +314,14 @@ async function scenario(
     }
     const firstFrame = async () => {
       await until(
-        () => sources().some((s) => s.kind === "screen"),
+        () =>
+          sources().some(
+            (s) =>
+              s.kind === "screen" &&
+              s.stream
+                ?.getVideoTracks()
+                .some((t) => t.readyState === "live"),
+          ),
         "Native screen did not reach meeting state",
       );
       video.srcObject = sources().find(
@@ -451,8 +461,11 @@ async function scenario(
         );
         await until(
           () =>
-            sources().filter((s) => s.kind === "screen")
-              .length === 2,
+            sources()
+              .filter((s) => s.kind === "screen")
+              .filter(
+                (s) => s.stream?.getVideoTracks().length,
+              ).length === 2,
           "Second native screen did not arrive",
         );
         const secondRemote = sources().find(
@@ -566,6 +579,61 @@ async function scenario(
         .length === (multiple ? 3 : 2),
       "Did not use native publication for each share",
     );
+    if (polite && beforeJoin) {
+      // Fail only the dedicated native signaling channel; chat and the room PC
+      // must survive, and each recovery must create fresh media transports.
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const native = (b as any).nativeScreens.get(pb);
+        const old = native.channel as RTCDataChannel;
+        old.close();
+        await until(
+          () =>
+            native.channel &&
+            native.channel !== old &&
+            native.channel.readyState === "open",
+          "Dedicated native channel did not reopen",
+        );
+        await firstFrame();
+        assert(
+          pa.peerConnection === initial[0] &&
+            pb.peerConnection === initial[1],
+          "Dedicated channel recovery replaced the room PC",
+        );
+        assert(
+          pa.isMessageChannelReady &&
+            pb.isMessageChannelReady,
+          "Dedicated failure interrupted chat transport",
+        );
+      }
+      for (let cycle = 0; cycle < 3; cycle++) {
+        pa.close();
+        pb.close();
+        await until(
+          () => synthetic.peers.size === 1,
+          "Leave leaked a native publication peer",
+        );
+        assert(
+          stream.getVideoTracks()[0].readyState === "live",
+          "Leave stopped local capture",
+        );
+        pa = await a.addClient({
+          clientId: "web",
+          createdAt: 2,
+          name: "Web",
+          avatar: null,
+        });
+        pb = await b.addClient({
+          clientId: "native",
+          createdAt: time,
+          name: "Native",
+          avatar: null,
+        });
+        a.setSessionStream(pa, stream);
+        await Promise.all([pa.listen(), pb.listen()]);
+        await pb.connect();
+        await firstFrame();
+      }
+    }
     return {
       polite,
       beforeJoin,
@@ -574,6 +642,10 @@ async function scenario(
         video.getVideoPlaybackQuality().totalVideoFrames,
       restartedWithoutRejoin: true,
       multipleScreens: multiple,
+      repeatedRecovery:
+        polite && beforeJoin
+          ? { dedicatedChannel: 3, leaveRejoin: 3 }
+          : undefined,
     };
   } finally {
     a.destoryAllSession();

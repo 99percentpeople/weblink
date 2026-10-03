@@ -6,6 +6,7 @@ import {
   vi,
 } from "vitest";
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
+import { ScreenDecodeError } from "@/libs/domain/native-screen/errors";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
 
 class Stream {
@@ -197,3 +198,86 @@ it.each(["H264", "H265"])(
     screen.close();
   },
 );
+
+it("detects sustained incoming video without decoded frames and stops polling on failure", async () => {
+  vi.useFakeTimers();
+  const failed = vi.fn();
+  const screen = new ScreenReceiver({}, vi.fn(), failed);
+  let bytes = 0;
+  const stats = vi.fn(
+    async () =>
+      new Map([
+        [
+          "video",
+          {
+            type: "inbound-rtp",
+            kind: "video",
+            framesDecoded: 0,
+            bytesReceived: ++bytes * 1000,
+          },
+        ],
+      ]),
+  );
+  Object.assign(screen.pc, { getStats: stats });
+  screen.monitorDecode(vi.fn());
+  await vi.advanceTimersByTimeAsync(14000);
+  expect(failed).toHaveBeenCalledOnce();
+  expect(failed).toHaveBeenCalledWith(
+    expect.any(ScreenDecodeError),
+  );
+  const reads = stats.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(stats).toHaveBeenCalledTimes(reads);
+});
+
+it("requires decoded progress for stable success, never treats a silent network as codec failure", async () => {
+  vi.useFakeTimers();
+  const failed = vi.fn(),
+    healthy = vi.fn();
+  const screen = new ScreenReceiver({}, vi.fn(), failed);
+  let frames = 0,
+    receiving = false;
+  Object.assign(screen.pc, {
+    getStats: vi.fn(
+      async () =>
+        new Map([
+          [
+            "v",
+            {
+              type: "inbound-rtp",
+              kind: "video",
+              framesDecoded: receiving ? ++frames : frames,
+              bytesReceived: frames * 1000,
+            },
+          ],
+        ]),
+    ),
+  });
+  screen.monitorDecode(healthy);
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(failed).not.toHaveBeenCalled();
+  expect(healthy).not.toHaveBeenCalled();
+  receiving = true;
+  await vi.advanceTimersByTimeAsync(12000);
+  expect(healthy).toHaveBeenCalledOnce();
+  screen.close();
+});
+
+it("discards late stats after leaving and closes its owned track once", async () => {
+  let resolve!: (report: Map<string, unknown>) => void;
+  const screen = new ScreenReceiver({}, vi.fn(), vi.fn());
+  const track = announce(screen, "video", {});
+  Object.assign(screen.pc, {
+    getStats: () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  });
+  const healthy = vi.fn();
+  screen.monitorDecode(healthy);
+  screen.close();
+  resolve(new Map());
+  await Promise.resolve();
+  expect(track.stop).toHaveBeenCalledOnce();
+  expect(healthy).not.toHaveBeenCalled();
+});

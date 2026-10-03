@@ -109,6 +109,39 @@ async function setup(
 }
 
 describe("VideoDisplay playback error notifications", () => {
+  it("keeps the same video/card node for terminal decode failure and releases only presentation", async () => {
+    const source = track("hevc");
+    const [error, setError] = createSignal<"codec">();
+    const view = render(() => (
+      <VideoDisplay
+        stream={stream(source)}
+        name="HEVC"
+        mediaError={error()}
+        onDecodeError={() => setError("codec")}
+      />
+    ));
+    await flush();
+    const video = view.container.querySelector("video")!;
+    Object.defineProperty(video, "error", {
+      configurable: true,
+      value: { code: 3 },
+    });
+    fireEvent.error(video);
+    await flush();
+    expect(view.container.querySelector("video")).toBe(
+      video,
+    );
+    expect(screen.getByRole("status").textContent).toBe(
+      "video.loading_state.codec_unsupported",
+    );
+    expect(video.srcObject).toBeNull();
+    const calls = play.mock.calls.length;
+    fireEvent.focus(window);
+    fireEvent(video, new Event("resize"));
+    await flush();
+    expect(play).toHaveBeenCalledTimes(calls);
+    expect(source.stop).not.toHaveBeenCalled();
+  });
   it("waits for the stage to be visible before attaching, and retains the source when hidden again", async () => {
     const { video, source, setActive } = await setup(
       track("screen"),
@@ -176,7 +209,7 @@ describe("VideoDisplay playback error notifications", () => {
     expect(notification.error).not.toHaveBeenCalled();
   });
 
-  it("shows one retryable toast instead of a persistent error overlay and retains normal loading indicators", async () => {
+  it("shows one retryable toast and an in-card error while retaining normal loading indicators", async () => {
     const { video } = await setup();
     expect(
       screen.getByTestId("loading-spinner"),
@@ -196,7 +229,7 @@ describe("VideoDisplay playback error notifications", () => {
     );
     expect(
       screen.queryByText("video.loading_state.error"),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
         name: "video.loading_state.retry",

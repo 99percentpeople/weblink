@@ -18,6 +18,9 @@ export class RemoteControlHost {
   private owner?: string;
   private ready: Promise<void> = Promise.resolve();
   private timer?: ReturnType<typeof setTimeout>;
+  private recoveryDelay = 1000;
+  private readonly ownerRevision = createSignal(0);
+  readonly revision = this.ownerRevision[0];
   private readonly state =
     createSignal<NativeControlStatus>({
       pending: null,
@@ -64,9 +67,23 @@ export class RemoteControlHost {
         return;
       }
       this.owner = owner;
+      this.ownerRevision[1]((value) => value + 1);
       await this.poll(generation, owner);
-    })().catch((error) =>
-      console.warn("Remote control unavailable", error),
+    })().catch((error) => {
+      console.warn("Remote control unavailable", error);
+      if (generation === this.generation) this.recover();
+    });
+  }
+  private recover() {
+    // New owner means new native bindings and fresh consent. Never replay grants.
+    this.close();
+    const generation = this.generation;
+    this.timer = setTimeout(() => {
+      if (generation === this.generation) this.start();
+    }, this.recoveryDelay);
+    this.recoveryDelay = Math.min(
+      this.recoveryDelay * 2,
+      30000,
     );
   }
   private async poll(generation: number, owner: string) {
@@ -79,9 +96,10 @@ export class RemoteControlHost {
       )
         return;
       if (status.closed) {
-        this.close();
+        this.recover();
         return;
       }
+      this.recoveryDelay = 1000;
       if (
         status.clientId &&
         this.decision(status.clientId) === "deny"
@@ -239,6 +257,7 @@ export class RemoteControlHost {
     clearTimeout(this.timer);
     const id = this.owner;
     this.owner = undefined;
+    if (id) this.ownerRevision[1]((value) => value + 1);
     this.state[1]({
       pending: null,
       clientId: null,

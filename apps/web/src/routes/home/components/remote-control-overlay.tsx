@@ -541,8 +541,7 @@ export function RemoteControlOverlay(props: {
                 })
               : undefined
           }
-          class="focus-visible:ring-primary absolute inset-0 z-10
-            outline-none focus-visible:ring-2 focus-visible:ring-inset"
+          class="meeting-tile-focus-target absolute inset-0 z-10 outline-none"
           style={{
             "touch-action": "none",
             "user-select": "none",

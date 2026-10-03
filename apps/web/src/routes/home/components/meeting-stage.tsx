@@ -256,6 +256,7 @@ export function MeetingStage(
           order={tile.order}
           sourceKind={source().kind}
           trackId={source().track?.id}
+          mediaError={source().error}
           name={source().name}
           avatar={source().avatar}
           stream={source().stream}

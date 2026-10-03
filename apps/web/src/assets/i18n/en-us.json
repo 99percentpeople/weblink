@@ -378,9 +378,8 @@
       "permission_failed": "Could not request notification permission.",
       "allow": "Allow notifications",
       "requesting": "Requesting permission…",
+      "request_unresolved": "The browser has not confirmed permission. Check your browser or system notification settings; permission updates automatically when you return.",
       "browser_blocked": "Notifications are blocked. Open this site’s permissions in your browser and allow notifications.",
-      "native_description": "While Weblink is running, reply to messages and approve or decline remote control and speed test requests directly in Windows notifications.",
-      "basic_description": "Receive notifications while Weblink is open. Click to open the conversation or request; approve and decline buttons appear where supported.",
       "new_message": "New message",
       "reply": "Send",
       "reply_placeholder": "Type a reply",
@@ -389,8 +388,7 @@
       "open": "Open conversation",
       "transfer_completed": "File transfer completed",
       "loading": "Checking notification availability…",
-      "load_failed": "Could not read system notification status. Please retry.",
-      "retry": "Retry",
+      "load_failed": "Could not read system notification status. Returning to Weblink checks it again automatically.",
       "error_details": "Error details",
       "permission_unknown": "The system has not provided a notification status yet. Notifications will follow system settings."
     }
@@ -445,6 +443,8 @@
     "global_mute": "Global Mute",
     "global_unmute": "Global Unmute",
     "loading_state": {
+      "codec_unsupported": "Unable to play shared video",
+      "connection_failed": "Shared video connection lost",
       "initial": "Initializing...",
       "loading": "Loading...",
       "waiting": "Buffering...",

@@ -55,6 +55,64 @@ const browser = {
 const permissionsDescriptor =
   Object.getOwnPropertyDescriptor(navigator, "permissions");
 
+it.each(["granted", "denied"] as const)(
+  "uses Permissions API %s when an installed app reports Notification.default",
+  async (state) => {
+    mockPermissions(
+      async () =>
+        Object.assign(new EventTarget(), {
+          state,
+        }) as PermissionStatus,
+    );
+    render(() => (
+      <>
+        <NotificationPermissionButton />
+        <NotificationSettings />
+      </>
+    ));
+    await screen.findByText(
+      state === "granted"
+        ? "setting.notifications.permission_granted"
+        : "setting.notifications.browser_blocked",
+    );
+    expect(
+      screen.queryByRole("button", { name: allow }),
+    ).not.toBeInTheDocument();
+    expect(
+      browser.requestPermission,
+    ).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button"),
+    ).not.toBeInTheDocument();
+  },
+);
+
+it("uses the explicit request result before a stale default property, then refreshes on pageshow", async () => {
+  browser.requestPermission.mockResolvedValueOnce(
+    "granted",
+  );
+  render(() => (
+    <>
+      <NotificationPermissionButton />
+      <NotificationSettings />
+    </>
+  ));
+  fireEvent.click(
+    (
+      await screen.findAllByRole("button", { name: allow })
+    )[0],
+  );
+  await screen.findByText(
+    "setting.notifications.permission_granted",
+  );
+  browser.permission = "denied";
+  fireEvent(window, new Event("pageshow"));
+  await screen.findByText(
+    "setting.notifications.browser_blocked",
+  );
+  expect(browser.requestPermission).toHaveBeenCalledOnce();
+});
+
 function mockPermissions(
   query: () => Promise<PermissionStatus>,
 ) {
@@ -192,21 +250,38 @@ it("hides when notifications are unavailable", async () => {
   ).not.toBeInTheDocument();
 });
 
-it("keeps the button usable when the prompt is dismissed or fails", async () => {
-  render(() => <NotificationPermissionButton />);
+it("stops repeated default requests and explains settings without claiming a system denial", async () => {
+  render(() => (
+    <>
+      <NotificationPermissionButton />
+      <NotificationSettings />
+    </>
+  ));
   fireEvent.click(
-    await screen.findByRole("button", { name: allow }),
+    (
+      await screen.findAllByRole("button", { name: allow })
+    )[0],
   );
+  await screen.findByText(
+    "setting.notifications.request_unresolved",
+  );
+  fireEvent.focus(window);
+  fireEvent(window, new Event("pageshow"));
   await waitFor(() =>
     expect(
-      screen.getByRole("button", { name: allow }),
-    ).toBeEnabled(),
+      screen.queryByRole("button", { name: allow }),
+    ).not.toBeInTheDocument(),
   );
+  expect(browser.requestPermission).toHaveBeenCalledOnce();
+});
+
+it("allows retry after a request API rejection", async () => {
   browser.requestPermission.mockRejectedValueOnce(
     new Error("Failed"),
   );
+  render(() => <NotificationPermissionButton />);
   fireEvent.click(
-    screen.getByRole("button", { name: allow }),
+    await screen.findByRole("button", { name: allow }),
   );
   await waitFor(() =>
     expect(toast.error).toHaveBeenCalledWith(
@@ -236,9 +311,9 @@ it("synchronizes settings permission requests with the header without changing n
   const settings = screen.getByRole("region", {
     name: "app_menu.settings_notifications",
   });
-  await within(header).findByRole("button", {
-    name: allow,
-  });
+  expect(
+    within(header).queryByRole("button", { name: allow }),
+  ).not.toBeInTheDocument();
   fireEvent.click(
     await within(settings).findByRole("button", {
       name: allow,
@@ -336,7 +411,6 @@ it("does not attach a late permission observer after unmount", async () => {
   const view = render(() => (
     <NotificationPermissionButton />
   ));
-  await screen.findByRole("button", { name: allow });
   view.unmount();
   const permissionStatus =
     new EventTarget() as PermissionStatus;

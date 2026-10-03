@@ -419,6 +419,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn failed_peer_encoder_does_not_end_capture_or_another_encoder() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let media = super::super::MediaSession::new(MediaOptions {
+                encoder: "software".into(),
+                ..Default::default()
+            })
+            .unwrap();
+            for cycle in 0..4 {
+                // No frames or real capture: inject a worker failure before a
+                // transform is opened, then exercise the production recovery path.
+                let failed =
+                    Arc::new(Encoder::new("test".into(), MediaOptions::default(), false).unwrap());
+                let retained =
+                    Arc::new(Encoder::new("test".into(), MediaOptions::default(), false).unwrap());
+                *failed.error.lock().unwrap() = Some(format!("controlled encoder failure {cycle}"));
+                {
+                    let mut encoders = media.hardware.lock().unwrap();
+                    encoders.insert("failed".into(), failed.clone());
+                    encoders.insert("retained".into(), retained.clone());
+                }
+                media.reap_failed_encoders();
+                assert!(media.error().is_none());
+                assert!(!media.closed.load(std::sync::atomic::Ordering::Acquire));
+                assert!(!media.hardware.lock().unwrap().contains_key("failed"));
+                assert!(media.hardware.lock().unwrap().contains_key("retained"));
+                assert!(failed.worker.lock().unwrap().is_none());
+                assert!(retained.worker.lock().unwrap().is_some());
+                media.close_peer("retained");
+            }
+            assert_eq!(media.pipeline_stats().peer_errors.len(), 4);
+            media.close();
+        });
+    }
+
+    #[test]
     fn event_driven_encoder_reconfigures_and_keeps_static_repeats_out_of_capture_latency() {
         for info in detect().unwrap() {
             for _ in 0..2 {

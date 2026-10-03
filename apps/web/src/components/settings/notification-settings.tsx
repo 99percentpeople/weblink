@@ -1,9 +1,5 @@
 import { For, Show } from "solid-js";
-import {
-  BellRing,
-  LoaderCircle,
-  RotateCw,
-} from "lucide-solid";
+import { BellRing, LoaderCircle } from "lucide-solid";
 import { useAppState } from "@/libs/state/app-state-context";
 import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
@@ -24,8 +20,8 @@ export default function NotificationSettings() {
     status,
     failure,
     busy,
-    refresh,
     requestPermission,
+    requestUnresolved,
   } = useAppState().permissions.notifications;
   const keys = [
     "enabled",
@@ -63,15 +59,6 @@ export default function NotificationSettings() {
                   )}
         </p>
         <Show when={status() === "error"}>
-          <Button
-            variant="outline"
-            size="sm"
-            class="self-start"
-            onClick={() => void refresh()}
-          >
-            <RotateCw aria-hidden="true" />
-            {t("setting.notifications.retry")}
-          </Button>
           <details class="muted">
             <summary>
               {t("setting.notifications.error_details")}
@@ -82,7 +69,8 @@ export default function NotificationSettings() {
         <Show
           when={
             status() === "ready" &&
-            capabilities()?.permission === "default"
+            capabilities()?.permission === "default" &&
+            !requestUnresolved()
           }
         >
           <Button
@@ -118,13 +106,15 @@ export default function NotificationSettings() {
             )}
           </Button>
         </Show>
-        <Show when={status() === "ready"}>
-          <p class="muted">
-            {t(
-              capabilities()?.reply
-                ? "setting.notifications.native_description"
-                : "setting.notifications.basic_description",
-            )}
+        <Show
+          when={
+            platform.kind === "browser" &&
+            status() === "ready" &&
+            requestUnresolved()
+          }
+        >
+          <p role="status">
+            {t("setting.notifications.request_unresolved")}
           </p>
         </Show>
       </div>

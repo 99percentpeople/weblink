@@ -9,6 +9,7 @@ import {
 } from "./meeting-audio-sources";
 import type { StreamVideoSource } from "@/libs/domain/protocol/messages";
 import type { RemoteMediaTrackBinding } from "@/libs/domain/session-media";
+import type { NativeScreenView } from "@/libs/domain/native-screen/errors";
 
 export interface MeetingParticipant extends RemoteAudioSources {
   id: string;
@@ -16,6 +17,7 @@ export interface MeetingParticipant extends RemoteAudioSources {
   avatar?: string;
   stream?: MediaStream | null;
   nativeScreenStream?: MediaStream;
+  nativeScreenViews?: readonly NativeScreenView[];
   videoSources?: readonly StreamVideoSource[];
   videoTracks?: readonly RemoteMediaTrackBinding[];
   local?: boolean;
@@ -32,6 +34,7 @@ export interface MeetingSource {
   local: boolean;
   kind: "camera" | "screen" | "video" | "participant";
   track?: MediaStreamTrack;
+  error?: "codec" | "connection";
 }
 
 export function selectMeetingFeaturedSource(
@@ -87,7 +90,10 @@ export function createMeetingSources(
           ...tracks.filter(
             (track) => track.kind === "audio",
           ),
-          ...(participant.nativeScreenStream
+          ...((participant.nativeScreenViews
+            ? undefined
+            : participant.nativeScreenStream
+          )
             ?.getAudioTracks()
             .filter(
               (track) => track.readyState !== "ended",
@@ -105,7 +111,9 @@ export function createMeetingSources(
             : tracks.filter(
                 (track) => track.kind === "video",
               )),
-          ...nativeTracks,
+          ...(participant.nativeScreenViews
+            ? []
+            : nativeTracks),
         ];
         const kindByMid = new Map(
           participant.videoSources?.map((source) => [
@@ -252,7 +260,32 @@ export function createMeetingSources(
             }),
           ),
         );
-        return [...main, ...shared];
+        const native =
+          participant.nativeScreenViews?.map(
+            (view, index): MeetingSource => {
+              const track =
+                view.stream?.getVideoTracks()[0];
+              return {
+                id: JSON.stringify([
+                  participant.id,
+                  "native",
+                  view.sourceId,
+                ]),
+                participantId: participant.id,
+                audioId: meetingAudioSourceId(
+                  participant.id,
+                  track?.id,
+                ),
+                name: `${participant.name} · ${t("meeting.screen_source", { count: screens.length + index + 1 })}`,
+                stream: view.stream ?? null,
+                kind: "screen",
+                local: false,
+                track,
+                error: view.error,
+              };
+            },
+          ) ?? [];
+        return [...main, ...shared, ...native];
       },
     );
     cache = nextCache;

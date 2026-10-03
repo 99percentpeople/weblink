@@ -62,6 +62,7 @@ export function MeetingTile(props: {
   sourceKind?: string;
   clientId?: string;
   trackId?: string;
+  mediaError?: "codec" | "connection";
   name: string;
   avatar?: string;
   stream?: MediaStream | null;
@@ -162,6 +163,10 @@ export function MeetingTile(props: {
           ref={setDisplayRef}
           class="meeting-tile-video"
           stream={props.stream}
+          mediaError={props.mediaError}
+          onDecodeError={(track) =>
+            sessionService.reportNativeDecodeFailure(track)
+          }
           name={props.name}
           avatar={props.avatar}
           isPlaceholderStream={props.placeholder}
@@ -190,7 +195,7 @@ export function MeetingTile(props: {
           <Show when={props.onSelect}>
             <button
               type="button"
-              class="meeting-tile-select"
+              class="meeting-tile-select meeting-tile-focus-target"
               aria-label={t("meeting.feature_source", {
                 name: props.name,
               })}
@@ -203,10 +208,9 @@ export function MeetingTile(props: {
           <Show when={previewCovered()}>
             <button
               type="button"
-              class="absolute inset-0 flex flex-col items-center justify-center
-                gap-3 bg-black/80 p-4 text-center text-white
-                focus-visible:outline focus-visible:outline-2
-                focus-visible:-outline-offset-4 focus-visible:outline-white"
+              class="meeting-tile-focus-target absolute inset-0 flex flex-col
+                items-center justify-center gap-3 bg-black/80 p-4
+                text-center text-white"
               aria-label={t("meeting.show_screen_preview")}
               onClick={() => setPreviewRevealed(true)}
             >
@@ -470,7 +474,11 @@ function TileActions(props: {
               <RemoteControlAction
                 control={control()}
                 state={remote.state()}
-                onRequest={activate}
+                onRequest={
+                  videoControl.control()
+                    ? activate
+                    : undefined
+                }
               />
             )}
           </Show>

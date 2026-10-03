@@ -9,11 +9,13 @@ import {
 import type {
   NativeCapture,
   NativeScreenShare,
+  NativeScreenPreview,
 } from "@weblink/platform";
 import {
   browserMediaStream,
   createNativeScreenStream,
   getNativeScreenPublication,
+  getNativeCaptureStatus,
 } from "@/libs/application/native-screen-service";
 const receivers = vi.hoisted(() => [] as any[]);
 let previewAudio = false;
@@ -102,6 +104,68 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("native preview ownership", () => {
+  it("releases a raw preview that resolves after cancellation without reviving capture", async () => {
+    const { capture, share } = setup();
+    let finish!: (preview: any) => void;
+    share.preview = vi.fn(
+      () =>
+        new Promise<NativeScreenPreview>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const controller = new AbortController();
+    const request = createNativeScreenStream(
+      capture,
+      share,
+      "source",
+      controller.signal,
+    );
+    const rejected = expect(request).rejects.toThrow(
+      "Native screen closed",
+    );
+    await flush();
+    controller.abort();
+    const close = vi.fn();
+    finish({ stream: new Stream(), close });
+    await rejected;
+    expect(close).toHaveBeenCalledOnce();
+    expect(capture.stop).toHaveBeenCalledOnce();
+  });
+
+  it("survives repeated status IPC errors and retains the terminal native diagnostic", async () => {
+    const warn = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+    const { capture, share } = setup();
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+    );
+    const track = stream.getVideoTracks()[0];
+    for (let i = 0; i < 4; i++) {
+      vi.mocked(capture.status).mockRejectedValueOnce(
+        new Error("temporary IPC"),
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(capture.stop).not.toHaveBeenCalled();
+    }
+    vi.mocked(capture.status).mockResolvedValueOnce({
+      state: "failed",
+      sessionId: "owned",
+      error: "audio failed",
+      stopReason: "sourceClosed",
+    } as any);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(capture.stop).toHaveBeenCalledOnce();
+    expect(getNativeCaptureStatus(track)).toMatchObject({
+      state: "failed",
+      error: "audio failed",
+      stopReason: "sourceClosed",
+    });
+    warn.mockRestore();
+  });
   it("uses raw preview without a local RTC peer and preserves remote publication and audio controls", async () => {
     const { capture, share } = setup();
     const video = new Track();

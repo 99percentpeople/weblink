@@ -18,6 +18,28 @@ const registration = () =>
 
 const permissionListeners = new Set<() => void>();
 
+// Reconcile both browser APIs when one still reports `default`. Neither API
+// can establish whether an OS notification channel or Do Not Disturb allows delivery.
+async function readPermission() {
+  if (!supported()) return "unavailable" as const;
+  let observed: PermissionState | undefined;
+  try {
+    observed = (
+      await navigator.permissions?.query({
+        name: "notifications",
+      })
+    )?.state;
+  } catch {
+    // Safari and older WebViews may not implement this permission descriptor.
+  }
+  const current = Notification.permission;
+  if (current === "denied" || observed === "denied")
+    return "denied";
+  if (current === "granted" || observed === "granted")
+    return "granted";
+  return "default";
+}
+
 /** Bind worker actions to the creating page, never to an arbitrary open tab. */
 async function ownerId(
   worker: ServiceWorker,
@@ -45,11 +67,13 @@ async function ownerId(
 
 export const browserNotifications: SystemNotifications = {
   async capabilities() {
-    const active = (await registration())?.active;
+    const [permission, reg] = await Promise.all([
+      readPermission(),
+      registration(),
+    ]);
+    const active = reg?.active;
     return {
-      permission: supported()
-        ? Notification.permission
-        : "unavailable",
+      permission,
       actions:
         supported() &&
         !!active &&
@@ -63,6 +87,8 @@ export const browserNotifications: SystemNotifications = {
   },
   requestPermission() {
     if (!supported()) return Promise.resolve("unavailable");
+    if (Notification.permission !== "default")
+      return Promise.resolve(Notification.permission);
     // Invoke synchronously so the browser still sees the user's click.
     return Notification.requestPermission().then(
       (permission) => {
@@ -185,7 +211,7 @@ export const browserNotifications: SystemNotifications = {
         if (
           closed ||
           !supported() ||
-          Notification.permission !== "granted"
+          (await readPermission()) !== "granted"
         )
           return;
         shown.set(notification.id, notification);

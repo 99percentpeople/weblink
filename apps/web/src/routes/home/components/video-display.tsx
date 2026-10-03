@@ -27,6 +27,8 @@ export const VideoDisplay = (
     ref?: (element: HTMLDivElement) => void;
     class?: string;
     stream: MediaStream | null | undefined;
+    mediaError?: "codec" | "connection";
+    onDecodeError?: (track: MediaStreamTrack) => void;
     name: string;
     muted?: boolean;
     playbackActive?: boolean;
@@ -129,6 +131,19 @@ export const VideoDisplay = (
       return;
     setIsLoaded(true);
     setLoadingState("error");
+    if (
+      video.error?.code === 3 ||
+      video.error?.code === 4 ||
+      (error instanceof DOMException &&
+        error.name === "NotSupportedError")
+    ) {
+      props.onDecodeError?.(track);
+    }
+    if (props.mediaError) {
+      errorReported = true;
+      dismissError();
+      return;
+    }
     if (errorReported) return;
     errorReported = true;
     const blocked =
@@ -215,7 +230,13 @@ export const VideoDisplay = (
     active: () => props.playbackActive !== false,
     resume: (video, track) => {
       const currentStream = videoStream();
-      if (!currentStream || videoTrack() !== track) return;
+      if (
+        !currentStream ||
+        videoTrack() !== track ||
+        errorReported ||
+        props.mediaError
+      )
+        return;
       if (video.srcObject !== currentStream)
         video.srcObject = currentStream;
       if (!playPending) play(video, track);
@@ -225,12 +246,27 @@ export const VideoDisplay = (
   createEffect(() => {
     if (!videoStream()) setVideoRef(null);
   });
+  createEffect(() => {
+    const video = videoRef();
+    if (!props.mediaError || !video) return;
+    ++playbackAttempt;
+    playPending = false;
+    video.pause();
+    video.srcObject = null;
+    dismissError();
+  });
 
   const retryLoadVideo = () => {
     const video = videoRef();
     const currentStream = videoStream();
     const track = videoTrack();
-    if (disposed || !video || !currentStream || !track)
+    if (
+      disposed ||
+      props.mediaError ||
+      !video ||
+      !currentStream ||
+      !track
+    )
       return;
     errorReported = false;
     dismissError();
@@ -334,9 +370,10 @@ export const VideoDisplay = (
             />
             <Show
               when={
-                !isLoaded() ||
-                loadingState() === "waiting" ||
-                loadingState() === "stalled"
+                !props.mediaError &&
+                (!isLoaded() ||
+                  loadingState() === "waiting" ||
+                  loadingState() === "stalled")
               }
             >
               <div class="absolute inset-0 flex items-center justify-center">
@@ -356,6 +393,25 @@ export const VideoDisplay = (
               </div>
             </Show>
           </Show>
+        </Show>
+        <Show
+          when={
+            props.mediaError || loadingState() === "error"
+          }
+        >
+          <div
+            role="status"
+            class="absolute inset-0 flex items-center justify-center
+              bg-black/70 p-4 text-center text-sm text-white"
+          >
+            {t(
+              props.mediaError === "codec"
+                ? "video.loading_state.codec_unsupported"
+                : props.mediaError === "connection"
+                  ? "video.loading_state.connection_failed"
+                  : "video.loading_state.error",
+            )}
+          </div>
         </Show>
         <div
           use:layoutOverlay={"name"}

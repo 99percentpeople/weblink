@@ -35,6 +35,36 @@ function setup(policy?: RemoteControlPolicy) {
   const host = new RemoteControlHost(platform, policy);
   return { host, api };
 }
+it("reopens a failed worker repeatedly with new owners and fresh consent, and cancels recovery on leave", async () => {
+  vi.useFakeTimers();
+  const { host, api } = setup();
+  host.start();
+  await flush();
+  for (let i = 0; i < 4; i++) {
+    const before = await host.context("peer", "alice");
+    api.status.mockResolvedValueOnce({
+      pending: null,
+      clientId: "alice",
+      closed: true,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(host.status().clientId).toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+    const after = await host.context("peer", "alice");
+    expect(after?.ownerId).not.toBe(before?.ownerId);
+    expect(api.approve).not.toHaveBeenCalled();
+  }
+  api.status.mockResolvedValueOnce({
+    pending: null,
+    clientId: null,
+    closed: true,
+  });
+  await vi.advanceTimersByTimeAsync(500);
+  const opens = api.open.mock.calls.length;
+  host.close();
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(api.open).toHaveBeenCalledTimes(opens);
+});
 it("starts a distinct room owner, polls status, and closes it on leave", async () => {
   vi.useFakeTimers();
   const { host, api } = setup();

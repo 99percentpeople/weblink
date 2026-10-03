@@ -5,6 +5,7 @@ import type {
   NativeScreenShare,
   NativeScreenOptions,
   NativeScreenPreview,
+  CaptureStatus,
 } from "@weblink/platform";
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import { readBrowserVideoStats } from "@/libs/domain/video-stats";
@@ -17,6 +18,13 @@ const publications = new WeakMap<
 export const getNativeScreenPublication = (
   track: MediaStreamTrack,
 ) => publications.get(track);
+const captureDiagnostics = new WeakMap<
+  MediaStreamTrack,
+  () => CaptureStatus
+>();
+export const getNativeCaptureStatus = (
+  track: MediaStreamTrack,
+) => captureDiagnostics.get(track)?.();
 
 /** Preserve browser capture identity while excluding native preview tracks. */
 export function browserMediaStream(
@@ -56,6 +64,8 @@ export async function createNativeScreenStream(
     );
   const peerId = createUuid();
   let closed = false;
+  let lastStatus = status;
+  let statusFailures = 0;
   let audioQueue = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let preview: ScreenReceiver | undefined;
@@ -83,13 +93,28 @@ export async function createNativeScreenStream(
     try {
       const current = await capture.status(id);
       if (closed) return;
+      lastStatus = current;
+      statusFailures = 0;
       if (current.state !== "running") {
+        console.warn("Native capture ended", {
+          state: current.state,
+          error: current.error,
+          stopReason: current.stopReason,
+        });
         release();
         return;
       }
       timer = setTimeout(() => void poll(), 1000);
-    } catch {
-      release();
+    } catch (error) {
+      if (closed) return;
+      // An IPC read failure is not evidence that the capture has ended.
+      // The native lease still bounds orphaned captures if the renderer dies.
+      if (++statusFailures === 1)
+        console.warn(
+          "Could not read native capture status",
+          error,
+        );
+      timer = setTimeout(() => void poll(), 1000);
     }
   };
   signal?.addEventListener("abort", release, {
@@ -105,6 +130,10 @@ export async function createNativeScreenStream(
         release,
         previewAbort.signal,
       );
+      if (closed) {
+        rawPreview.close();
+        throw new Error("Native screen closed");
+      }
       stream = rawPreview.stream;
     } else {
       preview = new ScreenReceiver(
@@ -249,8 +278,13 @@ export async function createNativeScreenStream(
       addIceCandidate: (peer, candidate) =>
         share.addIceCandidate(id, peer, candidate),
     };
-    for (const previewTrack of stream.getTracks())
+    for (const previewTrack of stream.getTracks()) {
       publications.set(previewTrack, publication);
+      captureDiagnostics.set(
+        previewTrack,
+        () => lastStatus,
+      );
+    }
     return stream;
   } catch (error) {
     release();

@@ -182,6 +182,10 @@ show the window. An unavailable tray or unreadable startup configuration falls
 back to a visible window. Changing the startup display preference does not enable
 OS registration.
 
+Both debug and release Windows executables use the GUI subsystem, including when
+launch-at-login points at a development build. The autostart plugin registers the
+current executable directly with `--autostart`; no terminal or shell wrapper is needed.
+
 ## System notifications
 
 Notification preferences are shared by the Web and desktop UI: messages, control
@@ -190,6 +194,13 @@ window is unfocused. Content preview and sound can be disabled separately. Brows
 permission is requested only by explicit header or settings actions. New-message events follow
 durable insertion; loading history, duplicate delivery and ACKs do not notify.
 Transfer completion requires an observed state transition in the current session.
+
+Browser permission is reconciled from Notifications and Permissions APIs and
+refreshed automatically on focus, visibility, page restoration and permission changes;
+settings do not expose a manual permission refresh. An
+unresolved prompt is not treated as a grant or retried repeatedly. Android installed
+apps may require changing the app's own notification settings; website permission
+cannot establish the OS notification-channel or Do Not Disturb state.
 
 Message previews include the sender's avatar and name; group titles also identify
 the room. UI fallback avatars use a shared SVG with consistent gradients, initials
@@ -292,6 +303,15 @@ stable; HEVC IDs include a codec suffix for multi-codec driver registrations.
 Receivers must negotiate H.265 support. A rejected video answer fails promptly
 with a compatible-format suggestion, without waiting for ICE or silently switching
 formats. Native AV1 hardware publication is not implemented.
+
+Negotiation alone does not prove decoding. Receivers observe decoded-frame progress
+while video RTP is arriving, and report terminal codec/playback failures inside the
+existing source card. Cards use publication identity across media reconnection.
+Terminal failures do not automatically switch codecs or retry; restarting sharing
+creates a new publication. Transport retries remain bounded, with their budget reset
+only after sustained decoded progress. Additive `receiver-status` messages report
+healthy/unsupported receivers; `stop.retry` preserves the card during transport repair.
+Explicit stop also clears that retained card during backoff or an unfinished offer.
 
 Browser/WebView decoding follows the runtime's negotiated receiver capabilities,
 not the sender's GPU or Windows media-file codec extensions. A runtime must expose
@@ -533,15 +553,23 @@ the tracks for presentation while retaining each connection's audio/video owners
 Peers without this capability receive the first active publication; stopping it
 promotes the next one without replacing the room connection.
 Closing/replacing that channel releases its native senders and remote receivers.
+An unexpectedly closed dedicated channel is reopened by its negotiation owner while
+the main room channel remains ready. A native input worker failure opens a fresh
+owner and rebuilds eligible media bindings; previous input grants are never replayed.
+Remembering an allowed peer leaves its existing transport and consent intact.
 ICE failure retries are bounded; stopping and restarting sharing resets them.
 
 Adding a native share retains existing screens and windows. Each capture owns
 its raw preview, encoder, remote peers and heartbeat independently (up to 16 captures).
-Explicit stop, source closure, application exit and a 10-second lost-client lease
+Explicit stop, source closure, application exit and a 60-second lost-client lease
 release the affected capture and transports; application exit releases all of them.
 Leaving a room releases its peer connections but
 retains an explicitly running local capture for rejoin. Pending selections cannot
 start in a replacement room. Stale session IDs cannot stop a newer capture.
+Transient status IPC failures retry without ending capture; native terminal status
+retains its error and stop reason. Failed per-peer hardware encoders close only
+their own transport and retain bounded error diagnostics. Capture/readback and
+system-audio failures still terminate the affected capture with native diagnostics.
 
 **Settings → Advanced → Native screen capture test** remains a local diagnostic
 using the same capture service with an independent session.

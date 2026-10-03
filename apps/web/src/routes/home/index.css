@@ -96,7 +96,7 @@
     padding var(--meeting-toolbar-motion);
 }
 .meeting-grid {
-  @apply grid min-h-0 w-full min-w-0 flex-[1_1_0] place-content-center overflow-hidden;
+  @apply grid min-h-0 w-full min-w-0 flex-[1_1_0] place-content-center;
   grid-template-columns: repeat(
     var(--meeting-grid-columns, 1),
     var(--meeting-tile-width, 0px)
@@ -122,12 +122,18 @@
     var(--meeting-grid-offset-y, 0px);
 }
 .meeting-tile {
-  @apply relative aspect-video min-h-0 w-full min-w-0 self-center overflow-hidden rounded-lg;
+  @apply relative aspect-video min-h-0 w-full min-w-0 self-center rounded-lg;
   container-type: inline-size;
 }
 .meeting-tile-surface {
   /* Fade the background and border with the content, not the layout frame. */
   @apply border-border bg-(--meeting-surface) absolute inset-0 overflow-hidden rounded-[inherit] border border-solid;
+}
+.meeting-tile-surface:has(
+  .meeting-tile-focus-target:focus-visible
+) {
+  /* Clip the video inside the surface; draw focus outside its rounded edge. */
+  @apply ring-primary ring-2;
 }
 .meeting-tile .meeting-video-avatar {
   @apply size-[clamp(--spacing(9),25cqw,--spacing(20))];
@@ -136,11 +142,19 @@
 .meeting-tile-video {
   @apply absolute inset-0;
 }
+.meeting-tile-video:fullscreen:has(
+    .meeting-tile-focus-target:focus-visible
+  )::after {
+  /* Fullscreen hides the tile frame, so keep focus visible at the viewport edge. */
+  @apply ring-primary pointer-events-none absolute inset-0 z-30 ring-2 ring-inset;
+  content: "";
+}
 .meeting-tile-select {
   @apply absolute inset-0 rounded-[inherit] bg-transparent;
 }
-.meeting .meeting-tile-select:focus-visible {
-  outline-offset: -3px;
+.meeting .meeting-tile-focus-target:focus-visible {
+  /* Full-tile targets share the rounded surface ring; toolbar buttons keep theirs. */
+  outline: none;
 }
 .meeting-featured-frame {
   @apply grid size-full min-h-0 min-w-0 place-items-center;
@@ -150,7 +164,7 @@
   @apply aspect-video h-auto w-[min(100cqw,calc(100cqh*16/9))];
 }
 .meeting-grid.has-featured {
-  @apply grid content-stretch items-stretch overflow-hidden;
+  @apply grid content-stretch items-stretch;
   --meeting-rail-height: clamp(
     --spacing(23),
     22%,
@@ -191,7 +205,9 @@
   grid-row: 1;
 }
 .meeting-thumbnails {
-  @apply flex min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain pb-1;
+  /* Reserve the outer focus ring without changing the tile content box. */
+  @apply -m-0.5 flex min-h-0 min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain p-0.5 pb-1.5;
+  scroll-padding-inline: --spacing(0.5);
   /* The controls leave grid flow while animating; keep the rail in its own row. */
   grid-column: 1;
   grid-row: -2 / -1;

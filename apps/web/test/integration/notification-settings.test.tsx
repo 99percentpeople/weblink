@@ -70,7 +70,7 @@ it("shows loading rather than unavailable while native capabilities are pending"
     "setting.notifications.permission_granted",
   );
 });
-it("keeps native errors distinct from unsupported and allows retry", async () => {
+it("keeps native errors distinct from unsupported and refreshes automatically on focus", async () => {
   api.capabilities.mockRejectedValueOnce(
     "Could not read Windows notification settings: 0x80070490",
   );
@@ -86,11 +86,10 @@ it("keeps native errors distinct from unsupported and allows retry", async () =>
       "setting.notifications.permission_unavailable",
     ),
   ).not.toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "setting.notifications.retry",
-    }),
-  );
+  expect(
+    screen.queryByRole("button"),
+  ).not.toBeInTheDocument();
+  fireEvent.focus(window);
   await screen.findByText(
     "setting.notifications.permission_granted",
   );
@@ -107,9 +106,7 @@ it("only shows unavailable when the adapter explicitly reports it", async () => 
     "setting.notifications.permission_unavailable",
   );
   expect(
-    screen.queryByRole("button", {
-      name: "setting.notifications.retry",
-    }),
+    screen.queryByRole("button"),
   ).not.toBeInTheDocument();
 });
 it("does not let an older query overwrite a newer focus refresh", async () => {

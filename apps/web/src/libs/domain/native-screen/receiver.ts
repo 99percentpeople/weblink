@@ -1,4 +1,5 @@
 import type { RemotePointer } from "../remote-control/pointer";
+import { ScreenDecodeError } from "./errors";
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
@@ -8,6 +9,7 @@ export class ScreenReceiver {
   private disconnectTimer?: ReturnType<typeof setTimeout>;
   private remoteReady = false;
   private candidates: RTCIceCandidateInit[] = [];
+  private decodeTimer?: ReturnType<typeof setTimeout>;
   constructor(
     configuration: RTCConfiguration,
     private readonly changed: (
@@ -142,11 +144,10 @@ export class ScreenReceiver {
         /^a=(inactive|sendonly)\r?$/m.test(video))
     ) {
       this.close();
-      throw new Error(
-        "This receiver cannot decode the selected video codec. Choose a compatible format such as H.264 on the sharing device.",
-      );
+      throw new ScreenDecodeError();
     }
     await this.pc.setLocalDescription(answer);
+    this.lifetime.signal.throwIfAborted();
     if (!this.onCandidate)
       await this.waitFor(
         () => this.pc.iceGatheringState === "complete",
@@ -154,6 +155,75 @@ export class ScreenReceiver {
         15000,
       );
     return this.pc.localDescription!.sdp;
+  }
+  /** Receiving RTP is not proof that the advertised decoder actually works. */
+  monitorDecode(healthy: () => void): void {
+    let lastFrames = 0;
+    let stalledSince: number | undefined;
+    let lastBytes = 0;
+    let healthySince: number | undefined;
+    let reportedHealthy = false;
+    const poll = async () => {
+      try {
+        const stats = await this.pc.getStats();
+        if (this.lifetime.signal.aborted) return;
+        if (this.pc.connectionState === "connected") {
+          stats.forEach((stat) => {
+            if (
+              stat.type !== "inbound-rtp" ||
+              (stat.kind ?? stat.mediaType) !== "video"
+            )
+              return;
+            if (typeof stat.framesDecoded !== "number")
+              return;
+            const now = Date.now();
+            const bytes = stat.bytesReceived ?? 0;
+            if (stat.framesDecoded > lastFrames) {
+              stalledSince = undefined;
+              healthySince ??= now;
+              if (
+                !reportedHealthy &&
+                now - healthySince >= 10000
+              ) {
+                reportedHealthy = true;
+                healthy();
+              }
+            } else if (bytes > lastBytes) {
+              healthySince = undefined;
+              stalledSince ??= now;
+              if (now - stalledSince >= 12000)
+                this.fail(
+                  new ScreenDecodeError(
+                    "Video data is arriving but this receiver's decoder is not producing frames.",
+                  ),
+                );
+            } else {
+              // A silent sender/network cannot establish decoder failure.
+              stalledSince = undefined;
+              healthySince = undefined;
+            }
+            lastFrames = stat.framesDecoded;
+            lastBytes = bytes;
+          });
+        } else {
+          stalledSince = undefined;
+          healthySince = undefined;
+        }
+      } catch {
+        // Statistics are optional; a failed read cannot end a healthy stream.
+      } finally {
+        if (!this.lifetime.signal.aborted)
+          this.decodeTimer = setTimeout(
+            () => void poll(),
+            1000,
+          );
+      }
+    };
+    clearTimeout(this.decodeTimer);
+    void poll();
+  }
+  decodeFailed(): void {
+    this.fail(new ScreenDecodeError());
   }
   async addIceCandidate(
     candidate: RTCIceCandidateInit,
@@ -231,6 +301,7 @@ export class ScreenReceiver {
     this.lifetime.abort();
     this.candidates = [];
     clearTimeout(this.disconnectTimer);
+    clearTimeout(this.decodeTimer);
     this.pc.close();
     this.stream
       .getTracks()

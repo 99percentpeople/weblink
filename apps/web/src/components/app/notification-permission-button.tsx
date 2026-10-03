@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 import { useAppState } from "@/libs/state/app-state-context";
 import { platform } from "@/libs/platform/runtime";
+import { appState } from "@/libs/state/app-state";
 
 export function NotificationPermissionButton() {
   if (platform.kind !== "browser") return null;
@@ -19,7 +20,10 @@ export function NotificationPermissionButton() {
   return (
     <Show
       when={
-        permission.capabilities()?.permission === "default"
+        appState.options.notifications.enabled &&
+        permission.capabilities()?.permission ===
+          "default" &&
+        !permission.requestUnresolved()
       }
     >
       <Button

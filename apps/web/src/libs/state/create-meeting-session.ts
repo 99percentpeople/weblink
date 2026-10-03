@@ -33,6 +33,7 @@ import {
 } from "@/routes/home/components/meeting-sources";
 import { reportMeetingPipError } from "@/routes/home/components/meeting-pip-error";
 import type { MeetingPipControls } from "@/routes/home/components/meeting-controls";
+import type { ScreenControlRequest } from "@/libs/domain/native-screen/control-request";
 
 import type { Location, Navigator } from "@solidjs/router";
 export function createMeetingSession({
@@ -88,6 +89,7 @@ export function createMeetingSession({
       avatar: client.avatar ?? undefined,
       stream: client.stream,
       nativeScreenStream: client.nativeScreenStream,
+      nativeScreenViews: client.nativeScreenViews,
       videoSources: client.videoSources,
       videoTracks: client.videoTracks,
       audioSources: client.audioSources,
@@ -433,35 +435,68 @@ export function createMeetingSession({
       { defer: true },
     ),
   );
-  // An avatar request continues on its approved screen. This is the same
-  // control session, not an unrelated source stealing the user's main view.
+  // Avatar requests need no main-view ownership until their approved screen
+  // arrives. Follow each request once, including requests made in the rail.
+  const followedRequests = new WeakMap<
+    ScreenControlRequest,
+    string
+  >();
   createEffect(() => {
-    const main = selected();
     const next = sources();
-    if (!main || main.local || main.kind === "screen")
-      return;
-    const request = sessionService.getScreenControl(
-      main.participantId,
+    const participants = new Set(
+      next
+        .filter((source) => !source.local)
+        .map((source) => source.participantId),
     );
-    if (!request) return;
-    const follow = () => {
-      if (untrack(selected)?.id !== main.id) return;
-      const screen = next.find(
-        (source) =>
-          source.kind === "screen" &&
-          source.track &&
-          source.participantId === main.participantId &&
-          request.controls(
-            sessionService.getRemoteControl(source.track),
-          ),
+    for (const participantId of participants) {
+      const request =
+        sessionService.getScreenControl(participantId);
+      if (!request) continue;
+      const follow = () => {
+        if (request.state() === "viewing")
+          followedRequests.delete(request);
+        const screen = next.find(
+          (source) =>
+            source.kind === "screen" &&
+            source.track &&
+            source.participantId === participantId &&
+            request.controls(
+              sessionService.getRemoteControl(source.track),
+            ),
+        );
+        if (
+          !screen ||
+          followedRequests.get(request) === screen.id
+        )
+          return;
+        followedRequests.set(request, screen.id);
+        const main = untrack(selected);
+        if (
+          main?.participantId === participantId &&
+          main.kind !== "screen"
+        ) {
+          // This is the same session; stopping the avatar would cancel it.
+          setPinnedId(screen.id);
+        } else {
+          void mainView.change(screen.id, () => {
+            if (
+              screen.track &&
+              request.controls(
+                sessionService.getRemoteControl(
+                  screen.track,
+                ),
+              )
+            )
+              setPinnedId(screen.id);
+          });
+        }
+      };
+      request.addEventListener("change", follow);
+      untrack(follow);
+      onCleanup(() =>
+        request.removeEventListener("change", follow),
       );
-      if (screen) setPinnedId(screen.id);
-    };
-    request.addEventListener("change", follow);
-    untrack(follow);
-    onCleanup(() =>
-      request.removeEventListener("change", follow),
-    );
+    }
   });
   createEffect(
     on(

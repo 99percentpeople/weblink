@@ -66,6 +66,10 @@ export class SessionService {
       if (control) return control;
     }
   }
+  reportNativeDecodeFailure(track: MediaStreamTrack) {
+    for (const native of this.nativeScreens.values())
+      native.decodeFailed(track);
+  }
   readonly sessions: Record<ClientID, PeerSession> =
     appState.session.sessions;
   readonly clientViewData: Record<ClientID, ClientInfo> =
@@ -324,6 +328,26 @@ export class SessionService {
         ),
       loadIceServers: this.loadIceServers,
       relayOnly: () => appState.options.relayOnly,
+      viewsChanged: (views) => {
+        if (
+          this.sessions[client.clientId] === session &&
+          this.clientViewData[client.clientId]
+        )
+          setAppState(
+            "session",
+            "clientViewData",
+            client.clientId,
+            "nativeScreenViews",
+            reconcile(views),
+          );
+      },
+      channelClosed: () => {
+        opening = false;
+        controlGeneration = createUuid();
+        clearTimeout(nativeReopenTimer);
+        if (!controller.signal.aborted)
+          nativeReopenTimer = setTimeout(openNative, 1000);
+      },
       changed: (stream) => {
         if (
           this.sessions[client.clientId] === session &&
@@ -344,15 +368,24 @@ export class SessionService {
     const disposePolicy = createRoot((dispose) => {
       createEffect(
         on(
-          () =>
-            appState.options.clientConfigs[client.clientId]
-              ?.remoteControl,
-          () => {
+          [
+            () =>
+              appState.options.clientConfigs[
+                client.clientId
+              ]?.remoteControl,
+            this.remoteControl.revision,
+          ],
+          ([, ownerRevision], previous) => {
+            const ownerChanged =
+              previous !== undefined &&
+              ownerRevision !== previous[1];
             void (async () => {
               await this.remoteControl.policyChanged(
                 client.clientId,
               );
-              await native.refreshControlCapabilities();
+              await native.refreshControlCapabilities(
+                ownerChanged,
+              );
             })().catch((error) =>
               console.warn(
                 "Remote control permissions",
@@ -366,9 +399,15 @@ export class SessionService {
       return dispose;
     });
     let opening = false;
+    let mainChannelReady = false;
+    let nativeReopenTimer:
+      | ReturnType<typeof setTimeout>
+      | undefined;
     const openNative = () => {
       if (
         !session.polite ||
+        controller.signal.aborted ||
+        !mainChannelReady ||
         opening ||
         !session.peerConnection
       )
@@ -390,6 +429,8 @@ export class SessionService {
           "Native screen channel unavailable",
           error,
         );
+        if (!controller.signal.aborted)
+          nativeReopenTimer = setTimeout(openNative, 2000);
       }
     };
     session.addEventListener(
@@ -407,6 +448,8 @@ export class SessionService {
       "peerconnectioninit",
       () => {
         opening = false;
+        mainChannelReady = false;
+        clearTimeout(nativeReopenTimer);
         native.reset();
         controlGeneration = createUuid();
       },
@@ -415,9 +458,11 @@ export class SessionService {
     session.addEventListener(
       "messagechannelchange",
       ({ detail }) => {
+        mainChannelReady = detail === "ready";
         if (detail === "ready") void openNative();
         else {
           opening = false;
+          clearTimeout(nativeReopenTimer);
           native.reset();
           controlGeneration = createUuid();
         }
@@ -427,6 +472,7 @@ export class SessionService {
     controller.signal.addEventListener(
       "abort",
       () => {
+        clearTimeout(nativeReopenTimer);
         disposePolicy();
         native.reset();
         controlGeneration = createUuid();

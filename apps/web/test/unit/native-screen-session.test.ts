@@ -12,6 +12,7 @@ import {
   type NativeScreenPublication,
 } from "@/libs/domain/native-screen/session";
 import { getNativeScreenAudioOwner } from "@/libs/domain/native-screen/tracks";
+import { ScreenDecodeError } from "@/libs/domain/native-screen/errors";
 
 class Stream {
   constructor(private tracks: MediaStreamTrack[] = []) {}
@@ -49,6 +50,8 @@ vi.mock("@/libs/domain/native-screen/receiver", () => ({
     }
     answer = vi.fn(async () => "browser-answer");
     connected = vi.fn(async () => {});
+    monitorDecode = vi.fn();
+    decodeFailed = vi.fn();
     addIceCandidate = vi.fn(async () => {});
     close = vi.fn(() => this.changed(null));
   },
@@ -99,6 +102,7 @@ function setup() {
     relayOnly: () => true,
     changed: vi.fn(),
     error: vi.fn(),
+    viewsChanged: vi.fn(),
   };
   const session = new NativeScreenSession(port);
   const channel = new Channel();
@@ -110,10 +114,277 @@ beforeEach(() => {
   vi.stubGlobal("MediaStream", Stream);
   receivers.length = 0;
 });
+
+it("retains a failed codec card without retry until the publisher explicitly stops", async () => {
+  const { session, channel, port } = setup();
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    multiScreen: true,
+  });
+  channel.receive({
+    type: "offer",
+    id: "hevc",
+    sourceId: "screen",
+    sdp: "offer",
+  });
+  await flush();
+  receivers[0].changed(mediaStream("video"));
+  receivers[0].failed(new ScreenDecodeError());
+  await vi.advanceTimersByTimeAsync(180000);
+  expect(port.viewsChanged).toHaveBeenLastCalledWith([
+    expect.objectContaining({
+      sourceId: "screen",
+      error: "codec",
+    }),
+  ]);
+  expect(
+    channel.sent.filter((s) => s.type === "retry"),
+  ).toHaveLength(0);
+  expect(channel.sent.at(-1)).toMatchObject({
+    type: "receiver-status",
+    state: "unsupported",
+  });
+  channel.receive({ type: "stop", id: "hevc" });
+  expect(port.viewsChanged).toHaveBeenLastCalledWith([]);
+  session.reset();
+});
+
+it("does not retry a retired receiver when intentional replacement aborts pending connection work", async () => {
+  const { session, channel, port } = setup();
+  const servers = deferred<RTCIceServer[]>();
+  port.loadIceServers.mockReturnValue(
+    servers.promise as any,
+  );
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    multiScreen: true,
+  });
+  channel.receive({
+    type: "offer",
+    id: "old",
+    sourceId: "screen",
+    sdp: "offer",
+  });
+  servers.resolve([]);
+  await Promise.resolve();
+  let reject!: (error: Error) => void;
+  receivers[0].connected.mockImplementation(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  await flush();
+  channel.receive({ type: "stop", id: "old", retry: true });
+  reject(new Error("Native screen closed"));
+  await flush();
+  expect(port.error).not.toHaveBeenCalled();
+  expect(
+    channel.sent.some((value) => value.type === "retry"),
+  ).toBe(false);
+  expect(port.viewsChanged).toHaveBeenLastCalledWith([
+    { sourceId: "screen" },
+  ]);
+  session.reset();
+});
+
+it("retains source identity across transport retries and resets all receiver state on repeated rejoin", async () => {
+  const { session, port } = setup();
+  for (let cycle = 0; cycle < 5; cycle++) {
+    const channel = new Channel();
+    session.bind(channel as unknown as RTCDataChannel);
+    channel.receive({
+      type: "hello",
+      receiveScreen: true,
+      multiScreen: true,
+    });
+    channel.receive({
+      type: "offer",
+      id: `first-${cycle}`,
+      sourceId: "screen",
+      sdp: "offer",
+    });
+    await flush();
+    const old = receivers.at(-1);
+    old.failed(new Error("controlled disconnect"));
+    channel.receive({
+      type: "stop",
+      id: `first-${cycle}`,
+      retry: true,
+    });
+    expect(
+      port.viewsChanged.mock.calls.at(-1)?.[0],
+    ).toHaveLength(1);
+    channel.receive({
+      type: "offer",
+      id: `second-${cycle}`,
+      sourceId: "screen",
+      sdp: "offer",
+    });
+    await flush();
+    expect(port.viewsChanged).toHaveBeenLastCalledWith([
+      { sourceId: "screen" },
+    ]);
+    session.reset();
+    old.changed(mediaStream("late"));
+    expect(port.viewsChanged).toHaveBeenLastCalledWith([]);
+  }
+});
+
+it("restores the retry budget after stable decoding and stops a terminal codec failure", async () => {
+  const { session, channel } = setup();
+  const pub = { ...publication(), controlEligible: true };
+  session.setPublication(pub);
+  channel.receive({ type: "hello", receiveScreen: true });
+  await flush();
+  for (let cycle = 0; cycle < 6; cycle++) {
+    const id = channel.sent
+      .filter((s) => s.type === "offer")
+      .at(-1).id;
+    channel.receive({ type: "answer", id, sdp: "answer" });
+    await flush();
+    channel.receive({
+      type: "receiver-status",
+      id,
+      state: "healthy",
+    });
+    channel.receive({ type: "retry", id });
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+  expect(pub.offer).toHaveBeenCalledTimes(7);
+  const id = channel.sent
+    .filter((s) => s.type === "offer")
+    .at(-1).id;
+  channel.receive({
+    type: "receiver-status",
+    id,
+    state: "unsupported",
+  });
+  await session.refreshControlCapabilities(true);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    remoteControl: { request: true, host: false },
+  });
+  await vi.advanceTimersByTimeAsync(180000);
+  expect(pub.offer).toHaveBeenCalledTimes(7);
+  session.setPublication();
+  expect(channel.sent.at(-1)).toEqual({ type: "stop", id });
+  session.reset();
+});
+
+it.each([true, false])(
+  "rejoins HEVC publication five times with simulated decode support=%s and discards previous owners",
+  async (supported) => {
+    const { session, port } = setup();
+    for (let cycle = 0; cycle < 5; cycle++) {
+      const channel = new Channel();
+      session.bind(channel as unknown as RTCDataChannel);
+      channel.receive({
+        type: "hello",
+        receiveScreen: true,
+        multiScreen: true,
+      });
+      channel.receive({
+        type: "offer",
+        id: `hevc-${cycle}`,
+        sourceId: "same-live-capture",
+        sdp: "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 104\r\na=rtpmap:104 H265/90000\r\n",
+      });
+      await flush();
+      const receiver = receivers.at(-1);
+      if (supported)
+        receiver.changed(mediaStream(`decoded-${cycle}`));
+      else receiver.failed(new ScreenDecodeError());
+      expect(
+        port.viewsChanged.mock.calls.at(-1)?.[0],
+      ).toHaveLength(1);
+      session.reset();
+      receiver.changed(mediaStream("obsolete"));
+      receiver.failed(new ScreenDecodeError());
+      expect(port.viewsChanged).toHaveBeenLastCalledWith(
+        [],
+      );
+      expect(
+        channel.sent.some((s) => s.type === "retry"),
+      ).toBe(false);
+      expect(receiver.close).toHaveBeenCalled();
+    }
+  },
+);
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
+it.each(["backoff", "pending-offer", "failed-offers"])(
+  "clears the retained remote card when sharing stops during %s",
+  async (phase) => {
+    const sender = setup();
+    const receiver = setup();
+    const pub = publication("screen");
+    let delivered = 0;
+    const deliver = async () => {
+      for (const message of sender.channel.sent.slice(
+        delivered,
+      ))
+        receiver.channel.receive(message);
+      delivered = sender.channel.sent.length;
+      await flush();
+    };
+    try {
+      sender.channel.receive({
+        type: "hello",
+        receiveScreen: true,
+      });
+      sender.session.setPublication(pub);
+      await flush();
+      await deliver();
+      const offer = sender.channel.sent.find(
+        (value) => value.type === "offer",
+      );
+      const pending = deferred<string>();
+      if (phase === "pending-offer")
+        vi.mocked(pub.offer).mockReturnValueOnce(
+          pending.promise,
+        );
+      if (phase === "failed-offers")
+        vi.mocked(pub.offer).mockRejectedValue(
+          new Error("Encoder unavailable"),
+        );
+      sender.channel.receive({
+        type: "retry",
+        id: offer.id,
+      });
+      if (phase !== "backoff")
+        await vi.advanceTimersByTimeAsync(
+          phase === "pending-offer" ? 1000 : 10000,
+        );
+      await deliver();
+      expect(
+        receiver.port.viewsChanged,
+      ).toHaveBeenLastCalledWith([{ sourceId: "screen" }]);
+      sender.session.setPublications([]);
+      pending.resolve("late-offer");
+      await vi.advanceTimersByTimeAsync(60000);
+      await deliver();
+      expect(
+        receiver.port.viewsChanged,
+      ).toHaveBeenLastCalledWith([]);
+      expect(
+        sender.channel.sent.filter(
+          (value) => value.type === "offer",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      sender.session.reset();
+      receiver.session.reset();
+    }
+  },
+);
+
 describe("native screen control", () => {
   it("keeps control capabilities opt-in and forgets them on disconnect", async () => {
     const { session, channel } = setup();
@@ -845,6 +1116,39 @@ it("ignores a stale capability read after a newer permission refresh", async () 
   ).toBeUndefined();
   expect(context).not.toHaveBeenCalled();
   session.reset();
+});
+
+it("retains an owner rebind when a newer permission refresh overtakes it", async () => {
+  const capabilities = { request: true, host: true };
+  const load = vi.fn(async () => capabilities);
+  const session = new NativeScreenSession({
+    loadControlCapabilities: load,
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+  });
+  const channel = new Channel();
+  const pub = { ...publication(), controlEligible: true };
+  session.bind(channel as unknown as RTCDataChannel);
+  session.setPublication(pub);
+  channel.receive({ type: "hello", receiveScreen: true });
+  await flush();
+  const pending = deferred<typeof capabilities>();
+  load.mockReturnValueOnce(pending.promise);
+  const rebind = session.refreshControlCapabilities(true);
+  try {
+    await session.refreshControlCapabilities();
+    await flush();
+    expect(pub.closePeer).toHaveBeenCalledOnce();
+    expect(pub.offer).toHaveBeenCalledTimes(2);
+    pending.resolve(capabilities);
+    await rebind;
+    expect(pub.offer).toHaveBeenCalledTimes(2);
+  } finally {
+    pending.resolve(capabilities);
+    session.reset();
+  }
 });
 
 it("retries a failed control transport for the same shared source and binds a fresh controller", async () => {

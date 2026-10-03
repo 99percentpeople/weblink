@@ -497,6 +497,12 @@ may select concrete infrastructure implementations.
     remotely shared settings.
   - `session.ts`, `peer-negotiation.ts`, `signaling.ts`: WebRTC session and
     signaling service contracts.
+  - `native-screen/session.ts`: authenticated native-media channel, capability
+    negotiation, incoming streams and view identity. `native-screen/sender.ts`
+    owns each outgoing publication's offers, ICE, retry budget and cleanup;
+    its retained receiver identity survives a closed or pending transport.
+    `native-screen/signaling.ts` owns the additive wire messages and parser,
+    while `native-screen/receiver.ts` owns receive-only RTC and decode monitoring.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
     presence, routed-peer messages, join acknowledgment, deployed version and
     limits for cross-client implementations.

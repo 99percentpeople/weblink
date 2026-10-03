@@ -52,6 +52,50 @@ beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("meeting source presentation", () => {
+  it("keeps one native card id while negotiating, decoding, failing and reconnecting", () => {
+    createRoot((dispose) => {
+      const [views, setViews] = createSignal<
+        MeetingParticipant["nativeScreenViews"]
+      >([{ sourceId: "screen" }]);
+      const sources = createMeetingSources(() => [
+        {
+          id: "peer",
+          name: "Peer",
+          nativeScreenViews: views(),
+        },
+      ]);
+      const card = () =>
+        sources().find((s) => s.kind === "screen")!;
+      const id = card().id;
+      const first = track("first-decoder", "video");
+      setViews([
+        { sourceId: "screen", stream: stream(first) },
+      ]);
+      expect(card().id).toBe(id);
+      setViews([
+        {
+          sourceId: "screen",
+          error: "codec",
+          stream: stream(first),
+        },
+      ]);
+      expect(card().id).toBe(id);
+      expect(card().error).toBe("codec");
+      setViews([
+        {
+          sourceId: "screen",
+          stream: stream(track("second-decoder", "video")),
+        },
+      ]);
+      expect(card().id).toBe(id);
+      expect(first.stop).not.toHaveBeenCalled();
+      setViews([]);
+      expect(sources().some((s) => s.id === id)).toBe(
+        false,
+      );
+      dispose();
+    });
+  });
   it("keeps each native screen's audio and presentation identity when another screen stops", () => {
     createRoot((dispose) => {
       const one = track("native-one", "video"),

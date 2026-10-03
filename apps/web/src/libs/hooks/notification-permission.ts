@@ -14,6 +14,8 @@ export function createNotificationPermission(
   >("loading");
   const [failure, setFailure] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  const [requestUnresolved, setRequestUnresolved] =
+    createSignal(false);
   let refreshVersion = 0;
   let disposed = false;
 
@@ -31,6 +33,11 @@ export function createNotificationPermission(
             reply: false,
           };
       if (disposed || version !== refreshVersion) return;
+      if (
+        value.permission !== "default" ||
+        capabilities()?.permission !== value.permission
+      )
+        setRequestUnresolved(false);
       setCapabilities(value);
       setStatus("ready");
     } catch (error) {
@@ -56,6 +63,9 @@ export function createNotificationPermission(
     window.addEventListener("focus", changed, {
       signal: controller.signal,
     });
+    window.addEventListener("pageshow", changed, {
+      signal: controller.signal,
+    });
     document.addEventListener(
       "visibilitychange",
       () => {
@@ -74,13 +84,36 @@ export function createNotificationPermission(
   });
 
   const requestPermission = async () => {
-    if (!notifications || busy() || disposed) return;
+    if (
+      !notifications ||
+      busy() ||
+      disposed ||
+      capabilities()?.permission !== "default" ||
+      requestUnresolved()
+    )
+      return;
     setBusy(true);
     try {
       // No asynchronous work before this call: browsers require a user gesture.
       const permission =
         await notifications.requestPermission();
-      if (!disposed) await refresh();
+      if (!disposed) {
+        await refresh();
+        if (
+          !disposed &&
+          capabilities()?.permission === "default" &&
+          (permission === "granted" ||
+            permission === "denied")
+        )
+          setCapabilities(
+            (value) => value && { ...value, permission },
+          );
+        if (
+          !disposed &&
+          capabilities()?.permission === "default"
+        )
+          setRequestUnresolved(true);
+      }
       return permission;
     } finally {
       if (!disposed) setBusy(false);
@@ -91,7 +124,7 @@ export function createNotificationPermission(
     status,
     failure,
     busy,
-    refresh,
+    requestUnresolved,
     requestPermission,
   };
 }

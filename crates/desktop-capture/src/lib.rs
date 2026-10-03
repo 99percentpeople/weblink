@@ -17,7 +17,9 @@ mod tests;
 
 const MAX_SESSIONS: usize = 16;
 const MAX_RETIRED_SESSIONS: usize = 32;
-const LEASE: Duration = Duration::from_secs(10);
+// Renderer pauses must not destroy an explicitly active share after a few missed
+// status reads. Explicit stop/window teardown still release immediately.
+const LEASE: Duration = Duration::from_secs(60);
 type Result<T> = std::result::Result<T, String>;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

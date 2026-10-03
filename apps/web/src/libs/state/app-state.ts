@@ -12,6 +12,7 @@ import type {
 } from "@/libs/domain/ids";
 import type { PeerSession } from "@/libs/domain/session";
 import type { RemoteMediaTrackBinding } from "@/libs/domain/session-media";
+import type { NativeScreenView } from "@/libs/domain/native-screen/errors";
 import type { ClientProfile } from "@/libs/domain/profile";
 import type { StoreMessage } from "@/libs/domain/message";
 import type {
@@ -50,6 +51,7 @@ export interface ClientInfo extends TransferClient {
   videoSources?: StreamVideoSource[];
   videoTracks?: RemoteMediaTrackBinding[];
   nativeScreenStream?: MediaStream;
+  nativeScreenViews?: NativeScreenView[];
   audioSources?: StreamAudioSource[];
   audioTracks?: RemoteMediaTrackBinding[];
   clipboard?: SendClipboardMessage[];

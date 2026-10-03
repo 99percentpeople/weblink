@@ -59,6 +59,7 @@ pub struct MediaSession {
     closed: AtomicBool,
     started: Instant,
     pipeline: Mutex<super::pipeline::Timings>,
+    peer_errors: Mutex<std::collections::VecDeque<String>>,
 }
 
 struct MediaPeer {
@@ -169,6 +170,7 @@ impl MediaSession {
             closed: AtomicBool::new(false),
             started: Instant::now(),
             pipeline: Mutex::new(Default::default()),
+            peer_errors: Mutex::new(Default::default()),
         });
         let weak = Arc::downgrade(&session);
         let notify = session.notify.clone();
@@ -334,13 +336,26 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
             .or_else(|| self.audio.as_ref().and_then(audio::Loopback::error))
-            .or_else(|| {
-                self.hardware
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .values()
-                    .find_map(|encoder| encoder.error())
-            })
+    }
+
+    fn reap_failed_encoders(&self) {
+        let failed: Vec<_> = self
+            .hardware
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter_map(|(id, encoder)| encoder.error().map(|error| (id.clone(), error)))
+            .collect();
+        for (id, error) in failed {
+            // One receiver's transform is not the capture's lifetime. Closing its
+            // transport activates that receiver's bounded reconnection path.
+            self.close_peer(&id);
+            let mut errors = self.peer_errors.lock().unwrap_or_else(|e| e.into_inner());
+            if errors.len() >= 16 {
+                errors.pop_front();
+            }
+            errors.push_back(error);
+        }
     }
 
     pub fn pipeline_stats(&self) -> super::pipeline::PipelineStats {
@@ -362,10 +377,18 @@ impl MediaSession {
             .iter()
             .map(|(peer, encoder)| encoder.statistics().snapshot(peer.clone()))
             .collect();
+        report.peer_errors = self
+            .peer_errors
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect();
         report
     }
 
     fn flush(&self) -> Result<()> {
+        self.reap_failed_encoders();
         let mut timing = super::pipeline::Clock::new();
         if self.closed.load(Ordering::Acquire) {
             return Ok(());

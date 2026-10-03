@@ -79,6 +79,7 @@ async function main() {
   let cdp;
   let browserError;
   let browserLog = "";
+  let port;
   try {
     // Avoid the application backend, HMR reruns and changes to a real profile.
     vite = await createServer({
@@ -165,7 +166,10 @@ async function main() {
         `--user-data-dir=${profile}`,
         "about:blank",
       ],
-      { stdio: ["ignore", "ignore", "pipe"] },
+      {
+        stdio: ["ignore", "ignore", "pipe"],
+        windowsHide: true,
+      },
     );
     browser.on("error", (error) => {
       browserError = error;
@@ -173,13 +177,16 @@ async function main() {
     browser.stderr.on("data", (data) => {
       browserLog = (browserLog + data).slice(-8000);
     });
-    let port;
     // Hosted runners can need more than ten seconds for a cold browser start.
     const startupDeadline = Date.now() + 30000;
     while (Date.now() < startupDeadline) {
       if (browserError) throw browserError;
       if (
-        browser.exitCode !== null ||
+        (browser.exitCode !== null &&
+          !(
+            process.platform === "win32" &&
+            browser.exitCode === 0
+          )) ||
         browser.signalCode !== null
       )
         throw new Error(
@@ -372,6 +379,29 @@ async function main() {
     console.error(error.stack ?? error);
     if (browserLog) console.error(browserLog);
   } finally {
+    // Edge on Windows may start a separate browser process and exit its launcher.
+    // Close the isolated profile through CDP, not just that launcher PID.
+    try {
+      if (!cdp) {
+        port ??= Number(
+          (
+            await readFile(
+              join(profile, "DevToolsActivePort"),
+              "utf8",
+            )
+          ).split("\n")[0],
+        );
+        const version = await (
+          await fetch(
+            `http://127.0.0.1:${port}/json/version`,
+          )
+        ).json();
+        cdp = await connect(version.webSocketDebuggerUrl);
+      }
+      await cdp.call("Browser.close");
+    } catch {
+      // Startup failure may leave no debugger to close; owned PID cleanup follows.
+    }
     cdp?.close();
     if (
       browser?.pid &&

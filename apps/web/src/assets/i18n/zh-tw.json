@@ -378,9 +378,8 @@
       "permission_failed": "無法申請通知權限。",
       "allow": "允許通知",
       "requesting": "正在請求權限…",
+      "request_unresolved": "瀏覽器尚未確認通知權限。請檢查瀏覽器或系統的通知設定，返回 Weblink 後會自動更新。",
       "browser_blocked": "通知已被封鎖，請在瀏覽器的網站權限設定中，將此網站的通知改為允許。",
-      "native_description": "Weblink 執行期間，可在 Windows 通知中直接回覆訊息、同意或拒絕遠端控制和測速請求。",
-      "basic_description": "Weblink 開啟期間接收通知。點擊可開啟對應對話或請求，支援操作按鈕時可直接同意或拒絕。",
       "new_message": "收到新訊息",
       "reply": "傳送",
       "reply_placeholder": "輸入回覆",
@@ -389,8 +388,7 @@
       "open": "開啟會話",
       "transfer_completed": "檔案傳輸完成",
       "loading": "正在讀取系統通知狀態…",
-      "load_failed": "讀取系統通知狀態失敗，請重試。",
-      "retry": "重試",
+      "load_failed": "讀取系統通知狀態失敗，返回 Weblink 後會自動重新檢查。",
       "error_details": "查看錯誤詳情",
       "permission_unknown": "系統尚未提供此應用程式的通知狀態，通知將依系統設定處理。"
     }
@@ -445,6 +443,8 @@
     "global_mute": "全局靜音",
     "global_unmute": "全局取消靜音",
     "loading_state": {
+      "codec_unsupported": "無法播放分享畫面",
+      "connection_failed": "分享畫面連線中斷",
       "initial": "初始化中...",
       "loading": "載入中...",
       "waiting": "緩衝中...",

@@ -649,42 +649,54 @@ it("keeps one remote control action across request, cancellation, active control
   view.unmount();
 });
 
-it("offers request and cancel on the avatar and hides them when hosting capability is withdrawn", () => {
-  const send = vi.fn();
-  const control = new ScreenControlRequest(send);
-  fixture.screenControl = control;
-  render(() => (
-    <MeetingTile clientId="host" name="Host" pinned />
-  ));
-  expect(
-    screen.queryByRole("button", {
-      name: "remote_control.request",
-    }),
-  ).toBeNull();
-  control.setAvailable(true);
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "remote_control.request",
-    }),
-  );
-  expect(send.mock.calls[0][0].type).toBe(
-    "control-request",
-  );
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "remote_control.cancel",
-    }),
-  );
-  expect(send.mock.calls[1][0].type).toBe("control-cancel");
-  control.setAvailable(false);
-  expect(
-    screen.queryByRole("button", {
-      name: "remote_control.request",
-    }),
-  ).toBeNull();
-  expect(
-    screen.queryByRole("button", {
-      name: "remote_control.reconnecting",
-    }),
-  ).toBeNull();
-});
+it.each([false, true])(
+  "requests control from the avatar without promoting it (pinned=%s)",
+  (pinned) => {
+    const send = vi.fn();
+    const activate = vi.fn();
+    const control = new ScreenControlRequest(send);
+    fixture.screenControl = control;
+    render(() => (
+      <MeetingTile
+        clientId="host"
+        name="Host"
+        pinned={pinned}
+        onActivate={activate}
+      />
+    ));
+    expect(
+      screen.queryByRole("button", {
+        name: "remote_control.request",
+      }),
+    ).toBeNull();
+    control.setAvailable(true);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "remote_control.request",
+      }),
+    );
+    expect(send.mock.calls[0][0].type).toBe(
+      "control-request",
+    );
+    expect(activate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "remote_control.cancel",
+      }),
+    );
+    expect(send.mock.calls[1][0].type).toBe(
+      "control-cancel",
+    );
+    control.setAvailable(false);
+    expect(
+      screen.queryByRole("button", {
+        name: "remote_control.request",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "remote_control.reconnecting",
+      }),
+    ).toBeNull();
+  },
+);

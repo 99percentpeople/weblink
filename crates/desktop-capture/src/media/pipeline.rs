@@ -47,6 +47,8 @@ pub struct PipelineStats {
     /// Capture callback arrival to CPU processing, excluding intentional static repeats.
     pub capture_wait: StageStats,
     pub encoders: Vec<super::latency::EncoderPipelineStats>,
+    /// Bounded diagnostics for failed peer encoders; no frame or SDP contents.
+    pub peer_errors: Vec<String>,
 }
 
 #[cfg(any(windows, test))]
