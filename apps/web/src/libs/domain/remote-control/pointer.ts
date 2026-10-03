@@ -1,5 +1,6 @@
 import { createUuid } from "../ids";
 import type { TrackpadEvent } from "./trackpad-types";
+import type { TouchSampleRate } from "./touch-options";
 import type { RemoteKeyEvent } from "./keyboard";
 import {
   validRemoteText,
@@ -459,14 +460,20 @@ export class RemotePointer extends EventTarget {
       movement,
     );
   }
-  move(position: PointerPosition) {
+  move(
+    position: PointerPosition,
+    sampleRate: TouchSampleRate = 120,
+  ) {
     if (!this.active) return;
     this.cursor = { ...position };
     this.latest = position;
-    this.scheduleMove();
+    this.scheduleMove(sampleRate);
   }
   /** Deltas must use the ordered channel: losing one would lose part of the gesture. */
-  trackpad(action: TrackpadEvent) {
+  trackpad(
+    action: TrackpadEvent,
+    sampleRate: TouchSampleRate = 120,
+  ) {
     if (!this.active || !this.relativeAvailable) return;
     this.latest = undefined;
     if (action.type === "move") {
@@ -478,7 +485,7 @@ export class RemotePointer extends EventTarget {
         x: Math.max(-1, Math.min(1, previous.x + action.x)),
         y: Math.max(-1, Math.min(1, previous.y + action.y)),
       };
-      this.scheduleMove();
+      this.scheduleMove(sampleRate);
     } else {
       // A tap/drag/wheel must follow all earlier relative movement.
       this.flushMove();
@@ -499,13 +506,16 @@ export class RemotePointer extends EventTarget {
       });
     else if (p) this.input({ type: "move", ...p });
   }
-  private scheduleMove() {
+  private scheduleMove(sampleRate: TouchSampleRate) {
     if (this.moveTimer) return;
     this.moveTimer = setTimeout(
       () => this.flushMove(),
       Math.max(
         0,
-        1000 / 120 - (performance.now() - this.lastMove),
+        Math.ceil(
+          1000 / sampleRate -
+            (performance.now() - this.lastMove),
+        ),
       ),
     );
   }

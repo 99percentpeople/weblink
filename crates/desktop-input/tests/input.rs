@@ -667,6 +667,9 @@ fn touch(
         x: 0.,
         y: 1.,
         phase,
+        pressure: None,
+        width: None,
+        height: None,
     }
 }
 #[test]
@@ -684,7 +687,9 @@ fn native_touch_frames_map_physical_pixels_and_release_on_pause_expiry_revoke_an
                 id: 1,
                 x: -1920,
                 y: 1319,
-                phase: Down
+                phase: Down,
+                pressure: None,
+                contact: None,
             }
         );
         let before = f.0.borrow().touch_cancels;

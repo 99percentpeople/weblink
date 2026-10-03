@@ -125,6 +125,7 @@ function touch(
   id: number,
   x: number,
   y: number,
+  properties: Partial<PointerEvent> = {},
 ) {
   const event = new Event(`pointer${phase}`, {
     bubbles: true,
@@ -135,6 +136,7 @@ function touch(
     pointerId: id,
     clientX: x,
     clientY: y,
+    ...properties,
   });
   fireEvent(surface(), event);
   return event;
@@ -164,15 +166,19 @@ it("uses the host relative capability even when negotiated after the overlay mou
   touch("down", 1, 60, 80);
   touch("move", 1, 80, 90);
   touch("up", 1, 80, 90);
-  expect(fixture.control.trackpad).toHaveBeenCalledWith({
-    type: "move",
-    x: 0.1,
-    y: 0.1,
-  });
+  expect(fixture.control.trackpad).toHaveBeenCalledWith(
+    {
+      type: "move",
+      x: 0.1,
+      y: 0.1,
+    },
+    120,
+  );
   touch("down", 1, 60, 80);
   touch("up", 1, 60, 80);
   expect(fixture.control.trackpad).toHaveBeenLastCalledWith(
     { type: "button", button: 0, down: false },
+    120,
   );
   expect(fixture.control.input).not.toHaveBeenCalled();
   expect(fixture.control.move).not.toHaveBeenCalled();
@@ -298,6 +304,121 @@ it("persists gesture choices and preserves them across direct mode", async () =>
   expect(appState.options.remoteTouch.twoFingerScroll).toBe(
     false,
   );
+});
+
+it("offers sampling rates in both modes and remembers the direct touch property switch", async () => {
+  render(() => <RemoteControlSettings />);
+  expect(appState.options.remoteTouch.sampleRate).toBe(120);
+  fireEvent.keyDown(
+    screen.getByRole("button", {
+      name: /setting.remote_control.sample_rate.title/,
+    }),
+    { key: "ArrowDown" },
+  );
+  fireEvent.click(
+    await screen.findByRole("option", { name: "240 Hz" }),
+  );
+  expect(appState.options.remoteTouch.sampleRate).toBe(240);
+  setAppState("options", "remoteTouch", "mode", "direct");
+  expect(
+    screen.getByRole("button", {
+      name: /setting.remote_control.sample_rate.title/,
+    }),
+  ).toHaveTextContent("240 Hz");
+  expect(
+    screen.getByRole("switch", {
+      name: "setting.remote_control.forwardProperties",
+    }),
+  ).not.toBeChecked();
+  fireEvent.click(
+    screen.getByRole("switch", {
+      name: "setting.remote_control.forwardProperties",
+    }),
+  );
+  expect(
+    appState.options.remoteTouch.forwardProperties,
+  ).toBe(true);
+  setAppState("options", "remoteTouch", "mode", "trackpad");
+  setAppState("options", "remoteTouch", "mode", "direct");
+  expect(
+    screen.getByRole("switch", {
+      name: "setting.remote_control.forwardProperties",
+    }),
+  ).toBeChecked();
+});
+
+it("forwards contact properties using video content size and cancels the gesture when the switch changes", () => {
+  setAppState("options", "remoteTouch", "mode", "direct");
+  setAppState(
+    "options",
+    "remoteTouch",
+    "forwardProperties",
+    true,
+  );
+  render(() => <RemoteControlOverlay enabled />);
+  const properties = {
+    pressure: 0.3,
+    width: 20,
+    height: 15,
+  };
+  touch("down", 1, 100, 100, properties);
+  expect(fixture.control.input).toHaveBeenLastCalledWith({
+    type: "touch",
+    contacts: [
+      {
+        id: 1,
+        x: 0.5,
+        y: 0.5,
+        phase: "down",
+        pressure: 0.3,
+        width: 0.1,
+        height: 0.15,
+      },
+    ],
+  });
+  setAppState(
+    "options",
+    "remoteTouch",
+    "forwardProperties",
+    false,
+  );
+  expect(
+    fixture.control.input.mock.calls.at(-1)[0].contacts[0]
+      .phase,
+  ).toBe("cancel");
+  touch("down", 2, 100, 100, properties);
+  expect(fixture.control.input).toHaveBeenLastCalledWith({
+    type: "touch",
+    contacts: [{ id: 1, x: 0.5, y: 0.5, phase: "down" }],
+  });
+  touch("up", 2, 100, 100, { ...properties, pressure: 0 });
+});
+
+it("does not misinterpret coalesced out-and-back motion as a tap and applies the selected trackpad rate", () => {
+  setAppState("options", "remoteTouch", "sampleRate", 30);
+  render(() => <RemoteControlOverlay enabled />);
+  touch("down", 1, 60, 80);
+  const samples = [100, 60].map((clientX) =>
+    Object.assign(new Event("pointermove"), {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX,
+      clientY: 80,
+    }),
+  ) as PointerEvent[];
+  touch("move", 1, 60, 80, {
+    getCoalescedEvents: () => samples,
+  });
+  touch("up", 1, 60, 80);
+  expect(fixture.control.move).toHaveBeenCalledTimes(2);
+  expect(
+    fixture.control.move.mock.calls.at(-1)[0].x,
+  ).toBeCloseTo(0.5);
+  expect(fixture.control.move).toHaveBeenLastCalledWith(
+    { x: expect.any(Number), y: 0.5 },
+    30,
+  );
+  expect(fixture.control.input).not.toHaveBeenCalled();
 });
 
 it("reports unsupported native scrolling once per gesture without wheel fallback or losing control", () => {

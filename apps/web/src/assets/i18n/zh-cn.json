@@ -266,6 +266,12 @@
         "direct_description": "将触点映射到远端屏幕，发送真正的触屏事件，支持多点触控和长按。手势由 Windows 和远端应用处理，需要对端支持触屏输入。"
       },
       "pointer_speed": "光标移动速度",
+      "sample_rate": {
+        "title": "触摸采样率",
+        "description": "设置移动和滚动的最高发送频率。更高的频率可改善流畅度，也会增加流量；实际频率取决于设备、浏览器和网络。按下和抬起始终立即发送。"
+      },
+      "forwardProperties": "转发触点属性",
+      "touch_properties_description": "直接触控时转发浏览器提供的压力和接触面积。关闭后使用系统默认属性，不影响多点触控。",
       "scroll_speed": "双指滚动速度",
       "tapToClick": "轻点模拟左键单击",
       "twoFingerRightClick": "双指轻点模拟右键",

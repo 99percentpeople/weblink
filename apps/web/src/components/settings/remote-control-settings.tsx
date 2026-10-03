@@ -25,10 +25,12 @@ import {
   SwitchThumb,
 } from "@/components/ui/switch";
 import {
+  TOUCH_SAMPLE_RATES,
   resolveRemoteTouchOptions,
   type LongPressAction,
   type ThreeFingerTapAction,
   type TouchMode,
+  type TouchSampleRate,
 } from "@/libs/domain/remote-control/touch-options";
 
 import {
@@ -50,7 +52,8 @@ export default function RemoteControlSettings() {
       | "tapToClick"
       | "twoFingerRightClick"
       | "twoFingerScroll"
-      | "naturalScroll",
+      | "naturalScroll"
+      | "forwardProperties",
   ) => (
     <Switch
       class="flex w-full items-center justify-between gap-3"
@@ -150,6 +153,48 @@ export default function RemoteControlSettings() {
           {t(`${prefix}mode.${options().mode}_description`)}
         </p>
       </div>
+      <div class="flex flex-col gap-2">
+        <Label id="remote-touch-sample-rate">
+          {t(`${prefix}sample_rate.title`)}
+        </Label>
+        <Select<TouchSampleRate>
+          modal
+          disallowEmptySelection
+          options={[...TOUCH_SAMPLE_RATES]}
+          value={options().sampleRate}
+          onChange={(value) =>
+            value &&
+            setAppOptions(
+              "remoteTouch",
+              "sampleRate",
+              value,
+            )
+          }
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue} Hz
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger aria-labelledby="remote-touch-sample-rate">
+            <SelectValue<TouchSampleRate>>
+              {(state) => `${state.selectedOption()} Hz`}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p class="muted">
+          {t(`${prefix}sample_rate.description`)}
+        </p>
+      </div>
+      <Show when={options().mode === "direct"}>
+        <div class="flex flex-col gap-2">
+          {toggle("forwardProperties")}
+          <p class="muted">
+            {t(`${prefix}touch_properties_description`)}
+          </p>
+        </div>
+      </Show>
       <Show when={options().mode === "trackpad"}>
         <Slider
           minValue={0.25}

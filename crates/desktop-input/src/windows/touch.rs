@@ -6,10 +6,48 @@ use std::{collections::BTreeMap, thread, time::Duration};
 use windows::{
     core::HRESULT,
     Win32::{
-        Foundation::{ERROR_NOT_READY, POINT},
-        UI::{Controls::*, Input::Pointer::*, WindowsAndMessaging::PT_TOUCH},
+        Foundation::{ERROR_NOT_READY, POINT, RECT},
+        UI::{
+            Controls::*,
+            Input::Pointer::*,
+            WindowsAndMessaging::{PT_TOUCH, TOUCH_MASK_CONTACTAREA, TOUCH_MASK_PRESSURE},
+        },
     },
 };
+
+fn touch_info(a: &Action) -> POINTER_TOUCH_INFO {
+    let mut info = POINTER_TOUCH_INFO {
+        pointerInfo: POINTER_INFO {
+            pointerType: PT_TOUCH,
+            pointerId: u32::from(a.id),
+            ptPixelLocation: POINT { x: a.x, y: a.y },
+            pointerFlags: match a.phase {
+                Phase::Down => POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT,
+                Phase::Update => {
+                    POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
+                }
+                Phase::Up => POINTER_FLAG_UP,
+                Phase::Cancel => POINTER_FLAG_UP | POINTER_FLAG_CANCELED,
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    if let Some(pressure) = a.pressure {
+        info.touchMask |= TOUCH_MASK_PRESSURE;
+        info.pressure = pressure;
+    }
+    if let Some(area) = a.contact {
+        info.touchMask |= TOUCH_MASK_CONTACTAREA;
+        info.rcContact = RECT {
+            left: area.left,
+            top: area.top,
+            right: (i64::from(area.left) + i64::from(area.width)) as i32,
+            bottom: (i64::from(area.top) + i64::from(area.height)) as i32,
+        };
+    }
+    info
+}
 
 /// A dedicated OS device owns only this worker's touch contacts.
 pub(super) struct TouchDevice {
@@ -44,29 +82,7 @@ impl TouchDevice {
             .map(|a| POINTER_TYPE_INFO {
                 r#type: PT_TOUCH,
                 Anonymous: POINTER_TYPE_INFO_0 {
-                    touchInfo: POINTER_TOUCH_INFO {
-                        pointerInfo: POINTER_INFO {
-                            pointerType: PT_TOUCH,
-                            pointerId: u32::from(a.id),
-                            ptPixelLocation: POINT { x: a.x, y: a.y },
-                            pointerFlags: match a.phase {
-                                Phase::Down => {
-                                    POINTER_FLAG_DOWN
-                                        | POINTER_FLAG_INRANGE
-                                        | POINTER_FLAG_INCONTACT
-                                }
-                                Phase::Update => {
-                                    POINTER_FLAG_UPDATE
-                                        | POINTER_FLAG_INRANGE
-                                        | POINTER_FLAG_INCONTACT
-                                }
-                                Phase::Up => POINTER_FLAG_UP,
-                                Phase::Cancel => POINTER_FLAG_UP | POINTER_FLAG_CANCELED,
-                            },
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
+                    touchInfo: touch_info(a),
                 },
             })
             .collect();
@@ -111,6 +127,12 @@ impl TouchDevice {
                     let a = actions.iter().find(|a| a.id == p.id).unwrap_or(p);
                     Action {
                         phase: Phase::Update,
+                        // Preserve held pressure until the separate UP frame.
+                        pressure: if a.phase == Phase::Up {
+                            p.pressure
+                        } else {
+                            a.pressure
+                        },
                         ..*a
                     }
                 })
@@ -159,5 +181,53 @@ impl TouchDevice {
 impl Drop for TouchDevice {
     fn drop(&mut self) {
         self.destroy();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::input::Rect;
+
+    #[test]
+    fn touch_injection_masks_only_forwarded_properties_and_keeps_phase_flags() {
+        let mut action = Action {
+            id: 1,
+            x: -500,
+            y: 500,
+            phase: Phase::Down,
+            pressure: None,
+            contact: None,
+        };
+        assert_eq!(touch_info(&action).touchMask, 0);
+        action.pressure = Some(256);
+        action.contact = Some(Rect {
+            left: -510,
+            top: 485,
+            width: 20,
+            height: 30,
+        });
+        let info = touch_info(&action);
+        assert_eq!(info.touchMask, TOUCH_MASK_PRESSURE | TOUCH_MASK_CONTACTAREA);
+        assert_eq!(info.pressure, 256);
+        assert_eq!(
+            (
+                info.rcContact.left,
+                info.rcContact.top,
+                info.rcContact.right,
+                info.rcContact.bottom
+            ),
+            (-510, 485, -490, 515)
+        );
+        assert_eq!(
+            info.pointerInfo.pointerFlags,
+            POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
+        );
+        action.phase = Phase::Up;
+        action.pressure = Some(0);
+        let info = touch_info(&action);
+        assert_eq!(info.pointerInfo.pointerFlags, POINTER_FLAG_UP);
+        assert_eq!(info.pressure, 0);
+        assert_ne!(info.touchMask & TOUCH_MASK_PRESSURE, 0);
     }
 }

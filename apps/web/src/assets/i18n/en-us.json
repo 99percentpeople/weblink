@@ -266,6 +266,12 @@
         "direct_description": "Send real touch contacts at the corresponding screen positions, including multi-touch and press-and-hold. Gestures are handled by Windows and the remote app. The remote host must support touch input."
       },
       "pointer_speed": "Cursor speed",
+      "sample_rate": {
+        "title": "Touch sample rate",
+        "description": "Set the maximum send rate for movement and scrolling. Higher rates can improve smoothness and use more bandwidth; the actual rate depends on the device, browser, and network. Press and release are always sent immediately."
+      },
+      "forwardProperties": "Forward touch properties",
+      "touch_properties_description": "Forward browser-reported pressure and contact area in direct touch mode. Turn off to use system defaults; multitouch remains available.",
       "scroll_speed": "Two-finger scroll speed",
       "tapToClick": "Tap to left-click",
       "twoFingerRightClick": "Two-finger tap to right-click",

@@ -2,9 +2,11 @@ import {
   MAX_TOUCH_CONTACTS,
   type TouchContact,
   type TouchPhase,
+  type TouchSample,
 } from "./touch-types";
 import type { PointerPosition } from "./pointer";
-type Contact = PointerPosition & { id: number };
+import type { TouchSampleRate } from "./touch-options";
+type Contact = TouchSample & { id: number };
 /** Complete contact frames stay ordered; stationary updates preserve OS press-and-hold gestures. */
 export class DirectTouch {
   private contacts = new Map<number, Contact>();
@@ -17,11 +19,9 @@ export class DirectTouch {
     private readonly send: (
       contacts: TouchContact[],
     ) => void,
+    private readonly sampleRate: TouchSampleRate = 120,
   ) {}
-  down(
-    pointer: number,
-    position: PointerPosition,
-  ): boolean {
+  down(pointer: number, position: TouchSample): boolean {
     if (
       this.contacts.has(pointer) ||
       this.contacts.size >= MAX_TOUCH_CONTACTS
@@ -46,24 +46,44 @@ export class DirectTouch {
       }, 50);
     return true;
   }
-  move(pointer: number, position: PointerPosition) {
+  move(pointer: number, position: TouchSample) {
     const contact = this.contacts.get(pointer);
     if (
       !contact ||
-      (contact.x === position.x && contact.y === position.y)
+      (contact.x === position.x &&
+        contact.y === position.y &&
+        contact.pressure === position.pressure &&
+        contact.width === position.width &&
+        contact.height === position.height)
     )
       return;
-    Object.assign(contact, position);
+    this.contacts.set(pointer, {
+      ...position,
+      id: contact.id,
+    });
     this.dirty = true;
     if (!this.moveTimer)
       this.moveTimer = setTimeout(
         () => this.flush(),
-        1000 / 60,
+        Math.max(
+          0,
+          Math.ceil(
+            1000 / this.sampleRate -
+              (performance.now() - this.lastFrame),
+          ),
+        ),
       );
   }
   up(pointer: number, position?: PointerPosition) {
-    if (!this.contacts.has(pointer)) return;
-    if (position) this.move(pointer, position);
+    const contact = this.contacts.get(pointer);
+    if (!contact) return;
+    // Releasing pressure must not become an in-contact update before UP.
+    if (position)
+      this.move(pointer, {
+        ...contact,
+        x: position.x,
+        y: position.y,
+      });
     this.flush();
     if (!this.contacts.has(pointer)) return;
     this.frame(pointer, "up");
@@ -85,6 +105,11 @@ export class DirectTouch {
     this.send(
       [...this.contacts].map(([key, contact]) => ({
         ...contact,
+        ...(key === pointer &&
+        phase === "up" &&
+        contact.pressure !== undefined
+          ? { pressure: 0 }
+          : {}),
         phase: key === pointer ? phase : "update",
       })),
     );

@@ -878,19 +878,26 @@ phone browser's `contextmenu` event, with no application timer or delay preferen
 single-finger touch defaults are preserved so the browser can recognize it. It
 applies only to a stationary single-finger gesture. Mouse right clicks continue
 through pointer events, and direct touch leaves long-press recognition to Windows.
-Pointer/scroll speed, direction and gesture switches are local preferences. Changes release the current gesture and
-apply immediately.
+Pointer/scroll speed, direction and gesture switches are local preferences. The
+touch sample rate (30/60/120/240 Hz, default 120 Hz) limits movement and scroll
+updates in both modes; actual delivery also depends on browser samples, timers
+and transport backpressure. Down/up/cancel transitions and their final movement
+flush bypass this limit. Changes release the current gesture and apply immediately.
+When available, actual coalesced pointer samples are processed in order for gesture
+recognition; predicted samples are never sent. Direct movement still coalesces to
+the latest complete contact frame at the selected rate, rather than replaying
+every historical position.
 
 Hosts advertise `ready.relativePointer` for native trackpad gestures. These use
 ordered `trackpad` input events: move deltas are fractions of the shared display,
 and buttons/wheels carry no cached absolute coordinate. The native input thread
 reads the actual physical cursor for each event, preserves subpixel motion and
-constrains output to the shared display. Deltas coalesce at 120 updates/s but use
+constrains output to the shared display. Deltas coalesce at the selected rate but use
 the reliable channel so individual displacement is never lost to packet loss.
 Older hosts retain absolute pointer emulation for movement and clicks.
 Two-finger scrolling requires the additive `ready.touchpadPan` capability and uses
 ordered `trackpad` pan start/update/end/cancel events. Updates carry cumulative
-CSS-pixel centroid displacement, coalesced at 120 Hz, with the configured speed
+CSS-pixel centroid displacement, coalesced at the selected rate, with the configured speed
 and natural-scroll direction. Windows uses a dedicated `PT_TOUCHPAD` device via
 `CreateSyntheticPointerDevice2` with physical-size and gesture-only flags; it
 handles scroll recognition and inertia. Capability detection checks the actual
@@ -902,11 +909,24 @@ Direct touch requires the host's additive `ready.touchContacts` capability. It
 sends real Windows `PT_TOUCH` contacts using a dedicated synthetic pointer device,
 not mouse emulation. Hosts without this capability can still use trackpad mode.
 Each ordered frame includes every active contact, with up to ten normalized
-positions and explicit down/update/up/cancel phases. Movement coalesces to 60
-frames/s; stationary updates preserve native press-and-hold recognition. Gesture
+positions and explicit down/update/up/cancel phases. Movement uses the selected
+sample rate; stationary updates preserve native press-and-hold recognition. Gesture
 interpretation belongs to Windows and the target application. Letterboxes never
 generate direct contacts; positions map to physical display pixels without an
 extra DPI scale factor.
+
+Direct mode's touch-property switch (disabled by default) forwards browser-reported
+pressure and contact area. Optional `pressure` is in [0, 1]; `width` and `height`
+must be a pair in (0, 1], normalized against the displayed video content. Unknown
+contact geometry (the browser's 1×1 default) is omitted. The host validates these
+fields, maps pressure to Windows' 0–1024 range and clips physical contact rectangles
+to the shared display. Injection sets only the corresponding `TOUCH_MASK_*` bits;
+absent properties retain native defaults. Stationary property changes still produce
+updates, and UP releases pressure after any final movement. These are additive
+fields: older senders omit them and older hosts ignore them. Trackpad mode continues
+to recognize mouse and scroll gestures locally; it does not forward raw touchpad
+contacts or touch pressure. Browser-reported properties may be fixed fallback
+values; forwarding them does not establish hardware pressure or area support.
 
 The native engine validates contact ownership and transitions before injection.
 Pause, cancellation, mode changes, revoke, session loss and lease expiry release

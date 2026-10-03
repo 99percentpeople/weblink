@@ -8,6 +8,7 @@ import {
 import { Trackpad } from "@/libs/domain/remote-control/trackpad";
 import { DirectTouch } from "@/libs/domain/remote-control/direct-touch";
 import {
+  TOUCH_SAMPLE_RATES,
   defaultRemoteTouchOptions,
   resolveRemoteTouchOptions,
 } from "@/libs/domain/remote-control/touch-options";
@@ -53,7 +54,7 @@ it("moves relative to the cursor with speed and clamps to the remote display", (
   expect(input).not.toHaveBeenCalled();
 });
 it("taps click at the cursor and two finger taps produce only right click", () => {
-  const { p, input } = pad();
+  const { p, input, move } = pad();
   p.down(1, 40, 40);
   p.up(1, 40, 40);
   expect(
@@ -77,6 +78,7 @@ it("taps click at the cursor and two finger taps produce only right click", () =
     x: 0.5,
     y: 0.5,
   });
+  expect(move).not.toHaveBeenCalled();
 });
 it("sends a native pan with no wheel events, cursor movement, or click after scrolling", () => {
   const { p, move, input, pan } = pad();
@@ -336,6 +338,8 @@ it("restores old preferences with safe defaults and validates persisted values",
       longPress: "invalid",
       threeFingerTap: "invalid",
       longPressDelay: -5,
+      sampleRate: 500,
+      forwardProperties: "false",
     }),
   ).toMatchObject({
     mode: "direct",
@@ -344,7 +348,146 @@ it("restores old preferences with safe defaults and validates persisted values",
     tapToClick: true,
     longPress: "drag",
     threeFingerTap: "keyboard",
+    sampleRate: 120,
+    forwardProperties: false,
   });
+  expect(
+    resolveRemoteTouchOptions({
+      sampleRate: 30,
+      forwardProperties: true,
+    }),
+  ).toMatchObject({
+    sampleRate: 30,
+    forwardProperties: true,
+  });
+});
+
+it.each(TOUCH_SAMPLE_RATES)(
+  "samples direct movement at %i Hz and flushes final movement before immediate release",
+  (sampleRate) => {
+    const send = vi.fn();
+    const d = new DirectTouch(send, sampleRate);
+    const interval = Math.ceil(1000 / sampleRate);
+    d.down(1, { x: 0.1, y: 0.2 });
+    d.move(1, { x: 0.2, y: 0.2 });
+    d.move(1, { x: 0.3, y: 0.2 });
+    vi.advanceTimersByTime(interval - 1);
+    expect(send).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith([
+      { id: 1, x: 0.3, y: 0.2, phase: "update" },
+    ]);
+    d.move(1, { x: 0.4, y: 0.2 });
+    d.up(1);
+    expect(
+      send.mock.calls
+        .slice(-2)
+        .map(([frame]) => frame[0].phase),
+    ).toEqual(["update", "up"]);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it.each(TOUCH_SAMPLE_RATES)(
+  "samples trackpad scrolling at %i Hz and ends without waiting for the next sample",
+  (sampleRate) => {
+    const { p, pan } = pad({ sampleRate });
+    p.down(1, 40, 40);
+    p.down(2, 80, 40);
+    p.move(1, 40, 60);
+    p.move(2, 80, 60);
+    expect(
+      pan.mock.calls.map(([event]) => event.phase),
+    ).toEqual(["start"]);
+    vi.advanceTimersByTime(
+      Math.ceil(1000 / sampleRate) - 1,
+    );
+    expect(pan).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: 0,
+      y: 20,
+    });
+    p.move(1, 40, 70);
+    p.move(2, 80, 70);
+    p.up(1, 40, 70);
+    p.up(2, 80, 70);
+    expect(
+      pan.mock.calls.slice(-2).map(([event]) => event),
+    ).toEqual([
+      { phase: "update", x: 0, y: 30 },
+      { phase: "end" },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it("forwards stationary property changes and releases pressure only in the up frame", () => {
+  const send = vi.fn();
+  const d = new DirectTouch(send, 30);
+  d.down(1, {
+    x: 0.5,
+    y: 0.5,
+    pressure: 0.2,
+    width: 0.1,
+    height: 0.2,
+  });
+  d.move(1, {
+    x: 0.5,
+    y: 0.5,
+    pressure: 0.8,
+    width: 0.15,
+    height: 0.25,
+  });
+  vi.advanceTimersByTime(34);
+  expect(send.mock.calls.at(-1)?.[0][0]).toMatchObject({
+    phase: "update",
+    pressure: 0.8,
+    width: 0.15,
+    height: 0.25,
+  });
+  d.up(1, { x: 0.6, y: 0.5 });
+  expect(
+    send.mock.calls
+      .slice(-2)
+      .map(([frame]) => [
+        frame[0].phase,
+        frame[0].x,
+        frame[0].pressure,
+      ]),
+  ).toEqual([
+    ["update", 0.6, 0.8],
+    ["up", 0.6, 0],
+  ]);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("drops obsolete properties and immediately cancels queued touch movement", () => {
+  const send = vi.fn();
+  const d = new DirectTouch(send, 30);
+  d.down(1, {
+    x: 0.5,
+    y: 0.5,
+    pressure: 0.2,
+    width: 0.1,
+    height: 0.2,
+  });
+  d.move(1, { x: 0.5, y: 0.5 });
+  vi.advanceTimersByTime(34);
+  expect(send).toHaveBeenLastCalledWith([
+    { id: 1, x: 0.5, y: 0.5, phase: "update" },
+  ]);
+  d.move(1, { x: 0.6, y: 0.5 });
+  d.cancel();
+  expect(send).toHaveBeenCalledTimes(3);
+  expect(send).toHaveBeenLastCalledWith([
+    { id: 1, x: 0.6, y: 0.5, phase: "cancel" },
+  ]);
+  vi.advanceTimersByTime(100);
+  expect(send).toHaveBeenCalledTimes(3);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("does not start a new finger after an interrupted movement flush", () => {

@@ -1,4 +1,9 @@
 export type TouchMode = "trackpad" | "direct";
+export const TOUCH_SAMPLE_RATES = [
+  30, 60, 120, 240,
+] as const;
+export type TouchSampleRate =
+  (typeof TOUCH_SAMPLE_RATES)[number];
 export type LongPressAction =
   | "drag"
   | "right-click"
@@ -6,6 +11,8 @@ export type LongPressAction =
 export type ThreeFingerTapAction = "keyboard" | "none";
 export interface RemoteTouchOptions {
   mode: TouchMode;
+  sampleRate: TouchSampleRate;
+  forwardProperties: boolean;
   pointerSpeed: number;
   scrollSpeed: number;
   tapToClick: boolean;
@@ -18,6 +25,8 @@ export interface RemoteTouchOptions {
 export const defaultRemoteTouchOptions: Readonly<RemoteTouchOptions> =
   {
     mode: "trackpad",
+    sampleRate: 120,
+    forwardProperties: false,
     pointerSpeed: 1,
     scrollSpeed: 1,
     tapToClick: true,
@@ -49,11 +58,18 @@ export function resolveRemoteTouchOptions(
       | "tapToClick"
       | "twoFingerRightClick"
       | "twoFingerScroll"
-      | "naturalScroll",
+      | "naturalScroll"
+      | "forwardProperties",
   ) =>
     typeof v[key] === "boolean" ? v[key] : defaults[key];
   return {
     mode: v.mode === "direct" ? "direct" : "trackpad",
+    sampleRate: TOUCH_SAMPLE_RATES.includes(
+      v.sampleRate as TouchSampleRate,
+    )
+      ? (v.sampleRate as TouchSampleRate)
+      : defaults.sampleRate,
+    forwardProperties: boolean("forwardProperties"),
     pointerSpeed: number("pointerSpeed", 0.25, 3),
     scrollSpeed: number("scrollSpeed", 0.25, 3),
     tapToClick: boolean("tapToClick"),

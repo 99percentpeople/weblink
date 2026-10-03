@@ -12,6 +12,11 @@ import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
 import { Trackpad } from "@/libs/domain/remote-control/trackpad";
 import { DirectTouch } from "@/libs/domain/remote-control/direct-touch";
+import {
+  touchMovementSamples,
+  touchSample,
+} from "@/libs/domain/remote-control/touch-sampling";
+import type { TrackpadEvent } from "@/libs/domain/remote-control/trackpad-types";
 import { ThreeFingerTap } from "@/libs/domain/remote-control/three-finger-tap";
 import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import {
@@ -207,12 +212,13 @@ export function RemoteControlOverlay(props: {
     let warnedPan = false;
     const pad = new Trackpad(
       {
-        move: (p) => c.move(p),
+        move: (p) => c.move(p, options.sampleRate),
         input: (e) => c.input(e),
         position: () => c.position(),
         get relative() {
           return c.supportsRelativePointer()
-            ? c.trackpad.bind(c)
+            ? (event: TrackpadEvent) =>
+                c.trackpad(event, options.sampleRate)
             : undefined;
         },
         pan: (gesture) => {
@@ -233,8 +239,9 @@ export function RemoteControlOverlay(props: {
       },
       options,
     );
-    const touch = new DirectTouch((contacts) =>
-      c.input({ type: "touch", contacts }),
+    const touch = new DirectTouch(
+      (contacts) => c.input({ type: "touch", contacts }),
+      options.sampleRate,
     );
     trackpad = pad;
     direct = touch;
@@ -364,7 +371,15 @@ export function RemoteControlOverlay(props: {
       const accepted =
         threeFingerTap.consumed ||
         (isDirect
-          ? direct?.down(id, p!)
+          ? direct?.down(
+              id,
+              touchSample(
+                event,
+                p!,
+                contentSize(),
+                touchOptions().forwardProperties,
+              ),
+            )
           : trackpad?.down(
               id,
               event.clientX,
@@ -396,7 +411,16 @@ export function RemoteControlOverlay(props: {
         const p = point(event, true);
         if (!p) {
           direct?.cancel();
-        } else if (phase === "move") direct?.move(id, p);
+        } else if (phase === "move")
+          direct?.move(
+            id,
+            touchSample(
+              event,
+              p,
+              contentSize(),
+              touchOptions().forwardProperties,
+            ),
+          );
         else direct?.up(id, p);
       } else if (!consumed && phase === "move")
         trackpad?.move(id, event.clientX, event.clientY);
@@ -671,7 +695,13 @@ export function RemoteControlOverlay(props: {
               resetInput();
           }}
           onPointerMove={(e) => {
-            if (touch(e, "move")) return;
+            if (e.pointerType === "touch") {
+              e.preventDefault();
+              e.stopPropagation();
+              for (const sample of touchMovementSamples(e))
+                touch(sample, "move");
+              return;
+            }
             if (
               captureMode() ||
               e.pointerType !== "mouse" ||

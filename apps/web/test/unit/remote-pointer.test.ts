@@ -12,6 +12,7 @@ import {
   POINTER_CHANNEL,
   videoPosition,
 } from "@/libs/domain/remote-control/pointer";
+import { TOUCH_SAMPLE_RATES } from "@/libs/domain/remote-control/touch-options";
 class Channel extends EventTarget {
   readyState = "open";
   bufferedAmount = 0;
@@ -112,6 +113,62 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it.each(TOUCH_SAMPLE_RATES)(
+    "samples absolute and relative touchpad movement at %i Hz",
+    (sampleRate) => {
+      const { c, r, m, approve, activate } = setup(
+        10,
+        true,
+      );
+      approve();
+      activate();
+      const interval = Math.ceil(1000 / sampleRate);
+      c.move({ x: 0.1, y: 0.2 }, sampleRate);
+      c.move({ x: 0.3, y: 0.4 }, sampleRate);
+      vi.advanceTimersByTime(interval - 1);
+      expect(m.sent).toHaveLength(0);
+      vi.advanceTimersByTime(1);
+      expect(m.sent).toHaveLength(1);
+      expect(m.sent[0].event).toEqual({
+        type: "move",
+        x: 0.3,
+        y: 0.4,
+      });
+      const before = r.sent.length;
+      c.trackpad(
+        { type: "move", x: 0.1, y: 0.1 },
+        sampleRate,
+      );
+      c.trackpad(
+        { type: "move", x: 0.1, y: 0.1 },
+        sampleRate,
+      );
+      vi.advanceTimersByTime(interval - 1);
+      expect(r.sent).toHaveLength(before);
+      vi.advanceTimersByTime(1);
+      expect(r.sent.at(-1).event).toEqual({
+        type: "trackpad",
+        action: { type: "move", x: 0.2, y: 0.2 },
+      });
+      c.trackpad(
+        { type: "move", x: 0.1, y: 0.1 },
+        sampleRate,
+      );
+      c.trackpad(
+        { type: "button", button: 0, down: true },
+        sampleRate,
+      );
+      expect(
+        r.sent
+          .slice(-2)
+          .map((packet) => packet.event.action.type),
+      ).toEqual(["move", "button"]);
+      c.resetInput();
+      const resetCount = r.sent.length;
+      vi.advanceTimersByTime(interval);
+      expect(r.sent).toHaveLength(resetCount);
+    },
+  );
   it("negotiates bounded Unicode text independently and sends only while active", () => {
     const event = { type: "text" as const, text: "中😀" };
     for (const [keyboard, textInput] of [

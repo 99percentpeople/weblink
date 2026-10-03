@@ -266,6 +266,12 @@
         "direct_description": "將觸點對應到遠端螢幕，傳送真正的觸控事件，支援多點觸控和長按。手勢由 Windows 與遠端應用程式處理，需要對端支援觸控輸入。"
       },
       "pointer_speed": "游標移動速度",
+      "sample_rate": {
+        "title": "觸控取樣率",
+        "description": "設定移動和捲動的最高傳送頻率。較高的頻率可改善流暢度，也會增加流量；實際頻率取決於裝置、瀏覽器和網路。按下和放開始終立即傳送。"
+      },
+      "forwardProperties": "轉發觸點屬性",
+      "touch_properties_description": "直接觸控時轉發瀏覽器提供的壓力和接觸面積。關閉後使用系統預設屬性，不影響多點觸控。",
       "scroll_speed": "雙指捲動速度",
       "tapToClick": "輕點模擬左鍵單擊",
       "twoFingerRightClick": "雙指輕點模擬右鍵",

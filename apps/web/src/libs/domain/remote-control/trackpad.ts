@@ -77,6 +77,7 @@ export class Trackpad {
     const delta = this.gesture.move(id, x, y);
     if (!delta) return;
     const { x: dx, y: dy } = delta;
+    if (!dx && !dy) return;
     if (this.gesture.movement > 8) {
       this.tap = false;
     }
@@ -84,24 +85,23 @@ export class Trackpad {
       const { width, height } = this.port.size();
       if (!(width > 0 && height > 0)) return;
       if (this.port.relative) {
-        if (dx || dy)
-          this.port.relative({
-            type: "move",
-            x: Math.max(
-              -1,
-              Math.min(
-                1,
-                (dx / width) * this.options.pointerSpeed,
-              ),
+        this.port.relative({
+          type: "move",
+          x: Math.max(
+            -1,
+            Math.min(
+              1,
+              (dx / width) * this.options.pointerSpeed,
             ),
-            y: Math.max(
-              -1,
-              Math.min(
-                1,
-                (dy / height) * this.options.pointerSpeed,
-              ),
+          ),
+          y: Math.max(
+            -1,
+            Math.min(
+              1,
+              (dy / height) * this.options.pointerSpeed,
             ),
-          });
+          ),
+        });
         return;
       }
       const clamp = (v: number) =>
@@ -126,7 +126,7 @@ export class Trackpad {
       if (this.scrolling && !this.scrollTimer)
         this.scrollTimer = setTimeout(
           () => this.flushScroll(),
-          1000 / 120,
+          Math.ceil(1000 / this.options.sampleRate),
         );
     }
   }
