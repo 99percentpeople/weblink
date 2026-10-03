@@ -45,6 +45,7 @@ pub struct MediaOptions {
     pub max_bitrate: u64,
     pub codec: Option<String>,
     pub encoder: String,
+    pub readback_buffers: u32,
     pub color_matrix: color::ColorMatrix,
     pub color_range: color::ColorRange,
     pub color_format: color::ColorFormat,
@@ -64,6 +65,7 @@ impl Default for MediaOptions {
             max_bitrate: 25 * 1024 * 1024,
             codec: None,
             encoder: "auto".into(),
+            readback_buffers: 2,
             color_matrix: Default::default(),
             color_range: Default::default(),
             color_format: Default::default(),
@@ -96,6 +98,7 @@ impl MediaOptions {
         if !(2..=3840).contains(&self.max_width)
             || !(2..=2160).contains(&self.max_height)
             || !(1..=MAX_FRAME_RATE).contains(&self.frame_rate)
+            || !(1..=3).contains(&self.readback_buffers)
             || !(128 * 1024..=150 * 1024 * 1024).contains(&self.max_bitrate)
             || !matches!(
                 self.degradation_preference.as_str(),
@@ -406,6 +409,7 @@ mod tests {
             audio: true,
             codec: Some("video/h264".into()),
             encoder: "software".into(),
+            readback_buffers: 3,
             ..Default::default()
         };
         let mut update = VideoSettings {
@@ -419,6 +423,7 @@ mod tests {
         assert!(next.audio);
         assert_eq!(next.codec, initial.codec);
         assert_eq!(next.encoder, initial.encoder);
+        assert_eq!(next.readback_buffers, 3);
         assert_eq!(next.dimensions(1920, 1080), (852, 480));
         assert_eq!(next.frame_rate, 60);
         update.frame_rate = 0;
@@ -469,6 +474,27 @@ mod tests {
                 ..Default::default()
             }
             .validate()
+            .is_err());
+        }
+    }
+    #[test]
+    fn readback_buffers_default_to_two_and_accept_only_one_to_three() {
+        let legacy: MediaOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy.readback_buffers, 2);
+        for count in [0, 1, 2, 3, 4, u32::MAX] {
+            let options: MediaOptions =
+                serde_json::from_value(serde_json::json!({ "readbackBuffers": count })).unwrap();
+            assert_eq!(options.readback_buffers, count);
+            assert_eq!(options.validate().is_ok(), (1..=3).contains(&count));
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!("2"),
+        ] {
+            assert!(serde_json::from_value::<MediaOptions>(
+                serde_json::json!({ "readbackBuffers": value }),
+            )
             .is_err());
         }
     }

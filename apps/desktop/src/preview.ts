@@ -174,13 +174,20 @@ export async function createRawPreview(
     frames++;
     return true;
   };
+  const wake = () => {
+    raf = undefined;
+    timer = undefined;
+    // Keep the display clock running while IPC/write is in flight. Scheduling
+    // only after completion adds another vsync wait to every preview frame.
+    schedule();
+    void pump();
+  };
   const schedule = () => {
-    if (closed || running) return;
+    if (closed) return;
     clearTimeout(timer);
     if (raf !== undefined) cancelAnimationFrame(raf);
-    if (document.hidden)
-      timer = setTimeout(() => void pump(), 16);
-    else raf = requestAnimationFrame(() => void pump());
+    if (document.hidden) timer = setTimeout(wake, 16);
+    else raf = requestAnimationFrame(wake);
   };
   const pump = async () => {
     if (closed || running) return;
@@ -197,10 +204,6 @@ export async function createRawPreview(
     } finally {
       running = false;
     }
-    if (closed) return;
-    // RAF is suspended in a hidden WebView. Keep PiP and borrowed tracks alive
-    // there too; the native sequence prevents copying unchanged pixels.
-    schedule();
   };
   webview.addEventListener("sharedbufferreceived", receive);
   signal?.addEventListener("abort", aborted, {
@@ -240,6 +243,9 @@ export async function createRawPreview(
       );
     }
     document.addEventListener("visibilitychange", schedule);
+    // RAF is suspended in a hidden WebView. The timer also keeps PiP and
+    // borrowed tracks alive; the sequence prevents copying unchanged pixels.
+    schedule();
     void pump();
     return {
       stream,

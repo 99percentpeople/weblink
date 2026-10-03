@@ -62,6 +62,7 @@ export type MeetingVideoSettings = Pick<
     Pick<
       AppOption,
       | "nativeScreenEncoder"
+      | "nativeReadbackBuffers"
       | "nativeColorMatrix"
       | "nativeColorRange"
       | "nativeColorFormat"
@@ -126,6 +127,11 @@ export function nativeScreenOptions(
       : 25 * 1024 * 1024,
     codec,
     encoder: options.nativeScreenEncoder ?? "auto",
+    readbackBuffers:
+      options.nativeReadbackBuffers === 1 ||
+      options.nativeReadbackBuffers === 3
+        ? options.nativeReadbackBuffers
+        : 2,
     colorFormat,
     colorMatrix:
       codec === "video/vp8"

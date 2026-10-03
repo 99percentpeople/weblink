@@ -1,4 +1,5 @@
 import type { NativeMediaCapabilitiesSnapshot } from "@/libs/state/create-app-media-capabilities";
+import type { NativeReadbackBuffers } from "@weblink/platform";
 import { createMemo, Show } from "solid-js";
 import {
   Select,
@@ -183,6 +184,44 @@ export default function NativeMediaSettings(props: {
           {label("backends_unavailable")}
         </p>
       </Show>
+      <div class="flex flex-col gap-2">
+        <Label>{label("readback_buffers")}</Label>
+        <Select<NativeReadbackBuffers>
+          modal
+          value={
+            nativeScreenOptions(appState.options)
+              .readbackBuffers
+          }
+          options={[1, 2, 3]}
+          onChange={(value) => {
+            if (value === 1 || value === 2 || value === 3)
+              setAppOptions("nativeReadbackBuffers", value);
+          }}
+          itemComponent={(item) => (
+            <SelectItem item={item.item}>
+              {label(
+                `readback_buffers_${item.item.rawValue}`,
+              )}
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger
+            aria-label={label("readback_buffers")}
+          >
+            <SelectValue<NativeReadbackBuffers>>
+              {(state) =>
+                label(
+                  `readback_buffers_${state.selectedOption()}`,
+                )
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p class="muted">
+          {label("readback_buffers_description")}
+        </p>
+      </div>
       <div class="flex flex-col gap-2">
         <Label>{label("native_encoder")}</Label>
         <Select<EncodingOption, EncodingGroup>

@@ -448,12 +448,20 @@ For unrotated sources, a D3D11 shader scales to the selected dimensions before C
 readback and color conversion. DXGI cursor coordinates and pixels follow that scale.
 Unsupported GPU processing falls back to CPU scaling; rotated displays retain the
 existing rotation path. The original texture preserves detail when increasing live
-resolution while the screen is static. Capture
-coalesces new content for a single conversion worker. Only the newest pending GPU frame
-is retained; the conversion worker owns the frame-rate cap. Software input follows
-an absolute cadence, while hardware capture starts promptly after idle and skips
-missed deadlines. An already-due hardware frame bypasses the timer; only future
-frame deadlines await the cadence limit, avoiding timer-tick rounding on ready frames.
+resolution while the screen is static. Capture coalesces new content into one
+retained GPU source. A single conversion worker admits copies at the selected
+frame rate into one, two (default), or three reusable staging slots, selected by
+**GPU readback buffers** in the native capture settings for the next share.
+More slots allow overlapping work but consume more graphics memory and can add
+latency; they do not increase PCIe bandwidth. GPU copies overlap CPU
+conversion; nonblocking Map polls run outside the capture mutex and yield between
+attempts. The worker processes the newest completed copy and preserves the latest
+source when all slots are busy, including the final update before a static scene.
+Readback timing includes asynchronous GPU wait; overlapped stage times are not a
+throughput estimate. Source size/device changes preserve in-flight ownership,
+and stopping releases pending slots without publishing late frames. Software
+input follows an absolute cadence; hardware input skips missed deadlines and
+starts promptly after idle.
 Hardware MFT input/output readiness wakes its worker through
 Media Foundation events; there is no second encoder FPS gate or output polling
 timer. Each encoder keeps only its latest pending input. Reconfiguration and

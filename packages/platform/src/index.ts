@@ -244,6 +244,8 @@ export interface NativeScreenOptions {
   maxBitrate: number;
   codec: string | null;
   encoder?: string;
+  /** GPU readback slots for the next native share; defaults to two. */
+  readbackBuffers?: NativeReadbackBuffers;
   /** Colour conversion for the next native share. */
   colorMatrix?: NativeColorMatrix;
   colorRange?: NativeColorRange;
@@ -254,6 +256,7 @@ export interface NativeScreenOptions {
 export type NativeColorMatrix = "auto" | "bt601" | "bt709";
 export type NativeColorRange = "limited" | "full";
 export type NativeColorFormat = "yuv420" | "yuv444" | "rgb";
+export type NativeReadbackBuffers = 1 | 2 | 3;
 
 /** Validation ceiling, not a promise of capture/encoder throughput. */
 export const MAX_NATIVE_FRAME_RATE = 1000;

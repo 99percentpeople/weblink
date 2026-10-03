@@ -69,7 +69,7 @@ export function createLiveVideoSettings(port: {
         clearTimeout(entry.timer);
         entries.delete(track);
       }
-      // Deliberately exclude codec, encoder, backend and audio consent. Those
+      // Exclude codec, encoder, backend, readback buffers and audio consent. Those
       // preferences only apply when a new capture/session is created.
       const {
         maxWidth,

@@ -118,6 +118,7 @@ describe("meeting capture settings", () => {
       maxBitrate: 4_000_000,
       codec: "video/h264",
       encoder: "auto",
+      readbackBuffers: 2,
       colorMatrix: "auto",
       colorRange: "limited",
       colorFormat: "yuv420",
@@ -149,6 +150,34 @@ describe("meeting capture settings", () => {
       frameRate: 1000,
       maxBitrate: 128 * 1024,
     });
+  });
+  it("preserves valid readback buffer counts and defaults legacy or invalid preferences to two", () => {
+    for (const nativeReadbackBuffers of [
+      1, 2, 3,
+    ] as const) {
+      expect(
+        nativeScreenOptions({
+          ...getDefaultAppOptions(),
+          nativeReadbackBuffers,
+        }).readbackBuffers,
+      ).toBe(nativeReadbackBuffers);
+    }
+    for (const nativeReadbackBuffers of [
+      undefined,
+      null,
+      0,
+      4,
+      1.5,
+      "3",
+      NaN,
+    ]) {
+      expect(
+        nativeScreenOptions({
+          ...getDefaultAppOptions(),
+          nativeReadbackBuffers,
+        } as any).readbackBuffers,
+      ).toBe(2);
+    }
   });
   it("does not reset existing bitrate or browser codec preferences", () => {
     const options = {

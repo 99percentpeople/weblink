@@ -82,15 +82,16 @@ describe("live video settings", () => {
       publication: () => publication,
       error: vi.fn(),
     });
-    controller.sync(stream(video), {
+    const current = {
       ...options(),
       nativeScreenCodec: "video/vp9",
       nativeScreenEncoder: "software",
-      nativeColorMatrix: "bt709",
-      nativeColorRange: "full",
+      nativeColorMatrix: "bt709" as const,
+      nativeColorRange: "full" as const,
       videoMaxBitrate: 2_000_000,
-      degradationPreference: "maintain-resolution",
-    });
+      degradationPreference: "maintain-resolution" as const,
+    };
+    controller.sync(stream(video), current);
     await tick();
     expect(updateVideoSettings).toHaveBeenCalledWith({
       maxWidth: 1280,
@@ -100,6 +101,12 @@ describe("live video settings", () => {
       degradationPreference: "maintain-resolution",
     });
     expect(video.applyConstraints).not.toHaveBeenCalled();
+    controller.sync(stream(video), {
+      ...current,
+      nativeReadbackBuffers: 3,
+    });
+    await tick();
+    expect(updateVideoSettings).toHaveBeenCalledOnce();
     controller.dispose();
   });
 

@@ -131,6 +131,7 @@ export type AppOption = {
   nativeScreenCodec: string | null;
   nativeAudioCodec: string | null;
   nativeScreenEncoder: string;
+  nativeReadbackBuffers: import("@weblink/platform").NativeReadbackBuffers;
   nativeColorMatrix: import("@weblink/platform").NativeColorMatrix;
   nativeColorRange: import("@weblink/platform").NativeColorRange;
   nativeColorFormat: import("@weblink/platform").NativeColorFormat;
@@ -259,6 +260,7 @@ export const getDefaultAppOptions = (): AppOption => {
     nativeScreenCodec: null,
     nativeAudioCodec: null,
     nativeScreenEncoder: "auto",
+    nativeReadbackBuffers: 2,
     nativeColorMatrix: "auto",
     nativeColorFormat: "yuv420",
     nativeColorRange: "limited",

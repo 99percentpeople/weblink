@@ -1,10 +1,28 @@
 use super::*;
-use libwebrtc::video_frame::I420Buffer;
+use crate::surface::Rotation;
+use libwebrtc::video_frame::{I420Buffer, VideoRotation};
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
 mod color;
 mod latency_probe;
+
+// Synchronously drain a synthetic frame in tests that inspect converted pixels.
+// Production polls on its worker without waiting in a graphics call.
+impl MediaSession {
+    pub(super) fn flush(&self) -> Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut work = self.capture_step(true)?;
+        while work.pending || work.dirty {
+            if Instant::now() >= deadline {
+                return Err("Synthetic readback did not complete".into());
+            }
+            std::thread::sleep(Duration::from_millis(1));
+            work = self.capture_step(true)?;
+        }
+        Ok(())
+    }
+}
 
 #[test]
 #[ignore = "Requires Windows process-loopback support; initializes clients without recording"]

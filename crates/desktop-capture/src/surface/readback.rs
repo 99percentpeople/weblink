@@ -1,11 +1,13 @@
 //! Reuse the staging texture instead of allocating one per captured frame.
 use crate::surface::{Cursor, Rotation, TextureFrame};
 use crate::Result;
+use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE,
-    D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_USAGE_DEFAULT,
-    D3D11_USAGE_STAGING,
+    ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
+    D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE,
+    D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ, D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING,
 };
+use windows::Win32::Graphics::Dxgi::DXGI_ERROR_WAS_STILL_DRAWING;
 
 #[derive(Default)]
 pub(crate) struct Readback {
@@ -23,7 +25,6 @@ pub(crate) struct Readback {
     pub dirty: bool,
     pub rotation: Rotation,
     pub cursor: Option<Cursor>,
-    pub composed: Vec<u8>,
 }
 impl Readback {
     pub(crate) fn frame(&self) -> Option<TextureFrame<'_>> {
@@ -51,6 +52,15 @@ impl Readback {
             return Err("Unsupported capture dimensions".into());
         }
         if self.size != size || self.device.as_ref() != Some(frame.device) {
+            // Pending readbacks use this context outside the capture mutex.
+            // This also covers the generic WGC/window path and injected sources.
+            let protection: ID3D11Multithread = frame.context.cast().map_err(|e| e.to_string())?;
+            unsafe {
+                let _ = protection.SetMultithreadProtected(true);
+                if !protection.GetMultithreadProtected().as_bool() {
+                    return Err("Readback requires a thread-safe D3D context".into());
+                }
+            }
             // Retain the original on GPU: later settings increases can recover detail
             // even while the source is static, without full-size CPU readback.
             desc.Usage = D3D11_USAGE_DEFAULT;
@@ -163,6 +173,68 @@ impl Readback {
             return Err("Invalid mapped BGRA surface".into());
         }
         Ok(result)
+    }
+
+    /// Move staging into a bounded worker-owned slot. Subsequent captures only
+    /// replace the retained source; they cannot overwrite this pending GPU copy.
+    pub fn submit(
+        &mut self,
+        requested: (u32, u32),
+        reusable: Option<PendingReadback>,
+    ) -> Result<PendingReadback> {
+        if let Some(buffer) = reusable.filter(|b| Some(&b.context) == self.context.as_ref()) {
+            self.staging = Some(buffer.texture);
+            self.staging_size = buffer.size;
+        }
+        self.prepare(requested)?;
+        let pending = PendingReadback {
+            texture: self.staging.take().ok_or("Missing staging texture")?,
+            context: self.context.clone().ok_or("Missing capture context")?,
+            size: self.output_size,
+        };
+        self.prepared = false;
+        // Submit once before polling. DO_NOT_WAIT must not leave the copy sitting
+        // in the driver's command buffer until another blocking graphics call.
+        unsafe { pending.context.Flush() };
+        Ok(pending)
+    }
+}
+
+pub(crate) struct PendingReadback {
+    texture: ID3D11Texture2D,
+    context: ID3D11DeviceContext,
+    size: (u32, u32),
+}
+impl PendingReadback {
+    /// Never wait inside the protected immediate context or the capture mutex.
+    /// The worker yields between attempts and can submit other available slots.
+    pub fn try_map(&mut self) -> Result<Option<Mapped<'_>>> {
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        match unsafe {
+            self.context.Map(
+                &self.texture,
+                0,
+                D3D11_MAP_READ,
+                D3D11_MAP_FLAG_DO_NOT_WAIT.0 as u32,
+                Some(&mut mapped),
+            )
+        } {
+            Ok(()) => {}
+            Err(error) if error.code() == DXGI_ERROR_WAS_STILL_DRAWING => {
+                return Ok(None);
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+        let result = Mapped {
+            texture: &self.texture,
+            context: &self.context,
+            mapped,
+            height: self.size.1,
+        };
+        if result.mapped.pData.is_null() || result.mapped.RowPitch < self.size.0 * 4 {
+            return Err("Invalid mapped BGRA surface".into());
+        }
+        Ok(Some(result))
     }
 }
 

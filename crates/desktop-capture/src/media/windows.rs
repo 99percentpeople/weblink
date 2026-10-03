@@ -1,5 +1,6 @@
 use super::{CandidateHandler, EncoderInfo, IceCandidate, IceServer, MediaOptions, VideoSettings};
 mod audio;
+mod capture;
 mod compose;
 mod control;
 mod mf;
@@ -9,7 +10,7 @@ mod statistics;
 #[cfg(test)]
 mod tests;
 use crate::surface::readback::Readback;
-use crate::surface::{FrameSink, Rotation, TextureFrame};
+use crate::surface::{FrameSink, TextureFrame};
 use crate::Result;
 use libwebrtc::{
     media_stream_track::MediaStreamTrack,
@@ -23,7 +24,7 @@ use libwebrtc::{
     rtp_sender::VideoEncoderBackend,
     rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit},
     session_description::{SdpType, SessionDescription},
-    video_frame::{VideoFrame, VideoRotation},
+    video_frame::VideoFrame,
     video_source::{native::NativeVideoSource, VideoResolution},
     MediaType,
 };
@@ -54,6 +55,9 @@ pub struct MediaSession {
     latest_sequence: AtomicU64,
     last_sent: Mutex<Instant>,
     readback: Mutex<Readback>,
+    // Worker-owned bounded readbacks; capture only touches the retained source.
+    conversion: Mutex<capture::Conversion>,
+    readback_buffers: usize,
     options: Mutex<MediaOptions>,
     notify: Arc<tokio::sync::Notify>,
     error: Mutex<Option<String>>,
@@ -212,6 +216,8 @@ impl MediaSession {
             latest_sequence: AtomicU64::new(0),
             last_sent: Mutex::new(Instant::now()),
             readback: Mutex::new(Readback::default()),
+            conversion: Mutex::new(Default::default()),
+            readback_buffers: options.readback_buffers as usize,
             options: Mutex::new(options),
             notify: Arc::new(tokio::sync::Notify::new()),
             error: Mutex::new(None),
@@ -221,73 +227,7 @@ impl MediaSession {
             pipeline: Mutex::new(Default::default()),
             peer_errors: Mutex::new(Default::default()),
         });
-        let weak = Arc::downgrade(&session);
-        let notify = session.notify.clone();
-        let interval = session.frame_interval();
-        let steady_input = session.encoder_id.is_none();
-        tokio::spawn(async move {
-            let mut cadence = tokio::time::interval(interval);
-            cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            let mut capture_deadline = tokio::time::Instant::now();
-            loop {
-                // Software rate control estimates FPS from incoming frames. Sending
-                // static content at 2 FPS gives the first moving frames an excessive
-                // per-frame budget. Reuse cached pixels at the selected cadence.
-                // MF uses an explicit frame rate and can retain sparse static input.
-                if !steady_input {
-                    let _ =
-                        tokio::time::timeout(Duration::from_millis(500), notify.notified()).await;
-                }
-                let Some(session) = weak.upgrade() else { break };
-                if session.closed.load(Ordering::Acquire) {
-                    break;
-                }
-                let interval = session.frame_interval();
-                if cadence.period() != interval {
-                    cadence = tokio::time::interval(interval);
-                    cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-                    capture_deadline = tokio::time::Instant::now();
-                }
-                drop(session);
-                // Keep an absolute cadence: resetting the deadline to now on
-                // every wake accumulates timer overshoot (notably on Windows).
-                if steady_input {
-                    cadence.tick().await;
-                } else {
-                    // Start promptly on arrival after idle; rate-limit subsequent
-                    // arrivals on this one clock. Hardware has no second FPS gate.
-                    let now = tokio::time::Instant::now();
-                    if now >= capture_deadline + interval {
-                        capture_deadline = now;
-                    }
-                    // An elapsed deadline is already admissible. Registering a
-                    // fresh timer can round it up to the next timer tick and
-                    // delay a frame which needs no rate-limit wait.
-                    if now < capture_deadline {
-                        tokio::time::sleep_until(capture_deadline).await;
-                    }
-                    capture_deadline += interval;
-                }
-                let Some(session) = weak.upgrade() else { break };
-                // CPU conversion and GPU Map must not block Tauri's async executor.
-                // Await every conversion: only one can run or be queued at a time.
-                let result = tokio::task::spawn_blocking(move || {
-                    if let Err(error) = session.flush() {
-                        *session.error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
-                        session.close();
-                    }
-                })
-                .await;
-                if let Err(error) = result {
-                    if let Some(session) = weak.upgrade() {
-                        *session.error.lock().unwrap_or_else(|e| e.into_inner()) =
-                            Some(error.to_string());
-                        session.close();
-                    }
-                    break;
-                }
-            }
-        });
+        Self::start_capture_worker(&session);
         Ok(session)
     }
 
@@ -439,127 +379,6 @@ impl MediaSession {
             .cloned()
             .collect();
         report
-    }
-
-    fn flush(&self) -> Result<()> {
-        self.reap_failed_encoders();
-        let mut timing = super::pipeline::Clock::new();
-        if self.closed.load(Ordering::Acquire) {
-            return Ok(());
-        }
-        let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
-        timing.mark(0);
-        if !readback.dirty {
-            drop(readback);
-            let latest = self
-                .latest
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone();
-            let mut sent = self.last_sent.lock().unwrap_or_else(|e| e.into_inner());
-            if !self.closed.load(Ordering::Acquire)
-                && (self.encoder_id.is_none() || sent.elapsed() >= Duration::from_millis(500))
-            {
-                if let Some(frame) = latest.as_ref() {
-                    self.publish_frame_at(frame, None);
-                    *sent = Instant::now();
-                }
-            }
-            return Ok(());
-        }
-        let options = self
-            .options
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        // Live settings may reprocess a retained static texture. Consume its
-        // arrival once so that reprocessing is not counted as delayed capture.
-        let captured_at = readback.captured_at.take();
-        let capture_wait = captured_at.map(|at| at.elapsed());
-        let original_size = readback.size;
-        let rotation = readback.rotation;
-        let requested = if rotation == Rotation::Identity {
-            options.dimensions(original_size.0, original_size.1)
-        } else {
-            original_size
-        };
-        readback.prepare(requested)?;
-        let (raw_width, raw_height) = readback.output_size;
-        let scale_fallback = readback.scale_error.clone();
-        timing.mark(1);
-        let cursor = readback
-            .cursor
-            .clone()
-            .filter(|_| self.cursor_visible.load(Ordering::Acquire));
-        let mut composed = std::mem::take(&mut readback.composed);
-        let bgra = readback.map()?;
-        timing.mark(2);
-        let (width, height) = match rotation {
-            Rotation::Clockwise90 | Rotation::Clockwise270 => (raw_height, raw_width),
-            _ => (raw_width, raw_height),
-        };
-        let needs_compose =
-            rotation != Rotation::Identity || cursor.as_ref().is_some_and(|c| c.visible);
-        if needs_compose {
-            compose::compose_with_cursor_scale(
-                bgra.bytes(),
-                bgra.stride() as usize,
-                raw_width,
-                raw_height,
-                rotation,
-                cursor.as_ref(),
-                (
-                    raw_width as f64 / original_size.0 as f64,
-                    raw_height as f64 / original_size.1 as f64,
-                ),
-                &mut composed,
-            );
-        }
-        let bytes = if needs_compose {
-            &composed[..]
-        } else {
-            bgra.bytes()
-        };
-        let stride = if needs_compose {
-            width * 4
-        } else {
-            bgra.stride()
-        };
-        timing.mark(3);
-        let mut buffer = Pixels::from_bgra(bytes, stride, width, height, &options);
-        drop(bgra);
-        readback.composed = composed;
-        readback.dirty = false;
-        drop(readback);
-        timing.mark(4);
-        let (scaled_width, scaled_height) = options.dimensions(width, height);
-        if (width, height) != (scaled_width, scaled_height) {
-            buffer = buffer.scale(scaled_width as i32, scaled_height as i32);
-        }
-        timing.mark(5);
-        if self.closed.load(Ordering::Acquire) {
-            return Ok(());
-        }
-        let frame = Arc::new(VideoFrame::new(VideoRotation::VideoRotation0, buffer));
-        self.publish_frame_at(&frame, captured_at);
-        *self.last_sent.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-        let mut latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
-        if self.closed.load(Ordering::Acquire) {
-            return Ok(());
-        }
-        *latest = Some(frame);
-        self.latest_sequence.fetch_add(1, Ordering::Relaxed);
-        drop(latest);
-        timing.mark(6);
-        let mut pipeline = self.pipeline.lock().unwrap_or_else(|e| e.into_inner());
-        pipeline.input_size = original_size;
-        pipeline.readback_size = (raw_width, raw_height);
-        pipeline.scale_fallback = scale_fallback;
-        pipeline.record(timing.stages);
-        if let Some(wait) = capture_wait {
-            pipeline.capture_wait.record(wait);
-        }
-        Ok(())
     }
 
     /// Called only by the local presenter after it has consumed the previous frame.
@@ -1037,6 +856,7 @@ impl MediaSession {
             encoder.close();
         }
         self.latest.lock().unwrap_or_else(|e| e.into_inner()).take();
+        *self.conversion.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
     }
 }
 impl Drop for MediaSession {

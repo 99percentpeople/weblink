@@ -224,6 +224,24 @@ it("uses native capabilities for exact screen encoding without changing browser 
   expect(native.encoders).toHaveBeenCalledOnce();
   expect(native.codecs).toHaveBeenCalledWith("audio");
 });
+it("selects single, double and triple readback buffers for the next native share", async () => {
+  render(() => <MeetingSettings />);
+  const key = "setting.meeting_settings.readback_buffers";
+  expect(
+    await screen.findByRole("button", {
+      name: new RegExp(key),
+    }),
+  ).toHaveTextContent(`${key}_2`);
+  for (const count of [1, 3, 2] as const) {
+    await choose(key, `${key}_${count}`);
+    expect(appState.options.nativeReadbackBuffers).toBe(
+      count,
+    );
+    expect(
+      nativeScreenOptions(appState.options).readbackBuffers,
+    ).toBe(count);
+  }
+});
 it("hides native encoding controls when native capture is unavailable", async () => {
   native.capabilities.mockResolvedValue({
     nativeScreenCapture: false,

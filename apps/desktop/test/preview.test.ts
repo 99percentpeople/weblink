@@ -223,6 +223,98 @@ it("presents full-resolution RGB planes with identity color metadata", async () 
   preview.close();
   expect(release).toHaveBeenCalledOnce();
 });
+
+it("keeps the display clock armed during IPC without overlapping shared-buffer requests", async () => {
+  let requests = 0;
+  let finish!: (value: any) => void;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      listener?.({
+        additionalData: {
+          kind: "weblink-preview",
+          id: args.previewId,
+        },
+        getBuffer: () => shared,
+      });
+    if (command === "capture_preview_frame") {
+      requests++;
+      if (requests === 1)
+        return { sequence: 1, width: 2, height: 2 };
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    }
+  });
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    vi.fn(),
+  );
+  await tick();
+  expect(requests).toBe(2);
+  const animate = () => {
+    expect(scheduled).toBeTypeOf("function");
+    const callback = scheduled;
+    scheduled = undefined;
+    callback?.();
+  };
+  // Display ticks may happen while IPC is pending. They cannot overwrite the
+  // shared buffer, and they must keep the following display tick armed.
+  animate();
+  animate();
+  expect(requests).toBe(2);
+  finish({ sequence: 2, width: 2, height: 2 });
+  await tick();
+  expect(requests).toBe(2);
+  animate();
+  await tick();
+  expect(requests).toBe(3);
+  preview.close();
+  finish(null);
+  await tick();
+  expect(scheduled).toBeUndefined();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it("keeps hidden preview ticks serialized and cancels them on close", async () => {
+  vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+  let requests = 0;
+  let finish!: (value: any) => void;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      listener?.({
+        additionalData: {
+          kind: "weblink-preview",
+          id: args.previewId,
+        },
+        getBuffer: () => shared,
+      });
+    if (command === "capture_preview_frame") {
+      if (++requests === 1)
+        return { sequence: 1, width: 2, height: 2 };
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    }
+  });
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(64);
+  expect(requests).toBe(2);
+  finish({ sequence: 2, width: 2, height: 2 });
+  await tick();
+  await vi.advanceTimersByTimeAsync(16);
+  expect(requests).toBe(3);
+  preview.close();
+  finish(null);
+  await vi.advanceTimersByTimeAsync(64);
+  expect(requests).toBe(3);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(release).toHaveBeenCalledOnce();
+});
 it("aborting an opening preview releases a late mapping before closing its native owner", async () => {
   const controller = new AbortController();
   let complete!: () => void;
