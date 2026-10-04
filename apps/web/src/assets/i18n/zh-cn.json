@@ -378,6 +378,8 @@
       "autostart": "开机自动启动",
       "autostart_description": "登录此电脑后自动启动 Weblink。",
       "autostart_failed": "无法读取或修改系统启动设置。",
+      "autostart_path_mismatch": "系统自启动项未指向当前程序。修复后将使用当前程序路径，并开启自启动。",
+      "autostart_repair": "修复",
       "automatic_pip_description": "离开会议页面或切换到后台时自动打开画中画，具体取决于浏览器支持与网站权限。",
       "close_behavior": {
         "title": "关闭窗口时",

@@ -36,13 +36,21 @@ export interface NativeApplicationOptions {
   locale: "en" | "zh-cn" | "zh-tw";
 }
 
+export interface NativeAutostartStatus {
+  enabled: boolean;
+  /** An existing Windows startup entry targets another or invalid executable. */
+  pathMismatch: boolean;
+}
+
 export interface NativeApplication {
   show(): Promise<void>;
   /** Request normal window closing, including the configured close behavior. */
   requestClose(): Promise<void>;
   readonly autostart?: {
-    enabled(): Promise<boolean>;
-    setEnabled(enabled: boolean): Promise<boolean>;
+    status(): Promise<NativeAutostartStatus>;
+    setEnabled(
+      enabled: boolean,
+    ): Promise<NativeAutostartStatus>;
     behavior(): Promise<"tray" | "window">;
     setBehavior(behavior: "tray" | "window"): Promise<void>;
   };

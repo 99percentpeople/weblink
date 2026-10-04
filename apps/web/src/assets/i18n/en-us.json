@@ -378,6 +378,8 @@
       "autostart": "Launch at startup",
       "autostart_description": "Start Weblink automatically when you sign in to this computer.",
       "autostart_failed": "Could not read or update the system startup setting.",
+      "autostart_path_mismatch": "The system startup entry does not point to this application. Repair it to use the current program and enable launch at startup.",
+      "autostart_repair": "Repair",
       "automatic_pip_description": "Open picture-in-picture when leaving the meeting or sending it to the background. Availability depends on browser support and site permission.",
       "close_behavior": {
         "title": "When closing the window",

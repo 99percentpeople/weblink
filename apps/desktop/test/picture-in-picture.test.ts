@@ -122,21 +122,24 @@ it("releases a partially registered native watcher after failure", async () => {
 it("reads OS autostart without changing it and only updates on an explicit set", async () => {
   const ipc = vi.fn(async (command: string, args) =>
     command === "application_autostart_set"
-      ? args.enabled
-      : false,
+      ? { enabled: args.enabled, pathMismatch: false }
+      : { enabled: true, pathMismatch: true },
   );
   mockIPC(ipc);
-  expect(await nativeApplication.autostart!.enabled()).toBe(
-    false,
-  );
+  expect(
+    await nativeApplication.autostart!.status(),
+  ).toEqual({
+    enabled: true,
+    pathMismatch: true,
+  });
   expect(ipc).toHaveBeenCalledOnce();
   expect(ipc).toHaveBeenLastCalledWith(
-    "application_autostart_enabled",
+    "application_autostart_status",
     {},
   );
   expect(
     await nativeApplication.autostart!.setEnabled(true),
-  ).toBe(true);
+  ).toEqual({ enabled: true, pathMismatch: false });
   expect(ipc).toHaveBeenLastCalledWith(
     "application_autostart_set",
     { enabled: true },

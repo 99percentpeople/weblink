@@ -9,7 +9,7 @@ export const nativeApplication: NativeApplication = {
   show: () => invoke("application_show"),
   requestClose: () => getCurrentWindow().close(),
   autostart: {
-    enabled: () => invoke("application_autostart_enabled"),
+    status: () => invoke("application_autostart_status"),
     setEnabled: (enabled) =>
       invoke("application_autostart_set", { enabled }),
     behavior: () => invoke("application_startup_behavior"),

@@ -8,6 +8,7 @@ import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { setAppOptions } from "@/options";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -100,6 +101,7 @@ export default function ApplicationSettings() {
             checked={startup.enabled() === true}
             disabled={
               startup.busy() ||
+              startup.pathMismatch() ||
               startup.enabled() === undefined
             }
             onChange={(enabled) =>
@@ -116,6 +118,25 @@ export default function ApplicationSettings() {
           <p class="muted">
             {t("setting.application.autostart_description")}
           </p>
+          <Show when={startup.pathMismatch()}>
+            <div class="flex items-center justify-between gap-2">
+              <p class="muted" role="status">
+                {t(
+                  "setting.application.autostart_path_mismatch",
+                )}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="self-start"
+                disabled={startup.busy()}
+                onClick={() => void startup.repair()}
+              >
+                {t("setting.application.autostart_repair")}
+              </Button>
+            </div>
+          </Show>
         </div>
         <div class="flex flex-col gap-2">
           <Label id="startup-behavior">

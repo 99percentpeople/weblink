@@ -183,8 +183,17 @@ restore the main window. Explicit host-control auto-hide keeps its existing beha
 Application settings also contain the existing auto-join preference and a desktop
 launch-at-login switch. Auto-join keeps its existing profile value and room behavior.
 Launch at login reads the OS registration rather than storing a second preference;
-only changing that switch enables or disables registration. Keyboard forwarding and
-exit shortcuts remain in Remote control settings alongside touch input preferences.
+only changing that switch or explicitly repairing the entry changes registration.
+Keyboard forwarding and exit shortcuts remain in Remote control settings alongside
+touch input preferences.
+
+On Windows, startup preferences are read when the app opens and refreshed on focus.
+An existing startup entry targeting another executable (or an ambiguous unquoted
+path with spaces) leaves the switch off and disabled and exposes a Repair button.
+Repair registers the currently running executable with a quoted path and
+`--autostart`, enables launch at login, and reads back the resulting status. Missing
+entries remain ordinary disabled startup preferences that can be enabled normally.
+Reads never rewrite an entry automatically; a failed repair remains retryable.
 
 Login startup uses `--autostart`. Its native configuration defaults to hiding in
 an available tray and can instead show the main window; manual launches always
@@ -193,8 +202,14 @@ back to a visible window. Changing the startup display preference does not enabl
 OS registration.
 
 Both debug and release Windows executables use the GUI subsystem, including when
-launch-at-login points at a development build. The autostart plugin registers the
+launch-at-login points at a development build. Launch at login registers the
 current executable directly with `--autostart`; no terminal or shell wrapper is needed.
+
+Windows single-instance ownership is scoped to the normalized executable path.
+Repeating a manual launch of that path restores its existing window; a duplicate
+`--autostart` launch leaves it in the background. Different executable paths,
+including development and release builds, can run concurrently. The application
+identifier and existing profile/configuration locations are unchanged.
 
 ## System notifications
 

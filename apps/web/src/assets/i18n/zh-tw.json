@@ -378,6 +378,8 @@
       "autostart": "開機自動啟動",
       "autostart_description": "登入此電腦後自動啟動 Weblink。",
       "autostart_failed": "無法讀取或修改系統啟動設定。",
+      "autostart_path_mismatch": "系統自動啟動項未指向目前程式。修復後將使用目前程式路徑，並開啟自動啟動。",
+      "autostart_repair": "修復",
       "automatic_pip_description": "離開會議頁面或切換到背景時自動開啟子母畫面，實際行為取決於瀏覽器支援與網站權限。",
       "close_behavior": {
         "title": "關閉視窗時",

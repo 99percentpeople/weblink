@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt;
 
+#[cfg(windows)]
+mod windows;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutostartStatus {
+    enabled: bool,
+    path_mismatch: bool,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum StartupBehavior {
@@ -43,22 +53,33 @@ pub fn application_startup_set_behavior(
 }
 
 #[tauri::command]
-pub fn application_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
-    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+pub fn application_autostart_status(app: tauri::AppHandle) -> Result<AutostartStatus, String> {
+    #[cfg(windows)]
+    let path_mismatch = windows::path_mismatch(&app.package_info().name)?;
+    #[cfg(not(windows))]
+    let path_mismatch = false;
+    Ok(AutostartStatus {
+        enabled: app.autolaunch().is_enabled().map_err(|e| e.to_string())?,
+        path_mismatch,
+    })
 }
 
 #[tauri::command]
-pub fn application_autostart_set(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+pub fn application_autostart_set(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<AutostartStatus, String> {
     let launch = app.autolaunch();
-    if enabled || launch.is_enabled().map_err(|e| e.to_string())? {
-        if enabled {
-            launch.enable()
-        } else {
-            launch.disable()
-        }
-        .map_err(|e| e.to_string())?;
+    if enabled {
+        #[cfg(windows)]
+        windows::enable(&app.package_info().name)?;
+        #[cfg(not(windows))]
+        launch.enable().map_err(|e| e.to_string())?;
+    } else {
+        // Also remove entries disabled through Task Manager.
+        launch.disable().map_err(|e| e.to_string())?;
     }
-    launch.is_enabled().map_err(|e| e.to_string())
+    application_autostart_status(app)
 }
 
 #[cfg(test)]

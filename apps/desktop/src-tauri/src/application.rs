@@ -12,6 +12,9 @@ use tauri::{
 pub mod autostart;
 pub mod close;
 mod control_window;
+#[cfg(windows)]
+mod executable;
+pub mod single_instance;
 
 #[derive(Clone, Copy, Default, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]

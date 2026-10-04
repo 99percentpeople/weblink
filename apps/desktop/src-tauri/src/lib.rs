@@ -47,6 +47,7 @@ fn media_permission(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(application::single_instance::init())
         .manage(notifications::Service::default())
         .manage(std::sync::Arc::new(
             weblink_desktop_capture::CaptureService::new()
@@ -57,11 +58,6 @@ pub fn run() {
         .manage(application::Service::default())
         .manage(picture_in_picture::Service::default())
         .plugin(tauri_plugin_autostart::Builder::new().args(["--autostart"]).build())
-        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
-            if !args.iter().any(|arg| arg == "--autostart") {
-                application::show(app);
-            }
-        }))
         .plugin(
             tauri_plugin_opener::Builder::new()
                 .open_js_links_on_click(false)
@@ -78,7 +74,7 @@ pub fn run() {
 
             application::application_configure,
             application::application_show,
-            application::autostart::application_autostart_enabled,
+            application::autostart::application_autostart_status,
             application::autostart::application_autostart_set,
             application::autostart::application_startup_behavior,
             application::autostart::application_startup_set_behavior,

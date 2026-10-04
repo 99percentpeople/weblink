@@ -10,7 +10,7 @@ fn main() {
             "notifications_dismiss",
             "application_configure",
             "application_show",
-            "application_autostart_enabled",
+            "application_autostart_status",
             "application_autostart_set",
             "application_startup_behavior",
             "application_startup_set_behavior",

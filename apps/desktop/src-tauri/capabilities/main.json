@@ -7,7 +7,7 @@
     "allow-runtime-capabilities",
     "allow-application-configure",
     "core:window:allow-close",
-    "allow-application-autostart-enabled",
+    "allow-application-autostart-status",
     "allow-application-autostart-set",
     "allow-application-startup-behavior",
     "allow-application-startup-set-behavior",
