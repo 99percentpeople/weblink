@@ -269,7 +269,7 @@ impl<D: Device> Backend for InputState<D> {
         self.release_all()
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Status {
     pub input_suspended: bool,
     pub pan_supported: bool,
@@ -421,6 +421,9 @@ impl<D: Device> Engine<D> {
     }
     pub fn tick(&mut self, now: Instant) {
         self.authority.tick(now);
+    }
+    pub(crate) fn wait_duration(&self, now: Instant) -> Option<Duration> {
+        self.authority.wait_duration(now)
     }
     /// Release interrupted gestures while retaining this connection's local consent.
     /// A fresh activation barrier is required before accepting further input.

@@ -1,6 +1,6 @@
 //! Shared preview IPC; pixel transport and resource ownership belong to the backend.
 use tauri::{ipc::Channel, State, Webview};
-use weblink_desktop_capture::media::preview::PreviewFrame;
+use weblink_desktop_capture::media::preview::{PreviewEvent, PreviewFrame};
 #[cfg(windows)]
 #[path = "preview/windows.rs"]
 mod backend;
@@ -15,13 +15,22 @@ pub async fn capture_preview_open(
     service: State<'_, crate::capture::Service>,
     session_id: String,
     preview_id: String,
-    visibility: Channel<bool>,
+    events: Channel<PreviewEvent>,
+    visible: bool,
 ) -> Result<(), String> {
     if preview_id.len() > 128 || preview_id.is_empty() {
         return Err("Invalid preview id".into());
     }
     let media = crate::capture::run(service, move |s| s.media(session_id)).await?;
-    backend::open(webview, media, preview_id, visibility).await
+    backend::open(webview, media, preview_id, events, visible).await
+}
+#[tauri::command]
+pub async fn capture_preview_visible(
+    webview: Webview,
+    preview_id: String,
+    visible: bool,
+) -> Result<(), String> {
+    backend::set_visible(webview, preview_id, visible).await
 }
 #[tauri::command]
 pub async fn capture_preview_frame(

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
+import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
 
 function Metric(props: {
   label: string;
@@ -25,7 +26,7 @@ function Metric(props: {
       <dt class="text-muted-foreground mb-1.5 text-xs">
         {props.label}
       </dt>
-      <dd class="leading-relaxed [overflow-wrap:anywhere] tabular-nums">
+      <dd class="tabular-nums leading-relaxed [overflow-wrap:anywhere]">
         {props.children}
       </dd>
     </div>
@@ -38,10 +39,12 @@ export function MeetingInfoPanel(props: {
   onOpenSettings(): void;
 }) {
   const state = useAppState();
+  const visible = createPresentationVisible();
   const [now, setNow] = createSignal(Date.now());
   createEffect(() => {
     if (
       !props.active ||
+      !visible() ||
       appState.roomStatus.joinedAt == null
     )
       return;
@@ -133,7 +136,7 @@ export function MeetingInfoPanel(props: {
         </div>
       </header>
 
-      <dl class="bg-muted/55 grid min-w-0 grid-cols-2 gap-4.5 rounded-md p-4">
+      <dl class="bg-muted/55 gap-4.5 grid min-w-0 grid-cols-2 rounded-md p-4">
         <Metric
           class="col-span-2"
           label={t("meeting.room_name")}

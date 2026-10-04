@@ -125,10 +125,15 @@ impl Endpoint {
     }
     pub fn pop(&self) -> Option<(bool, Instant, Vec<u8>)> {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
-        q.reliable
+        let next = q
+            .reliable
             .pop_front()
             .map(|(at, data)| (false, at, data))
-            .or_else(|| q.movement.take().map(|(at, data)| (true, at, data)))
+            .or_else(|| q.movement.take().map(|(at, data)| (true, at, data)));
+        if !q.reliable.is_empty() || q.movement.is_some() {
+            self.wake();
+        }
+        next
     }
 }
 impl Port for Endpoint {

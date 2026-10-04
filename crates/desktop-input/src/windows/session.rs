@@ -1,6 +1,11 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn set_waker(&self, owner: thread::Thread) -> bool {
+        *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(owner.clone());
+        owner.unpark();
+        true
+    }
     fn register_until(
         &self,
         target: TrustedTarget,

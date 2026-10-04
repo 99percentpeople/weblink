@@ -17,8 +17,15 @@ const draw = vi.fn();
 let scheduled: (() => void) | undefined;
 let shared: ArrayBuffer;
 let visibility: Channel<boolean> | undefined;
+let events:
+  | Channel<{ type: string; visible?: boolean }>
+  | undefined;
 const openBuffer = (args: any, visible = true) => {
-  visibility = args.visibility;
+  events = args.events;
+  visibility = {
+    onmessage: (visible: boolean) =>
+      events?.onmessage({ type: "visibility", visible }),
+  } as Channel<boolean>;
   visibility?.onmessage(visible);
   listener?.({
     additionalData: {
@@ -31,6 +38,53 @@ const openBuffer = (args: any, visible = true) => {
 const tick = async () => {
   for (let i = 0; i < 15; i++) await Promise.resolve();
 };
+const notifyFrame = () => {
+  events?.onmessage({ type: "frame" });
+  const callback = scheduled;
+  scheduled = undefined;
+  callback?.();
+};
+
+it.runIf(process.env.WEBLINK_PERF === "1")(
+  "measures static preview IPC over 180 display ticks",
+  async () => {
+    let requests = 0;
+    mockIPC((command, args: any) => {
+      if (command === "capture_preview_open")
+        openBuffer(args);
+      if (command === "capture_preview_frame") {
+        requests++;
+        return args.after === 0
+          ? { sequence: 1, width: 2, height: 2 }
+          : null;
+      }
+    });
+    const ended = vi.fn();
+    const preview = await createRawPreview(
+      "capture",
+      false,
+      ended,
+    );
+    for (let tickIndex = 0; tickIndex < 180; tickIndex++) {
+      const frame = scheduled;
+      scheduled = undefined;
+      frame?.();
+      await tick();
+      await vi.advanceTimersByTimeAsync(1000 / 60);
+    }
+    console.log(
+      "PERF",
+      JSON.stringify({
+        scenario: "static-preview-180-display-ticks",
+        requests,
+        frames: preview.stats().frames,
+      }),
+    );
+    expect(ended).not.toHaveBeenCalled();
+    preview.close();
+    await tick();
+  },
+);
 beforeEach(() => {
   vi.useFakeTimers({
     toFake: ["setTimeout", "clearTimeout", "performance"],
@@ -38,6 +92,7 @@ beforeEach(() => {
   listener = undefined;
   scheduled = undefined;
   visibility = undefined;
+  events = undefined;
   shared = new ArrayBuffer(24);
   release.mockClear();
   stop.mockClear();
@@ -111,6 +166,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete (HTMLCanvasElement.prototype as any).captureStream;
+});
+it("ends a static preview from the native event without another frame query", async () => {
+  let queries = 0;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      openBuffer(args);
+    if (command === "capture_preview_frame") {
+      queries++;
+      return { sequence: 1, width: 2, height: 2 };
+    }
+  });
+  const ended = vi.fn();
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    ended,
+  );
+  expect(vi.getTimerCount()).toBe(0); // Canvas needs no static repeats.
+  events?.onmessage({ type: "ended" });
+  events?.onmessage({ type: "frame" });
+  await tick();
+  expect(ended).toHaveBeenCalledOnce();
+  expect(queries).toBe(1);
+  expect(release).toHaveBeenCalledOnce();
+  expect(scheduled).toBeUndefined();
+  preview.close();
+});
+it("rejects an ended preview during buffer startup immediately", async () => {
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      args.events.onmessage({ type: "ended" });
+  });
+  const ended = vi.fn();
+  await expect(
+    createRawPreview("capture", false, ended),
+  ).rejects.toThrow("Preview closed");
+  await tick();
+  expect(ended).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(listener).toBeUndefined();
 });
 it("presents raw frames, resizes without replacing the stream, and serializes requests across visibility changes", async () => {
   const calls: string[] = [];
@@ -195,7 +290,7 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
   expect(ended).not.toHaveBeenCalled();
   expect(scheduled).toBeUndefined();
 });
-it("keeps the display clock armed during IPC without overlapping shared-buffer requests", async () => {
+it("coalesces new frame events during IPC without overlapping shared-buffer requests", async () => {
   let requests = 0;
   let finish!: (value: any) => void;
   mockIPC((command, args: any) => {
@@ -216,24 +311,18 @@ it("keeps the display clock armed during IPC without overlapping shared-buffer r
     vi.fn(),
   );
   await tick();
+  expect(requests).toBe(1);
+  notifyFrame();
   expect(requests).toBe(2);
-  const animate = () => {
-    expect(scheduled).toBeTypeOf("function");
-    const callback = scheduled;
-    scheduled = undefined;
-    callback?.();
-  };
-  // Display ticks may happen while IPC is pending. They cannot overwrite the
-  // shared buffer, and they must keep the following display tick armed.
-  animate();
-  animate();
+  // Repeated notices while a read is pending coalesce into one following read.
+  notifyFrame();
+  notifyFrame();
   expect(requests).toBe(2);
   finish({ sequence: 2, width: 2, height: 2 });
   await tick();
-  expect(requests).toBe(2);
-  animate();
-  await tick();
+  // The display tick already arrived during the pending read: no extra vsync.
   expect(requests).toBe(3);
+  expect(scheduled).toBeUndefined();
   preview.close();
   finish(null);
   await tick();
@@ -267,6 +356,7 @@ it("pauses native-hidden previews even if the document stays visible and resumes
     ended,
   );
   const stream = preview.stream;
+  notifyFrame();
   expect(requests).toBe(2);
   visibility?.onmessage(false);
   expect(scheduled).toBeUndefined();
@@ -288,7 +378,7 @@ it("pauses native-hidden previews even if the document stays visible and resumes
     width: 4,
     frames: 2,
   });
-  expect(scheduled).toBeTypeOf("function");
+  expect(scheduled).toBeUndefined();
   preview.close();
   visibility?.onmessage(false);
   visibility?.onmessage(true);
@@ -299,7 +389,11 @@ it("pauses native-hidden previews even if the document stays visible and resumes
   expect(scheduled).toBeUndefined();
   expect(release).toHaveBeenCalledOnce();
   expect(ended).not.toHaveBeenCalled();
-  expect(calls).toEqual([
+  expect(
+    calls.filter(
+      (command) => command !== "capture_preview_visible",
+    ),
+  ).toEqual([
     "capture_preview_open",
     "capture_preview_frame",
     "capture_preview_frame",
@@ -341,7 +435,8 @@ it.each(["native", "document"])(
     await tick();
     expect(requests).toBe(1);
     expect(draw).toHaveBeenCalledOnce();
-    expect(scheduled).toBeTypeOf("function");
+    if (hiddenBy === "document")
+      expect(scheduled).toBeUndefined();
     expect(ended).not.toHaveBeenCalled();
     preview.close();
     await tick();
@@ -506,6 +601,8 @@ it("waits for a generated-track write before requesting another shared-memory fr
     ended,
   );
   await tick();
+  notifyFrame();
+  await tick();
   expect(sequence).toBe(2);
   expect(write).toHaveBeenCalledTimes(2);
   document.dispatchEvent(new Event("visibilitychange"));
@@ -574,7 +671,7 @@ it("pauses generated-track static refreshes while document-hidden and resumes wh
   hidden.mockReturnValue(true);
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.advanceTimersByTimeAsync(2000);
-  expect(requests).toBe(2);
+  expect(requests).toBe(1);
   expect(write).toHaveBeenCalledOnce();
   expect(scheduled).toBeUndefined();
   expect(vi.getTimerCount()).toBe(0);
@@ -584,9 +681,9 @@ it("pauses generated-track static refreshes while document-hidden and resumes wh
   window.dispatchEvent(new Event("blur"));
   document.dispatchEvent(new Event("visibilitychange"));
   await tick();
-  expect(requests).toBe(3);
+  expect(requests).toBe(2);
   expect(write).toHaveBeenCalledTimes(2);
-  expect(scheduled).toBeTypeOf("function");
+  expect(scheduled).toBeUndefined();
   preview.close();
   await tick();
   expect(abort).toHaveBeenCalledOnce();

@@ -33,7 +33,8 @@ impl Drop for Exclusive {
         RUNNING.store(false, Ordering::Release);
     }
 }
-type LocalCall = Box<dyn FnOnce(&mut Engine<WindowsDevice>) + Send>;
+type Reply = Box<dyn FnOnce() + Send>;
+type LocalCall = Box<dyn FnOnce(&mut Engine<WindowsDevice>) -> Reply + Send>;
 enum Command {
     Local(LocalCall),
     Input {
@@ -47,6 +48,7 @@ enum Command {
 pub struct Worker {
     queue: Arc<Mailbox<Command>>,
     status: Arc<Mutex<Status>>,
+    observer: Arc<Mutex<Option<thread::Thread>>>,
     thread: Option<JoinHandle<()>>,
 }
 impl Worker {
@@ -72,7 +74,24 @@ impl Worker {
             submitted: 0,
         }));
         let (ready, initialized) = mpsc::sync_channel(1);
+        let observer = Arc::new(Mutex::new(None::<thread::Thread>));
+        let changed = observer.clone();
         let q = queue.clone();
+        let s = status.clone();
+        let publish = move |next: Status| {
+            let mut current = s.lock().unwrap_or_else(|e| e.into_inner());
+            // Submission counters do not change host authorization state.
+            let mut previous = current.clone();
+            previous.submitted = next.submitted;
+            let notify = previous != next;
+            *current = next;
+            drop(current);
+            if notify {
+                if let Some(owner) = &*changed.lock().unwrap_or_else(|e| e.into_inner()) {
+                    owner.unpark();
+                }
+            }
+        };
         let s = status.clone();
         let worker = thread::Builder::new()
             .name("weblink-input".into())
@@ -114,9 +133,10 @@ impl Worker {
                         }
                         let command = q.pop();
                         let idle = command.is_none();
+                        let mut reply = None;
                         if let Some(command) = command {
                             match command {
-                                Command::Local(call) => call(&mut engine),
+                                Command::Local(call) => reply = Some(call(&mut engine)),
                                 Command::Input {
                                     grant,
                                     event,
@@ -127,22 +147,31 @@ impl Worker {
                                 }
                             }
                         }
-                        *s.lock().unwrap_or_else(|e| e.into_inner()) = engine.status();
+                        publish(engine.status());
+                        // A synchronous local response is a status barrier as well:
+                        // the awakened host must never see the pre-approval state.
+                        if let Some(reply) = reply {
+                            reply();
+                        }
                         if engine.status().closed {
                             break;
                         }
                         if idle {
-                            thread::park_timeout(Duration::from_millis(2));
+                            match engine.wait_duration(Instant::now()) {
+                                Some(wait) => thread::park_timeout(wait),
+                                None => thread::park(),
+                            }
                         }
                     }
                     engine.shutdown();
-                    *s.lock().unwrap_or_else(|e| e.into_inner()) = engine.status();
+                    publish(engine.status());
                 }));
                 if result.is_err() {
-                    let mut status = s.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut status = s.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     status.closed = true;
                     status.grant = None;
                     status.failure = Some(Error::Injection);
+                    publish(status);
                 }
                 let failure = s.lock().unwrap_or_else(|e| e.into_inner()).failure;
                 q.close(failure.unwrap_or(Error::Closed));
@@ -163,6 +192,7 @@ impl Worker {
         let handle = Self {
             queue,
             status,
+            observer,
             thread: Some(worker),
         };
 
@@ -186,7 +216,10 @@ impl Worker {
     ) -> Result<T, Error> {
         let (tx, rx) = mpsc::sync_channel(1);
         let command = Command::Local(Box::new(move |engine| {
-            let _ = tx.send(f(engine));
+            let result = f(engine);
+            Box::new(move || {
+                let _ = tx.send(result);
+            })
         }));
         if priority {
             self.queue.priority(command)?;

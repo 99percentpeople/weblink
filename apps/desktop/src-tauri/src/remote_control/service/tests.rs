@@ -19,12 +19,16 @@ enum Observation {
 }
 struct DeviceState {
     available: AtomicBool,
+    status_reads: std::sync::atomic::AtomicUsize,
+    owner: Mutex<Option<std::thread::Thread>>,
     observations: Mutex<Vec<Observation>>,
 }
 impl Default for DeviceState {
     fn default() -> Self {
         Self {
             available: AtomicBool::new(true),
+            status_reads: Default::default(),
+            owner: Default::default(),
             observations: Mutex::default(),
         }
     }
@@ -60,6 +64,11 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn set_waker(&self, owner: std::thread::Thread) -> bool {
+        *self.state.owner.lock().unwrap() = Some(owner.clone());
+        owner.unpark();
+        true
+    }
     fn register_until(
         &self,
         target: TrustedTarget,
@@ -116,6 +125,7 @@ impl Session for TestSession {
         Ok(self.status())
     }
     fn status(&self) -> Status {
+        self.state.status_reads.fetch_add(1, Ordering::Relaxed);
         let mut engine = self.engine.lock().unwrap();
         engine.tick(Instant::now());
         engine.status()
@@ -131,6 +141,53 @@ impl Session for TestSession {
                 .push(Observation::Shutdown);
         }
     }
+}
+
+#[test]
+#[ignore = "Opt-in idle host measurement with fake OS injection"]
+fn idle_host_status_reads() {
+    let state = Arc::new(DeviceState::default());
+    let service = Service::default();
+    let shared = state.clone();
+    service
+        .start(move || Ok(Box::new(TestSession::new(shared))))
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    state.status_reads.store(0, Ordering::Relaxed);
+    std::thread::sleep(Duration::from_secs(1));
+    let reads = state.status_reads.load(Ordering::Relaxed);
+    service.close();
+    println!(
+        "PERF {}",
+        json!({"scenario":"idle-host-1-second", "statusReads":reads})
+    );
+}
+
+#[test]
+fn an_idle_notifying_backend_wakes_the_host_without_periodic_status_reads() {
+    let state = Arc::new(DeviceState::default());
+    let service = Service::default();
+    let shared = state.clone();
+    service
+        .start(move || Ok(Box::new(TestSession::new(shared))))
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while state.status_reads.load(Ordering::Relaxed) < 3 {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(5));
+    }
+    // Let the retained startup token drain before observing steady-state idle.
+    thread::sleep(Duration::from_millis(50));
+    let reads = state.status_reads.load(Ordering::Relaxed);
+    thread::sleep(Duration::from_millis(150));
+    assert_eq!(state.status_reads.load(Ordering::Relaxed), reads);
+    state.owner.lock().unwrap().as_ref().unwrap().unpark();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while state.status_reads.load(Ordering::Relaxed) == reads {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(5));
+    }
+    service.close();
 }
 impl Drop for TestSession {
     fn drop(&mut self) {

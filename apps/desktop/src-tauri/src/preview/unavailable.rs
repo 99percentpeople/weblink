@@ -1,11 +1,15 @@
 use std::sync::Arc;
 use tauri::{ipc::Channel, Webview};
-use weblink_desktop_capture::media::{preview::PreviewFrame, MediaSession};
+use weblink_desktop_capture::media::{
+    preview::{PreviewEvent, PreviewFrame},
+    MediaSession,
+};
 pub async fn open(
     _: Webview,
     _: Arc<MediaSession>,
     _: String,
-    _: Channel<bool>,
+    _: Channel<PreviewEvent>,
+    _: bool,
 ) -> Result<(), String> {
     Err("Native preview unavailable on this platform".into())
 }
@@ -13,6 +17,9 @@ pub async fn frame(_: Webview, _: String, _: u64) -> Result<Option<PreviewFrame>
     Err("Native preview unavailable on this platform".into())
 }
 pub async fn close(_: Webview, _: String) -> Result<(), String> {
+    Ok(())
+}
+pub async fn set_visible(_: Webview, _: String, _: bool) -> Result<(), String> {
     Ok(())
 }
 pub fn clear(_: &tauri::WebviewWindow) {}

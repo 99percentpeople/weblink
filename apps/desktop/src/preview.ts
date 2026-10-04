@@ -23,6 +23,10 @@ interface Frame {
   height: number;
   colorSpace?: VideoColorSpaceInit;
 }
+type PreviewEvent =
+  | { type: "visibility"; visible: boolean }
+  | { type: "frame" }
+  | { type: "ended" };
 
 /** One request at a time is the ownership handshake: Rust must not overwrite the
  * read-only shared buffer until VideoFrame has copied its previous contents.
@@ -63,8 +67,22 @@ export async function createRawPreview(
   let running = false;
   let initialized = false;
   let nativeVisible = false;
+  let dirty = true;
+  let frameDue = false;
   let raf: number | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let refreshTimer:
+    | ReturnType<typeof setTimeout>
+    | undefined;
+  let firstFrameReady!: () => void;
+  let firstFrameFailed!: (reason: unknown) => void;
+  const firstFrame = new Promise<void>(
+    (resolve, reject) => {
+      firstFrameReady = resolve;
+      firstFrameFailed = reject;
+    },
+  );
+  void firstFrame.catch(() => {});
   let resolveBuffer!: () => void;
   let rejectBuffer!: (error: unknown) => void;
   const ready = new Promise<void>((resolve, reject) => {
@@ -89,7 +107,10 @@ export async function createRawPreview(
   const close = () => {
     if (closed) return;
     closed = true;
+    firstFrameFailed(new Error("Preview closed"));
+    rejectBuffer(new Error("Preview closed"));
     clearTimeout(timeout);
+    clearTimeout(refreshTimer);
     if (raf !== undefined) cancelAnimationFrame(raf);
     signal?.removeEventListener("abort", aborted);
     document.removeEventListener(
@@ -128,6 +149,7 @@ export async function createRawPreview(
   const visible = () => nativeVisible && !document.hidden;
   const draw = async () => {
     if (closed || !visible()) return false;
+    dirty = false;
     const frame = await invoke<Frame | null>(
       "capture_preview_frame",
       { previewId: id, after: sequence },
@@ -169,48 +191,95 @@ export async function createRawPreview(
     width = frame.width;
     height = frame.height;
     frames++;
+    firstFrameReady();
     return true;
   };
-  const wake = () => {
-    raf = undefined;
-    // Keep the display clock running while IPC/write is in flight. Scheduling
-    // only after completion adds another vsync wait to every preview frame.
-    schedule();
-    void pump();
-  };
   const schedule = () => {
-    if (raf !== undefined) cancelAnimationFrame(raf);
-    raf = undefined;
-    if (!closed && initialized && visible())
-      raf = requestAnimationFrame(wake);
+    if (
+      raf === undefined &&
+      !closed &&
+      initialized &&
+      visible() &&
+      dirty
+    )
+      raf = requestAnimationFrame(() => {
+        raf = undefined;
+        frameDue = true;
+        void pump();
+      });
   };
   const pump = async () => {
     if (closed || !initialized || !visible() || running)
       return;
     running = true;
+    frameDue = false;
+    clearTimeout(refreshTimer);
     try {
-      await draw();
+      if (dirty) await draw();
+      else if (await presenter.refresh()) frames++;
     } catch (error) {
       if (!closed) {
         console.error("Native preview failed", error);
+        firstFrameFailed(error);
         close();
         onEnded();
       }
       return;
     } finally {
       running = false;
+      if (!closed && visible()) {
+        // A display tick can arrive during IPC or a track write. Consume that
+        // tick once the shared buffer is released instead of adding a second
+        // vsync wait to every busy frame.
+        if (dirty && frameDue)
+          queueMicrotask(() => void pump());
+        else schedule();
+        // Static generated tracks need sparse local repeats, never another IPC read.
+        if (presenter.needsRefresh)
+          refreshTimer = setTimeout(() => void pump(), 500);
+      }
+    }
+  };
+  const updatePresentation = () => {
+    if (!visible()) {
+      if (raf !== undefined) cancelAnimationFrame(raf);
+      raf = undefined;
+      frameDue = false;
+      clearTimeout(refreshTimer);
+      firstFrameReady();
+    } else {
+      dirty = true;
+      void pump();
     }
   };
   const visibilityChanged = () => {
-    schedule();
-    void pump();
+    updatePresentation();
+    if (initialized && !closed)
+      void invoke("capture_preview_visible", {
+        previewId: id,
+        visible: !document.hidden,
+      }).catch((error) => {
+        if (!closed)
+          console.warn(
+            "Could not update preview visibility",
+            error,
+          );
+      });
   };
   // Native visibility covers explicit tray/control hiding and minimization even
   // when WebView2 keeps its document active. An unfocused, visible PiP still runs.
-  const visibility = new Channel<boolean>((value) => {
-    if (closed || nativeVisible === value) return;
-    nativeVisible = value;
-    visibilityChanged();
+  const events = new Channel<PreviewEvent>((event) => {
+    if (closed) return;
+    if (event.type === "ended") {
+      close();
+      onEnded();
+    } else if (event.type === "frame") {
+      dirty = true;
+      schedule();
+    } else if (nativeVisible !== event.visible) {
+      nativeVisible = event.visible;
+      updatePresentation();
+    }
   });
   webview.addEventListener("sharedbufferreceived", receive);
   signal?.addEventListener("abort", aborted, {
@@ -227,21 +296,30 @@ export async function createRawPreview(
     opening = invoke("capture_preview_open", {
       sessionId,
       previewId: id,
-      visibility,
+      events,
+      visible: !document.hidden,
     });
     await Promise.all([opening, ready]);
     clearTimeout(timeout);
     signal?.throwIfAborted();
-    const deadline = performance.now() + 10_000;
-    while (visible() && !(await draw())) {
-      if (!visible()) break;
-      if (closed || performance.now() > deadline)
-        throw new Error(
-          "Native preview did not produce a frame",
-        );
-      await new Promise((resolve) =>
-        setTimeout(resolve, 16),
+    initialized = true;
+    document.addEventListener(
+      "visibilitychange",
+      visibilityChanged,
+    );
+    visibilityChanged();
+    if (visible()) {
+      timeout = setTimeout(
+        () =>
+          firstFrameFailed(
+            new Error(
+              "Native preview did not produce a frame",
+            ),
+          ),
+        10_000,
       );
+      await firstFrame;
+      clearTimeout(timeout);
     }
     signal?.throwIfAborted();
     if (closed) throw new Error("Preview closed");
@@ -253,14 +331,8 @@ export async function createRawPreview(
           .stream.getAudioTracks()[0],
       );
     }
-    document.addEventListener(
-      "visibilitychange",
-      visibilityChanged,
-    );
     // Pause only presentation: retain the stream, mapping and capture ownership
     // while hidden, then request the latest frame when the window returns.
-    initialized = true;
-    visibilityChanged();
     return {
       stream,
       close,

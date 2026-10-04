@@ -2,8 +2,8 @@
 use std::{cell::RefCell, collections::HashMap, sync::Weak};
 use tauri::{ipc::Channel, Webview};
 use weblink_desktop_capture::media::{
-    preview::{PreviewFrame, BUFFER_SIZE},
-    MediaSession,
+    preview::{PreviewEvent, PreviewFrame, BUFFER_SIZE},
+    MediaSession, PreviewSubscription,
 };
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2Environment12, ICoreWebView2SharedBuffer, ICoreWebView2_17,
@@ -14,8 +14,8 @@ struct Buffer {
     shared: ICoreWebView2SharedBuffer,
     media: Weak<MediaSession>,
     owner: String,
-    visibility: Channel<bool>,
-    visible: bool,
+    subscription: PreviewSubscription,
+    document_visible: bool,
 }
 impl Drop for Buffer {
     fn drop(&mut self) {
@@ -57,9 +57,10 @@ pub fn update_visibility(webview: &tauri::WebviewWindow) {
             window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true);
         BUFFERS.with(|buffers| {
             for buffer in buffers.borrow_mut().values_mut() {
-                if buffer.owner == window.label() && buffer.visible != visible {
-                    buffer.visible = visible;
-                    let _ = buffer.visibility.send(visible);
+                if buffer.owner == window.label() {
+                    buffer
+                        .subscription
+                        .set_visible(visible && buffer.document_visible);
                 }
             }
         });
@@ -70,7 +71,8 @@ pub async fn open(
     webview: Webview,
     media: std::sync::Arc<MediaSession>,
     preview_id: String,
-    visibility: Channel<bool>,
+    events: Channel<PreviewEvent>,
+    document_visible: bool,
 ) -> Result<(), String> {
     let owner = webview.label().to_owned();
     let window = webview.window();
@@ -83,7 +85,6 @@ pub async fn open(
             }
             let visible = window.is_visible().map_err(|e| e.to_string())?
                 && !window.is_minimized().map_err(|e| e.to_string())?;
-            visibility.send(visible).map_err(|e| e.to_string())?;
             let shared = (|| -> windows_core::Result<_> {
                 unsafe {
                     let environment: ICoreWebView2Environment12 = view.environment().cast()?;
@@ -101,14 +102,24 @@ pub async fn open(
                 }
             })()
             .map_err(|e| format!("WebView2 shared-memory preview is unavailable: {e}"))?;
+            let subscription = match media
+                .subscribe_preview(visible && document_visible, move |event| {
+                    events.send(event).is_ok()
+                }) {
+                Ok(subscription) => subscription,
+                Err(error) => {
+                    let _ = unsafe { shared.Close() };
+                    return Err(error);
+                }
+            };
             buffers.insert(
                 preview_id,
                 Buffer {
                     shared,
                     media: std::sync::Arc::downgrade(&media),
                     owner,
-                    visibility,
-                    visible,
+                    subscription,
+                    document_visible,
                 },
             );
             Ok(())
@@ -132,7 +143,8 @@ pub async fn frame(
                 .filter(|buffer| buffer.owner == owner)
                 .ok_or("Preview no longer exists")?;
             // A request queued before hiding must not copy another pixel buffer.
-            if !window.is_visible().map_err(|e| e.to_string())?
+            if !buffer.document_visible
+                || !window.is_visible().map_err(|e| e.to_string())?
                 || window.is_minimized().map_err(|e| e.to_string())?
             {
                 return Ok(None);
@@ -146,7 +158,12 @@ pub async fn frame(
                 }
                 // Only this UI-thread request writes. JS reads after invoke resolves,
                 // copies into a VideoFrame, then requests again. No shared mutable JS access.
-                media.copy_preview_frame(after, std::slice::from_raw_parts_mut(data, BUFFER_SIZE))
+                let frame = media
+                    .copy_preview_frame(after, std::slice::from_raw_parts_mut(data, BUFFER_SIZE))?;
+                buffer
+                    .subscription
+                    .acknowledge(frame.as_ref().map_or(after, |frame| frame.sequence));
+                Ok(frame)
             }
         })
     })
@@ -166,6 +183,32 @@ pub async fn close(webview: Webview, preview_id: String) -> Result<(), String> {
             }
         });
         Ok(())
+    })
+    .await
+}
+
+pub async fn set_visible(
+    webview: Webview,
+    preview_id: String,
+    visible: bool,
+) -> Result<(), String> {
+    let owner = webview.label().to_owned();
+    let window = webview.window();
+    on_view(webview, move |_| {
+        BUFFERS.with(|buffers| {
+            let mut buffers = buffers.borrow_mut();
+            let buffer = buffers
+                .get_mut(&preview_id)
+                .filter(|buffer| buffer.owner == owner)
+                .ok_or("Preview no longer exists")?;
+            buffer.document_visible = visible;
+            buffer.subscription.set_visible(
+                visible
+                    && window.is_visible().unwrap_or(false)
+                    && !window.is_minimized().unwrap_or(true),
+            );
+            Ok(())
+        })
     })
     .await
 }

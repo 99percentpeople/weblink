@@ -265,6 +265,17 @@ impl<B: Backend> Authority<B> {
             }
         }
     }
+    /// Idle authorities have no clock work. Active bindings retain a bounded
+    /// safety recheck, with lease/consent deadlines taking precedence.
+    pub fn wait_duration(&self, now: Instant) -> Option<Duration> {
+        let deadline = match &self.state {
+            State::Idle => return None,
+            State::Pending(p) => Some(p.deadline),
+            State::Granted { deadline, .. } => *deadline,
+        };
+        let guard = Duration::from_millis(100);
+        Some(deadline.map_or(guard, |at| at.saturating_duration_since(now).min(guard)))
+    }
     pub fn revoke(&mut self) {
         // Invalidate first: even a failed/panicking release cannot leave permission active.
         if let State::Granted { grant, .. } = std::mem::replace(&mut self.state, State::Idle) {

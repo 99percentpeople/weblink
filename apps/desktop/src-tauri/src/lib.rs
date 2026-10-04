@@ -120,6 +120,7 @@ pub fn run() {
             capture::capture_pipeline_stats,
             preview::capture_preview_open,
             preview::capture_preview_frame,
+            preview::capture_preview_visible,
             preview::capture_preview_close,
             capture::capture_offer,
             capture::capture_answer,

@@ -34,6 +34,7 @@ struct State {
     watch: Option<Watch>,
     update: Option<Update>,
     revision: u64,
+    owner: Option<thread::Thread>,
 }
 pub(super) struct Monitor {
     state: Arc<(Mutex<State>, Condvar)>,
@@ -113,6 +114,9 @@ impl Monitor {
                             sequence,
                             focus,
                         });
+                        if let Some(owner) = &state.owner {
+                            owner.unpark();
+                        }
                     }
                     next = Instant::now() + Duration::from_millis(200);
                 }
@@ -132,6 +136,9 @@ impl Monitor {
         state.watch = Some(watch);
         state.update = None;
         self.state.1.notify_one();
+    }
+    pub(super) fn set_waker(&self, owner: thread::Thread) {
+        self.state.0.lock().unwrap_or_else(|e| e.into_inner()).owner = Some(owner);
     }
     pub(super) fn take(&self) -> Option<Update> {
         self.state

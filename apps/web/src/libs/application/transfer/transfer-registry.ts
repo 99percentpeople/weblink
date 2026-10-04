@@ -58,8 +58,9 @@ type Entry = {
   finishing: boolean;
   pendingChannel?: RTCDataChannel;
   timer?: ReturnType<typeof setTimeout>;
-  flushTimer?: ReturnType<typeof setInterval>;
+  flushTimer?: ReturnType<typeof setTimeout>;
   flushing?: Promise<void>;
+  dirty?: boolean;
   releaseCache: () => void;
 };
 
@@ -324,19 +325,44 @@ export class TransferRegistry {
     this.assertCurrent(run);
     entry.initialized = true;
     if (run.transferer.mode === TransferMode.Receive) {
-      entry.flushTimer = setInterval(() => {
-        if (entry.flushing || !this.isCurrent(run)) return;
-        entry.flushing = run.transferer.cache
-          .flush()
-          .catch((error) => this.fail(run, error))
-          .finally(() => {
-            entry.flushing = undefined;
-          });
-      }, 1000);
+      run.transferer.addEventListener(
+        "progress",
+        () => {
+          entry.dirty = true;
+          this.scheduleFlush(entry);
+        },
+        { signal: run.signal },
+      );
     }
     const pending = entry.pendingChannel;
     entry.pendingChannel = undefined;
     if (pending) this.setChannel(run, pending);
+  }
+
+  private scheduleFlush(entry: Entry): void {
+    const { run } = entry;
+    if (
+      !entry.dirty ||
+      entry.finishing ||
+      entry.flushing ||
+      entry.flushTimer !== undefined ||
+      !this.isCurrent(run)
+    )
+      return;
+    // Bound durability delay from the first changed chunk; continuous traffic
+    // must not postpone the write, and idle receivers need no periodic flush.
+    entry.flushTimer = setTimeout(() => {
+      entry.flushTimer = undefined;
+      if (!this.isCurrent(run) || entry.finishing) return;
+      entry.dirty = false;
+      entry.flushing = run.transferer.cache
+        .flush()
+        .catch((error) => this.fail(run, error))
+        .finally(() => {
+          entry.flushing = undefined;
+          this.scheduleFlush(entry);
+        });
+    }, 1000);
   }
 
   assertCurrent(run: TransferRun): void {
@@ -351,7 +377,7 @@ export class TransferRegistry {
     const { run } = entry;
     if (!this.isCurrent(run) || entry.finishing) return;
     entry.finishing = true;
-    clearInterval(entry.flushTimer);
+    clearTimeout(entry.flushTimer);
     clearTimeout(entry.timer);
     try {
       await entry.flushing;
@@ -407,7 +433,7 @@ export class TransferRegistry {
     if (entries.size === 0)
       this.sessions.delete(run.session);
     clearTimeout(entry.timer);
-    clearInterval(entry.flushTimer);
+    clearTimeout(entry.flushTimer);
     this.options.publish(run.id, undefined);
     const channel = run.transferer.channel;
     run.transferer.close();

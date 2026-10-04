@@ -10,6 +10,11 @@ use std::sync::{atomic::AtomicBool, Arc};
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    /// Wake the native owner when status changes. False retains its bounded
+    /// fallback for backends without notifications.
+    fn set_waker(&self, _owner: std::thread::Thread) -> bool {
+        false
+    }
     /// The backend must observe invalidation before injecting any queued input.
     fn register_until(
         &self,

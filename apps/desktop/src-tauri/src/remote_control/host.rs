@@ -84,6 +84,9 @@ impl Host {
                 last_geometry: Instant::now(),
             },
         );
+        if let Some(wake) = &self.wake {
+            wake.unpark();
+        }
         Ok(endpoint)
     }
     pub(super) fn snapshot(&self) -> Snapshot {

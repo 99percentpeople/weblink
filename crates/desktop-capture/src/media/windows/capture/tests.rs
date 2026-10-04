@@ -32,6 +32,56 @@ fn texture(device: &ID3D11Device, size: (u32, u32), value: u8) -> ID3D11Texture2
     texture.unwrap()
 }
 
+#[test]
+#[ignore = "Opt-in synthetic GPU work/CPU measurement; no desktop pixels"]
+fn synthetic_unviewed_capture_cost() {
+    use windows::Win32::{
+        Foundation::FILETIME,
+        System::Threading::{GetCurrentProcess, GetProcessTimes},
+    };
+    fn cpu_seconds() -> f64 {
+        let (mut created, mut exited, mut kernel, mut user) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        unsafe {
+            GetProcessTimes(
+                GetCurrentProcess(),
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
+        }
+        .unwrap();
+        let ticks =
+            |time: FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
+        (ticks(kernel) + ticks(user)) as f64 / 10_000_000.0
+    }
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let textures = [texture(&device, (1920, 1080), 32), texture(&device, (1920, 1080), 192)];
+        for round in 0..3 {
+            let media = MediaSession::new(MediaOptions { encoder: "software".into(), frame_rate: 60, ..Default::default() }).unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let cpu = cpu_seconds();
+            let started = Instant::now();
+            let mut cadence = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
+            cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            for index in 0..180 {
+                cadence.tick().await;
+                media.frame(frame(&device, &context, &textures[index % 2])).unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            println!("PERF {}", serde_json::json!({"scenario":"unviewed-1080p60", "round":round, "wallSeconds":started.elapsed().as_secs_f64(), "cpuSeconds":cpu_seconds() - cpu, "convertedFrames":media.latest_sequence.load(Ordering::Relaxed)}));
+            assert!(media.error().is_none(), "{:?}", media.error());
+            media.close();
+        }
+    });
+}
+
 fn frame<'a>(
     device: &'a ID3D11Device,
     context: &'a ID3D11DeviceContext,
@@ -44,6 +94,50 @@ fn frame<'a>(
         rotation: Rotation::Identity,
         cursor: None,
     }
+}
+
+#[test]
+fn consumer_demand_resumes_a_static_source_without_another_capture_arrival() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let media = MediaSession::new(MediaOptions {
+            encoder: "software".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let source = texture(&device, (16, 16), 96);
+        media.frame(frame(&device, &context, &source)).unwrap();
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert_eq!(media.latest_sequence.load(Ordering::Acquire), 0);
+        let preview = media.subscribe_preview(true, |_| true).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while media.latest_sequence.load(Ordering::Acquire) == 0 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        preview.set_visible(false);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let sequence = media.latest_sequence.load(Ordering::Acquire);
+        let source = texture(&device, (16, 16), 160);
+        media.frame(frame(&device, &context, &source)).unwrap();
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert_eq!(media.latest_sequence.load(Ordering::Acquire), sequence);
+        // A remote peer is a consumer even with every preview hidden.
+        media
+            .offer("remote".into(), vec![], false, false)
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while media.latest_sequence.load(Ordering::Acquire) == sequence {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        media.close();
+    });
 }
 
 fn assert_pixels(pending: &mut PendingReadback, value: u8) {
@@ -102,6 +196,7 @@ fn bounded_readbacks_deliver_the_final_static_update_and_live_resize() {
                 })
                 .unwrap();
                 let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+                let _preview = media.subscribe_preview(true, |_| true).unwrap();
                 for index in 0..12 {
                     let pixels = texture(&device, (16, 8), if index == 11 { 240 } else { 16 });
                     media.frame(frame(&device, &context, &pixels)).unwrap();
@@ -158,6 +253,7 @@ fn closing_with_pending_readback_releases_slots_without_publishing_late_frames()
             .unwrap();
             let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
             let pixels = texture(&device, (8, 8), 128);
+            let _preview = media.subscribe_preview(true, |_| true).unwrap();
             media.frame(frame(&device, &context, &pixels)).unwrap();
             assert!(media.capture_step(true).unwrap().pending);
             media.close();
@@ -167,5 +263,34 @@ fn closing_with_pending_readback_releases_slots_without_publishing_late_frames()
             assert_eq!(media.latest_sequence.load(Ordering::Relaxed), 0);
             let state = media.conversion.lock().unwrap();
             assert!(state.pending.is_empty() && state.reusable.is_empty());
+        });
+}
+
+#[test]
+fn hiding_during_readback_retains_the_final_static_update_for_resume() {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let media = MediaSession::new(MediaOptions {
+                encoder: "software".into(),
+                ..Default::default()
+            })
+            .unwrap();
+            let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+            let pixels = texture(&device, (8, 8), 128);
+            let preview = media.subscribe_preview(true, |_| true).unwrap();
+            media.frame(frame(&device, &context, &pixels)).unwrap();
+            assert!(media.capture_step(true).unwrap().pending);
+            preview.set_visible(false);
+            media.capture_step(false).unwrap();
+            assert!(media.conversion.lock().unwrap().pending.is_empty());
+            assert!(media.readback.lock().unwrap().dirty);
+            assert_eq!(media.latest_sequence.load(Ordering::Acquire), 0);
+            preview.set_visible(true);
+            media.flush().unwrap();
+            assert!(media.latest.lock().unwrap().is_some());
+            media.close();
         });
 }

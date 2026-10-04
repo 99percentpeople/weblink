@@ -3,7 +3,7 @@ use crate::input::{Error, Geometry};
 use std::{
     cell::RefCell,
     sync::{
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
         mpsc, Arc,
     },
     thread::{self, JoinHandle},
@@ -15,7 +15,9 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::{
-            LibraryLoader::GetModuleHandleW, RemoteDesktop::*, Threading::GetCurrentProcessId,
+            LibraryLoader::GetModuleHandleW,
+            RemoteDesktop::*,
+            Threading::{GetCurrentProcessId, GetCurrentThreadId},
         },
         UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     },
@@ -202,6 +204,7 @@ pub(super) struct Safety {
     pub observations: Arc<Observations>,
     stop: Arc<AtomicBool>,
     listener: Option<JoinHandle<()>>,
+    listener_id: Arc<AtomicU32>,
     _dpi: InputDpi,
     pub layout: Layout,
     pub marker: usize,
@@ -221,6 +224,8 @@ impl Safety {
         let stop = Arc::new(AtomicBool::new(false));
         let shared = observations.clone();
         let stopping = stop.clone();
+        let listener_id = Arc::new(AtomicU32::new(0));
+        let id = listener_id.clone();
         let (ready, initialized) = mpsc::sync_channel(1);
         let listener = thread::Builder::new()
             .name("weblink-input-events".into())
@@ -233,10 +238,14 @@ impl Safety {
                         return;
                     }
                 };
+                id.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
                 let _ = ready.send(Ok(native.layout.clone()));
                 let mut poll = Instant::now();
                 while !stopping.load(Ordering::Acquire) {
                     pump();
+                    if stopping.load(Ordering::Acquire) {
+                        break;
+                    }
                     if poll.elapsed() >= Duration::from_millis(100) {
                         if !desktop_available() || layout().as_ref() != Ok(&native.layout) {
                             shared.signal(INVALIDATED);
@@ -245,7 +254,11 @@ impl Safety {
                     }
                     // Wake on lifecycle/hotkey messages, not a polling sleep. Never run SendInput here.
                     unsafe {
-                        if MsgWaitForMultipleObjectsEx(None, 5, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
+                        let wait = Duration::from_millis(100)
+                            .saturating_sub(poll.elapsed())
+                            .as_millis()
+                            .max(1) as u32;
+                        if MsgWaitForMultipleObjectsEx(None, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
                             == WAIT_FAILED
                         {
                             shared.signal(INVALIDATED);
@@ -253,12 +266,21 @@ impl Safety {
                         }
                     }
                 }
+                id.store(0, Ordering::Release);
             })
             .map_err(|_| Error::Unavailable)?;
         let layout = match initialized.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(layout)) => layout,
             result => {
                 stop.store(true, Ordering::Release);
+                unsafe {
+                    let _ = PostThreadMessageW(
+                        listener_id.load(Ordering::Acquire),
+                        WM_NULL,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
+                }
                 let _ = listener.join();
                 return Err(match result {
                     Ok(Err(e)) => e,
@@ -270,6 +292,7 @@ impl Safety {
             observations,
             stop,
             listener: Some(listener),
+            listener_id,
             _dpi: dpi,
             layout,
             marker,
@@ -316,6 +339,14 @@ impl Safety {
 impl Drop for Safety {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
+        unsafe {
+            let _ = PostThreadMessageW(
+                self.listener_id.load(Ordering::Acquire),
+                WM_NULL,
+                WPARAM(0),
+                LPARAM(0),
+            );
+        }
         if let Some(listener) = self.listener.take() {
             let _ = listener.join();
         }

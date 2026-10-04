@@ -2,7 +2,7 @@ use super::{ExitShortcut, KeyboardEvent};
 use std::{
     cell::RefCell,
     sync::{
-        atomic::{AtomicU64, AtomicU8, Ordering},
+        atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -12,8 +12,8 @@ use tauri::ipc::Channel;
 use weblink_desktop_input::keyboard_capture::{Decision, KeyboardCapture};
 use windows::Win32::{
     Foundation::*,
-    System::LibraryLoader::GetModuleHandleW,
-    UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+    System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
+    UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
 
 const CLOSED: u8 = 1;
@@ -34,6 +34,8 @@ struct Life {
     deadline: AtomicU64,
     sequence: AtomicU64,
     acknowledged: AtomicU64,
+    thread_id: AtomicU32,
+    delivery: Mutex<Option<mpsc::SyncSender<Option<KeyboardEvent>>>>,
 }
 impl Life {
     fn new() -> Self {
@@ -43,12 +45,26 @@ impl Life {
             deadline: AtomicU64::new(750),
             sequence: AtomicU64::new(0),
             acknowledged: AtomicU64::new(0),
+            thread_id: AtomicU32::new(0),
+            delivery: Mutex::new(None),
         }
     }
     fn stop(&self, reason: u8) {
-        let _ = self
+        if self
             .stopped
-            .compare_exchange(0, reason, Ordering::AcqRel, Ordering::Acquire);
+            .compare_exchange(0, reason, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            if let Some(send) = &*self.delivery.lock().unwrap_or_else(|e| e.into_inner()) {
+                let _ = send.try_send(None);
+            }
+            let thread_id = self.thread_id.load(Ordering::Acquire);
+            if thread_id != 0 {
+                unsafe {
+                    let _ = PostThreadMessageW(thread_id, WM_NULL, WPARAM(0), LPARAM(0));
+                }
+            }
+        }
     }
     fn active(&self) -> bool {
         if self.elapsed() >= self.deadline.load(Ordering::Acquire) {
@@ -86,6 +102,7 @@ impl Service {
         slot.take();
         let life = Arc::new(Life::new());
         let (send, receive) = mpsc::sync_channel(64);
+        *life.delivery.lock().unwrap() = Some(send.clone());
         let (ready, started) = mpsc::sync_channel(1);
         let shared = life.clone();
         thread::Builder::new()
@@ -107,8 +124,8 @@ impl Service {
             .name("weblink-keyboard-delivery".into())
             .spawn(move || {
                 while shared.active() {
-                    match receive.recv_timeout(Duration::from_millis(10)) {
-                        Ok(event) => {
+                    match receive.recv() {
+                        Ok(Some(event)) => {
                             if !shared.active() {
                                 break;
                             }
@@ -122,8 +139,7 @@ impl Service {
                                 shared.stop(CLOSED);
                             }
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
-                        Err(_) => {
+                        Ok(None) | Err(_) => {
                             shared.stop(CLOSED);
                         }
                     }
@@ -182,7 +198,7 @@ struct Capture {
     hwnd: HWND,
     life: Arc<Life>,
     policy: KeyboardCapture,
-    send: mpsc::SyncSender<KeyboardEvent>,
+    send: mpsc::SyncSender<Option<KeyboardEvent>>,
 }
 thread_local! { static CAPTURE: RefCell<Option<Capture>> = const { RefCell::new(None) }; }
 unsafe fn foreground(hwnd: HWND) -> bool {
@@ -234,13 +250,13 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
                 let sequence = s.life.sequence.fetch_add(1, Ordering::AcqRel) + 1;
                 if sequence.saturating_sub(s.life.acknowledged.load(Ordering::Acquire)) > 64
                     || s.send
-                        .try_send(KeyboardEvent::Key {
+                        .try_send(Some(KeyboardEvent::Key {
                             scan_code: key.code(),
                             extended: key.extended(),
                             down,
                             sequence,
                             timestamp: now(),
-                        })
+                        }))
                         .is_err()
                 {
                     s.life.stop(OVERFLOW);
@@ -255,11 +271,28 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         CallNextHookEx(None, code, wp, lp)
     }
 }
+unsafe extern "system" fn focus_changed(
+    _: HWINEVENTHOOK,
+    _: u32,
+    _: HWND,
+    _: i32,
+    _: i32,
+    _: u32,
+    _: u32,
+) {
+    CAPTURE.with(|slot| {
+        if let Some(capture) = slot.borrow().as_ref() {
+            if !foreground(capture.hwnd) {
+                capture.life.stop(FOCUS);
+            }
+        }
+    });
+}
 fn run(
     hwnd: usize,
     exit: ExitShortcut,
     life: Arc<Life>,
-    send: mpsc::SyncSender<KeyboardEvent>,
+    send: mpsc::SyncSender<Option<KeyboardEvent>>,
     ready: mpsc::SyncSender<Result<(), String>>,
 ) {
     unsafe {
@@ -301,6 +334,17 @@ fn run(
                 return;
             }
         };
+        let focus_hook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            None,
+            Some(focus_changed),
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT,
+        );
+        life.thread_id
+            .store(GetCurrentThreadId(), Ordering::Release);
         let _ = ready.send(Ok(()));
         let mut draining = None;
         let mut desktop_check = Instant::now();
@@ -334,13 +378,28 @@ fn run(
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            if MsgWaitForMultipleObjectsEx(None, 5, QS_ALLINPUT, MWMO_INPUTAVAILABLE) == WAIT_FAILED
+            let mut wait = Duration::from_millis(50).saturating_sub(desktop_check.elapsed());
+            if draining.is_none() {
+                wait = wait.min(Duration::from_millis(
+                    life.deadline
+                        .load(Ordering::Acquire)
+                        .saturating_sub(life.elapsed()),
+                ));
+            }
+            if MsgWaitForMultipleObjectsEx(
+                None,
+                wait.as_millis().max(1) as u32,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            ) == WAIT_FAILED
             {
                 life.stop(CLOSED);
                 break;
             }
         }
         let _ = UnhookWindowsHookEx(handle);
+        let _ = UnhookWinEvent(focus_hook);
+        life.thread_id.store(0, Ordering::Release);
         CAPTURE.with(|slot| slot.borrow_mut().take());
         life.stop(CLOSED);
     }
@@ -375,6 +434,20 @@ pub async fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stopping_capture_wakes_delivery_once_without_polling() {
+        let life = Life::new();
+        let (send, receive) = mpsc::sync_channel(1);
+        *life.delivery.lock().unwrap() = Some(send);
+        life.stop(FOCUS);
+        assert!(receive
+            .recv_timeout(Duration::from_millis(100))
+            .unwrap()
+            .is_none());
+        life.stop(CLOSED);
+        assert!(receive.try_recv().is_err());
+        assert_eq!(life.stopped.load(Ordering::Acquire), FOCUS);
+    }
     fn service() -> (Service, Arc<Life>) {
         let life = Arc::new(Life::new());
         (

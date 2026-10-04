@@ -27,6 +27,8 @@ export class FileReceiver extends FileTransferBase {
   private receivedData?: ReceiveData;
   private initialized: boolean = false;
   private lastReceiveActivityAt = Date.now();
+  private receiveRevision = 0;
+  private checking = false;
 
   private blockCache: {
     [chunkIndex: number]: {
@@ -152,9 +154,7 @@ export class FileReceiver extends FileTransferBase {
     receivedData.receiveBytes += chunkData.byteLength;
     this.updateProgress();
 
-    if (this.triggerReceiveComplete()) {
-      window.clearInterval(this.timer);
-    }
+    this.triggerReceiveComplete();
     delete this.blockCache[chunkIndex];
   }
 
@@ -205,20 +205,54 @@ export class FileReceiver extends FileTransferBase {
     }
   }
 
-  private startChecking(delay: number = 5000) {
-    if (this.closed || this.timer !== undefined) return;
+  private startChecking(delay: number = 10000) {
+    if (
+      this.closed ||
+      this.paused ||
+      this.finishing ||
+      this.isComplete ||
+      this.checking ||
+      this.timer !== undefined
+    )
+      return;
+    const remaining = Math.max(
+      0,
+      delay - (Date.now() - this.lastReceiveActivityAt),
+    );
+    this.timer = window.setTimeout(() => {
+      this.timer = undefined;
+      void this.checkMissing(delay);
+    }, remaining);
+  }
 
-    const checking = async () => {
-      if (this.closed || !this.receivedData) return;
-      if (Date.now() - this.lastReceiveActivityAt < delay) {
-        return;
-      }
-
+  private async checkMissing(delay: number) {
+    if (
+      this.closed ||
+      this.paused ||
+      this.finishing ||
+      this.isComplete
+    )
+      return;
+    if (Date.now() - this.lastReceiveActivityAt < delay) {
+      this.startChecking(delay);
+      return;
+    }
+    this.checking = true;
+    const revision = this.receiveRevision;
+    const current = () =>
+      !this.closed &&
+      !this.paused &&
+      !this.finishing &&
+      !this.isComplete &&
+      revision === this.receiveRevision;
+    try {
       this.lastReceiveActivityAt = Date.now();
+      if (!this.receivedData) return;
       const done = await this.cache.isTransferComplete();
-
+      if (!current()) return;
       if (!done) {
         const ranges = await this.cache.getReqRanges();
+        if (!current()) return;
         console.log(`send request-content ranges`, ranges);
 
         if (ranges) {
@@ -233,25 +267,23 @@ export class FileReceiver extends FileTransferBase {
             if (this.closed) return;
             throw error;
           }
+          if (!current()) return;
           channel.send(encodeTransferMessage(msg));
           console.log(`send msg`, msg);
         }
       }
-      if (this.triggerReceiveComplete()) {
-        window.clearInterval(this.timer);
-        this.timer = undefined;
-      }
-    };
-
-    const pollInterval = Math.min(delay, 1000);
-    this.timer = window.setInterval(() => {
-      checking().catch((error) => {
+      this.triggerReceiveComplete();
+    } catch (error) {
+      if (!this.closed) {
         console.error(error);
         if (error instanceof Error) {
           this.dispatchEvent("error", error);
         }
-      });
-    }, pollInterval);
+      }
+    } finally {
+      this.checking = false;
+      this.startChecking(delay);
+    }
   }
 
   private finishing = false;
@@ -266,6 +298,8 @@ export class FileReceiver extends FileTransferBase {
     const complete =
       this.receivedData.indexes.size === chunkslength;
     if (complete) {
+      window.clearTimeout(this.timer);
+      this.timer = undefined;
       if (this.isComplete || this.finishing) return true;
       console.log(`trigger receive complete`);
       this.finishing = true;
@@ -308,16 +342,16 @@ export class FileReceiver extends FileTransferBase {
     data: string | ArrayBuffer | Blob,
   ) {
     try {
+      if (this.closed || this.paused) return;
       this.lastReceiveActivityAt = Date.now();
+      this.receiveRevision++;
       if (typeof data === "string") {
         console.log(`receiver get message`, data);
         const message = parseTransferMessage(data);
         if (message.type === "pause") {
           this.pause(false);
         } else if (message.type === "complete") {
-          if (this.triggerReceiveComplete()) {
-            window.clearInterval(this.timer);
-          }
+          this.triggerReceiveComplete();
         }
       } else {
         const info = this.info;

@@ -3,6 +3,14 @@ use serde::Serialize;
 
 pub const BUFFER_SIZE: usize = 3840 * 2160 * 3 / 2;
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum PreviewEvent {
+    Visibility { visible: bool },
+    Frame,
+    Ended,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewFrame {

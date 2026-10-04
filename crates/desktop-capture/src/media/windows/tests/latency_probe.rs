@@ -36,6 +36,23 @@ fn per_item_ms(seconds: f64, count: u64) -> Option<f64> {
 #[test]
 #[ignore = "Opt-in hardware/RTP latency measurement; synthetic images only"]
 fn synthetic_native_stream_latency() {
+    // Opt-in controlled timer granularity for A/B runs. This guard changes only
+    // this benchmark process and always balances the native resolution request.
+    struct TimerResolution(bool);
+    impl Drop for TimerResolution {
+        fn drop(&mut self) {
+            if self.0 {
+                unsafe {
+                    windows::Win32::Media::timeEndPeriod(1);
+                }
+            }
+        }
+    }
+    let resolution = std::env::var("WEBLINK_PERF_TIMER_MS").as_deref() == Ok("1");
+    if resolution {
+        assert_eq!(unsafe { windows::Win32::Media::timeBeginPeriod(1) }, 0);
+    }
+    let _timer = TimerResolution(resolution);
     tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(run_probe());
@@ -139,6 +156,7 @@ async fn run_probe() {
         let report: Value = json!({
             "scope": "synthetic GPU input to native loopback receiver; excludes capture OS and presentation",
             "debugAssertions": cfg!(debug_assertions),
+            "requestedTimerResolutionMs": std::env::var("WEBLINK_PERF_TIMER_MS").ok(),
             "measurementSeconds": measured_seconds,
             "pipelineRollingWindow": 120,
             "encoder": hardware.name, "requestedFps": fps,

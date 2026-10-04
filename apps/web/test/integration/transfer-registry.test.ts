@@ -33,6 +33,61 @@ afterEach(async () => {
 });
 
 describe("session-owned file transfers", () => {
+  it("flushes changed chunks once within a second and sleeps while idle", async () => {
+    const cache = fakeCache();
+    const run = fixture.register(
+      fileSession(),
+      cache,
+      "message",
+      TransferMode.Receive,
+    );
+    await fixture.registry.initialize(run);
+    fixture.registry.setChannel(run, fakeChannel());
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(cache.flush).not.toHaveBeenCalled();
+    fixture.created[0].dispatchEvent("progress", {
+      total: 2048,
+      received: 256,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    fixture.created[0].dispatchEvent("progress", {
+      total: 2048,
+      received: 512,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(cache.flush).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(cache.flush).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("remembers new progress during an in-flight flush without overlapping writes", async () => {
+    const cache = fakeCache();
+    const pending = deferred<void>();
+    cache.flush.mockReturnValueOnce(pending.promise);
+    const run = fixture.register(
+      fileSession(),
+      cache,
+      "message",
+      TransferMode.Receive,
+    );
+    await fixture.registry.initialize(run);
+    fixture.registry.setChannel(run, fakeChannel());
+    fixture.created[0].dispatchEvent("progress", {
+      total: 2048,
+      received: 256,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.created[0].dispatchEvent("progress", {
+      total: 2048,
+      received: 512,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cache.flush).toHaveBeenCalledOnce();
+    pending.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(cache.flush).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("preserves each room recipient's paused progress when binding a replacement run", () => {
     fixture.messages.messages = [
       {
@@ -309,7 +364,7 @@ describe("session-owned file transfers", () => {
       fixture.registry.get(run.session, "file"),
     ).toBeUndefined();
   });
-  it("contains periodic flush failure and tears down its timer", async () => {
+  it("contains deferred flush failure and tears down its timer", async () => {
     fixture.messages.messages = [fileMessage()];
     const cache = fakeCache();
     cache.flush.mockRejectedValue(new Error("disk full"));
@@ -321,6 +376,10 @@ describe("session-owned file transfers", () => {
     );
     await fixture.registry.initialize(run);
     fixture.registry.setChannel(run, fakeChannel());
+    fixture.created[0].dispatchEvent("progress", {
+      total: 2048,
+      received: 1024,
+    });
     await vi.advanceTimersByTimeAsync(1001);
     expect(fixture.messages.messages[0].error).toBe(
       "disk full",

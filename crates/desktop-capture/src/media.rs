@@ -289,7 +289,7 @@ fn gathered_sdp(sdp: &str, candidates: &[IceCandidate]) -> String {
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::MediaSession;
+pub use windows::{MediaSession, PreviewSubscription};
 
 #[cfg(not(windows))]
 pub struct MediaSession;

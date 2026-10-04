@@ -37,6 +37,37 @@ fn failed_cleanup_keeps_authority_closed_even_if_the_owner_catches_the_panic() {
 }
 
 #[test]
+fn idle_wait_is_unbounded_but_active_waits_preserve_consent_and_lease_deadlines() {
+    let (mut authority, _, binding, now) = setup();
+    assert_eq!(authority.wait_duration(now), None);
+    let consent = pending(&mut authority, &binding, "request", now);
+    assert_eq!(
+        authority.wait_duration(now),
+        Some(Duration::from_millis(100))
+    );
+    let almost_consent =
+        now + Duration::from_millis(weblink_desktop_input::protocol::REQUEST_TIMEOUT_MS - 5);
+    assert_eq!(
+        authority.wait_duration(almost_consent),
+        Some(Duration::from_millis(5))
+    );
+    authority.approve(&consent, now).unwrap();
+    let deadline = now + Duration::from_millis(weblink_desktop_input::protocol::LEASE_MS);
+    assert_eq!(
+        authority.wait_duration(deadline - Duration::from_millis(5)),
+        Some(Duration::from_millis(5))
+    );
+    assert_eq!(authority.wait_duration(deadline), Some(Duration::ZERO));
+    authority.tick(deadline);
+    assert_eq!(
+        authority.wait_duration(deadline),
+        Some(Duration::from_millis(100))
+    );
+    authority.revoke();
+    assert_eq!(authority.wait_duration(deadline), None);
+}
+
+#[test]
 fn request_deduplication_is_bounded_and_recovers_after_its_window() {
     let (mut a, _, b, now) = setup();
     for i in 0..256 {

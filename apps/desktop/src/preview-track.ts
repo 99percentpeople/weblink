@@ -4,6 +4,7 @@ interface GeneratedVideoTrack extends MediaStreamTrack {
 interface PreviewTrack {
   stream: MediaStream;
   implementation: string;
+  needsRefresh: boolean;
   /** The owner serializes writes and closes each input frame. */
   write(frame: VideoFrame): Promise<void>;
   refresh(): Promise<boolean>;
@@ -59,6 +60,7 @@ function generatedTrack(
   return {
     stream,
     implementation: "Shared memory / VideoFrame",
+    needsRefresh: true,
     write,
     refresh: async () => {
       if (
@@ -110,6 +112,7 @@ function canvasTrack(): PreviewTrack {
   return {
     stream,
     implementation: "Shared memory / Canvas",
+    needsRefresh: false,
     write: async (frame) => {
       if (closed)
         throw new DOMException(

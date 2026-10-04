@@ -126,6 +126,11 @@ impl Service {
         let thread = thread::Builder::new()
             .name("weblink-control".into())
             .spawn(move || {
+                let notified = weak.upgrade().is_some_and(|owner| {
+                    let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+                    host.text_focus.set_waker(thread::current());
+                    host.worker.set_waker(thread::current())
+                });
                 while let Some(owner) = weak.upgrade() {
                     if !owner.live() {
                         let mut h = owner.host.lock().unwrap_or_else(|e| e.into_inner());
@@ -142,16 +147,21 @@ impl Service {
                         owner.watch.lock().unwrap_or_else(|e| e.into_inner()).take();
                         break;
                     }
-                    {
+                    let active = {
                         let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
                         host.tick();
                         owner.publish(host.snapshot());
-                    }
+                        !host.peers.is_empty()
+                    };
                     drop(owner);
                     // Channel arrivals wake this wait immediately. The timeout
                     // still services safety/liveness state without incoming input.
                     // unpark retains a token when arrival races with this park.
-                    thread::park_timeout(Duration::from_millis(4));
+                    if active || !notified {
+                        thread::park_timeout(Duration::from_millis(100));
+                    } else {
+                        thread::park();
+                    }
                 }
             })
             .map_err(|e| e.to_string())?;

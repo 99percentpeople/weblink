@@ -53,6 +53,7 @@
     "allow-capture-pipeline-stats",
     "allow-capture-preview-open",
     "allow-capture-preview-frame",
+    "allow-capture-preview-visible",
     "allow-capture-preview-close",
     "allow-capture-offer",
     "allow-capture-answer",

@@ -56,6 +56,16 @@ impl MediaSession {
                 if session.closed.load(Ordering::Acquire) {
                     break;
                 }
+                if !session.has_consumers() {
+                    // Keep only the latest GPU source so resuming a static screen works.
+                    session.pause_conversion(
+                        &mut session.conversion.lock().unwrap_or_else(|e| e.into_inner()),
+                    );
+                    drop(session);
+                    notify.notified().await;
+                    deadline = tokio::time::Instant::now();
+                    continue;
+                }
                 let next_interval = session.frame_interval();
                 if next_interval != interval {
                     interval = next_interval;
@@ -109,6 +119,10 @@ impl MediaSession {
         self.reap_failed_encoders();
         if self.closed.load(Ordering::Acquire) {
             *conversion = Conversion::default();
+            return Ok(Work::default());
+        }
+        if !self.has_consumers() {
+            self.pause_conversion(&mut conversion);
             return Ok(Work::default());
         }
         let mut published = false;
@@ -184,8 +198,9 @@ impl MediaSession {
                 return Ok(Work::default());
             }
             *latest = Some(pixels);
-            self.latest_sequence.fetch_add(1, Ordering::Relaxed);
+            let sequence = self.latest_sequence.fetch_add(1, Ordering::Release) + 1;
             drop(latest);
+            self.notify_previews(sequence);
             frame.timing.mark(6);
             let mut pipeline = self.pipeline.lock().unwrap_or_else(|e| e.into_inner());
             pipeline.input_size = frame.original_size;
@@ -262,5 +277,18 @@ impl MediaSession {
             }
         }
         Ok(work)
+    }
+
+    fn pause_conversion(&self, conversion: &mut Conversion) {
+        if !conversion.pending.is_empty() {
+            // A submitted copy cleared dirty, but has not been published yet.
+            // Re-admit the retained source when a consumer returns, even if the
+            // desktop stays static and there will be no further frame event.
+            self.readback
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .dirty = true;
+        }
+        *conversion = Conversion::default();
     }
 }

@@ -5,7 +5,9 @@ mod compose;
 mod control;
 mod mf;
 mod pixels;
+mod presentation;
 use pixels::from_bgra;
+pub use presentation::PreviewSubscription;
 mod statistics;
 #[cfg(test)]
 mod tests;
@@ -53,6 +55,7 @@ pub struct MediaSession {
     encoder_id: Option<String>,
     latest: Mutex<Option<Arc<VideoFrame<libwebrtc::video_frame::I420Buffer>>>>,
     latest_sequence: AtomicU64,
+    previews: Mutex<presentation::Watches>,
     last_sent: Mutex<Instant>,
     readback: Mutex<Readback>,
     // Worker-owned bounded readbacks; capture only touches the retained source.
@@ -211,6 +214,7 @@ impl MediaSession {
             encoder_id,
             latest: Mutex::new(None),
             latest_sequence: AtomicU64::new(0),
+            previews: Mutex::new(Default::default()),
             last_sent: Mutex::new(Instant::now()),
             readback: Mutex::new(Readback::default()),
             conversion: Mutex::new(Default::default()),
@@ -661,6 +665,7 @@ impl MediaSession {
                 }
             }
         }
+        self.notify.notify_one();
         let candidates = Arc::new(Mutex::new(Vec::new()));
         let gathered = candidates.clone();
         let trickle = on_candidate.is_some();
@@ -797,9 +802,11 @@ impl MediaSession {
         if let Some(encoder) = encoder {
             encoder.close();
         }
+        self.notify.notify_one();
     }
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
+        self.end_previews();
         if let Some(audio) = &self.audio {
             audio.close();
         }
@@ -838,7 +845,9 @@ impl FrameSink for MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .copy_at(&frame, captured_at)?;
-        self.notify.notify_one();
+        if self.has_consumers() {
+            self.notify.notify_one();
+        }
         Ok(())
     }
 }

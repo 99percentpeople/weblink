@@ -1,10 +1,12 @@
 import {
-  Accessor,
+  type Accessor,
+  createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
-  onMount,
 } from "solid-js";
+import { createPresentationVisible } from "./presentation-visible";
 
 type TransferSpeedOptions = {
   sampleInterval?: number;
@@ -12,12 +14,8 @@ type TransferSpeedOptions = {
   maxSpeed?: number;
 };
 
-/**
- * Calculate the average transfer speed based on the received bytes
- * @param transferredSize - The size of the transferred bytes
- * @param options - The options for the transfer speed
- * @returns The average transfer speed
- */
+/** Sample changed byte counters while visible, then decay a stalled transfer
+ * to zero. Historical/resumed progress is never reported as a speed spike. */
 const createTransferSpeed = (
   transferredSize: Accessor<number>,
   options: TransferSpeedOptions = {},
@@ -27,92 +25,77 @@ const createTransferSpeed = (
     windowSize = 10,
     maxSpeed = 256 * 1024 * 1024,
   } = options;
-  const [prevTransferred, setPrevTransferred] =
-    createSignal<number>(transferredSize());
-  const [prevTimestamp, setPrevTimestamp] =
-    createSignal<number>(performance.now());
-  const [speedSamples, setSpeedSamples] = createSignal<
-    number[]
-  >([]);
+  const visible = createPresentationVisible();
+  const [samples, setSamples] = createSignal<number[]>([]);
+  let previous = transferredSize();
+  let timestamp = performance.now();
   let ignoreNextPositiveDelta = true;
-  let interval: number;
-  const averageSpeed = createMemo<number | null>(() => {
-    if (speedSamples().length > 0) {
-      const avgSpeed =
-        speedSamples().reduce(
-          (acc, speed) => acc + speed,
-          0,
-        ) / speedSamples().length;
-      return avgSpeed;
-    } else {
-      return null;
-    }
-  });
+  let timer: number | undefined;
 
-  const setSample = () => {
+  const stop = () => {
+    window.clearTimeout(timer);
+    timer = undefined;
+  };
+  const reset = (current: number) => {
+    stop();
+    previous = current;
+    timestamp = performance.now();
+    ignoreNextPositiveDelta = true;
+    setSamples([]);
+  };
+  const schedule = () => {
+    timer = window.setTimeout(sample, sampleInterval);
+  };
+  const sample = () => {
+    timer = undefined;
+    if (!visible()) return;
+    const current = transferredSize();
     const now = performance.now();
-    const timeElapsed = (now - prevTimestamp()) / 1000;
-    const currentTransferred = transferredSize();
-    const transferredInLastInterval =
-      currentTransferred - prevTransferred();
-    if (timeElapsed > 0) {
-      if (transferredInLastInterval < 0) {
-        setSpeedSamples([]);
-        setPrevTransferred(currentTransferred);
-        setPrevTimestamp(now);
-        ignoreNextPositiveDelta = true;
-        return;
-      }
-
-      if (
-        ignoreNextPositiveDelta &&
-        transferredInLastInterval > 0
-      ) {
-        setSpeedSamples([]);
-        setPrevTransferred(currentTransferred);
-        setPrevTimestamp(now);
-        ignoreNextPositiveDelta = false;
-        return;
-      }
-
-      const currentSpeed =
-        transferredInLastInterval / timeElapsed;
-      if (currentSpeed > maxSpeed) {
-        setSpeedSamples([]);
-        setPrevTransferred(currentTransferred);
-        setPrevTimestamp(now);
-        ignoreNextPositiveDelta = true;
-        return;
-      }
-
-      setSpeedSamples((prevSamples) => {
-        const newSamples = [...prevSamples, currentSpeed];
-        return newSamples.length > windowSize
-          ? newSamples.slice(1)
-          : newSamples;
-      });
+    const elapsed = (now - timestamp) / 1000;
+    const delta = current - previous;
+    const speed = elapsed > 0 ? delta / elapsed : 0;
+    if (delta < 0 || speed > maxSpeed) {
+      reset(current);
+      return;
     }
-
-    setPrevTransferred(currentTransferred);
-    setPrevTimestamp(now);
+    previous = current;
+    timestamp = now;
+    const next = [...samples(), speed].slice(-windowSize);
+    setSamples(next);
+    // After the averaging window becomes zero there is nothing left to repaint.
+    if (next.some((value) => value > 0)) schedule();
   };
 
-  onMount(() => {
-    setSpeedSamples([]);
-    setPrevTransferred(transferredSize());
-    setPrevTimestamp(performance.now());
-    ignoreNextPositiveDelta = true;
-    interval = window.setInterval(
-      setSample,
-      sampleInterval,
-    );
+  createEffect(
+    on(
+      [transferredSize, visible],
+      ([current, shown], before) => {
+        if (!shown || !before?.[1] || current < previous) {
+          reset(current);
+          return;
+        }
+        if (current === previous) return;
+        if (ignoreNextPositiveDelta) {
+          previous = current;
+          timestamp = performance.now();
+          ignoreNextPositiveDelta = false;
+          return;
+        }
+        if (timer === undefined) {
+          timestamp = performance.now();
+          schedule();
+        }
+      },
+    ),
+  );
+  onCleanup(stop);
+  return createMemo<number | null>(() => {
+    const values = samples();
+    return values.length
+      ? values.reduce((sum, value) => sum + value, 0) /
+          values.length
+      : null;
   });
-
-  onCleanup(() => {
-    window.clearInterval(interval);
-  });
-
-  return averageSpeed;
 };
 
 export default createTransferSpeed;

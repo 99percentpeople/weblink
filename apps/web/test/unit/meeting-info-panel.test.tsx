@@ -22,6 +22,9 @@ import {
 } from "@/libs/state/app-state";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/platform/runtime", () => ({
+  platform: {},
+}));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     roomChatCapabilities: () => ({
@@ -51,6 +54,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -66,6 +70,22 @@ const mount = (onOpenSettings = vi.fn()) =>
   ));
 
 describe("meeting online information", () => {
+  it("stops the hidden display clock and catches up on restoration", () => {
+    const hidden = vi
+      .spyOn(document, "hidden", "get")
+      .mockReturnValue(false);
+    mount();
+    hidden.mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(30_000);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(
+      metric("meeting.online_duration"),
+    ).toHaveTextContent("00:00:35");
+    expect(vi.getTimerCount()).toBe(1);
+  });
   it("keeps elapsed time across remounts and cleans up the display timer", () => {
     const first = mount();
     expect(

@@ -547,12 +547,19 @@ another write, and unchanged pixels are not recopied. The generated track retain
 only the latest frame and repeats it at most twice per
 second during static content, so a newly attached player can display it without
 another shared-memory copy. Closing releases the writer and retained frame.
+Frame notifications are coalesced until the presenter acknowledges a shared-buffer
+read. Static content causes no repeated IPC frame queries; only generated tracks
+need the sparse local repeats above. Canvas previews sleep until a frame or
+visibility event arrives.
 Hiding or minimizing the native window pauses local preview requests, pixel copies
 and static-frame refreshes. Showing it resumes from the latest frame using the same
 stream and shared buffer. Native visibility notifications also cover tray hiding
 and automatic hiding after control approval; a visible, unfocused PiP keeps its
 preview running. Capture, remote publication, system audio and control ownership
-remain active while local presentation is paused.
+remain active while local presentation is paused. When there are no remote peers
+and no visible local previews, the conversion worker sleeps and releases pending
+CPU readbacks. It retains the latest GPU source, including an unpublished final
+update, so a static screen can resume without another capture arrival.
 The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
 only its available dimensions and preview-submission counters (including static
 refresh submissions) are shown. The overlay separates submitted/encoded/decoded
@@ -836,11 +843,16 @@ input burst clears delayed input and resets its epoch while retaining the channe
 A terminal control-channel failure enters the existing media retry path, rebuilding
 the peer transport for the same capture; authorization is not carried to a new peer.
 
-Frontend status polling observes native state and applies saved or one-use approvals. Native window/page teardown,
+Frontend status subscriptions observe native state and apply saved or one-use approvals. Native window/page teardown,
 room leave, channel/media closure and explicit revoke own the session lifetime;
 a delayed WebView timer or failed status read cannot revoke consent. Stopping a
 share or replacing the room/peer ends the grant, and rejoining never restores it.
 The header sharing status and Ctrl+Alt+Shift+F10 provide explicit local revocation.
+Native control and input workers wake on queued commands, channel events and
+authorization changes. Idle workers have no periodic status loop; active sessions
+retain bounded desktop/geometry checks and exact consent/input lease deadlines.
+Keyboard delivery blocks on events, and foreground changes wake the hook thread;
+bounded desktop checks remain as a safety fallback.
 
 The viewing UI maps only the contained video content, excluding letterbox areas.
 The desktop tile action bar has one icon button for request, cancel request and end control.

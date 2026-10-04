@@ -56,6 +56,7 @@ fn main() {
             "capture_pipeline_stats",
             "capture_preview_open",
             "capture_preview_frame",
+            "capture_preview_visible",
             "capture_preview_close",
             "capture_offer",
             "capture_answer",
