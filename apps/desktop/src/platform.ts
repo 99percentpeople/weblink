@@ -7,6 +7,7 @@ import { nativeApplication } from "./application";
 import { nativePictureInPicture } from "./picture-in-picture";
 import { keepDesktopActive } from "./background";
 import { watchStatus } from "./status-watch";
+import { createVisibilityWatcher } from "./visibility";
 import {
   isExternalLink,
   type PlatformRuntime,
@@ -19,6 +20,7 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  watchVisibility: createVisibilityWatcher(),
   pictureInPicture: nativePictureInPicture,
   notifications: nativeNotifications,
   application: nativeApplication,

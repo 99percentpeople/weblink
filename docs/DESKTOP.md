@@ -141,6 +141,13 @@ Hiding or minimizing does not dispose room, media, or host input owners. Control
 foreground focus. Explicit room leave, page reload, window destruction and process
 exit keep their existing cleanup behavior; choosing Quit in the tray always exits.
 
+Presentation consumers share one native visibility subscription and combine it with
+their document's visibility. Hiding or minimizing pauses video/session diagnostic
+sampling and releases speaking-indicator audio analysis; showing resumes with fresh
+statistics baselines. Focus loss alone keeps a visible PiP active. Observation does
+not stop borrowed tracks, remote sharing or lease renewal, and the last consumer or
+page reload releases its subscription.
+
 The renderer subscribes to the native control owner's initial status and subsequent
 consent, grant and closure changes. Status observation does not renew or revoke
 control. Leaving releases the watcher; late events and asynchronous decisions from
@@ -679,9 +686,13 @@ system-audio failures still terminate the affected capture with native diagnosti
 **Settings → Advanced → Native screen capture test** remains a local diagnostic
 using the same capture service with an independent session.
 It reports capture arrival statistics without mapping or transmitting pixels.
-Its 500 ms statistics sampler pauses while the document is hidden; status events
+Its 500 ms statistics sampler pauses while the window or document is hidden; status events
 and lease renewal remain independent of that sampler.
 Closing this diagnostic panel stops only the capture it owns.
+
+The native capture service blocks on its command queue when no sessions are active.
+A new command or shutdown wakes it immediately. Active sessions retain the bounded
+250 ms source-closure and lease-expiry checks.
 
 For a native smoke test, run this in an unlocked interactive Windows session:
 

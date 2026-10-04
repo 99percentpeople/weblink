@@ -10,6 +10,8 @@ fn main() {
             "notifications_dismiss",
             "application_configure",
             "application_show",
+            "application_visibility_watch",
+            "application_visibility_unwatch",
             "application_device_name",
             "application_autostart_status",
             "application_autostart_set",

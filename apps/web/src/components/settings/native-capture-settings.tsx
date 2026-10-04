@@ -11,6 +11,7 @@ import { useAppState } from "@/libs/state/app-state-context";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 import { monitorNativeCapture } from "@/libs/application/native-capture-monitor";
+import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
 
 const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -21,6 +22,7 @@ export default function NativeCaptureSettings() {
     captureSources,
   } = useAppState();
   const capture = platform.capture;
+  const visible = createPresentationVisible();
   const sources = captureSources.sources;
   const [selected, setSelected] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -40,11 +42,13 @@ export default function NativeCaptureSettings() {
   let ownedId: string | null = null;
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let sampleRevision = 0;
   let stopMonitoring: (() => void) | undefined;
   const running = () => status()?.state === "running";
   const label = (key: string) =>
     t(`setting.native_capture.${key}`);
   const clearTimer = () => {
+    ++sampleRevision;
     clearTimeout(timer);
     timer = undefined;
   };
@@ -67,6 +71,8 @@ export default function NativeCaptureSettings() {
 
   function sample(id: string, token: number) {
     clearTimer();
+    if (!visible()) return;
+    const revision = sampleRevision;
     timer = setTimeout(async () => {
       if (
         disposed ||
@@ -75,13 +81,15 @@ export default function NativeCaptureSettings() {
         !capture
       )
         return;
-      if (document.hidden) return;
+      if (!visible() || revision !== sampleRevision) return;
       try {
         const next = await capture.status(id);
         if (
           disposed ||
           token !== generation ||
-          ownedId !== id
+          ownedId !== id ||
+          !visible() ||
+          revision !== sampleRevision
         )
           return;
         apply(next);
@@ -90,7 +98,9 @@ export default function NativeCaptureSettings() {
         if (
           disposed ||
           token !== generation ||
-          ownedId !== id
+          ownedId !== id ||
+          !visible() ||
+          revision !== sampleRevision
         )
           return;
         setError(message(cause));
@@ -100,15 +110,11 @@ export default function NativeCaptureSettings() {
     }, 500);
   }
 
-  const visibilityChanged = () => {
+  createEffect(() => {
+    const shown = visible();
     clearTimer();
-    if (ownedId && !document.hidden)
-      sample(ownedId, generation);
-  };
-  document.addEventListener(
-    "visibilitychange",
-    visibilityChanged,
-  );
+    if (ownedId && shown) sample(ownedId, generation);
+  });
 
   function monitor(id: string, token: number) {
     stopMonitoring?.();
@@ -192,10 +198,6 @@ export default function NativeCaptureSettings() {
     generation++;
     clearTimer();
     stopMonitoring?.();
-    document.removeEventListener(
-      "visibilitychange",
-      visibilityChanged,
-    );
     if (ownedId) void release(ownedId);
     ownedId = null;
   });

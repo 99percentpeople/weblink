@@ -4,6 +4,7 @@ import {
   createSignal,
   onCleanup,
 } from "solid-js";
+import { createPresentationVisible } from "./presentation-visible";
 
 type CheckVolumeOptions = {
   speakingThreshold: number;
@@ -18,25 +19,14 @@ export const createCheckVolume = (
   },
 ) => {
   const [speaking, setSpeaking] = createSignal(false);
-
-  let audioContext: AudioContext | undefined;
-  let timer: number | undefined;
+  const visible = createPresentationVisible();
   createEffect(() => {
     const checkStream = stream();
 
     setSpeaking(false);
-    if (audioContext) {
-      audioContext.close();
-      audioContext = undefined;
-    }
-    if (timer) {
-      window.clearTimeout(timer);
-      timer = undefined;
-    }
-    if (!checkStream) return;
+    if (!checkStream || !visible()) return;
     if (checkStream.getAudioTracks().length === 0) return;
     const context: AudioContext = new AudioContext();
-    audioContext = context;
     const source =
       context.createMediaStreamSource(checkStream);
     const analyser = context.createAnalyser();
@@ -44,8 +34,13 @@ export const createCheckVolume = (
     source.connect(analyser);
 
     const dataArray = new Uint8Array(analyser.fftSize);
+    let stopped = false;
+    let timer: number | undefined;
+    let frame: number | undefined;
 
     const checkVolume = () => {
+      frame = undefined;
+      if (stopped) return;
       analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
@@ -58,14 +53,19 @@ export const createCheckVolume = (
 
       timer = window.setTimeout(() => {
         timer = undefined;
-        if (context.state === "closed") return;
-        requestAnimationFrame(checkVolume);
+        if (stopped || context.state === "closed") return;
+        frame = requestAnimationFrame(checkVolume);
       }, options.interval);
     };
     checkVolume();
-  });
-  onCleanup(() => {
-    audioContext?.close();
+    onCleanup(() => {
+      stopped = true;
+      window.clearTimeout(timer);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      source.disconnect();
+      analyser.disconnect();
+      void context.close().catch(console.warn);
+    });
   });
   return speaking;
 };

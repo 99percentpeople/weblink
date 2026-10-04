@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   watch: vi.fn(),
   stop: vi.fn(),
   capabilities: vi.fn(),
+  visibility: vi.fn(),
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/platform/runtime", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/libs/platform/runtime", () => ({
     kind: "desktop",
     capture: api,
     getCapabilities: api.capabilities,
+    watchVisibility: api.visibility,
   },
 }));
 
@@ -81,6 +83,10 @@ const begin = async () => {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  api.visibility.mockImplementation((receive) => {
+    receive(true);
+    return vi.fn();
+  });
   api.capabilities.mockResolvedValue({
     runtime: "desktop",
     nativeScreenCapture: true,
@@ -101,6 +107,40 @@ beforeEach(() => {
   });
 });
 afterEach(cleanup);
+
+it("pauses native-hidden statistics while capture renewal and lifecycle events continue", async () => {
+  render(() => <NativeCaptureSettings />);
+  await choose();
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(button("start"));
+    await vi.advanceTimersByTimeAsync(0);
+    const visible = api.visibility.mock.calls[0][0];
+    visible(false);
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(api.status).not.toHaveBeenCalled();
+    expect(api.renew).toHaveBeenCalledTimes(2);
+    expect(api.stop).not.toHaveBeenCalled();
+    visible(true);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(api.status).toHaveBeenCalledOnce();
+    visible(false);
+    const receive = api.watch.mock.calls[0][1];
+    receive({
+      ...active,
+      state: "closed",
+      stopReason: "sourceClosed",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "setting.native_capture.state.closed",
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.renew).toHaveBeenCalledTimes(2);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
 
 it("requires an explicit choice and stops the owned session", async () => {
   render(() => <NativeCaptureSettings />);

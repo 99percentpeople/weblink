@@ -270,6 +270,7 @@ impl State {
                 target.position = corner(work.position, work.size, size, margin);
             }
             window.show()?;
+            crate::application::visibility::update(window);
             Ok((from, target))
         })();
         let focusable = window.set_focusable(true).map_err(|e| e.to_string());
@@ -362,6 +363,7 @@ impl State {
             apply(window.show());
             apply(window.unminimize());
             apply(window.set_focus());
+            crate::application::visibility::update(window);
         }
         if let Err(e) = geometry {
             error.get_or_insert(e);

@@ -570,6 +570,21 @@ pub struct CaptureService {
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
+fn receive_command<T>(
+    receiver: &mpsc::Receiver<T>,
+    active: bool,
+) -> std::result::Result<T, mpsc::RecvTimeoutError> {
+    if active {
+        // Active sources still need bounded source-close and lease-expiry checks.
+        receiver.recv_timeout(Duration::from_millis(250))
+    } else {
+        // Commands, including shutdown and a new capture, wake an idle service.
+        receiver
+            .recv()
+            .map_err(|_| mpsc::RecvTimeoutError::Disconnected)
+    }
+}
+
 impl CaptureService {
     pub fn new() -> std::io::Result<Self> {
         let (commands, receiver) = mpsc::channel();
@@ -579,7 +594,7 @@ impl CaptureService {
                 let mut engine = Engine::new(backend::NativeBackend::new());
                 loop {
                     engine.tick(Instant::now());
-                    match receiver.recv_timeout(Duration::from_millis(250)) {
+                    match receive_command(&receiver, !engine.active.is_empty()) {
                         Ok(Command::CursorSupported(id, reply)) => {
                             let _ = reply.send(
                                 engine

@@ -26,6 +26,11 @@ export interface PlatformRuntime {
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
   readonly screenShare?: NativeScreenShare;
+  /** Initial native visibility and later changes; focus alone does not hide a window.
+   * Shared by presentation consumers. Disposing never stops capture or transport. */
+  watchVisibility?(
+    onVisible: (visible: boolean) => void,
+  ): () => void;
   getCapabilities(): Promise<RuntimeCapabilities>;
   /** Local device name for a new profile; null when unavailable. */
   getDeviceName?(): Promise<string | null>;

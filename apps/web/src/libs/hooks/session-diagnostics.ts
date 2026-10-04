@@ -4,6 +4,7 @@ import {
   onCleanup,
   type Accessor,
 } from "solid-js";
+import { createPresentationVisible } from "./presentation-visible";
 
 export interface SessionDiagnostics {
   reports: unknown[];
@@ -69,13 +70,14 @@ export function createSessionDiagnostics(
   >,
   enabled: Accessor<boolean>,
 ): Accessor<SessionDiagnostics> {
+  const visible = createPresentationVisible();
   const [state, setState] =
     createSignal<SessionDiagnostics>({ reports: [] });
   createEffect(() => {
     const pc = connection();
     const active = enabled();
     setState({ reports: [] });
-    if (!pc || !active) return;
+    if (!pc || !active || !visible()) return;
     let retired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {

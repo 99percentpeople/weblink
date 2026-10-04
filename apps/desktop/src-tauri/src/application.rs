@@ -16,6 +16,7 @@ pub mod device;
 #[cfg(windows)]
 mod executable;
 pub mod single_instance;
+pub mod visibility;
 
 #[derive(Clone, Copy, Default, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -73,6 +74,7 @@ pub struct Service {
     control_window: Mutex<control_window::ControlWindow>,
     exiting: AtomicBool,
     visibility_sequence: AtomicU64,
+    visibility: Mutex<visibility::Watches>,
 }
 
 impl Service {
@@ -90,8 +92,12 @@ impl Service {
     fn options(&self) -> Options {
         *self.options.lock().unwrap_or_else(|e| e.into_inner())
     }
-    pub fn clear_close_requests(&self) {
+    pub fn clear_page(&self) {
         self.close.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.visibility
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
     /// True means the native close event must be prevented.
     pub fn handle_close(&self, app: &tauri::AppHandle) -> bool {
@@ -136,6 +142,10 @@ impl Service {
     }
     pub fn shutdown(&self) {
         self.exiting.store(true, Ordering::Release);
+        self.visibility
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.manual_visibility();
     }
     fn control_event(
@@ -214,7 +224,7 @@ fn focus_window(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
-    crate::preview::update_visibility(window);
+    visibility::update(window);
 }
 
 pub fn hide(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -227,7 +237,7 @@ fn hide_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .get_webview_window("main")
         .ok_or(tauri::Error::WindowNotFound)?;
     window.hide()?;
-    crate::preview::update_visibility(&window);
+    visibility::update(&window);
     // Cancel PiP motion without moving/resizing the disappearing native window.
     app.state::<crate::picture_in_picture::Service>().suspend();
     // Captured controller keys require foreground focus; the native host stays alive.

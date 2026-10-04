@@ -14,6 +14,7 @@ import {
   createVideoPresentationStats,
   type VideoPresentationStats,
 } from "../domain/video-presentation-stats";
+import { createPresentationVisible } from "./presentation-visible";
 
 export interface VideoStatisticsRow
   extends VideoStatsValue, VideoPresentationStats {
@@ -36,6 +37,9 @@ export function createVideoStatistics(
   ) => Promise<VideoStatsBatch[]>,
   local: Accessor<boolean> = () => false,
 ): Accessor<VideoStatisticsRow[]> {
+  const visible = createPresentationVisible(
+    () => video()?.ownerDocument,
+  );
   const [rows, setRows] = createSignal<
     VideoStatisticsRow[]
   >([]);
@@ -44,7 +48,7 @@ export function createVideoStatistics(
     const element = video();
     const isLocal = local();
     setRows([]);
-    if (!current || !element) return;
+    if (!current || !element || !visible()) return;
     const presentation =
       createVideoPresentationStats(element);
     let stopped = false;
@@ -55,10 +59,6 @@ export function createVideoStatistics(
     >();
     const poll = async () => {
       try {
-        if (element.ownerDocument.hidden) {
-          previous.clear();
-          return;
-        }
         if (current.readyState === "ended") {
           presentation.close();
           setRows([]);

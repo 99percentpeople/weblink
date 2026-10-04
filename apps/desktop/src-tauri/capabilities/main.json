@@ -7,6 +7,8 @@
     "allow-runtime-capabilities",
     "allow-application-device-name",
     "allow-application-configure",
+    "allow-application-visibility-watch",
+    "allow-application-visibility-unwatch",
     "core:window:allow-close",
     "allow-application-autostart-status",
     "allow-application-autostart-set",

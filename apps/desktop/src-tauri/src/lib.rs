@@ -74,6 +74,8 @@ pub fn run() {
 
             application::application_configure,
             application::application_show,
+            application::visibility::application_visibility_watch,
+            application::visibility::application_visibility_unwatch,
             application::device::application_device_name,
             application::autostart::application_autostart_status,
             application::autostart::application_autostart_set,
@@ -178,7 +180,7 @@ pub fn run() {
                         if let Some(window) = webview.app_handle().get_webview_window("main") {
                             webview.state::<picture_in_picture::Service>().reset(&window);
                         }
-                        webview.state::<application::Service>().clear_close_requests();
+                        webview.state::<application::Service>().clear_page();
                         webview.state::<keyboard::Shared>().close();
                         webview.state::<remote_control::Shared>().close();
                     }
@@ -219,7 +221,7 @@ pub fn run() {
                     if let Some(window) = app.get_webview_window("main") {
                         app.state::<picture_in_picture::Service>().window_event(&window, event);
                         if matches!(event, tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)) {
-                            preview::update_visibility(&window);
+                            application::visibility::update(&window);
                         }
                     }
                 }

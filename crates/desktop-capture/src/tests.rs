@@ -123,6 +123,38 @@ fn start(engine: &mut Engine<Fake>) -> String {
 }
 
 #[test]
+fn idle_command_wait_has_no_periodic_timeout_and_wakes_for_work_or_disconnect() {
+    let (commands, receiver) = mpsc::channel();
+    let (reply, result) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        reply.send(receive_command(&receiver, false)).unwrap();
+        reply.send(receive_command(&receiver, false)).unwrap();
+    });
+    // Longer than the active source check: an empty service must remain asleep.
+    assert_eq!(
+        result.recv_timeout(Duration::from_millis(350)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    );
+    commands.send(7).unwrap();
+    assert_eq!(result.recv_timeout(Duration::from_secs(1)).unwrap(), Ok(7));
+    drop(commands);
+    assert_eq!(
+        result.recv_timeout(Duration::from_secs(1)).unwrap(),
+        Err(mpsc::RecvTimeoutError::Disconnected)
+    );
+    worker.join().unwrap();
+}
+
+#[test]
+fn active_command_wait_preserves_periodic_source_and_lease_checks() {
+    let (_commands, receiver) = mpsc::channel::<()>();
+    assert_eq!(
+        receive_command(&receiver, true),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    );
+}
+
+#[test]
 fn cursor_visibility_is_scoped_to_a_live_capture_without_restarting_it() {
     let (mut engine, fake) = setup();
     let id = start(&mut engine);

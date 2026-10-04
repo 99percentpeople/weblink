@@ -100,10 +100,13 @@ it("resets baselines on a track change and does not sample hidden documents", as
   expect(values()[0].fps).toBeUndefined();
   expect(values()[0].counters?.previous).toBeUndefined();
   visibility.mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
   const calls = read.mock.calls.length;
   await vi.advanceTimersByTimeAsync(3000);
   expect(read).toHaveBeenCalledTimes(calls);
+  expect(vi.getTimerCount()).toBe(0);
   visibility.mockReturnValue(false);
-  await vi.advanceTimersByTimeAsync(1000);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.advanceTimersByTimeAsync(0);
   expect(values()[0].fps).toBeUndefined();
 });
