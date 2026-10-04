@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   open: vi.fn<() => Promise<string>>(),
   end: vi.fn(async () => {}),
   status: vi.fn<() => Promise<NativeControlStatus>>(),
+  watch: vi.fn(),
   approve: vi.fn(async () => {}),
   revoke: vi.fn(async () => {}),
 }));
@@ -59,6 +60,7 @@ class Channel extends EventTarget {
 const flush = async () => {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 };
+let receive: (status: NativeControlStatus) => void;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
@@ -71,6 +73,11 @@ beforeEach(() => {
     closed: false,
     pending: null,
     clientId: null,
+  });
+  api.watch.mockImplementation(async (_owner, onStatus) => {
+    receive = onStatus;
+    onStatus(await api.status());
+    return vi.fn();
   });
 });
 afterEach(() => {
@@ -198,7 +205,7 @@ it.each([false, true])(
 it("rebuilds eligible transports for a replacement owner without replaying grants", async () => {
   const fixture = await setup();
   try {
-    api.status.mockResolvedValueOnce({
+    receive({
       closed: true,
       clientId: null,
       pending: null,

@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let heartbeat = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                if heartbeat_service.status(heartbeat_id.clone()).is_err() { break; }
+                if heartbeat_service.renew(heartbeat_id.clone()).is_err() { break; }
             }
         });
         std::fs::write(dir.join("offer.sdp"), media.offer("browser-test".into(), vec![], false, std::env::args().any(|arg| arg == "--preview")).await?)?;

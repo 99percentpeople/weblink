@@ -23,6 +23,8 @@ const api = vi.hoisted(() => ({
   sources: vi.fn(),
   start: vi.fn(),
   status: vi.fn(),
+  renew: vi.fn(),
+  watch: vi.fn(),
   stop: vi.fn(),
   capabilities: vi.fn(),
 }));
@@ -87,6 +89,11 @@ beforeEach(() => {
   api.sources.mockResolvedValue([source]);
   api.start.mockResolvedValue(active);
   api.status.mockResolvedValue(active);
+  api.renew.mockResolvedValue(undefined);
+  api.watch.mockImplementation(async (_id, onStatus) => {
+    onStatus(active);
+    return vi.fn();
+  });
   api.stop.mockResolvedValue({
     ...active,
     state: "stopped",

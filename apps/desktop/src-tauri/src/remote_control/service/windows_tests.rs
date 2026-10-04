@@ -125,7 +125,7 @@ fn browser_pointer_attended() {
     let deadline = Instant::now() + Duration::from_secs(150);
     let keep_alive = || {
         assert!(Instant::now() < deadline, "browser test deadline");
-        capture.status(session.clone()).unwrap();
+        capture.renew(session.clone()).unwrap();
         if !persistent {
             service.status(&owner).unwrap();
         }

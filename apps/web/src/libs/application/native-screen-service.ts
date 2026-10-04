@@ -9,6 +9,7 @@ import type {
 } from "@weblink/platform";
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import { readBrowserVideoStats } from "@/libs/domain/video-stats";
+import { monitorNativeCapture } from "./native-capture-monitor";
 
 import type { NativeScreenPublication } from "@/libs/domain/native-screen/session";
 const publications = new WeakMap<
@@ -65,9 +66,8 @@ export async function createNativeScreenStream(
   const peerId = createUuid();
   let closed = false;
   let lastStatus = status;
-  let statusFailures = 0;
   let audioQueue = Promise.resolve();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopMonitoring: (() => void) | undefined;
   let preview: ScreenReceiver | undefined;
   let rawPreview: NativeScreenPreview | undefined;
   let stream: MediaStream;
@@ -79,7 +79,7 @@ export async function createNativeScreenStream(
   const release = () => {
     if (closed) return;
     closed = true;
-    clearTimeout(timer);
+    stopMonitoring?.();
     previewAbort.abort();
     rawPreview?.close();
     preview?.close();
@@ -89,40 +89,31 @@ export async function createNativeScreenStream(
     track?.dispatchEvent(new Event("ended"));
     void capture.stop(id).catch(console.error);
   };
-  const poll = async () => {
-    try {
-      const current = await capture.status(id);
-      if (closed) return;
-      lastStatus = current;
-      statusFailures = 0;
-      if (current.state !== "running") {
-        console.warn("Native capture ended", {
-          state: current.state,
-          error: current.error,
-          stopReason: current.stopReason,
-        });
-        release();
-        return;
-      }
-      timer = setTimeout(() => void poll(), 1000);
-    } catch (error) {
-      if (closed) return;
-      // An IPC read failure is not evidence that the capture has ended.
-      // The native lease still bounds orphaned captures if the renderer dies.
-      if (++statusFailures === 1)
-        console.warn(
-          "Could not read native capture status",
-          error,
-        );
-      timer = setTimeout(() => void poll(), 1000);
-    }
-  };
   signal?.addEventListener("abort", release, {
     once: true,
   });
   try {
     signal?.throwIfAborted();
-    void poll();
+    stopMonitoring = monitorNativeCapture(
+      capture,
+      id,
+      (current) => {
+        if (closed) return;
+        lastStatus = current;
+        if (current.state !== "running") {
+          console.warn("Native capture ended", {
+            state: current.state,
+            error: current.error,
+            stopReason: current.stopReason,
+          });
+          release();
+        }
+      },
+    );
+    if (closed) {
+      stopMonitoring();
+      throw new Error("Native screen closed");
+    }
     if (share.preview) {
       rawPreview = await share.preview(
         id,

@@ -18,7 +18,7 @@ pub struct Context {
     pub client_id: String,
     pub source_id: String,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pending {
     pub consent_id: String,
@@ -26,7 +26,7 @@ pub struct Pending {
     pub source_id: String,
     pub peer_generation: String,
 }
-#[derive(Clone, Default, Serialize)]
+#[derive(Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub pending: Option<Pending>,

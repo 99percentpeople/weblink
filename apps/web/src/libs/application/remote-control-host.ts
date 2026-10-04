@@ -18,6 +18,9 @@ export class RemoteControlHost {
   private owner?: string;
   private ready: Promise<void> = Promise.resolve();
   private timer?: ReturnType<typeof setTimeout>;
+  private unwatch?: () => void;
+  private statusRevision = 0;
+  private decisionRetry?: ReturnType<typeof setTimeout>;
   private recoveryDelay = 1000;
   private readonly ownerRevision = createSignal(0);
   readonly revision = this.ownerRevision[0];
@@ -68,7 +71,7 @@ export class RemoteControlHost {
       }
       this.owner = owner;
       this.ownerRevision[1]((value) => value + 1);
-      await this.poll(generation, owner);
+      await this.subscribe(generation, owner);
     })().catch((error) => {
       console.warn("Remote control unavailable", error);
       if (generation === this.generation) this.recover();
@@ -86,15 +89,50 @@ export class RemoteControlHost {
       30000,
     );
   }
-  private async poll(generation: number, owner: string) {
+  private async subscribe(
+    generation: number,
+    owner: string,
+  ) {
+    const current = () =>
+      generation === this.generation &&
+      this.owner === owner;
     try {
-      const status =
-        await this.platform.remoteControl!.status(owner);
-      if (
-        generation !== this.generation ||
-        this.owner !== owner
-      )
-        return;
+      const unwatch =
+        await this.platform.remoteControl!.watch(
+          owner,
+          (status) => {
+            if (current())
+              void this.receive(generation, owner, status);
+          },
+        );
+      if (current()) this.unwatch = unwatch;
+      else unwatch();
+    } catch (error) {
+      // Retrying observation must not revoke an existing native grant.
+      if (!current()) return;
+      console.warn(
+        "Could not watch remote control status",
+        error,
+      );
+      this.timer = setTimeout(() => {
+        if (current())
+          void this.subscribe(generation, owner);
+      }, 1000);
+    }
+  }
+  private async receive(
+    generation: number,
+    owner: string,
+    snapshot: NativeControlStatus,
+  ) {
+    clearTimeout(this.decisionRetry);
+    const revision = ++this.statusRevision;
+    const current = () =>
+      generation === this.generation &&
+      this.owner === owner &&
+      revision === this.statusRevision;
+    const status = { ...snapshot };
+    try {
       if (status.closed) {
         this.recover();
         return;
@@ -105,6 +143,7 @@ export class RemoteControlHost {
         this.decision(status.clientId) === "deny"
       ) {
         await this.platform.remoteControl!.revoke(owner);
+        if (!current()) return;
         status.clientId = null;
       }
       const pending = status.pending;
@@ -124,7 +163,11 @@ export class RemoteControlHost {
             pending.consentId,
             decision !== "deny",
           );
-          if (approved)
+          if (
+            approved &&
+            generation === this.generation &&
+            this.owner === owner
+          )
             this.screen.consume(
               pending.clientId,
               pending.peerGeneration,
@@ -133,27 +176,20 @@ export class RemoteControlHost {
           status.pending = null;
         }
       }
-      if (
-        generation === this.generation &&
-        this.owner === owner
-      )
-        this.state[1](status);
+      if (current()) this.state[1](status);
     } catch (error) {
-      // A delayed/failed status read is not a local decision to revoke consent.
-      if (generation === this.generation)
+      // Retry transient command failures only while this exact snapshot is current.
+      if (current()) {
+        this.state[1](snapshot);
         console.warn(
-          "Could not read remote control status",
+          "Could not apply remote control status",
           error,
         );
-    } finally {
-      if (
-        generation === this.generation &&
-        this.owner === owner
-      )
-        this.timer = setTimeout(
-          () => void this.poll(generation, owner),
-          500,
-        );
+        this.decisionRetry = setTimeout(() => {
+          if (current())
+            void this.receive(generation, owner, snapshot);
+        }, 1000);
+      }
     }
   }
 
@@ -240,7 +276,21 @@ export class RemoteControlHost {
     return result;
   }
   async policyChanged(clientId: string) {
-    if (this.decision(clientId) !== "deny") return;
+    const decision = this.decision(clientId);
+    if (decision === "allow") {
+      const status = this.state[0]();
+      if (
+        this.owner &&
+        status.pending?.clientId === clientId
+      )
+        await this.receive(
+          this.generation,
+          this.owner,
+          status,
+        );
+      return;
+    }
+    if (decision !== "deny") return;
     const pending = this.status().pending;
     if (pending?.clientId === clientId)
       await this.approve(pending.consentId, false);
@@ -255,6 +305,9 @@ export class RemoteControlHost {
     this.screen.close();
     ++this.generation;
     clearTimeout(this.timer);
+    clearTimeout(this.decisionRetry);
+    this.unwatch?.();
+    this.unwatch = undefined;
     const id = this.owner;
     this.owner = undefined;
     if (id) this.ownerRevision[1]((value) => value + 1);

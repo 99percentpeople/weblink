@@ -10,6 +10,7 @@ import { platform } from "@/libs/platform/runtime";
 import { useAppState } from "@/libs/state/app-state-context";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import { monitorNativeCapture } from "@/libs/application/native-capture-monitor";
 
 const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -39,6 +40,7 @@ export default function NativeCaptureSettings() {
   let ownedId: string | null = null;
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopMonitoring: (() => void) | undefined;
   const running = () => status()?.state === "running";
   const label = (key: string) =>
     t(`setting.native_capture.${key}`);
@@ -54,11 +56,16 @@ export default function NativeCaptureSettings() {
 
   function apply(next: CaptureStatus) {
     setStatus(next);
-    if (next.state !== "running") ownedId = null;
+    if (next.state !== "running") {
+      ownedId = null;
+      clearTimer();
+      stopMonitoring?.();
+      stopMonitoring = undefined;
+    }
     if (next.error) setError(next.error);
   }
 
-  function poll(id: string, token: number) {
+  function sample(id: string, token: number) {
     clearTimer();
     timer = setTimeout(async () => {
       if (
@@ -68,6 +75,7 @@ export default function NativeCaptureSettings() {
         !capture
       )
         return;
+      if (document.hidden) return;
       try {
         const next = await capture.status(id);
         if (
@@ -77,7 +85,7 @@ export default function NativeCaptureSettings() {
         )
           return;
         apply(next);
-        if (next.state === "running") poll(id, token);
+        if (next.state === "running") sample(id, token);
       } catch (cause) {
         if (
           disposed ||
@@ -87,9 +95,40 @@ export default function NativeCaptureSettings() {
           return;
         setError(message(cause));
         // Keep Stop available and retry status; transient IPC failures are not a stopped session.
-        poll(id, token);
+        sample(id, token);
       }
     }, 500);
+  }
+
+  const visibilityChanged = () => {
+    clearTimer();
+    if (ownedId && !document.hidden)
+      sample(ownedId, generation);
+  };
+  document.addEventListener(
+    "visibilitychange",
+    visibilityChanged,
+  );
+
+  function monitor(id: string, token: number) {
+    stopMonitoring?.();
+    stopMonitoring = monitorNativeCapture(
+      capture!,
+      id,
+      (next) => {
+        if (
+          !disposed &&
+          token === generation &&
+          ownedId === id
+        )
+          apply(next);
+      },
+      (cause) => {
+        if (!disposed && token === generation)
+          setError(message(cause));
+      },
+    );
+    if (ownedId) sample(id, token);
   }
 
   function refresh() {
@@ -118,7 +157,7 @@ export default function NativeCaptureSettings() {
       ownedId =
         next.state === "running" ? next.sessionId : null;
       apply(next);
-      if (ownedId) poll(ownedId, token);
+      if (ownedId) monitor(ownedId, token);
     } catch (cause) {
       if (!disposed) setError(message(cause));
     } finally {
@@ -131,6 +170,8 @@ export default function NativeCaptureSettings() {
     const id = ownedId;
     const token = ++generation;
     clearTimer();
+    stopMonitoring?.();
+    stopMonitoring = undefined;
     setBusy(true);
     setError(undefined);
     try {
@@ -139,7 +180,7 @@ export default function NativeCaptureSettings() {
     } catch (cause) {
       if (!disposed) {
         setError(message(cause));
-        poll(id, token);
+        monitor(id, token);
       }
     } finally {
       if (!disposed) setBusy(false);
@@ -150,6 +191,11 @@ export default function NativeCaptureSettings() {
     disposed = true;
     generation++;
     clearTimer();
+    stopMonitoring?.();
+    document.removeEventListener(
+      "visibilitychange",
+      visibilityChanged,
+    );
     if (ownedId) void release(ownedId);
     ownedId = null;
   });

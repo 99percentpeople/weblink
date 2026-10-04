@@ -189,6 +189,11 @@ function source() {
     sources: async () => [],
     start: async () => status,
     status: async () => status,
+    renew: async () => {},
+    watch: async (_id, onStatus) => {
+      onStatus(status);
+      return () => {};
+    },
     stop: async () => {
       peers.forEach((pc) => pc.close());
       peers.clear();

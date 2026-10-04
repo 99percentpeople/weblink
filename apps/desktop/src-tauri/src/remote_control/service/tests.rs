@@ -239,6 +239,57 @@ fn target(owner: &str, capture: &str, media: &str) -> TrustedTarget {
         },
     }
 }
+
+#[test]
+fn observers_push_initial_consent_grant_revoke_and_owner_close_in_order() {
+    let rig = Rig::new();
+    let (send, receive) = std::sync::mpsc::channel();
+    rig.service
+        .watch(&rig.owner, "view".into(), move |status| {
+            send.send(status).is_ok()
+        })
+        .unwrap();
+    let next = || receive.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(!next().closed);
+    let consent = rig.request();
+    assert_eq!(next().pending.unwrap().consent_id, consent);
+    rig.service.approve(&rig.owner, &consent, true).unwrap();
+    assert_eq!(next().client_id.as_deref(), Some("client"));
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(next().client_id.is_none());
+    rig.tick();
+    assert!(receive.try_recv().is_err());
+    rig.service.end(&rig.owner);
+    assert!(next().closed);
+    assert!(receive.try_recv().is_err());
+}
+
+#[test]
+fn replacing_and_unwatching_status_does_not_revoke_input_or_remove_a_new_watcher() {
+    let rig = Rig::new();
+    rig.approve();
+    rig.service
+        .watch(&rig.owner, "old".into(), |_| true)
+        .unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+    rig.service
+        .watch(&rig.owner, "new".into(), move |status| {
+            send.send(status).is_ok()
+        })
+        .unwrap();
+    assert_eq!(receive.recv().unwrap().client_id.as_deref(), Some("client"));
+    rig.service.unwatch(&rig.owner, "old");
+    assert!(rig.service.status(&rig.owner).unwrap().client_id.is_some());
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(receive
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap()
+        .client_id
+        .is_none());
+    rig.service.unwatch(&rig.owner, "new");
+    rig.service.end(&rig.owner);
+    assert!(receive.try_recv().is_err());
+}
 impl Rig {
     fn new() -> Self {
         let service = Service::default();

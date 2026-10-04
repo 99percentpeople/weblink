@@ -317,7 +317,7 @@ fn closing_one_source_and_expiring_one_lease_leave_other_captures_running() {
     let now = Instant::now();
     engine.active[&closed].frames.lock().unwrap().closed = true;
     engine
-        .status(&live, now + LEASE - Duration::from_secs(1))
+        .renew(&live, now + LEASE - Duration::from_secs(1))
         .unwrap();
     engine.tick(now + LEASE + Duration::from_secs(1));
     assert_eq!(fake.stops.get(), 2);
@@ -391,11 +391,11 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
     let (mut engine, fake) = setup();
     let id = start(&mut engine);
     let now = engine.active.get(&id).unwrap().started;
-    engine.status(&id, now + Duration::from_secs(9)).unwrap();
+    engine.renew(&id, now + Duration::from_secs(9)).unwrap();
     engine.tick(now + Duration::from_secs(11));
     assert_eq!(fake.stops.get(), 0);
     assert!(engine
-        .status("stale", now + Duration::from_secs(18))
+        .renew("stale", now + Duration::from_secs(18))
         .is_err());
     engine.tick(now + Duration::from_secs(9) + LEASE);
     assert_eq!(
@@ -404,6 +404,9 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
     );
     assert_eq!(fake.stops.get(), 1);
     // A late heartbeat cannot resurrect an expired session.
+    assert!(engine
+        .renew(&id, now + Duration::from_secs(10) + LEASE)
+        .is_err());
     assert_eq!(
         engine
             .status(&id, now + Duration::from_secs(10) + LEASE)
@@ -412,6 +415,82 @@ fn heartbeat_renews_only_current_session_and_expiry_stops_idle_capture() {
         CaptureState::Stopped
     );
     assert!(engine.active.is_empty());
+}
+
+#[test]
+fn status_and_change_observers_do_not_renew_or_emit_counter_ticks() {
+    let (mut engine, _) = setup();
+    let id = start(&mut engine);
+    let now = engine.active[&id].started;
+    let (send, receive) = mpsc::channel();
+    engine
+        .watch(
+            &id,
+            "view".into(),
+            Box::new(move |status| send.send(status).is_ok()),
+            now,
+        )
+        .unwrap();
+    assert_eq!(receive.recv().unwrap().state, CaptureState::Running);
+    engine.status(&id, now + Duration::from_secs(30)).unwrap();
+    assert!(receive.try_recv().is_err());
+    {
+        let mut frames = engine.active[&id].frames.lock().unwrap();
+        frames.width = 1280;
+        frames.height = 720;
+        frames.count += 1;
+    }
+    engine.tick(now + Duration::from_secs(31));
+    assert_eq!(receive.recv().unwrap().width, 1280);
+    engine.active[&id].frames.lock().unwrap().count += 1;
+    engine.tick(now + Duration::from_secs(32));
+    assert!(receive.try_recv().is_err());
+    engine.tick(now + LEASE);
+    let ended = receive.recv().unwrap();
+    assert_eq!(ended.stop_reason, Some(StopReason::ClientDisconnected));
+    engine.tick(now + LEASE + Duration::from_secs(1));
+    assert!(receive.try_recv().is_err());
+    assert!(engine.renew(&id, now + LEASE).is_err());
+}
+
+#[test]
+fn observers_reconcile_already_closed_sources_and_unsubscribe_without_stopping_capture() {
+    let (mut engine, fake) = setup();
+    let id = start(&mut engine);
+    let now = engine.active[&id].started;
+    let (send, receive) = mpsc::channel();
+    engine
+        .watch(
+            &id,
+            "view".into(),
+            Box::new(move |status| send.send(status).is_ok()),
+            now,
+        )
+        .unwrap();
+    receive.recv().unwrap();
+    engine.observers.unwatch("view");
+    assert!(engine.active.contains_key(&id));
+    assert_eq!(fake.stops.get(), 0);
+    engine.active[&id].frames.lock().unwrap().closed = true;
+    engine.tick(now);
+    assert!(receive.try_recv().is_err());
+    let (send, receive) = mpsc::channel();
+    engine
+        .watch(
+            &id,
+            "late-view".into(),
+            Box::new(move |status| send.send(status).is_ok()),
+            now,
+        )
+        .unwrap();
+    assert_eq!(
+        receive.recv().unwrap().stop_reason,
+        Some(StopReason::SourceClosed)
+    );
+    assert!(matches!(
+        receive.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected)
+    ));
 }
 
 #[test]

@@ -62,6 +62,34 @@ pub async fn capture_status(
 }
 
 #[tauri::command]
+pub async fn capture_renew(service: State<'_, Service>, session_id: String) -> Result<(), String> {
+    run(service, move |s| s.renew(session_id)).await
+}
+
+#[tauri::command]
+pub async fn capture_watch(
+    service: State<'_, Service>,
+    session_id: String,
+    watch_id: String,
+    events: tauri::ipc::Channel<CaptureStatus>,
+) -> Result<(), String> {
+    uuid::Uuid::parse_str(&watch_id).map_err(|_| "Invalid capture watcher")?;
+    run(service, move |s| {
+        s.watch(
+            session_id,
+            watch_id,
+            Box::new(move |status| events.send(status).is_ok()),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn capture_unwatch(service: State<'_, Service>, watch_id: String) {
+    service.unwatch(watch_id);
+}
+
+#[tauri::command]
 pub async fn capture_stop(
     service: State<'_, Service>,
     control_service: State<'_, crate::remote_control::Shared>,

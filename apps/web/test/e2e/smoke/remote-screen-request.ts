@@ -35,6 +35,9 @@ export async function remoteScreenRequestCheck() {
     closed: false,
   };
   let decision: "allow" | "deny" | undefined;
+  let receive:
+    | ((status: NativeControlStatus) => void)
+    | undefined;
   let answer: ((accepted: boolean) => void) | undefined;
   let captures = 0,
     approvals = 0;
@@ -46,8 +49,19 @@ export async function remoteScreenRequestCheck() {
         open: async () => "owner",
         end: async () => {},
         status: async () => ({ ...status }),
+        watch: async (
+          _owner: string,
+          onStatus: (status: NativeControlStatus) => void,
+        ) => {
+          receive = onStatus;
+          receive({ ...status });
+          return () => {
+            receive = undefined;
+          };
+        },
         revoke: async () => {
           status.clientId = null;
+          receive?.({ ...status });
         },
         approve: async (
           _owner: string,
@@ -61,6 +75,7 @@ export async function remoteScreenRequestCheck() {
           ++approvals;
           status.pending = null;
           answer?.(accepted);
+          receive?.({ ...status });
         },
       },
     } as unknown as PlatformRuntime,
@@ -150,6 +165,7 @@ export async function remoteScreenRequestCheck() {
                   reason: "declined",
                 });
             };
+            receive?.({ ...status });
           } else if (value.type === "heartbeat")
             send({
               type: "heartbeat",

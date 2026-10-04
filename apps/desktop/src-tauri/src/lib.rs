@@ -93,6 +93,8 @@ pub fn run() {
             keyboard::keyboard_stop,
             remote_control::remote_control_open,
             remote_control::remote_control_status,
+            remote_control::remote_control_watch,
+            remote_control::remote_control_unwatch,
             remote_control::remote_control_end,
             remote_control::remote_control_revoke,
             remote_control::remote_control_approve,
@@ -105,6 +107,9 @@ pub fn run() {
             capture::capture_encoders,
             capture::capture_start,
             capture::capture_status,
+            capture::capture_renew,
+            capture::capture_watch,
+            capture::capture_unwatch,
             capture::capture_stop,
             capture::capture_share_start,
             capture::capture_set_audio_enabled,
@@ -168,6 +173,7 @@ pub fn run() {
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         preview::clear(&webview);
+                        webview.state::<capture::Service>().clear_watches();
                         webview.state::<notifications::Service>().clear();
                         if let Some(window) = webview.app_handle().get_webview_window("main") {
                             webview.state::<picture_in_picture::Service>().reset(&window);
@@ -212,6 +218,9 @@ pub fn run() {
                 if label == "main" {
                     if let Some(window) = app.get_webview_window("main") {
                         app.state::<picture_in_picture::Service>().window_event(&window, event);
+                        if matches!(event, tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)) {
+                            preview::update_visibility(&window);
+                        }
                     }
                 }
             }

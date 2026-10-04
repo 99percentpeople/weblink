@@ -9,6 +9,8 @@ use std::{
 
 mod backend;
 mod cursor;
+mod observers;
+pub use observers::StatusObserver;
 pub mod geometry;
 pub mod media;
 #[cfg(windows)]
@@ -19,7 +21,7 @@ mod tests;
 const MAX_SESSIONS: usize = 16;
 const MAX_RETIRED_SESSIONS: usize = 32;
 // Renderer pauses must not destroy an explicitly active share after a few missed
-// status reads. Explicit stop/window teardown still release immediately.
+// lease renewals. Explicit stop/window teardown still release immediately.
 const LEASE: Duration = Duration::from_secs(60);
 type Result<T> = std::result::Result<T, String>;
 
@@ -203,6 +205,7 @@ struct Engine<B> {
     stopped: VecDeque<CaptureStatus>,
     next_id: u64,
     layout: geometry::LayoutTracker,
+    observers: observers::Observers,
 }
 
 impl<B: Backend> Engine<B> {
@@ -213,6 +216,7 @@ impl<B: Backend> Engine<B> {
             stopped: VecDeque::new(),
             next_id: 0,
             layout: geometry::LayoutTracker::default(),
+            observers: Default::default(),
         }
     }
 
@@ -417,6 +421,7 @@ impl<B: Backend> Engine<B> {
         active.status.error = result.err();
         active.status.stop_reason = Some(reason);
         active.status.fps = 0.0;
+        self.observers.notify(&active.status);
         self.stopped.push_back(active.status);
         while self.stopped.len() > MAX_RETIRED_SESSIONS {
             self.stopped.pop_front();
@@ -451,12 +456,15 @@ impl<B: Backend> Engine<B> {
         for (id, reason) in ended {
             self.stop_session(&id, reason, now);
         }
+        for active in self.active.values_mut() {
+            Self::sample(active, now);
+            self.observers.notify(&active.status);
+        }
     }
 
     fn status(&mut self, id: &str, now: Instant) -> Result<CaptureStatus> {
         self.tick(now);
         if let Some(active) = self.active.get_mut(id) {
-            active.heartbeat = now;
             Self::sample(active, now);
             return Ok(active.status.clone());
         }
@@ -465,6 +473,24 @@ impl<B: Backend> Engine<B> {
             .find(|s| s.session_id.as_deref() == Some(id))
             .cloned()
             .ok_or_else(|| "This capture session is no longer current".into())
+    }
+
+    fn renew(&mut self, id: &str, now: Instant) -> Result<()> {
+        self.tick(now);
+        let active = self.active.get_mut(id).ok_or("Capture session ended")?;
+        active.heartbeat = now;
+        Ok(())
+    }
+
+    fn watch(
+        &mut self,
+        id: &str,
+        watch_id: String,
+        observer: StatusObserver,
+        now: Instant,
+    ) -> Result<()> {
+        let status = self.status(id, now)?;
+        self.observers.watch(watch_id, status, observer)
     }
 
     fn stop(&mut self, id: &str, now: Instant) -> Result<CaptureStatus> {
@@ -528,12 +554,17 @@ enum Command {
     ),
     Media(String, mpsc::Sender<Result<Arc<media::MediaSession>>>),
     Status(String, mpsc::Sender<Result<CaptureStatus>>),
+    Renew(String, mpsc::Sender<Result<()>>),
+    Watch(String, String, StatusObserver, mpsc::Sender<Result<()>>),
+    Unwatch(String),
+    ClearWatches,
     Stop(String, mpsc::Sender<Result<CaptureStatus>>),
     Shutdown,
 }
 
 /// Serializes native operations and reaps sessions even if the UI disappears.
-/// Blocking methods must be called off the UI thread. Poll `status` while owning a session.
+/// Blocking methods must be called off the UI thread. Renew while owning a session;
+/// status reads and observers never extend its lease.
 pub struct CaptureService {
     commands: mpsc::Sender<Command>,
     worker: Mutex<Option<JoinHandle<()>>>,
@@ -589,6 +620,18 @@ impl CaptureService {
                         Ok(Command::Status(id, reply)) => {
                             let _ = reply.send(engine.status(&id, Instant::now()));
                         }
+                        Ok(Command::Renew(id, reply)) => {
+                            let _ = reply.send(engine.renew(&id, Instant::now()));
+                        }
+                        Ok(Command::Watch(id, watch_id, observer, reply)) => {
+                            let result =
+                                engine.watch(&id, watch_id.clone(), observer, Instant::now());
+                            if reply.send(result).is_err() {
+                                engine.observers.unwatch(&watch_id);
+                            }
+                        }
+                        Ok(Command::Unwatch(id)) => engine.observers.unwatch(&id),
+                        Ok(Command::ClearWatches) => engine.observers.clear(),
                         Ok(Command::StartMedia(id, media, options, reply)) => {
                             let result =
                                 engine.start_media(&id, Instant::now(), Some(media), options, None);
@@ -670,6 +713,23 @@ impl CaptureService {
     }
     pub fn status(&self, session_id: String) -> Result<CaptureStatus> {
         self.request(|r| Command::Status(session_id, r))?
+    }
+    pub fn renew(&self, session_id: String) -> Result<()> {
+        self.request(|r| Command::Renew(session_id, r))?
+    }
+    pub fn watch(
+        &self,
+        session_id: String,
+        watch_id: String,
+        observer: StatusObserver,
+    ) -> Result<()> {
+        self.request(|r| Command::Watch(session_id, watch_id, observer, r))?
+    }
+    pub fn unwatch(&self, watch_id: String) {
+        let _ = self.commands.send(Command::Unwatch(watch_id));
+    }
+    pub fn clear_watches(&self) {
+        let _ = self.commands.send(Command::ClearWatches);
     }
     pub fn start_media(
         &self,

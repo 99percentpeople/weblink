@@ -6,6 +6,7 @@ import {
   vi,
 } from "vitest";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import type { Channel } from "@tauri-apps/api/core";
 import { createRawPreview } from "../src/preview";
 
 let listener: ((event: any) => void) | undefined;
@@ -15,13 +16,28 @@ const requestFrame = vi.fn();
 const draw = vi.fn();
 let scheduled: (() => void) | undefined;
 let shared: ArrayBuffer;
+let visibility: Channel<boolean> | undefined;
+const openBuffer = (args: any, visible = true) => {
+  visibility = args.visibility;
+  visibility?.onmessage(visible);
+  listener?.({
+    additionalData: {
+      kind: "weblink-preview",
+      id: args.previewId,
+    },
+    getBuffer: () => shared,
+  });
+};
 const tick = async () => {
   for (let i = 0; i < 15; i++) await Promise.resolve();
 };
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "performance"],
+  });
   listener = undefined;
   scheduled = undefined;
+  visibility = undefined;
   shared = new ArrayBuffer(24);
   release.mockClear();
   stop.mockClear();
@@ -105,13 +121,7 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
   mockIPC(async (command, args: any) => {
     calls.push(command);
     if (command === "capture_preview_open")
-      listener?.({
-        additionalData: {
-          kind: "weblink-preview",
-          id: args.previewId,
-        },
-        getBuffer: () => shared,
-      });
+      openBuffer(args);
     if (command === "capture_preview_frame") {
       if (++sequence === 1)
         return {
@@ -190,13 +200,7 @@ it("keeps the display clock armed during IPC without overlapping shared-buffer r
   let finish!: (value: any) => void;
   mockIPC((command, args: any) => {
     if (command === "capture_preview_open")
-      listener?.({
-        additionalData: {
-          kind: "weblink-preview",
-          id: args.previewId,
-        },
-        getBuffer: () => shared,
-      });
+      openBuffer(args);
     if (command === "capture_preview_frame") {
       requests++;
       if (requests === 1)
@@ -237,19 +241,118 @@ it("keeps the display clock armed during IPC without overlapping shared-buffer r
   expect(release).toHaveBeenCalledOnce();
 });
 
-it("keeps hidden preview ticks serialized and cancels them on close", async () => {
-  vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+it("pauses native-hidden previews even if the document stays visible and resumes the same stream", async () => {
+  vi.spyOn(document, "hidden", "get").mockReturnValue(
+    false,
+  );
+  let requests = 0;
+  let finish!: (value: any) => void;
+  const calls: string[] = [];
+  mockIPC((command, args: any) => {
+    calls.push(command);
+    if (command === "capture_preview_open")
+      openBuffer(args);
+    if (command === "capture_preview_frame") {
+      if (++requests === 1)
+        return { sequence: 1, width: 2, height: 2 };
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    }
+  });
+  const ended = vi.fn();
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    ended,
+  );
+  const stream = preview.stream;
+  expect(requests).toBe(2);
+  visibility?.onmessage(false);
+  expect(scheduled).toBeUndefined();
+  // A frame already requested before hiding must not reach the presenter.
+  finish({ sequence: 2, width: 2, height: 2 });
+  await tick();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(requests).toBe(2);
+  expect(draw).toHaveBeenCalledOnce();
+  expect(stop).not.toHaveBeenCalled();
+  expect(release).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+  visibility?.onmessage(true);
+  expect(requests).toBe(3);
+  finish({ sequence: 3, width: 4, height: 2 });
+  await tick();
+  expect(preview.stream).toBe(stream);
+  expect(preview.stats()).toMatchObject({
+    width: 4,
+    frames: 2,
+  });
+  expect(scheduled).toBeTypeOf("function");
+  preview.close();
+  visibility?.onmessage(false);
+  visibility?.onmessage(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await tick();
+  expect(requests).toBe(3);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(scheduled).toBeUndefined();
+  expect(release).toHaveBeenCalledOnce();
+  expect(ended).not.toHaveBeenCalled();
+  expect(calls).toEqual([
+    "capture_preview_open",
+    "capture_preview_frame",
+    "capture_preview_frame",
+    "capture_preview_frame",
+    "capture_preview_close",
+  ]);
+});
+it.each(["native", "document"])(
+  "opens while %s-hidden without waiting for a frame and starts on visibility restoration",
+  async (hiddenBy) => {
+    const hidden = vi
+      .spyOn(document, "hidden", "get")
+      .mockReturnValue(hiddenBy === "document");
+    let requests = 0;
+    mockIPC((command, args: any) => {
+      if (command === "capture_preview_open")
+        openBuffer(args, hiddenBy !== "native");
+      if (command === "capture_preview_frame")
+        return {
+          sequence: ++requests,
+          width: 2,
+          height: 2,
+        };
+    });
+    const ended = vi.fn();
+    const preview = await createRawPreview(
+      "capture",
+      false,
+      ended,
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(requests).toBe(0);
+    expect(draw).not.toHaveBeenCalled();
+    expect(scheduled).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+    hidden.mockReturnValue(false);
+    visibility?.onmessage(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await tick();
+    expect(requests).toBe(1);
+    expect(draw).toHaveBeenCalledOnce();
+    expect(scheduled).toBeTypeOf("function");
+    expect(ended).not.toHaveBeenCalled();
+    preview.close();
+    await tick();
+  },
+);
+it("keeps requests serialized across rapid hide/show while IPC is pending", async () => {
   let requests = 0;
   let finish!: (value: any) => void;
   mockIPC((command, args: any) => {
     if (command === "capture_preview_open")
-      listener?.({
-        additionalData: {
-          kind: "weblink-preview",
-          id: args.previewId,
-        },
-        getBuffer: () => shared,
-      });
+      openBuffer(args);
     if (command === "capture_preview_frame") {
       if (++requests === 1)
         return { sequence: 1, width: 2, height: 2 };
@@ -263,18 +366,52 @@ it("keeps hidden preview ticks serialized and cancels them on close", async () =
     false,
     vi.fn(),
   );
-  await vi.advanceTimersByTimeAsync(64);
+  visibility?.onmessage(false);
+  visibility?.onmessage(true);
+  visibility?.onmessage(false);
+  visibility?.onmessage(true);
+  scheduled?.();
   expect(requests).toBe(2);
   finish({ sequence: 2, width: 2, height: 2 });
   await tick();
-  await vi.advanceTimersByTimeAsync(16);
+  scheduled?.();
   expect(requests).toBe(3);
   preview.close();
   finish(null);
-  await vi.advanceTimersByTimeAsync(64);
-  expect(requests).toBe(3);
-  expect(vi.getTimerCount()).toBe(0);
-  expect(release).toHaveBeenCalledOnce();
+  await tick();
+});
+it("finishes opening if the window hides while its first frame is pending", async () => {
+  let finish!: (value: any) => void;
+  let requests = 0;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      openBuffer(args);
+    if (command === "capture_preview_frame") {
+      requests++;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    }
+  });
+  const ended = vi.fn();
+  const opening = createRawPreview("capture", false, ended);
+  await tick();
+  expect(requests).toBe(1);
+  visibility?.onmessage(false);
+  finish({ sequence: 1, width: 2, height: 2 });
+  const preview = await opening;
+  await vi.advanceTimersByTimeAsync(15_000);
+  expect(requests).toBe(1);
+  expect(draw).not.toHaveBeenCalled();
+  expect(ended).not.toHaveBeenCalled();
+  expect(scheduled).toBeUndefined();
+  visibility?.onmessage(true);
+  expect(requests).toBe(2);
+  finish({ sequence: 2, width: 2, height: 2 });
+  await tick();
+  expect(draw).toHaveBeenCalledOnce();
+  preview.close();
+  await tick();
 });
 it("aborting an opening preview releases a late mapping before closing its native owner", async () => {
   const controller = new AbortController();
@@ -353,13 +490,7 @@ it("waits for a generated-track write before requesting another shared-memory fr
   let sequence = 0;
   mockIPC((command, args: any) => {
     if (command === "capture_preview_open")
-      listener?.({
-        additionalData: {
-          kind: "weblink-preview",
-          id: args.previewId,
-        },
-        getBuffer: () => shared,
-      });
+      openBuffer(args);
     if (command === "capture_preview_frame")
       return {
         sequence: ++sequence,
@@ -390,4 +521,73 @@ it("waits for a generated-track write before requesting another shared-memory fr
   expect(release).toHaveBeenCalledOnce();
   expect(ended).not.toHaveBeenCalled();
   expect(scheduled).toBeUndefined();
+});
+
+it("pauses generated-track static refreshes while document-hidden and resumes while unfocused", async () => {
+  const hidden = vi
+    .spyOn(document, "hidden", "get")
+    .mockReturnValue(false);
+  const write = vi.fn().mockResolvedValue(undefined);
+  const abort = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal(
+    "MediaStreamTrackGenerator",
+    class {
+      stop = stop;
+      writable = {
+        getWriter: () => ({
+          write,
+          abort,
+          releaseLock: vi.fn(),
+        }),
+      };
+    },
+  );
+  vi.stubGlobal(
+    "MediaStream",
+    class {
+      constructor(private tracks: MediaStreamTrack[]) {}
+      getVideoTracks() {
+        return this.tracks;
+      }
+      getAudioTracks() {
+        return [];
+      }
+    },
+  );
+  let requests = 0;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      openBuffer(args);
+    if (command === "capture_preview_frame") {
+      if (++requests === 1)
+        return { sequence: 1, width: 2, height: 2 };
+      return null;
+    }
+  });
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    vi.fn(),
+  );
+  await tick();
+  expect(write).toHaveBeenCalledOnce();
+  hidden.mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(requests).toBe(2);
+  expect(write).toHaveBeenCalledOnce();
+  expect(scheduled).toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(stop).not.toHaveBeenCalled();
+  hidden.mockReturnValue(false);
+  vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  window.dispatchEvent(new Event("blur"));
+  document.dispatchEvent(new Event("visibilitychange"));
+  await tick();
+  expect(requests).toBe(3);
+  expect(write).toHaveBeenCalledTimes(2);
+  expect(scheduled).toBeTypeOf("function");
+  preview.close();
+  await tick();
+  expect(abort).toHaveBeenCalledOnce();
 });

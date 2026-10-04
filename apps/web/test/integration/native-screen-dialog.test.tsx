@@ -72,6 +72,8 @@ function mount() {
     })),
     start: vi.fn(),
     status: vi.fn(),
+    renew: vi.fn(),
+    watch: vi.fn(),
     stop: vi.fn(),
   };
   const accepted = vi.fn(),

@@ -1,6 +1,6 @@
 //! WebView2 shared memory. COM access and buffer writes stay on the UI thread.
 use std::{cell::RefCell, collections::HashMap, sync::Weak};
-use tauri::Webview;
+use tauri::{ipc::Channel, Webview};
 use weblink_desktop_capture::media::{
     preview::{PreviewFrame, BUFFER_SIZE},
     MediaSession,
@@ -14,6 +14,8 @@ struct Buffer {
     shared: ICoreWebView2SharedBuffer,
     media: Weak<MediaSession>,
     owner: String,
+    visibility: Channel<bool>,
+    visible: bool,
 }
 impl Drop for Buffer {
     fn drop(&mut self) {
@@ -46,12 +48,32 @@ pub fn clear(webview: &tauri::WebviewWindow) {
     });
 }
 
+pub fn update_visibility(webview: &tauri::WebviewWindow) {
+    let window = webview.clone();
+    let _ = webview.with_webview(move |_| {
+        // Read at delivery time so queued resize/focus events cannot restore an
+        // older visibility state after an explicit hide or show.
+        let visible =
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true);
+        BUFFERS.with(|buffers| {
+            for buffer in buffers.borrow_mut().values_mut() {
+                if buffer.owner == window.label() && buffer.visible != visible {
+                    buffer.visible = visible;
+                    let _ = buffer.visibility.send(visible);
+                }
+            }
+        });
+    });
+}
+
 pub async fn open(
     webview: Webview,
     media: std::sync::Arc<MediaSession>,
     preview_id: String,
+    visibility: Channel<bool>,
 ) -> Result<(), String> {
     let owner = webview.label().to_owned();
+    let window = webview.window();
     on_view(webview, move |view| {
         BUFFERS.with(|buffers| -> Result<(), String> {
             let mut buffers = buffers.borrow_mut();
@@ -59,6 +81,9 @@ pub async fn open(
             if buffers.contains_key(&preview_id) || buffers.len() >= 16 {
                 return Err("Preview already exists or limit reached".into());
             }
+            let visible = window.is_visible().map_err(|e| e.to_string())?
+                && !window.is_minimized().map_err(|e| e.to_string())?;
+            visibility.send(visible).map_err(|e| e.to_string())?;
             let shared = (|| -> windows_core::Result<_> {
                 unsafe {
                     let environment: ICoreWebView2Environment12 = view.environment().cast()?;
@@ -82,6 +107,8 @@ pub async fn open(
                     shared,
                     media: std::sync::Arc::downgrade(&media),
                     owner,
+                    visibility,
+                    visible,
                 },
             );
             Ok(())
@@ -96,6 +123,7 @@ pub async fn frame(
     after: u64,
 ) -> Result<Option<PreviewFrame>, String> {
     let owner = webview.label().to_owned();
+    let window = webview.window();
     on_view(webview, move |_| {
         BUFFERS.with(|buffers| {
             let buffers = buffers.borrow();
@@ -103,6 +131,12 @@ pub async fn frame(
                 .get(&preview_id)
                 .filter(|buffer| buffer.owner == owner)
                 .ok_or("Preview no longer exists")?;
+            // A request queued before hiding must not copy another pixel buffer.
+            if !window.is_visible().map_err(|e| e.to_string())?
+                || window.is_minimized().map_err(|e| e.to_string())?
+            {
+                return Ok(None);
+            }
             let media = buffer.media.upgrade().ok_or("Native screen closed")?;
             let mut data = std::ptr::null_mut();
             unsafe {

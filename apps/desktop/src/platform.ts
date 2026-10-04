@@ -6,6 +6,7 @@ import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
 import { nativePictureInPicture } from "./picture-in-picture";
 import { keepDesktopActive } from "./background";
+import { watchStatus } from "./status-watch";
 import {
   isExternalLink,
   type PlatformRuntime,
@@ -29,6 +30,8 @@ export const platform: PlatformRuntime = {
     open: () => invoke("remote_control_open"),
     status: (ownerId) =>
       invoke("remote_control_status", { ownerId }),
+    watch: (ownerId, onStatus) =>
+      watchStatus("remote_control", { ownerId }, onStatus),
     end: (ownerId) =>
       invoke("remote_control_end", { ownerId }),
     revoke: (ownerId) =>
@@ -66,6 +69,10 @@ export const platform: PlatformRuntime = {
       invoke<CaptureStatus>("capture_status", {
         sessionId,
       }),
+    renew: (sessionId) =>
+      invoke("capture_renew", { sessionId }),
+    watch: (sessionId, onStatus) =>
+      watchStatus("capture", { sessionId }, onStatus),
     stop: (sessionId) =>
       invoke<CaptureStatus>("capture_stop", { sessionId }),
   },

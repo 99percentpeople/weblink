@@ -214,6 +214,7 @@ fn focus_window(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
+    crate::preview::update_visibility(window);
 }
 
 pub fn hide(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -226,6 +227,7 @@ fn hide_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .get_webview_window("main")
         .ok_or(tauri::Error::WindowNotFound)?;
     window.hide()?;
+    crate::preview::update_visibility(&window);
     // Cancel PiP motion without moving/resizing the disappearing native window.
     app.state::<crate::picture_in_picture::Service>().suspend();
     // Captured controller keys require foreground focus; the native host stays alive.

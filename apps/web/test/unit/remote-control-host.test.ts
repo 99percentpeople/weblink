@@ -13,6 +13,10 @@ const flush = async () => {
 };
 function setup(policy?: RemoteControlPolicy) {
   let next = 0;
+  let receive:
+    | ((status: NativeControlStatus) => void)
+    | undefined;
+  const unwatch = vi.fn();
   const api = {
     open: vi.fn(async () => `owner-${++next}`),
     end: vi.fn(async () => {}),
@@ -25,6 +29,16 @@ function setup(policy?: RemoteControlPolicy) {
     ),
     approve: vi.fn(async () => {}),
     revoke: vi.fn(async () => {}),
+    watch: vi.fn(
+      async (
+        _owner: string,
+        onStatus: (status: NativeControlStatus) => void,
+      ): Promise<() => void> => {
+        receive = onStatus;
+        onStatus(await api.status());
+        return unwatch;
+      },
+    ),
   };
   const platform = {
     remoteControl: api,
@@ -33,16 +47,78 @@ function setup(policy?: RemoteControlPolicy) {
     })),
   } as unknown as PlatformRuntime;
   const host = new RemoteControlHost(platform, policy);
-  return { host, api };
+  return {
+    host,
+    api,
+    unwatch,
+    emit: (status: NativeControlStatus) =>
+      receive?.(status),
+  };
 }
+it("does not let an asynchronous automatic approval overwrite a newer native snapshot", async () => {
+  const { host, api, emit } = setup({
+    decision: () => "allow",
+    remember: vi.fn(),
+  });
+  let finish!: () => void;
+  api.approve.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  host.start();
+  await flush();
+  emit({
+    closed: false,
+    clientId: null,
+    pending: {
+      consentId: "consent",
+      clientId: "alice",
+      sourceId: "screen",
+    },
+  });
+  emit({ closed: false, clientId: "alice", pending: null });
+  finish();
+  await flush();
+  expect(host.status().clientId).toBe("alice");
+  expect(api.approve).toHaveBeenCalledOnce();
+  host.close();
+});
+it("disposes a watcher that finishes registering after leave and ignores its late events", async () => {
+  const { host, api, unwatch } = setup();
+  let finish!: (close: () => void) => void;
+  let receive!: (status: NativeControlStatus) => void;
+  api.watch.mockImplementationOnce((_owner, callback) => {
+    receive = callback;
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  host.start();
+  await flush();
+  host.close();
+  receive({
+    closed: false,
+    clientId: "stale",
+    pending: null,
+  });
+  finish(unwatch);
+  await flush();
+  expect(unwatch).toHaveBeenCalledOnce();
+  expect(host.status()).toMatchObject({
+    closed: true,
+    clientId: null,
+  });
+});
 it("reopens a failed worker repeatedly with new owners and fresh consent, and cancels recovery on leave", async () => {
   vi.useFakeTimers();
-  const { host, api } = setup();
+  const { host, api, emit } = setup();
   host.start();
   await flush();
   for (let i = 0; i < 4; i++) {
     const before = await host.context("peer", "alice");
-    api.status.mockResolvedValueOnce({
+    emit({
       pending: null,
       clientId: "alice",
       closed: true,
@@ -54,7 +130,7 @@ it("reopens a failed worker repeatedly with new owners and fresh consent, and ca
     expect(after?.ownerId).not.toBe(before?.ownerId);
     expect(api.approve).not.toHaveBeenCalled();
   }
-  api.status.mockResolvedValueOnce({
+  emit({
     pending: null,
     clientId: null,
     closed: true,
@@ -65,9 +141,9 @@ it("reopens a failed worker repeatedly with new owners and fresh consent, and ca
   await vi.advanceTimersByTimeAsync(60000);
   expect(api.open).toHaveBeenCalledTimes(opens);
 });
-it("starts a distinct room owner, polls status, and closes it on leave", async () => {
+it("subscribes once without idle polling and closes the subscription on leave", async () => {
   vi.useFakeTimers();
-  const { host, api } = setup();
+  const { host, api, unwatch } = setup();
   host.start();
   await flush();
   expect(await host.context("peer", "client")).toEqual({
@@ -76,11 +152,14 @@ it("starts a distinct room owner, polls status, and closes it on leave", async (
     clientId: "client",
   });
   await vi.advanceTimersByTimeAsync(1000);
-  expect(api.status).toHaveBeenCalledTimes(3);
+  expect(api.status).toHaveBeenCalledOnce();
+  expect(api.watch).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
   host.close();
   expect(api.end).toHaveBeenCalledWith("owner-1");
   await vi.advanceTimersByTimeAsync(2000);
-  expect(api.status).toHaveBeenCalledTimes(3);
+  expect(api.status).toHaveBeenCalledOnce();
+  expect(unwatch).toHaveBeenCalledOnce();
   host.start();
   await flush();
   expect(
@@ -105,17 +184,17 @@ it("late native open completion cannot carry permission into another room", asyn
   ).toMatchObject({ ownerId: "owner-1" });
   host.close();
 });
-it("retries a failed status read without ending the owner or requiring new approval", async () => {
+it("retries a failed subscription without ending the owner or requiring new approval", async () => {
   vi.useFakeTimers();
   const warning = vi
     .spyOn(console, "warn")
     .mockImplementation(() => {});
-  const { host, api } = setup();
-  host.start();
-  await flush();
-  api.status.mockRejectedValueOnce(
+  const { host, api, emit } = setup();
+  api.watch.mockRejectedValueOnce(
     new Error("temporary IPC failure"),
   );
+  host.start();
+  await flush();
   await vi.advanceTimersByTimeAsync(500);
   expect(await host.capabilities()).toEqual({
     request: true,
@@ -123,9 +202,9 @@ it("retries a failed status read without ending the owner or requiring new appro
   });
   expect(api.end).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(500);
-  expect(api.status).toHaveBeenCalledTimes(3);
+  expect(api.watch).toHaveBeenCalledTimes(2);
   expect(host.status().closed).toBe(false);
-  api.status.mockResolvedValueOnce({
+  emit({
     pending: null,
     clientId: null,
     closed: true,
@@ -142,13 +221,13 @@ it.each(["allow", "deny"] as const)(
   "enforces a saved %s decision without presenting the native request",
   async (decision) => {
     vi.useFakeTimers();
-    const { host, api } = setup({
+    const { host, api, emit } = setup({
       decision: () => decision,
       remember: vi.fn(),
     });
     host.start();
     await flush();
-    api.status.mockResolvedValue({
+    emit({
       closed: false,
       clientId: null,
       pending: {
@@ -177,7 +256,7 @@ it.each(["allow", "deny"] as const)(
 it("remembers only the selected answer and automatically approves the subsequent matching screen request", async () => {
   vi.useFakeTimers();
   const remember = vi.fn();
-  const { host, api } = setup({
+  const { host, api, emit } = setup({
     decision: () => undefined,
     remember,
   });
@@ -195,7 +274,7 @@ it("remembers only the selected answer and automatically approves the subsequent
   await host.approve(pending.consentId, true);
   expect(await result).toBe("screen");
   expect(remember).not.toHaveBeenCalled();
-  api.status.mockResolvedValue({
+  emit({
     closed: false,
     clientId: null,
     pending: {
@@ -211,7 +290,7 @@ it("remembers only the selected answer and automatically approves the subsequent
     "native",
     true,
   );
-  api.status.mockResolvedValue({
+  emit({
     closed: false,
     clientId: null,
     pending: {
@@ -233,7 +312,7 @@ it("remembers only the selected answer and automatically approves the subsequent
 it("auto-starts sharing only for allowed clients and revokes an active client when blocked", async () => {
   vi.useFakeTimers();
   let decision: "allow" | "deny" = "allow";
-  const { host, api } = setup({
+  const { host, api, emit } = setup({
     decision: () => decision,
     remember: vi.fn(),
   });
@@ -248,7 +327,7 @@ it("auto-starts sharing only for allowed clients and revokes an active client wh
     ),
   ).toBe("screen");
   expect(host.status().pending).toBeNull();
-  api.status.mockResolvedValue({
+  emit({
     closed: false,
     pending: null,
     clientId: "alice",
@@ -265,5 +344,34 @@ it("auto-starts sharing only for allowed clients and revokes an active client wh
     ),
   ).toBeUndefined();
   expect(host.screen.share).toHaveBeenCalledTimes(1);
+  host.close();
+});
+
+it("applies a newly saved allow rule to a pending native request without waiting for another event", async () => {
+  let decision: "allow" | undefined;
+  const { host, api, emit } = setup({
+    decision: () => decision,
+    remember: vi.fn(),
+  });
+  host.start();
+  await flush();
+  emit({
+    closed: false,
+    clientId: null,
+    pending: {
+      consentId: "pending",
+      clientId: "alice",
+      sourceId: "screen",
+    },
+  });
+  expect(host.status().pending?.consentId).toBe("pending");
+  decision = "allow";
+  await host.policyChanged("alice");
+  expect(api.approve).toHaveBeenCalledWith(
+    "owner-1",
+    "pending",
+    true,
+  );
+  expect(host.status().pending).toBeNull();
   host.close();
 });

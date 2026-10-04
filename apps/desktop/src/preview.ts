@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { NativeScreenPreview } from "@weblink/platform";
 import { createPreviewTrack } from "./preview-track";
 
@@ -61,7 +61,8 @@ export async function createRawPreview(
   let closed = false;
   let opening: Promise<unknown> | undefined;
   let running = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let initialized = false;
+  let nativeVisible = false;
   let raf: number | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let resolveBuffer!: () => void;
@@ -88,13 +89,12 @@ export async function createRawPreview(
   const close = () => {
     if (closed) return;
     closed = true;
-    clearTimeout(timer);
     clearTimeout(timeout);
     if (raf !== undefined) cancelAnimationFrame(raf);
     signal?.removeEventListener("abort", aborted);
     document.removeEventListener(
       "visibilitychange",
-      schedule,
+      visibilityChanged,
     );
     presenter.close();
     for (const track of stream.getAudioTracks())
@@ -125,12 +125,14 @@ export async function createRawPreview(
     );
     close();
   };
+  const visible = () => nativeVisible && !document.hidden;
   const draw = async () => {
+    if (closed || !visible()) return false;
     const frame = await invoke<Frame | null>(
       "capture_preview_frame",
       { previewId: id, after: sequence },
     );
-    if (closed || !buffer) return false;
+    if (closed || !buffer || !visible()) return false;
     if (!frame) {
       if (await presenter.refresh()) frames++;
       return false;
@@ -171,21 +173,20 @@ export async function createRawPreview(
   };
   const wake = () => {
     raf = undefined;
-    timer = undefined;
     // Keep the display clock running while IPC/write is in flight. Scheduling
     // only after completion adds another vsync wait to every preview frame.
     schedule();
     void pump();
   };
   const schedule = () => {
-    if (closed) return;
-    clearTimeout(timer);
     if (raf !== undefined) cancelAnimationFrame(raf);
-    if (document.hidden) timer = setTimeout(wake, 16);
-    else raf = requestAnimationFrame(wake);
+    raf = undefined;
+    if (!closed && initialized && visible())
+      raf = requestAnimationFrame(wake);
   };
   const pump = async () => {
-    if (closed || running) return;
+    if (closed || !initialized || !visible() || running)
+      return;
     running = true;
     try {
       await draw();
@@ -200,6 +201,17 @@ export async function createRawPreview(
       running = false;
     }
   };
+  const visibilityChanged = () => {
+    schedule();
+    void pump();
+  };
+  // Native visibility covers explicit tray/control hiding and minimization even
+  // when WebView2 keeps its document active. An unfocused, visible PiP still runs.
+  const visibility = new Channel<boolean>((value) => {
+    if (closed || nativeVisible === value) return;
+    nativeVisible = value;
+    visibilityChanged();
+  });
   webview.addEventListener("sharedbufferreceived", receive);
   signal?.addEventListener("abort", aborted, {
     once: true,
@@ -215,12 +227,14 @@ export async function createRawPreview(
     opening = invoke("capture_preview_open", {
       sessionId,
       previewId: id,
+      visibility,
     });
     await Promise.all([opening, ready]);
     clearTimeout(timeout);
     signal?.throwIfAborted();
     const deadline = performance.now() + 10_000;
-    while (!(await draw())) {
+    while (visible() && !(await draw())) {
+      if (!visible()) break;
       if (closed || performance.now() > deadline)
         throw new Error(
           "Native preview did not produce a frame",
@@ -229,6 +243,8 @@ export async function createRawPreview(
         setTimeout(resolve, 16),
       );
     }
+    signal?.throwIfAborted();
+    if (closed) throw new Error("Preview closed");
     if (audio) {
       audioContext = new AudioContext();
       stream.addTrack(
@@ -237,11 +253,14 @@ export async function createRawPreview(
           .stream.getAudioTracks()[0],
       );
     }
-    document.addEventListener("visibilitychange", schedule);
-    // RAF is suspended in a hidden WebView. The timer also keeps PiP and
-    // borrowed tracks alive; the sequence prevents copying unchanged pixels.
-    schedule();
-    void pump();
+    document.addEventListener(
+      "visibilitychange",
+      visibilityChanged,
+    );
+    // Pause only presentation: retain the stream, mapping and capture ownership
+    // while hidden, then request the latest frame when the window returns.
+    initialized = true;
+    visibilityChanged();
     return {
       stream,
       close,

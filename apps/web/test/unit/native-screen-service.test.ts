@@ -7,6 +7,7 @@ import {
   vi,
 } from "vitest";
 import type {
+  CaptureStatus,
   NativeCapture,
   NativeScreenShare,
   NativeScreenPreview,
@@ -68,6 +69,9 @@ const flush = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };
 function setup() {
+  let receive:
+    | ((status: CaptureStatus) => void)
+    | undefined;
   const status = {
     sessionId: "owned",
     state: "running",
@@ -78,6 +82,12 @@ function setup() {
     sources: vi.fn(),
     start: vi.fn(),
     status: vi.fn(async () => status),
+    renew: vi.fn(async () => {}),
+    watch: vi.fn(async (_id, onStatus) => {
+      receive = onStatus;
+      onStatus(status);
+      return vi.fn();
+    }),
     stop: vi.fn(async () => status),
   };
   const share: NativeScreenShare = {
@@ -91,7 +101,11 @@ function setup() {
     addIceCandidate: vi.fn(async () => {}),
     closePeer: vi.fn(async () => {}),
   };
-  return { capture, share };
+  return {
+    capture,
+    share,
+    emit: (status: CaptureStatus) => receive?.(status),
+  };
 }
 beforeEach(() => {
   vi.useFakeTimers();
@@ -132,11 +146,11 @@ describe("native preview ownership", () => {
     expect(capture.stop).toHaveBeenCalledOnce();
   });
 
-  it("survives repeated status IPC errors and retains the terminal native diagnostic", async () => {
+  it("survives repeated lease IPC errors and retains the pushed terminal diagnostic", async () => {
     const warn = vi
       .spyOn(console, "warn")
       .mockImplementation(() => {});
-    const { capture, share } = setup();
+    const { capture, share, emit } = setup();
     const stream = await createNativeScreenStream(
       capture,
       share,
@@ -144,14 +158,14 @@ describe("native preview ownership", () => {
     );
     const track = stream.getVideoTracks()[0];
     for (let i = 0; i < 4; i++) {
-      vi.mocked(capture.status).mockRejectedValueOnce(
+      vi.mocked(capture.renew).mockRejectedValueOnce(
         new Error("temporary IPC"),
       );
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(10_000);
       await vi.advanceTimersByTimeAsync(1000);
       expect(capture.stop).not.toHaveBeenCalled();
     }
-    vi.mocked(capture.status).mockResolvedValueOnce({
+    emit({
       state: "failed",
       sessionId: "owned",
       error: "audio failed",
@@ -385,12 +399,12 @@ describe("native preview ownership", () => {
     await expect(
       createNativeScreenStream(capture, share, "chosen"),
     ).rejects.toThrow("ICE failed");
-    const polls = vi.mocked(capture.status).mock.calls
+    const polls = vi.mocked(capture.renew).mock.calls
       .length;
     await vi.advanceTimersByTimeAsync(15000);
     expect(capture.stop).toHaveBeenCalledOnce();
     expect(capture.stop).toHaveBeenCalledWith("owned");
-    expect(capture.status).toHaveBeenCalledTimes(polls);
+    expect(capture.renew).toHaveBeenCalledTimes(polls);
   });
   it("releases a start that resolves after its requesting room has left", async () => {
     const { capture, share } = setup();
@@ -417,7 +431,7 @@ describe("native preview ownership", () => {
   });
 
   it("propagates native source closure to the local media owner", async () => {
-    const { capture, share } = setup();
+    const { capture, share, emit } = setup();
     const stream = await createNativeScreenStream(
       capture,
       share,
@@ -426,7 +440,7 @@ describe("native preview ownership", () => {
     const track = stream.getVideoTracks()[0];
     const ended = vi.fn();
     track.addEventListener("ended", ended);
-    vi.mocked(capture.status).mockResolvedValue({
+    emit({
       sessionId: "owned",
       state: "closed",
     } as any);

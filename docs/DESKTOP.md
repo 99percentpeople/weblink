@@ -141,6 +141,12 @@ Hiding or minimizing does not dispose room, media, or host input owners. Control
 foreground focus. Explicit room leave, page reload, window destruction and process
 exit keep their existing cleanup behavior; choosing Quit in the tray always exits.
 
+The renderer subscribes to the native control owner's initial status and subsequent
+consent, grant and closure changes. Status observation does not renew or revoke
+control. Leaving releases the watcher; late events and asynchronous decisions from
+an older owner cannot update a replacement room. Failed subscription setup retries
+without replacing the native owner or replaying grants.
+
 The main page subscribes to native close requests. Repeated close attempts share one
 prompt, and replies must match both the page subscription and pending request.
 Reloading releases the subscription. Before the page subscribes, or if its channel
@@ -534,6 +540,12 @@ another write, and unchanged pixels are not recopied. The generated track retain
 only the latest frame and repeats it at most twice per
 second during static content, so a newly attached player can display it without
 another shared-memory copy. Closing releases the writer and retained frame.
+Hiding or minimizing the native window pauses local preview requests, pixel copies
+and static-frame refreshes. Showing it resumes from the latest frame using the same
+stream and shared buffer. Native visibility notifications also cover tray hiding
+and automatic hiding after control approval; a visible, unfocused PiP keeps its
+preview running. Capture, remote publication, system audio and control ownership
+remain active while local presentation is paused.
 The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
 only its available dimensions and preview-submission counters (including static
 refresh submissions) are shown. The overlay separates submitted/encoded/decoded
@@ -654,14 +666,21 @@ release the affected capture and transports; application exit releases all of th
 Leaving a room releases its peer connections but
 retains an explicitly running local capture for rejoin. Pending selections cannot
 start in a replacement room. Stale session IDs cannot stop a newer capture.
-Transient status IPC failures retry without ending capture; native terminal status
-retains its error and stop reason. Failed per-peer hardware encoders close only
+Capture owners subscribe to initial status and lifecycle, backend and size changes.
+Counter-only changes are not pushed; diagnostic consumers read status explicitly.
+These reads and subscriptions do not renew the lease. A separate 10-second renderer heartbeat renews each owned
+capture even while previews are hidden. Failed subscription setup or heartbeat IPC
+retries without treating a transport error as proof of capture termination. Reloading
+clears page subscriptions, and stopped sessions release theirs after a terminal event.
+Native terminal status retains its error and stop reason. Failed per-peer hardware encoders close only
 their own transport and retain bounded error diagnostics. Capture/readback and
 system-audio failures still terminate the affected capture with native diagnostics.
 
 **Settings → Advanced → Native screen capture test** remains a local diagnostic
 using the same capture service with an independent session.
 It reports capture arrival statistics without mapping or transmitting pixels.
+Its 500 ms statistics sampler pauses while the document is hidden; status events
+and lease renewal remain independent of that sampler.
 Closing this diagnostic panel stops only the capture it owns.
 
 For a native smoke test, run this in an unlocked interactive Windows session:

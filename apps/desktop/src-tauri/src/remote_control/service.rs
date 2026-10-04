@@ -22,8 +22,26 @@ struct Owner {
     alive: AtomicBool,
     host: Mutex<Host>,
     thread: Mutex<Option<JoinHandle<()>>>,
+    watch: Mutex<Option<StatusWatch>>,
+}
+struct StatusWatch {
+    id: String,
+    previous: Snapshot,
+    send: Box<dyn Fn(Snapshot) -> bool + Send>,
 }
 impl Owner {
+    // Called under the host lock, keeping snapshots and initial delivery ordered.
+    fn publish(&self, status: Snapshot) {
+        let mut slot = self.watch.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(watch) = slot.as_mut() {
+            if watch.previous != status {
+                watch.previous = status.clone();
+                if !(watch.send)(status) {
+                    *slot = None;
+                }
+            }
+        }
+    }
     fn live(&self) -> bool {
         self.alive.load(Ordering::Acquire)
     }
@@ -59,6 +77,7 @@ impl Service {
         for id in ids {
             host.remove_peer(&id);
         }
+        owner.publish(host.snapshot());
     }
     fn owner(&self, id: &str) -> Result<Arc<Owner>, String> {
         self.owner
@@ -101,6 +120,7 @@ impl Service {
                     .clone(),
             }),
             thread: Mutex::new(None),
+            watch: Mutex::new(None),
         });
         let weak = Arc::downgrade(&owner);
         let thread = thread::Builder::new()
@@ -115,9 +135,18 @@ impl Service {
                         h.worker.shutdown();
                         h.pending = None;
                         h.end_grant();
+                        owner.publish(Snapshot {
+                            closed: true,
+                            ..Default::default()
+                        });
+                        owner.watch.lock().unwrap_or_else(|e| e.into_inner()).take();
                         break;
                     }
-                    owner.host.lock().unwrap_or_else(|e| e.into_inner()).tick();
+                    {
+                        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+                        host.tick();
+                        owner.publish(host.snapshot());
+                    }
                     drop(owner);
                     // Channel arrivals wake this wait immediately. The timeout
                     // still services safety/liveness state without incoming input.
@@ -158,12 +187,56 @@ impl Service {
         let state = o.host.lock().unwrap_or_else(|e| e.into_inner()).snapshot();
         Ok(state)
     }
+    pub fn watch(
+        &self,
+        id: &str,
+        watch_id: String,
+        send: impl Fn(Snapshot) -> bool + Send + 'static,
+    ) -> Result<(), String> {
+        let Ok(owner) = self.owner(id) else {
+            return send(Snapshot {
+                closed: true,
+                ..Default::default()
+            })
+            .then_some(())
+            .ok_or_else(|| "Control watcher closed".into());
+        };
+        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let status = if owner.live() {
+            host.snapshot()
+        } else {
+            Snapshot {
+                closed: true,
+                ..Default::default()
+            }
+        };
+        if !send(status.clone()) {
+            return Err("Control watcher closed".into());
+        }
+        if owner.live() {
+            *owner.watch.lock().unwrap_or_else(|e| e.into_inner()) = Some(StatusWatch {
+                id: watch_id,
+                previous: status,
+                send: Box::new(send),
+            });
+        }
+        Ok(())
+    }
+    pub fn unwatch(&self, id: &str, watch_id: &str) {
+        if let Ok(owner) = self.owner(id) {
+            let mut slot = owner.watch.lock().unwrap_or_else(|e| e.into_inner());
+            if slot.as_ref().is_some_and(|watch| watch.id == watch_id) {
+                *slot = None;
+            }
+        }
+    }
     pub fn revoke(&self, id: &str) -> Result<(), String> {
         let o = self.owner(id)?;
         let mut h = o.host.lock().unwrap_or_else(|e| e.into_inner());
         h.worker.revoke().map_err(input_error)?;
         h.pending = None;
         h.end_grant();
+        o.publish(h.snapshot());
         Ok(())
     }
     /// Preserve the host's emergency path while the same app captures controller keys.
@@ -223,6 +296,7 @@ impl Service {
         if let (Some(observer), Signal::Grant { grant_id, .. }) = (&h.observer, &signal) {
             observer(ControlEvent::Granted(grant_id.clone()));
         }
+        o.publish(h.snapshot());
         Ok(())
     }
     pub fn attach(

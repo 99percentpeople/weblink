@@ -20,6 +20,34 @@ pub async fn remote_control_status(
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+pub async fn remote_control_watch(
+    service: State<'_, Shared>,
+    owner_id: String,
+    watch_id: String,
+    events: tauri::ipc::Channel<Snapshot>,
+) -> Result<(), String> {
+    uuid::Uuid::parse_str(&watch_id).map_err(|_| "Invalid control watcher")?;
+    let s = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        s.watch(&owner_id, watch_id, move |status| {
+            events.send(status).is_ok()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn remote_control_unwatch(
+    service: State<'_, Shared>,
+    owner_id: String,
+    watch_id: String,
+) -> Result<(), String> {
+    let s = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || s.unwatch(&owner_id, &watch_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
 pub async fn remote_control_end(
     service: State<'_, Shared>,
     owner_id: String,

@@ -226,8 +226,15 @@ export interface NativeCapture {
     sourceId: string,
     options?: CaptureOptions,
   ): Promise<CaptureStatus>;
-  /** Renews the session lease; call regularly while owning a running capture. */
+  /** Read-only diagnostic snapshot; does not renew the session lease. */
   status(sessionId: string): Promise<CaptureStatus>;
+  /** Renew well within the 60-second lease, independently of presentation. */
+  renew(sessionId: string): Promise<void>;
+  /** Initial snapshot and lifecycle/size/backend changes, excluding counter ticks. */
+  watch(
+    sessionId: string,
+    onStatus: (status: CaptureStatus) => void,
+  ): Promise<() => void>;
   stop(sessionId: string): Promise<CaptureStatus>;
 }
 
@@ -341,6 +348,11 @@ export interface NativeControlStatus {
 export interface NativeRemoteControl {
   open(): Promise<string>;
   status(ownerId: string): Promise<NativeControlStatus>;
+  /** Delivers the initial snapshot and subsequent changes in native order. */
+  watch(
+    ownerId: string,
+    onStatus: (status: NativeControlStatus) => void,
+  ): Promise<() => void>;
   end(ownerId: string): Promise<void>;
   revoke(ownerId: string): Promise<void>;
   approve(

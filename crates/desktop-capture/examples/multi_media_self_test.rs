@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ids: Vec<_> = shares.iter().map(|(id, _)| id.clone()).collect();
         let heartbeat = tokio::spawn(async move {
             loop {
-                for id in &ids { let _ = heartbeat_service.status(id.clone()); }
+                for id in &ids { let _ = heartbeat_service.renew(id.clone()); }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
