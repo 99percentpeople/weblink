@@ -12,6 +12,7 @@ use tauri::{
 pub mod autostart;
 pub mod close;
 mod control_window;
+pub mod device;
 #[cfg(windows)]
 mod executable;
 pub mod single_instance;

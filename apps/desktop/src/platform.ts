@@ -146,6 +146,8 @@ export const platform: PlatformRuntime = {
   },
   getCapabilities: () =>
     invoke<RuntimeCapabilities>("runtime_capabilities"),
+  getDeviceName: () =>
+    invoke<string | null>("application_device_name"),
   initialize() {
     const controller = new AbortController();
     keepDesktopActive(navigator.locks, controller.signal);

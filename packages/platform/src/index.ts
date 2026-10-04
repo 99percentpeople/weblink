@@ -27,6 +27,8 @@ export interface PlatformRuntime {
   readonly capture?: NativeCapture;
   readonly screenShare?: NativeScreenShare;
   getCapabilities(): Promise<RuntimeCapabilities>;
+  /** Local device name for a new profile; null when unavailable. */
+  getDeviceName?(): Promise<string | null>;
   initialize(): () => void;
 }
 

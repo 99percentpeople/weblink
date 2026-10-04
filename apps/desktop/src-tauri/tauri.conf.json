@@ -4,6 +4,7 @@
   "version": "../package.json",
   "identifier": "ink.webl.desktop",
   "build": {
+    "removeUnusedCommands": true,
     "beforeDevCommand": "bun run --cwd ../web dev:desktop",
     "beforeBuildCommand": "bun run --cwd ../web build:desktop",
     "devUrl": "http://127.0.0.1:1420",

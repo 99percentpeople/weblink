@@ -12,10 +12,12 @@ export function initializeApplication(): void {
     const dispose = platform.initialize();
     onCleanup(dispose);
   });
-  void createInitialization().catch((error) => {
-    console.error(error);
-    toast.error(error?.message ?? String(error));
-  });
+  void createInitialization(platform.getDeviceName).catch(
+    (error) => {
+      console.error(error);
+      toast.error(error?.message ?? String(error));
+    },
+  );
   if (!platform.application) return;
   const settings = createApplicationSettingsSync(
     platform.application,

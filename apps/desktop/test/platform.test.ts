@@ -26,6 +26,19 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("reads a device name through the dedicated local command", async () => {
+    ipc.mockResolvedValue("Workstation");
+    expect(await platform.getDeviceName!()).toBe(
+      "Workstation",
+    );
+    expect(ipc).toHaveBeenCalledWith(
+      "application_device_name",
+      {},
+    );
+    ipc.mockResolvedValue(null);
+    expect(await platform.getDeviceName!()).toBeNull();
+  });
+
   it("sends window preferences only through the local native configuration command", async () => {
     const options = {
       closeBehavior: "tray",

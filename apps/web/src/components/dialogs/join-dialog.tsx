@@ -40,7 +40,7 @@ import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { getDefaultAppOptions } from "@/options";
 import { getInitials } from "@/libs/utils/name";
-import { generateStrongPassword } from "@/libs/domain/utils/encrypt/strong-password";
+import { generateRoomPassword } from "@/libs/domain/utils/encrypt/room-password";
 import {
   Tooltip,
   TooltipContent,
@@ -480,7 +480,7 @@ export const createRoomDialog = () => {
                   "common.join_form.password.generate",
                 )}
                 onClick={() => {
-                  const password = generateStrongPassword();
+                  const password = generateRoomPassword();
                   setClientProfile("password", password);
                 }}
               >

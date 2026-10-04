@@ -1,9 +1,12 @@
-import { faker } from "@faker-js/faker";
-import { createEffect } from "solid-js";
+import { createEffect, onCleanup } from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
 import { STORAGE_KEYS } from "@/constants";
 import { createClientId } from "@/libs/domain/ids";
-import type { ClientProfile } from "@/libs/domain/profile";
+import {
+  MAX_PEER_PROFILE_NAME_LENGTH,
+  type ClientProfile,
+} from "@/libs/domain/profile";
+import { createDefaultProfileNames } from "@/libs/domain/profile-defaults";
 import { appState, setAppState } from "./app-state";
 
 const LEGACY_DICEBEAR_INITIALS_PREFIX =
@@ -23,10 +26,8 @@ export const normalizeStoredProfile = (
 });
 
 export const getDefaultProfile = (): ClientProfile => {
-  const name = faker.person.lastName();
   return {
-    roomId: faker.word.noun(),
-    name,
+    ...createDefaultProfileNames(),
     clientId: createClientId(),
     password: null,
     avatar: null,
@@ -37,9 +38,16 @@ export const getDefaultProfile = (): ClientProfile => {
 
 let profileInitialized = false;
 
-export function initializeProfile() {
-  if (profileInitialized) return;
+export function initializeProfile(
+  getDeviceName?: () => Promise<string | null>,
+): Promise<void> {
+  if (profileInitialized) return Promise.resolve();
   profileInitialized = true;
+  let defaults: ClientProfile | undefined;
+  const createProfile = () => {
+    defaults = getDefaultProfile();
+    setAppState("profile", defaults);
+  };
 
   if (typeof localStorage !== "undefined") {
     const raw = localStorage.getItem(STORAGE_KEYS.profile);
@@ -55,13 +63,13 @@ export function initializeProfile() {
           "[initializeProfile] invalid profile in localStorage",
           err,
         );
-        setAppState("profile", getDefaultProfile());
+        createProfile();
       }
     } else {
-      setAppState("profile", getDefaultProfile());
+      createProfile();
     }
   } else {
-    setAppState("profile", getDefaultProfile());
+    createProfile();
   }
 
   createEffect(() => {
@@ -71,6 +79,32 @@ export function initializeProfile() {
       JSON.stringify(appState.profile),
     );
   });
+
+  if (!defaults || !getDeviceName) return Promise.resolve();
+  const initialName = defaults.name;
+  const initialClientId = defaults.clientId;
+  let disposed = false;
+  onCleanup(() => {
+    disposed = true;
+  });
+  return Promise.resolve()
+    .then(getDeviceName)
+    .then((deviceName) => {
+      const name = deviceName
+        ?.trim()
+        .slice(0, MAX_PEER_PROFILE_NAME_LENGTH);
+      if (
+        name &&
+        !disposed &&
+        appState.profile.clientId === initialClientId &&
+        appState.profile.name === initialName
+      ) {
+        setAppState("profile", "name", name);
+      }
+    })
+    .catch(() => {
+      // Device metadata is optional; keep the persisted random defaults on failure.
+    });
 }
 
 export const clientProfile = appState.profile;

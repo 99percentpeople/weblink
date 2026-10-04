@@ -74,6 +74,7 @@ pub fn run() {
 
             application::application_configure,
             application::application_show,
+            application::device::application_device_name,
             application::autostart::application_autostart_status,
             application::autostart::application_autostart_set,
             application::autostart::application_startup_behavior,

@@ -42,7 +42,6 @@
   "dependencies": {
     "@corvu/drawer": "^0.2.4",
     "@corvu/resizable": "^0.2.5",
-    "@faker-js/faker": "^9.9.0",
     "@fontsource-variable/inter": "^5.2.6",
     "@fontsource-variable/roboto-mono": "^5.2.6",
     "@kobalte/core": "^0.13.11",

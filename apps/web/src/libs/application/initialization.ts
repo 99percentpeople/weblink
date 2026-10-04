@@ -18,13 +18,15 @@ import { IndexedDbMessageRepository } from "@/libs/infrastructure/storage/indexe
 
 let initPromise: Promise<void> | null = null;
 
-export function createInitialization() {
+export function createInitialization(
+  getDeviceName?: () => Promise<string | null>,
+) {
   if (initPromise) return initPromise;
 
   setAppState(reconcile(createInitialAppState()));
 
   initializeAppOptions();
-  initializeProfile();
+  const profileReady = initializeProfile(getDeviceName);
 
   createTransferManager();
   createSessionService();
@@ -34,6 +36,7 @@ export function createInitialization() {
   createCacheManager();
 
   initPromise = Promise.all([
+    profileReady,
     cacheManager.initialize(),
     messageStores.initialize(),
   ]).then(() => undefined);

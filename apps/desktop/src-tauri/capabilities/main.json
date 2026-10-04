@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-application-device-name",
     "allow-application-configure",
     "core:window:allow-close",
     "allow-application-autostart-status",

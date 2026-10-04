@@ -11,7 +11,7 @@ import {
   fromBase64,
   toBase64,
 } from "@/libs/domain/utils/encrypt/bytes";
-import { generateStrongPassword } from "@/libs/domain/utils/encrypt/strong-password";
+import { generateRoomPassword } from "@/libs/domain/utils/encrypt/room-password";
 
 const native = createCryptography(
   webcrypto.subtle as SubtleCrypto,
@@ -222,19 +222,33 @@ describe("native and HTTP cryptography", () => {
       "closed",
     );
   });
-  it("generates mixed-class passwords without subtle or randomUUID", () => {
+  it("generates six-digit room passwords without subtle or randomUUID", () => {
     const original = globalThis.crypto;
     vi.stubGlobal("crypto", {
       getRandomValues:
         original.getRandomValues.bind(original),
     });
     try {
-      const password = generateStrongPassword();
-      expect(password).toHaveLength(12);
-      expect(password).toMatch(/[A-Z]/);
-      expect(password).toMatch(/[a-z]/);
-      expect(password).toMatch(/[0-9]/);
-      expect(password).toMatch(/[^a-zA-Z0-9]/);
+      expect(generateRoomPassword()).toMatch(/^[0-9]{6}$/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("preserves leading zeroes and rejects biased digit samples", () => {
+    const samples = [0, 250, 255, 1, 249, 2, 3, 4];
+    let index = 0;
+    vi.stubGlobal("crypto", {
+      getRandomValues: (array: Uint8Array) => {
+        for (let i = 0; i < array.length; i++) {
+          if (index >= samples.length)
+            throw new Error("Unexpected random read");
+          array[i] = samples[index++];
+        }
+        return array;
+      },
+    });
+    try {
+      expect(generateRoomPassword()).toBe("019234");
     } finally {
       vi.unstubAllGlobals();
     }
