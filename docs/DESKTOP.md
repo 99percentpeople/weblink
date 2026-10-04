@@ -968,6 +968,36 @@ of the local caret allow repeated Left/Right and Backspace/Delete actions. IME
 selection-only cursor moves become remote arrow strokes only outside composition;
 the guards are never transmitted.
 
+The independent `remoteKeyboard.autoShow` and `collapseControls` preferences default
+to false. Automatic keyboard control subscribes to `text-input-watch` while the
+local view has enabled keyboard control and is visible. The subscription carries
+the current `grantId`, `inputEpoch` and an opaque `watchId` (`null` unsubscribes).
+The authenticated channel and grant already bind the capture target and generation.
+Windows samples UI Automation on a dedicated MTA thread every 200 ms and publishes
+`text-input-state` only when its `focus` changes. Each update carries the subscription
+identity and an increasing `sequence`. Focus is `editable` with an opaque field ID,
+`none`, or `unknown`. Failed/unsupported detection is unknown, never proof of blur.
+No field contents, labels, passwords or native element IDs are transmitted.
+
+A short, stationary single-finger tap in either touch mode arms automatic opening
+and refreshes the subscription for a new snapshot after ordered native input settles.
+Editable focus opens the keyboard; confirmed non-text focus closes only an automatically
+opened keyboard. Switching fields resets staged composition. Unknown state preserves
+the current keyboard. A manual opening remains under user control; a manual dismissal
+suppresses automatic reopening until another tap, including across transient input
+epoch changes. Local focus transfers disarm opening. Hidden views unsubscribe, and
+pause, revoke, capture teardown or epoch replacement stop native observation. Stale
+subscriptions, epochs and non-increasing sequences are rejected.
+Browser restrictions, notably asynchronous focus on iPhone, may still require the
+keyboard button.
+
+The collapse preference temporarily overrides the toolbar and screen-list display
+only after keyboard geometry or viewport changes confirm visibility. Dismissal,
+focus loss or tile disposal restores the manual collapse preferences without writing
+over them. Manual and automatic keyboard opening use the same visibility lifecycle.
+Browsers that report neither floating keyboard geometry nor viewport changes cannot
+confirm that keyboard's visibility.
+
 Native `ready.textInput: true`, together with `keyboard: true`, opts into reliable
 `text` packets. Each contains at most 64 UTF-16 units, no control characters and no
 unpaired surrogates. A single editor commit is limited to 1024 UTF-16 units before

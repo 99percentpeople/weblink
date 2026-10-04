@@ -62,11 +62,15 @@ impl Endpoint {
             let mut q = self.outbound.lock().unwrap_or_else(|e| e.into_inner());
             // Only the latest liveness/state observation matters. Consent messages
             // keep their original order, including a revoke queued behind a grant.
-            if matches!(value["type"].as_str(), Some("heartbeat" | "state")) {
+            if matches!(
+                value["type"].as_str(),
+                Some("heartbeat" | "state" | "text-input-state")
+            ) {
                 q.retain(|old| {
                     !(old["type"] == value["type"]
                         && old["grantId"] == value["grantId"]
-                        && old["inputEpoch"] == value["inputEpoch"])
+                        && old["inputEpoch"] == value["inputEpoch"]
+                        && old["watchId"] == value["watchId"])
                 });
             }
             if q.len() >= CAPACITY {
@@ -249,6 +253,30 @@ mod tests {
         drop(sent);
         endpoint.dispose();
         assert!(!endpoint.send(&json!({"type":"heartbeat"})));
+    }
+    #[test]
+    fn congested_focus_stream_keeps_only_the_latest_snapshot_per_subscription() {
+        let endpoint = Endpoint::new(None);
+        let sender = Arc::new(Fake::default());
+        sender.busy.store(true, Ordering::Release);
+        endpoint.opened(sender.clone());
+        for sequence in 1..=1000 {
+            assert!(
+                endpoint.send(&json!({"type":"text-input-state", "grantId":"g",
+                "inputEpoch":"e", "watchId":"w", "sequence":sequence,
+                "focus":{"type":"editable", "id":"field-a"}}))
+            );
+        }
+        let latest = json!({"type":"text-input-state", "grantId":"g",
+            "inputEpoch":"e", "watchId":"w", "sequence":1001, "focus":{"type":"none"}});
+        assert!(endpoint.send(&latest));
+        let refreshed = json!({"type":"text-input-state", "grantId":"g",
+            "inputEpoch":"e", "watchId":"new", "sequence":1, "focus":{"type":"unknown"}});
+        assert!(endpoint.send(&refreshed));
+        sender.busy.store(false, Ordering::Release);
+        endpoint.flush();
+        assert_eq!(*sender.sent.lock().unwrap(), vec![latest, refreshed]);
+        assert!(!endpoint.is_closed());
     }
     #[test]
     fn input_overflow_keeps_channel_and_revocation_but_drops_old_gestures() {

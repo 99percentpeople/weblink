@@ -1,4 +1,5 @@
 import { createEffect, onCleanup } from "solid-js";
+import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
 import { Portal } from "solid-js/web";
 import { useMeetingMedia } from "@/libs/state/meeting-media-context";
 import { preparePictureInPictureDocument } from "@/libs/utils/picture-in-picture-document";
@@ -40,8 +41,9 @@ export function MeetingPipWindow(props: {
     afterUpdate: () => stage?.measure(),
   });
   const transitionLayout = layout.transition;
+  const keyboardCollapse = createMeetingKeyboardCollapse();
   const displayedToolbarCollapsed = () =>
-    props.toolbarCollapsed;
+    props.toolbarCollapsed || keyboardCollapse.collapsed();
   const { media } = useMeetingMedia();
   const roomActions = useRoomActions();
   const audio = useAudioPlayer();
@@ -74,7 +76,13 @@ export function MeetingPipWindow(props: {
             sources={props.sources}
             pinnedId={props.featuredId}
             hideRailToggle={displayedToolbarCollapsed()}
-            railCollapsed={props.railCollapsed}
+            railCollapsed={
+              props.railCollapsed ||
+              keyboardCollapse.collapsed()
+            }
+            onKeyboardVisibleChange={
+              keyboardCollapse.setVisible
+            }
             onRailCollapsedChange={
               props.onRailCollapsedChange
             }

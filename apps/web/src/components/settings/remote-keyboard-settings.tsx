@@ -62,6 +62,61 @@ export default function RemoteKeyboardSettings() {
           {t("setting.remote_control.keyboard.description")}
         </p>
       </div>
+      <div class="flex flex-col gap-2">
+        <Switch
+          class="flex w-full items-center justify-between gap-3"
+          checked={keyboard().autoShow}
+          disabled={!keyboard().enabled}
+          onChange={(value) =>
+            setAppOptions(
+              "remoteKeyboard",
+              "autoShow",
+              value,
+            )
+          }
+        >
+          <SwitchLabel>
+            {t(
+              "setting.remote_control.auto_keyboard.title",
+            )}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t(
+            "setting.remote_control.auto_keyboard.description",
+          )}
+        </p>
+      </div>
+      <div class="flex flex-col gap-2">
+        <Switch
+          class="flex w-full items-center justify-between gap-3"
+          checked={keyboard().collapseControls}
+          onChange={(value) =>
+            setAppOptions(
+              "remoteKeyboard",
+              "collapseControls",
+              value,
+            )
+          }
+        >
+          <SwitchLabel>
+            {t(
+              "setting.remote_control.keyboard_collapse.title",
+            )}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t(
+            "setting.remote_control.keyboard_collapse.description",
+          )}
+        </p>
+      </div>
       <Show when={systemKeyboard()}>
         <div class="flex flex-col gap-2">
           <Switch

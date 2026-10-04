@@ -93,6 +93,7 @@ impl Service {
                 peers: HashMap::new(),
                 pending: None,
                 active: None,
+                text_focus: Default::default(),
                 observer: self
                     .observer
                     .lock()

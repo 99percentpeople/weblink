@@ -24,6 +24,8 @@ import {
 } from "@/routes/home/components/remote-keyboard-input";
 import RemoteControlSettings from "@/components/settings/remote-control-settings";
 import { SettingsStateProvider } from "../helpers/settings-state";
+import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
+import type { TextInputFocus } from "@/libs/domain/remote-control/auto-keyboard";
 import {
   appState,
   createInitialAppState,
@@ -85,6 +87,19 @@ class Control extends EventTarget {
   move = vi.fn();
   resetInput = vi.fn();
   setCursorVisible = vi.fn();
+  focusListener?: (focus: TextInputFocus) => void;
+  watchTextInput = vi.fn(
+    (listener: (focus: TextInputFocus) => void) => {
+      this.focusListener = listener;
+      return () => {
+        this.focusListener = undefined;
+      };
+    },
+  );
+  refreshTextInput = vi.fn();
+  textFocus(focus: TextInputFocus) {
+    this.focusListener?.(focus);
+  }
   cancel = vi.fn();
 }
 beforeEach(() => {
@@ -496,6 +511,406 @@ function threeFingerTap() {
     touch("down", id, id * 40, 80);
   for (const id of [1, 2, 3]) touch("up", id, id * 40, 80);
 }
+
+it.each(["trackpad", "direct"] as const)(
+  "automatically opens for an editable field after a %s tap",
+  (mode) => {
+    setAppState("options", "remoteTouch", "mode", mode);
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "autoShow",
+      true,
+    );
+    const { editor } = renderKeyboardControl();
+    touch("down", 1, 60, 80);
+    touch("up", 1, 60, 80);
+    expect(
+      fixture.control.refreshTextInput,
+    ).toHaveBeenCalledOnce();
+    expect(editor).not.toHaveFocus();
+    fixture.control.textFocus({
+      type: "editable",
+      id: "field-a",
+    });
+    expect(editor).toHaveFocus();
+  },
+);
+
+it.each([
+  "disabled",
+  "drag",
+  "small-drag",
+  "multitouch",
+  "cancel",
+  "tap-disabled",
+  "longpress",
+  "contextmenu",
+])(
+  "does not request automatic keyboard for %s",
+  (reason) => {
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "autoShow",
+      reason !== "disabled",
+    );
+    if (reason === "tap-disabled")
+      setAppState(
+        "options",
+        "remoteTouch",
+        "tapToClick",
+        false,
+      );
+    const { editor } = renderKeyboardControl();
+    touch("down", 1, 60, 80);
+    if (reason === "drag") {
+      touch("move", 1, 90, 80);
+      touch("move", 1, 60, 80);
+    }
+    if (reason === "small-drag") touch("move", 1, 69, 80);
+    if (reason === "longpress")
+      vi.spyOn(performance, "now").mockReturnValue(
+        performance.now() + 400,
+      );
+    if (reason === "contextmenu")
+      fireEvent.contextMenu(surface());
+    if (reason === "multitouch") touch("down", 2, 100, 80);
+    touch(reason === "cancel" ? "cancel" : "up", 1, 60, 80);
+    if (reason === "multitouch") touch("up", 2, 100, 80);
+    expect(
+      fixture.control.refreshTextInput,
+    ).not.toHaveBeenCalled();
+    expect(editor).not.toHaveFocus();
+  },
+);
+
+it.each([
+  "readonly",
+  "setting",
+  "revoke",
+  "focus",
+  "next-tap",
+  "hidden",
+  "window-blur",
+])(
+  "discards an automatic keyboard reply after %s",
+  (reason) => {
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "autoShow",
+      true,
+    );
+    const { editor } = renderKeyboardControl();
+    touch("down", 1, 60, 80);
+    touch("up", 1, 60, 80);
+    if (reason === "window-blur")
+      window.dispatchEvent(new Event("blur"));
+    if (reason === "setting")
+      setAppState(
+        "options",
+        "remoteKeyboard",
+        "autoShow",
+        false,
+      );
+    if (reason === "revoke") {
+      fixture.control.value = "viewing";
+      fixture.control.dispatchEvent(new Event("change"));
+    }
+    if (reason === "focus") {
+      const button = document.createElement("button");
+      document.body.append(button);
+      button.focus();
+    }
+    if (reason === "next-tap") touch("down", 2, 60, 80);
+    if (reason === "hidden") {
+      vi.spyOn(document, "hidden", "get").mockReturnValue(
+        true,
+      );
+      document.dispatchEvent(new Event("visibilitychange"));
+    }
+    fixture.control.textFocus(
+      reason === "readonly"
+        ? { type: "none" }
+        : { type: "editable", id: "field-a" },
+    );
+    expect(editor).not.toHaveFocus();
+  },
+);
+
+it("reports actual keyboard visibility and clears it on dismissal or unmount", () => {
+  vi.useFakeTimers();
+  const api = Object.assign(new EventTarget(), {
+    boundingRect: { height: 0 },
+  });
+  Object.defineProperty(navigator, "virtualKeyboard", {
+    configurable: true,
+    value: api,
+  });
+  const { keyboard, unmount } = renderKeyboardControl();
+  const handle = keyboard()!;
+  handle.show();
+  expect(handle.visible()).toBe(false);
+  api.boundingRect.height = 300;
+  api.dispatchEvent(new Event("geometrychange"));
+  expect(handle.visible()).toBe(true);
+  api.boundingRect.height = 0;
+  api.dispatchEvent(new Event("geometrychange"));
+  vi.advanceTimersByTime(200);
+  expect(handle.visible()).toBe(false);
+  handle.show();
+  api.boundingRect.height = 300;
+  api.dispatchEvent(new Event("geometrychange"));
+  expect(handle.visible()).toBe(true);
+  unmount();
+  expect(handle.visible()).toBe(false);
+});
+
+it("follows remote blur and later editable focus, but holds through unknown samples", () => {
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "autoShow",
+    true,
+  );
+  const { editor } = renderKeyboardControl();
+  touch("down", 1, 60, 80);
+  touch("up", 1, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-a",
+  });
+  expect(editor).toHaveFocus();
+  fixture.control.textFocus({ type: "unknown" });
+  expect(editor).toHaveFocus();
+  fixture.control.textFocus({ type: "none" });
+  expect(editor).not.toHaveFocus();
+  expect(surface()).toHaveFocus();
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).toHaveFocus();
+});
+
+it("preserves the focus stream and keyboard ownership through transient activation", () => {
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "autoShow",
+    true,
+  );
+  const { editor } = renderKeyboardControl();
+  touch("down", 1, 60, 80);
+  touch("up", 1, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-a",
+  });
+  fixture.control.value = "activating";
+  fixture.control.dispatchEvent(new Event("change"));
+  fixture.control.value = "active";
+  fixture.control.dispatchEvent(new Event("change"));
+  expect(
+    fixture.control.watchTextInput,
+  ).toHaveBeenCalledOnce();
+  fixture.control.textFocus({ type: "none" });
+  expect(editor).not.toHaveFocus();
+});
+
+it("does not auto-close a manually opened keyboard or reopen one dismissed by the user", () => {
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "autoShow",
+    true,
+  );
+  const { editor, keyboard } = renderKeyboardControl();
+  keyboard()?.show();
+  touch("down", 1, 60, 80);
+  touch("up", 1, 60, 80);
+  fixture.control.textFocus({ type: "none" });
+  expect(editor).toHaveFocus();
+  editor.blur();
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).not.toHaveFocus();
+  touch("down", 2, 60, 80);
+  touch("up", 2, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).toHaveFocus();
+  fixture.control.textFocus({ type: "none" });
+  expect(editor).not.toHaveFocus();
+});
+
+it("discards a pending IME commit on remote blur and stops observing when hidden or unmounted", () => {
+  vi.useFakeTimers();
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "autoShow",
+    true,
+  );
+  const { editor, unmount } = renderKeyboardControl();
+  touch("down", 1, 60, 80);
+  touch("up", 1, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-a",
+  });
+  fireEvent.compositionStart(editor);
+  editor.value = "中文";
+  fireEvent.compositionEnd(editor);
+  fixture.control.textFocus({ type: "none" });
+  fixture.control.input.mockClear();
+  vi.runOnlyPendingTimers();
+  expect(fixture.control.input).not.toHaveBeenCalled();
+  const hidden = vi
+    .spyOn(document, "hidden", "get")
+    .mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(fixture.control.focusListener).toBeUndefined();
+  hidden.mockReturnValue(false);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(fixture.control.focusListener).toBeTypeOf(
+    "function",
+  );
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).not.toHaveFocus();
+  unmount();
+  expect(fixture.control.focusListener).toBeUndefined();
+});
+
+it("keeps Android Back dismissal suppressed across focus changes and epoch resets until a new tap", () => {
+  vi.useFakeTimers();
+  const api = Object.assign(new EventTarget(), {
+    boundingRect: { height: 0 },
+  });
+  Object.defineProperty(navigator, "virtualKeyboard", {
+    configurable: true,
+    value: api,
+  });
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "autoShow",
+    true,
+  );
+  const { editor, keyboard } = renderKeyboardControl();
+  touch("down", 1, 60, 80);
+  touch("up", 1, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-a",
+  });
+  api.boundingRect.height = 300;
+  api.dispatchEvent(new Event("geometrychange"));
+  expect(keyboard()?.visible()).toBe(true);
+  api.boundingRect.height = 0;
+  api.dispatchEvent(new Event("geometrychange"));
+  vi.advanceTimersByTime(200);
+  expect(keyboard()?.visible()).toBe(false);
+  expect(editor).not.toHaveFocus();
+  fixture.control.value = "activating";
+  fixture.control.dispatchEvent(new Event("change"));
+  fixture.control.value = "active";
+  fixture.control.dispatchEvent(new Event("change"));
+  fixture.control.textFocus({ type: "none" });
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).not.toHaveFocus();
+  touch("down", 2, 60, 80);
+  touch("up", 2, 60, 80);
+  fixture.control.textFocus({
+    type: "editable",
+    id: "field-b",
+  });
+  expect(editor).toHaveFocus();
+});
+
+it("offers independent automatic keyboard and control collapse switches", () => {
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const automatic = screen.getByRole("switch", {
+    name: "setting.remote_control.auto_keyboard.title",
+  });
+  const collapse = screen.getByRole("switch", {
+    name: "setting.remote_control.keyboard_collapse.title",
+  });
+  fireEvent.click(collapse);
+  expect(appState.options.remoteKeyboard).toMatchObject({
+    autoShow: false,
+    collapseControls: true,
+  });
+  fireEvent.click(automatic);
+  expect(appState.options.remoteKeyboard).toMatchObject({
+    autoShow: true,
+    collapseControls: true,
+  });
+  fireEvent.click(collapse);
+  expect(appState.options.remoteKeyboard).toMatchObject({
+    autoShow: true,
+    collapseControls: false,
+  });
+});
+
+it.each([false, true])(
+  "restores manual collapse state (%s) after temporary keyboard collapse",
+  (manual) => {
+    let visible!: (value: boolean) => void;
+    render(() => {
+      const keyboard = createMeetingKeyboardCollapse();
+      visible = keyboard.setVisible;
+      return (
+        <output aria-label="controls">
+          {manual || keyboard.collapsed()
+            ? "collapsed"
+            : "expanded"}
+        </output>
+      );
+    });
+    const controls = screen.getByLabelText("controls");
+    visible(true);
+    expect(controls).toHaveTextContent(
+      manual ? "collapsed" : "expanded",
+    );
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "collapseControls",
+      true,
+    );
+    expect(controls).toHaveTextContent("collapsed");
+    visible(false);
+    expect(controls).toHaveTextContent(
+      manual ? "collapsed" : "expanded",
+    );
+    visible(true);
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "collapseControls",
+      false,
+    );
+    expect(controls).toHaveTextContent(
+      manual ? "collapsed" : "expanded",
+    );
+  },
+);
 
 function nativeTouch(type: string, remaining = 0) {
   const event = new Event(type, {

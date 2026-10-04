@@ -39,6 +39,28 @@ function setup(options = defaultRemoteKeyboardOptions) {
   };
 }
 describe("remote keyboard", () => {
+  it("keeps automatic display and temporary collapse independently opt-in", () => {
+    expect(
+      resolveRemoteKeyboardOptions({
+        autoShow: "true",
+        collapseControls: 1,
+      }),
+    ).toEqual(defaultRemoteKeyboardOptions);
+    expect(
+      resolveRemoteKeyboardOptions({ autoShow: true }),
+    ).toMatchObject({
+      autoShow: true,
+      collapseControls: false,
+    });
+    expect(
+      resolveRemoteKeyboardOptions({
+        collapseControls: true,
+      }),
+    ).toMatchObject({
+      autoShow: false,
+      collapseControls: true,
+    });
+  });
   it("can handle only the local exit without forwarding DOM duplicates of native input", () => {
     const { keyboard, events, cancel } = setup();
     expect(keyboard.exit(key("KeyA"))).toBe(false);
@@ -213,6 +235,7 @@ describe("remote keyboard", () => {
       down: true,
     });
     const disabled = setup({
+      ...defaultRemoteKeyboardOptions,
       enabled: false,
       systemKeys: true,
       exitShortcut: "ctrl-alt-shift-x",
@@ -290,6 +313,7 @@ describe("remote keyboard", () => {
         exitShortcut: "ctrl-alt-shift-x",
       }),
     ).toEqual({
+      ...defaultRemoteKeyboardOptions,
       enabled: false,
       systemKeys: true,
       exitShortcut: "ctrl-alt-shift-x",

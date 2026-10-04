@@ -3,6 +3,10 @@ import type { TrackpadEvent } from "./trackpad-types";
 import type { TouchSampleRate } from "./touch-options";
 import type { RemoteKeyEvent } from "./keyboard";
 import {
+  parseTextInputFocus,
+  type TextInputFocus,
+} from "./auto-keyboard";
+import {
   validRemoteText,
   type RemoteTextEvent,
 } from "./text";
@@ -112,6 +116,64 @@ export class RemotePointer extends EventTarget {
       this.cursorVisible = visible;
   }
   private textAvailable = false;
+  private textInputListeners = new Set<
+    (focus: TextInputFocus) => void
+  >();
+  private textInputWatch?: {
+    id: string;
+    sequence: number;
+    latest?: TextInputFocus;
+  };
+  watchTextInput(
+    listener: (focus: TextInputFocus) => void,
+  ): () => void {
+    this.textInputListeners.add(listener);
+    this.syncTextInputWatch();
+    const latest = this.textInputWatch?.latest;
+    if (latest) listener(latest);
+    return () => {
+      this.textInputListeners.delete(listener);
+      this.syncTextInputWatch();
+    };
+  }
+  /** A tap asks for a fresh stream snapshot after the ordered native input. */
+  refreshTextInput(): void {
+    this.textInputWatch = undefined;
+    this.syncTextInputWatch();
+  }
+  private syncTextInputWatch(): void {
+    const state = this.session?.state;
+    if (
+      !this.active ||
+      state?.type !== "granted" ||
+      !this.textAvailable
+    )
+      return;
+    if (!this.textInputListeners.size) {
+      if (this.textInputWatch) {
+        this.textInputWatch = undefined;
+        this.send({
+          type: "text-input-watch",
+          grantId: state.grantId,
+          inputEpoch: this.epoch,
+          watchId: null,
+        });
+      }
+      return;
+    }
+    if (this.textInputWatch) return;
+    const id = createUuid();
+    this.textInputWatch = { id, sequence: 0 };
+    if (
+      !this.send({
+        type: "text-input-watch",
+        watchId: id,
+        grantId: state.grantId,
+        inputEpoch: this.epoch,
+      })
+    )
+      this.textInputWatch = undefined;
+  }
   supportsText(): boolean {
     return this.textAvailable;
   }
@@ -344,6 +406,32 @@ export class RemotePointer extends EventTarget {
       this.changed();
       return;
     }
+    if (v.type === "text-input-state") {
+      const watch = this.textInputWatch;
+      const focus = parseTextInputFocus(v.focus);
+      if (
+        this.active &&
+        this.session?.state.type === "granted" &&
+        v.grantId === this.session.state.grantId &&
+        v.inputEpoch === this.epoch &&
+        watch &&
+        v.watchId === watch.id &&
+        focus &&
+        typeof v.sequence === "number" &&
+        Number.isSafeInteger(v.sequence) &&
+        v.sequence > watch.sequence
+      ) {
+        watch.sequence = v.sequence;
+        watch.latest = focus;
+        for (const listener of [
+          ...this.textInputListeners,
+        ]) {
+          if (watch !== this.textInputWatch) break;
+          listener(focus);
+        }
+      }
+      return;
+    }
     if (
       v.type === "heartbeat" &&
       typeof v.grantId === "string"
@@ -367,6 +455,7 @@ export class RemotePointer extends EventTarget {
       this.activationPending = false;
       this.active = this.desired && v.active === true;
       if (this.persistent && !this.active) this.suspend();
+      this.syncTextInputWatch();
     } else {
       const requesting =
         this.session?.state.type === "requesting";
@@ -428,6 +517,7 @@ export class RemotePointer extends EventTarget {
     this.suspend();
   }
   private suspend() {
+    this.textInputWatch = undefined;
     this.cursorVisible = true;
     this.active = false;
     this.activationPending = false;
@@ -581,6 +671,7 @@ export class RemotePointer extends EventTarget {
       else this.cancel();
     }
     this.session?.tick();
+    this.syncTextInputWatch();
     const state = this.session?.state;
     if (
       state?.type === "granted" &&

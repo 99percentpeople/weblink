@@ -6,12 +6,16 @@ export type ExitControlShortcut =
   (typeof exitControlShortcuts)[number];
 export interface RemoteKeyboardOptions {
   enabled: boolean;
+  autoShow: boolean;
+  collapseControls: boolean;
   systemKeys: boolean;
   exitShortcut: ExitControlShortcut;
 }
 export const defaultRemoteKeyboardOptions: Readonly<RemoteKeyboardOptions> =
   {
     enabled: true,
+    autoShow: false,
+    collapseControls: false,
     systemKeys: true,
     exitShortcut: "ctrl-alt-shift-q",
   };
@@ -25,6 +29,8 @@ export function resolveRemoteKeyboardOptions(
   return {
     enabled:
       typeof v.enabled === "boolean" ? v.enabled : true,
+    autoShow: v.autoShow === true,
+    collapseControls: v.collapseControls === true,
     systemKeys:
       typeof v.systemKeys === "boolean"
         ? v.systemKeys

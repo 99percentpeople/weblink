@@ -115,6 +115,126 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("streams focus snapshots for the active subscription and rejects stale sequence, watch and epoch", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    const focus = vi.fn();
+    const stop = c.watchTextInput(focus);
+    expect(r.sent).toHaveLength(0);
+    approve();
+    activate();
+    const watch = r.sent.at(-1);
+    expect(watch.type).toBe("text-input-watch");
+    const reply = {
+      ...watch,
+      type: "text-input-state",
+      sequence: 1,
+      focus: { type: "editable", id: "field-a" },
+    };
+    for (const patch of [
+      { watchId: "old" },
+      { grantId: "old" },
+      { inputEpoch: "old" },
+      { sequence: 0 },
+      { sequence: 1.5 },
+      { focus: { type: "editable" } },
+    ])
+      r.receive({ ...reply, ...patch });
+    expect(focus).not.toHaveBeenCalled();
+    r.receive(reply);
+    r.receive(reply);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenLastCalledWith({
+      type: "editable",
+      id: "field-a",
+    });
+    r.receive({
+      ...reply,
+      sequence: 3,
+      focus: { type: "none" },
+    });
+    r.receive({ ...reply, sequence: 2 });
+    expect(focus).toHaveBeenCalledTimes(2);
+    expect(focus).toHaveBeenLastCalledWith({
+      type: "none",
+    });
+    c.refreshTextInput();
+    const refreshed = r.sent.at(-1);
+    expect(refreshed.watchId).not.toBe(watch.watchId);
+    r.receive({ ...reply, sequence: 4 });
+    expect(focus).toHaveBeenCalledTimes(2);
+    r.receive({ ...reply, watchId: refreshed.watchId });
+    expect(focus).toHaveBeenCalledTimes(3);
+    c.resetInput();
+    activate();
+    const resumed = r.sent.at(-1);
+    expect(resumed.type).toBe("text-input-watch");
+    expect(resumed.inputEpoch).not.toBe(watch.inputEpoch);
+    r.receive({
+      ...reply,
+      watchId: refreshed.watchId,
+      sequence: 2,
+    });
+    expect(focus).toHaveBeenCalledTimes(3);
+    r.receive({
+      ...resumed,
+      type: "text-input-state",
+      sequence: 1,
+      focus: { type: "unknown" },
+    });
+    expect(focus).toHaveBeenLastCalledWith({
+      type: "unknown",
+    });
+    stop();
+    expect(r.sent.at(-1)).toEqual({
+      ...resumed,
+      watchId: null,
+    });
+    r.receive({
+      ...resumed,
+      type: "text-input-state",
+      sequence: 2,
+      focus: { type: "none" },
+    });
+    expect(focus).toHaveBeenCalledTimes(4);
+  });
+  it("shares one watch across views and stops only after the final subscriber leaves", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    approve();
+    activate();
+    const a = vi.fn(),
+      b = vi.fn();
+    const first = c.watchTextInput(a);
+    const watch = r.sent.at(-1);
+    r.receive({
+      ...watch,
+      type: "text-input-state",
+      sequence: 1,
+      focus: { type: "none" },
+    });
+    const count = r.sent.length;
+    const second = c.watchTextInput(b);
+    expect(b).toHaveBeenCalledOnce();
+    expect(b).toHaveBeenLastCalledWith({ type: "none" });
+    first();
+    expect(r.sent).toHaveLength(count);
+    second();
+    expect(r.sent.at(-1).watchId).toBeNull();
+  });
   it("sends the newest move if main-thread work delayed its timer past the deadline", () => {
     const { c, m, approve, activate } = setup();
     approve();

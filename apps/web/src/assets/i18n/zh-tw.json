@@ -343,6 +343,14 @@
         "webview": "使用網頁按鍵處理時，也可按 Escape 釋放擷取。",
         "host": "本機作為 Windows 受控端時，可按 Ctrl+Alt+Shift+F10 收回控制。"
       },
+      "auto_keyboard": {
+        "title": "自動彈出與收起行動裝置鍵盤",
+        "description": "點擊遠端畫面後，跟隨 Windows 受控端的輸入框焦點彈出鍵盤，離開輸入框時收起自動開啟的鍵盤。手動收起後，直到再次點擊才允許自動彈出。iPhone 等部分瀏覽器仍可能需要點擊鍵盤按鈕。"
+      },
+      "keyboard_collapse": {
+        "title": "鍵盤彈出時收起工具列與畫面清單",
+        "description": "遠端螢幕鍵盤顯示時，暫時收起底部工具列與畫面清單；鍵盤收起後恢復先前的顯示狀態。"
+      },
       "system_keyboard": {
         "title": "轉送系統快捷鍵",
         "description": "控制遠端畫面時轉送支援的系統快速鍵。關閉後使用網頁按鍵處理；Ctrl+Alt+Del 仍由本機系統處理。"

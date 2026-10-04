@@ -7,6 +7,9 @@ export function createRemoteSoftKeyboard(
   readEditor: () => HTMLTextAreaElement | undefined,
   onVisibilityChange: (visible: boolean) => void,
   hasComposition: () => boolean = () => false,
+  onObservedVisibilityChange: (
+    visible: boolean,
+  ) => void = () => {},
 ) {
   let refocusing = false;
   let session:
@@ -21,6 +24,7 @@ export function createRemoteSoftKeyboard(
     const current = session;
     session = undefined;
     current?.release();
+    onObservedVisibilityChange(false);
   };
   const hide = () => {
     const current = session;
@@ -171,8 +175,10 @@ export function createRemoteSoftKeyboard(
           changed &&
           visible &&
           doc.activeElement === editor
-        )
+        ) {
           onVisibilityChange(true);
+          onObservedVisibilityChange(true);
+        }
       };
       const geometry = () => {
         if (api!.boundingRect.height > 0)
@@ -232,6 +238,9 @@ export function createRemoteSoftKeyboard(
         return;
       }
       show();
+      // Some browsers report geometry synchronously during focus.
+      if (api) geometry();
+      else resized();
     },
     hide,
   };

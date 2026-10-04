@@ -5,6 +5,7 @@ mod binding;
 mod commands;
 mod host;
 mod service;
+mod text_focus;
 mod transport;
 pub use commands::*;
 pub use service::Service;

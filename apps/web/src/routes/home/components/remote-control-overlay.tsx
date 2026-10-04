@@ -44,6 +44,9 @@ export function RemoteControlOverlay(props: {
   let captureClick = false;
   const held = new Set<number>();
   const fingers = new Set<number>();
+  let keyboardTap:
+    | { id: number; x: number; y: number; at: number }
+    | undefined;
   const threeFingerTap = new ThreeFingerTap();
   let shortcutEnabled = false;
   let nativeTouchEvents = false;
@@ -111,6 +114,7 @@ export function RemoteControlOverlay(props: {
     keyboardOptions().systemKeys &&
     control()?.supportsKeyboard();
   const clearTouches = () => {
+    keyboardTap = undefined;
     threeFingerTap.cancel();
     shortcutEnabled = false;
     nativeTouchEvents = false;
@@ -446,6 +450,24 @@ export function RemoteControlOverlay(props: {
     const id = event.pointerId;
     const isDirect = touchOptions().mode === "direct";
     if (phase === "down") {
+      keyboardTap = !fingers.size
+        ? {
+            id,
+            x: event.clientX,
+            y: event.clientY,
+            at: performance.now(),
+          }
+        : undefined;
+    } else if (
+      keyboardTap &&
+      Math.hypot(
+        event.clientX - keyboardTap.x,
+        event.clientY - keyboardTap.y,
+      ) > 8
+    ) {
+      keyboardTap = undefined;
+    }
+    if (phase === "down") {
       if (!fingers.size) {
         nativeTouchEvents = false;
         pendingKeyboard = undefined;
@@ -534,6 +556,12 @@ export function RemoteControlOverlay(props: {
       else if (!consumed)
         trackpad?.up(id, event.clientX, event.clientY);
       if (phase === "up") {
+        const autoKeyboard =
+          !consumed &&
+          (isDirect || touchOptions().tapToClick) &&
+          keyboardTap?.id === id &&
+          performance.now() - keyboardTap.at <= 300;
+        keyboardTap = undefined;
         fingers.delete(id);
         if (surface()?.hasPointerCapture(id))
           surface()!.releasePointerCapture(id);
@@ -542,6 +570,8 @@ export function RemoteControlOverlay(props: {
             pendingKeyboard = props.keyboard?.();
           else props.keyboard?.()?.show();
         }
+        if (autoKeyboard && !fingers.size && surface())
+          props.keyboard?.()?.remoteTap(surface()!);
       }
     }
     return true;
@@ -725,8 +755,10 @@ export function RemoteControlOverlay(props: {
             fingers.size === 1 &&
             pointerType !== "mouse" &&
             pointerType !== "pen"
-          )
+          ) {
+            keyboardTap = undefined;
             trackpad?.contextMenu();
+          }
         }}
         onClick={(e) => {
           if (!interactive()) return;

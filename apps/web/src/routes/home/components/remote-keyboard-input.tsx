@@ -4,6 +4,7 @@ import {
   createSignal,
   onCleanup,
   Show,
+  untrack,
 } from "solid-js";
 import { Keyboard, KeyboardOff } from "lucide-solid";
 import { toast } from "solid-sonner";
@@ -13,6 +14,7 @@ import type {
   RemotePointer,
   PointerState,
 } from "@/libs/domain/remote-control/pointer";
+import { AutoKeyboard } from "@/libs/domain/remote-control/auto-keyboard";
 import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { sendRemoteText } from "@/libs/domain/remote-control/text";
@@ -29,8 +31,10 @@ import {
 export interface RemoteKeyboardInputHandle {
   available(): boolean;
   focused(): boolean;
+  visible(): boolean;
   suppressAutomaticShow(): void;
   show(): void;
+  remoteTap(surface: HTMLElement): void;
 }
 export type RegisterRemoteKeyboardInput = (
   keyboard: RemoteKeyboardInputHandle,
@@ -61,9 +65,15 @@ export function RemoteKeyboardInput(props: {
     );
   };
   const [open, setOpen] = createSignal(false);
+  const [visible, setVisible] = createSignal(false);
+  const [pageVisible, setPageVisible] = createSignal(true);
   const [editor, setEditor] =
     createSignal<HTMLTextAreaElement>();
   let keys: RemoteKeyboard | undefined;
+  let autoKeyboard = new AutoKeyboard();
+  let autoSurface: HTMLElement | undefined;
+  let automaticChange = false;
+  let interactionPending = false;
   const focused = () =>
     !!editor() &&
     editor()!.ownerDocument.activeElement === editor();
@@ -121,6 +131,7 @@ export function RemoteKeyboardInput(props: {
     keys?.release();
   };
   const unfocus = () => {
+    if (!automaticChange) autoKeyboard.dismiss();
     setOpen(false);
     reset();
     softKeyboard.hide();
@@ -133,6 +144,7 @@ export function RemoteKeyboardInput(props: {
     editor,
     setOpen,
     () => input.hasComposition,
+    setVisible,
   );
   createEffect(() => {
     const c = props.control;
@@ -167,6 +179,7 @@ export function RemoteKeyboardInput(props: {
     const element = editor();
     if (!available() || !element) return;
     const doc = element.ownerDocument;
+    setPageVisible(!doc.hidden);
     const life = new AbortController();
     doc.addEventListener(
       "selectionchange",
@@ -182,6 +195,7 @@ export function RemoteKeyboardInput(props: {
     doc.addEventListener(
       "visibilitychange",
       () => {
+        setPageVisible(!doc.hidden);
         if (doc.hidden) close();
       },
       { signal: life.signal },
@@ -189,12 +203,111 @@ export function RemoteKeyboardInput(props: {
     onCleanup(() => life.abort());
   });
   onCleanup(close);
-  const show = () => {
+  const openKeyboard = () => {
     if (!available()) return;
     if (!focused()) reset();
-    // Keep this synchronous with the tap: mobile keyboards require a user gesture.
+    // Explicit actions keep focus synchronous with the gesture. Automatic replies
+    // are best-effort: some mobile browsers reject asynchronous keyboard requests.
     softKeyboard.show();
   };
+  const show = () => {
+    autoKeyboard.manual();
+    openKeyboard();
+  };
+  const automatic = createMemo(
+    () =>
+      options().autoShow &&
+      pageVisible() &&
+      available() &&
+      platform.kind !== "desktop",
+  );
+  const remoteTap = (surface: HTMLElement) => {
+    const doc = editor()?.ownerDocument;
+    if (
+      !automatic() ||
+      props.state !== "active" ||
+      !doc ||
+      doc.hidden
+    )
+      return;
+    autoSurface = surface;
+    interactionPending = false;
+    autoKeyboard.tap();
+    props.control.refreshTextInput();
+  };
+  createEffect(() => {
+    const c = props.control;
+    const doc = editor()?.ownerDocument;
+    if (!doc || !automatic()) return;
+    const life = new AbortController();
+    const stop = c.watchTextInput((focus) =>
+      untrack(() => {
+        if (!automatic() || doc.hidden) return;
+        const action = autoKeyboard.receive(
+          focus,
+          !interactionPending &&
+            props.state === "active" &&
+            autoSurface?.isConnected === true &&
+            (doc.activeElement === autoSurface ||
+              focused()),
+        );
+        automaticChange = true;
+        try {
+          if (action === "show") openKeyboard();
+          else if (action === "reset") reset();
+          else if (action === "hide") {
+            const restoreSurface = focused();
+            close();
+            if (restoreSurface && autoSurface?.isConnected)
+              autoSurface.focus({ preventScroll: true });
+          }
+        } finally {
+          automaticChange = false;
+        }
+      }),
+    );
+    const leave = () => {
+      autoSurface = undefined;
+    };
+    doc.addEventListener(
+      "pointerdown",
+      (event) => {
+        interactionPending = true;
+        if (
+          event.target !== autoSurface &&
+          event.target !== editor()
+        )
+          leave();
+      },
+      {
+        capture: true,
+        signal: life.signal,
+      },
+    );
+    doc.addEventListener(
+      "focusin",
+      (event) => {
+        if (
+          event.target !== autoSurface &&
+          event.target !== editor()
+        )
+          leave();
+      },
+      {
+        signal: life.signal,
+      },
+    );
+    doc.defaultView?.addEventListener("blur", leave, {
+      signal: life.signal,
+    });
+    onCleanup(() => {
+      stop();
+      leave();
+      autoKeyboard = new AutoKeyboard();
+      interactionPending = false;
+      life.abort();
+    });
+  });
   const toggle = () => {
     if (open()) close();
     else show();
@@ -204,12 +317,14 @@ export function RemoteKeyboardInput(props: {
       onCleanup(
         props.registerKeyboard({
           available,
+          visible,
           // IME may already be hidden while its final resize animation runs.
           // A screen tap should then focus the surface, not revive the editor.
           focused: () => open() && focused(),
           suppressAutomaticShow:
             softKeyboard.suppressAutomaticShow,
           show,
+          remoteTap,
         }),
       );
   });

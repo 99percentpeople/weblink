@@ -426,6 +426,175 @@ fn cursor_visibility_requires_current_approved_input_and_restores_on_every_end()
 }
 
 #[test]
+fn text_input_stream_requires_active_authorization_and_stops_at_epoch_boundaries() {
+    use crate::remote_control::text_focus::{Focus, Monitor};
+    use std::sync::atomic::AtomicUsize;
+    let rig = Rig::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let value = Arc::new(Mutex::new(Focus::Editable {
+        id: "field-a".into(),
+    }));
+    let count = calls.clone();
+    let current = value.clone();
+    rig.service
+        .owner(&rig.owner)
+        .unwrap()
+        .host
+        .lock()
+        .unwrap()
+        .text_focus = Monitor::new(move || {
+        Box::new(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            current.lock().unwrap().clone()
+        })
+    });
+    let grant = rig.approve();
+    let watch = json!({"type":"text-input-watch", "watchId":"watch-1", "grantId":grant, "inputEpoch":"epoch-1"});
+    rig.send(watch.clone());
+    rig.activate_and_hold(&grant, 1);
+    for field in ["grantId", "inputEpoch"] {
+        let mut invalid = watch.clone();
+        invalid[field] = json!("old");
+        rig.send(invalid);
+    }
+    let mut invalid = watch.clone();
+    invalid["watchId"] = json!(false);
+    rig.send(invalid);
+    std::thread::sleep(Duration::from_millis(130));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let updates = || {
+        rig.sender
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|v| v["type"] == "text-input-state")
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let wait = |length| {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while updates().len() < length {
+            rig.send(json!({"type":"heartbeat", "grantId":grant, "generation":"media", "geometryRevision":"layout"}));
+            assert!(Instant::now() < deadline, "missing focus update");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    rig.send(watch.clone());
+    wait(1);
+    assert_eq!(
+        updates()[0],
+        json!({"type":"text-input-state", "watchId":"watch-1", "grantId":grant,
+        "inputEpoch":"epoch-1", "sequence":1, "focus":{"type":"editable", "id":"field-a"}})
+    );
+    std::thread::sleep(Duration::from_millis(250));
+    rig.tick();
+    assert_eq!(
+        updates().len(),
+        1,
+        "unchanged samples must not generate packets"
+    );
+    *value.lock().unwrap() = Focus::Unknown;
+    wait(2);
+    assert_eq!(updates()[1]["focus"], json!({"type":"unknown"}));
+    *value.lock().unwrap() = Focus::None;
+    wait(3);
+    assert_eq!(updates()[2]["focus"], json!({"type":"none"}));
+    assert_eq!(updates()[2]["sequence"], 3);
+    let mut off = watch.clone();
+    off["watchId"] = Value::Null;
+    rig.send(off);
+    std::thread::sleep(Duration::from_millis(30));
+    let stopped = calls.load(Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(230));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        stopped,
+        "unsubscribe must stop polling"
+    );
+    let mut refreshed = watch;
+    refreshed["watchId"] = json!("watch-2");
+    rig.send(refreshed);
+    wait(4);
+    assert_eq!(updates()[3]["sequence"], 1);
+    rig.input(&grant, 1, 3, json!({"type":"pause"}));
+    rig.input(&grant, 2, 1, json!({"type":"activate"}));
+    *value.lock().unwrap() = Focus::Editable {
+        id: "field-b".into(),
+    };
+    std::thread::sleep(Duration::from_millis(250));
+    rig.tick();
+    assert_eq!(updates().len(), 4, "retired epoch must stop the stream");
+}
+#[test]
+fn refreshed_or_cancelled_focus_watch_discards_an_inflight_sample() {
+    use crate::remote_control::text_focus::{Focus, Monitor, Watch};
+    use std::sync::mpsc;
+    let rig = Rig::new();
+    rig.approve();
+    let grant = rig
+        .service
+        .owner(&rig.owner)
+        .unwrap()
+        .host
+        .lock()
+        .unwrap()
+        .active
+        .as_ref()
+        .unwrap()
+        .grant
+        .clone();
+    for refresh in [false, true] {
+        let (started, starting) = mpsc::channel();
+        let (resume, resumed) = mpsc::channel();
+        let monitor = Monitor::new(move || {
+            let mut first = true;
+            Box::new(move || {
+                if std::mem::take(&mut first) {
+                    started.send(()).unwrap();
+                    resumed.recv_timeout(Duration::from_secs(2)).unwrap();
+                    Focus::Editable {
+                        id: "obsolete".into(),
+                    }
+                } else {
+                    Focus::None
+                }
+            })
+        });
+        let mut watch = Watch {
+            grant: grant.clone(),
+            epoch: "epoch".into(),
+            id: "old".into(),
+        };
+        monitor.watch(watch.clone());
+        starting.recv_timeout(Duration::from_secs(2)).unwrap();
+        if refresh {
+            watch.id = "new".into();
+            monitor.watch(watch);
+        } else {
+            monitor.cancel();
+        }
+        resume.send(()).unwrap();
+        if refresh {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let update = loop {
+                if let Some(update) = monitor.take() {
+                    break update;
+                }
+                assert!(Instant::now() < deadline, "missing refreshed snapshot");
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            assert_eq!(update.watch.id, "new");
+            assert_eq!(update.sequence, 1);
+            assert_eq!(update.focus, Focus::None);
+        } else {
+            std::thread::sleep(Duration::from_millis(250));
+            assert!(monitor.take().is_none(), "cancelled watch leaked a sample");
+        }
+    }
+}
+
+#[test]
 fn requests_require_current_local_approval_and_decline_never_injects() {
     let rig = Rig::new();
     rig.input("unapproved", 1, 1, json!({"type":"activate"}));

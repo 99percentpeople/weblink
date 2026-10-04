@@ -40,6 +40,7 @@ export function MeetingStage(
     pinnedId: string | null;
     hideRailToggle?: boolean;
     railCollapsed: boolean;
+    onKeyboardVisibleChange?: (visible: boolean) => void;
     onRailCollapsedChange(collapsed: boolean): void;
     onPin(id: string): void;
     onActivate?(id: string, action: () => void): void;
@@ -60,6 +61,18 @@ export function MeetingStage(
   const [exitLayer, setExitLayer] =
     createSignal<HTMLDivElement>();
   const tileElements = new Map<string, HTMLElement>();
+  const keyboardOwners = new Set<string>();
+  const keyboardVisible = (
+    id: string,
+    visible: boolean,
+  ) => {
+    if (visible) keyboardOwners.add(id);
+    else keyboardOwners.delete(id);
+    props.onKeyboardVisibleChange?.(
+      keyboardOwners.size > 0,
+    );
+  };
+  onCleanup(() => props.onKeyboardVisibleChange?.(false));
   const [exitRects, setExitRects] = createSignal(
     new Map<string, DOMRect>(),
   );
@@ -313,6 +326,9 @@ export function MeetingStage(
           }
           desktopPip={props.desktopPip}
           registerFeatures={props.registerFeatures}
+          onKeyboardVisibleChange={(visible) =>
+            keyboardVisible(tile.id, visible)
+          }
           onStop={
             source().local && source().track
               ? () => props.onStop(source().track!.id)

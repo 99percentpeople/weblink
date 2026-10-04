@@ -76,6 +76,7 @@ export function MeetingTile(props: {
   registerFeatures?: RegisterMeetingMainFeatures;
   desktopPip?: MeetingPipControls;
   onStop?: () => void;
+  onKeyboardVisibleChange?: (visible: boolean) => void;
 }) {
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
@@ -90,6 +91,12 @@ export function MeetingTile(props: {
         setKeyboardInput(undefined);
     };
   };
+  createEffect(() => {
+    props.onKeyboardVisibleChange?.(
+      keyboardInput()?.visible() === true,
+    );
+  });
+  onCleanup(() => props.onKeyboardVisibleChange?.(false));
   // Fullscreen the display container so its cover and controls remain usable.
   const fullscreen = createFullscreen(displayRef);
   // IME can collapse the grid even outside fullscreen. Keep its focused editor

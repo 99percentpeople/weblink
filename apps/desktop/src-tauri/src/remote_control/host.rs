@@ -52,6 +52,7 @@ pub(super) struct Host {
     pub(super) peers: HashMap<String, Peer>,
     pub(super) pending: Option<Consent>,
     pub(super) active: Option<Active>,
+    pub(super) text_focus: super::text_focus::Monitor,
     pub(super) observer: Option<Observer>,
 }
 impl Host {
@@ -96,6 +97,7 @@ impl Host {
         }
     }
     pub(super) fn end_grant(&mut self) {
+        self.text_focus.cancel();
         if let Some(active) = self.active.take() {
             if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
                 peer.set_cursor_visible(true);
@@ -134,6 +136,7 @@ impl Host {
             return;
         }
         if let Some(active) = self.active.as_mut().filter(|a| a.sequencer.active()) {
+            self.text_focus.cancel();
             active.sequencer.suspend();
             if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
                 peer.set_cursor_visible(true);
@@ -159,6 +162,27 @@ impl Host {
             self.pending = None;
         }
         self.synchronize_input();
+        if let Some(update) = self.text_focus.take() {
+            let watch = update.watch;
+            let status = self.worker.status();
+            if self.active.as_ref().is_some_and(|a| {
+                a.grant == watch.grant
+                    && a.sequencer.active()
+                    && a.sequencer.epoch() == Some(watch.epoch.as_str())
+                    && status.grant.as_ref() == Some(&a.grant)
+                    && !status.input_suspended
+            }) {
+                if let Some(peer) = self.peers.get(&watch.grant.binding.target.media_id) {
+                    if peer.capture.is_current(&peer.binding) && !peer.endpoint.is_closed() {
+                        peer.endpoint.send(&serde_json::json!({
+                            "type": "text-input-state", "watchId": watch.id,
+                            "grantId": watch.grant.id, "inputEpoch": watch.epoch,
+                            "sequence": update.sequence, "focus": update.focus,
+                        }));
+                    }
+                }
+            }
+        }
         let ids: Vec<_> = self.peers.keys().cloned().collect();
         for id in ids {
             let peer = self.peers.get_mut(&id).unwrap();
@@ -254,6 +278,9 @@ impl Host {
             if events.is_empty() {
                 return;
             }
+            if transition {
+                self.text_focus.cancel();
+            }
             for event in events {
                 if self.worker.input(active.grant.clone(), event).is_err() {
                     peer.endpoint.closed();
@@ -323,6 +350,32 @@ impl Host {
         let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) else {
             return;
         };
+        if value["type"] == "text-input-watch" {
+            let status = self.worker.status();
+            if let Some(active) = self.active.as_ref().filter(|a| {
+                a.grant.binding == peer.binding
+                    && value["grantId"] == a.grant.id
+                    && value["inputEpoch"].as_str() == a.sequencer.epoch()
+                    && a.sequencer.active()
+                    && status.grant.as_ref() == Some(&a.grant)
+                    && !status.input_suspended
+                    && peer.capture.is_current(&peer.binding)
+            }) {
+                if value.get("watchId") == Some(&serde_json::Value::Null) {
+                    self.text_focus.cancel();
+                } else if let Some(watch_id) = value["watchId"]
+                    .as_str()
+                    .filter(|id| protocol::valid_id(id))
+                {
+                    self.text_focus.watch(super::text_focus::Watch {
+                        grant: active.grant.clone(),
+                        epoch: active.sequencer.epoch().unwrap().into(),
+                        id: watch_id.into(),
+                    });
+                }
+            }
+            return;
+        }
         if value["type"] == "cursor" {
             let status = self.worker.status();
             if let Some(visible) = value["visible"].as_bool().filter(|_| {

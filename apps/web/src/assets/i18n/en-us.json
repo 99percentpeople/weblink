@@ -343,6 +343,14 @@
         "webview": "When using browser key handling, Escape also releases capture.",
         "host": "When this Windows computer is being controlled, press Ctrl+Alt+Shift+F10 to revoke control."
       },
+      "auto_keyboard": {
+        "title": "Automatically show and hide mobile keyboard",
+        "description": "After a tap on the remote screen, follow editable-field focus on the Windows host. Hide automatically opened keyboards when text focus ends. Manual dismissal stays in effect until another tap. Some browsers, including iPhone, may still require the keyboard button."
+      },
+      "keyboard_collapse": {
+        "title": "Collapse controls while typing",
+        "description": "Temporarily collapse the bottom toolbar and screen list when the remote keyboard is visible. Restore their previous state when the keyboard closes."
+      },
       "system_keyboard": {
         "title": "Forward system shortcuts",
         "description": "Forward supported system shortcuts while controlling the remote screen. Turn this off to use browser key handling. Ctrl+Alt+Del remains local."

@@ -343,6 +343,14 @@
         "webview": "使用网页按键处理时，也可按 Escape 释放捕获。",
         "host": "本机作为 Windows 被控端时，可按 Ctrl+Alt+Shift+F10 收回控制。"
       },
+      "auto_keyboard": {
+        "title": "自动弹出和收起移动端键盘",
+        "description": "点击远程画面后，跟随 Windows 被控端的输入框焦点弹出键盘，离开输入框时收起自动打开的键盘。手动收起后，直到再次点击才允许自动弹出。iPhone 等部分浏览器仍可能需要点击键盘按钮。"
+      },
+      "keyboard_collapse": {
+        "title": "键盘弹出时收起工具栏和画面列表",
+        "description": "远控软键盘显示时，临时收起底部工具栏和画面列表；键盘收起后恢复之前的显示状态。"
+      },
       "system_keyboard": {
         "title": "转发系统快捷键",
         "description": "控制远程画面时转发支持的系统快捷键。关闭后使用网页按键处理；Ctrl+Alt+Del 仍由本机系统处理。"

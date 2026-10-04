@@ -1,4 +1,5 @@
 import "./index.css";
+import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
 import { sessionService } from "@/libs/application/session-service";
 import { toast } from "solid-sonner";
 import { createWindowSize } from "@solid-primitives/resize-observer";
@@ -152,7 +153,9 @@ export default function Home() {
         : undefined)
     );
   });
-  const displayedToolbarCollapsed = toolbarCollapsed;
+  const keyboardCollapse = createMeetingKeyboardCollapse();
+  const displayedToolbarCollapsed = () =>
+    toolbarCollapsed() || keyboardCollapse.collapsed();
   const showPreviewHint = layout.value(
     () => !appState.roomStatus.roomId,
   );
@@ -715,7 +718,13 @@ export default function Home() {
                   sources={sources()}
                   pinnedId={pinnedId()}
                   hideRailToggle={displayedToolbarCollapsed()}
-                  railCollapsed={railCollapsed()}
+                  railCollapsed={
+                    railCollapsed() ||
+                    keyboardCollapse.collapsed()
+                  }
+                  onKeyboardVisibleChange={
+                    keyboardCollapse.setVisible
+                  }
                   onRailCollapsedChange={setRailCollapsed}
                   onPin={togglePin}
                   onActivate={(id, action) =>
