@@ -1,4 +1,9 @@
 import { createUuid } from "../ids";
+import {
+  MAX_CURSOR_MESSAGE_BYTES,
+  parseRemoteCursorShape,
+  type RemoteCursorShape,
+} from "../protocol/remote-control/cursor";
 import type { TrackpadEvent } from "./trackpad-types";
 import type { TouchSampleRate } from "./touch-options";
 import type { RemoteKeyEvent } from "./keyboard";
@@ -114,6 +119,61 @@ export class RemotePointer extends EventTarget {
       })
     )
       this.cursorVisible = visible;
+  }
+  private cursorShapeAvailable = false;
+  private cursorListeners = new Set<
+    (shape: RemoteCursorShape | undefined) => void
+  >();
+  private cursorWatch?: {
+    id: string;
+    sequence: number;
+    latest?: RemoteCursorShape;
+  };
+  watchCursor(
+    listener: (
+      shape: RemoteCursorShape | undefined,
+    ) => void,
+  ): () => void {
+    this.cursorListeners.add(listener);
+    this.syncCursorWatch();
+    listener(this.cursorWatch?.latest);
+    return () => {
+      this.cursorListeners.delete(listener);
+      this.syncCursorWatch();
+    };
+  }
+  private syncCursorWatch(): void {
+    const state = this.session?.state;
+    if (
+      !this.active ||
+      state?.type !== "granted" ||
+      !this.cursorShapeAvailable
+    )
+      return;
+    if (!this.cursorListeners.size) {
+      if (this.cursorWatch) {
+        this.cursorWatch = undefined;
+        this.send({
+          type: "cursor-watch",
+          grantId: state.grantId,
+          inputEpoch: this.epoch,
+          watchId: null,
+        });
+      }
+      return;
+    }
+    if (this.cursorWatch) return;
+    const id = createUuid();
+    this.cursorWatch = { id, sequence: 0 };
+    if (
+      !this.send({
+        type: "cursor-watch",
+        grantId: state.grantId,
+        inputEpoch: this.epoch,
+        watchId: id,
+      })
+    )
+      this.cursorWatch = undefined;
   }
   private textAvailable = false;
   private textInputListeners = new Set<
@@ -344,8 +404,9 @@ export class RemotePointer extends EventTarget {
   private receive(data: unknown) {
     if (
       typeof data !== "string" ||
-      data.length > 4096 ||
-      new TextEncoder().encode(data).length > 4096
+      data.length > MAX_CURSOR_MESSAGE_BYTES ||
+      new TextEncoder().encode(data).length >
+        MAX_CURSOR_MESSAGE_BYTES
     )
       return;
     let v: Record<string, unknown>;
@@ -355,6 +416,11 @@ export class RemotePointer extends EventTarget {
     } catch {
       return;
     }
+    if (
+      v.type !== "cursor-state" &&
+      new TextEncoder().encode(data).length > 4096
+    )
+      return;
     if (v.type === "ready") {
       if (
         this.session ||
@@ -374,6 +440,9 @@ export class RemotePointer extends EventTarget {
       this.relativeAvailable = v.relativePointer === true;
       this.cursorVisibilityAvailable =
         v.cursorVisibility === true;
+      this.cursorShapeAvailable =
+        this.cursorVisibilityAvailable &&
+        v.cursorShape === true;
       this.persistent = v.persistentControl === true;
       this.panAvailable = v.touchpadPan === true;
       this.generation = v.generation;
@@ -404,6 +473,33 @@ export class RemotePointer extends EventTarget {
         this.persistent,
       );
       this.changed();
+      return;
+    }
+    if (v.type === "cursor-state") {
+      const watch = this.cursorWatch;
+      if (
+        this.active &&
+        this.session?.state.type === "granted" &&
+        v.grantId === this.session.state.grantId &&
+        v.inputEpoch === this.epoch &&
+        watch &&
+        v.watchId === watch.id &&
+        typeof v.sequence === "number" &&
+        Number.isSafeInteger(v.sequence) &&
+        v.sequence > watch.sequence
+      ) {
+        const shape = parseRemoteCursorShape(v.shape);
+        if (shape) {
+          watch.sequence = v.sequence;
+          watch.latest = shape;
+          for (const listener of [
+            ...this.cursorListeners,
+          ]) {
+            if (watch !== this.cursorWatch) break;
+            listener(shape);
+          }
+        }
+      }
       return;
     }
     if (v.type === "text-input-state") {
@@ -456,6 +552,7 @@ export class RemotePointer extends EventTarget {
       this.active = this.desired && v.active === true;
       if (this.persistent && !this.active) this.suspend();
       this.syncTextInputWatch();
+      this.syncCursorWatch();
     } else {
       const requesting =
         this.session?.state.type === "requesting";
@@ -518,6 +615,7 @@ export class RemotePointer extends EventTarget {
   }
   private suspend() {
     this.textInputWatch = undefined;
+    this.cursorWatch = undefined;
     this.cursorVisible = true;
     this.active = false;
     this.activationPending = false;
@@ -526,6 +624,8 @@ export class RemotePointer extends EventTarget {
     this.relativeMotion = undefined;
     clearTimeout(this.moveTimer);
     this.moveTimer = undefined;
+    for (const listener of [...this.cursorListeners])
+      listener(undefined);
   }
   input(event: PointerEvent): boolean {
     const state = this.session?.state;

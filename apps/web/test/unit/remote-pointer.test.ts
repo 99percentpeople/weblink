@@ -52,6 +52,7 @@ function setup(
   keyboard?: unknown,
   textInput?: unknown,
   cursorVisibility?: unknown,
+  cursorShape?: unknown,
 ) {
   const c = new RemotePointer("source", "media");
   controllers.push(c);
@@ -75,6 +76,7 @@ function setup(
     keyboard,
     textInput,
     cursorVisibility,
+    cursorShape,
   });
   const approve = () => {
     c.request();
@@ -115,6 +117,98 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("scopes cursor updates to the current watch, grant and input epoch", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    const listener = vi.fn();
+    const stop = c.watchCursor(listener);
+    expect(listener).toHaveBeenLastCalledWith(undefined);
+    expect(r.sent).toHaveLength(0);
+    approve();
+    activate();
+    const watch = r.sent.at(-1);
+    expect(watch.type).toBe("cursor-watch");
+    const reply = {
+      ...watch,
+      type: "cursor-state",
+      sequence: 1,
+      shape: { type: "system", name: "text" },
+    };
+    listener.mockClear();
+    for (const patch of [
+      { watchId: "old" },
+      { grantId: "old" },
+      { inputEpoch: "old" },
+      { sequence: 0 },
+      { sequence: 1.5 },
+      {
+        shape: {
+          type: "system",
+          name: 'url("https://example.com")',
+        },
+      },
+    ])
+      r.receive({ ...reply, ...patch });
+    expect(listener).not.toHaveBeenCalled();
+    r.receive(reply);
+    r.receive(reply);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenLastCalledWith(reply.shape);
+    const second = vi.fn();
+    const count = r.sent.length;
+    const stopSecond = c.watchCursor(second);
+    expect(second).toHaveBeenLastCalledWith(reply.shape);
+    stopSecond();
+    expect(r.sent).toHaveLength(count);
+    c.resetInput();
+    expect(listener).toHaveBeenLastCalledWith(undefined);
+    activate();
+    const resumed = r.sent.at(-1);
+    expect(resumed.watchId).not.toBe(watch.watchId);
+    expect(resumed.inputEpoch).not.toBe(watch.inputEpoch);
+    listener.mockClear();
+    r.receive({ ...reply, sequence: 2 });
+    expect(listener).not.toHaveBeenCalled();
+    r.receive({
+      ...resumed,
+      type: "cursor-state",
+      sequence: 1,
+      shape: { type: "unknown" },
+    });
+    expect(listener).toHaveBeenLastCalledWith({
+      type: "unknown",
+    });
+    stop();
+    expect(r.sent.at(-1)).toEqual({
+      ...resumed,
+      watchId: null,
+    });
+    listener.mockClear();
+    r.receive({
+      ...resumed,
+      type: "cursor-state",
+      sequence: 2,
+      shape: reply.shape,
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
+  it("does not subscribe without negotiated cursor support", () => {
+    const { c, r, approve, activate } = setup();
+    approve();
+    activate();
+    const count = r.sent.length;
+    const stop = c.watchCursor(vi.fn());
+    stop();
+    expect(r.sent).toHaveLength(count);
+  });
   it("streams focus snapshots for the active subscription and rejects stale sequence, watch and epoch", () => {
     const { c, r, approve, activate } = setup(
       10,

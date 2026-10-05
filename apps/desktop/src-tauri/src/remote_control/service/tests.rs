@@ -463,6 +463,115 @@ impl Rig {
 }
 
 #[test]
+fn cursor_shape_stream_requires_authorization_and_stops_with_input() {
+    use crate::remote_control::cursor::{Monitor, Shape};
+    for reason in [
+        "unwatch",
+        "pause",
+        "interrupt",
+        "revoke",
+        "disconnect",
+        "capture",
+        "shutdown",
+    ] {
+        let rig = Rig::new();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = calls.clone();
+        rig.service
+            .owner(&rig.owner)
+            .unwrap()
+            .host
+            .lock()
+            .unwrap()
+            .cursor = Monitor::new(move |_| {
+            count.fetch_add(1, Ordering::Relaxed);
+            Shape::System { name: "text" }
+        });
+        let packet = |grant: &str| json!({"type":"cursor-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1"});
+        rig.send(packet("unapproved"));
+        let grant = rig.approve();
+        rig.send(packet(&grant));
+        rig.input(&grant, 1, 1, json!({"type":"activate"}));
+        for (field, wrong) in [
+            ("grantId", json!("wrong")),
+            ("inputEpoch", json!("old")),
+            ("watchId", json!(false)),
+        ] {
+            let mut invalid = packet(&grant);
+            invalid[field] = wrong;
+            rig.send(invalid);
+        }
+        rig.endpoint
+            .message(true, &serde_json::to_vec(&packet(&grant)).unwrap());
+        rig.tick();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        rig.send(packet(&grant));
+        assert!(rig.sender.sent.lock().unwrap().iter().any(|v| *v
+            == json!({"type":"cursor-state",
+            "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1", "sequence":1,
+            "shape":{"type":"system", "name":"text"}})));
+        // Auto-keyboard subscriptions must remain independent of cursor subscriptions.
+        rig.send(json!({"type":"text-input-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":null}));
+        assert!(rig
+            .service
+            .owner(&rig.owner)
+            .unwrap()
+            .host
+            .lock()
+            .unwrap()
+            .cursor
+            .watching());
+        match reason {
+            "unwatch" => {
+                let mut off = packet(&grant);
+                off["watchId"] = Value::Null;
+                rig.send(off);
+            }
+            "pause" => rig.input(&grant, 1, 2, json!({"type":"pause"})),
+            "interrupt" => {
+                rig.service
+                    .owner(&rig.owner)
+                    .unwrap()
+                    .host
+                    .lock()
+                    .unwrap()
+                    .worker
+                    .interrupt()
+                    .unwrap();
+                rig.tick();
+            }
+            "revoke" => rig.service.revoke(&rig.owner).unwrap(),
+            "disconnect" => {
+                rig.endpoint.closed();
+                rig.tick();
+            }
+            "capture" => rig.service.stop_capture("capture"),
+            "shutdown" => rig.service.close(),
+            _ => unreachable!(),
+        }
+        if let Ok(owner) = rig.service.owner(&rig.owner) {
+            assert!(
+                !owner.host.lock().unwrap().cursor.watching(),
+                "still watching after {reason}"
+            );
+        }
+        if reason == "pause" {
+            rig.input(&grant, 2, 1, json!({"type":"activate"}));
+            rig.send(packet(&grant));
+            assert!(!rig
+                .service
+                .owner(&rig.owner)
+                .unwrap()
+                .host
+                .lock()
+                .unwrap()
+                .cursor
+                .watching());
+        }
+    }
+}
+
+#[test]
 fn cursor_visibility_requires_current_approved_input_and_restores_on_every_end() {
     for reason in [
         "pause",

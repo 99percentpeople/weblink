@@ -21,6 +21,7 @@ import { ThreeFingerTap } from "@/libs/domain/remote-control/three-finger-tap";
 import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
+import { createRemoteCursor } from "@/libs/hooks/remote-cursor";
 import { createRemotePointerCapture } from "@/libs/hooks/remote-pointer-capture";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
@@ -76,28 +77,22 @@ export function RemoteControlOverlay(props: {
       disposed = true;
     });
   });
-  const captureMode = () =>
+  const pointerOptions = createMemo(() =>
     resolveRemotePointerOptions(
       appState.options.remotePointer,
-    ).mode === "capture";
-  createEffect(() => {
-    const c = control();
-    if (!c) return;
-    let hiding = false;
-    createEffect(() => {
-      const hide =
-        props.enabled &&
-        state() === "active" &&
-        !captureMode() &&
-        (mouseInside() || mouseDragging());
-      // Inactive mirrors of this stream must not restore another surface's cursor.
-      if (hide || hiding) c.setCursorVisible(!hide);
-      hiding = hide;
-    });
-    onCleanup(() => {
-      if (hiding) c.setCursorVisible(true);
-    });
-  });
+    ),
+  );
+  const captureMode = () =>
+    pointerOptions().mode === "capture";
+  const cursorStyle = createRemoteCursor(
+    control,
+    () =>
+      props.enabled &&
+      state() === "active" &&
+      !captureMode() &&
+      (mouseInside() || mouseDragging()),
+    () => pointerOptions().syncCursor,
+  );
   const touchOptions = createMemo(() =>
     resolveRemoteTouchOptions(appState.options.remoteTouch),
   );
@@ -704,6 +699,7 @@ export function RemoteControlOverlay(props: {
         style={{
           "pointer-events": interactive() ? "auto" : "none",
           "touch-action": "none",
+          cursor: cursorStyle(),
           "user-select": "none",
           "-webkit-touch-callout":
             touchOptions().mode === "direct"

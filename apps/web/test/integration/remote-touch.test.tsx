@@ -87,6 +87,20 @@ class Control extends EventTarget {
   move = vi.fn();
   resetInput = vi.fn();
   setCursorVisible = vi.fn();
+  cursorListener?: (
+    shape:
+      | import("@/libs/domain/protocol/remote-control/cursor").RemoteCursorShape
+      | undefined,
+  ) => void;
+  watchCursor = vi.fn(
+    (listener: NonNullable<Control["cursorListener"]>) => {
+      this.cursorListener = listener;
+      listener(undefined);
+      return () => {
+        this.cursorListener = undefined;
+      };
+    },
+  );
   focusListener?: (focus: TextInputFocus) => void;
   watchTextInput = vi.fn(
     (listener: (focus: TextInputFocus) => void) => {

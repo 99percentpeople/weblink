@@ -117,6 +117,30 @@ export default function RemoteControlSettings() {
           )}
         </p>
       </div>
+      <div class="flex flex-col gap-2">
+        <Switch
+          class="flex w-full items-center justify-between gap-3"
+          checked={pointer().syncCursor}
+          disabled={pointer().mode !== "local"}
+          onChange={(value) =>
+            setAppOptions(
+              "remotePointer",
+              "syncCursor",
+              value,
+            )
+          }
+        >
+          <SwitchLabel>
+            {t(`${prefix}cursor_sync.title`)}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t(`${prefix}cursor_sync.description`)}
+        </p>
+      </div>
       <h4 class="h3">{t(`${prefix}keyboard_heading`)}</h4>
       <RemoteKeyboardSettings />
       <h4 class="h3">{t(`${prefix}touch_heading`)}</h4>

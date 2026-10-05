@@ -3,7 +3,9 @@ use std::sync::Arc;
 pub const RELIABLE_LABEL: &str = "weblink-control";
 pub const MOVEMENT_LABEL: &str = "weblink-pointer";
 pub const MAX_BYTES: usize = 4096;
-pub const HIGH_WATER: u64 = 16 * 1024;
+// Host cursor images have a separate bound; input packets retain their 4 KiB limit.
+pub const MAX_OUTBOUND_BYTES: usize = 24 * 1024;
+pub const HIGH_WATER: u64 = 64 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SendResult {
     Sent,

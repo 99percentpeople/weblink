@@ -152,6 +152,7 @@ impl Service {
                 pending: None,
                 active: None,
                 text_focus: Default::default(),
+                cursor: Default::default(),
                 observer: self
                     .observer
                     .lock()
@@ -186,18 +187,22 @@ impl Service {
                         owner.watch.lock().unwrap_or_else(|e| e.into_inner()).take();
                         break;
                     }
-                    let active = {
+                    let (active, cursor) = {
                         let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
                         host.tick();
                         owner.publish(host.snapshot());
-                        !host.peers.is_empty()
+                        (!host.peers.is_empty(), host.cursor.watching())
                     };
                     drop(owner);
                     // Channel arrivals wake this wait immediately. The timeout
                     // still services safety/liveness state without incoming input.
                     // unpark retains a token when arrival races with this park.
                     if active || !notified {
-                        thread::park_timeout(Duration::from_millis(100));
+                        thread::park_timeout(if cursor {
+                            super::cursor::INTERVAL
+                        } else {
+                            Duration::from_millis(100)
+                        });
                     } else {
                         thread::park();
                     }

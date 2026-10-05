@@ -21,6 +21,7 @@ pub(super) struct Peer {
     pub(super) capture: Arc<dyn GeometrySource>,
     pub(super) ready: bool,
     pub(super) last_geometry: Instant,
+    display: weblink_desktop_input::input::Rect,
     cursor_visibility: bool,
     cursor_visible: bool,
 }
@@ -52,6 +53,7 @@ pub(super) struct Host {
     pub(super) peers: HashMap<String, Peer>,
     pub(super) pending: Option<Consent>,
     pub(super) active: Option<Active>,
+    pub(super) cursor: super::cursor::Monitor,
     pub(super) text_focus: super::text_focus::Monitor,
     pub(super) observer: Option<Observer>,
 }
@@ -61,6 +63,7 @@ impl Host {
         capture: Arc<dyn GeometrySource>,
         target: TrustedTarget,
     ) -> Result<Arc<Endpoint>, String> {
+        let display = target.geometry.display;
         let binding = target.binding.clone();
         let media = binding.target.media_id.clone();
         let endpoint = Arc::new(Endpoint::new(self.wake.clone()));
@@ -75,6 +78,7 @@ impl Host {
         self.peers.insert(
             media,
             Peer {
+                display,
                 cursor_visibility: capture.cursor_visibility_supported(&binding),
                 cursor_visible: true,
                 binding,
@@ -101,6 +105,7 @@ impl Host {
     }
     pub(super) fn end_grant(&mut self) {
         self.text_focus.cancel();
+        self.cursor.cancel();
         if let Some(active) = self.active.take() {
             if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
                 peer.set_cursor_visible(true);
@@ -140,6 +145,7 @@ impl Host {
         }
         if let Some(active) = self.active.as_mut().filter(|a| a.sequencer.active()) {
             self.text_focus.cancel();
+            self.cursor.cancel();
             active.sequencer.suspend();
             if let Some(peer) = self.peers.get_mut(&active.grant.binding.target.media_id) {
                 peer.set_cursor_visible(true);
@@ -210,6 +216,7 @@ impl Host {
                     "generation": id,
                     "relativePointer": true,
                     "cursorVisibility": peer.cursor_visibility,
+                    "cursorShape": cfg!(windows) && peer.cursor_visibility,
                     "persistentControl": true,
                     "keyboard": true,
                     "textInput": true,
@@ -255,6 +262,37 @@ impl Host {
                 }
             }
         }
+        self.sample_cursor();
+    }
+    fn sample_cursor(&mut self) {
+        if !self.cursor.due(Instant::now()) {
+            return;
+        }
+        let status = self.worker.status();
+        let valid = self.active.as_ref().is_some_and(|active| {
+            active.sequencer.active()
+                && status.grant.as_ref() == Some(&active.grant)
+                && !status.input_suspended
+                && self
+                    .peers
+                    .get(&active.grant.binding.target.media_id)
+                    .is_some_and(|p| !p.endpoint.is_closed() && p.capture.is_current(&p.binding))
+        });
+        if !valid {
+            self.cursor.cancel();
+            return;
+        }
+        if let Some(update) = self.cursor.sample(Instant::now()) {
+            let watch = update.watch;
+            if self.active.as_ref().is_some_and(|a| {
+                a.grant == watch.grant && a.sequencer.epoch() == Some(watch.epoch.as_str())
+            }) {
+                if let Some(peer) = self.peers.get(&watch.grant.binding.target.media_id) {
+                    peer.endpoint.send(&serde_json::json!({"type":"cursor-state", "grantId":watch.grant.id,
+                        "inputEpoch":watch.epoch, "watchId":watch.id, "sequence":update.sequence, "shape":update.shape}));
+                }
+            }
+        }
     }
     fn message(&mut self, id: &str, movement: bool, data: &[u8], at: Instant) {
         self.synchronize_input();
@@ -283,6 +321,7 @@ impl Host {
             }
             if transition {
                 self.text_focus.cancel();
+                self.cursor.cancel();
             }
             for event in events {
                 if self.worker.input(active.grant.clone(), event).is_err() {
@@ -374,6 +413,35 @@ impl Host {
                         grant: active.grant.clone(),
                         epoch: active.sequencer.epoch().unwrap().into(),
                         id: watch_id.into(),
+                    });
+                }
+            }
+            return;
+        }
+        if value["type"] == "cursor-watch" {
+            let status = self.worker.status();
+            if let Some(active) = self.active.as_ref().filter(|a| {
+                a.grant.binding == peer.binding
+                    && value["grantId"] == a.grant.id
+                    && value["inputEpoch"].as_str() == a.sequencer.epoch()
+                    && a.sequencer.active()
+                    && status.grant.as_ref() == Some(&a.grant)
+                    && !status.input_suspended
+                    && peer.cursor_visibility
+                    && peer.capture.is_current(&peer.binding)
+            }) {
+                if value.get("watchId") == Some(&serde_json::Value::Null) {
+                    self.cursor.cancel();
+                    peer.set_cursor_visible(true);
+                } else if let Some(id) = value["watchId"]
+                    .as_str()
+                    .filter(|id| protocol::valid_id(id))
+                {
+                    self.cursor.watch(super::cursor::Watch {
+                        grant: active.grant.clone(),
+                        epoch: active.sequencer.epoch().unwrap().into(),
+                        id: id.into(),
+                        display: peer.display,
                     });
                 }
             }

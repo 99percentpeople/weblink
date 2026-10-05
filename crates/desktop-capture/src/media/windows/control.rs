@@ -136,7 +136,7 @@ impl Sender for Outbound {
             return SendResult::Closed;
         };
         if c.closed.load(Ordering::Acquire)
-            || data.len() > MAX_BYTES
+            || data.len() > MAX_OUTBOUND_BYTES
             || c.reliable.state() != DataChannelState::Open
         {
             return SendResult::Closed;

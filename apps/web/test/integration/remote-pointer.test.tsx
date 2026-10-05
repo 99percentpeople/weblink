@@ -80,6 +80,20 @@ class Control extends EventTarget {
   input = vi.fn(() => true);
   resetInput = vi.fn();
   setCursorVisible = vi.fn();
+  cursorListener?: (
+    shape:
+      | import("@/libs/domain/protocol/remote-control/cursor").RemoteCursorShape
+      | undefined,
+  ) => void;
+  watchCursor = vi.fn(
+    (listener: NonNullable<Control["cursorListener"]>) => {
+      this.cursorListener = listener;
+      listener(undefined);
+      return () => {
+        this.cursorListener = undefined;
+      };
+    },
+  );
   cancel = vi.fn();
 }
 let locked: Element | null;
@@ -1013,4 +1027,42 @@ it("releases ordinary-mode keyboard focus with the shared shortcut without endin
   fixture.control.input.mockClear();
   key();
   expect(fixture.control.input).toHaveBeenCalledOnce();
+});
+
+it("stops cursor synchronization immediately when the setting is disabled", () => {
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("move");
+  expect(fixture.control.cursorListener).toBeTypeOf(
+    "function",
+  );
+  fixture.control.cursorListener({
+    type: "system",
+    name: "text",
+  });
+  expect(surface().style.cursor).toBe("text");
+  setAppState(
+    "options",
+    "remotePointer",
+    "syncCursor",
+    false,
+  );
+  expect(fixture.control.cursorListener).toBeUndefined();
+  expect(surface().style.cursor).toBe("default");
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(false);
+  setAppState(
+    "options",
+    "remotePointer",
+    "syncCursor",
+    true,
+  );
+  expect(fixture.control.cursorListener).toBeTypeOf(
+    "function",
+  );
+  mouse("leave");
+  expect(fixture.control.cursorListener).toBeUndefined();
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
 });

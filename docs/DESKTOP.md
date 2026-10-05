@@ -888,6 +888,25 @@ starts; settings changes apply to subsequent shares. The optional
 `cursorVisibility` capability keeps older hosts compatible; cursor updates require
 the current grant, media generation, geometry and active input epoch.
 
+Windows hosts advertise `cursorShape` alongside cursor visibility. The pointer
+settings include **Sync remote cursor appearance**, enabled by default; disabling
+it immediately unsubscribes and restores the default local cursor. Local mouse
+mode subscribes with `cursor-watch` while the mouse is over the active video or
+has a captured drag. `cursor-state` snapshots carry the grant, input epoch,
+watch ID, increasing sequence and shape. The native control actor samples at
+most every 32 ms while subscribed and sends only changes; congestion replaces
+queued snapshots with the latest one. Pause, revocation, disconnect and leaving
+the surface stop the subscription. Text-focus subscriptions are independent.
+
+Standard Windows cursors map to local CSS names (text, pointer, resize, busy,
+help, prohibited and move). Other cursors use PNG plus pixel dimensions and
+hotspot, bounded to 128 × 128 and 16 KiB encoded PNG. The viewer checks the PNG
+header and decode before using it. Host-to-viewer control messages allow 24 KiB;
+viewer input retains the 4 KiB limit. Unknown, oversized or XOR/inverting custom
+cursors keep the captured video cursor and hide the local cursor. Custom animated
+cursors currently use a static frame; standard wait/progress use the local
+system animation. Touch and pointer-lock modes retain the captured video cursor.
+
 Settings → Remote control provides two pointer behaviors. **Local cursor** is the
 default: mouse coordinates map to the displayed video, and focusing the screen enables
 physical keyboard forwarding. The header keyboard switch can disable it immediately.

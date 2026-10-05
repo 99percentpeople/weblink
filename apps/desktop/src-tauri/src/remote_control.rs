@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 mod binding;
 mod commands;
+mod cursor;
 mod host;
 mod service;
 mod text_focus;

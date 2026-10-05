@@ -64,7 +64,7 @@ impl Endpoint {
             // keep their original order, including a revoke queued behind a grant.
             if matches!(
                 value["type"].as_str(),
-                Some("heartbeat" | "state" | "text-input-state")
+                Some("heartbeat" | "state" | "text-input-state" | "cursor-state")
             ) {
                 q.retain(|old| {
                     !(old["type"] == value["type"]
@@ -282,6 +282,21 @@ mod tests {
         endpoint.flush();
         assert_eq!(*sender.sent.lock().unwrap(), vec![latest, refreshed]);
         assert!(!endpoint.is_closed());
+    }
+    #[test]
+    fn congested_cursor_stream_keeps_only_the_latest_shape() {
+        let endpoint = Endpoint::new(None);
+        let sender = Arc::new(Fake::default());
+        sender.busy.store(true, Ordering::Release);
+        endpoint.opened(sender.clone());
+        for sequence in 1..=1000 {
+            assert!(endpoint.send(&json!({"type":"cursor-state", "grantId":"g", "inputEpoch":"e", "watchId":"w", "sequence":sequence, "shape":{"type":"system", "name":"text"}})));
+        }
+        sender.busy.store(false, Ordering::Release);
+        endpoint.flush();
+        let sent = sender.sent.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0]["sequence"], 1000);
     }
     #[test]
     fn input_overflow_keeps_channel_and_revocation_but_drops_old_gestures() {
