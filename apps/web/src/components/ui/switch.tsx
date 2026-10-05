@@ -6,7 +6,24 @@ import * as SwitchPrimitive from "@kobalte/core/switch";
 
 import { cn } from "@/libs/cn";
 
-const Switch = SwitchPrimitive.Root;
+type SwitchProps = SwitchPrimitive.SwitchRootProps & {
+  class?: string;
+};
+
+const Switch = <T extends ValidComponent = "div">(
+  props: PolymorphicProps<T, SwitchProps>,
+) => {
+  const [local, others] = splitProps(props as SwitchProps, [
+    "class",
+  ]);
+  return (
+    <SwitchPrimitive.Root
+      // Keep the hidden input inside its row when the browser scrolls it into focus.
+      class={cn("relative", local.class)}
+      {...others}
+    />
+  );
+};
 const SwitchDescription = SwitchPrimitive.Description;
 const SwitchErrorMessage = SwitchPrimitive.ErrorMessage;
 
@@ -27,19 +44,21 @@ const SwitchControl = <T extends ValidComponent = "input">(
     <>
       <SwitchPrimitive.Input
         class={cn(
-          `[&:focus-visible+div]:outline-none
-          [&:focus-visible+div]:ring-2 [&:focus-visible+div]:ring-ring
-          [&:focus-visible+div]:ring-offset-2
-          [&:focus-visible+div]:ring-offset-background`,
+          `[&:focus-visible+div]:ring-ring
+          [&:focus-visible+div]:ring-offset-background
+          [&:focus-visible+div]:outline-none
+          [&:focus-visible+div]:ring-2
+          [&:focus-visible+div]:ring-offset-2`,
           local.class,
         )}
       />
       <SwitchPrimitive.Control
         class={cn(
-          `inline-flex h-6 w-11 shrink-0 cursor-pointer items-center
-          rounded-full border-2 border-transparent bg-input
+          `bg-input data-[checked]:bg-primary inline-flex h-6 w-11
+          shrink-0 cursor-pointer items-center rounded-full border-2
+          border-transparent
           transition-[color,background-color,box-shadow]
-          data-[disabled]:cursor-not-allowed data-[checked]:bg-primary
+          data-[disabled]:cursor-not-allowed
           data-[disabled]:opacity-50`,
           local.class,
         )}
@@ -65,8 +84,8 @@ const SwitchThumb = <T extends ValidComponent = "div">(
   return (
     <SwitchPrimitive.Thumb
       class={cn(
-        `pointer-events-none block size-5 translate-x-0 rounded-full
-        bg-background shadow-lg ring-0 transition-transform
+        `bg-background pointer-events-none block size-5 translate-x-0
+        rounded-full shadow-lg ring-0 transition-transform
         data-[checked]:translate-x-5`,
         local.class,
       )}
