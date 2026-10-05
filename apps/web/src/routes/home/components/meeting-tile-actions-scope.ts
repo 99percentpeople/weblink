@@ -1,8 +1,4 @@
-import {
-  createContext,
-  type Accessor,
-  type ParentProps,
-} from "solid-js";
+import { createContext, type ParentProps } from "solid-js";
 export type TileActionProps = ParentProps<{
   label: string;
   title?: string;
@@ -13,6 +9,5 @@ export type TileActionProps = ParentProps<{
   onAction(): void;
 }>;
 export const ActionsContext = createContext<{
-  compact: Accessor<boolean>;
   register(action: TileActionProps): () => void;
 }>();

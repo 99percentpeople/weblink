@@ -249,8 +249,32 @@
   @apply size-7;
 }
 .meeting-tile-actions {
-  @apply gap-0.75 p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cd9] text-white opacity-0;
+  @apply p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cd9] text-white opacity-0;
+  --meeting-tile-action-size: --spacing(8.5);
+  --meeting-tile-action-gap: --spacing(0.75);
   transition: opacity 0.15s;
+}
+.meeting-thumbnails .meeting-tile-actions {
+  --meeting-tile-action-size: --spacing(7);
+}
+.meeting-tile-actions .meeting-icon-button {
+  width: var(--meeting-tile-action-size);
+  height: var(--meeting-tile-action-size);
+}
+.meeting-tile-actions-trigger {
+  /* Keep the hover target anchored while actions expand to its left. */
+  order: 1;
+}
+.meeting-tile-action-slot {
+  @apply w-0 flex-none overflow-hidden opacity-0;
+}
+.meeting-tile-actions-row {
+  @apply flex;
+}
+.meeting-tile-actions-row
+  .meeting-icon-button:focus-visible {
+  /* Keep the keyboard focus ring inside the animated clipping area. */
+  outline-offset: -2px;
 }
 .meeting-tile-actions .meeting-icon-button:hover {
   @apply bg-white/15 text-white;
