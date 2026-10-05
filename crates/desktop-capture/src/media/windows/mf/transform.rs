@@ -149,6 +149,14 @@ pub fn detect() -> crate::Result<Vec<EncoderInfo>> {
     for codec in [Codec::H264, Codec::Hevc] {
         // Missing registration for one codec must not hide another working codec.
         for (info, activation) in activations(codec).unwrap_or_default() {
+            // Some drivers register the same transform more than once. Keep a
+            // successful registration once; a failed duplicate must not hide it.
+            if encoders
+                .iter()
+                .any(|encoder: &EncoderInfo| encoder.id == info.id)
+            {
+                continue;
+            }
             // Activation and type negotiation exclude stale registrations and missing drivers.
             if Transform::create(
                 activation,

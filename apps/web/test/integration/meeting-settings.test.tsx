@@ -864,6 +864,69 @@ it("selects probed HEVC hardware without offering unsupported HEVC software", as
   ).toBeNull();
 });
 
+it.each(["h264", "h265"])(
+  "lists duplicate Intel %s registrations once and preserves the saved selection",
+  async (codec) => {
+    const encoder = {
+      id: `mf:intel:${codec}`,
+      name: `Intel H.${codec.slice(1)} Encoder`,
+      hardware: true,
+      codecs: [`video/${codec}`, `video/${codec}`],
+    };
+    native.encoders.mockResolvedValue([
+      encoder,
+      { ...encoder },
+    ]);
+    setAppState("options", {
+      nativeScreenEncoder: encoder.id,
+      nativeScreenCodec: `video/${codec}`,
+    });
+    render(() => <MeetingSettings />);
+    const trigger = await screen.findByRole("button", {
+      name: /setting.meeting_settings.native_encoder/,
+    });
+    await waitFor(() => expect(trigger).not.toBeDisabled());
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const choices = screen.getAllByRole("option", {
+      name: `H.${codec.slice(1)} (Intel Encoder)`,
+    });
+    expect(choices).toHaveLength(1);
+    fireEvent.click(choices[0]);
+    expect(appState.options.nativeScreenEncoder).toBe(
+      encoder.id,
+    );
+    expect(appState.options.nativeScreenCodec).toBe(
+      `video/${codec}`,
+    );
+  },
+);
+
+it("keeps distinct Intel encoders with the same name selectable", async () => {
+  native.encoders.mockResolvedValue(
+    ["mf:intel-b", "mf:intel-a"].map((id) => ({
+      id,
+      name: "Intel H.264 Encoder",
+      hardware: true,
+      codecs: ["video/h264"],
+    })),
+  );
+  render(() => <MeetingSettings />);
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.264 (Intel Encoder · 2)",
+  );
+  expect(appState.options.nativeScreenEncoder).toBe(
+    "mf:intel-b",
+  );
+  await choose(
+    "setting.meeting_settings.native_encoder",
+    "H.264 (Intel Encoder · 1)",
+  );
+  expect(appState.options.nativeScreenEncoder).toBe(
+    "mf:intel-a",
+  );
+});
+
 it("saves audio codec, sample rate and channels independently and restores automatic defaults", async () => {
   render(() => <MeetingSettings />);
   await choose(

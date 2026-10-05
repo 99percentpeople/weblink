@@ -51,7 +51,7 @@ export default function NativeMediaSettings(props: {
     const disabled =
       !codecs ||
       (codec !== null && !codecs.includes(codec));
-    const name =
+    let name =
       encoder === "auto"
         ? label("native_encoder_auto")
         : !item
@@ -65,6 +65,24 @@ export default function NativeMediaSettings(props: {
                 .replace(/\s+/g, " ")
                 .trim()
             : label("software");
+    if (item?.hardware && codec !== null) {
+      // Different transforms can have the same friendly name. Keep both
+      // selectable, but distinguish them without exposing opaque driver IDs.
+      const siblings = [
+        ...new Set(
+          props.available.encoders
+            .filter(
+              (other) =>
+                other.hardware &&
+                other.name === item.name &&
+                other.codecs.includes(codec),
+            )
+            .map((other) => other.id),
+        ),
+      ].sort();
+      if (siblings.length > 1)
+        name += ` · ${siblings.indexOf(encoder) + 1}`;
+    }
     const format = codec
       ? codec
           .replace(/^video\//i, "")
@@ -107,6 +125,7 @@ export default function NativeMediaSettings(props: {
     ),
   );
   const options = createMemo(() => {
+    const seen = new Set<string>();
     const choices = [
       encodingOption("auto", null),
       ...[...props.available.encoders]
@@ -118,7 +137,11 @@ export default function NativeMediaSettings(props: {
             encodingOption(encoder.id, codec),
           ),
         ),
-    ];
+    ].filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
     // Keep old automatic-format/automatic-encoder combinations and missing
     // devices visible without rewriting persisted preferences on mount.
     if (!choices.some((item) => item.id === selected().id))
