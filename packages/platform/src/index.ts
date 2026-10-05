@@ -137,7 +137,7 @@ export interface NativeKeyboardSession {
 export interface NativeKeyboard {
   supported(): Promise<boolean>;
   start(
-    exitShortcut: "ctrl-alt-shift-q" | "ctrl-alt-shift-x",
+    exitShortcut: string,
     onEvent: (event: NativeKeyboardEvent) => void,
   ): Promise<NativeKeyboardSession>;
 }
@@ -351,7 +351,9 @@ export interface NativeControlStatus {
   closed: boolean;
 }
 export interface NativeRemoteControl {
-  open(): Promise<string>;
+  /** Canonical local shortcut, applied atomically; listener failures retain the previous value. */
+  configureShortcut?(shortcut: string): Promise<void>;
+  open(shortcut?: string): Promise<string>;
   status(ownerId: string): Promise<NativeControlStatus>;
   /** Delivers the initial snapshot and subsequent changes in native order. */
   watch(

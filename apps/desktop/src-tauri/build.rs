@@ -30,6 +30,7 @@ fn main() {
             "keyboard_renew",
             "keyboard_stop",
             "remote_control_open",
+            "remote_control_configure_shortcut",
             "remote_control_status",
             "remote_control_watch",
             "remote_control_unwatch",

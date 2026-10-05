@@ -847,7 +847,7 @@ Frontend status subscriptions observe native state and apply saved or one-use ap
 room leave, channel/media closure and explicit revoke own the session lifetime;
 a delayed WebView timer or failed status read cannot revoke consent. Stopping a
 share or replacing the room/peer ends the grant, and rejoining never restores it.
-The header sharing status and Ctrl+Alt+Shift+F10 provide explicit local revocation.
+The header sharing status and the configured host emergency shortcut (Ctrl+Alt+Shift+F10 by default) provide explicit local revocation.
 Native control and input workers wake on queued commands, channel events and
 authorization changes. Idle workers have no periodic status loop; active sessions
 retain bounded desktop/geometry checks and exact consent/input lease deadlines.
@@ -899,12 +899,30 @@ capture leaves keyboard input local and allows another explicit attempt.
 
 In capture mode, physical keyboard forwarding requires an actual pointer lock on the
 active surface; keyboard input stops together with pointer capture.
-The shared release shortcut (Ctrl+Alt+Shift+Q by default, optionally Ctrl+Alt+Shift+X)
+The shared release shortcut (Ctrl+Alt+Shift+Q by default, customizable in keyboard settings)
 releases pointer and keyboard capture together, including when keyboard forwarding is
 disabled. It preserves the approved control connection. Browser Escape may also unlock.
 Blur, hidden documents, mode changes, lost control and teardown release capture and
 held input. A late lock completion is released; returning focus never recaptures.
-The host's independent Ctrl+Alt+Shift+F10 emergency revocation remains unchanged.
+The host has a separate customizable emergency revocation shortcut, Ctrl+Alt+Shift+F10 by default.
+Both settings use a shared chord recorder: click, press a combination, then release
+its main key to save; Escape or focus loss cancels. Reset restores the default.
+Shortcuts require Ctrl, Alt or Meta with a letter, digit, F1–F11 or supported
+navigation key. Bare modifiers, F12 and reserved system chords are rejected.
+The host shortcut uses a passive low-level keyboard observer while the room input
+worker is alive, including in the background, and only acts on a current native
+control grant. Every event, including a matching chord, continues through the OS
+hook chain. It does not reserve a global hotkey; multiple processes can observe
+the same combination and other apps may respond to it. This also avoids replacing
+Tauri's process-wide Raw Input registration. The observer ignores injected events,
+tracks physical left/right modifiers, and fires once per main-key press.
+Emergency notifications carry the grant generation so delayed input cannot revoke
+its replacement. Teardown removes the observer. Configuration updates change its
+matcher; a closed listener keeps the previous preference. Reload and recovery use
+the saved chord. Updating the host shortcut also ends controller keyboard capture
+so it cannot retain the old combination. Controller system-key forwarding remains
+an explicit capture mode and continues suppressing the keys it forwards.
+
 The keyboard forwarding preference is enabled by default. The keyboard
 switch in the room header appears only while controlling a remote screen that supports
 keyboard input; hosting a share or merely viewing one does not display it.
@@ -951,7 +969,7 @@ another click on the remote screen, and does not revoke pointer control.
 
 The chosen exit chord is recognized natively, releases pointer lock and keyboard
 capture together, and its final key is not forwarded.
-Ctrl+Alt+Shift+F10 also ends controller input and invokes the local host's emergency
+The configured host emergency shortcut also ends controller input and invokes the local host's emergency
 revocation if this app is hosting control at the same time. This does not add secure
 desktop or Ctrl+Alt+Del support. Real Windows shortcut behavior requires manual
 acceptance; compilation and ownership tests do not prove OS shortcut interception.
@@ -1144,7 +1162,8 @@ These checks do not constitute actual remote keyboard/mouse acceptance.
 
 The native owner registers verified room/media bindings and physical display
 geometry. One worker serializes consent, grant validation, input and cleanup;
-`Ctrl+Alt+Shift+F10` is registered before it can accept a grant. Hotkey or
+The passive observer for the saved host emergency shortcut (default
+`Ctrl+Alt+Shift+F10`) starts before the worker can accept a grant. Observer or
 session-notification registration failure makes startup fail. Remote input never
 selects arbitrary HWNDs, scan codes outside the allowlist or system coordinates.
 The selected display constrains pointer mapping, not the OS keyboard foreground
@@ -1159,12 +1178,12 @@ status/consent calls while dropping queued input. The native wire sequencer chec
 epoch and movement barriers before enqueueing input. Queue acceptance and successful `SendInput` submission
 do not prove that the target application rendered an action.
 
-An independent native thread pumps hotkeys and system notifications; it never
+An independent native thread pumps keyboard and system notifications; it never
 injects input or waits for the input worker. The input worker checks the two-second
-heartbeat deadline without frontend timers. The host does not monitor local input
-or idle time: using this computer, including its Weblink window, does not
+heartbeat deadline without frontend timers. The host does not use ordinary local
+input or idle time as an interruption signal: using this computer, including its Weblink window, does not
 interrupt remote control or prevent local approval. Explicit revoke and the
-emergency hotkey end consent. Cleanup releases presses recorded for the grant,
+emergency shortcut end consent. Cleanup releases presses recorded for the grant,
 in reverse order; unmatched remote key/button releases are ignored. Scan-code
 input distinguishes extended keys; committed Unicode text is bounded and cannot
 be mixed with held remote keys. Pause/PrintScreen are not in the scan-code allowlist.

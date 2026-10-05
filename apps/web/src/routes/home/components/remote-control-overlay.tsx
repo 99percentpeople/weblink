@@ -19,10 +19,8 @@ import {
 import type { TrackpadEvent } from "@/libs/domain/remote-control/trackpad-types";
 import { ThreeFingerTap } from "@/libs/domain/remote-control/three-finger-tap";
 import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
-import {
-  exitControlShortcutLabel,
-  resolveRemoteKeyboardOptions,
-} from "@/libs/domain/remote-control/keyboard-options";
+import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { createRemotePointerCapture } from "@/libs/hooks/remote-pointer-capture";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
@@ -689,14 +687,14 @@ export function RemoteControlOverlay(props: {
         tabIndex={interactive() ? 0 : -1}
         role="application"
         aria-label={t("remote_control.surface", {
-          shortcut: exitControlShortcutLabel(
+          shortcut: shortcutLabel(
             keyboardOptions().exitShortcut,
           ),
         })}
         title={
           captureMode()
             ? t("remote_control.capture_hint", {
-                shortcut: exitControlShortcutLabel(
+                shortcut: shortcutLabel(
                   keyboardOptions().exitShortcut,
                 ),
               })

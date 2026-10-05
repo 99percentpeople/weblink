@@ -377,12 +377,12 @@ impl TestWindow {
                 VK_F10.0 as u32,
             )
             .map_err(|e| e.to_string())?;
-            let rejected = probe();
+            let accepted = probe();
             let _ = UnregisterHotKey(None, 0x574d);
-            if rejected {
+            if accepted {
                 Ok(())
             } else {
-                Err("input worker started without an available emergency hotkey".into())
+                Err("input worker could not coexist with an existing global hotkey".into())
             }
         }
     }

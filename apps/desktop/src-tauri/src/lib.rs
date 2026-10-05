@@ -94,6 +94,7 @@ pub fn run() {
             keyboard::keyboard_renew,
             keyboard::keyboard_stop,
             remote_control::remote_control_open,
+            remote_control::remote_control_configure_shortcut,
             remote_control::remote_control_status,
             remote_control::remote_control_watch,
             remote_control::remote_control_unwatch,

@@ -1,6 +1,9 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn configure_shortcut(&self, shortcut: crate::shortcut::Shortcut) -> Result<(), Error> {
+        self.shortcut.configure(shortcut)
+    }
     fn set_waker(&self, owner: thread::Thread) -> bool {
         *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(owner.clone());
         owner.unpark();

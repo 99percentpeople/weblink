@@ -38,14 +38,22 @@ vi.mock("@/libs/application/session-service", () => ({
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
+    options: {
+      remoteKeyboard: { emergencyShortcut: "ctrl-alt-f8" },
+    },
     session: {
       clientViewData: { peer: { name: "Alice" } },
     },
   },
 }));
 vi.mock("@/i18n", () => ({
-  t: (key: string, values?: { name: string }) =>
-    values ? `${key}: ${values.name}` : key,
+  t: (
+    key: string,
+    values?: { name?: string; shortcut?: string },
+  ) =>
+    values
+      ? `${key}: ${values.name ?? values.shortcut}`
+      : key,
 }));
 let setStatus: (status: NativeControlStatus) => void;
 const request = (
@@ -239,6 +247,7 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
         {(active) => (
           <MeetingControlStatus
             name={active().name}
+            emergencyShortcut="ctrl-alt-f8"
             revoke={active().revoke}
           />
         )}
@@ -257,6 +266,10 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   const button = screen.getByRole("button", {
     name: "remote_control.revoke",
   });
+  expect(button).toHaveAttribute(
+    "title",
+    "remote_control.revoke · Ctrl + Alt + F8",
+  );
   fireEvent.click(button);
   fireEvent.click(button);
   expect(revoke).toHaveBeenCalledTimes(1);

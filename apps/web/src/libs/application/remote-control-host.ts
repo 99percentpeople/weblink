@@ -1,3 +1,4 @@
+import { defaultRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
 import type {
   NativeControlStatus,
   PlatformRuntime,
@@ -49,6 +50,8 @@ export class RemoteControlHost {
   constructor(
     private readonly platform: PlatformRuntime,
     private readonly policy?: RemoteControlPolicy,
+    private readonly shortcut: () => string = () =>
+      defaultRemoteKeyboardOptions.emergencyShortcut,
   ) {}
   start() {
     const previous = this.ready;
@@ -64,7 +67,7 @@ export class RemoteControlHost {
         generation !== this.generation
       )
         return;
-      const owner = await api.open();
+      const owner = await api.open(this.shortcut());
       if (generation !== this.generation) {
         await api.end(owner);
         return;

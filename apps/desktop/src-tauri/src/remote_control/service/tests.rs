@@ -18,6 +18,8 @@ enum Observation {
     Shutdown,
 }
 struct DeviceState {
+    shortcut_unavailable: AtomicBool,
+    shortcut: Mutex<Option<weblink_desktop_input::shortcut::Shortcut>>,
     available: AtomicBool,
     status_reads: std::sync::atomic::AtomicUsize,
     owner: Mutex<Option<std::thread::Thread>>,
@@ -27,6 +29,8 @@ impl Default for DeviceState {
     fn default() -> Self {
         Self {
             available: AtomicBool::new(true),
+            shortcut_unavailable: AtomicBool::new(false),
+            shortcut: Mutex::new(None),
             status_reads: Default::default(),
             owner: Default::default(),
             observations: Mutex::default(),
@@ -64,6 +68,16 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn configure_shortcut(
+        &self,
+        shortcut: weblink_desktop_input::shortcut::Shortcut,
+    ) -> Result<(), Error> {
+        if self.state.shortcut_unavailable.load(Ordering::Acquire) {
+            return Err(Error::Unavailable);
+        }
+        *self.state.shortcut.lock().unwrap() = Some(shortcut);
+        Ok(())
+    }
     fn set_waker(&self, owner: std::thread::Thread) -> bool {
         *self.state.owner.lock().unwrap() = Some(owner.clone());
         owner.unpark();
@@ -891,6 +905,26 @@ fn failed_backend_start_leaves_no_old_owner_or_pressed_keys() {
 fn unsupported_backend_never_opens_an_input_owner() {
     assert!(!weblink_desktop_input::session::supported());
     let service = Service::default();
-    assert!(service.open().is_err());
+    assert!(service.open_with_shortcut(None).is_err());
     assert!(service.owner.lock().unwrap().is_none());
+}
+
+#[test]
+fn changing_emergency_shortcut_keeps_owner_and_retains_previous_on_listener_failure() {
+    let state = Arc::new(DeviceState::default());
+    let service = Service::default();
+    let id = service
+        .start(|| Ok(Box::new(TestSession::new(state.clone()))))
+        .unwrap();
+    let first = "ctrl-shift-f8".to_owned().try_into().unwrap();
+    let second = "ctrl-alt-f9".to_owned().try_into().unwrap();
+    service.configure_shortcut(first).unwrap();
+    assert_eq!(service.with_shortcut(|key| key), first);
+    assert_eq!(*state.shortcut.lock().unwrap(), Some(first));
+    state.shortcut_unavailable.store(true, Ordering::Release);
+    assert!(service.configure_shortcut(second).is_err());
+    assert_eq!(service.with_shortcut(|key| key), first);
+    assert_eq!(*state.shortcut.lock().unwrap(), Some(first));
+    assert!(!service.status(&id).unwrap().closed);
+    service.close();
 }

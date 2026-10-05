@@ -29,7 +29,12 @@ export const platform: PlatformRuntime = {
   mediaPermissionPolicy: "automatic",
   supportsServiceWorker: false,
   remoteControl: {
-    open: () => invoke("remote_control_open"),
+    configureShortcut: (shortcut) =>
+      invoke("remote_control_configure_shortcut", {
+        shortcut,
+      }),
+    open: (shortcut) =>
+      invoke("remote_control_open", { shortcut }),
     status: (ownerId) =>
       invoke("remote_control_status", { ownerId }),
     watch: (ownerId, onStatus) =>

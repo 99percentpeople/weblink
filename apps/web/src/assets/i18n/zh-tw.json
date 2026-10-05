@@ -340,8 +340,7 @@
         "description": "釋放鍵盤輸入和已擷取的游標，遠端控制連線保持。關閉鍵盤轉送後仍可使用此快速鍵。",
         "browser": "也可按 Escape 釋放擷取。",
         "native": "轉送系統快速鍵時，Escape 會送至遠端，請使用上方快速鍵釋放輸入。",
-        "webview": "使用網頁按鍵處理時，也可按 Escape 釋放擷取。",
-        "host": "本機作為 Windows 受控端時，可按 Ctrl+Alt+Shift+F10 收回控制。"
+        "webview": "使用網頁按鍵處理時，也可按 Escape 釋放擷取。"
       },
       "auto_keyboard": {
         "title": "自動彈出與收起行動裝置鍵盤",
@@ -362,6 +361,11 @@
         "capture": "擷取並隱藏本機游標",
         "local_description": "使用本機游標定位遠端畫面，點擊畫面後轉送鍵盤輸入，可透過 Header 中的鍵盤開關快速關閉。",
         "capture_description": "點擊遠端畫面後擷取並隱藏本機游標，僅在擷取時轉送實體鍵盤。使用退出快速鍵同時釋放游標和鍵盤，遠端控制連線保持。"
+      },
+      "emergency_shortcut": {
+        "title": "被控端緊急停止快捷鍵",
+        "description": "僅 Windows 桌面端可用。在本機授予遠控權限後回應，即使應用程式在背景也能停止遠控。不獨占或攔截按鍵，其他程式仍可回應相同組合鍵。",
+        "failed": "無法更新緊急停止快捷鍵監聽，已保留原設定，請重試。"
       }
     },
     "permissions": {
@@ -444,6 +448,15 @@
       "load_failed": "讀取系統通知狀態失敗，返回 Weblink 後會自動重新檢查。",
       "error_details": "查看錯誤詳情",
       "permission_unknown": "系統尚未提供此應用程式的通知狀態，通知將依系統設定處理。"
+    },
+    "shortcut_input": {
+      "recording": "請按下組合鍵…",
+      "reset": "恢復預設",
+      "hint": "點擊後按下包含 Ctrl、Alt 或 Win / ⌘ 的組合鍵，放開主鍵儲存；按 Esc 或點擊別處取消。",
+      "invalid": "請使用 Ctrl、Alt 或 Win / ⌘ 搭配字母、數字、F1–F11 或導覽鍵，不能使用系統保留快捷鍵。",
+      "duplicate": "釋放輸入與緊急停止遠控不能使用相同的快捷鍵。",
+      "edit": "點擊錄製",
+      "saving": "儲存中…"
     }
   },
   "cache": {
@@ -1182,7 +1195,7 @@
   "remote_control": {
     "request_title": "允許遠端控制？",
     "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
-    "revoke_hint": "點擊「收回控制」或在本機按 Ctrl+Alt+Shift+F10 可結束控制。",
+    "revoke_hint": "點擊「收回控制」或在本機按 {{shortcut}} 可結束控制。",
     "decline": "拒絕",
     "allow": "允許控制",
     "host_active": "{{name}} 可以控制本機",
@@ -1190,7 +1203,7 @@
     "host_active_short": "被控制中",
     "controller_active_short": "控制中",
     "revoke": "收回控制",
-    "revoke_failed": "無法收回控制，請在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
+    "revoke_failed": "無法收回控制，請在被控端按 {{shortcut}} 停止控制。",
     "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",
     "reconnecting": "正在恢復控制連線",
     "surface": "遠端控制；按 {{shortcut}} 釋放游標和鍵盤。",

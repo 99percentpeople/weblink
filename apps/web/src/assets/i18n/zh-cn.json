@@ -340,8 +340,7 @@
         "description": "释放键盘输入和已捕获的光标，远控连接保持。关闭键盘转发后仍可使用此快捷键。",
         "browser": "也可按 Escape 释放捕获。",
         "native": "转发系统快捷键时，Escape 会发送到远端，请使用上方快捷键释放输入。",
-        "webview": "使用网页按键处理时，也可按 Escape 释放捕获。",
-        "host": "本机作为 Windows 被控端时，可按 Ctrl+Alt+Shift+F10 收回控制。"
+        "webview": "使用网页按键处理时，也可按 Escape 释放捕获。"
       },
       "auto_keyboard": {
         "title": "自动弹出和收起移动端键盘",
@@ -362,6 +361,11 @@
         "capture": "捕获并隐藏本地光标",
         "local_description": "使用本地光标定位远程画面，点击画面后转发键盘输入，可通过 Header 中的键盘开关快速关闭。",
         "capture_description": "点击远程画面后捕获并隐藏本地光标，仅在捕获时转发物理键盘。使用退出快捷键同时释放光标和键盘，远控连接保持。"
+      },
+      "emergency_shortcut": {
+        "title": "被控端紧急停止快捷键",
+        "description": "仅 Windows 桌面端可用。在本机授予远控权限后响应，即使应用在后台也能停止远控。不独占或拦截按键，其他程序仍可响应相同组合键。",
+        "failed": "无法更新紧急停止快捷键监听，已保留原设置，请重试。"
       }
     },
     "permissions": {
@@ -444,6 +448,15 @@
       "load_failed": "读取系统通知状态失败，返回 Weblink 后会自动重新检查。",
       "error_details": "查看错误详情",
       "permission_unknown": "系统尚未提供此应用的通知状态，通知将按系统设置处理。"
+    },
+    "shortcut_input": {
+      "recording": "请按下组合键…",
+      "reset": "恢复默认",
+      "hint": "点击后按下包含 Ctrl、Alt 或 Win / ⌘ 的组合键，松开主键保存；按 Esc 或点击别处取消。",
+      "invalid": "请使用 Ctrl、Alt 或 Win / ⌘ 搭配字母、数字、F1–F11 或导航键，不能使用系统保留快捷键。",
+      "duplicate": "释放输入与紧急停止远控不能使用相同的快捷键。",
+      "edit": "点击录制",
+      "saving": "保存中…"
     }
   },
   "cache": {
@@ -1182,7 +1195,7 @@
   "remote_control": {
     "request_title": "允许远程控制？",
     "request_description": "{{name}} 请求控制本机的鼠标和键盘。共享屏幕仅用于映射鼠标位置，控制权限不限于某个应用或显示器。",
-    "revoke_hint": "点击“收回控制”或在本机按 Ctrl+Alt+Shift+F10 可结束控制。",
+    "revoke_hint": "点击“收回控制”或在本机按 {{shortcut}} 可结束控制。",
     "decline": "拒绝",
     "allow": "允许控制",
     "host_active": "{{name}} 可以控制本机。",
@@ -1190,7 +1203,7 @@
     "host_active_short": "被控制中",
     "controller_active_short": "控制中",
     "revoke": "收回控制",
-    "revoke_failed": "无法收回控制，请在被控端按 Ctrl+Alt+Shift+F10 停止控制。",
+    "revoke_failed": "无法收回控制，请在被控端按 {{shortcut}} 停止控制。",
     "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",
     "reconnecting": "正在恢复控制连接",
     "surface": "远程控制；按 {{shortcut}} 释放光标和键盘。",

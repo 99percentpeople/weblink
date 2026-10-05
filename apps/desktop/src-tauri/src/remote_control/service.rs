@@ -55,10 +55,42 @@ impl Owner {
 }
 #[derive(Default)]
 pub struct Service {
+    shortcut: Mutex<weblink_desktop_input::shortcut::Shortcut>,
     owner: Mutex<Option<Arc<Owner>>>,
     observer: Mutex<Option<Observer>>,
 }
 impl Service {
+    pub fn with_shortcut<T>(
+        &self,
+        use_shortcut: impl FnOnce(weblink_desktop_input::shortcut::Shortcut) -> T,
+    ) -> T {
+        let shortcut = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
+        use_shortcut(*shortcut)
+    }
+    pub fn configure_shortcut(
+        &self,
+        shortcut: weblink_desktop_input::shortcut::Shortcut,
+    ) -> Result<(), String> {
+        let mut current = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
+        let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(owner) = owner.as_ref().filter(|owner| owner.live()) {
+            let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+            if !host.worker.status().closed {
+                host.worker
+                    .configure_shortcut(shortcut)
+                    .map_err(input_error)?;
+                *current = shortcut;
+                return Ok(());
+            }
+        }
+        #[cfg(not(windows))]
+        return Err("Emergency shortcut unavailable".into());
+        #[cfg(windows)]
+        {
+            *current = shortcut;
+            Ok(())
+        }
+    }
     pub fn observe(&self, observer: Observer) {
         *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(observer);
     }
@@ -88,8 +120,15 @@ impl Service {
             .cloned()
             .ok_or_else(|| "Remote control owner ended".into())
     }
-    pub fn open(&self) -> Result<String, String> {
-        self.start(weblink_desktop_input::session::start)
+    pub fn open_with_shortcut(
+        &self,
+        shortcut: Option<weblink_desktop_input::shortcut::Shortcut>,
+    ) -> Result<String, String> {
+        let mut current = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
+        let shortcut = shortcut.unwrap_or(*current);
+        let owner = self.start(|| weblink_desktop_input::session::start_with_shortcut(shortcut))?;
+        *current = shortcut;
+        Ok(owner)
     }
     fn start(
         &self,

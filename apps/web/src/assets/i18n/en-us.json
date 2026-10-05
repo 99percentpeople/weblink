@@ -340,8 +340,7 @@
         "description": "Release keyboard input and any captured pointer without ending the control connection. The shortcut also works when keyboard forwarding is off.",
         "browser": "You can also press Escape to release capture.",
         "native": "With system shortcut forwarding enabled, Escape is sent to the remote computer. Use the shortcut above to release input.",
-        "webview": "When using browser key handling, Escape also releases capture.",
-        "host": "When this Windows computer is being controlled, press Ctrl+Alt+Shift+F10 to revoke control."
+        "webview": "When using browser key handling, Escape also releases capture."
       },
       "auto_keyboard": {
         "title": "Automatically show and hide mobile keyboard",
@@ -362,6 +361,11 @@
         "capture": "Capture and hide local cursor",
         "local_description": "Use the local cursor to point at the remote screen. Click the screen to forward keyboard input; the header switch can turn forwarding off.",
         "capture_description": "Click the remote screen to capture and hide the local cursor. Only while captured are physical keys forwarded. Use the release shortcut to free both the pointer and keyboard; the control connection stays active."
+      },
+      "emergency_shortcut": {
+        "title": "Host emergency stop shortcut",
+        "description": "Windows desktop only. While this computer is under remote control, this shortcut stops it even when the app is in the background. It does not reserve or intercept the keys; other apps may also respond.",
+        "failed": "Could not update the emergency shortcut listener. The previous setting was kept. Please try again."
       }
     },
     "permissions": {
@@ -444,6 +448,15 @@
       "load_failed": "Could not read system notification status. Returning to Weblink checks it again automatically.",
       "error_details": "Error details",
       "permission_unknown": "The system has not provided a notification status yet. Notifications will follow system settings."
+    },
+    "shortcut_input": {
+      "recording": "Press a shortcut…",
+      "reset": "Reset",
+      "hint": "Click to record a combination with Ctrl, Alt or Win / ⌘. Release the main key to save; press Esc or click away to cancel.",
+      "invalid": "Use Ctrl, Alt or Win / ⌘ with a letter, number, F1–F11, or navigation key. Reserved system shortcuts are unavailable.",
+      "duplicate": "Choose a different shortcut for releasing input and stopping remote control.",
+      "edit": "Record shortcut",
+      "saving": "Saving…"
     }
   },
   "cache": {
@@ -1182,7 +1195,7 @@
   "remote_control": {
     "request_title": "Allow remote control?",
     "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
-    "revoke_hint": "Use “Revoke control” or press Ctrl+Alt+Shift+F10 on this computer to end control.",
+    "revoke_hint": "Use “Revoke control” or press {{shortcut}} on this computer to end control.",
     "decline": "Decline",
     "allow": "Allow control",
     "host_active": "{{name}} can control this computer.",
@@ -1190,7 +1203,7 @@
     "host_active_short": "Being controlled",
     "controller_active_short": "Controlling",
     "revoke": "Revoke control",
-    "revoke_failed": "Could not revoke control. Use Ctrl+Alt+Shift+F10 on the host to stop it.",
+    "revoke_failed": "Could not revoke control. Use {{shortcut}} on the host to stop it.",
     "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
     "reconnecting": "Reconnecting control",
     "surface": "Remote control; press {{shortcut}} to release the pointer and keyboard.",

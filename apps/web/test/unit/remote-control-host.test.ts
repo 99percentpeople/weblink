@@ -11,7 +11,10 @@ afterEach(() => vi.useRealTimers());
 const flush = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
-function setup(policy?: RemoteControlPolicy) {
+function setup(
+  policy?: RemoteControlPolicy,
+  shortcut?: () => string,
+) {
   let next = 0;
   let receive:
     | ((status: NativeControlStatus) => void)
@@ -46,7 +49,11 @@ function setup(policy?: RemoteControlPolicy) {
       remoteInput: true,
     })),
   } as unknown as PlatformRuntime;
-  const host = new RemoteControlHost(platform, policy);
+  const host = new RemoteControlHost(
+    platform,
+    policy,
+    shortcut,
+  );
   return {
     host,
     api,
@@ -373,5 +380,26 @@ it("applies a newly saved allow rule to a pending native request without waiting
     true,
   );
   expect(host.status().pending).toBeNull();
+  host.close();
+});
+
+it("uses the saved emergency chord at startup and the latest chord after recovery", async () => {
+  vi.useFakeTimers();
+  let shortcut = "ctrl-shift-f8";
+  const { host, api, emit } = setup(
+    undefined,
+    () => shortcut,
+  );
+  host.start();
+  await flush();
+  expect(api.open).toHaveBeenLastCalledWith(
+    "ctrl-shift-f8",
+  );
+  shortcut = "ctrl-alt-f9";
+  emit({ closed: true, pending: null, clientId: null });
+  await flush();
+  await vi.advanceTimersByTimeAsync(1000);
+  await flush();
+  expect(api.open).toHaveBeenLastCalledWith("ctrl-alt-f9");
   host.close();
 });

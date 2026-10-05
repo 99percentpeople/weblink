@@ -59,7 +59,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             },
         },
     };
-    window.with_reserved_hotkey(|| Worker::start(Some(window.handle())).is_err())?;
+    window.with_reserved_hotkey(|| Worker::start(Some(window.handle())).is_ok())?;
     let mut worker = Worker::start(Some(window.handle()))?;
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         assert!(
@@ -67,7 +67,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "multiple actors accepted"
         );
         assert!(worker.register(target.clone())?);
-        window.check_hotkey(false)?;
+        window.check_hotkey(true)?;
         let approve =
             |worker: &Worker, request: &str| -> Result<Grant, Box<dyn std::error::Error>> {
                 let Some(RequestResult::Pending { consent_id }) = worker.request(
@@ -217,17 +217,33 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         worker.revoke()?;
 
         thread::sleep(Duration::from_millis(30));
-        let grant = approve(&worker, "hotkey")?;
-        worker.input(grant, Event::Key { key, down: true })?;
+        let grant = approve(&worker, "passive-shortcut")?;
+        worker.input(grant.clone(), Event::Key { key, down: true })?;
         worker.flush()?;
+        // Neither a stale WM_HOTKEY nor remotely injected shortcut keys are a physical stop gesture.
         window.notify_lifecycle(WM_HOTKEY)?;
-        let started = Instant::now();
-        while worker.status().grant.is_some() && started.elapsed() < Duration::from_secs(1) {
-            thread::sleep(Duration::from_millis(5));
+        for (codes, down) in [
+            ([0x1d, 0x38, 0x2a, 0x44], true),
+            ([0x44, 0x2a, 0x38, 0x1d], false),
+        ] {
+            for code in codes {
+                worker.input(
+                    grant.clone(),
+                    Event::Key {
+                        key: ScanCode::new(code, false).unwrap(),
+                        down,
+                    },
+                )?;
+            }
         }
+        thread::sleep(Duration::from_millis(30));
+        assert_eq!(worker.flush()?.grant.as_ref(), Some(&grant));
+        worker.revoke()?;
         assert!(worker.status().grant.is_none());
         window.assert_released()?;
-        println!("PASS: registered emergency hotkey notification releases input");
+        println!(
+            "PASS: synthetic shortcut events do not revoke control; explicit revoke releases input"
+        );
 
         thread::sleep(Duration::from_millis(30));
         let grant = approve(&worker, "shutdown")?;
@@ -238,7 +254,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         window.assert_released()?;
         assert!(worker.status().closed);
         println!("PASS: shutdown releases held state and joins worker");
-        // Successfully starting again proves hooks, hotkey, window and process exclusivity were released.
+        // Successfully starting again proves hooks, window and process exclusivity were released.
         for notification in [WM_DISPLAYCHANGE, WM_WTSSESSION_CHANGE] {
             let restarted = Worker::start(Some(window.handle()))?;
             assert!(restarted.register(target.clone())?);

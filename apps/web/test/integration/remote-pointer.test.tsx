@@ -854,7 +854,7 @@ it("shows browser release help without Windows-only shortcuts", () => {
   ).toBeVisible();
   expect(
     screen.queryByText(
-      /exit_shortcut.native|exit_shortcut.host/,
+      /exit_shortcut.native|emergency_shortcut.title/,
     ),
   ).toBeNull();
   expect(
@@ -889,13 +889,56 @@ it("adapts Windows release help to native keyboard support and forwarding settin
     await screen.findByText(/exit_shortcut.native/),
   ).toBeVisible();
   expect(
-    screen.getByText(/exit_shortcut.host/),
+    screen.getByText(/emergency_shortcut.title/),
   ).toBeVisible();
   expect(
     screen.queryByText(
       /exit_shortcut.browser|exit_shortcut.webview/,
     ),
   ).toBeNull();
+  const previous = platform.remoteControl;
+  const configureShortcut = vi.fn(
+    async (_shortcut: string) => {},
+  );
+  Object.assign(platform, {
+    remoteControl: { ...previous!, configureShortcut },
+  });
+  try {
+    const button = screen.getByLabelText(
+      "setting.remote_control.emergency_shortcut.title",
+    );
+    const record = (code: string) => {
+      button.focus();
+      fireEvent.click(button);
+      fireEvent.keyDown(button, {
+        code,
+        ctrlKey: true,
+        altKey: true,
+      });
+      fireEvent.keyUp(button, { code });
+    };
+    record("F8");
+    await waitFor(() =>
+      expect(
+        appState.options.remoteKeyboard.emergencyShortcut,
+      ).toBe("ctrl-alt-f8"),
+    );
+    expect(configureShortcut).toHaveBeenLastCalledWith(
+      "ctrl-alt-f8",
+    );
+    configureShortcut.mockRejectedValueOnce(
+      new Error("in use"),
+    );
+    record("F9");
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("emergency_shortcut.failed");
+    expect(
+      appState.options.remoteKeyboard.emergencyShortcut,
+    ).toBe("ctrl-alt-f8");
+  } finally {
+    Object.assign(platform, { remoteControl: previous });
+  }
   setAppState(
     "options",
     "remoteKeyboard",

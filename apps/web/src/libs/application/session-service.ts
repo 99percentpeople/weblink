@@ -1,3 +1,4 @@
+import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
 import { platform } from "@/libs/platform/runtime";
 import { RemoteControlHost } from "./remote-control-host";
 import {
@@ -47,15 +48,22 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
-  readonly remoteControl = new RemoteControlHost(platform, {
-    decision: (id) =>
-      appState.options.clientConfigs[id]?.remoteControl,
-    remember: (id, remoteControl) =>
-      setClientConfig(id, {
-        name: this.clientViewData[id]?.name ?? id,
-        remoteControl,
-      }),
-  });
+  readonly remoteControl = new RemoteControlHost(
+    platform,
+    {
+      decision: (id) =>
+        appState.options.clientConfigs[id]?.remoteControl,
+      remember: (id, remoteControl) =>
+        setClientConfig(id, {
+          name: this.clientViewData[id]?.name ?? id,
+          remoteControl,
+        }),
+    },
+    () =>
+      resolveRemoteKeyboardOptions(
+        appState.options.remoteKeyboard,
+      ).emergencyShortcut,
+  );
   getScreenControl(clientId: string) {
     return this.nativeScreens.get(this.sessions[clientId])
       ?.screenControl;

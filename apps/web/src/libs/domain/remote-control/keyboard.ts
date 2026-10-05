@@ -1,3 +1,4 @@
+import { matchesShortcut } from "../keyboard-shortcut";
 import type { RemoteKeyboardOptions } from "./keyboard-options";
 
 export interface RemoteKeyEvent {
@@ -194,17 +195,7 @@ export class RemoteKeyboard {
   }
   /** Keep the local exit path available even if native capture has stopped. */
   exit(event: BrowserKey): boolean {
-    const exitCode =
-      this.options.exitShortcut === "ctrl-alt-shift-x"
-        ? "KeyX"
-        : "KeyQ";
-    if (
-      event.code === exitCode &&
-      event.ctrlKey &&
-      event.altKey &&
-      event.shiftKey &&
-      !event.metaKey
-    ) {
+    if (matchesShortcut(this.options.exitShortcut, event)) {
       this.clear();
       this.port.cancel();
       return true;

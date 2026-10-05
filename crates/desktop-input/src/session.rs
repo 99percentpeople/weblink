@@ -10,6 +10,9 @@ use std::sync::{atomic::AtomicBool, Arc};
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    fn configure_shortcut(&self, _shortcut: crate::shortcut::Shortcut) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
     /// Wake the native owner when status changes. False retains its bounded
     /// fallback for backends without notifications.
     fn set_waker(&self, _owner: std::thread::Thread) -> bool {
@@ -46,12 +49,17 @@ pub fn supported() -> bool {
 }
 
 pub fn start() -> Result<Box<dyn Session>, Error> {
+    start_with_shortcut(crate::shortcut::Shortcut::default())
+}
+pub fn start_with_shortcut(shortcut: crate::shortcut::Shortcut) -> Result<Box<dyn Session>, Error> {
     #[cfg(target_os = "windows")]
     {
-        crate::windows::Worker::start(None).map(|worker| Box::new(worker) as Box<dyn Session>)
+        crate::windows::Worker::start_with_shortcut(None, shortcut)
+            .map(|worker| Box::new(worker) as Box<dyn Session>)
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = shortcut;
         Err(Error::Unavailable)
     }
 }

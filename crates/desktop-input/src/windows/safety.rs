@@ -1,9 +1,11 @@
 use super::environment::{desktop_available, layout, InputDpi, Layout};
+use super::hotkey::Listener as ShortcutListener;
 use crate::input::{Error, Geometry};
+use crate::shortcut::Shortcut;
 use std::{
     cell::RefCell,
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
         mpsc, Arc,
     },
     thread::{self, JoinHandle},
@@ -19,24 +21,52 @@ use windows::{
             RemoteDesktop::*,
             Threading::{GetCurrentProcessId, GetCurrentThreadId},
         },
-        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+        UI::{HiDpi::*, WindowsAndMessaging::*},
     },
 };
 
 pub(super) const INVALIDATED: u8 = 2;
-pub(super) const EMERGENCY: u8 = 4;
-const HOTKEY: i32 = 0x574c;
 pub(super) struct Observations {
     signals: AtomicU8,
     closed: AtomicBool,
     owner: thread::Thread,
+    grant_epoch: AtomicU64,
+    emergency_epoch: AtomicU64,
 }
 impl Observations {
+    pub fn new() -> Self {
+        Self {
+            signals: AtomicU8::new(0),
+            closed: AtomicBool::new(false),
+            owner: thread::current(),
+            grant_epoch: AtomicU64::new(0),
+            emergency_epoch: AtomicU64::new(0),
+        }
+    }
+    pub fn authorize(&self, epoch: u64) {
+        self.grant_epoch.store(epoch, Ordering::Release);
+    }
+    pub fn grant_epoch(&self) -> u64 {
+        self.grant_epoch.load(Ordering::Acquire)
+    }
+    pub fn emergency(&self, epoch: u64) {
+        if epoch != 0 && epoch == self.grant_epoch() && !self.closed.load(Ordering::Acquire) {
+            self.emergency_epoch.fetch_max(epoch, Ordering::AcqRel);
+            self.owner.unpark();
+        }
+    }
+    pub fn take_emergency(&self) -> bool {
+        let epoch = self.emergency_epoch.swap(0, Ordering::AcqRel);
+        epoch != 0 && epoch == self.grant_epoch()
+    }
     pub fn signals(&self) -> u8 {
         self.signals.swap(0, Ordering::AcqRel)
     }
     pub fn pending(&self) -> bool {
-        self.closed.load(Ordering::Acquire) || self.signals.load(Ordering::Acquire) != 0
+        let emergency = self.emergency_epoch.load(Ordering::Acquire);
+        self.closed.load(Ordering::Acquire)
+            || self.signals.load(Ordering::Acquire) != 0
+            || (emergency != 0 && emergency == self.grant_epoch())
     }
     fn signal(&self, value: u8) {
         if value & INVALIDATED != 0 {
@@ -74,7 +104,6 @@ fn signal(value: u8) {
 }
 unsafe extern "system" fn window(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
-        WM_HOTKEY if wp.0 == HOTKEY as usize => signal(EMERGENCY),
         // Input preferences, theme and application activation can broadcast settings
         // changes without invalidating the authorized desktop. Recheck the binding
         // environment instead of terminating control for every settings notification.
@@ -98,14 +127,14 @@ fn settings_invalidated(
 }
 struct Listener {
     hwnd: HWND,
-    hotkey: bool,
+    hotkey: Option<ShortcutListener>,
     session: bool,
     class: HSTRING,
     old_dpi: DPI_AWARENESS_CONTEXT,
     pub layout: Layout,
 }
 impl Listener {
-    fn new(observations: Arc<Observations>) -> Result<Self, Error> {
+    fn new(observations: Arc<Observations>, shortcut: Shortcut) -> Result<Self, Error> {
         unsafe {
             let old_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             if old_dpi.0.is_null() {
@@ -117,7 +146,7 @@ impl Listener {
                 }
                 let layout = layout()?;
                 OBSERVED_LAYOUT.with(|slot| *slot.borrow_mut() = Some(layout.clone()));
-                OBSERVED.with(|slot| *slot.borrow_mut() = Some(observations));
+                OBSERVED.with(|slot| *slot.borrow_mut() = Some(observations.clone()));
                 let class = HSTRING::from(format!("WeblinkInput-{}", uuid::Uuid::new_v4()));
                 let module = GetModuleHandleW(None).map_err(|_| Error::Unavailable)?;
                 let wc = WNDCLASSW {
@@ -151,20 +180,13 @@ impl Listener {
                 };
                 let mut s = Self {
                     hwnd,
-                    hotkey: false,
+                    hotkey: None,
                     session: false,
                     class,
                     old_dpi,
                     layout,
                 };
-                RegisterHotKey(
-                    Some(hwnd),
-                    HOTKEY,
-                    MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT,
-                    VK_F10.0 as u32,
-                )
-                .map_err(|_| Error::Unavailable)?;
-                s.hotkey = true;
+                s.hotkey = Some(ShortcutListener::new(shortcut, observations)?);
                 WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)
                     .map_err(|_| Error::Unavailable)?;
                 s.session = true;
@@ -180,9 +202,7 @@ impl Listener {
 impl Drop for Listener {
     fn drop(&mut self) {
         unsafe {
-            if self.hotkey {
-                let _ = UnregisterHotKey(Some(self.hwnd), HOTKEY);
-            }
+            self.hotkey.take();
             if self.session {
                 let _ = WTSUnRegisterSessionNotification(self.hwnd);
             }
@@ -200,8 +220,23 @@ impl Drop for ObserverExit {
     }
 }
 
+#[derive(Clone)]
+pub(super) struct ShortcutControl(
+    mpsc::SyncSender<(Shortcut, mpsc::SyncSender<Result<(), Error>>)>,
+);
+impl ShortcutControl {
+    pub fn configure(&self, shortcut: Shortcut) -> Result<(), Error> {
+        let (send, receive) = mpsc::sync_channel(1);
+        self.0.send((shortcut, send)).map_err(|_| Error::Closed)?;
+        // Listener processes requests every <=100ms; channel disconnect also wakes this wait.
+        // No timeout that could report failure followed by a late successful update.
+        receive.recv().map_err(|_| Error::Closed)?
+    }
+}
+
 pub(super) struct Safety {
     pub observations: Arc<Observations>,
+    pub shortcut: ShortcutControl,
     stop: Arc<AtomicBool>,
     listener: Option<JoinHandle<()>>,
     listener_id: Arc<AtomicU32>,
@@ -211,27 +246,25 @@ pub(super) struct Safety {
     guard: Option<usize>,
 }
 impl Safety {
-    pub fn new(guard: Option<usize>) -> Result<Self, Error> {
+    pub fn new(guard: Option<usize>, shortcut: Shortcut) -> Result<Self, Error> {
         let dpi = InputDpi::new()?;
         // Mouse ExtraInfo can be truncated to 32 bits even for 64-bit SendInput.
         // This positive tag identifies our injections; it is not an authorization token.
         let marker = ((uuid::Uuid::new_v4().as_u128() as u32 & 0x7fff_ffff) | 1) as usize;
-        let observations = Arc::new(Observations {
-            signals: AtomicU8::new(0),
-            closed: AtomicBool::new(false),
-            owner: thread::current(),
-        });
+        let observations = Arc::new(Observations::new());
         let stop = Arc::new(AtomicBool::new(false));
         let shared = observations.clone();
         let stopping = stop.clone();
         let listener_id = Arc::new(AtomicU32::new(0));
         let id = listener_id.clone();
         let (ready, initialized) = mpsc::sync_channel(1);
+        let (configure, requests) =
+            mpsc::sync_channel::<(Shortcut, mpsc::SyncSender<Result<(), Error>>)>(1);
         let listener = thread::Builder::new()
             .name("weblink-input-events".into())
             .spawn(move || {
                 let _exit = ObserverExit(shared.clone());
-                let native = match Listener::new(shared.clone()) {
+                let mut native = match Listener::new(shared.clone(), shortcut) {
                     Ok(native) => native,
                     Err(e) => {
                         let _ = ready.send(Err(e));
@@ -243,6 +276,14 @@ impl Safety {
                 let mut poll = Instant::now();
                 while !stopping.load(Ordering::Acquire) {
                     pump();
+                    while let Ok((shortcut, reply)) = requests.try_recv() {
+                        let result = native
+                            .hotkey
+                            .as_mut()
+                            .ok_or(Error::Closed)
+                            .and_then(|key| key.configure(shortcut));
+                        let _ = reply.send(result);
+                    }
                     if stopping.load(Ordering::Acquire) {
                         break;
                     }
@@ -252,7 +293,7 @@ impl Safety {
                         }
                         poll = Instant::now();
                     }
-                    // Wake on lifecycle/hotkey messages, not a polling sleep. Never run SendInput here.
+                    // Wake on lifecycle/keyboard messages, not a polling sleep. Never run SendInput here.
                     unsafe {
                         let wait = Duration::from_millis(100)
                             .saturating_sub(poll.elapsed())
@@ -290,6 +331,7 @@ impl Safety {
         };
         let safety = Self {
             observations,
+            shortcut: ShortcutControl(configure),
             stop,
             listener: Some(listener),
             listener_id,
@@ -356,6 +398,31 @@ impl Drop for Safety {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn emergency_requires_current_grant_and_cannot_revoke_a_replacement() {
+        let observations = Observations::new();
+        observations.emergency(0);
+        assert!(!observations.pending());
+        assert!(!observations.take_emergency());
+        observations.authorize(1);
+        observations.emergency(1);
+        assert!(observations.pending());
+        assert!(observations.take_emergency());
+        assert!(!observations.take_emergency());
+        observations.emergency(1);
+        observations.authorize(0);
+        assert!(!observations.pending());
+        assert!(!observations.take_emergency());
+        observations.authorize(2);
+        observations.emergency(2);
+        observations.authorize(3);
+        assert!(!observations.pending());
+        assert!(!observations.take_emergency());
+        observations.emergency(2);
+        assert!(!observations.take_emergency());
+        observations.emergency(3);
+        assert!(observations.take_emergency());
+    }
     #[test]
     fn ordinary_settings_changes_keep_control_but_changed_or_unavailable_desktop_does_not() {
         let original = Layout {

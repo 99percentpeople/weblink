@@ -4,14 +4,7 @@ import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { setAppOptions } from "@/options";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ShortcutInput } from "@/components/ui/shortcut-input";
 import {
   Switch,
   SwitchControl,
@@ -19,10 +12,8 @@ import {
   SwitchThumb,
 } from "@/components/ui/switch";
 import {
-  exitControlShortcutLabel,
-  exitControlShortcuts,
+  defaultRemoteKeyboardOptions,
   resolveRemoteKeyboardOptions,
-  type ExitControlShortcut,
 } from "@/libs/domain/remote-control/keyboard-options";
 
 export default function RemoteKeyboardSettings() {
@@ -147,41 +138,29 @@ export default function RemoteKeyboardSettings() {
         </div>
       </Show>
       <div class="flex flex-col gap-2">
-        <Label id="exit-control-shortcut">
-          {t("setting.remote_control.exit_shortcut.title")}
-        </Label>
-        <Select<ExitControlShortcut>
-          modal
-          disallowEmptySelection
-          options={[...exitControlShortcuts]}
+        <ShortcutInput
+          label={t(
+            "setting.remote_control.exit_shortcut.title",
+          )}
           value={keyboard().exitShortcut}
-          onChange={(value) =>
-            value &&
+          defaultValue={
+            defaultRemoteKeyboardOptions.exitShortcut
+          }
+          onChange={(value) => {
+            if (
+              hostShortcut() &&
+              value === keyboard().emergencyShortcut
+            )
+              throw new Error(
+                t("setting.shortcut_input.duplicate"),
+              );
             setAppOptions(
               "remoteKeyboard",
               "exitShortcut",
               value,
-            )
-          }
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {exitControlShortcutLabel(
-                props.item.rawValue,
-              )}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-labelledby="exit-control-shortcut">
-            <SelectValue<ExitControlShortcut>>
-              {(state) =>
-                exitControlShortcutLabel(
-                  state.selectedOption(),
-                )
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
+            );
+          }}
+        />
         <p class="muted">
           {t(
             "setting.remote_control.exit_shortcut.description",
@@ -195,12 +174,52 @@ export default function RemoteKeyboardSettings() {
                 ? "setting.remote_control.exit_shortcut.native"
                 : "setting.remote_control.exit_shortcut.webview",
           )}
-          <Show when={hostShortcut()}>
-            {" "}
-            {t("setting.remote_control.exit_shortcut.host")}
-          </Show>
         </p>
       </div>
+      <Show when={hostShortcut()}>
+        <div class="flex flex-col gap-2">
+          <ShortcutInput
+            label={t(
+              "setting.remote_control.emergency_shortcut.title",
+            )}
+            value={keyboard().emergencyShortcut}
+            defaultValue={
+              defaultRemoteKeyboardOptions.emergencyShortcut
+            }
+            onChange={async (value) => {
+              if (value === keyboard().exitShortcut)
+                throw new Error(
+                  t("setting.shortcut_input.duplicate"),
+                );
+              try {
+                if (
+                  !platform.remoteControl?.configureShortcut
+                )
+                  throw new Error("Unavailable");
+                await platform.remoteControl.configureShortcut(
+                  value,
+                );
+              } catch {
+                throw new Error(
+                  t(
+                    "setting.remote_control.emergency_shortcut.failed",
+                  ),
+                );
+              }
+              setAppOptions(
+                "remoteKeyboard",
+                "emergencyShortcut",
+                value,
+              );
+            }}
+          />
+          <p class="muted">
+            {t(
+              "setting.remote_control.emergency_shortcut.description",
+            )}
+          </p>
+        </div>
+      </Show>
     </>
   );
 }

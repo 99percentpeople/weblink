@@ -1,3 +1,5 @@
+import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
+import { defaultRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { createSignal, type JSX } from "solid-js";
 import { MousePointer2, Square } from "lucide-solid";
 import { t } from "@/i18n";
@@ -5,6 +7,7 @@ import { t } from "@/i18n";
 export function MeetingControlStatus(props: {
   name: string;
   side?: "host" | "controller";
+  emergencyShortcut?: string;
   children?: JSX.Element;
   revoke(): void | Promise<void>;
 }) {
@@ -25,7 +28,7 @@ export function MeetingControlStatus(props: {
   const title = (text: string) =>
     props.side === "controller"
       ? text
-      : `${text} · Ctrl+Alt+Shift+F10`;
+      : `${text} · ${shortcutLabel(props.emergencyShortcut ?? defaultRemoteKeyboardOptions.emergencyShortcut)}`;
   return (
     <div class="meeting-status-pill max-w-[360px]">
       <MousePointer2

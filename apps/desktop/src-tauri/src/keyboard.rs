@@ -1,5 +1,5 @@
 //! Local controller keyboard capture, separate from the remote host's input engine.
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 #[cfg(windows)]
@@ -11,13 +11,7 @@ mod backend;
 pub use backend::{supported, Service};
 pub type Shared = Arc<Service>;
 
-#[derive(Clone, Copy, Deserialize)]
-pub enum ExitShortcut {
-    #[serde(rename = "ctrl-alt-shift-q")]
-    Q,
-    #[serde(rename = "ctrl-alt-shift-x")]
-    X,
-}
+pub use weblink_desktop_input::shortcut::Shortcut as ExitShortcut;
 #[derive(Clone, Serialize)]
 #[cfg_attr(not(windows), allow(dead_code))]
 #[serde(tag = "type", rename_all = "camelCase")]

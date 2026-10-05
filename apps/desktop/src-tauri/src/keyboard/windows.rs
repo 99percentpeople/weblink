@@ -95,6 +95,7 @@ impl Service {
         id: String,
         hwnd: usize,
         exit: ExitShortcut,
+        emergency_shortcut: ExitShortcut,
         events: Channel<KeyboardEvent>,
         emergency: impl FnOnce() + Send + 'static,
     ) -> Result<(), String> {
@@ -107,7 +108,7 @@ impl Service {
         let shared = life.clone();
         thread::Builder::new()
             .name("weblink-keyboard-capture".into())
-            .spawn(move || run(hwnd, exit, shared, send, ready))
+            .spawn(move || run(hwnd, exit, emergency_shortcut, shared, send, ready))
             .map_err(|e| e.to_string())?;
         match started.recv_timeout(Duration::from_secs(1)) {
             Ok(Ok(())) => {}
@@ -291,6 +292,7 @@ unsafe extern "system" fn focus_changed(
 fn run(
     hwnd: usize,
     exit: ExitShortcut,
+    emergency_shortcut: ExitShortcut,
     life: Arc<Life>,
     send: mpsc::SyncSender<Option<KeyboardEvent>>,
     ready: mpsc::SyncSender<Result<(), String>>,
@@ -312,13 +314,7 @@ fn run(
             *slot.borrow_mut() = Some(Capture {
                 hwnd,
                 life: life.clone(),
-                policy: KeyboardCapture::new(
-                    match exit {
-                        ExitShortcut::Q => 0x10,
-                        ExitShortcut::X => 0x2d,
-                    },
-                    initial,
-                ),
+                policy: KeyboardCapture::new(exit, emergency_shortcut, initial),
                 send,
             })
         });
@@ -423,8 +419,16 @@ pub async fn start(
         .inner()
         .clone();
     tauri::async_runtime::spawn_blocking(move || {
-        service.start(session_id, hwnd, exit_shortcut, events, move || {
-            host.emergency_revoke()
+        let revoker = host.clone();
+        host.with_shortcut(|emergency_shortcut| {
+            service.start(
+                session_id,
+                hwnd,
+                exit_shortcut,
+                emergency_shortcut,
+                events,
+                move || revoker.emergency_revoke(),
+            )
         })
     })
     .await

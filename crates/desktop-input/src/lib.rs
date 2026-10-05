@@ -8,6 +8,9 @@ mod mailbox;
 pub mod pan;
 pub mod protocol;
 pub mod session;
+pub mod shortcut;
+#[cfg(any(target_os = "windows", test))]
+mod shortcut_observer;
 pub mod touch;
 pub mod trackpad;
 #[cfg(target_os = "windows")]

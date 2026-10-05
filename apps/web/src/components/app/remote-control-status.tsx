@@ -1,3 +1,5 @@
+import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import {
   createEffect,
   createMemo,
@@ -32,7 +34,13 @@ export function RemoteControlStatus() {
                 : ""}
             </span>
             <span class="block">
-              {t("remote_control.revoke_hint")}
+              {t("remote_control.revoke_hint", {
+                shortcut: shortcutLabel(
+                  resolveRemoteKeyboardOptions(
+                    appState.options.remoteKeyboard,
+                  ).emergencyShortcut,
+                ),
+              })}
             </span>
           </>
         ),

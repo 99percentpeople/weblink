@@ -1,3 +1,5 @@
+import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import "./index.css";
 import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
 import { sessionService } from "@/libs/application/session-service";
@@ -92,6 +94,10 @@ export default function Home() {
   const transitionLayout = layout.transition;
   const state = useAppState();
   const roomActions = useRoomActions();
+  const emergencyShortcut = () =>
+    resolveRemoteKeyboardOptions(
+      appState.options.remoteKeyboard,
+    ).emergencyShortcut;
   const controller = createMemo(() => {
     const id =
       sessionService.remoteControl.status().clientId;
@@ -106,7 +112,11 @@ export default function Home() {
             "Could not revoke remote control",
             error,
           );
-          toast.error(t("remote_control.revoke_failed"));
+          toast.error(
+            t("remote_control.revoke_failed", {
+              shortcut: shortcutLabel(emergencyShortcut()),
+            }),
+          );
         }
       },
     };
@@ -616,6 +626,7 @@ export default function Home() {
               {(active) => (
                 <MeetingControlStatus
                   name={active().name}
+                  emergencyShortcut={emergencyShortcut()}
                   revoke={active().revoke}
                 />
               )}

@@ -1,5 +1,5 @@
 //! Controller-side ownership policy. No OS calls, transport or key logging.
-use crate::input::ScanCode;
+use crate::{input::ScanCode, shortcut::Shortcut};
 
 #[derive(Debug, PartialEq)]
 pub enum Decision {
@@ -12,14 +12,16 @@ pub enum Decision {
 pub struct KeyboardCapture {
     held: [bool; 512],
     initial: [bool; 256],
-    exit_code: u16,
+    exit: Shortcut,
+    emergency: Shortcut,
 }
 impl KeyboardCapture {
-    pub fn new(exit_code: u16, initial: [bool; 256]) -> Self {
+    pub fn new(exit: Shortcut, emergency: Shortcut, initial: [bool; 256]) -> Self {
         Self {
             held: [false; 512],
             initial,
-            exit_code,
+            exit,
+            emergency,
         }
     }
     pub fn held(&self) -> bool {
@@ -61,17 +63,14 @@ impl KeyboardCapture {
                 Decision::Pass
             };
         }
-        if down
-            && !extended
-            && (self.held[0x1d] || self.held[0x11d])
-            && (self.held[0x38] || self.held[0x138])
-            && (self.held[0x2a] || self.held[0x36])
-            && !self.held[0x15b]
-            && !self.held[0x15c]
-            && (code == self.exit_code || code == 0x44)
-        {
+        let modifiers = u32::from(self.held[0x38] || self.held[0x138])
+            | (u32::from(self.held[0x1d] || self.held[0x11d]) << 1)
+            | (u32::from(self.held[0x2a] || self.held[0x36]) << 2)
+            | (u32::from(self.held[0x15b] || self.held[0x15c]) << 3);
+        let chord = Shortcut { vk, modifiers };
+        if down && (chord == self.exit || chord == self.emergency) {
             self.held[index] = true;
-            return if code == 0x44 {
+            return if chord == self.emergency {
                 Decision::Emergency
             } else {
                 Decision::Exit
@@ -89,7 +88,11 @@ impl KeyboardCapture {
 mod tests {
     use super::*;
     fn state() -> KeyboardCapture {
-        KeyboardCapture::new(0x10, [false; 256])
+        KeyboardCapture::new(
+            "ctrl-alt-shift-q".to_owned().try_into().unwrap(),
+            Shortcut::default(),
+            [false; 256],
+        )
     }
     #[test]
     fn forwards_physical_system_chords_and_repeats_but_not_injection() {
@@ -126,7 +129,11 @@ mod tests {
     }
     #[test]
     fn reserves_host_emergency_and_respects_alternate_exit_key() {
-        let mut s = KeyboardCapture::new(0x2d, [false; 256]);
+        let mut s = KeyboardCapture::new(
+            "ctrl-alt-shift-x".to_owned().try_into().unwrap(),
+            Shortcut::default(),
+            [false; 256],
+        );
         for (code, ext) in [(0x1d, true), (0x38, true), (0x36, false)] {
             s.input(code, ext, true, false, 1, true);
         }
@@ -141,10 +148,43 @@ mod tests {
         );
     }
     #[test]
+    fn custom_navigation_exit_and_emergency_require_exact_modifiers() {
+        let mut s = KeyboardCapture::new(
+            "ctrl-shift-arrowup".to_owned().try_into().unwrap(),
+            "ctrl-shift-f8".to_owned().try_into().unwrap(),
+            [false; 256],
+        );
+        s.input(0x1d, true, true, false, 0xa3, true);
+        assert!(matches!(
+            s.input(0x48, true, true, false, 38, true),
+            Decision::Forward(_, true)
+        ));
+        s.input(0x36, false, true, false, 0xa1, true);
+        assert_eq!(s.input(0x48, true, true, false, 38, true), Decision::Exit);
+        assert_eq!(
+            s.input(0x42, false, true, false, 0x77, true),
+            Decision::Emergency
+        );
+        s.input(0x38, false, true, false, 0xa4, true);
+        assert!(matches!(
+            s.input(0x42, false, true, false, 0x77, true),
+            Decision::Forward(_, true)
+        ));
+        // F10 is no longer reserved once the host chooses another chord.
+        assert!(matches!(
+            s.input(0x44, false, true, false, 0x79, true),
+            Decision::Forward(_, true)
+        ));
+    }
+    #[test]
     fn waits_for_preexisting_keys_and_leaves_unsupported_keys_local() {
         let mut initial = [false; 256];
         initial[0xa2] = true;
-        let mut s = KeyboardCapture::new(0x10, initial);
+        let mut s = KeyboardCapture::new(
+            "ctrl-alt-shift-q".to_owned().try_into().unwrap(),
+            Shortcut::default(),
+            initial,
+        );
         assert_eq!(s.input(0x1e, false, true, false, 65, true), Decision::Pass);
         assert_eq!(
             s.input(0x1d, false, false, false, 0xa2, true),

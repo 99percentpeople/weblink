@@ -1,15 +1,13 @@
-export const exitControlShortcuts = [
-  "ctrl-alt-shift-q",
-  "ctrl-alt-shift-x",
-] as const;
-export type ExitControlShortcut =
-  (typeof exitControlShortcuts)[number];
+import { parseShortcut } from "../keyboard-shortcut";
+
+export type ExitControlShortcut = string;
 export interface RemoteKeyboardOptions {
   enabled: boolean;
   autoShow: boolean;
   collapseControls: boolean;
   systemKeys: boolean;
   exitShortcut: ExitControlShortcut;
+  emergencyShortcut: string;
 }
 export const defaultRemoteKeyboardOptions: Readonly<RemoteKeyboardOptions> =
   {
@@ -18,6 +16,7 @@ export const defaultRemoteKeyboardOptions: Readonly<RemoteKeyboardOptions> =
     collapseControls: false,
     systemKeys: true,
     exitShortcut: "ctrl-alt-shift-q",
+    emergencyShortcut: "ctrl-alt-shift-f10",
   };
 export function resolveRemoteKeyboardOptions(
   value: unknown,
@@ -35,16 +34,11 @@ export function resolveRemoteKeyboardOptions(
       typeof v.systemKeys === "boolean"
         ? v.systemKeys
         : true,
-    exitShortcut:
-      v.exitShortcut === "ctrl-alt-shift-x"
-        ? v.exitShortcut
-        : "ctrl-alt-shift-q",
+    exitShortcut: parseShortcut(v.exitShortcut)
+      ? (v.exitShortcut as string)
+      : defaultRemoteKeyboardOptions.exitShortcut,
+    emergencyShortcut: parseShortcut(v.emergencyShortcut)
+      ? (v.emergencyShortcut as string)
+      : defaultRemoteKeyboardOptions.emergencyShortcut,
   };
-}
-export function exitControlShortcutLabel(
-  shortcut: ExitControlShortcut,
-): string {
-  return shortcut === "ctrl-alt-shift-x"
-    ? "Ctrl+Alt+Shift+X"
-    : "Ctrl+Alt+Shift+Q";
 }

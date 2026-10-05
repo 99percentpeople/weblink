@@ -1,6 +1,8 @@
 //! Native actor. No Tauri IPC or network handler is exposed by this module.
 mod device;
 mod environment;
+mod hotkey;
+use crate::shortcut::Shortcut;
 mod pan;
 mod safety;
 mod session;
@@ -43,9 +45,10 @@ enum Command {
         queued: Instant,
     },
 }
-/// One per native process; the registered emergency hotkey also prevents parallel instances.
+/// One input worker per native process. The host owns its passive emergency shortcut observer.
 /// Dropping the owner closes the queue and joins after releasing injected keys/buttons.
 pub struct Worker {
+    shortcut: safety::ShortcutControl,
     queue: Arc<Mailbox<Command>>,
     status: Arc<Mutex<Status>>,
     observer: Arc<Mutex<Option<thread::Thread>>>,
@@ -55,6 +58,12 @@ impl Worker {
     /// Local host only. `test_window` restricts injection to a foreground window owned by this process.
     /// Production room/media bindings must be resolved by the native composition layer (R3).
     pub fn start(test_window: Option<usize>) -> Result<Self, Error> {
+        Self::start_with_shortcut(test_window, Shortcut::default())
+    }
+    pub fn start_with_shortcut(
+        test_window: Option<usize>,
+        shortcut: Shortcut,
+    ) -> Result<Self, Error> {
         if RUNNING
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
@@ -98,7 +107,7 @@ impl Worker {
             .spawn(move || {
                 let _exclusive = exclusive;
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let safety = match safety::Safety::new(test_window) {
+                    let safety = match safety::Safety::new(test_window, shortcut) {
                         Ok(s) => s,
                         Err(e) => {
                             let _ = ready.send(Err(e));
@@ -106,16 +115,27 @@ impl Worker {
                         }
                     };
                     let observations = safety.observations.clone();
+                    let mut current_grant: Option<Grant> = None;
+                    let mut epoch = 0;
+                    let mut publish = |next: Status| {
+                        if next.grant != current_grant {
+                            epoch += 1;
+                            current_grant = next.grant.clone();
+                            observations.authorize(if current_grant.is_some() { epoch } else { 0 });
+                        }
+                        publish(next);
+                    };
+                    let shortcut = safety.shortcut.clone();
                     let touch = touch::TouchDevice::new();
                     let mut engine =
                         Engine::new(WindowsDevice(safety, touch, pan::PanDevice::new()));
-                    let _ = ready.send(Ok(()));
+                    let _ = ready.send(Ok(shortcut));
                     loop {
                         let signals = observations.signals();
                         if signals & safety::INVALIDATED != 0 {
                             q.close(Error::Unavailable);
                         }
-                        if signals & safety::EMERGENCY != 0 {
+                        if observations.take_emergency() && engine.status().grant.is_some() {
                             q.clear();
                             engine.revoke();
                         }
@@ -177,8 +197,8 @@ impl Worker {
                 q.close(failure.unwrap_or(Error::Closed));
             })
             .map_err(|_| Error::Unavailable)?;
-        match initialized.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(())) => (),
+        let shortcut = match initialized.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(shortcut)) => shortcut,
             other => {
                 queue.close(Error::Closed);
                 worker.thread().unpark();
@@ -190,6 +210,7 @@ impl Worker {
             }
         };
         let handle = Self {
+            shortcut,
             queue,
             status,
             observer,
