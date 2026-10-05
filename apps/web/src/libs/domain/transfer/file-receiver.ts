@@ -29,6 +29,7 @@ export class FileReceiver extends FileTransferBase {
   private lastReceiveActivityAt = Date.now();
   private receiveRevision = 0;
   private checking = false;
+  private pendingChunks = new Set<number>();
 
   private blockCache: {
     [chunkIndex: number]: {
@@ -86,26 +87,30 @@ export class FileReceiver extends FileTransferBase {
     const uncompressWorker = new UncompressWorker();
 
     uncompressWorker.onmessage = (ev) => {
+      if (this.closed || this.paused) return;
       const { data, error, context } = ev.data;
+      const chunkIndex = context?.chunkIndex;
       if (error) {
+        this.pendingChunks.delete(chunkIndex);
         console.error(error);
         return;
       }
-      const chunkIndex = context?.chunkIndex;
       if (chunkIndex === undefined) {
         console.error(
           `can not store chunk, chunkIndex is undefined`,
         );
         return;
       }
-      this.storeChunk(chunkIndex, data.buffer).catch(
-        (storeError) => {
+      this.storeChunk(chunkIndex, data.buffer)
+        .catch((storeError) => {
           console.error(storeError);
           if (storeError instanceof Error) {
             this.dispatchEvent("error", storeError);
           }
-        },
-      );
+        })
+        .finally(() =>
+          this.pendingChunks.delete(chunkIndex),
+        );
     };
 
     this.unzipWorker = uncompressWorker;
@@ -140,6 +145,7 @@ export class FileReceiver extends FileTransferBase {
       return;
     }
     await this.cache.storeChunk(chunkIndex, chunkData);
+    if (this.closed || this.paused) return;
     const receivedData = this.receivedData;
     if (!receivedData) {
       console.error(
@@ -159,6 +165,7 @@ export class FileReceiver extends FileTransferBase {
   }
 
   private unzip(packet: ArrayBuffer) {
+    if (this.closed || this.paused) return;
     if (!this.unzipWorker) {
       throw new Error("unzip worker is not initialized");
     }
@@ -169,6 +176,12 @@ export class FileReceiver extends FileTransferBase {
       isLastBlock,
     } = readTransferPacket(packet);
 
+    if (
+      this.pendingChunks.has(chunkIndex) ||
+      this.receivedData?.indexes.has(chunkIndex)
+    )
+      return;
+
     if (!this.blockCache[chunkIndex]) {
       this.blockCache[chunkIndex] = {
         blocks: {},
@@ -178,8 +191,11 @@ export class FileReceiver extends FileTransferBase {
 
     const chunkInfo = this.blockCache[chunkIndex];
 
+    // A missing-chunk request resends all its blocks, including those already
+    // received before the stall. Count distinct blocks, not arrivals.
+    if (!chunkInfo.blocks[blockIndex])
+      chunkInfo.receivedBlockNumber += 1;
     chunkInfo.blocks[blockIndex] = blockData;
-    chunkInfo.receivedBlockNumber += 1;
 
     if (isLastBlock) {
       chunkInfo.totalBlockNumber = blockIndex + 1;
@@ -192,7 +208,10 @@ export class FileReceiver extends FileTransferBase {
         chunkInfo.blocks,
         chunkInfo.totalBlockNumber,
       );
-
+      // Release the assembly before decoding so a failed decode can be retried.
+      // Until storage settles, retransmissions must not start a second decode.
+      delete this.blockCache[chunkIndex];
+      this.pendingChunks.add(chunkIndex);
       this.unzipWorker.postMessage(
         {
           data: compressedData,

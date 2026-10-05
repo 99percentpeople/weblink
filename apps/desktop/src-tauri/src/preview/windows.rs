@@ -39,7 +39,10 @@ async fn on_view<T: Send + 'static>(
 
 pub fn clear(webview: &tauri::WebviewWindow) {
     let owner = webview.label().to_owned();
-    let _ = webview.with_webview(move |_| {
+    // Dropping a subscription may send the channel's final message. Dispatch a
+    // plain UI task: with_webview called on this thread holds Tauri's webview ID
+    // lock, which Channel::send/drop acquires again when evaluating its callback.
+    let _ = webview.run_on_main_thread(move || {
         BUFFERS.with(|buffers| {
             buffers
                 .borrow_mut()
@@ -50,7 +53,9 @@ pub fn clear(webview: &tauri::WebviewWindow) {
 
 pub fn update_visibility(webview: &tauri::WebviewWindow) {
     let window = webview.clone();
-    let _ = webview.with_webview(move |_| {
+    // Visibility events send on this same webview, so do not nest them inside
+    // with_webview's synchronous dispatcher lock. BUFFERS only needs the UI thread.
+    let _ = webview.run_on_main_thread(move || {
         // Read at delivery time so queued resize/focus events cannot restore an
         // older visibility state after an explicit hide or show.
         let visible =
