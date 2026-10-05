@@ -30,6 +30,9 @@ const fixture = vi.hoisted(() => ({
   }[],
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/state/app-state-context", () => ({
+  useAppState: () => ({ remoteClipboard: undefined }),
+}));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     getRemoteControl: () => undefined,

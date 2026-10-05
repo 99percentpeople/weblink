@@ -20,6 +20,16 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  clipboard: {
+    watch: (scope, changed) =>
+      watchStatus("clipboard", { scope }, changed),
+    sequence: (scope) =>
+      invoke("clipboard_sequence", { scope }),
+    read: (scope, after, files) =>
+      invoke("clipboard_read", { scope, after, files }),
+    write: (entries, scope) =>
+      invoke("clipboard_write", { entries, scope }),
+  },
   watchVisibility: createVisibilityWatcher(),
   pictureInPicture: nativePictureInPicture,
   notifications: nativeNotifications,

@@ -95,6 +95,7 @@ impl Host {
     }
     pub(super) fn snapshot(&self) -> Snapshot {
         Snapshot {
+            grant_id: self.active.as_ref().map(|a| a.grant.id.clone()),
             pending: self.pending.as_ref().map(|p| p.view.clone()),
             client_id: self
                 .active

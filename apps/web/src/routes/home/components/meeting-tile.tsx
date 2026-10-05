@@ -1,3 +1,4 @@
+import { useAppState } from "@/libs/state/app-state-context";
 import {
   createVideoRemoteControl,
   createControlState,
@@ -238,11 +239,8 @@ export function MeetingTile(props: {
             <TileActions
               container={displayRef()}
               sourceId={props.sourceId}
-              clientId={
-                props.sourceKind !== "screen"
-                  ? props.clientId
-                  : undefined
-              }
+              clientId={props.clientId}
+              requestScreen={props.sourceKind !== "screen"}
               fullscreen={fullscreen}
               local={props.local}
               playbackActive={playbackActive()}
@@ -272,6 +270,7 @@ function TileActions(props: {
   container?: HTMLElement;
   sourceId?: string;
   clientId?: string;
+  requestScreen: boolean;
   fullscreen: ReturnType<typeof createFullscreen>;
   local?: boolean;
   playbackActive?: boolean;
@@ -288,13 +287,14 @@ function TileActions(props: {
   onStop?: () => void;
   name: string;
 }) {
+  const app = useAppState();
   const { videoRef, videoTrack, audioTracks } =
     useVideoDisplay();
   const videoControl = createVideoRemoteControl();
   const remote = createControlState(
     () =>
       videoControl.control() ??
-      (props.clientId
+      (props.requestScreen && props.clientId
         ? sessionService.getScreenControl(props.clientId)
         : undefined),
   );
@@ -461,22 +461,6 @@ function TileActions(props: {
               : undefined
           }
         >
-          <Show
-            when={
-              props.pinned &&
-              !props.local &&
-              videoControl.control()
-            }
-          >
-            {(control) => (
-              <RemoteKeyboardInput
-                control={control()}
-                state={videoControl.state()}
-                enabled={props.playbackActive !== false}
-                registerKeyboard={props.registerKeyboard}
-              />
-            )}
-          </Show>
           <Show when={showControl() && remote.control()}>
             {(control) => (
               <RemoteControlAction
@@ -487,6 +471,24 @@ function TileActions(props: {
                     ? activate
                     : undefined
                 }
+              />
+            )}
+          </Show>
+          <Show
+            when={
+              props.pinned &&
+              !props.local &&
+              videoControl.control()
+            }
+          >
+            {(control) => (
+              <RemoteKeyboardInput
+                clientId={props.clientId}
+                clipboard={app.remoteClipboard}
+                control={control()}
+                state={videoControl.state()}
+                enabled={props.playbackActive !== false}
+                registerKeyboard={props.registerKeyboard}
               />
             )}
           </Show>

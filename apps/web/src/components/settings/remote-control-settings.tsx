@@ -37,15 +37,24 @@ import {
   resolveRemotePointerOptions,
   type RemotePointerMode,
 } from "@/libs/domain/remote-control/pointer-options";
+import {
+  resolveRemoteKeyboardOptions,
+  type ClipboardFileDestination,
+} from "@/libs/domain/remote-control/keyboard-options";
 import RemoteKeyboardSettings from "./remote-keyboard-settings";
 
 export default function RemoteControlSettings() {
+  const clipboardAccess = appState.capabilities.clipboard;
   const options = () =>
     resolveRemoteTouchOptions(appState.options.remoteTouch);
   const pointer = () =>
     resolveRemotePointerOptions(
       appState.options.remotePointer,
     );
+  const clipboardEnabled = () =>
+    resolveRemoteKeyboardOptions(
+      appState.options.remoteKeyboard,
+    ).clipboard;
   const prefix = "setting.remote_control.";
   const toggle = (
     key:
@@ -367,6 +376,99 @@ export default function RemoteControlSettings() {
           </p>
         </div>
       </Show>
+      <h4 class="h3">{t(`${prefix}general_heading`)}</h4>
+      <div class="flex flex-col gap-2">
+        <Switch
+          class="flex w-full items-center justify-between gap-3"
+          checked={clipboardEnabled()}
+          onChange={(value) =>
+            setAppOptions(
+              "remoteKeyboard",
+              "clipboard",
+              value,
+            )
+          }
+        >
+          <SwitchLabel>
+            {t("setting.remote_control.clipboard.title")}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t(
+            "setting.remote_control.clipboard.description",
+          )}
+        </p>
+      </div>
+      <div class="flex flex-col gap-2">
+        <Label id="remote-clipboard-files">
+          {t(`${prefix}clipboard_files.title`)}
+        </Label>
+        <Select<ClipboardFileDestination>
+          modal
+          disallowEmptySelection
+          placeholder={t(
+            `${prefix}clipboard_files.loading`,
+          )}
+          disabled={
+            !clipboardEnabled() || !clipboardAccess.ready
+          }
+          value={
+            resolveRemoteKeyboardOptions(
+              appState.options.remoteKeyboard,
+            ).clipboardFiles
+          }
+          onChange={(value) =>
+            value &&
+            (value !== "clipboard" ||
+              clipboardAccess.writeFiles) &&
+            setAppOptions(
+              "remoteKeyboard",
+              "clipboardFiles",
+              value,
+            )
+          }
+          options={["clipboard", "cache", "off"]}
+          optionDisabled={(value) =>
+            value === "clipboard" &&
+            !clipboardAccess.writeFiles
+          }
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {t(
+                `${prefix}clipboard_files.${props.item.rawValue}`,
+              )}
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger aria-labelledby="remote-clipboard-files">
+            <SelectValue<ClipboardFileDestination>>
+              {(state) =>
+                t(
+                  `${prefix}clipboard_files.${state.selectedOption()}`,
+                )
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p class="muted">
+          {t(`${prefix}clipboard_files.description`)}
+        </p>
+        <Show
+          when={
+            clipboardEnabled() &&
+            clipboardAccess.ready &&
+            !clipboardAccess.writeFiles
+          }
+        >
+          <p class="muted">
+            {t(`${prefix}clipboard_files.unavailable`)}
+          </p>
+        </Show>
+      </div>
       <p class="muted">{t(`${prefix}changes`)}</p>
     </section>
   );

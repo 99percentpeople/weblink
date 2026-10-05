@@ -3,7 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 /** Each subscription owns its channel; late registration and events stay scoped. */
 export async function watchStatus<T>(
   command: string,
-  args: Record<string, string>,
+  args: Record<string, unknown>,
   receive: (status: T) => void,
 ): Promise<() => void> {
   const watchId = crypto.randomUUID();

@@ -4,6 +4,7 @@ import type { AppPermissions } from "./create-app-permissions";
 import { createAppMediaCapabilities } from "./create-app-media-capabilities";
 import { createAppStartup } from "./create-app-startup";
 import { createAppCaptureSources } from "./create-app-capture-sources";
+import { createAppClipboardAccess } from "./create-app-clipboard-access";
 
 export function createAppSettings(options: {
   platform: PlatformRuntime;
@@ -15,6 +16,12 @@ export function createAppSettings(options: {
 }) {
   const mediaCapabilities =
     createAppMediaCapabilities(options);
+  createAppClipboardAccess({
+    nativeClipboard: !!options.platform.clipboard,
+    runtimeCapabilities:
+      mediaCapabilities.runtimeCapabilities,
+    runtimeReady: mediaCapabilities.ready,
+  });
   return {
     mediaCapabilities,
     runtimeCapabilities:

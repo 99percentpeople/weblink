@@ -29,6 +29,7 @@ vi.mock("solid-sonner", () => ({
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
+    capabilities: { clipboard: { ready: false } },
     options: {
       remoteKeyboard: { enabled: true },
       remoteTouch: {},

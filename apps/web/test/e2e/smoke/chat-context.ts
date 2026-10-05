@@ -1,13 +1,17 @@
 // Only replace the application context: chat, history, layout and observers are real.
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import { clipboardFixture } from "./clipboard-context";
 let context: AppStateContextProps;
 export const setChatTestContext = (
   value: Omit<
     AppStateContextProps,
-    "conversationMessaging"
+    "conversationMessaging" | "remoteClipboard"
   > &
     Partial<
-      Pick<AppStateContextProps, "conversationMessaging">
+      Pick<
+        AppStateContextProps,
+        "conversationMessaging" | "remoteClipboard"
+      >
     >,
 ) => {
   const peer = (id: string) =>
@@ -15,6 +19,7 @@ export const setChatTestContext = (
       (client: string) => client !== "self",
     );
   context = {
+    remoteClipboard: clipboardFixture,
     ...value,
     conversationMessaging: value.conversationMessaging ?? {
       sendText: async (id, text) => {

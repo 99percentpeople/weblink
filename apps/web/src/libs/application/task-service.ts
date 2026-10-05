@@ -62,6 +62,7 @@ export interface SharedFileTask extends Omit<
 > {
   message?: never;
   shared: true;
+  origin?: "clipboard";
   fileId: string;
   pause(): void;
   resume(): Promise<void>;
@@ -76,6 +77,11 @@ export type AppTask =
 export type TaskListItem = AppTask & {
   statusChangedAt: number;
 };
+
+export const isClipboardTransferTask = <T extends AppTask>(
+  task: T,
+): task is T & SharedFileTask =>
+  "origin" in task && task.origin === "clipboard";
 
 export const isActiveTask = (task: AppTask): boolean =>
   ["waiting", "running", "finalizing"].includes(

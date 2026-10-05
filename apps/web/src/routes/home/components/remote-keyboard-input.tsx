@@ -22,6 +22,8 @@ import { createRemoteSoftKeyboard } from "@/libs/hooks/remote-soft-keyboard";
 import { createIsMobile } from "@/libs/hooks/create-mobile";
 import { platform } from "@/libs/platform/runtime";
 import { MeetingTileAction } from "./meeting-tile-actions";
+import { createRemoteClipboard } from "@/libs/hooks/create-remote-clipboard";
+import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import {
   REMOTE_TEXT_CARET,
   REMOTE_TEXT_SEED,
@@ -29,6 +31,10 @@ import {
 } from "@/libs/domain/remote-control/text-input";
 
 export interface RemoteKeyboardInputHandle {
+  clipboardEnabled?(action?: "copy" | "paste"): boolean;
+  copy?(): void | boolean;
+  paste?(): void | boolean;
+  pasteEvent?(event: ClipboardEvent): boolean;
   available(): boolean;
   focused(): boolean;
   visible(): boolean;
@@ -42,11 +48,14 @@ export type RegisterRemoteKeyboardInput = (
 
 /** A real editor focused directly by the user's gesture also works in fullscreen. */
 export function RemoteKeyboardInput(props: {
+  clientId?: string;
+  clipboard?: AppStateContextProps["remoteClipboard"];
   control: RemotePointer;
   state: PointerState;
   enabled: boolean;
   registerKeyboard?: RegisterRemoteKeyboardInput;
 }) {
+  const clipboard = createRemoteClipboard(props);
   const isMobile = createIsMobile();
   const options = createMemo(() =>
     resolveRemoteKeyboardOptions(
@@ -316,6 +325,13 @@ export function RemoteKeyboardInput(props: {
     if (props.registerKeyboard)
       onCleanup(
         props.registerKeyboard({
+          clipboardEnabled: (action) =>
+            action === "copy"
+              ? clipboard.canCopy()
+              : clipboard.enabled(),
+          copy: clipboard.copy,
+          paste: clipboard.paste,
+          pasteEvent: clipboard.pasteEvent,
           available,
           visible,
           // IME may already be hidden while its final resize animation runs.
@@ -387,6 +403,10 @@ export function RemoteKeyboardInput(props: {
         onCompositionStart={() => input.compositionStart()}
         onCompositionEnd={() => input.compositionEnd()}
         onPaste={(event) => {
+          if (clipboard.pasteEvent(event)) {
+            resetEditor();
+            return;
+          }
           event.preventDefault();
           input.paste(
             event.clipboardData?.getData("text/plain") ??
@@ -409,6 +429,22 @@ export function RemoteKeyboardInput(props: {
             return;
           const shortcut =
             event.ctrlKey || event.altKey || event.metaKey;
+          if (
+            clipboard.enabled() &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey
+          ) {
+            if (event.code === "KeyV") return;
+            if (
+              event.code === "KeyC" &&
+              clipboard.canCopy()
+            ) {
+              event.preventDefault();
+              if (!event.repeat) clipboard.copy();
+              return;
+            }
+          }
           // Software keyboards need not report a physical key position.
           const code =
             event.code && event.code !== "Unidentified"

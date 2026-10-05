@@ -6,6 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 mod application;
 mod capabilities;
 mod capture;
+mod clipboard;
 mod keyboard;
 mod media_permissions;
 mod notifications;
@@ -95,6 +96,11 @@ pub fn run() {
             keyboard::keyboard_stop,
             remote_control::remote_control_open,
             remote_control::remote_control_configure_shortcut,
+            clipboard::clipboard_sequence,
+            clipboard::clipboard_watch,
+            clipboard::clipboard_unwatch,
+            clipboard::clipboard_read,
+            clipboard::clipboard_write,
             remote_control::remote_control_status,
             remote_control::remote_control_watch,
             remote_control::remote_control_unwatch,
@@ -229,6 +235,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::RunEvent::Exit) {
+                clipboard::shutdown();
                 app.state::<application::Service>().shutdown();
                 app.state::<notifications::Service>().clear();
                 app.state::<keyboard::Shared>().close();

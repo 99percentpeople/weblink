@@ -3,6 +3,8 @@ import { userErrorMessage } from "@/libs/user-error";
 import { setRoomConfig } from "@/libs/state/permission-options";
 import { t } from "@/i18n";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
+import { RemoteClipboard } from "@/libs/application/remote-clipboard";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
 import {
@@ -221,6 +223,42 @@ export function createAppState(
     },
   });
   onCleanup(() => files.dispose());
+  const remoteClipboard = new RemoteClipboard({
+    platform,
+    host: sessionService.remoteControl,
+    protocol,
+    rtc,
+    registry: transferManager,
+    caches: cacheManager,
+    fileDestination: () =>
+      resolveRemoteKeyboardOptions(
+        appState.options.remoteKeyboard,
+      ).clipboardFiles ?? "off",
+    cacheFile: async (file, signal) => {
+      await cacheManager.library.importFile(file, {
+        signal,
+        silent: true,
+      });
+    },
+    enabled: () =>
+      resolveRemoteKeyboardOptions(
+        appState.options.remoteKeyboard,
+      ).clipboard,
+    getSession: (id) => sessionService.sessions[id],
+  });
+  createEffect(() => {
+    resolveRemoteKeyboardOptions(
+      appState.options.remoteKeyboard,
+    ).clipboard;
+    resolveRemoteKeyboardOptions(
+      appState.options.remoteKeyboard,
+    ).clipboardFiles;
+    sessionService.remoteControl.status();
+    sessionService.remoteControl.revision();
+    Object.values(sessionService.sessions);
+    remoteClipboard.syncPermissions();
+  });
+  onCleanup(() => remoteClipboard.dispose());
   let previousAttachments = new Set<string>();
   createEffect(() => {
     const current = new Set(
@@ -332,8 +370,14 @@ export function createAppState(
   });
   let clipboardCacheData: SendClipboardMessage[] = [];
   const tasks = createTaskService({
-    sharedFiles: sharedFiles.tasks,
-    clearSharedFiles: sharedFiles.clearFinished,
+    sharedFiles: () => [
+      ...sharedFiles.tasks(),
+      ...remoteClipboard.tasks(),
+    ],
+    clearSharedFiles: () => {
+      sharedFiles.clearFinished();
+      remoteClipboard.clearFinished();
+    },
     preparations: cacheManager.preparations,
     clearPreparations: cacheManager.clearPreparations,
     clientId: () => appState.profile.clientId,
@@ -762,6 +806,7 @@ export function createAppState(
     );
 
   return {
+    remoteClipboard,
     permissions,
     ...settings,
     conversationMessaging,

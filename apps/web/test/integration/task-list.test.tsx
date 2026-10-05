@@ -159,6 +159,41 @@ afterEach(() => {
 });
 
 describe("unified task list controls", () => {
+  it("makes the original clipboard failure available as selectable diagnostic text", () => {
+    const error =
+      "Clipboard transfer interrupted <details>";
+    setShared([
+      {
+        id: "clipboard-failure",
+        fileId: "clipboard-file",
+        shared: true,
+        origin: "clipboard",
+        peerId: "peer",
+        fileName: "Clipboard",
+        kind: "file-receive",
+        bytes: 8 * 1024 * 1024,
+        total: 12 * 1024 * 1024,
+        createdAt: 30,
+        status: "failed",
+        error,
+        canPause: false,
+        canResume: false,
+        pause: () => {},
+        resume: async () => {},
+        cancel: async () => {},
+      },
+    ]);
+    render(() => <TaskList onInspect={inspect} />);
+    const summary = screen.getByText("tasks.error_details");
+    const details = summary.closest("details")!;
+    expect(details.open).toBe(false);
+    fireEvent.click(summary);
+    expect(details.open).toBe(true);
+    expect(
+      within(details).getByText(error).textContent,
+    ).toBe(error);
+    expect(details.querySelector("pre details")).toBeNull();
+  });
   it("uses one circular indicator for identification and reflects completion instead of leaving an active task at 100%", () => {
     const preparation: FilePreparation = {
       id: "hash",

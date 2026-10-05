@@ -91,6 +91,33 @@ impl Service {
             Ok(())
         }
     }
+    /// Serialize the final clipboard access with revocation. Payload preparation stays outside.
+    pub fn with_clipboard<T>(
+        &self,
+        owner_id: &str,
+        client: &str,
+        grant_id: &str,
+        action: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let owner = self.owner(owner_id)?;
+        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let active = host.active.as_ref().ok_or("Remote control ended")?;
+        let grant = &active.grant;
+        let peer = host
+            .peers
+            .get(&grant.binding.target.media_id)
+            .ok_or("Control peer ended")?;
+        if !owner.live()
+            || grant.id != grant_id
+            || grant.binding.client_id != client
+            || host.worker.status().grant.as_ref() != Some(grant)
+            || peer.endpoint.is_closed()
+            || !peer.capture.is_current(&grant.binding)
+        {
+            return Err("Clipboard control grant is no longer current".into());
+        }
+        action()
+    }
     pub fn observe(&self, observer: Observer) {
         *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(observer);
     }
@@ -216,6 +243,7 @@ impl Service {
         Ok(id)
     }
     pub fn close(&self) {
+        crate::clipboard::stop_watches();
         let mut slot = self.owner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(owner) = slot.take() {
             owner.shutdown();

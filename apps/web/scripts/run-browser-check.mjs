@@ -40,7 +40,11 @@ const cacheBenchmark = process.argv.includes(
   "--cache-benchmark",
 );
 const cacheTest = process.argv.includes("--cache");
-const entry = notificationsTest
+const clipboardTest = process.argv.includes("--clipboard");
+const clipboardCacheTest = process.argv.includes(
+  "--clipboard-cache",
+);
+const defaultEntry = notificationsTest
   ? "test/e2e/smoke/notifications.html"
   : nativeScreenTest
     ? "test/e2e/smoke/native-screen.html"
@@ -67,6 +71,11 @@ const entry = notificationsTest
                         : transferTest
                           ? "test/e2e/smoke/transfer-workflow.html"
                           : "test/e2e/smoke/speed-test.html";
+const entry = clipboardTest
+  ? "test/e2e/smoke/clipboard.html"
+  : clipboardCacheTest
+    ? "test/e2e/smoke/clipboard-cache.html"
+    : defaultEntry;
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -259,6 +268,48 @@ async function main() {
         permissions: ["notifications"],
       });
     await cdp.call("Page.navigate", { url });
+    if (clipboardTest) {
+      await cdp.call("Browser.grantPermissions", {
+        origin: new URL(url).origin,
+        permissions: [
+          "clipboardReadWrite",
+          "clipboardSanitizedWrite",
+        ],
+      });
+      const waitFor = async (name) => {
+        const until = Date.now() + 20000;
+        while (Date.now() < until) {
+          const { result } = await cdp.call(
+            "Runtime.evaluate",
+            {
+              expression: `({ready:window.${name},error:window.__SPEED_TEST_ERROR__})`,
+              returnByValue: true,
+            },
+          );
+          if (result.value?.error)
+            throw new Error(result.value.error);
+          if (result.value?.ready) return;
+          await sleep(100);
+        }
+        throw new Error(
+          `Clipboard fixture timeout: ${name}`,
+        );
+      };
+      const shortcut = async (key, code, vk) => {
+        for (const type of ["keyDown", "keyUp"])
+          await cdp.call("Input.dispatchKeyEvent", {
+            type,
+            key,
+            code,
+            windowsVirtualKeyCode: vk,
+            modifiers: 2,
+          });
+      };
+      await waitFor("__CLIPBOARD_READY__");
+      await shortcut("c", "KeyC", 67);
+      await waitFor("__CLIPBOARD_COPIED__");
+      await shortcut("v", "KeyV", 86);
+    }
     const start = Date.now();
     while (Date.now() - start < 80000) {
       const evaluation = await cdp.call(

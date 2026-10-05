@@ -48,6 +48,7 @@ export const handleSelectFolder = async (
 export const handleDropItems = async (
   items: DataTransferItemList,
   signal?: AbortSignal,
+  limits?: { maxBytes: number; maxEntries: number },
 ): Promise<File[]> => {
   signal?.throwIfAborted();
   return new Promise<File[]>(async (resolve, reject) => {
@@ -72,7 +73,7 @@ export const handleDropItems = async (
     }
     if (entries.length > 0) {
       const filesMap: FilesMap = {
-        directories: {},
+        directories: Object.create(null),
         files: [],
       };
 
@@ -85,6 +86,25 @@ export const handleDropItems = async (
         ),
       );
       if (error) return reject(error);
+
+      const selected = [
+        ...files.map((file) => ({ file })),
+        ...filesMap.files.map((file) => ({ file })),
+        ...Object.values(filesMap.directories).flat(),
+      ];
+      if (
+        limits &&
+        (selected.length > limits.maxEntries ||
+          selected.reduce(
+            (size, entry) => size + (entry.file?.size ?? 0),
+            0,
+          ) > limits.maxBytes)
+      )
+        return reject(
+          new Error(
+            "Clipboard content exceeds 64 MiB / 4096 entries",
+          ),
+        );
 
       let compressedFoldersResult:
         | (File | null)[]
@@ -192,7 +212,8 @@ async function processFiles(
   folderName: string,
   signal?: AbortSignal,
 ): Promise<File> {
-  const fileMap: Record<string, File | null> = {};
+  const fileMap: Record<string, File | null> =
+    Object.create(null);
 
   files.map((file) => {
     // If file is not a file, it's a directory
@@ -209,17 +230,34 @@ async function processFiles(
   return await compressFiles(fileMap, folderName, signal);
 }
 
-async function compressFiles(
+export async function compressFiles(
   fileMap: Record<string, File | null>,
   folderName: string,
   signal?: AbortSignal,
 ) {
   signal?.throwIfAborted();
   const worker = new CompressWorker();
+  let abort: (() => void) | undefined;
   return new Promise<File>((resolve, reject) => {
-    signal?.addEventListener("abort", () => {
-      reject(new Error(signal?.reason));
+    abort = () =>
+      reject(
+        signal?.reason ??
+          new DOMException(
+            "Compression cancelled",
+            "AbortError",
+          ),
+      );
+    signal?.addEventListener("abort", abort, {
+      once: true,
     });
+    worker.onerror = (event) =>
+      reject(
+        new Error(
+          event.message || "Folder compression failed",
+        ),
+      );
+    worker.onmessageerror = () =>
+      reject(new Error("Invalid compression result"));
     worker.onmessage = (event) => {
       const result = event.data;
       if (result.error) return reject(result.error);
@@ -227,6 +265,7 @@ async function compressFiles(
     };
     worker.postMessage({ fileMap, folderName });
   }).finally(() => {
+    if (abort) signal?.removeEventListener("abort", abort);
     worker.terminate();
   });
 }

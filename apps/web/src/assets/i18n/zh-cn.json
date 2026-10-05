@@ -1,5 +1,6 @@
 {
   "tasks": {
+    "error_details": "错误详情",
     "pause": "暂停",
     "resume": "继续",
     "title": "任务列表",
@@ -362,9 +363,23 @@
         "local_description": "使用本地光标定位远程画面，点击画面后转发键盘输入，可通过 Header 中的键盘开关快速关闭。",
         "capture_description": "点击远程画面后捕获并隐藏本地光标，仅在捕获时转发物理键盘。使用退出快捷键同时释放光标和键盘，远控连接保持。"
       },
+      "general_heading": "通用",
       "cursor_sync": {
         "title": "同步远端光标样式",
         "description": "在本地光标模式下，跟随远端显示文本、手形、缩放等光标样式。"
+      },
+      "clipboard": {
+        "title": "同步远控剪贴板",
+        "description": "只需在控制端开启，即可复制、粘贴文字、富文本、图片和文件；目录先压缩为 ZIP，单次上限 64 MiB。写入剪贴板需要本机 API 和权限支持；不支持主动读取时仍可通过系统粘贴。"
+      },
+      "clipboard_files": {
+        "loading": "正在检测剪贴板能力…",
+        "unavailable": "当前环境无法写入文件剪贴板，可选择文件缓存或关闭。",
+        "title": "复制文件时",
+        "clipboard": "剪贴板",
+        "cache": "文件缓存",
+        "off": "关闭",
+        "description": "文件缓存无需剪贴板权限。浏览器写入的文件可粘贴回 Weblink，无法直接粘贴到系统文件管理器。关闭只影响复制文件，不影响文字、图片或向被控端粘贴文件。"
       },
       "emergency_shortcut": {
         "title": "被控端紧急停止快捷键",
@@ -1197,6 +1212,14 @@
     "ice_auth_line": "第 {{line}} 行的认证方式不受支持，请使用 longterm 或 hmac。"
   },
   "remote_control": {
+    "clipboard_transfer": {
+      "sending": "正在发送剪贴板文件",
+      "receiving": "正在接收剪贴板文件",
+      "finalizing": "正在处理剪贴板文件",
+      "completed": "剪贴板文件传输完成",
+      "failed": "剪贴板文件传输失败",
+      "details": "打开任务列表查看传输详情。"
+    },
     "request_title": "允许远程控制？",
     "request_description": "{{name}} 请求控制本机的鼠标和键盘。共享屏幕仅用于映射鼠标位置，控制权限不限于某个应用或显示器。",
     "revoke_hint": "点击“收回控制”或在本机按 {{shortcut}} 可结束控制。",

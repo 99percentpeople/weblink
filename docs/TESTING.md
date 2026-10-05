@@ -124,6 +124,15 @@ Context and view definitions arriving together must rebuild through the native
 entry dependency without missing-context errors. It also checks root disposal
 and keeps the source workspace unchanged.
 
+`bun run test:e2e:clipboard` checks custom binary clipboard formats in Chromium.
+It starts a promised write from Ctrl+C, delays the data beyond transient activation,
+and verifies file names and bytes using a real Ctrl+V paste event. The disposable
+browser context receives clipboard permissions for the local test origin.
+`bun run test:e2e:clipboard-cache` covers copying a multi-chunk remote file into File
+cache through real WebRTC data channels, compression/merge/fingerprint Workers and
+IndexedDB. It resets the controller input epoch after 8 MiB has arrived, then
+verifies every byte of the 12 MiB file and successful completion on both peers.
+
 `node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
 workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This
 checks the API compatibility path; it does not substitute for iPhone testing.

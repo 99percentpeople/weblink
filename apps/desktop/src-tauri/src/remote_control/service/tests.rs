@@ -250,6 +250,27 @@ struct Rig {
     sender: Arc<TestSender>,
 }
 #[test]
+fn clipboard_access_requires_current_native_grant_and_capture() {
+    let rig = Rig::new();
+    let grant = rig.approve();
+    let calls = std::sync::atomic::AtomicUsize::new(0);
+    let read = |client: &str, id: &str| {
+        rig.service.with_clipboard(&rig.owner, client, id, || {
+            calls.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        })
+    };
+    assert!(read("wrong-client", &grant).is_err());
+    assert!(read("client", "old-grant").is_err());
+    assert!(read("client", &grant).is_ok());
+    rig.source.0.store(false, Ordering::Release);
+    assert!(read("client", &grant).is_err());
+    rig.source.0.store(true, Ordering::Release);
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(read("client", &grant).is_err());
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+}
+#[test]
 #[ignore = "Opt-in control handoff timing with mock injection; no OS input"]
 fn control_handoff_latency() {
     let rig = Rig::new();

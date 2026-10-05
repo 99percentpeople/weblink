@@ -19,9 +19,10 @@ import { renderNotificationAvatar } from "@/libs/application/notifications/notif
 import { appendConversationDraft } from "@/libs/hooks/conversation-draft";
 import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
+import { createClipboardTransferFeedback } from "@/libs/hooks/create-clipboard-transfer-feedback";
+import { isClipboardTransferTask } from "@/libs/application/task-service";
 
 export function SystemNotificationBridge() {
-  if (!platform.notifications) return null;
   const state = useAppState();
   const dialogs = useAppDialogs();
   const navigate = useNavigate();
@@ -42,15 +43,30 @@ export function SystemNotificationBridge() {
     )?.name ??
     id;
   const preferences = () => appState.options.notifications;
-  const service = new NotificationService(
-    platform.notifications,
-    preferences,
-    () =>
-      document.visibilityState === "visible" &&
-      document.hasFocus(),
-    (error) =>
-      console.warn("System notification failed", error),
-  );
+  const service =
+    platform.notifications &&
+    new NotificationService(
+      platform.notifications,
+      preferences,
+      () =>
+        document.visibilityState === "visible" &&
+        document.hasFocus(),
+      (error) =>
+        console.warn("System notification failed", error),
+    );
+  createClipboardTransferFeedback({
+    tasks: state.tasks.tasks,
+    notifications: service,
+    openTasks: () => {
+      dialogs.openTasks();
+      void platform.application
+        ?.show()
+        .catch((error) =>
+          console.warn("Could not show application", error),
+        );
+    },
+  });
+  if (!service) return null;
   const unsubscribe = messageStores.onMessageStored(
     (message) => {
       const localId = appState.profile.clientId;
@@ -280,6 +296,7 @@ export function SystemNotificationBridge() {
       if (
         (task.kind === "file-send" ||
           task.kind === "file-receive") &&
+        !isClipboardTransferTask(task) &&
         previous &&
         previous !== "completed" &&
         task.status === "completed"

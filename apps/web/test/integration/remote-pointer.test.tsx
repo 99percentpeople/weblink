@@ -22,6 +22,7 @@ import { RemoteKeyboardToggle } from "@/routes/home/components/remote-keyboard-t
 import RemoteControlSettings from "@/components/settings/remote-control-settings";
 import { SettingsStateProvider } from "../helpers/settings-state";
 import { platform } from "@/libs/platform/runtime";
+import { createRemoteClipboard } from "@/libs/hooks/create-remote-clipboard";
 import {
   appState,
   createInitialAppState,
@@ -157,6 +158,7 @@ afterEach(() => {
     "requestPointerLock",
   );
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 const surface = () => screen.getByRole("application");
 function mouse(phase: string, button = 0) {
@@ -837,6 +839,300 @@ it.each(["local", "capture"] as const)(
     });
   },
 );
+it.each([false, true])(
+  "gates clipboard file destination by actual binary write support (%s)",
+  async (supported) => {
+    const browserNavigator = navigator;
+    vi.stubGlobal(
+      "navigator",
+      new Proxy(browserNavigator, {
+        get: (target, name) =>
+          name === "clipboard"
+            ? { write: vi.fn() }
+            : Reflect.get(target, name, target),
+      }),
+    );
+    vi.stubGlobal("isSecureContext", false);
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        static supports = () => supported;
+      },
+    );
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "clipboardFiles",
+      "cache",
+    );
+    render(() => (
+      <SettingsStateProvider>
+        <RemoteControlSettings />
+      </SettingsStateProvider>
+    ));
+    const select = screen.getByRole("button", {
+      name: /setting.remote_control.clipboard_files.title/,
+    });
+    expect(select).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "setting.remote_control.clipboard.title",
+      }),
+    );
+    await vi.waitFor(() => expect(select).toBeEnabled());
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const clipboard = await screen.findByRole("option", {
+      name: "setting.remote_control.clipboard_files.clipboard",
+    });
+    expect(
+      clipboard.getAttribute("aria-disabled") === "true",
+    ).toBe(!supported);
+    if (supported) fireEvent.click(clipboard);
+    else
+      fireEvent.click(
+        screen.getByRole("option", {
+          name: "setting.remote_control.clipboard_files.off",
+        }),
+      );
+    expect(
+      appState.options.remoteKeyboard.clipboardFiles,
+    ).toBe(supported ? "clipboard" : "off");
+  },
+);
+it("updates clipboard file availability when browser write permission changes", async () => {
+  const permission = Object.assign(new EventTarget(), {
+    state: "granted",
+  });
+  const browserNavigator = navigator;
+  vi.stubGlobal(
+    "navigator",
+    new Proxy(browserNavigator, {
+      get: (target, name) =>
+        name === "clipboard"
+          ? { write: vi.fn() }
+          : name === "permissions"
+            ? { query: async () => permission }
+            : Reflect.get(target, name, target),
+    }),
+  );
+  vi.stubGlobal(
+    "ClipboardItem",
+    class {
+      static supports = () => true;
+    },
+  );
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    true,
+  );
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "cache",
+  );
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const select = screen.getByRole("button", {
+    name: /setting.remote_control.clipboard_files.title/,
+  });
+  await vi.waitFor(() => expect(select).toBeEnabled());
+  permission.state = "denied";
+  permission.dispatchEvent(new Event("change"));
+  fireEvent.keyDown(select, { key: "ArrowDown" });
+  expect(
+    await screen.findByRole("option", {
+      name: "setting.remote_control.clipboard_files.clipboard",
+    }),
+  ).toHaveAttribute("aria-disabled", "true");
+  fireEvent.click(
+    screen.getByRole("option", {
+      name: "setting.remote_control.clipboard_files.off",
+    }),
+  );
+  permission.state = "granted";
+  permission.dispatchEvent(new Event("change"));
+  fireEvent.keyDown(select, { key: "ArrowDown" });
+  expect(
+    (
+      await screen.findByRole("option", {
+        name: "setting.remote_control.clipboard_files.clipboard",
+      })
+    ).getAttribute("aria-disabled"),
+  ).not.toBe("true");
+});
+it("shares native discovery and permission observers across settings and repeated remote input mounts", async () => {
+  const permission = Object.assign(new EventTarget(), {
+    state: "granted",
+  });
+  const query = vi.fn(
+    async (_request: { name: string }) => permission,
+  );
+  const listen = vi.spyOn(permission, "addEventListener");
+  const browserNavigator = navigator;
+  vi.stubGlobal(
+    "navigator",
+    new Proxy(browserNavigator, {
+      get: (target, name) =>
+        name === "permissions"
+          ? { query }
+          : Reflect.get(target, name, target),
+    }),
+  );
+  Object.assign(platform, { kind: "desktop" });
+  const previous = platform.clipboard;
+  platform.clipboard = {
+    read: vi.fn(),
+    write: vi.fn(),
+  } as any;
+  const discovery = vi
+    .spyOn(platform, "getCapabilities")
+    .mockResolvedValue({
+      runtime: "desktop",
+      os: "windows",
+      version: null,
+      nativeScreenCapture: false,
+      displayRefreshRates: [],
+      remoteInput: true,
+      nativeClipboard: true,
+    });
+  const [open, setOpen] = createSignal(false);
+  const clipboard = {
+    copy: vi.fn(),
+    paste: vi.fn(),
+    watch: vi.fn(() => () => {}),
+  };
+  Object.assign(fixture.control, {
+    clipboardGrant: () => "grant",
+  });
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    true,
+  );
+  const Consumer = () => {
+    const actions = createRemoteClipboard({
+      clientId: "peer",
+      control: fixture.control,
+      state: "active",
+      enabled: true,
+      clipboard,
+    });
+    return (
+      <span data-testid="clipboard-consumer">
+        {String(actions.canCopy())}
+      </span>
+    );
+  };
+  try {
+    render(() => (
+      <SettingsStateProvider>
+        <Show when={open()}>
+          <RemoteControlSettings />
+          <Consumer />
+          <Consumer />
+        </Show>
+      </SettingsStateProvider>
+    ));
+    await waitFor(() =>
+      expect(appState.capabilities.clipboard.ready).toBe(
+        true,
+      ),
+    );
+    expect(
+      appState.options.remoteKeyboard.clipboardFiles,
+    ).toBe("clipboard");
+    setOpen(true);
+    expect(
+      screen
+        .getAllByTestId("clipboard-consumer")
+        .every((element) => element.textContent === "true"),
+    ).toBe(true);
+    setOpen(false);
+    setOpen(true);
+    expect(
+      screen.getByRole("button", {
+        name: /setting.remote_control.clipboard_files.title/,
+      }),
+    ).toHaveTextContent(
+      "setting.remote_control.clipboard_files.clipboard",
+    );
+    expect(discovery).toHaveBeenCalledOnce();
+    expect(
+      query.mock.calls
+        .map(([request]) => request.name)
+        .sort(),
+    ).toEqual(["clipboard-read", "clipboard-write"]);
+    expect(listen).toHaveBeenCalledTimes(2);
+    expect(platform.clipboard!.read).not.toHaveBeenCalled();
+    expect(
+      platform.clipboard!.write,
+    ).not.toHaveBeenCalled();
+  } finally {
+    platform.clipboard = previous;
+  }
+});
+it("waits for initial permission detection before selecting File cache in settings", async () => {
+  let resolve!: (permission: { state: string }) => void;
+  const pending = new Promise<{ state: string }>((done) => {
+    resolve = done;
+  });
+  const browserNavigator = navigator;
+  vi.stubGlobal(
+    "navigator",
+    new Proxy(browserNavigator, {
+      get: (target, name) =>
+        name === "clipboard"
+          ? { write: vi.fn() }
+          : name === "permissions"
+            ? { query: () => pending }
+            : Reflect.get(target, name, target),
+    }),
+  );
+  vi.stubGlobal(
+    "ClipboardItem",
+    class {
+      static supports = () => true;
+    },
+  );
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    true,
+  );
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const select = screen.getByRole("button", {
+    name: /setting.remote_control.clipboard_files.title/,
+  });
+  expect(select).toBeDisabled();
+  expect(select).toHaveTextContent(
+    "setting.remote_control.clipboard_files.loading",
+  );
+  expect(
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBeUndefined();
+  resolve(
+    Object.assign(new EventTarget(), { state: "denied" }),
+  );
+  await waitFor(() => expect(select).toBeEnabled());
+  expect(select).toHaveTextContent(
+    "setting.remote_control.clipboard_files.cache",
+  );
+  expect(
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBe("cache");
+});
 it("provides both pointer behaviors in Remote control settings", async () => {
   render(() => (
     <SettingsStateProvider>
@@ -1029,6 +1325,34 @@ it("releases ordinary-mode keyboard focus with the shared shortcut without endin
   expect(fixture.control.input).toHaveBeenCalledOnce();
 });
 
+it("persists cursor and clipboard switches independently", () => {
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const cursor = screen.getByRole("switch", {
+    name: "setting.remote_control.cursor_sync.title",
+  });
+  const clipboard = screen.getByRole("switch", {
+    name: "setting.remote_control.clipboard.title",
+  });
+  expect(cursor).toBeChecked();
+  expect(clipboard).not.toBeChecked();
+  expect(
+    screen.getByRole("heading", {
+      name: "setting.remote_control.general_heading",
+    }),
+  ).toBeInTheDocument();
+  fireEvent.click(cursor);
+  fireEvent.click(clipboard);
+  expect(appState.options.remotePointer.syncCursor).toBe(
+    false,
+  );
+  expect(appState.options.remoteKeyboard.clipboard).toBe(
+    true,
+  );
+});
 it("stops cursor synchronization immediately when the setting is disabled", () => {
   render(() => <RemoteControlOverlay enabled />);
   mouse("move");

@@ -203,6 +203,16 @@ export function RemoteControlOverlay(props: {
             surface() &&
           !surface()?.ownerDocument.hidden,
         input: (event) => c.input(event),
+        clipboard: (action) => {
+          const input = props.keyboard?.();
+          if (!input?.clipboardEnabled?.(action))
+            return false;
+          return (
+            (action === "copy"
+              ? input.copy?.()
+              : input.paste?.()) !== false
+          );
+        },
         reset: () => c.resetInput(),
         cancel: releaseControls,
         stopped: (failed) => {
@@ -718,6 +728,25 @@ export function RemoteControlOverlay(props: {
           )
             return;
           const native = nativeKeys();
+          if (
+            !native &&
+            props
+              .keyboard?.()
+              ?.clipboardEnabled?.(
+                e.code === "KeyC" ? "copy" : "paste",
+              ) &&
+            (e.ctrlKey || e.metaKey) &&
+            !e.altKey &&
+            !e.shiftKey &&
+            ["KeyC", "KeyV"].includes(e.code)
+          ) {
+            keyboard?.release();
+            if (e.code === "KeyC") {
+              e.preventDefault();
+              if (!e.repeat) props.keyboard?.()?.copy?.();
+            }
+            return;
+          }
           if (native) keyboard?.exit(e);
           if (native || keyboard?.down(e)) {
             e.preventDefault();
@@ -733,6 +762,9 @@ export function RemoteControlOverlay(props: {
             e.preventDefault();
             e.stopPropagation();
           }
+        }}
+        onPaste={(event) => {
+          props.keyboard?.()?.pasteEvent?.(event);
         }}
         onCompositionStart={() => keyboard?.release()}
         onContextMenu={(e) => {

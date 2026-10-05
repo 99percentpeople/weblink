@@ -1,4 +1,5 @@
 import { isFileFingerprint } from "./file-fingerprint";
+import { validClipboardRequest } from "./clipboard";
 import type {
   ProtocolPeer,
   SessionMessage,
@@ -293,6 +294,9 @@ export function validateSessionMessage(
             ...(value.version === 2 ? ["fingerprint"] : []),
           ].includes(key),
         );
+      break;
+    case "remote-clipboard":
+      valid = validClipboardRequest(value);
       break;
     case "request-room-file":
       valid =

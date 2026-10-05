@@ -64,6 +64,15 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("file fingerprint worker lifecycle", () => {
+  it("can reuse hashing for clipboard cache imports without creating an extra task", async () => {
+    const f = setup();
+    const result = f.service.hash(f.file, { silent: true });
+    const worker = await started(f.workers);
+    expect(f.service.tasks()).toEqual([]);
+    worker.reply({ fingerprint: f.fingerprint });
+    await expect(result).resolves.toEqual(f.fingerprint);
+    expect(f.service.tasks()).toEqual([]);
+  });
   it("associates a shared hash job with every local file reference, including reuse after completion", async () => {
     const f = setup();
     const first = f.service.hash(f.file, {

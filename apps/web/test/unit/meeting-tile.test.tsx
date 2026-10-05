@@ -20,6 +20,7 @@ import {
   vi,
 } from "vitest";
 import { MeetingTile } from "@/routes/home/components/meeting-tile";
+import { setAppState } from "@/libs/state/app-state";
 
 vi.hoisted(() => {
   Object.defineProperty(document, "fullscreenEnabled", {
@@ -32,6 +33,16 @@ const fixture = vi.hoisted(() => ({
   error: vi.fn(),
   control: undefined as any,
   screenControl: undefined as any,
+  clipboard: {
+    watch: vi.fn(() => () => {}),
+    copy: vi.fn(),
+    paste: vi.fn(),
+  },
+}));
+vi.mock("@/libs/state/app-state-context", () => ({
+  useAppState: () => ({
+    remoteClipboard: fixture.clipboard,
+  }),
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
@@ -116,6 +127,17 @@ beforeEach(() => {
   fixture.error.mockClear();
   fixture.control = undefined;
   fixture.screenControl = undefined;
+  fixture.clipboard.watch.mockClear();
+  setAppState("capabilities", "clipboard", {
+    ready: false,
+    write: false,
+  });
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    false,
+  );
   fullscreenElement = null;
   Object.defineProperties(document, {
     fullscreenEnabled: { configurable: true, value: true },
@@ -723,3 +745,76 @@ it.each([false, true])(
     ).toBeNull();
   },
 );
+
+it("synchronizes the screen peer clipboard without adding action buttons", () => {
+  setAppState("capabilities", "clipboard", {
+    ready: true,
+    write: true,
+  });
+  class Control extends EventTarget {
+    state = () => "active";
+    supportsText = () => false;
+    supportsKeyboard = () => false;
+    clipboardGrant = () => "grant";
+    resetInput = vi.fn();
+    setCursorVisible = vi.fn();
+    cancel = vi.fn();
+  }
+  const control = (fixture.control = new Control());
+  const stream = new Stream([
+    new Track(
+      "remote-screen",
+    ) as unknown as MediaStreamTrack,
+  ]) as unknown as MediaStream;
+  render(() => (
+    <MeetingTile
+      clientId="host"
+      sourceKind="screen"
+      name="Host"
+      stream={stream}
+      pinned
+    />
+  ));
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  ).toBeEnabled();
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    true,
+  );
+  expect(fixture.clipboard.watch).toHaveBeenCalledWith(
+    "host",
+    control,
+    expect.any(Function),
+  );
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.clipboard_copy",
+    }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.clipboard_paste",
+    }),
+  ).toBeNull();
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboard",
+    false,
+  );
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.clipboard_paste",
+    }),
+  ).toBeNull();
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  ).toBeEnabled();
+});

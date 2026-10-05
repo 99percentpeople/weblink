@@ -19,6 +19,17 @@ import {
 import { FileCatalogIndex } from "./file-catalog-index";
 
 export class FileCacheFactory {
+  /** Ephemeral clipboard transfers never enter the library or chat history. */
+  async clipboardCache(id: string): Promise<ChunkCache> {
+    if (!/^remote-clipboard_[a-zA-Z0-9-]+$/.test(id))
+      throw new Error("Invalid clipboard cache id");
+    const cache = new IDBChunkCache({
+      id,
+      maxMomeryCacheSize: 4 * 1024 * 1024,
+    });
+    await cache.initialize();
+    return cache;
+  }
   readonly catalog = new FileCatalogIndex();
   private readonly rawCaches = new Map<
     string,
@@ -79,6 +90,10 @@ export class FileCacheFactory {
       );
 
       for (const cache of caches) {
+        if (cache.id.startsWith("remote-clipboard_")) {
+          await cache.cleanup();
+          continue;
+        }
         const info = await cache
           .getInfo()
           .catch(() => null);

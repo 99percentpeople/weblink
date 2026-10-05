@@ -3,17 +3,20 @@ import { zipSync } from "fflate";
 self.onmessage = async (
   event: MessageEvent<{
     folderName: string;
-    fileMap: Record<string, File>;
+    fileMap: Record<string, File | null>;
   }>,
 ) => {
   const { fileMap, folderName } = event.data;
   try {
-    const bufferMap: Record<string, Uint8Array> = {};
+    const bufferMap: Record<string, Uint8Array> =
+      Object.create(null);
 
     await Promise.all(
       Object.entries(fileMap).map(async ([path, file]) => {
         if (!file) {
-          bufferMap[path] = null!;
+          bufferMap[
+            path.endsWith("/") ? path : `${path}/`
+          ] = new Uint8Array();
           return;
         }
 

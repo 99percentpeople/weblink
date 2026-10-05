@@ -7,6 +7,8 @@ import {
 } from "@/libs/domain/protocol/file-fingerprint";
 
 export interface FingerprintOptions {
+  /** The caller already owns progress presentation (for example clipboard transfers). */
+  silent?: boolean;
   /** Local reference whose transfer owns this identification/verification phase. */
   fileId?: string;
   signal?: AbortSignal;
@@ -86,26 +88,27 @@ export class FileFingerprintService {
             item.id === id ? { ...item, ...patch } : item,
           ),
         );
-      this.state[1]((items) => [
-        ...items.filter(
-          (item) =>
-            item.status === "waiting" ||
-            item.status === "running" ||
-            items.indexOf(item) >= items.length - 50,
-        ),
-        {
-          id,
-          kind: "file-prepare",
-          fileIds: options.fileId ? [options.fileId] : [],
-          peerId: "",
-          fileName: file instanceof File ? file.name : "",
-          createdAt: Date.now(),
-          status: "waiting",
-          bytes: 0,
-          total: file.size,
-          cancel: () => controller.abort(),
-        },
-      ]);
+      if (!options.silent)
+        this.state[1]((items) => [
+          ...items.filter(
+            (item) =>
+              item.status === "waiting" ||
+              item.status === "running" ||
+              items.indexOf(item) >= items.length - 50,
+          ),
+          {
+            id,
+            kind: "file-prepare",
+            fileIds: options.fileId ? [options.fileId] : [],
+            peerId: "",
+            fileName: file instanceof File ? file.name : "",
+            createdAt: Date.now(),
+            status: "waiting",
+            bytes: 0,
+            total: file.size,
+            cancel: () => controller.abort(),
+          },
+        ]);
       next.promise = this.tail
         .catch(() => {})
         .then(() => {

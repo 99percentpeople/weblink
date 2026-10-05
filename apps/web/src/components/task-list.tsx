@@ -52,6 +52,7 @@ import {
   type SharedFileTask,
   isFinishedTask,
   isActiveTask,
+  isClipboardTransferTask,
   type TaskStatus,
 } from "@/libs/application/task-service";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
@@ -528,6 +529,24 @@ function TaskRow(props: {
             </p>
           )}
         </Show>
+        <Show
+          when={
+            isClipboardTransferTask(props.task) &&
+            props.task.status === "failed" &&
+            sharedFile()?.error
+          }
+        >
+          {(error) => (
+            <details class="text-muted-foreground text-xs">
+              <summary class="cursor-pointer">
+                {t("tasks.error_details")}
+              </summary>
+              <pre class="mt-1 select-text whitespace-pre-wrap break-all">
+                {error()}
+              </pre>
+            </details>
+          )}
+        </Show>
       </div>
       <div class="flex items-center gap-1">
         <Show
@@ -708,8 +727,8 @@ export function TaskList(props: {
       >
         <div class="relative min-w-40 flex-1">
           <Search
-            class="text-muted-foreground pointer-events-none absolute top-1/2
-              left-3 size-4 -translate-y-1/2"
+            class="text-muted-foreground pointer-events-none absolute left-3
+              top-1/2 size-4 -translate-y-1/2"
           />
           <Input
             type="search"

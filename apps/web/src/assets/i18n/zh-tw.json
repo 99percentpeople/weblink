@@ -1,5 +1,6 @@
 {
   "tasks": {
+    "error_details": "錯誤詳情",
     "pause": "暫停",
     "resume": "繼續",
     "title": "任務列表",
@@ -362,9 +363,23 @@
         "local_description": "使用本機游標定位遠端畫面，點擊畫面後轉送鍵盤輸入，可透過 Header 中的鍵盤開關快速關閉。",
         "capture_description": "點擊遠端畫面後擷取並隱藏本機游標，僅在擷取時轉送實體鍵盤。使用退出快速鍵同時釋放游標和鍵盤，遠端控制連線保持。"
       },
+      "general_heading": "通用",
       "cursor_sync": {
         "title": "同步遠端游標樣式",
         "description": "在本機游標模式下，跟隨遠端顯示文字、手形、縮放等游標樣式。"
+      },
+      "clipboard": {
+        "title": "同步遠控剪貼簿",
+        "description": "只需在控制端開啟，即可複製、貼上文字、RTF、圖片和檔案；資料夾先壓縮為 ZIP，單次上限 64 MiB。寫入剪貼簿需要本機 API 和權限支援；不支援主動讀取時仍可透過系統貼上。"
+      },
+      "clipboard_files": {
+        "loading": "正在偵測剪貼簿能力…",
+        "unavailable": "目前環境無法寫入檔案剪貼簿，可選擇檔案快取或關閉。",
+        "title": "複製檔案時",
+        "clipboard": "剪貼簿",
+        "cache": "檔案快取",
+        "off": "關閉",
+        "description": "檔案快取無需剪貼簿權限。瀏覽器寫入的檔案可貼回 Weblink，無法直接貼到系統檔案管理員。關閉只影響複製檔案，不影響文字、圖片或向被控端貼上檔案。"
       },
       "emergency_shortcut": {
         "title": "被控端緊急停止快捷鍵",
@@ -1197,6 +1212,14 @@
     "ice_auth_line": "第 {{line}} 行的驗證方式不受支援，請使用 longterm 或 hmac。"
   },
   "remote_control": {
+    "clipboard_transfer": {
+      "sending": "正在傳送剪貼簿檔案",
+      "receiving": "正在接收剪貼簿檔案",
+      "finalizing": "正在處理剪貼簿檔案",
+      "completed": "剪貼簿檔案傳輸完成",
+      "failed": "剪貼簿檔案傳輸失敗",
+      "details": "開啟任務清單查看傳輸詳情。"
+    },
     "request_title": "允許遠端控制？",
     "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
     "revoke_hint": "點擊「收回控制」或在本機按 {{shortcut}} 可結束控制。",

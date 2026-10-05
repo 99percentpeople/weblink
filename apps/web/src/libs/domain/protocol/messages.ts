@@ -1,4 +1,5 @@
 import type { FileFingerprint } from "./file-fingerprint";
+import type { ClipboardRequest } from "./clipboard";
 export type MessageID = string;
 export type ProtocolPeerID = string;
 export type ProtocolFileID = string;
@@ -257,6 +258,8 @@ export type RequestSharedFileMessage =
   };
 
 export type SessionMessage =
+  | (BaseExchangeMessage &
+      ClipboardRequest & { type: "remote-clipboard" })
   | RequestSharedFileMessage
   | FileOfferResultMessage
   | FileContentReadyMessage
@@ -306,6 +309,7 @@ const createMessageBase = (
 
 /** Wire behavior, shared by every client implementation. */
 export const requestSpec = {
+  "remote-clipboard": { ack: "receive" },
   "send-text": { ack: "receive" },
   "room-capabilities": { ack: "receive" },
   "send-room-text": { ack: "receive" },

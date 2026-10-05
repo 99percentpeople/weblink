@@ -35,6 +35,9 @@ vi.mock("@/libs/application/session-service", () => ({
 vi.mock("@/libs/state/app-state", () => ({
   appState: { options: {} },
 }));
+vi.mock("@/libs/state/app-state-context", () => ({
+  useAppState: () => ({ remoteClipboard: undefined }),
+}));
 vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     isSourceMuted: () => false,

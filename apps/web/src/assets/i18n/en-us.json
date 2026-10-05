@@ -1,5 +1,6 @@
 {
   "tasks": {
+    "error_details": "Error details",
     "pause": "Pause",
     "resume": "Resume",
     "title": "Tasks",
@@ -362,9 +363,23 @@
         "local_description": "Use the local cursor to point at the remote screen. Click the screen to forward keyboard input; the header switch can turn forwarding off.",
         "capture_description": "Click the remote screen to capture and hide the local cursor. Only while captured are physical keys forwarded. Use the release shortcut to free both the pointer and keyboard; the control connection stays active."
       },
+      "general_heading": "General",
       "cursor_sync": {
         "title": "Sync remote cursor appearance",
         "description": "In local cursor mode, match the remote text, hand, resize and other cursor shapes."
+      },
+      "clipboard": {
+        "title": "Synchronize remote clipboard",
+        "description": "Enable on the controller to copy and paste text, rich text, images and files. Folders are zipped; each operation is limited to 64 MiB. Clipboard writing requires local API support and permission; system paste remains available without programmatic read access."
+      },
+      "clipboard_files": {
+        "loading": "Checking clipboard availability…",
+        "unavailable": "File clipboard writing is unavailable here. Choose File cache or Off.",
+        "title": "When copying files",
+        "clipboard": "Clipboard",
+        "cache": "File cache",
+        "off": "Off",
+        "description": "File cache needs no clipboard permission. Files written by the browser can be pasted back into Weblink, but not directly into a system file manager. Off affects file copying only, not text, images or pasting files to the remote computer."
       },
       "emergency_shortcut": {
         "title": "Host emergency stop shortcut",
@@ -1197,6 +1212,14 @@
     "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm or hmac."
   },
   "remote_control": {
+    "clipboard_transfer": {
+      "sending": "Sending clipboard files",
+      "receiving": "Receiving clipboard files",
+      "finalizing": "Processing clipboard files",
+      "completed": "Clipboard file transfer completed",
+      "failed": "Clipboard file transfer failed",
+      "details": "Open the task list for transfer details."
+    },
     "request_title": "Allow remote control?",
     "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
     "revoke_hint": "Use “Revoke control” or press {{shortcut}} on this computer to end control.",

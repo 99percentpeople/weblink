@@ -1047,6 +1047,95 @@ of the local caret allow repeated Left/Right and Backspace/Delete actions. IME
 selection-only cursor moves become remote arrow strokes only outside composition;
 the guards are never transmitted.
 
+Remote clipboard synchronization is independent of automatic keyboard visibility.
+`remoteKeyboard.clipboard` defaults to false and only the controller needs to enable it.
+The host serves clipboard requests under the existing remote-control grant; its own
+controller preference does not gate incoming requests.
+Windows desktop hosts expose plain text, HTML/RTF, PNG/common DIB images and local
+files. Folder selections are converted into ZIP files using the existing folder
+compression worker; the receiving side gets the archive, without automatic extraction.
+Arbitrary native application-private formats, virtual shell files and file move/cut
+semantics are not transported. Each operation is bounded to 64 MiB and 4096 entries.
+
+`remoteKeyboard.clipboardFiles` selects the destination for files copied from the host:
+`clipboard`, `cache` (File cache), or `off`. An unset preference stays unset until
+initial capability and permission discovery completes: choose Clipboard if file
+writing is available, otherwise File cache, then persist that choice. Saved choices
+are never replaced by later permission changes. The selector requires completed
+discovery and clipboard synchronization to be enabled. Clipboard is selectable only with native clipboard
+capability or a browser write API supporting Weblink's custom binary format, and no
+known denied write permission. File cache remains available without clipboard APIs;
+it uses the existing file-library import, deduplication and pinning flow. Off excludes
+files and directories before the native adapter reads their bytes. It does not affect
+text, images or files pasted into the host. Unavailable persisted clipboard choices
+also exclude files, without silently changing the user's chosen destination.
+
+The portable `remote-clipboard` request binds a one-shot `operationId` to the current
+native `grantId` and its authenticated peer session. Explicit copy samples the host
+clipboard sequence before sending Ctrl+C, then waits for a newer sequence. Context
+menu copies use `watch`/`changed`/`unwatch` subscriptions and Windows clipboard change
+notifications. Notifications contain no clipboard data, require the current watch
+identity and do not echo application-owned clipboard writes. They never import an
+existing clipboard merely because control was granted.
+
+Clipboard bundles use the existing file sender, receiver, transfer registry,
+compression and backpressure. Text-only content (including HTML/RTF) never creates
+a task. Bundles containing files or images create tasks on both peers only when
+the packed payload exceeds one 128 KiB chunk. Smaller bundles stay out of the task
+list. The offer declares the content kind, which is checked again after unpacking.
+Transport caches are temporary. Only the explicit File cache destination imports
+received files into the library; clipboard operations do not create chat messages or
+clipboard history. Copy completes after the selected destination finishes writing or
+importing the files. Once Ctrl+C has been sent (or an existing clipboard read has
+started), Copy no longer depends on the input epoch: a focus reset during receipt
+or import does not cancel it. Before Ctrl+C, the original epoch must still be valid.
+Paste acknowledges only
+after the complete bundle is validated and written to the host clipboard; Ctrl+V
+then uses the original control grant and input epoch. Revocation, disabling the
+controller setting, changing the copy destination, switching sources, disconnection
+and task cancellation stop pending work.
+The native adapter independently enforces the live grant and current capture at
+clipboard access, including after asynchronous file preparation.
+
+Controllers probe read and write APIs independently and observe clipboard permission
+changes when the browser supports them. Capability checks never read or replace the
+clipboard, and do not infer support from the URL scheme or secure-context flag.
+Application-owned discovery publishes `appState.capabilities.clipboard`, reuses the
+existing runtime capability snapshot, and owns one observer per clipboard permission.
+Settings and remote inputs consume this shared state; mounting views does not probe
+again. Pending or unsupported permission queries remain distinct from denied access.
+Native capability is reported by the implemented backend. Without write capability,
+local clipboard writes are disabled; the File cache destination can still receive
+files and subscribe to changes. Otherwise the change subscription is disabled and
+ordinary remote Ctrl+C still works.
+Without programmatic read capability, Ctrl+V/system paste events remain supported
+through the focused remote input surface or soft-keyboard editor. Text and single-chunk
+copy/paste operations emit no toasts. Clipboard file tasks show a cancellable progress
+toast in the foreground and use the existing transfer notification preference in the
+background, including completion or failure. Progress updates reuse the same toast;
+background notifications are not repeated for each chunk. Cancellation stops the existing
+task and removes its loading notice. No action-bar buttons or separate paste dialog are added.
+Failed clipboard tasks retain an expandable diagnostic error for troubleshooting.
+
+Controllers intercept Ctrl+C/Ctrl+V only on the active remote input surface. Browser
+paste consumes the real paste event, preserving line breaks instead of typing Enter.
+The browser copy gesture starts a promised ClipboardItem before the remote reply,
+preserving write activation across the transfer. It includes a text alternative and,
+when supported and selected, `web application/x-weblink-clipboard` containing the
+validated binary bundle. It then attempts supported rich/image formats automatically.
+Browser paste captures the real event as a fallback, and uses the async read API
+during that gesture to recover custom file names and bytes when available. A denied
+write does not create a separate save action; a later copy gesture requests fresh
+content. Browser controllers can write only formats supported by their clipboard
+API. The Weblink custom format can be pasted back into Weblink with async read access;
+it does not publish native file-drop paths for file managers. Windows desktop controllers
+write all supported formats and file-drop paths directly. Received
+files remain in local temporary directories while referenced by the clipboard;
+replaced snapshots have a 30-minute grace period and are collected on subsequent
+writes. Staging is bounded to 512 MiB / 128 snapshots and cleared on normal exit.
+Actual clipboard interoperability and mobile browser permissions still require
+device acceptance.
+
 The independent `remoteKeyboard.autoShow` and `collapseControls` preferences default
 to false. Automatic keyboard control subscribes to `text-input-watch` while the
 local view has enabled keyboard control and is visible. The subscription carries

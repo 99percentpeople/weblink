@@ -14,6 +14,16 @@ export interface RemoteControlPolicy {
 }
 /** One frontend owner per room. Native room/window lifetime is independent of UI polling. */
 export class RemoteControlHost {
+  clipboardScope(clientId: string, grantId: string) {
+    if (
+      !this.owner ||
+      this.status().clientId !== clientId ||
+      this.status().grantId !== grantId ||
+      this.status().closed
+    )
+      throw new Error("Remote control is not authorized");
+    return { ownerId: this.owner, clientId, grantId };
+  }
   readonly screen = new RemoteScreenConsent();
   private generation = 0;
   private owner?: string;

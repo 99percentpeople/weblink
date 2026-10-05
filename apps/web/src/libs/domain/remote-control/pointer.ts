@@ -96,6 +96,16 @@ export function videoPosition(
   return { x: px, y: py };
 }
 export class RemotePointer extends EventTarget {
+  clipboardGrant(): string | undefined {
+    const s = this.session?.state;
+    return s?.type === "granted" &&
+      ["active", "activating"].includes(this.state())
+      ? s.grantId
+      : undefined;
+  }
+  clipboardEpoch(): string | undefined {
+    return this.epoch;
+  }
   private cursorVisibilityAvailable = false;
   private cursorVisible = true;
   /** The host owns cursor composition; old hosts keep their existing behavior. */

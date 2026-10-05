@@ -27,6 +27,8 @@
     "test:e2e:playback": "node scripts/run-browser-check.mjs --playback",
     "test:e2e:transfer": "bun scripts/run-browser-check.mjs --transfer",
     "test:e2e:cache": "bun scripts/run-browser-check.mjs --cache",
+    "test:e2e:clipboard": "bun scripts/run-browser-check.mjs --clipboard",
+    "test:e2e:clipboard-cache": "bun scripts/run-browser-check.mjs --clipboard-cache",
     "test:e2e:tasks": "bun scripts/run-browser-check.mjs --tasks",
     "test:e2e:chat": "bun scripts/run-browser-check.mjs --chat",
     "test:e2e:conversations": "bun scripts/run-browser-check.mjs --conversations",

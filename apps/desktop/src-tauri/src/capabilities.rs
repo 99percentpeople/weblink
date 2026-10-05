@@ -12,6 +12,7 @@ pub(crate) struct RuntimeCapabilities {
     display_refresh_rates: Vec<u32>,
     remote_input: bool,
     system_keyboard: bool,
+    native_clipboard: bool,
     system_tray: bool,
 }
 
@@ -30,6 +31,7 @@ pub(crate) async fn runtime_capabilities(
         display_refresh_rates,
         remote_input: weblink_desktop_input::session::supported(),
         system_keyboard: keyboard::supported(),
+        native_clipboard: cfg!(windows),
         system_tray: app.state::<application::Service>().ready(),
     })
 }

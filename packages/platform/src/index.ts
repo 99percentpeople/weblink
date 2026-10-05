@@ -10,11 +10,13 @@ export interface RuntimeCapabilities {
   displayRefreshRates: number[];
   remoteInput: boolean;
   systemKeyboard?: boolean;
+  nativeClipboard?: boolean;
   /** True only after a recoverable native tray icon has been created. */
   systemTray?: boolean;
 }
 
 export interface PlatformRuntime {
+  clipboard?: NativeClipboard;
   readonly notifications?: SystemNotifications;
   readonly pictureInPicture?: NativePictureInPicture;
   readonly application?: NativeApplication;
@@ -35,6 +37,47 @@ export interface PlatformRuntime {
   /** Local device name for a new profile; null when unavailable. */
   getDeviceName?(): Promise<string | null>;
   initialize(): () => void;
+}
+
+/** Only the current native control grant may access the host clipboard. */
+export interface ClipboardScope {
+  ownerId: string;
+  clientId: string;
+  grantId: string;
+}
+export interface ClipboardEntry {
+  type:
+    | "text/plain"
+    | "text/html"
+    | "text/rtf"
+    | "image/png"
+    | "file"
+    | "directory";
+  name?: string;
+  /** Directory-relative path, never a host filesystem path. */
+  path?: string;
+  group?: string;
+  data: string;
+}
+export interface ClipboardSnapshot {
+  sequence: number;
+  entries: ClipboardEntry[];
+}
+export interface NativeClipboard {
+  watch(
+    scope: ClipboardScope,
+    changed: () => void,
+  ): Promise<() => void>;
+  sequence(scope?: ClipboardScope): Promise<number>;
+  read(
+    scope?: ClipboardScope,
+    after?: number,
+    files?: boolean,
+  ): Promise<ClipboardSnapshot>;
+  write(
+    entries: ClipboardEntry[],
+    scope?: ClipboardScope,
+  ): Promise<number>;
 }
 
 export interface NativeApplicationOptions {
@@ -341,6 +384,7 @@ export interface NativeControlContext {
   sourceId: string;
 }
 export interface NativeControlStatus {
+  grantId?: string | null;
   pending: {
     consentId: string;
     clientId: string;

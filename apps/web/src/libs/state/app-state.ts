@@ -61,6 +61,16 @@ export interface ClientInfo extends TransferClient {
 
 export type CacheStatus = "ready" | "loading";
 
+export interface ClipboardAccessState {
+  ready: boolean;
+  native: boolean;
+  read: boolean;
+  write: boolean;
+  writeFiles: boolean;
+  readPermission: PermissionState | "unknown";
+  writePermission: PermissionState | "unknown";
+}
+
 export type MicrophoneConstraintsState = {
   autoGainControl?: boolean;
   echoCancellation?: boolean;
@@ -274,6 +284,9 @@ export const saveMediaConstraintsToSession = (
 };
 
 export type AppState = {
+  capabilities: {
+    clipboard: ClipboardAccessState;
+  };
   roomStatus: RoomStatus;
   profile: ClientProfile;
   options: AppOption;
@@ -305,6 +318,17 @@ export type AppState = {
 };
 
 export const createInitialAppState = (): AppState => ({
+  capabilities: {
+    clipboard: {
+      ready: false,
+      native: false,
+      read: false,
+      write: false,
+      writeFiles: false,
+      readPermission: "unknown",
+      writePermission: "unknown",
+    },
+  },
   media: {
     constraints: loadMediaConstraintsFromSession(
       createDefaultMediaConstraints(),
