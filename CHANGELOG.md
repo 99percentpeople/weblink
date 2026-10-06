@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-10-06
+
+Weblink 1.1 adds native Windows screen sharing and remote control, with mobile
+input, clipboard and file exchange, and improved desktop and room management.
+Weblink 1.1 新增 Windows 原生屏幕共享与远程控制，支持移动端输入、剪贴板和文件交换，并完善桌面端体验与房间管理。
+
+### Major Changes
+
+- Add native Windows display and window sharing with source previews, DXGI/WGC capture, system audio on supported systems, and available software encoders or H.264/HEVC hardware encoding 新增 Windows 原生显示器与窗口共享，支持来源预览、DXGI/WGC 采集、受支持系统上的系统音频，以及可用的软件编码器或 H.264/HEVC 硬件编码
+- Add remote mouse and keyboard control of Windows display shares from browser and desktop clients, with local approval, remembered allow/deny rules, screen requests, synchronized cursor appearance, and customizable input-release and emergency-revocation shortcuts 新增浏览器与桌面客户端对 Windows 显示器共享的远程鼠标和键盘控制，支持本机授权、记住允许或拒绝规则、请求共享屏幕、同步光标外观，以及自定义输入释放和紧急撤销快捷键
+- Add mobile trackpad and direct-touch control, configurable gestures and sampling, soft-keyboard and IME input, and optional keyboard visibility following the remote text field 新增移动端触控板与直接触摸控制，支持可配置手势和采样率、软键盘与输入法输入，以及按远端文本框焦点自动显示或隐藏键盘
+- Add opt-in remote clipboard synchronization for text, rich text, images and files, with browser capability checks, file copies to the clipboard or local library, ZIP conversion for folders, and cancellable file-transfer progress 新增可选的远程剪贴板同步，支持文本、富文本、图片与文件，按浏览器能力启用，将复制的文件写入剪贴板或本机文件库，将文件夹转换为 ZIP，并显示可取消的文件传输进度
+- Add opt-in file drag-and-drop onto controlled Windows screens, copying local files into compatible remote applications; share a configurable per-operation file limit with clipboard transfers, defaulting to 64 MiB and supporting up to 512 MiB 新增可选的远程文件拖放，将本地文件拖入受控 Windows 画面中的兼容应用；与剪贴板文件传输共用单次大小限制，默认 64 MiB，最高可设为 512 MiB
+
+### Improvements
+
+- Show both the shared Web application version and desktop package version in desktop About and copied version information 桌面端“关于”及复制的版本信息同时显示共用 Web 应用版本和桌面程序版本
+- Expand desktop window behavior with tray controls, configurable close actions, launch-at-login preferences, optional hiding after control approval, and a resizable always-on-top native picture-in-picture mode that preserves the meeting and control session 完善桌面端窗口行为，新增托盘操作、可配置关闭行为、开机启动设置、批准远程控制后自动隐藏选项，以及保留会议和控制会话的可缩放置顶原生画中画模式
+- Unify browser and Windows notifications for messages, control requests, speed-test requests and completed transfers, with configurable previews and sound; Windows notifications support inline replies and request approval 统一浏览器与 Windows 的消息、远程控制请求、测速请求及传输完成通知，支持配置内容预览和声音；Windows 通知支持直接回复与批准请求
+- Add recent-room selection with saved connection details, unify client and room permission management, and order conversations and permission records by persisted activity; move automatic-download size limits into shared transfer settings while preserving per-room switches 新增保存连接信息的最近房间选择，统一客户端与房间权限管理，按持久化活动时间排列会话和权限记录；将自动下载大小限制移至统一传输设置，并保留各房间的独立开关
+- Expand media settings with live resolution, frame-rate and bitrate changes, display-derived high-refresh options, audio codec/sample-rate/channel controls, SDR color settings, and per-stream diagnostics 完善媒体设置，支持实时调整分辨率、帧率与码率，按显示器刷新率提供高帧率选项，并新增音频编码、采样率、声道、SDR 色彩设置及各路媒体诊断信息
+- Reduce background work by generating source previews on demand, pausing hidden previews and diagnostics, and waking native workers on events while preserving active sharing and control; reduce desktop package size 减少后台资源占用，按需生成来源预览、暂停隐藏画面的预览和诊断，并按事件唤醒原生工作线程，同时保持共享和控制会话；缩减桌面程序体积
+- Unify settings controls and dialog layouts, improve keyboard focus behavior, and refine meeting-tile actions for mouse hover, touch and fullscreen use 统一设置控件与弹窗布局，改善键盘焦点行为，并优化画面操作按钮在鼠标悬停、触摸及全屏场景下的使用体验
+
+### Fixes
+
+- Restore password-protected room interoperability over LAN HTTP with a shared PBKDF2/AES-GCM implementation when Web Crypto is unavailable, and reject joining if password preparation fails 修复局域网 HTTP 下密码房间的互通问题，在 Web Crypto 不可用时使用一致的 PBKDF2/AES-GCM 实现，并在密码准备失败时中止加入房间
+- Fix desktop resume deadlocks, stale startup paths and native sharing recovery; improve remote-control recovery after transient congestion or connection interruptions and release stale held input 修复桌面端恢复窗口时的死锁、失效的启动路径及原生共享恢复问题；改进短暂拥塞或连接中断后的远程控制恢复，并释放残留按键与触点
+- Fix stalled file retries by deduplicating retransmitted blocks, clearing failed decoding state and ignoring late results after a transfer is paused 修复文件重试卡住的问题，对重传区块去重、清理失败的解码状态，并忽略传输暂停后迟到的处理结果
+- Correct native stream color metadata, duplicate encoder choices, picture-in-picture restoration and fullscreen overlays; keep request approval actions usable while dialogs are open 修正原生媒体流的色彩元数据、重复编码器选项、画中画恢复及全屏浮层问题，并保证弹窗打开时仍可操作请求审批按钮
+
+### Compatibility Notes
+
+- Native hosting features target Windows; browser clients can control supported Windows display shares, while window shares remain view-only. Remote input requires host approval or an existing allow rule 原生被控功能面向 Windows；浏览器客户端可控制受支持的 Windows 显示器共享，窗口共享仅支持观看。远程输入需要被控端批准或已有允许规则
+- HEVC requires a compatible host hardware encoder and a receiver exposing H.265 support in WebRTC. Native screen streaming remains 8-bit SDR YUV 4:2:0 HEVC 需要兼容的被控端硬件编码器，以及在 WebRTC 中提供 H.265 支持的接收端。原生屏幕传输仍采用 8 位 SDR YUV 4:2:0
+- Self-hosted signaling servers must return the version 2 join acknowledgment; a missing acknowledgment now fails joining after ten seconds instead of treating an open socket as successful room membership 自部署信令服务必须返回 v2 入房确认；未收到确认时将在十秒后判定加入失败，不再将 WebSocket 已连接视为成功入房
+
+### Infrastructure
+
+- Separate web and desktop development/production workflows behind shared checks, reuse desktop build outputs, and produce Windows NSIS installer artifacts for stable release tags 将 Web 与桌面端的开发及正式构建拆分为依赖统一检查的工作流，复用桌面构建产物，并为正式版本 tag 生成 Windows NSIS 安装包产物
+- Read public WebSocket/STUN build settings from GitHub Environment variables for both web and desktop builds; replace the former `PAGES_BUILD_ENV` secret with `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` variables Web 与桌面构建统一从 GitHub Environment variables 读取公开的 WebSocket/STUN 配置，以 `VITE_WEBSOCKET_URL` 和 `WEBLINK_STUN_SERVERS` 变量替代原有 `PAGES_BUILD_ENV` secret
+
 ## [1.0.7] - 2026-09-29
 
 ### Improvements

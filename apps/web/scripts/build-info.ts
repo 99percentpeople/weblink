@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import type { Plugin } from "vite";
 
 export interface BuildInfo {
+  /** Package version for the built platform. */
   version: string;
+  /** Shared Web application version included in desktop builds. */
+  webVersion?: string;
   channel: "stable" | "dev";
   commit: string | null;
   builtAt: string;

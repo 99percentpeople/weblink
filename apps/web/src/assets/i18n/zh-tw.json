@@ -783,7 +783,8 @@
       "title": "關於 Weblink",
       "description1": "Weblink 是一款基於瀏覽器的P2P聊天、檔案傳輸、檔案同步和螢幕共享工具。",
       "disclaimer": "免責聲明：此應用程式採用點對點（P2P）技術，所有資料儲存於使用者端（瀏覽器）中，伺服器不儲存任何使用者資料，僅負責轉送訊號。使用者應自行承擔使用風險，開發者不對任何資料遺失或隱私洩露負責。",
-      "version": "版本",
+      "web_version": "Web 版本",
+      "desktop_version": "桌面版本",
       "author": "作者",
       "license": "授權條款",
       "github": "GitHub 儲存庫"

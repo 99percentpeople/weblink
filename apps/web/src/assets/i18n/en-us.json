@@ -794,7 +794,8 @@
       "title": "About Weblink",
       "description1": "Weblink is a browser-based P2P chat, file transfer, file synchronization and screen sharing tool.",
       "disclaimer": "Disclaimer: This application uses P2P technology, all data is stored in the user's client (browser), the server does not store any user data, only responsible for forwarding signaling. Users should bear the risks of using it at their own risk, and the developers are not responsible for any data loss or privacy breaches.",
-      "version": "Version",
+      "web_version": "Web version",
+      "desktop_version": "Desktop version",
       "author": "Author",
       "license": "License",
       "github": "GitHub Repository"

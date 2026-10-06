@@ -91,7 +91,10 @@ do not become the packaged signaling endpoint.
   portable or provide macOS/Linux capture support.
 - Desktop version starts at `0.1.0`, independently of the website. Update
   `apps/desktop/package.json` and its Rust crate version together. Tauri reads
-  the JS manifest version and Vite uses it for About and `version.json`.
+  the JS manifest version. About shows both the shared Web version from
+  `apps/web/package.json` and the desktop package version; copying version
+  information includes both. Desktop `version.json` retains the desktop package
+  `version` and adds `webVersion` for the bundled shared application.
 - Desktop builds omit the PWA manifest, service worker, share target and web
   update prompt. Updates currently mean installing a newer desktop package;
   automatic updates need a separate signed release channel.

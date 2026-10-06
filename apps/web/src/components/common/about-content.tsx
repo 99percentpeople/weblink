@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
   Copy,
   ExternalLink,
@@ -25,7 +25,13 @@ export function AboutContent() {
     setCopying(true);
     try {
       await navigator.clipboard.writeText(
-        `${APP_NAME} ${__APP_VERSION__}\nBuild: ${builtAt.toISOString()}`,
+        [
+          `${APP_NAME} ${__APP_VERSION__}`,
+          ...(__DESKTOP_VERSION__
+            ? [`Desktop: ${__DESKTOP_VERSION__}`]
+            : []),
+          `Build: ${builtAt.toISOString()}`,
+        ].join("\n"),
       );
       toast.success(t("common.notification.copy_success"));
     } catch {
@@ -56,12 +62,22 @@ export function AboutContent() {
       <dl class="grid min-w-0 grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
         <div class="space-y-1">
           <dt class="text-muted-foreground text-xs">
-            {t("common.about_dialog.version")}
+            {t("common.about_dialog.web_version")}
           </dt>
           <dd class="text-sm font-medium">
             {__APP_VERSION__}
           </dd>
         </div>
+        <Show when={__DESKTOP_VERSION__}>
+          <div class="space-y-1">
+            <dt class="text-muted-foreground text-xs">
+              {t("common.about_dialog.desktop_version")}
+            </dt>
+            <dd class="text-sm font-medium">
+              {__DESKTOP_VERSION__}
+            </dd>
+          </div>
+        </Show>
         <div class="space-y-1">
           <dt class="text-muted-foreground text-xs">
             {t("setting.about.build_time")}
