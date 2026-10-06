@@ -12,6 +12,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { createSignal } from "solid-js";
@@ -20,7 +21,11 @@ import {
   SettingSelect,
   SettingSlider,
 } from "@/components/settings/setting-controls";
-import { SettingField } from "@/components/settings/setting-layout";
+import {
+  SettingField,
+  SettingHeading,
+  SettingSection,
+} from "@/components/settings/setting-layout";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 beforeEach(() => {
@@ -29,6 +34,41 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it("exposes settings headings without adding page banner landmarks", () => {
+  render(() => (
+    <>
+      <header>Weblink</header>
+      <SettingSection title="Notifications">
+        <SettingHeading>Permissions</SettingHeading>
+        <SettingSwitch label="Allow notifications" />
+      </SettingSection>
+    </>
+  ));
+  expect(screen.getByRole("banner")).toHaveTextContent(
+    "Weblink",
+  );
+  const settings = screen.getByRole("region", {
+    name: "Notifications",
+  });
+  expect(
+    within(settings).getByRole("heading", {
+      name: "Notifications",
+      level: 3,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    within(settings).getByRole("heading", {
+      name: "Permissions",
+      level: 4,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    within(settings).getByRole("switch", {
+      name: "Allow notifications",
+    }),
+  ).toBeInTheDocument();
 });
 
 it("keeps switch labels and descriptions associated while disabled state changes", async () => {

@@ -28,14 +28,14 @@ export function SettingSection(
       aria-labelledby={props.title ? id : undefined}
     >
       <Show when={props.title}>
-        <header class="setting-section-header">
+        <div class="setting-section-header">
           <h3 id={id}>{props.title}</h3>
           <Show when={props.description}>
             <p class="setting-description">
               {props.description}
             </p>
           </Show>
-        </header>
+        </div>
       </Show>
       {props.children}
     </section>
@@ -49,14 +49,14 @@ export function SettingHeading(
   }>,
 ) {
   return (
-    <header class="setting-group-heading">
+    <div class="setting-group-heading">
       <h4 id={props.id}>{props.children}</h4>
       <Show when={props.description}>
         <p class="setting-description">
           {props.description}
         </p>
       </Show>
-    </header>
+    </div>
   );
 }
 
