@@ -30,14 +30,20 @@ import {
   type ClipboardTransferJob,
 } from "./clipboard-transfer";
 
+import {
+  remoteBundleLimit,
+  resolveRemoteFileLimit,
+} from "../domain/protocol/remote-file-limits";
+
 interface Options {
   platform: PlatformRuntime;
   host: Pick<RemoteControlHost, "clipboardScope">;
   protocol: Pick<WebRtcProtocol, "call" | "handle">;
   rtc: Pick<RtcService, "onSessionClosed">;
   registry: TransferRegistry;
-  caches: Pick<FileCacheFactory, "clipboardCache">;
+  caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
+  maxFileBytes?(): number;
   fileDestination?(): ClipboardFileDestination;
   cacheFile?(
     file: File,
@@ -56,6 +62,7 @@ interface Job extends ClipboardTransferJob {
   baseline?: number;
   content?: ClipboardContent;
   offered: boolean;
+  maxFileBytes: number;
   fileDestination?: ClipboardFileDestination;
 }
 export interface ClipboardCopyOptions {
@@ -226,7 +233,7 @@ export class RemoteClipboard {
     session: PeerSession,
     request: Pick<
       ClipboardRequest,
-      "operationId" | "grantId"
+      "operationId" | "grantId" | "maxFileBytes"
     >,
     control?: RemotePointer,
   ): Job {
@@ -254,6 +261,9 @@ export class RemoteClipboard {
       requiresInputEpoch: true,
       lifetime: new AbortController(),
       offered: false,
+      maxFileBytes: resolveRemoteFileLimit(
+        request.maxFileBytes,
+      ),
     };
     this.jobs.set(session, job);
     try {
@@ -296,7 +306,11 @@ export class RemoteClipboard {
       throw new Error("Remote control is not active");
     return this.start(
       session,
-      { operationId: createUuid(), grantId },
+      {
+        operationId: createUuid(),
+        grantId,
+        maxFileBytes: this.options.maxFileBytes?.(),
+      },
       control,
     );
   }
@@ -315,6 +329,12 @@ export class RemoteClipboard {
         ...payload,
         operationId: job.id,
         grantId: job.grantId,
+        ...(payload.action === "prepare" ||
+        payload.action === "read-current" ||
+        (payload.action === "offer" &&
+          payload.direction === "paste")
+          ? { maxFileBytes: job.maxFileBytes }
+          : {}),
       },
       {
         signal: job.lifetime.signal,
@@ -606,6 +626,7 @@ export class RemoteClipboard {
             scope,
             job.baseline,
             message.files,
+            job.maxFileBytes,
           );
         this.check(job);
         // The native adapter can return no alternatives when files were excluded.
@@ -624,6 +645,7 @@ export class RemoteClipboard {
         const content = await fromNativeClipboard(
           entries,
           job.lifetime.signal,
+          job.maxFileBytes,
         );
         await this.send(job, content, "copy");
       } else {
@@ -639,7 +661,10 @@ export class RemoteClipboard {
           message.kind!,
         );
         this.check(job);
-        const content = await unpackClipboard(file!);
+        const content = await unpackClipboard(
+          file!,
+          job.maxFileBytes,
+        );
         this.check(job);
         if (clipboardContentKind(content) !== message.kind)
           throw new Error(
@@ -656,6 +681,7 @@ export class RemoteClipboard {
               session.targetClientId,
               job.grantId,
             ),
+            job.maxFileBytes,
           );
           this.check(job);
         }
@@ -679,7 +705,10 @@ export class RemoteClipboard {
     content: ClipboardContent,
     direction: "copy" | "paste",
   ) {
-    const file = await packClipboard(content);
+    const file = await packClipboard(
+      content,
+      job.maxFileBytes,
+    );
     const kind = clipboardContentKind(content);
     this.check(job);
     await this.transfer(job, file.size, kind, file);
@@ -697,6 +726,10 @@ export class RemoteClipboard {
     kind: ClipboardContentKind,
     file?: File,
   ) {
+    if (size > remoteBundleLimit(job.maxFileBytes))
+      throw new Error(
+        "Clipboard bundle exceeds its size limit",
+      );
     return transferClipboard(
       {
         registry: this.options.registry,

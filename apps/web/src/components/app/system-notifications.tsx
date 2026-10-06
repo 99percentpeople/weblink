@@ -19,8 +19,8 @@ import { renderNotificationAvatar } from "@/libs/application/notifications/notif
 import { appendConversationDraft } from "@/libs/hooks/conversation-draft";
 import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
-import { createClipboardTransferFeedback } from "@/libs/hooks/create-clipboard-transfer-feedback";
-import { isClipboardTransferTask } from "@/libs/application/task-service";
+import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
+import { isRemoteContentTransferTask } from "@/libs/application/task-service";
 
 export function SystemNotificationBridge() {
   const state = useAppState();
@@ -54,7 +54,7 @@ export function SystemNotificationBridge() {
       (error) =>
         console.warn("System notification failed", error),
     );
-  createClipboardTransferFeedback({
+  createRemoteTransferFeedback({
     tasks: state.tasks.tasks,
     notifications: service,
     openTasks: () => {
@@ -296,7 +296,7 @@ export function SystemNotificationBridge() {
       if (
         (task.kind === "file-send" ||
           task.kind === "file-receive") &&
-        !isClipboardTransferTask(task) &&
+        !isRemoteContentTransferTask(task) &&
         previous &&
         previous !== "completed" &&
         task.status === "completed"

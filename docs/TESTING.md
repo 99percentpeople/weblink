@@ -131,7 +131,12 @@ browser context receives clipboard permissions for the local test origin.
 `bun run test:e2e:clipboard-cache` covers copying a multi-chunk remote file into File
 cache through real WebRTC data channels, compression/merge/fingerprint Workers and
 IndexedDB. It resets the controller input epoch after 8 MiB has arrived, then
-verifies every byte of the 12 MiB file and successful completion on both peers.
+verifies every byte of the 12 MiB file and successful completion on both peers. It also
+transfers the file in the opposite direction through RemoteFileDrop, checking native
+adapter arguments and completion after application. This browser test uses a native
+adapter fixture; the opt-in Rust `file_drop::windows::tests` test exercises real OLE
+across two STA threads, verifies CF_HDROP file bytes and confirms no clipboard mutation.
+The native test opens its own temporary target window and moves/restores the pointer.
 
 `node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
 workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This

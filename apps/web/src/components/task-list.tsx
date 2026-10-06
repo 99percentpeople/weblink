@@ -52,7 +52,7 @@ import {
   type SharedFileTask,
   isFinishedTask,
   isActiveTask,
-  isClipboardTransferTask,
+  isRemoteContentTransferTask,
   type TaskStatus,
 } from "@/libs/application/task-service";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
@@ -531,7 +531,7 @@ function TaskRow(props: {
         </Show>
         <Show
           when={
-            isClipboardTransferTask(props.task) &&
+            isRemoteContentTransferTask(props.task) &&
             props.task.status === "failed" &&
             sharedFile()?.error
           }

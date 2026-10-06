@@ -26,7 +26,7 @@ import type {
   SharedFileTask,
   TaskListItem,
 } from "@/libs/application/task-service";
-import { createClipboardTransferFeedback } from "@/libs/hooks/create-clipboard-transfer-feedback";
+import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 let focused = true;
@@ -122,7 +122,7 @@ function setup(native = true) {
     cancel,
   };
   const view = render(() => {
-    createClipboardTransferFeedback({
+    createRemoteTransferFeedback({
       tasks,
       notifications: service,
       openTasks,
@@ -162,6 +162,25 @@ function setup(native = true) {
     },
   };
 }
+it("uses the shared feedback for file drop tasks and reports native acceptance", async () => {
+  const s = setup(false);
+  s.setTasks([{ ...s.task, origin: "drop" }]);
+  expect(s.loading).toHaveBeenLastCalledWith(
+    "remote_control.file_drop.sending",
+    expect.anything(),
+  );
+  s.update({ status: "finalizing" });
+  expect(s.loading).toHaveBeenLastCalledWith(
+    "remote_control.file_drop.finalizing",
+    expect.anything(),
+  );
+  s.update({ status: "completed" });
+  expect(s.success).toHaveBeenLastCalledWith(
+    "remote_control.file_drop.completed",
+    expect.anything(),
+  );
+  s.close();
+});
 it("shows progress in one cancellable loading toast without native notifications", async () => {
   const s = setup(false);
   s.setTasks([s.task]);

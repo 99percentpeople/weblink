@@ -28,6 +28,8 @@ import {
   type RemotePointerOptions,
 } from "@/libs/domain/remote-control/pointer-options";
 
+import { DEFAULT_REMOTE_FILE_BYTES } from "../domain/protocol/remote-file-limits";
+
 export type Locale = string;
 export type ConnectionOptions = IceServerOptions;
 export type { TurnServerOptions, CompressionLevel };
@@ -146,6 +148,8 @@ export type AppOption = {
   remotePointer: RemotePointerOptions;
   remoteTouch: RemoteTouchOptions;
   remoteKeyboard: RemoteKeyboardOptions;
+  /** Shared per-operation file byte limit for remote drop and clipboard. */
+  remoteFileMaxSize: number;
   // Receiver
   maxMomeryCacheSlices: number;
   automaticDownload: boolean;
@@ -312,6 +316,7 @@ export const getDefaultAppOptions = (): AppOption => {
     remotePointer: { ...defaultRemotePointerOptions },
     remoteTouch: { ...defaultRemoteTouchOptions },
     remoteKeyboard: { ...defaultRemoteKeyboardOptions },
+    remoteFileMaxSize: DEFAULT_REMOTE_FILE_BYTES,
     application: { ...defaultApplicationOptions },
     notifications: { ...defaultNotificationOptions },
     // todo: add dialog to prompt user the file size

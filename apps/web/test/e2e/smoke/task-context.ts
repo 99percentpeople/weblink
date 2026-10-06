@@ -4,8 +4,19 @@ import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import { clipboardFixture } from "./clipboard-context";
 let context: AppStateContextProps;
 export const setTaskTestContext = (
-  value: Omit<AppStateContextProps, "remoteClipboard">,
+  value: Omit<
+    AppStateContextProps,
+    "remoteClipboard" | "remoteFileDrop"
+  >,
 ) => {
-  context = { ...value, remoteClipboard: clipboardFixture };
+  context = {
+    remoteFileDrop: {
+      drop: async () => {
+        throw new Error("Unexpected file drop");
+      },
+    },
+    ...value,
+    remoteClipboard: clipboardFixture,
+  };
 };
 export const useAppState = () => context;

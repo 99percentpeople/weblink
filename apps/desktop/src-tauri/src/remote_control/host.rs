@@ -21,7 +21,7 @@ pub(super) struct Peer {
     pub(super) capture: Arc<dyn GeometrySource>,
     pub(super) ready: bool,
     pub(super) last_geometry: Instant,
-    display: weblink_desktop_input::input::Rect,
+    pub(super) display: weblink_desktop_input::input::Rect,
     cursor_visibility: bool,
     cursor_visible: bool,
 }
@@ -219,6 +219,7 @@ impl Host {
                     "cursorVisibility": peer.cursor_visibility,
                     "cursorShape": cfg!(windows) && peer.cursor_visibility,
                     "persistentControl": true,
+                    "fileDrop": cfg!(windows),
                     "keyboard": true,
                     "textInput": true,
                     "touchpadPan": self.worker.status().pan_supported,

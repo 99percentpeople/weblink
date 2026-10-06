@@ -110,7 +110,8 @@ do not become the packaged signaling endpoint.
   the window, revokes control of this device, or quits the application. A second
   instance also shows and focuses the existing window. If tray creation fails,
   hiding is disabled and the close prompt offers only quit or cancel.
-- Files, clipboard, camera and microphone use existing WebView browser APIs. Native
+- File selection, camera and microphone use existing WebView browser APIs. Remote clipboard
+  access uses the platform adapter described below. Native
   drag/drop interception is disabled so the app's existing HTML drop handlers
   receive files. The host automatically grants camera and microphone access only
   to the local application origin (or the configured development origin). Windows
@@ -1055,7 +1056,7 @@ Windows desktop hosts expose plain text, HTML/RTF, PNG/common DIB images and loc
 files. Folder selections are converted into ZIP files using the existing folder
 compression worker; the receiving side gets the archive, without automatic extraction.
 Arbitrary native application-private formats, virtual shell files and file move/cut
-semantics are not transported. Each operation is bounded to 64 MiB and 4096 entries.
+semantics are not transported. Each operation uses the shared remote file limit (64 MiB by default, configurable up to 512 MiB) and at most 4096 entries. Text/image alternatives keep an independent 64 MiB limit.
 
 `remoteKeyboard.clipboardFiles` selects the destination for files copied from the host:
 `clipboard`, `cache` (File cache), or `off`. An unset preference stays unset until
@@ -1135,6 +1136,34 @@ replaced snapshots have a 30-minute grace period and are collected on subsequent
 writes. Staging is bounded to 512 MiB / 128 snapshots and cleared on normal exit.
 Actual clipboard interoperability and mobile browser permissions still require
 device acceptance.
+
+Remote file drag and drop is controlled by `remotePointer.fileDrop` (default off).
+Only the controller enables this preference; incoming operations require the existing
+remote-control grant. Web and desktop controllers use the same HTML file-drop surface,
+including HTTP browsers without clipboard APIs. Native hosts advertise `fileDrop` on
+the control channel; currently only Windows hosts implement it. Local files are dropped
+onto the remote video position, excluding letterbox margins. Directories use the existing
+ZIP worker. This feature supports copying into the remote computer, not dragging files
+out of a remote window into the controller's OS.
+
+The `remote-file-drop` prepare/offer/cancel exchange uses the same remote-content bundle,
+file channels, sender/receiver, temporary cache, backpressure and task feedback as remote
+clipboard files. The shared remote file size setting applies to both drop and clipboard files (default 64 MiB, configurable from 1 to 512 MiB per operation). The controller snapshots the limit at operation start and sends it to the host; both ends enforce total file bytes, including before and after folder compression. Bundle metadata has a separate 1 MiB budget; text/image alternatives retain their 64 MiB budget. There are at most 4096 entries; only multi-chunk transfers create
+tasks. Preparing directories shows a cancellable loading notice. No clipboard API access
+or Ctrl+V injection is used. The host stages real files and uses a shell IDataObject,
+IDropSource and OLE DoDragDrop on a dedicated STA. Only DROPEFFECT_COPY is allowed.
+Acknowledgement and task completion require acceptance by the target application; this
+does not mean a target's later asynchronous import or copy has finished. Applications
+that do not accept OLE file drops fail without falling back to clipboard paste.
+
+Preparation binds the grant, capture source, media ID, geometry revision, physical point,
+window identity and window bounds. Before native application and during drag continuation,
+the host rechecks authorization and the target. A different window or changed bounds,
+revoked control, disconnected session, disabled controller setting or cancellation stops
+pending work. Input focus/epoch resets alone do not invalidate an approved drop. A target
+can change its internal document/folder without changing its window identity; avoid such
+changes while a transfer is pending. Accepted file paths retain a 30-minute grace period,
+with staging bounded to 512 MiB / 128 drops and cleaned on subsequent drops or normal exit.
 
 The independent `remoteKeyboard.autoShow` and `collapseControls` preferences default
 to false. Automatic keyboard control subscribes to `text-input-watch` while the

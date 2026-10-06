@@ -16,6 +16,7 @@ export interface RuntimeCapabilities {
 }
 
 export interface PlatformRuntime {
+  readonly fileDrop?: NativeFileDrop;
   clipboard?: NativeClipboard;
   readonly notifications?: SystemNotifications;
   readonly pictureInPicture?: NativePictureInPicture;
@@ -37,6 +38,29 @@ export interface PlatformRuntime {
   /** Local device name for a new profile; null when unavailable. */
   getDeviceName?(): Promise<string | null>;
   initialize(): () => void;
+}
+
+export interface NativeFileDrop {
+  prepare(
+    scope: ClipboardScope,
+    operationId: string,
+    target: {
+      sourceId: string;
+      mediaId: string;
+      geometryRevision: string;
+    },
+    point: { x: number; y: number },
+    maxFileBytes?: number,
+  ): Promise<void>;
+  apply(
+    scope: ClipboardScope,
+    operationId: string,
+    files: { name: string; data: string }[],
+  ): Promise<void>;
+  cancel(
+    scope: ClipboardScope,
+    operationId: string,
+  ): Promise<void>;
 }
 
 /** Only the current native control grant may access the host clipboard. */
@@ -73,10 +97,12 @@ export interface NativeClipboard {
     scope?: ClipboardScope,
     after?: number,
     files?: boolean,
+    maxFileBytes?: number,
   ): Promise<ClipboardSnapshot>;
   write(
     entries: ClipboardEntry[],
     scope?: ClipboardScope,
+    maxFileBytes?: number,
   ): Promise<number>;
 }
 

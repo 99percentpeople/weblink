@@ -24,6 +24,7 @@ interface DropAreaProps<
   ref?: (element: HTMLElement) => void;
   as?: T;
   class?: string;
+  style?: JSX.CSSProperties;
 }
 
 export default function DropArea<T extends ValidComponent>(

@@ -1,8 +1,14 @@
+import { toast } from "solid-sonner";
+import { t } from "@/i18n";
 import {
   createEffect,
   createSignal,
   onCleanup,
 } from "solid-js";
+import {
+  resolveRemoteFileLimit,
+  MAX_REMOTE_FILE_BYTES,
+} from "@/libs/domain/protocol/remote-file-limits";
 import { platform } from "@/libs/platform/runtime";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
@@ -29,6 +35,17 @@ export function createRemoteClipboard(props: {
   enabled: boolean;
 }) {
   const access = appState.capabilities.clipboard;
+  const reportFileLimit = (error: unknown) => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+    if (/files exceed|file.*size limit/i.test(message))
+      toast.error(
+        t("remote_control.clipboard_transfer.failed"),
+        { description: message },
+      );
+  };
   let disposed = false;
   onCleanup(() => {
     disposed = true;
@@ -65,7 +82,11 @@ export function createRemoteClipboard(props: {
     if (access.native) {
       const entries = await toNativeClipboard(content);
       if (!current(grant)) throw new Error("Control ended");
-      await platform.clipboard!.write(entries);
+      await platform.clipboard!.write(
+        entries,
+        undefined,
+        MAX_REMOTE_FILE_BYTES,
+      );
     } else await writeBrowserClipboard(content);
   };
   const copy = (selection = true): boolean => {
@@ -156,7 +177,10 @@ export function createRemoteClipboard(props: {
           },
         },
       )
-      .catch((error) => reject(error))
+      .catch((error) => {
+        reject(error);
+        reportFileLimit(error);
+      })
       .finally(() => setBusy(false));
     return true;
   };
@@ -174,17 +198,31 @@ export function createRemoteClipboard(props: {
         props.control,
         content,
       )
-      .catch(() => {})
+      .catch(reportFileLimit)
       .finally(() => setBusy(false));
   };
   const paste = (): boolean => {
     if (!enabled() || !access.read) return false;
     if (busy()) return true;
     // A denied programmatic read never prevents a real paste event.
+    const maxFileBytes = resolveRemoteFileLimit(
+      appState.options.remoteFileMaxSize,
+    );
     const content = access.native
       ? platform
-          .clipboard!.read()
-          .then((s) => fromNativeClipboard(s.entries))
+          .clipboard!.read(
+            undefined,
+            undefined,
+            undefined,
+            maxFileBytes,
+          )
+          .then((s) =>
+            fromNativeClipboard(
+              s.entries,
+              undefined,
+              maxFileBytes,
+            ),
+          )
       : readBrowserClipboard();
     pasteContent(content);
     return true;
@@ -194,7 +232,13 @@ export function createRemoteClipboard(props: {
     event.preventDefault();
     event.stopPropagation();
     pasteContent(
-      fromBrowserPaste(event.clipboardData, access.read),
+      fromBrowserPaste(
+        event.clipboardData,
+        access.read,
+        resolveRemoteFileLimit(
+          appState.options.remoteFileMaxSize,
+        ),
+      ),
     );
     return true;
   };

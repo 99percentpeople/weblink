@@ -96,6 +96,14 @@ export function videoPosition(
   return { x: px, y: py };
 }
 export class RemotePointer extends EventTarget {
+  private fileDropAvailable = false;
+  fileDropTarget():
+    | { grantId: string; target: ControlTarget }
+    | undefined {
+    const grantId = this.clipboardGrant();
+    if (this.fileDropAvailable && grantId && this.target)
+      return { grantId, target: { ...this.target } };
+  }
   clipboardGrant(): string | undefined {
     const s = this.session?.state;
     return s?.type === "granted" &&
@@ -443,6 +451,7 @@ export class RemotePointer extends EventTarget {
         return;
       this.target = { ...v.target };
       this.keyboardAvailable = v.keyboard === true;
+      this.fileDropAvailable = v.fileDrop === true;
       this.textAvailable =
         this.keyboardAvailable && v.textInput === true;
       this.touchAvailable =

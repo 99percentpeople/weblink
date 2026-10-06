@@ -2,6 +2,11 @@ import { For, Show } from "solid-js";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
+import { Input } from "@/components/ui/input";
+import {
+  MAX_REMOTE_FILE_BYTES,
+  resolveRemoteFileLimit,
+} from "@/libs/domain/protocol/remote-file-limits";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -380,6 +385,29 @@ export default function RemoteControlSettings() {
       <div class="flex flex-col gap-2">
         <Switch
           class="flex w-full items-center justify-between gap-3"
+          checked={pointer().fileDrop}
+          onChange={(value) =>
+            setAppOptions(
+              "remotePointer",
+              "fileDrop",
+              value,
+            )
+          }
+        >
+          <SwitchLabel>
+            {t(`${prefix}file_drop.title`)}
+          </SwitchLabel>
+          <SwitchControl>
+            <SwitchThumb />
+          </SwitchControl>
+        </Switch>
+        <p class="muted">
+          {t(`${prefix}file_drop.description`)}
+        </p>
+      </div>
+      <div class="flex flex-col gap-2">
+        <Switch
+          class="flex w-full items-center justify-between gap-3"
           checked={clipboardEnabled()}
           onChange={(value) =>
             setAppOptions(
@@ -468,6 +496,59 @@ export default function RemoteControlSettings() {
             {t(`${prefix}clipboard_files.unavailable`)}
           </p>
         </Show>
+      </div>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-3">
+          <Label for="remote-file-max-size">
+            {t(`${prefix}file_size_limit.title`)}
+          </Label>
+          <div class="flex items-center gap-2">
+            <Input
+              id="remote-file-max-size"
+              class="w-24"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MAX_REMOTE_FILE_BYTES / 1024 / 1024}
+              step={1}
+              value={
+                resolveRemoteFileLimit(
+                  appState.options.remoteFileMaxSize,
+                ) /
+                1024 /
+                1024
+              }
+              onChange={(event) => {
+                const value =
+                  event.currentTarget.valueAsNumber;
+                const bytes = Number.isFinite(value)
+                  ? Math.min(
+                      MAX_REMOTE_FILE_BYTES,
+                      Math.max(1, Math.round(value)) *
+                        1024 *
+                        1024,
+                    )
+                  : resolveRemoteFileLimit(
+                      appState.options.remoteFileMaxSize,
+                    );
+                setAppOptions("remoteFileMaxSize", bytes);
+                event.currentTarget.value = String(
+                  bytes / 1024 / 1024,
+                );
+              }}
+              aria-describedby="remote-file-max-size-description"
+            />
+            <span class="text-muted-foreground text-sm">
+              MiB
+            </span>
+          </div>
+        </div>
+        <p
+          id="remote-file-max-size-description"
+          class="muted"
+        >
+          {t(`${prefix}file_size_limit.description`)}
+        </p>
       </div>
       <p class="muted">{t(`${prefix}changes`)}</p>
     </section>

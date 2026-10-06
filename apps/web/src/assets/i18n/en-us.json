@@ -374,7 +374,7 @@
       },
       "clipboard": {
         "title": "Synchronize remote clipboard",
-        "description": "Enable on the controller to copy and paste text, rich text, images and files. Folders are zipped; each operation is limited to 64 MiB. Clipboard writing requires local API support and permission; system paste remains available without programmatic read access."
+        "description": "Enable on the controller to copy and paste text, RTF, images and files. Folders are zipped first. Writing requires local clipboard APIs and permission; system paste still works when programmatic reading is unavailable."
       },
       "clipboard_files": {
         "loading": "Checking clipboard availability…",
@@ -389,6 +389,14 @@
         "title": "Host emergency stop shortcut",
         "description": "Windows desktop only. While this computer is under remote control, this shortcut stops it even when the app is in the background. It does not reserve or intercept the keys; other apps may also respond.",
         "failed": "Could not update the emergency shortcut listener. The previous setting was kept. Please try again."
+      },
+      "file_drop": {
+        "title": "Remote file drag and drop",
+        "description": "Enable on the controller to drop files onto the remote screen. Requires a Windows desktop host and a target application that accepts file drops. Folders are zipped first."
+      },
+      "file_size_limit": {
+        "title": "File transfer size limit",
+        "description": "Shared by drag and drop and copy/paste, counting total file bytes per operation. Default: 64 MiB; range: 1–512 MiB. Folders must fit before and after ZIP compression. Changes apply to the next operation."
       }
     },
     "permissions": {
@@ -1275,6 +1283,16 @@
     "system_keyboard_stopped": "System keyboard forwarding stopped. Click the remote screen to try again, or turn off system shortcuts in Remote control settings.",
     "capture_failed": "Could not capture the pointer. Click the remote screen to retry, or choose Local cursor in Remote control settings.",
     "capture_unavailable": "This host does not support pointer capture. Choose Local cursor in Remote control settings.",
-    "capture_hint": "Click to capture the pointer. Press {{shortcut}} to release the pointer and keyboard."
+    "capture_hint": "Click to capture the pointer. Press {{shortcut}} to release the pointer and keyboard.",
+    "file_drop": {
+      "hint": "Drop files at this remote position",
+      "unavailable": "File drop is disabled, busy or unavailable on this host",
+      "sending": "Sending dropped files",
+      "receiving": "Receiving dropped files",
+      "finalizing": "Dropping files on the remote computer",
+      "completed": "Remote file drop completed",
+      "failed": "Remote file drop failed",
+      "details": "Open the task list for transfer details."
+    }
   }
 }

@@ -1,5 +1,6 @@
 import type { FileFingerprint } from "./file-fingerprint";
 import type { ClipboardRequest } from "./clipboard";
+import type { FileDropRequest } from "./file-drop";
 export type MessageID = string;
 export type ProtocolPeerID = string;
 export type ProtocolFileID = string;
@@ -259,6 +260,8 @@ export type RequestSharedFileMessage =
 
 export type SessionMessage =
   | (BaseExchangeMessage &
+      FileDropRequest & { type: "remote-file-drop" })
+  | (BaseExchangeMessage &
       ClipboardRequest & { type: "remote-clipboard" })
   | RequestSharedFileMessage
   | FileOfferResultMessage
@@ -309,6 +312,7 @@ const createMessageBase = (
 
 /** Wire behavior, shared by every client implementation. */
 export const requestSpec = {
+  "remote-file-drop": { ack: "receive" },
   "remote-clipboard": { ack: "receive" },
   "send-text": { ack: "receive" },
   "room-capabilities": { ack: "receive" },
@@ -339,12 +343,12 @@ export type NotificationType =
 export type MessageOf<T extends SessionMessage["type"]> =
   Extract<SessionMessage, { type: T }>;
 
+type PayloadFields<M> = M extends unknown
+  ? Omit<M, keyof BaseExchangeMessage | "version">
+  : never;
 export type MessagePayload<
   T extends SessionMessage["type"],
-> = Omit<
-  MessageOf<T>,
-  keyof BaseExchangeMessage | "version"
->;
+> = PayloadFields<MessageOf<T>>;
 
 export type MessageMetadata = {
   id?: MessageID;
@@ -406,7 +410,7 @@ export function createSessionMessage<
                   type === "storage"
                 ? { version: P2P_STORAGE_PROTOCOL_VERSION }
                 : {}),
-  } as MessageOf<T>;
+  } as unknown as MessageOf<T>;
 }
 
 export function isRequestType(

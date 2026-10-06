@@ -34,6 +34,55 @@ vi.mock("@/libs/utils/process-file", () => ({
   handleDropItems: vi.fn(async () => []),
 }));
 describe("clipboard content boundaries", () => {
+  it("counts file totals separately from manifest overhead and text", async () => {
+    const content = [
+      {
+        type: "file" as const,
+        name: "a",
+        blob: new Blob(["abc"]),
+      },
+      {
+        type: "file" as const,
+        name: "b",
+        blob: new Blob(["de"]),
+      },
+      {
+        type: "text/plain" as const,
+        blob: new Blob(["text longer than five bytes"]),
+      },
+    ];
+    const bundle = await packClipboard(content, 5);
+    expect(bundle.size).toBeGreaterThan(5);
+    expect((await unpackClipboard(bundle, 5)).length).toBe(
+      3,
+    );
+    await expect(packClipboard(content, 4)).rejects.toThrow(
+      "MiB limit",
+    );
+    await expect(
+      unpackClipboard(bundle, 4),
+    ).rejects.toThrow("MiB limit");
+  });
+  it("supports files above the previous 64 MiB ceiling when configured", async () => {
+    const blob = new Blob([
+      new Uint8Array(65 * 1024 * 1024),
+    ]);
+    const content = [
+      { type: "file" as const, name: "large.bin", blob },
+    ];
+    await expect(
+      packClipboard(content, 64 * 1024 * 1024),
+    ).rejects.toThrow("MiB limit");
+    const bundle = await packClipboard(
+      content,
+      128 * 1024 * 1024,
+    );
+    const restored = await unpackClipboard(
+      bundle,
+      128 * 1024 * 1024,
+    );
+    expect(restored[0].blob.size).toBe(blob.size);
+  });
   it("preserves Unicode text, rich alternatives, image bytes and multiple files", async () => {
     const content = [
       {
@@ -178,6 +227,13 @@ describe("clipboard content boundaries", () => {
       { ...base, action: "read", size: 20 },
       { ...base, action: "read", files: "yes" },
       { ...offer, files: false },
+      { ...offer, maxFileBytes: 0 },
+      { ...offer, maxFileBytes: -1 },
+      { ...offer, maxFileBytes: NaN },
+      { ...offer, maxFileBytes: 1.5 },
+      { ...offer, maxFileBytes: 512 * 1024 * 1024 + 1 },
+      { ...base, action: "read", maxFileBytes: 5 },
+      { ...base, action: "watch", maxFileBytes: 5 },
       { ...base, action: "prepare", grantId: "" },
       {
         ...offer,

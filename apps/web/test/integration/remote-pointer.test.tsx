@@ -33,10 +33,18 @@ const fixture = vi.hoisted(() => ({
   control: undefined as any,
   video: undefined as any,
   error: vi.fn(),
+  loading: vi.fn(() => "drop-toast"),
+  dismiss: vi.fn(),
+  success: vi.fn(),
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
-  toast: { error: fixture.error },
+  toast: {
+    error: fixture.error,
+    loading: fixture.loading,
+    dismiss: fixture.dismiss,
+    success: fixture.success,
+  },
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
@@ -219,6 +227,73 @@ const exitKeys = {
   altKey: true,
   shiftKey: true,
 };
+
+it("captures dropped files synchronously and maps the remote position without clipboard APIs", async () => {
+  setAppState("options", "remotePointer", "fileDrop", true);
+  fixture.control.fileDropTarget = () => ({
+    grantId: "grant",
+    target: {
+      sourceId: "source",
+      mediaId: "media",
+      geometryRevision: "layout",
+    },
+  });
+  const file = new File(["bytes"], "file.txt");
+  let readable = true;
+  const getAsFile = vi.fn(() => {
+    if (!readable) throw new Error("Expired drop data");
+    return file;
+  });
+  const drop = vi.fn(
+    async (_peer, _control, _point, read) => {
+      expect(
+        await read(
+          new AbortController().signal,
+          64 * 1024 * 1024,
+        ),
+      ).toEqual([file]);
+    },
+  );
+  render(() => (
+    <RemoteControlOverlay
+      enabled
+      clientId="peer"
+      fileDrop={{ drop }}
+    />
+  ));
+  const event = new MouseEvent("drop", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 100,
+  });
+  Object.defineProperty(event, "dataTransfer", {
+    value: { types: ["Files"], items: [{ getAsFile }] },
+  });
+  fireEvent(surface(), event);
+  readable = false;
+  expect(event.defaultPrevented).toBe(true);
+  expect(getAsFile).toHaveBeenCalledOnce();
+  expect(drop).toHaveBeenCalledWith(
+    "peer",
+    fixture.control,
+    { x: 0.5, y: 0.5 },
+    expect.any(Function),
+    expect.any(AbortSignal),
+    expect.any(Function),
+  );
+  await waitFor(() =>
+    expect(fixture.dismiss).toHaveBeenCalled(),
+  );
+  setAppState(
+    "options",
+    "remotePointer",
+    "fileDrop",
+    false,
+  );
+  fireEvent(surface(), event);
+  expect(drop).toHaveBeenCalledOnce();
+});
 
 it("forwards absolute pointer input and focused keyboard input by default in local-cursor mode", () => {
   render(() => <RemoteControlOverlay enabled />);
@@ -1325,7 +1400,37 @@ it("releases ordinary-mode keyboard focus with the shared shortcut without endin
   expect(fixture.control.input).toHaveBeenCalledOnce();
 });
 
-it("persists cursor and clipboard switches independently", () => {
+it("stores one shared file size limit without changing either feature switch", () => {
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const input = screen.getByRole("spinbutton", {
+    name: "setting.remote_control.file_size_limit.title",
+  });
+  expect(input).toHaveValue(64);
+  fireEvent.change(input, { target: { value: "128" } });
+  expect(appState.options.remoteFileMaxSize).toBe(
+    128 * 1024 * 1024,
+  );
+  expect(appState.options.remotePointer.fileDrop).toBe(
+    false,
+  );
+  expect(appState.options.remoteKeyboard.clipboard).toBe(
+    false,
+  );
+  fireEvent.change(input, { target: { value: "0" } });
+  expect(input).toHaveValue(1);
+  fireEvent.change(input, { target: { value: "999" } });
+  expect(input).toHaveValue(512);
+  fireEvent.change(input, { target: { value: "" } });
+  expect(input).toHaveValue(512);
+  expect(appState.options.remoteFileMaxSize).toBe(
+    512 * 1024 * 1024,
+  );
+});
+it("persists cursor, clipboard and file drop switches independently", () => {
   render(() => (
     <SettingsStateProvider>
       <RemoteControlSettings />
@@ -1337,6 +1442,10 @@ it("persists cursor and clipboard switches independently", () => {
   const clipboard = screen.getByRole("switch", {
     name: "setting.remote_control.clipboard.title",
   });
+  const drop = screen.getByRole("switch", {
+    name: "setting.remote_control.file_drop.title",
+  });
+  expect(drop).not.toBeChecked();
   expect(cursor).toBeChecked();
   expect(clipboard).not.toBeChecked();
   expect(
@@ -1345,6 +1454,13 @@ it("persists cursor and clipboard switches independently", () => {
     }),
   ).toBeInTheDocument();
   fireEvent.click(cursor);
+  fireEvent.click(clipboard);
+  fireEvent.click(drop);
+  expect(appState.options.remotePointer.fileDrop).toBe(
+    true,
+  );
+  fireEvent.click(clipboard);
+  expect(drop).toBeChecked();
   fireEvent.click(clipboard);
   expect(appState.options.remotePointer.syncCursor).toBe(
     false,

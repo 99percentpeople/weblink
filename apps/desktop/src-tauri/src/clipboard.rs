@@ -1,4 +1,5 @@
-//! Clipboard IPC is local-only; remote accesses additionally require a live control grant.
+//! Native clipboard IPC; remote access additionally requires a live control grant.
+use crate::staged_files::{file_limit, file_name};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -146,8 +147,10 @@ pub async fn clipboard_read(
     scope: Option<Scope>,
     after: Option<u32>,
     files: Option<bool>,
+    max_file_bytes: Option<usize>,
 ) -> Result<Snapshot, String> {
     local(&window)?;
+    let max_file_bytes = file_limit(max_file_bytes)?;
     let service = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let until = Instant::now() + Duration::from_millis(1800);
@@ -162,7 +165,7 @@ pub async fn clipboard_read(
         access(&service, &scope, || Ok(()))?;
         let (mut snapshot, paths) = native::read()?;
         access(&service, &scope, || Ok(()))?;
-        let mut size = snapshot.entries.iter().map(|e| e.data.len() * 3 / 4).sum();
+        let mut size = 0;
         for (index, path) in paths.iter().filter(|_| files != Some(false)).enumerate() {
             let p = Path::new(path);
             let name = p
@@ -177,6 +180,7 @@ pub async fn clipboard_read(
                 &mut snapshot.entries,
                 &mut size,
                 0,
+                max_file_bytes,
             )?;
         }
         access(&service, &scope, || {
@@ -199,6 +203,7 @@ fn collect(
     entries: &mut Vec<Entry>,
     size: &mut usize,
     depth: usize,
+    limit: usize,
 ) -> Result<(), String> {
     if entries.len() >= MAX_ENTRIES || depth > 64 {
         return Err("Too many clipboard files".into());
@@ -231,23 +236,30 @@ fn collect(
                 entries,
                 size,
                 depth + 1,
+                limit,
             )?;
         }
     } else if meta.is_file() {
-        if meta.len() > LIMIT.saturating_sub(*size) as u64 {
-            return Err("Clipboard content exceeds 64 MiB".into());
+        if meta.len() > limit.saturating_sub(*size) as u64 {
+            return Err(format!(
+                "Files exceed the {} MiB limit",
+                limit as f64 / 1024.0 / 1024.0
+            ));
         }
         // Bound reads even when the file grows after metadata was sampled.
         use std::io::Read;
         let mut data = Vec::new();
         std::fs::File::open(path)
             .map_err(|e| e.to_string())?
-            .take((LIMIT - *size + 1) as u64)
+            .take((limit - *size + 1) as u64)
             .read_to_end(&mut data)
             .map_err(|e| e.to_string())?;
         *size += data.len();
-        if *size > LIMIT {
-            return Err("Clipboard content exceeds 64 MiB".into());
+        if *size > limit {
+            return Err(format!(
+                "Files exceed the {} MiB limit",
+                limit as f64 / 1024.0 / 1024.0
+            ));
         }
         let mut entry = Entry::bytes("file", &data);
         entry.name = Some(path.file_name().unwrap().to_string_lossy().into_owned());
@@ -259,29 +271,16 @@ fn collect(
     }
     Ok(())
 }
-fn file_name(name: &str) -> Result<(), String> {
-    let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
-    if name.is_empty()
-        || name.len() > 240
-        || name.ends_with(['.', ' '])
-        || name.chars().any(|c| c < ' ' || "<>:\"/\\|?*".contains(c))
-        || ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str())
-        || (stem.len() == 4
-            && (stem.starts_with("COM") || stem.starts_with("LPT"))
-            && matches!(stem.as_bytes()[3], b'1'..=b'9'))
-    {
-        return Err("Invalid clipboard filename".into());
-    }
-    Ok(())
-}
 #[tauri::command]
 pub async fn clipboard_write(
     window: tauri::WebviewWindow,
     service: tauri::State<'_, crate::remote_control::Shared>,
     scope: Option<Scope>,
     entries: Vec<Entry>,
+    max_file_bytes: Option<usize>,
 ) -> Result<u32, String> {
     local(&window)?;
+    let max_file_bytes = file_limit(max_file_bytes)?;
     let service = service.inner().clone();
     #[cfg(windows)]
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
@@ -292,19 +291,33 @@ pub async fn clipboard_write(
         if entries.is_empty() || entries.len() > MAX_ENTRIES {
             return Err("Invalid clipboard contents".into());
         }
-        let mut total = 0usize;
+        let mut file_bytes = 0usize;
+        let mut other_bytes = 0usize;
         let mut formats = Vec::new();
         let mut paths = Vec::new();
         let mut directory = None;
         let mut seen = std::collections::HashSet::new();
         for entry in entries {
-            if entry.data.len() > LIMIT * 4 / 3 + 4 {
-                return Err("Clipboard content exceeds 64 MiB".into());
+            let (used, limit) = if entry.kind == "file" {
+                (&mut file_bytes, max_file_bytes)
+            } else {
+                (&mut other_bytes, LIMIT)
+            };
+            if entry.data.len() > (limit - *used) * 4 / 3 + 4 {
+                return Err(format!(
+                    "Clipboard {} content exceeds the {} MiB limit",
+                    entry.kind,
+                    limit as f64 / 1024.0 / 1024.0
+                ));
             }
             let data = STANDARD.decode(&entry.data).map_err(|e| e.to_string())?;
-            total += data.len();
-            if total > LIMIT {
-                return Err("Clipboard content exceeds 64 MiB".into());
+            *used += data.len();
+            if *used > limit {
+                return Err(format!(
+                    "Clipboard {} content exceeds the {} MiB limit",
+                    entry.kind,
+                    limit as f64 / 1024.0 / 1024.0
+                ));
             }
             if entry.kind == "file" {
                 let name = entry.name.as_deref().ok_or("Missing clipboard filename")?;
@@ -337,7 +350,7 @@ pub async fn clipboard_write(
         });
         if directory.is_some()
             && (retained.len() >= 128
-                || retained.iter().map(|e| e.bytes).sum::<usize>() + total > 512 * 1024 * 1024)
+                || retained.iter().map(|e| e.bytes).sum::<usize>() + file_bytes > 512 * 1024 * 1024)
         {
             return Err(
                 "Clipboard file staging is full; restart the application to clear it".into(),
@@ -347,7 +360,7 @@ pub async fn clipboard_write(
         if let Some(dir) = directory {
             retained.push(StagedFiles {
                 _directory: dir,
-                bytes: total,
+                bytes: file_bytes,
                 created: Instant::now(),
                 sequence: result,
             });
@@ -388,6 +401,33 @@ mod native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bounds_native_file_reads_before_loading_and_counts_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a"), [1, 2, 3]).unwrap();
+        std::fs::write(dir.path().join("b"), [4, 5]).unwrap();
+        let mut entries = Vec::new();
+        let mut size = 0;
+        collect(dir.path(), "folder", "0", &mut entries, &mut size, 0, 5).unwrap();
+        assert_eq!(size, 5);
+        assert_eq!(entries.len(), 3);
+        assert!(collect(dir.path(), "folder", "0", &mut Vec::new(), &mut 0, 0, 4).is_err());
+        let path = dir.path().join("large");
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len((crate::staged_files::DEFAULT_LIMIT + 1) as u64)
+            .unwrap();
+        assert!(collect(
+            &path,
+            "large",
+            "1",
+            &mut Vec::new(),
+            &mut 0,
+            0,
+            crate::staged_files::DEFAULT_LIMIT
+        )
+        .is_err());
+    }
     #[test]
     fn rejects_paths_and_windows_devices() {
         for name in ["../a", "a\\b", "C:a", "NUL.txt", "COM1", "a.", "a ", ""] {

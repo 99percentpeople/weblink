@@ -7,12 +7,14 @@ mod application;
 mod capabilities;
 mod capture;
 mod clipboard;
+mod file_drop;
 mod keyboard;
 mod media_permissions;
 mod notifications;
 mod picture_in_picture;
 mod preview;
 mod remote_control;
+mod staged_files;
 
 fn same_origin(left: &Url, right: &Url) -> bool {
     left.scheme() == right.scheme()
@@ -101,6 +103,9 @@ pub fn run() {
             clipboard::clipboard_unwatch,
             clipboard::clipboard_read,
             clipboard::clipboard_write,
+            file_drop::file_drop_prepare,
+            file_drop::file_drop_apply,
+            file_drop::file_drop_cancel,
             remote_control::remote_control_status,
             remote_control::remote_control_watch,
             remote_control::remote_control_unwatch,
@@ -236,6 +241,7 @@ pub fn run() {
             }
             if matches!(event, tauri::RunEvent::Exit) {
                 clipboard::shutdown();
+                file_drop::shutdown();
                 app.state::<application::Service>().shutdown();
                 app.state::<notifications::Service>().clear();
                 app.state::<keyboard::Shared>().close();

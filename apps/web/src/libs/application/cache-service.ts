@@ -19,10 +19,16 @@ import {
 import { FileCatalogIndex } from "./file-catalog-index";
 
 export class FileCacheFactory {
-  /** Ephemeral clipboard transfers never enter the library or chat history. */
-  async clipboardCache(id: string): Promise<ChunkCache> {
-    if (!/^remote-clipboard_[a-zA-Z0-9-]+$/.test(id))
-      throw new Error("Invalid clipboard cache id");
+  /** Ephemeral remote content transfers never enter the library or chat history. */
+  async temporaryTransferCache(
+    id: string,
+  ): Promise<ChunkCache> {
+    if (
+      !/^remote-(?:clipboard|drop)_[a-zA-Z0-9-]+$/.test(id)
+    )
+      throw new Error(
+        "Invalid temporary transfer cache id",
+      );
     const cache = new IDBChunkCache({
       id,
       maxMomeryCacheSize: 4 * 1024 * 1024,
@@ -90,7 +96,7 @@ export class FileCacheFactory {
       );
 
       for (const cache of caches) {
-        if (cache.id.startsWith("remote-clipboard_")) {
+        if (/^remote-(clipboard|drop)_/.test(cache.id)) {
           await cache.cleanup();
           continue;
         }

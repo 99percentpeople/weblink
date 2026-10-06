@@ -42,6 +42,7 @@ afterEach(() =>
   disposers.splice(0).forEach((stop) => stop()),
 );
 function setup() {
+  let maxFileBytes = 64 * 1024 * 1024;
   let destination: ClipboardFileDestination = "clipboard";
   const cacheFile = vi.fn(
     async (_file: File, _signal: AbortSignal) => {},
@@ -135,13 +136,14 @@ function setup() {
       rtc: transport,
       registry,
       caches: {
-        clipboardCache: async (id) => {
+        temporaryTransferCache: async (id) => {
           const cache = fakeCache(id);
           caches.set(id, cache);
           return cache;
         },
       },
       fileDestination: () => destination,
+      maxFileBytes: () => (i === 0 ? maxFileBytes : 1),
       cacheFile,
       enabled: () => (i === 0 ? enabled : hostEnabled),
       getSession: (id) =>
@@ -201,6 +203,9 @@ function setup() {
   }
   return {
     cacheFile,
+    limit: (bytes: number) => {
+      maxFileBytes = bytes;
+    },
     destination: (next: ClipboardFileDestination) => {
       destination = next;
       sides[0].service.syncPermissions();
@@ -232,6 +237,87 @@ function setup() {
   };
 }
 describe("authorized remote clipboard", () => {
+  it.each([true, false])(
+    "enforces the controller file budget on remote copy (selection=%s)",
+    async (selection) => {
+      const s = setup();
+      s.limit(5);
+      s.native.read.mockResolvedValue({
+        sequence: 8,
+        entries: [
+          { type: "file", name: "a", data: btoa("abc") },
+          { type: "file", name: "b", data: btoa("def") },
+        ],
+      });
+      await expect(
+        s.a.service.copy("peer1", s.control, selection),
+      ).rejects.toThrow("MiB limit");
+      expect(s.native.read).toHaveBeenCalledWith(
+        expect.anything(),
+        selection ? 7 : undefined,
+        true,
+        5,
+      );
+      expect(s.a.caches.size).toBe(0);
+      expect(s.b.caches.size).toBe(0);
+    },
+  );
+  it("rejects oversized paste before transferring and does not limit text with the file preference", async () => {
+    const s = setup();
+    s.limit(3);
+    await expect(
+      s.a.service.paste("peer1", s.control, [
+        {
+          type: "file",
+          name: "a",
+          blob: new Blob(["abcd"]),
+        },
+      ]),
+    ).rejects.toThrow("MiB limit");
+    expect(s.native.write).not.toHaveBeenCalled();
+    expect(s.a.caches.size).toBe(0);
+    s.applied.resolve();
+    await s.a.service.paste("peer1", s.control, [
+      {
+        type: "text/plain",
+        blob: new Blob(["longer text"]),
+      },
+    ]);
+    expect(s.native.write).toHaveBeenCalledOnce();
+  });
+  it("snapshots a raised controller file limit for both copy and paste, ignoring the host preference", async () => {
+    const s = setup();
+    const limit = 128 * 1024 * 1024;
+    s.limit(limit);
+    const ready = deferred<{
+      sequence: number;
+      entries: ClipboardEntry[];
+    }>();
+    s.native.read.mockImplementation(() => ready.promise);
+    const copy = s.a.service.copy("peer1", s.control);
+    s.limit(1);
+    ready.resolve({
+      sequence: 8,
+      entries: [
+        { type: "file", name: "a", data: btoa("abcd") },
+      ],
+    });
+    const content = await copy;
+    expect(s.native.read).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+      true,
+      limit,
+    );
+    s.limit(limit);
+    s.applied.resolve();
+    await s.a.service.paste("peer1", s.control, content);
+    expect(s.native.write).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      limit,
+    );
+  });
   const copiedFiles = [
     {
       type: "file" as const,
@@ -351,6 +437,7 @@ describe("authorized remote clipboard", () => {
       expect.anything(),
       7,
       false,
+      64 * 1024 * 1024,
     );
     expect(s.cacheFile).not.toHaveBeenCalled();
     expect(s.a.caches.size).toBe(0);
@@ -586,6 +673,7 @@ describe("authorized remote clipboard", () => {
       },
       7,
       true,
+      64 * 1024 * 1024,
     );
     expect(s.control.input).toHaveBeenCalledWith({
       type: "key",

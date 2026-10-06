@@ -8,6 +8,7 @@ import type { ConversationHistoryService } from "@/libs/application/messaging/co
 import type { FileCatalogService } from "@/libs/application/file-catalog-service";
 import type { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import type { RemoteClipboard } from "@/libs/application/remote-clipboard";
+import type { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 import type { TaskService } from "@/libs/application/task-service";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
 import type { SpeedTestApprovalRequest } from "@/components/speed-test-approval";
@@ -28,6 +29,7 @@ import type { AppMediaCapabilities } from "./create-app-media-capabilities";
 import type { AppStartup } from "./create-app-startup";
 import type { AppCaptureSources } from "./create-app-capture-sources";
 export interface AppStateContextProps {
+  remoteFileDrop: Pick<RemoteFileDrop, "drop">;
   remoteClipboard: Pick<
     RemoteClipboard,
     "copy" | "paste" | "watch"

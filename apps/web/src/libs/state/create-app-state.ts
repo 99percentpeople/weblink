@@ -4,6 +4,8 @@ import { setRoomConfig } from "@/libs/state/permission-options";
 import { t } from "@/i18n";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import { RemoteClipboard } from "@/libs/application/remote-clipboard";
+import { RemoteFileDrop } from "@/libs/application/remote-file-drop";
+import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
@@ -233,7 +235,10 @@ export function createAppState(
     },
   });
   onCleanup(() => files.dispose());
+  const maxRemoteFileBytes = () =>
+    appState.options.remoteFileMaxSize;
   const remoteClipboard = new RemoteClipboard({
+    maxFileBytes: maxRemoteFileBytes,
     platform,
     host: sessionService.remoteControl,
     protocol,
@@ -269,6 +274,28 @@ export function createAppState(
     remoteClipboard.syncPermissions();
   });
   onCleanup(() => remoteClipboard.dispose());
+  const remoteFileDrop = new RemoteFileDrop({
+    maxFileBytes: maxRemoteFileBytes,
+    platform,
+    host: sessionService.remoteControl,
+    protocol,
+    rtc,
+    registry: transferManager,
+    caches: cacheManager,
+    enabled: () =>
+      resolveRemotePointerOptions(
+        appState.options.remotePointer,
+      ).fileDrop,
+    getSession: (id) => sessionService.sessions[id],
+  });
+  createEffect(() => {
+    appState.options.remotePointer.fileDrop;
+    sessionService.remoteControl.status();
+    sessionService.remoteControl.revision();
+    Object.values(sessionService.sessions);
+    remoteFileDrop.syncPermissions();
+  });
+  onCleanup(() => remoteFileDrop.dispose());
   let previousAttachments = new Set<string>();
   createEffect(() => {
     const current = new Set(
@@ -379,10 +406,12 @@ export function createAppState(
     sharedFiles: () => [
       ...sharedFiles.tasks(),
       ...remoteClipboard.tasks(),
+      ...remoteFileDrop.tasks(),
     ],
     clearSharedFiles: () => {
       sharedFiles.clearFinished();
       remoteClipboard.clearFinished();
+      remoteFileDrop.clearFinished();
     },
     preparations: cacheManager.preparations,
     clearPreparations: cacheManager.clearPreparations,
@@ -824,6 +853,7 @@ export function createAppState(
 
   return {
     remoteClipboard,
+    remoteFileDrop,
     permissions,
     ...settings,
     conversationMessaging,

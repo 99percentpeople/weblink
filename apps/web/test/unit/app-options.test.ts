@@ -1,3 +1,7 @@
+import {
+  resolveRemoteFileLimit,
+  MAX_REMOTE_FILE_BYTES,
+} from "@/libs/domain/protocol/remote-file-limits";
 import { describe, expect, it } from "vitest";
 import {
   getDefaultAppOptions,
@@ -8,6 +12,31 @@ import {
 } from "@/libs/state/app-options";
 
 describe("app options", () => {
+  it("defaults the shared remote file budget and normalizes invalid persisted limits", () => {
+    expect(getDefaultAppOptions().remoteFileMaxSize).toBe(
+      64 * 1024 * 1024,
+    );
+    for (const value of [
+      undefined,
+      null,
+      "128",
+      0,
+      -1,
+      NaN,
+      Infinity,
+      1.5,
+      MAX_REMOTE_FILE_BYTES + 1,
+    ])
+      expect(resolveRemoteFileLimit(value)).toBe(
+        64 * 1024 * 1024,
+      );
+    expect(resolveRemoteFileLimit(128 * 1024 * 1024)).toBe(
+      128 * 1024 * 1024,
+    );
+    expect(
+      resolveRemoteFileLimit(MAX_REMOTE_FILE_BYTES),
+    ).toBe(MAX_REMOTE_FILE_BYTES);
+  });
   it("keeps room permission switches independent while sharing the application size limit", () => {
     const options = getDefaultAppOptions();
     expect(

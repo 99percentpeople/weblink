@@ -26,6 +26,61 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("carries the same file budget across clipboard and native drop IPC", async () => {
+    const scope = {
+      ownerId: "owner",
+      clientId: "peer",
+      grantId: "grant",
+    };
+    const maxFileBytes = 128 * 1024 * 1024;
+    const target = {
+      sourceId: "screen",
+      mediaId: "media",
+      geometryRevision: "layout",
+    };
+    const point = { x: 0.5, y: 0.5 };
+    await platform.clipboard!.read(
+      scope,
+      7,
+      true,
+      maxFileBytes,
+    );
+    expect(ipc).toHaveBeenLastCalledWith("clipboard_read", {
+      scope,
+      after: 7,
+      files: true,
+      maxFileBytes,
+    });
+    const entries = [
+      { type: "file" as const, name: "a", data: "YWJj" },
+    ];
+    await platform.clipboard!.write(
+      entries,
+      scope,
+      maxFileBytes,
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "clipboard_write",
+      { scope, entries, maxFileBytes },
+    );
+    await platform.fileDrop!.prepare(
+      scope,
+      "operation",
+      target,
+      point,
+      maxFileBytes,
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "file_drop_prepare",
+      {
+        scope,
+        operationId: "operation",
+        target,
+        point,
+        maxFileBytes,
+      },
+    );
+  });
   it("reads a device name through the dedicated local command", async () => {
     ipc.mockResolvedValue("Workstation");
     expect(await platform.getDeviceName!()).toBe(

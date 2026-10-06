@@ -14,6 +14,7 @@ export {
   resetRoomConfig,
 } from "@/libs/state/permission-options";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
+import { resolveRemoteFileLimit } from "@/libs/domain/protocol/remote-file-limits";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
@@ -124,6 +125,9 @@ export function initializeAppOptions() {
         application: resolveApplicationOptions(
           parsed.application,
           legacyPip,
+        ),
+        remoteFileMaxSize: resolveRemoteFileLimit(
+          parsed.remoteFileMaxSize,
         ),
         remotePointer: resolveRemotePointerOptions(
           parsed.remotePointer,

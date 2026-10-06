@@ -29,7 +29,11 @@ import { createVideoRemoteControl } from "./remote-control-action";
 import { platform } from "@/libs/platform/runtime";
 import { NativeKeyboardForwarder } from "@/libs/application/native-keyboard";
 import type { RemoteKeyboardInputHandle } from "./remote-keyboard-input";
+import { RemoteFileDropArea } from "./remote-file-drop-area";
+import type { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 export function RemoteControlOverlay(props: {
+  clientId?: string;
+  fileDrop?: Pick<RemoteFileDrop, "drop">;
   enabled: boolean;
   keyboard?: () => RemoteKeyboardInputHandle | undefined;
 }) {
@@ -684,242 +688,253 @@ export function RemoteControlOverlay(props: {
   };
   return (
     <Show when={props.enabled && state() !== "unavailable"}>
-      {/* Keep the fullscreen input layer mounted when control is toggled. */}
-      <div
-        ref={setSurface}
-        inert={!interactive()}
-        aria-hidden={!interactive()}
-        tabIndex={interactive() ? 0 : -1}
-        role="application"
-        aria-label={t("remote_control.surface", {
-          shortcut: shortcutLabel(
-            keyboardOptions().exitShortcut,
-          ),
-        })}
-        title={
-          captureMode()
-            ? t("remote_control.capture_hint", {
-                shortcut: shortcutLabel(
-                  keyboardOptions().exitShortcut,
-                ),
-              })
-            : undefined
-        }
-        class="meeting-tile-focus-target absolute inset-0 z-10 outline-none"
-        style={{
-          "pointer-events": interactive() ? "auto" : "none",
-          "touch-action": "none",
-          cursor: cursorStyle(),
-          "user-select": "none",
-          "-webkit-touch-callout":
-            touchOptions().mode === "direct"
-              ? "none"
-              : undefined,
-        }}
-        onFocus={() => setFocused(interactive())}
-        onBlur={() => {
-          setFocused(false);
-          stopInput();
-        }}
-        onKeyDown={(e) => {
-          if (
-            e.target !== e.currentTarget ||
-            !keyboardActive()
-          )
-            return;
-          const native = nativeKeys();
-          if (
-            !native &&
-            props
-              .keyboard?.()
-              ?.clipboardEnabled?.(
-                e.code === "KeyC" ? "copy" : "paste",
-              ) &&
-            (e.ctrlKey || e.metaKey) &&
-            !e.altKey &&
-            !e.shiftKey &&
-            ["KeyC", "KeyV"].includes(e.code)
-          ) {
-            keyboard?.release();
-            if (e.code === "KeyC") {
-              e.preventDefault();
-              if (!e.repeat) props.keyboard?.()?.copy?.();
+      <RemoteFileDropArea
+        active={interactive()}
+        enabled={pointerOptions().fileDrop}
+        clientId={props.clientId}
+        control={control()}
+        service={props.fileDrop}
+        point={point}
+      >
+        {/* Keep the fullscreen input layer mounted when control is toggled. */}
+        <div
+          ref={setSurface}
+          inert={!interactive()}
+          aria-hidden={!interactive()}
+          tabIndex={interactive() ? 0 : -1}
+          role="application"
+          aria-label={t("remote_control.surface", {
+            shortcut: shortcutLabel(
+              keyboardOptions().exitShortcut,
+            ),
+          })}
+          title={
+            captureMode()
+              ? t("remote_control.capture_hint", {
+                  shortcut: shortcutLabel(
+                    keyboardOptions().exitShortcut,
+                  ),
+                })
+              : undefined
+          }
+          class="meeting-tile-focus-target absolute inset-0 z-10 outline-none"
+          style={{
+            "pointer-events": interactive()
+              ? "auto"
+              : "none",
+            "touch-action": "none",
+            cursor: cursorStyle(),
+            "user-select": "none",
+            "-webkit-touch-callout":
+              touchOptions().mode === "direct"
+                ? "none"
+                : undefined,
+          }}
+          onFocus={() => setFocused(interactive())}
+          onBlur={() => {
+            setFocused(false);
+            stopInput();
+          }}
+          onKeyDown={(e) => {
+            if (
+              e.target !== e.currentTarget ||
+              !keyboardActive()
+            )
+              return;
+            const native = nativeKeys();
+            if (
+              !native &&
+              props
+                .keyboard?.()
+                ?.clipboardEnabled?.(
+                  e.code === "KeyC" ? "copy" : "paste",
+                ) &&
+              (e.ctrlKey || e.metaKey) &&
+              !e.altKey &&
+              !e.shiftKey &&
+              ["KeyC", "KeyV"].includes(e.code)
+            ) {
+              keyboard?.release();
+              if (e.code === "KeyC") {
+                e.preventDefault();
+                if (!e.repeat) props.keyboard?.()?.copy?.();
+              }
+              return;
             }
-            return;
-          }
-          if (native) keyboard?.exit(e);
-          if (native || keyboard?.down(e)) {
+            if (native) keyboard?.exit(e);
+            if (native || keyboard?.down(e)) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+          onKeyUp={(e) => {
+            if (
+              keyboardActive() &&
+              e.target === e.currentTarget &&
+              (nativeKeys() || keyboard?.up(e))
+            ) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+          onPaste={(event) => {
+            props.keyboard?.()?.pasteEvent?.(event);
+          }}
+          onCompositionStart={() => keyboard?.release()}
+          onContextMenu={(e) => {
+            if (!interactive()) return;
             e.preventDefault();
             e.stopPropagation();
-          }
-        }}
-        onKeyUp={(e) => {
-          if (
-            keyboardActive() &&
-            e.target === e.currentTarget &&
-            (nativeKeys() || keyboard?.up(e))
-          ) {
+            // Mouse right-clicks already use pointerdown/up; direct touch
+            // leaves press-and-hold recognition to the remote operating system.
+            const pointerType = (e as PointerEvent)
+              .pointerType;
+            if (
+              state() === "active" &&
+              touchOptions().mode === "trackpad" &&
+              fingers.size === 1 &&
+              pointerType !== "mouse" &&
+              pointerType !== "pen"
+            ) {
+              keyboardTap = undefined;
+              trackpad?.contextMenu();
+            }
+          }}
+          onClick={(e) => {
+            if (!interactive()) return;
             e.preventDefault();
             e.stopPropagation();
-          }
-        }}
-        onPaste={(event) => {
-          props.keyboard?.()?.pasteEvent?.(event);
-        }}
-        onCompositionStart={() => keyboard?.release()}
-        onContextMenu={(e) => {
-          if (!interactive()) return;
-          e.preventDefault();
-          e.stopPropagation();
-          // Mouse right-clicks already use pointerdown/up; direct touch
-          // leaves press-and-hold recognition to the remote operating system.
-          const pointerType = (e as PointerEvent)
-            .pointerType;
-          if (
-            state() === "active" &&
-            touchOptions().mode === "trackpad" &&
-            fingers.size === 1 &&
-            pointerType !== "mouse" &&
-            pointerType !== "pen"
-          ) {
-            keyboardTap = undefined;
-            trackpad?.contextMenu();
-          }
-        }}
-        onClick={(e) => {
-          if (!interactive()) return;
-          e.preventDefault();
-          e.stopPropagation();
-          if (!captureClick) return;
-          captureClick = false;
-          if (control()?.supportsRelativePointer())
-            capture.request();
-          else
-            toast.error(
-              t("remote_control.capture_unavailable"),
-            );
-        }}
-        onAuxClick={(e) => {
-          if (!interactive()) return;
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onPointerDown={(e) => {
-          if (!interactive()) return;
-          updateMouse(e);
-          // Pointer input can run while the text editor owns keyboard input.
-          // Both explicit focus and the browser's default focus would hide IME.
-          const keyboard = props.keyboard?.();
-          if (keyboard?.focused()) {
-            keyboard.suppressAutomaticShow();
-            e.preventDefault();
-          } else {
-            surface()?.focus({ preventScroll: true });
-            setFocused(true);
-          }
-          if (!touch(e, "down")) button(e, true);
-        }}
-        onMouseDown={(e) => {
-          if (!interactive()) return;
-          if (props.keyboard?.()?.focused())
-            e.preventDefault();
-          if (!captureMode()) return;
-          captureClick =
-            !captured() &&
-            e.button === 0 &&
-            state() === "active" &&
-            !fingers.size;
-          capturedButton(e, true);
-        }}
-        onMouseUp={(e) => capturedButton(e, false)}
-        onMouseMove={(e) => {
-          if (
-            !captured() ||
-            state() !== "active" ||
-            fingers.size
-          )
-            return;
-          const { width, height } = contentSize();
-          if (
-            width > 0 &&
-            height > 0 &&
-            (e.movementX || e.movementY)
-          )
-            control()?.trackpad({
-              type: "move",
-              x: e.movementX / width,
-              y: e.movementY / height,
-            });
-        }}
-        on:touchstart={nativeTouch}
-        on:touchmove={nativeTouch}
-        on:touchend={nativeTouch}
-        on:touchcancel={nativeTouch}
-        onPointerUp={(e) => {
-          if (!touch(e, "up")) button(e, false);
-        }}
-        onPointerCancel={(e) => {
-          setMouseInside(false);
-          if (!touch(e, "cancel") && held.size)
-            resetInput();
-        }}
-        onLostPointerCapture={(e) => {
-          if (held.size || fingers.has(e.pointerId))
-            resetInput();
-        }}
-        onPointerMove={(e) => {
-          if (!interactive() || state() !== "active")
-            return;
-          updateMouse(e);
-          if (e.pointerType === "touch") {
+            if (!captureClick) return;
+            captureClick = false;
+            if (control()?.supportsRelativePointer())
+              capture.request();
+            else
+              toast.error(
+                t("remote_control.capture_unavailable"),
+              );
+          }}
+          onAuxClick={(e) => {
+            if (!interactive()) return;
             e.preventDefault();
             e.stopPropagation();
-            for (const sample of touchMovementSamples(e))
-              touch(sample, "move");
-            return;
-          }
-          if (
-            captureMode() ||
-            e.pointerType !== "mouse" ||
-            fingers.size
-          )
-            return;
-          const p = point(e, held.size > 0);
-          if (p) control()?.move(p);
-          else if (held.size) resetInput();
-        }}
-        onPointerLeave={() => {
-          setMouseInside(false);
-        }}
-        onPointerEnter={updateMouse}
-        onWheel={(e) => {
-          if (fingers.size) return;
-          if (captureMode() && !captured()) return;
-          const p = point(e);
-          if ((!captured() && !p) || state() !== "active")
-            return;
-          e.preventDefault();
-          e.stopPropagation();
-          const unit =
-            e.deltaMode === 1
-              ? 40
-              : e.deltaMode === 2
-                ? 120
-                : 1;
-          const delta = (v: number) =>
-            Math.max(
-              -1200,
-              Math.min(1200, Math.round(v * unit)),
-            );
-          const wheel = {
-            type: "wheel" as const,
-            horizontal: delta(e.deltaX),
-            vertical: -delta(e.deltaY),
-          };
-          if (captured()) control()?.trackpad(wheel);
-          else control()?.input({ ...wheel, ...p! });
-        }}
-      />
+          }}
+          onPointerDown={(e) => {
+            if (!interactive()) return;
+            updateMouse(e);
+            // Pointer input can run while the text editor owns keyboard input.
+            // Both explicit focus and the browser's default focus would hide IME.
+            const keyboard = props.keyboard?.();
+            if (keyboard?.focused()) {
+              keyboard.suppressAutomaticShow();
+              e.preventDefault();
+            } else {
+              surface()?.focus({ preventScroll: true });
+              setFocused(true);
+            }
+            if (!touch(e, "down")) button(e, true);
+          }}
+          onMouseDown={(e) => {
+            if (!interactive()) return;
+            if (props.keyboard?.()?.focused())
+              e.preventDefault();
+            if (!captureMode()) return;
+            captureClick =
+              !captured() &&
+              e.button === 0 &&
+              state() === "active" &&
+              !fingers.size;
+            capturedButton(e, true);
+          }}
+          onMouseUp={(e) => capturedButton(e, false)}
+          onMouseMove={(e) => {
+            if (
+              !captured() ||
+              state() !== "active" ||
+              fingers.size
+            )
+              return;
+            const { width, height } = contentSize();
+            if (
+              width > 0 &&
+              height > 0 &&
+              (e.movementX || e.movementY)
+            )
+              control()?.trackpad({
+                type: "move",
+                x: e.movementX / width,
+                y: e.movementY / height,
+              });
+          }}
+          on:touchstart={nativeTouch}
+          on:touchmove={nativeTouch}
+          on:touchend={nativeTouch}
+          on:touchcancel={nativeTouch}
+          onPointerUp={(e) => {
+            if (!touch(e, "up")) button(e, false);
+          }}
+          onPointerCancel={(e) => {
+            setMouseInside(false);
+            if (!touch(e, "cancel") && held.size)
+              resetInput();
+          }}
+          onLostPointerCapture={(e) => {
+            if (held.size || fingers.has(e.pointerId))
+              resetInput();
+          }}
+          onPointerMove={(e) => {
+            if (!interactive() || state() !== "active")
+              return;
+            updateMouse(e);
+            if (e.pointerType === "touch") {
+              e.preventDefault();
+              e.stopPropagation();
+              for (const sample of touchMovementSamples(e))
+                touch(sample, "move");
+              return;
+            }
+            if (
+              captureMode() ||
+              e.pointerType !== "mouse" ||
+              fingers.size
+            )
+              return;
+            const p = point(e, held.size > 0);
+            if (p) control()?.move(p);
+            else if (held.size) resetInput();
+          }}
+          onPointerLeave={() => {
+            setMouseInside(false);
+          }}
+          onPointerEnter={updateMouse}
+          onWheel={(e) => {
+            if (fingers.size) return;
+            if (captureMode() && !captured()) return;
+            const p = point(e);
+            if ((!captured() && !p) || state() !== "active")
+              return;
+            e.preventDefault();
+            e.stopPropagation();
+            const unit =
+              e.deltaMode === 1
+                ? 40
+                : e.deltaMode === 2
+                  ? 120
+                  : 1;
+            const delta = (v: number) =>
+              Math.max(
+                -1200,
+                Math.min(1200, Math.round(v * unit)),
+              );
+            const wheel = {
+              type: "wheel" as const,
+              horizontal: delta(e.deltaX),
+              vertical: -delta(e.deltaY),
+            };
+            if (captured()) control()?.trackpad(wheel);
+            else control()?.input({ ...wheel, ...p! });
+          }}
+        />
+      </RemoteFileDropArea>
     </Show>
   );
 }

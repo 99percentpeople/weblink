@@ -9,13 +9,30 @@ import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import {
   isActiveTask,
-  isClipboardTransferTask,
+  isRemoteContentTransferTask,
   type SharedFileTask,
   type TaskListItem,
   type TaskStatus,
 } from "@/libs/application/task-service";
 import type { NotificationService } from "@/libs/application/notifications/notification-service";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
+
+function transferText(
+  task: SharedFileTask,
+  key:
+    | "details"
+    | "sending"
+    | "receiving"
+    | "finalizing"
+    | "completed"
+    | "failed",
+) {
+  const prefix =
+    task.origin === "drop"
+      ? "remote_control.file_drop."
+      : "remote_control.clipboard_transfer.";
+  return t(`${prefix}${key}`);
+}
 
 interface Notice {
   status?: TaskStatus;
@@ -24,8 +41,8 @@ interface Notice {
   cancelling?: boolean;
 }
 
-/** Present existing clipboard tasks; text and single-chunk transfers stay quiet. */
-export function createClipboardTransferFeedback(options: {
+/** Present existing remote content tasks; text and single-chunk transfers stay quiet. */
+export function createRemoteTransferFeedback(options: {
   tasks: Accessor<TaskListItem[]>;
   notifications?: Pick<
     NotificationService,
@@ -72,7 +89,7 @@ export function createClipboardTransferFeedback(options: {
       !task ||
       !notice ||
       notice.cancelling ||
-      !isClipboardTransferTask(task) ||
+      !isRemoteContentTransferTask(task) ||
       !isActiveTask(task)
     )
       return;
@@ -81,7 +98,7 @@ export function createClipboardTransferFeedback(options: {
       await task.cancel();
     } catch (error) {
       console.warn(
-        "Could not cancel clipboard transfer",
+        "Could not cancel remote transfer",
         error,
       );
     } finally {
@@ -113,9 +130,7 @@ export function createClipboardTransferFeedback(options: {
       notification: {
         id,
         title,
-        body: t(
-          "remote_control.clipboard_transfer.details",
-        ),
+        body: transferText(task, "details"),
         expiresAt: Date.now() + 10 * 60_000,
         actions: active
           ? [
@@ -137,7 +152,7 @@ export function createClipboardTransferFeedback(options: {
   createEffect(() => {
     const tasks = options
       .tasks()
-      .filter(isClipboardTransferTask);
+      .filter(isRemoteContentTransferTask);
     const front = foreground();
     untrack(() => {
       const ids = new Set(tasks.map((task) => task.id));
@@ -155,12 +170,13 @@ export function createClipboardTransferFeedback(options: {
         const previous = notice.status;
         notice.status = task.status;
         if (isActiveTask(task)) {
-          const title = t(
+          const title = transferText(
+            task,
             task.status === "finalizing"
-              ? "remote_control.clipboard_transfer.finalizing"
+              ? "finalizing"
               : task.kind === "file-send"
-                ? "remote_control.clipboard_transfer.sending"
-                : "remote_control.clipboard_transfer.receiving",
+                ? "sending"
+                : "receiving",
           );
           if (front) {
             dismissNotification(notice);
@@ -192,10 +208,11 @@ export function createClipboardTransferFeedback(options: {
             dismissToast(task.id, notice);
             continue;
           }
-          const title = t(
+          const title = transferText(
+            task,
             task.status === "completed"
-              ? "remote_control.clipboard_transfer.completed"
-              : "remote_control.clipboard_transfer.failed",
+              ? "completed"
+              : "failed",
           );
           if (front) {
             notice.toast = title;

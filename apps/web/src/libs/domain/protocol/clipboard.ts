@@ -1,4 +1,14 @@
-export const CLIPBOARD_MAX_BYTES = 64 * 1024 * 1024;
+import {
+  MAX_REMOTE_FILE_BYTES,
+  REMOTE_CONTENT_BYTES,
+  REMOTE_MANIFEST_BYTES,
+  remoteBundleLimit,
+  resolveRemoteFileLimit,
+  validRemoteFileLimit,
+} from "./remote-file-limits";
+export const CLIPBOARD_MAX_BYTES = remoteBundleLimit(
+  MAX_REMOTE_FILE_BYTES,
+);
 export const CLIPBOARD_MAX_ENTRIES = 4096;
 export const CLIPBOARD_CHUNK_SIZE = 128 * 1024;
 export type ClipboardContentKind = "text" | "binary";
@@ -19,6 +29,8 @@ export type ClipboardRequest = {
   kind?: ClipboardContentKind;
   /** Read requests may exclude files/directories before native file access. */
   files?: boolean;
+  /** Controller-selected file budget, fixed when an operation starts. */
+  maxFileBytes?: number;
 };
 export function validClipboardRequest(
   v: Record<string, unknown>,
@@ -27,6 +39,16 @@ export function validClipboardRequest(
     typeof s === "string" &&
     /^[a-zA-Z0-9-]{1,128}$/.test(s);
   if (!id(v.grantId) || !id(v.operationId)) return false;
+  if (
+    v.maxFileBytes !== undefined &&
+    (!validRemoteFileLimit(v.maxFileBytes) ||
+      !(
+        v.action === "prepare" ||
+        v.action === "read-current" ||
+        (v.action === "offer" && v.direction === "paste")
+      ))
+  )
+    return false;
   if (
     v.files !== undefined &&
     (!(
@@ -56,6 +78,13 @@ export function validClipboardRequest(
     (v.kind === "text" || v.kind === "binary") &&
     Number.isSafeInteger(v.size) &&
     (v.size as number) > 4 &&
-    (v.size as number) <= CLIPBOARD_MAX_BYTES
+    (v.size as number) <=
+      (v.kind === "text"
+        ? REMOTE_CONTENT_BYTES + REMOTE_MANIFEST_BYTES + 4
+        : v.direction === "paste"
+          ? remoteBundleLimit(
+              resolveRemoteFileLimit(v.maxFileBytes),
+            )
+          : CLIPBOARD_MAX_BYTES)
   );
 }

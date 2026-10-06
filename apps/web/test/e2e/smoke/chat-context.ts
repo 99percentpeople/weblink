@@ -5,12 +5,16 @@ let context: AppStateContextProps;
 export const setChatTestContext = (
   value: Omit<
     AppStateContextProps,
-    "conversationMessaging" | "remoteClipboard"
+    | "conversationMessaging"
+    | "remoteClipboard"
+    | "remoteFileDrop"
   > &
     Partial<
       Pick<
         AppStateContextProps,
-        "conversationMessaging" | "remoteClipboard"
+        | "conversationMessaging"
+        | "remoteClipboard"
+        | "remoteFileDrop"
       >
     >,
 ) => {
@@ -19,6 +23,11 @@ export const setChatTestContext = (
       (client: string) => client !== "self",
     );
   context = {
+    remoteFileDrop: {
+      drop: async () => {
+        throw new Error("Unexpected file drop");
+      },
+    },
     remoteClipboard: clipboardFixture,
     ...value,
     conversationMessaging: value.conversationMessaging ?? {

@@ -20,15 +20,48 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  fileDrop: {
+    prepare: (
+      scope,
+      operationId,
+      target,
+      point,
+      maxFileBytes,
+    ) =>
+      invoke("file_drop_prepare", {
+        scope,
+        operationId,
+        target,
+        point,
+        maxFileBytes,
+      }),
+    apply: (scope, operationId, files) =>
+      invoke("file_drop_apply", {
+        scope,
+        operationId,
+        files,
+      }),
+    cancel: (scope, operationId) =>
+      invoke("file_drop_cancel", { scope, operationId }),
+  },
   clipboard: {
     watch: (scope, changed) =>
       watchStatus("clipboard", { scope }, changed),
     sequence: (scope) =>
       invoke("clipboard_sequence", { scope }),
-    read: (scope, after, files) =>
-      invoke("clipboard_read", { scope, after, files }),
-    write: (entries, scope) =>
-      invoke("clipboard_write", { entries, scope }),
+    read: (scope, after, files, maxFileBytes) =>
+      invoke("clipboard_read", {
+        scope,
+        after,
+        files,
+        maxFileBytes,
+      }),
+    write: (entries, scope, maxFileBytes) =>
+      invoke("clipboard_write", {
+        entries,
+        scope,
+        maxFileBytes,
+      }),
   },
   watchVisibility: createVisibilityWatcher(),
   pictureInPicture: nativePictureInPicture,

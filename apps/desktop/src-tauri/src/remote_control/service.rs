@@ -121,6 +121,40 @@ impl Service {
     pub fn observe(&self, observer: Observer) {
         *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = Some(observer);
     }
+    /// Resolve only the granted capture's physical coordinates; never accept a native handle.
+    pub fn file_drop_position(
+        &self,
+        owner_id: &str,
+        client: &str,
+        grant_id: &str,
+        target: &protocol::Target,
+        x: f64,
+        y: f64,
+    ) -> Result<(i32, i32), String> {
+        let owner = self.owner(owner_id)?;
+        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let grant = &host.active.as_ref().ok_or("Remote control ended")?.grant;
+        let peer = host
+            .peers
+            .get(&target.media_id)
+            .ok_or("Control peer ended")?;
+        if !owner.live()
+            || grant.id != grant_id
+            || grant.binding.client_id != client
+            || &grant.binding.target != target
+            || host.worker.status().grant.as_ref() != Some(grant)
+            || peer.endpoint.is_closed()
+            || !peer.capture.is_current(&grant.binding)
+        {
+            return Err("File drop control target is no longer current".into());
+        }
+        weblink_desktop_input::input::Geometry {
+            display: peer.display,
+            desktop: peer.display,
+        }
+        .pixels(weblink_desktop_input::input::Position { x, y })
+        .ok_or_else(|| "Invalid file drop position".into())
+    }
     pub fn stop_capture(&self, session: &str) {
         let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let Some(owner) = owner else {

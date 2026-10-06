@@ -53,6 +53,7 @@ function setup(
   textInput?: unknown,
   cursorVisibility?: unknown,
   cursorShape?: unknown,
+  fileDrop?: unknown,
 ) {
   const c = new RemotePointer("source", "media");
   controllers.push(c);
@@ -77,6 +78,7 @@ function setup(
     textInput,
     cursorVisibility,
     cursorShape,
+    fileDrop,
   });
   const approve = () => {
     c.request();
@@ -117,6 +119,41 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("requires host file-drop capability and a live control grant", () => {
+    const { c, r, target, approve, activate } = setup(
+      undefined,
+      undefined,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    expect(c.fileDropTarget()).toBeUndefined();
+    approve();
+    activate();
+    expect(c.fileDropTarget()).toEqual({
+      grantId: "grant",
+      target,
+    });
+    c.resetInput();
+    expect(c.fileDropTarget()).toEqual({
+      grantId: "grant",
+      target,
+    });
+    r.receive({
+      type: "revoke",
+      grantId: "grant",
+      reason: "local",
+    });
+    expect(c.fileDropTarget()).toBeUndefined();
+    const legacy = setup();
+    legacy.approve();
+    legacy.activate();
+    expect(legacy.c.fileDropTarget()).toBeUndefined();
+  });
   it("scopes cursor updates to the current watch, grant and input epoch", () => {
     const { c, r, approve, activate } = setup(
       10,

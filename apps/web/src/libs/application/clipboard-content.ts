@@ -1,6 +1,5 @@
 import type { ClipboardEntry } from "@weblink/platform";
 import {
-  CLIPBOARD_MAX_BYTES,
   CLIPBOARD_MAX_ENTRIES,
   type ClipboardContentKind,
 } from "../domain/protocol/clipboard";
@@ -8,6 +7,12 @@ import {
   compressFiles,
   handleDropItems,
 } from "../utils/process-file";
+
+import {
+  MAX_REMOTE_FILE_BYTES,
+  REMOTE_CONTENT_BYTES,
+  remoteBundleLimit,
+} from "../domain/protocol/remote-file-limits";
 
 const WEB_CLIPBOARD_MIME =
   "application/x-weblink-clipboard";
@@ -42,16 +47,27 @@ const formats = [
 ];
 export function checkContent(
   content: ClipboardContent,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): void {
   if (
     !content.length ||
-    content.length > CLIPBOARD_MAX_ENTRIES ||
-    content.reduce((n, e) => n + e.blob.size, 0) >
-      CLIPBOARD_MAX_BYTES
+    content.length > CLIPBOARD_MAX_ENTRIES
   )
     throw new Error(
-      "Clipboard is empty or exceeds 64 MiB / 4096 entries",
+      "Clipboard is empty or exceeds 4096 entries",
     );
+  const fileBytes = content
+    .filter((e) => e.type === "file")
+    .reduce((n, e) => n + e.blob.size, 0);
+  const otherBytes = content
+    .filter((e) => e.type !== "file")
+    .reduce((n, e) => n + e.blob.size, 0);
+  if (fileBytes > maxFileBytes)
+    throw new Error(
+      `Files exceed the ${maxFileBytes / 1024 / 1024} MiB limit`,
+    );
+  if (otherBytes > REMOTE_CONTENT_BYTES)
+    throw new Error("Clipboard text/images exceed 64 MiB");
   const seen = new Set<string>();
   for (const e of content) {
     if (
@@ -78,8 +94,9 @@ export function checkContent(
 }
 export async function packClipboard(
   content: ClipboardContent,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): Promise<File> {
-  checkContent(content);
+  checkContent(content, maxFileBytes);
   const metadata = new TextEncoder().encode(
     JSON.stringify(
       content.map(({ type, name, blob }) => ({
@@ -98,14 +115,20 @@ export async function packClipboard(
     "Clipboard.weblink",
     { type: WEB_CLIPBOARD_MIME },
   );
-  if (file.size > CLIPBOARD_MAX_BYTES)
-    throw new Error("Clipboard content exceeds 64 MiB");
+  if (file.size > remoteBundleLimit(maxFileBytes))
+    throw new Error(
+      "Clipboard bundle exceeds its size limit",
+    );
   return file;
 }
 export async function unpackClipboard(
   file: Blob,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): Promise<ClipboardContent> {
-  if (file.size < 5 || file.size > CLIPBOARD_MAX_BYTES)
+  if (
+    file.size < 5 ||
+    file.size > remoteBundleLimit(maxFileBytes)
+  )
     throw new Error("Invalid clipboard size");
   const length = new DataView(
     await file.slice(0, 4).arrayBuffer(),
@@ -144,7 +167,7 @@ export async function unpackClipboard(
   });
   if (offset !== file.size)
     throw new Error("Trailing clipboard bytes");
-  checkContent(result);
+  checkContent(result, maxFileBytes);
   return result;
 }
 const decode = (entry: ClipboardEntry) =>
@@ -152,6 +175,7 @@ const decode = (entry: ClipboardEntry) =>
 export async function fromNativeClipboard(
   entries: ClipboardEntry[],
   signal?: AbortSignal,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): Promise<ClipboardContent> {
   const groups = new Map<
     string,
@@ -163,15 +187,23 @@ export async function fromNativeClipboard(
       .map((e) => e.group),
   );
   const result: ClipboardContent = [];
-  let total = 0;
+  let fileBytes = 0,
+    otherBytes = 0;
   if (entries.length > CLIPBOARD_MAX_ENTRIES)
     throw new Error("Too many clipboard entries");
   for (const entry of entries) {
     signal?.throwIfAborted();
     const bytes = decode(entry);
-    total += bytes.length;
-    if (total > CLIPBOARD_MAX_BYTES)
-      throw new Error("Clipboard content exceeds 64 MiB");
+    if (entry.type === "file") fileBytes += bytes.length;
+    else otherBytes += bytes.length;
+    if (fileBytes > maxFileBytes)
+      throw new Error(
+        `Files exceed the ${maxFileBytes / 1024 / 1024} MiB limit`,
+      );
+    if (otherBytes > REMOTE_CONTENT_BYTES)
+      throw new Error(
+        "Clipboard text/images exceed 64 MiB",
+      );
     if (
       directoryGroups.has(entry.group) &&
       entry.group !== undefined
@@ -207,7 +239,7 @@ export async function fromNativeClipboard(
     const blob = await compressFiles(files, name, signal);
     result.push({ type: "file", name: blob.name, blob });
   }
-  checkContent(result);
+  checkContent(result, maxFileBytes);
   return result;
 }
 export async function toNativeClipboard(
@@ -234,6 +266,7 @@ export async function toNativeClipboard(
 export function fromPaste(
   data: DataTransfer,
   signal?: AbortSignal,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): Promise<ClipboardContent> {
   const result: ClipboardContent = [];
   for (const type of [
@@ -249,7 +282,7 @@ export function fromPaste(
       });
   }
   const files = handleDropItems(data.items, signal, {
-    maxBytes: CLIPBOARD_MAX_BYTES,
+    maxBytes: maxFileBytes,
     maxEntries: CLIPBOARD_MAX_ENTRIES,
   });
   return files.then((files) => {
@@ -267,7 +300,7 @@ export function fromPaste(
           blob: file,
         });
     }
-    checkContent(result);
+    checkContent(result, maxFileBytes);
     return result;
   });
 }
@@ -379,8 +412,9 @@ export function beginBrowserClipboardWrite(
 export function fromBrowserPaste(
   data: DataTransfer,
   readCustom: boolean,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
 ): Promise<ClipboardContent> {
-  const fallback = fromPaste(data);
+  const fallback = fromPaste(data, undefined, maxFileBytes);
   void fallback.catch(() => {});
   if (
     !readCustom ||
@@ -393,6 +427,7 @@ export function fromBrowserPaste(
         if (item.types.includes(WEB_CLIPBOARD_FORMAT))
           return unpackClipboard(
             await item.getType(WEB_CLIPBOARD_FORMAT),
+            maxFileBytes,
           );
       return fallback;
     },

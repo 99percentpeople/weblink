@@ -102,7 +102,7 @@ export const handleDropItems = async (
       )
         return reject(
           new Error(
-            "Clipboard content exceeds 64 MiB / 4096 entries",
+            `Files exceed the ${limits.maxBytes / 1024 / 1024} MiB / ${limits.maxEntries} entries limit`,
           ),
         );
 

@@ -1,5 +1,6 @@
 import { isFileFingerprint } from "./file-fingerprint";
 import { validClipboardRequest } from "./clipboard";
+import { validFileDropRequest } from "./file-drop";
 import type {
   ProtocolPeer,
   SessionMessage,
@@ -297,6 +298,9 @@ export function validateSessionMessage(
       break;
     case "remote-clipboard":
       valid = validClipboardRequest(value);
+      break;
+    case "remote-file-drop":
+      valid = validFileDropRequest(value);
       break;
     case "request-room-file":
       valid =

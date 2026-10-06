@@ -1,3 +1,4 @@
+import { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 import { RemoteClipboard } from "@/libs/application/remote-clipboard";
 import { FileCacheFactory } from "@/libs/application/cache-service";
 import { toNativeClipboard } from "@/libs/application/clipboard-content";
@@ -37,10 +38,20 @@ async function main() {
   const factory = new FileCacheFactory();
   await factory.initialize();
   let imported = 0;
+  let dropped = 0;
+  const dropTarget = {
+    sourceId: "screen",
+    mediaId: "media",
+    geometryRevision: "geometry",
+  };
   let epoch = "epoch";
   let focusChanged = false;
   const control = Object.assign(new EventTarget(), {
     state: () => "active",
+    fileDropTarget: () => ({
+      grantId: "grant",
+      target: dropTarget,
+    }),
     clipboardGrant: () => "grant",
     clipboardEpoch: () => epoch,
     input: () => true,
@@ -85,7 +96,7 @@ async function main() {
             focusChanged = true;
             // Opening the task list resets remote input focus but retains the control grant.
             queueMicrotask(() => {
-              epoch = "refocused";
+              epoch = `${epoch}-refocused`;
               control.dispatchEvent(new Event("change"));
             });
           },
@@ -109,6 +120,29 @@ async function main() {
           channel,
         );
     };
+    const caches = {
+      temporaryTransferCache: async (id: string) => {
+        const raw = await factory.temporaryTransferCache(
+          index === 0 ? id : `${id}-host`,
+        );
+        if (index === 0) return raw;
+        // Isolate the host's physical database in this shared test origin.
+        return new Proxy(raw, {
+          get(target, key) {
+            if (key === "id") return id;
+            if (key === "getInfo")
+              return async () => {
+                const info = await target.getInfo();
+                return info && { ...info, id };
+              };
+            const value = Reflect.get(target, key, target);
+            return typeof value === "function"
+              ? value.bind(target)
+              : value;
+          },
+        });
+      },
+    };
     const service = new RemoteClipboard({
       platform: (index === 1
         ? {
@@ -128,33 +162,7 @@ async function main() {
       protocol,
       rtc: transport,
       registry,
-      caches: {
-        clipboardCache: async (id) => {
-          const raw = await factory.clipboardCache(
-            index === 0 ? id : `${id}-host`,
-          );
-          if (index === 0) return raw;
-          // Isolate the host's physical database in this shared test origin.
-          return new Proxy(raw, {
-            get(target, key) {
-              if (key === "id") return id;
-              if (key === "getInfo")
-                return async () => {
-                  const info = await target.getInfo();
-                  return info && { ...info, id };
-                };
-              const value = Reflect.get(
-                target,
-                key,
-                target,
-              );
-              return typeof value === "function"
-                ? value.bind(target)
-                : value;
-            },
-          });
-        },
-      },
+      caches,
       enabled: () => true,
       fileDestination: () => "cache",
       cacheFile: async (file, signal) => {
@@ -177,9 +185,63 @@ async function main() {
       getSession: (id) =>
         id === session.targetClientId ? session : undefined,
     });
+    const fileDrop = new RemoteFileDrop({
+      platform: (index === 1
+        ? {
+            fileDrop: {
+              prepare: async (
+                _scope,
+                _id,
+                target,
+                point,
+              ) => {
+                if (
+                  JSON.stringify(target) !==
+                    JSON.stringify(dropTarget) ||
+                  point.x !== 0.25 ||
+                  point.y !== 0.75
+                )
+                  throw new Error("Drop target changed");
+              },
+              apply: async (_scope, _id, files) => {
+                if (
+                  files.length !== 1 ||
+                  files[0].name !== "dropped.bin"
+                )
+                  throw new Error("Drop filenames changed");
+                const decoded = atob(files[0].data);
+                if (decoded.length !== bytes.length)
+                  throw new Error("Drop size changed");
+                for (let i = 0; i < bytes.length; i++)
+                  if (decoded.charCodeAt(i) !== bytes[i])
+                    throw new Error(
+                      "Dropped file bytes changed",
+                    );
+                dropped++;
+              },
+              cancel: async () => {},
+            },
+          }
+        : {}) as PlatformRuntime,
+      host: {
+        clipboardScope: () => ({
+          ownerId: "owner",
+          clientId: "peer0",
+          grantId: "grant",
+        }),
+      },
+      protocol,
+      rtc: transport,
+      registry,
+      caches,
+      enabled: () => index === 0,
+      getSession: (id) =>
+        id === session.targetClientId ? session : undefined,
+    });
     return {
       pc,
       service,
+      fileDrop,
       transport,
       protocol,
       registry,
@@ -227,9 +289,28 @@ async function main() {
       throw new Error(
         "Copy did not complete on both peers",
       );
+    focusChanged = false;
+    await a.fileDrop.drop(
+      "peer1",
+      control,
+      { x: 0.25, y: 0.75 },
+      async () => [new File([bytes], "dropped.bin")],
+    );
+    if (
+      dropped !== 1 ||
+      !focusChanged ||
+      peers.some(
+        (peer) =>
+          peer.fileDrop.tasks()[0]?.status !== "completed",
+      )
+    )
+      throw new Error(
+        "Drop did not complete on both peers",
+      );
     report.__SPEED_TEST_REPORT__ = {
       ok: true,
       imported,
+      dropped,
       bytes: bytes.length,
       nativeChannels: true,
       workersAndIndexedDB: true,
@@ -242,6 +323,7 @@ async function main() {
   } finally {
     peers.forEach((peer) => {
       peer.service.dispose();
+      peer.fileDrop.dispose();
       peer.protocol.dispose();
       peer.registry.clear();
       peer.pc.close();

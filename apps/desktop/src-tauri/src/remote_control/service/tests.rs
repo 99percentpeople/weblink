@@ -250,6 +250,32 @@ struct Rig {
     sender: Arc<TestSender>,
 }
 #[test]
+fn file_drop_resolves_only_current_granted_display_and_geometry() {
+    let rig = Rig::new();
+    let grant = rig.approve();
+    let destination = target(&rig.owner, "capture", "media").binding.target;
+    let point = |client: &str, grant: &str, target: &Target, x, y| {
+        rig.service
+            .file_drop_position(&rig.owner, client, grant, target, x, y)
+    };
+    assert_eq!(
+        point("client", &grant, &destination, 1.0, 1.0).unwrap(),
+        (1919, 1079)
+    );
+    assert!(point("other", &grant, &destination, 0.5, 0.5).is_err());
+    assert!(point("client", "old", &destination, 0.5, 0.5).is_err());
+    assert!(point("client", &grant, &destination, -0.1, 0.5).is_err());
+    assert!(point("client", &grant, &destination, f64::NAN, 0.5).is_err());
+    let mut stale = destination.clone();
+    stale.geometry_revision = "old".into();
+    assert!(point("client", &grant, &stale, 0.5, 0.5).is_err());
+    rig.source.0.store(false, Ordering::Release);
+    assert!(point("client", &grant, &destination, 0.5, 0.5).is_err());
+    rig.source.0.store(true, Ordering::Release);
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(point("client", &grant, &destination, 0.5, 0.5).is_err());
+}
+#[test]
 fn clipboard_access_requires_current_native_grant_and_capture() {
     let rig = Rig::new();
     let grant = rig.approve();

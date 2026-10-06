@@ -25,6 +25,61 @@ const file = createSessionMessage(peer, "request-file", {
 });
 
 describe("session message validation", () => {
+  it("validates file drop destinations separately from message recipients", () => {
+    const message = createSessionMessage(
+      peer,
+      "remote-file-drop",
+      {
+        action: "prepare",
+        operationId: "drop-id",
+        grantId: "grant",
+        destination: {
+          sourceId: "source",
+          mediaId: "media",
+          geometryRevision: "layout",
+        },
+        point: { x: 0, y: 1 },
+      },
+    );
+    expect(
+      parseSessionMessage(JSON.stringify(message)),
+    ).toEqual(message);
+    if (message.action !== "prepare")
+      throw new Error("Expected prepare");
+    for (const patch of [
+      { point: { x: -0.1, y: 0 } },
+      { point: { x: 0, y: 1.1 } },
+      { point: { x: "0", y: 1 } },
+      {
+        destination: {
+          ...message.destination,
+          geometryRevision: "",
+        },
+      },
+      { maxFileBytes: 0 },
+      { maxFileBytes: 512 * 1024 * 1024 + 1 },
+      { maxFileBytes: "64" },
+      { size: 5 },
+      { error: "unexpected" },
+      { action: "offer", size: 6 },
+      { action: "cancel" },
+    ])
+      expect(() =>
+        validateSessionMessage({ ...message, ...patch }),
+      ).toThrow();
+    for (const size of [0, 4, 1.5, 513 * 1024 * 1024 + 5]) {
+      expect(() =>
+        validateSessionMessage(
+          createSessionMessage(peer, "remote-file-drop", {
+            action: "offer",
+            operationId: "drop-id",
+            grantId: "grant",
+            size,
+          }),
+        ),
+      ).toThrow();
+    }
+  });
   it("requires audio source snapshots and rejects ambiguous or malformed associations", () => {
     const message = createSessionMessage(
       peer,

@@ -79,6 +79,7 @@ export function MeetingTile(props: {
   onStop?: () => void;
   onKeyboardVisibleChange?: (visible: boolean) => void;
 }) {
+  const app = useAppState();
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
   const [keyboardInput, setKeyboardInput] =
@@ -182,6 +183,8 @@ export function MeetingTile(props: {
           muted
         >
           <RemoteControlOverlay
+            clientId={props.clientId}
+            fileDrop={app.remoteFileDrop}
             keyboard={keyboardInput}
             enabled={
               (props.pinned ||
