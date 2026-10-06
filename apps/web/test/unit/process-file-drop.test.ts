@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import {
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { handleDropItems } from "@/libs/utils/process-file";
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("drop file compatibility", () => {
-  it("checks the clipboard budget before starting folder compression", async () => {
-    const file = new File(["12345678"], "a.txt");
+  it("checks the configured file budget before starting folder compression", async () => {
+    const worker = vi.fn();
+    vi.stubGlobal("Worker", worker);
+    const file = new File(
+      [new Uint8Array(1024 * 1024 + 1)],
+      "a.txt",
+    );
     const entry = {
       isFile: true,
       isDirectory: false,
@@ -26,10 +39,11 @@ describe("drop file compatibility", () => {
     ] as unknown as DataTransferItemList;
     await expect(
       handleDropItems(items, undefined, {
-        maxBytes: 4,
+        maxBytes: 1024 * 1024,
         maxEntries: 10,
       }),
-    ).rejects.toThrow("64 MiB");
+    ).rejects.toThrow("1 MiB / 10 entries limit");
+    expect(worker).not.toHaveBeenCalled();
   });
   it("reads files when the browser does not expose directory entries", async () => {
     const file = new File(["a"], "a.txt");
