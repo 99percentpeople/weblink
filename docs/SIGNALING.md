@@ -234,10 +234,11 @@ reply only after room membership has been installed:
 `resumed` is `true` only when the server recovered the retained session. The
 server sends this acknowledgment before existing-client presence or cached
 SDP/ICE signals. The frontend buffers room and peer signals until the
-acknowledgment arrives, publishes connection readiness, then rebinds every peer signaling channel and replays
-the buffer in order. For compatibility with older self-hosted servers, the
-frontend falls back to the legacy behavior after a short acknowledgment
-timeout.
+acknowledgment arrives, publishes connection readiness, then rebinds every peer
+signaling channel and replays the buffer in order. A missing acknowledgment
+fails the join after ten seconds; opening a socket alone does not establish
+room membership or create room history. Self-hosted servers must acknowledge
+joins using the version 2 response above.
 
 When a reconnect acknowledgment reports `resumed: false`, the client retires
 its old peer sessions before accepting the fresh roster. A peer that left while

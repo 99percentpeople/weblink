@@ -99,6 +99,7 @@ function createHarness(
     setClient: vi.fn(),
   };
   const onLeaving = vi.fn();
+  const onJoined = vi.fn();
   const onMemberJoined = vi.fn();
   const room = new RoomService({
     sessions,
@@ -108,6 +109,7 @@ function createHarness(
     createClientService: createService,
     getLocalStream: () => null,
     onLeaving,
+    onJoined,
     onMemberJoined,
   });
   rooms.push(room);
@@ -119,6 +121,7 @@ function createHarness(
     profiles,
     messages,
     onLeaving,
+    onJoined,
     onMemberJoined,
   };
 }
@@ -229,6 +232,7 @@ describe("RoomService", () => {
 
   it("starts the room clock after a successful join and resets it only after leaving", async () => {
     vi.useFakeTimers();
+    setAppState("profile", "initalJoin", true);
     const service = createClientService();
     const pending = deferred<void>();
     vi.mocked(service.createClient).mockReturnValueOnce(
@@ -239,10 +243,14 @@ describe("RoomService", () => {
     const joining = harness.room.join();
     await Promise.resolve();
     expect(appState.roomStatus.joinedAt).toBeNull();
+    expect(appState.profile.initalJoin).toBe(true);
+    expect(harness.onJoined).not.toHaveBeenCalled();
     vi.setSystemTime(12_000);
     pending.resolve();
     await joining;
     expect(appState.roomStatus.joinedAt).toBe(12_000);
+    expect(appState.profile.initalJoin).toBe(false);
+    expect(harness.onJoined).toHaveBeenCalledOnce();
 
     vi.setSystemTime(20_000);
     await harness.room.join();
@@ -529,6 +537,7 @@ describe("RoomService", () => {
   it.each(["factory", "handshake"])(
     "allows retry after a %s failure",
     async (stage) => {
+      setAppState("profile", "initalJoin", true);
       const error = new Error("join failed");
       const failedService = createClientService();
       const retryService = createClientService();
@@ -548,6 +557,8 @@ describe("RoomService", () => {
       const harness = createHarness(factory);
 
       await expect(harness.room.join()).rejects.toBe(error);
+      expect(harness.onJoined).not.toHaveBeenCalled();
+      expect(appState.profile.initalJoin).toBe(true);
       expect(appState.roomStatus.roomId).toBeNull();
       expect(
         harness.sessions.clientService,
@@ -557,6 +568,14 @@ describe("RoomService", () => {
         retryService,
       );
       expect(appState.roomStatus.roomId).toBe("room-a");
+      expect(harness.onJoined).toHaveBeenCalledOnce();
+      expect(appState.profile.initalJoin).toBe(false);
+      expect(harness.onJoined).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roomId: "room-a",
+          password: null,
+        }),
+      );
     },
   );
 
@@ -579,6 +598,7 @@ describe("RoomService", () => {
     expect(factory).toHaveBeenCalledTimes(1);
     expect(service.close).toHaveBeenCalledTimes(1);
     expect(appState.roomStatus.roomId).toBeNull();
+    expect(harness.onJoined).not.toHaveBeenCalled();
   });
 
   it("discards a client service that resolves after leaving", async () => {

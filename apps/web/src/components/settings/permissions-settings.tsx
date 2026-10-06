@@ -4,14 +4,17 @@ import {
   createMemo,
   createSignal,
 } from "solid-js";
-import { Settings2, Trash2 } from "lucide-solid";
+import { RotateCcw, Settings2, Trash2 } from "lucide-solid";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   forgetClientConfig,
-  forgetRoomConfig,
+  resetClientConfig,
+  resetRoomConfig,
 } from "@/options";
+import { deleteRoomRecord } from "@/libs/state/delete-conversation-record";
+import { getConversationUpdateTimes } from "@/libs/application/messaging/conversation-activity";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,19 +28,57 @@ import {
 import { RoomPermissions } from "@/components/dialogs/room-settings";
 import { ClientPermissions } from "./client-permissions";
 
-type Entry = { kind: "client" | "room"; id: string };
+type Entry = {
+  kind: "client" | "room";
+  id: string;
+  updatedAt: number;
+};
 export default function PermissionsSettings() {
   const state = useAppState();
   const [selected, setSelected] = createSignal<Entry>();
-  const [forgetting, setForgetting] = createSignal<Entry>();
-  const entries = createMemo(() => [
-    ...Object.keys(appState.options.clientConfigs)
-      .filter((id) => appState.options.clientConfigs[id])
-      .map((id): Entry => ({ kind: "client", id })),
-    ...Object.keys(appState.options.roomConfigs)
-      .filter((id) => appState.options.roomConfigs[id])
-      .map((id): Entry => ({ kind: "room", id })),
-  ]);
+  const [deleting, setDeleting] = createSignal<Entry>();
+  const entries = createMemo(() => {
+    const times = getConversationUpdateTimes(
+      appState.message.conversations,
+      appState.message.messages,
+    );
+    const clientTimes = new Map<string, number>();
+    for (const conversation of appState.message
+      .conversations) {
+      if (conversation.kind === "direct")
+        clientTimes.set(
+          conversation.peerId,
+          Math.max(
+            clientTimes.get(conversation.peerId) ?? 0,
+            times.get(conversation.id) ?? 0,
+          ),
+        );
+    }
+    return [
+      ...Object.keys(appState.options.clientConfigs)
+        .filter((id) => appState.options.clientConfigs[id])
+        .map(
+          (id): Entry => ({
+            kind: "client",
+            id,
+            updatedAt: clientTimes.get(id) ?? 0,
+          }),
+        ),
+      ...Object.keys(appState.options.roomConfigs)
+        .filter((id) => appState.options.roomConfigs[id])
+        .map(
+          (id): Entry => ({
+            kind: "room",
+            id,
+            updatedAt: times.get(id) ?? 0,
+          }),
+        ),
+    ].sort(
+      (a, b) =>
+        b.updatedAt - a.updatedAt ||
+        a.id.localeCompare(b.id),
+    );
+  });
   const name = (entry: Entry) =>
     entry.kind === "client"
       ? (appState.session.clientViewData[entry.id]?.name ??
@@ -51,26 +92,54 @@ export default function PermissionsSettings() {
         )?.title ??
         appState.options.roomConfigs[entry.id]?.name ??
         entry.id);
+  const timestamp = (entry: Entry) => {
+    if (!entry.updatedAt) return;
+    const date = new Date(entry.updatedAt);
+    return {
+      dateTime: date.toISOString(),
+      label: t("setting.permissions.last_updated", {
+        time: date.toLocaleString(appState.options.locale, {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }),
+    };
+  };
   const present = (entry: Entry) =>
     entry.kind === "client"
       ? !!appState.session.clientViewData[entry.id]
       : state.activeRoomConversationId() === entry.id;
-  const confirmForget = () => {
-    const entry = forgetting();
-    if (!entry) return;
+  const canDelete = (entry: Entry) =>
+    !present(entry) &&
+    (entry.kind === "client" ||
+      appState.message.status === "ready");
+  const deleteLabel = (entry: Entry) =>
+    t(
+      entry.kind === "room"
+        ? "setting.permissions.delete_room"
+        : "setting.permissions.remove",
+      { name: name(entry) },
+    );
+  const confirmDelete = () => {
+    const entry = deleting();
+    if (!entry || !canDelete(entry)) return;
     if (entry.kind === "client")
       forgetClientConfig(entry.id);
-    else
-      forgetRoomConfig(
-        entry.id,
-        state.activeRoomConversationId(),
-      );
-    setForgetting(undefined);
+    else deleteRoomRecord(entry.id);
+    setDeleting(undefined);
+  };
+  const reset = (entry: Entry) => {
+    if (entry.kind === "client")
+      resetClientConfig(entry.id);
+    else resetRoomConfig(entry.id);
   };
   return (
     <>
       <section
-        class="settings-section"
+        class="settings-section @container"
         aria-labelledby="permissions-settings"
       >
         <h3 id="permissions-settings" class="h3">
@@ -99,32 +168,45 @@ export default function PermissionsSettings() {
                   </p>
                 }
               >
-                <div class="divide-y rounded-lg border px-3">
+                <div
+                  class="@md:grid-cols-[minmax(0,1fr)_max-content_2rem_2rem] grid
+                    grid-cols-[minmax(0,1fr)_2rem_2rem] gap-x-2 divide-y
+                    rounded-lg border px-2.5"
+                >
                   <For
                     each={entries().filter(
                       (entry) => entry.kind === kind,
                     )}
                   >
                     {(entry) => (
-                      <div class="flex items-center gap-2 py-3">
-                        <div class="min-w-0 flex-1">
-                          <p class="truncate font-medium">
-                            {name(entry)}
-                          </p>
-                          <p
-                            class="text-muted-foreground truncate text-xs"
-                            title={entry.id}
-                          >
-                            {entry.kind === "client"
-                              ? t(
-                                  `setting.permissions.${appState.options.clientConfigs[entry.id]?.remoteControl ?? "ask"}`,
-                                )
-                              : entry.id}
-                          </p>
-                        </div>
+                      <div class="col-span-full grid grid-cols-subgrid items-center py-1.5">
+                        <p
+                          class="col-start-1 row-start-1 min-w-0 break-words text-sm
+                            font-medium leading-5"
+                          title={name(entry)}
+                        >
+                          {name(entry)}
+                        </p>
+                        <Show when={timestamp(entry)}>
+                          {(timestamp) => (
+                            <time
+                              class="text-muted-foreground @md:col-start-2 @md:row-start-1
+                                col-start-1 row-start-2 min-w-0 text-[11px] tabular-nums
+                                leading-5"
+                              dateTime={
+                                timestamp().dateTime
+                              }
+                              title={timestamp().label}
+                            >
+                              {timestamp().label}
+                            </time>
+                          )}
+                        </Show>
                         <Button
                           variant="ghost"
                           size="icon"
+                          class="@md:col-start-3 @md:row-span-1 col-start-2 row-span-2
+                            row-start-1 size-8"
                           aria-label={t(
                             "setting.permissions.configure",
                             { name: name(entry) },
@@ -136,14 +218,22 @@ export default function PermissionsSettings() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={t(
+                          class="@md:col-start-4 @md:row-span-1 col-start-3 row-span-2
+                            row-start-1 size-8"
+                          disabled={!canDelete(entry)}
+                          aria-label={deleteLabel(entry)}
+                          title={
                             present(entry)
-                              ? "setting.permissions.reset"
-                              : "setting.permissions.remove",
-                            { name: name(entry) },
-                          )}
+                              ? t(
+                                  entry.kind === "room"
+                                    ? "conversations.delete_requires_exit"
+                                    : "setting.permissions.delete_requires_disconnect",
+                                )
+                              : deleteLabel(entry)
+                          }
                           onClick={() =>
-                            setForgetting(entry)
+                            canDelete(entry) &&
+                            setDeleting(entry)
                           }
                         >
                           <Trash2 class="size-4" />
@@ -158,42 +248,55 @@ export default function PermissionsSettings() {
         </For>
       </section>
       <Dialog
-        open={!!forgetting()}
+        open={!!deleting()}
         onOpenChange={(open) => {
-          if (!open) setForgetting(undefined);
+          if (!open) setDeleting(undefined);
         }}
       >
         <DialogContent>
-          <Show when={forgetting()}>
+          <Show when={deleting()}>
             {(entry) => (
               <>
                 <DialogHeader>
                   <DialogTitle>
                     {t(
-                      present(entry())
-                        ? "setting.permissions.reset_title"
-                        : "setting.permissions.forget_title",
+                      entry().kind === "room"
+                        ? "conversations.delete_room"
+                        : "setting.permissions.remove_title",
                     )}
                   </DialogTitle>
                   <DialogDescription>
                     {t(
-                      present(entry())
-                        ? "setting.permissions.reset_description"
-                        : "setting.permissions.forget_description",
+                      entry().kind === "room"
+                        ? "conversations.delete_room_description"
+                        : "setting.permissions.remove_description",
                       { name: name(entry()) },
                     )}
                   </DialogDescription>
                 </DialogHeader>
+                <Show when={present(entry())}>
+                  <p
+                    class="text-muted-foreground text-sm"
+                    role="status"
+                  >
+                    {t(
+                      entry().kind === "room"
+                        ? "conversations.delete_requires_exit"
+                        : "setting.permissions.delete_requires_disconnect",
+                    )}
+                  </p>
+                </Show>
                 <DialogFooter>
                   <Button
                     variant="outline"
-                    onClick={() => setForgetting(undefined)}
+                    onClick={() => setDeleting(undefined)}
                   >
                     {t("common.action.cancel")}
                   </Button>
                   <Button
                     variant="destructive"
-                    onClick={confirmForget}
+                    disabled={!canDelete(entry())}
+                    onClick={confirmDelete}
                   >
                     {t("common.action.confirm")}
                   </Button>
@@ -233,6 +336,26 @@ export default function PermissionsSettings() {
                     />
                   </Show>
                 </DialogBody>
+                <p class="text-muted-foreground text-xs">
+                  {t(
+                    "setting.permissions.reset_description",
+                  )}
+                </p>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    aria-label={t(
+                      "setting.permissions.reset",
+                      {
+                        name: name(entry()),
+                      },
+                    )}
+                    onClick={() => reset(entry())}
+                  >
+                    <RotateCcw class="size-4" />
+                    {t("setting.permissions.reset_action")}
+                  </Button>
+                </DialogFooter>
               </>
             )}
           </Show>

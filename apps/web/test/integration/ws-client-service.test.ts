@@ -20,7 +20,10 @@ vi.mock("@/libs/domain/utils/encrypt/e2e", () => ({
 }));
 
 import { WebSocketClientService } from "@/libs/infrastructure/signaling/client/ws-client-service";
-import { hashPassword } from "@/libs/domain/utils/encrypt/e2e";
+import {
+  hashPassword,
+  comparePasswordHash,
+} from "@/libs/domain/utils/encrypt/e2e";
 import type { ClientServiceInitOptions } from "@/libs/domain/client";
 import {
   getReconnectDelayMs,
@@ -870,25 +873,70 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     });
   });
 
-  it("falls back when a legacy server does not acknowledge joins", async () => {
+  it("rejects unacknowledged joins and ignores a late acknowledgement instead of becoming connected", async () => {
     vi.useFakeTimers();
     FakeWebSocket.acknowledgeJoins = false;
     const service = createService();
-    let resolved = false;
-    const connected = service.createClient().then(() => {
-      resolved = true;
+    const status = vi.fn();
+    const onJoin = vi.fn();
+    service.addEventListener("statuschange", (event) =>
+      status(event.detail),
+    );
+    service.listenForJoin(onJoin);
+    const connected = service.createClient();
+    const failed = expect(connected).rejects.toThrow(
+      "join acknowledgement timeout",
+    );
+    await flushMicrotasks();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+    await flushMicrotasks();
+    socket.receive({
+      type: "join",
+      data: { clientId: "peer", createdAt: 1 },
     });
-    await flushMicrotasks();
-    FakeWebSocket.instances[0].accept();
-    await flushMicrotasks();
 
     await vi.advanceTimersByTimeAsync(
       WEBSOCKET_JOIN_ACK_TIMEOUT_MS - 1,
     );
-    expect(resolved).toBe(false);
+    expect(status).not.toHaveBeenCalledWith("connected");
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
     await vi.advanceTimersByTimeAsync(1);
-    await connected;
-    expect(resolved).toBe(true);
+    await failed;
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(status).toHaveBeenLastCalledWith("disconnected");
+    socket.receive({
+      type: "joined",
+      data: { protocolVersion: 2, resumed: false },
+    });
+    await flushMicrotasks();
+    expect(status).not.toHaveBeenCalledWith("connected");
+    expect(onJoin).not.toHaveBeenCalled();
+    FakeWebSocket.acknowledgeJoins = true;
+    await connectService(service);
+    expect(status).toHaveBeenLastCalledWith("connected");
+  });
+
+  it("rejects a wrong password before publishing membership or connected status", async () => {
+    vi.mocked(comparePasswordHash).mockResolvedValueOnce(
+      false,
+    );
+    const service = createService({ password: "wrong" });
+    const status = vi.fn();
+    service.addEventListener("statuschange", (event) =>
+      status(event.detail),
+    );
+    const joining = service.createClient();
+    const failed = expect(joining).rejects.toThrow(
+      "incorrect password",
+    );
+    await flushMicrotasks();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept("server-password-hash");
+    await failed;
+    expect(socket.parsedMessages()).toEqual([]);
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(status).not.toHaveBeenCalledWith("connected");
   });
 
   it("closes a timed-out socket and ignores its late handshake", async () => {

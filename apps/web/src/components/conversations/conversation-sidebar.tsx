@@ -205,7 +205,7 @@ export function ConversationSidebar(
             </Show>
             <Show when={row.summary.online}>
               <span
-                class="border-background absolute right-0 bottom-0 size-2.5
+                class="border-background absolute bottom-0 right-0 size-2.5
                   rounded-full border-2 bg-emerald-500"
                 aria-label={t("conversations.online")}
               />
@@ -387,7 +387,11 @@ export function ConversationSidebar(
                 }
               >
                 <Trash2 class="size-4" />
-                {t("conversations.delete")}
+                {t(
+                  conversation().kind === "room"
+                    ? "conversations.delete_room"
+                    : "conversations.delete",
+                )}
               </DropdownMenuItem>
               <Show when={row.summary.online}>
                 <p class="text-muted-foreground px-2 py-1.5 text-xs">
@@ -506,8 +510,8 @@ export function ConversationSidebar(
           </div>
           <div class="relative">
             <Search
-              class="text-muted-foreground pointer-events-none absolute top-2.5
-                left-2.5 size-4"
+              class="text-muted-foreground pointer-events-none absolute left-2.5
+                top-2.5 size-4"
             />
             <Input
               class="h-9 pl-8"

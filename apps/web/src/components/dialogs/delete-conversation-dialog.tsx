@@ -2,17 +2,30 @@ import { createSignal } from "solid-js";
 import { Button } from "@/components/ui/button";
 import { createDialog } from "./dialog";
 import { t } from "@/i18n";
+import type { Conversation } from "@/libs/domain/conversation";
 
 function createConversationActionDialog(
   action: "clear" | "delete",
 ) {
   const [name, setName] = createSignal("");
+  const [kind, setKind] =
+    createSignal<Conversation["kind"]>("direct");
+  const roomDeletion = () =>
+    action === "delete" && kind() === "room";
   const { open, close, submit } = createDialog<boolean>({
-    title: () => t(`conversations.${action}_title`),
+    title: () =>
+      t(
+        roomDeletion()
+          ? "conversations.delete_room"
+          : `conversations.${action}_title`,
+      ),
     description: () =>
-      t(`conversations.${action}_description`, {
-        name: name(),
-      }),
+      t(
+        roomDeletion()
+          ? "conversations.delete_room_description"
+          : `conversations.${action}_description`,
+        { name: name() },
+      ),
     confirm: (
       <Button
         variant="destructive"
@@ -21,7 +34,9 @@ function createConversationActionDialog(
         {t(
           action === "clear"
             ? "conversations.clear"
-            : "common.action.delete",
+            : roomDeletion()
+              ? "conversations.delete_room"
+              : "common.action.delete",
         )}
       </Button>
     ),
@@ -32,8 +47,12 @@ function createConversationActionDialog(
     ),
   });
   return {
-    open: (title: string) => {
+    open: (
+      title: string,
+      kind: Conversation["kind"] = "direct",
+    ) => {
       setName(title);
+      setKind(kind);
       return open();
     },
   };

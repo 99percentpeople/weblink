@@ -52,6 +52,7 @@ export interface RoomServiceOptions {
   ): Promise<ClientService>;
   getLocalStream(): MediaStream | null;
   onLeaving?(): void;
+  onJoined?(profile: ClientServiceInitOptions): void;
   onMemberJoined?(roomId: string, client: Client): void;
 }
 
@@ -304,6 +305,8 @@ export class RoomService {
             ? (appState.roomStatus.joinedAt ?? Date.now())
             : Date.now(),
       });
+      setAppState("profile", "initalJoin", false);
+      this.options.onJoined?.(profile);
     } catch (error) {
       if (!this.isGenerationCurrent(generation)) {
         throw abortError("Room changed while joining");

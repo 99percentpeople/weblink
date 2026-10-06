@@ -36,6 +36,7 @@ import { deferred } from "../support/rtc-transport";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import { platform } from "@/libs/platform/runtime";
 import type { Conversation } from "@/libs/domain/conversation";
+import { setRoomConfig } from "@/libs/state/permission-options";
 
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: { remoteControl: { screen: {} } },
@@ -333,6 +334,7 @@ describe("room dialog and shared meeting device ownership", () => {
   });
 
   it("allows clearing an active room but requires leaving before deletion", async () => {
+    setRoomConfig("current", { autoDownloadFiles: true });
     const f = setup();
     fireEvent.click(
       screen.getByRole("button", {
@@ -346,7 +348,7 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     expect(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     ).toBeDisabled();
     expect(
@@ -374,6 +376,10 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     expect(deletion.remove).not.toHaveBeenCalled();
     expect(
+      appState.options.roomConfigs.current
+        ?.autoDownloadFiles,
+    ).toBe(true);
+    expect(
       screen.getByRole("dialog", {
         name: "room_dialog.title",
       }),
@@ -386,12 +392,13 @@ describe("room dialog and shared meeting device ownership", () => {
     f.setActiveRoom(null);
     expect(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     ).toBeEnabled();
   });
 
   it("rechecks room membership if the room is joined while deletion confirmation is open", async () => {
+    setRoomConfig("history", { autoDownloadFiles: true });
     const f = setup();
     fireEvent.click(
       screen.getByRole("button", {
@@ -405,33 +412,38 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     await userEvent.click(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     );
     const confirmation = screen.getByRole("dialog", {
-      name: "conversations.delete_title",
+      name: "conversations.delete_room",
     });
     f.setActiveRoom("history");
     await userEvent.click(
       within(confirmation).getByRole("button", {
-        name: "common.action.delete",
+        name: "conversations.delete_room",
       }),
     );
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
-          name: "conversations.delete_title",
+          name: "conversations.delete_room",
         }),
       ).toBeNull(),
     );
     expect(deletion.remove).not.toHaveBeenCalled();
     expect(
+      appState.options.roomConfigs.history
+        ?.autoDownloadFiles,
+    ).toBe(true);
+    expect(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     ).toBeDisabled();
   });
   it("keeps the room conversation when removal is canceled", async () => {
+    setRoomConfig("history", { autoDownloadFiles: true });
     setup();
     fireEvent.click(
       screen.getByRole("button", {
@@ -445,11 +457,11 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     await userEvent.click(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     );
     const confirmation = screen.getByRole("dialog", {
-      name: "conversations.delete_title",
+      name: "conversations.delete_room",
     });
     expect(deletion.remove).not.toHaveBeenCalled();
     await userEvent.click(
@@ -460,7 +472,7 @@ describe("room dialog and shared meeting device ownership", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", {
-          name: "conversations.delete",
+          name: "conversations.delete_room",
         }),
       ).toBeEnabled(),
     );
@@ -470,9 +482,15 @@ describe("room dialog and shared meeting device ownership", () => {
         (room) => room.id === "history",
       ),
     ).toBe(true);
+    expect(
+      appState.options.roomConfigs.history
+        ?.autoDownloadFiles,
+    ).toBe(true);
   });
 
   it("removes the selected room after confirmation and closes its settings", async () => {
+    setRoomConfig("history", { autoDownloadFiles: true });
+    setRoomConfig("current", { autoDownloadFiles: true });
     const f = setup();
     deletion.remove.mockImplementationOnce((id) => {
       setAppState("message", "conversations", (items) =>
@@ -491,15 +509,18 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     await userEvent.click(
       screen.getByRole("button", {
-        name: "conversations.delete",
+        name: "conversations.delete_room",
       }),
     );
     const confirmation = screen.getByRole("dialog", {
-      name: "conversations.delete_title",
+      name: "conversations.delete_room",
     });
+    expect(confirmation).toHaveTextContent(
+      "conversations.delete_room_description",
+    );
     await userEvent.click(
       within(confirmation).getByRole("button", {
-        name: "common.action.delete",
+        name: "conversations.delete_room",
       }),
     );
     await waitFor(() =>
@@ -510,6 +531,13 @@ describe("room dialog and shared meeting device ownership", () => {
     expect(
       appState.message.conversations.map((room) => room.id),
     ).toEqual(["current"]);
+    expect(
+      appState.options.roomConfigs.history,
+    ).toBeUndefined();
+    expect(
+      appState.options.roomConfigs.current
+        ?.autoDownloadFiles,
+    ).toBe(true);
     expect(f.joinRoom).not.toHaveBeenCalled();
   });
 

@@ -12,15 +12,33 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from "@solidjs/testing-library";
 import { createRoomDialog } from "@/components/dialogs/join-dialog";
+import { createRoomActions } from "@/libs/state/create-room-actions";
 import { ModalProvider } from "@/components/dialogs/base";
 import { toast } from "solid-sonner";
+import { reconcile } from "solid-js/store";
 import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
+import { createMessageStores } from "@/libs/application/messaging/message-store";
+import { createMessageRepository } from "../support/message-repository";
+import {
+  roomConversationId,
+  type RoomConversation,
+} from "@/libs/domain/conversation";
+
+vi.mock("@/libs/application/room-identity", () => ({
+  getRoomNamespace: () => "test-server",
+}));
+const historyStore = createMessageStores(
+  createMessageRepository(),
+);
+const setRooms = (rooms: RoomConversation[]) =>
+  setAppState("message", "conversations", reconcile(rooms));
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
@@ -36,7 +54,14 @@ vi.mock("@/components/icons", () => ({
 }));
 
 let animationStyle: HTMLStyleElement;
-beforeEach(() => {
+beforeEach(async () => {
+  await historyStore.initialize();
+  setRooms([]);
+  setAppState(
+    "session",
+    "clientServiceStatus",
+    "disconnected",
+  );
   animationStyle = document.createElement("style");
   animationStyle.textContent =
     "* { animation-name: none !important; }";
@@ -59,14 +84,31 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function setup() {
+function setup(options?: {
+  retry?: boolean;
+  join?: () => Promise<void>;
+}) {
   const completed = vi.fn();
   function Harness() {
     const dialog = createRoomDialog();
+    const actions = options?.join
+      ? createRoomActions({
+          state: { joinRoom: options.join },
+          dialog,
+          history: historyStore,
+          namespace: "test-server",
+        })
+      : undefined;
     return (
       <>
         <button
-          onClick={() => void dialog.open().then(completed)}
+          onClick={() =>
+            void (
+              actions
+                ? actions.edit()
+                : dialog.open(options)
+            ).then(completed)
+          }
         >
           Edit
         </button>
@@ -82,6 +124,273 @@ function setup() {
 }
 
 describe("room settings autosave", () => {
+  const savedRoom = (
+    roomId: string,
+    lastJoinedAt: number,
+  ): RoomConversation => ({
+    id: roomConversationId("test-server", roomId),
+    kind: "room",
+    roomId,
+    namespace: "test-server",
+    title: roomId,
+    labelIds: [],
+    createdAt: 1,
+    lastJoinedAt,
+    joinPassword: "saved-password",
+  });
+
+  it.each([true, false])(
+    "returns failed additions to their form without adding history and saves only after retry succeeds (first=%s)",
+    async (first) => {
+      vi.mocked(toast.error).mockClear();
+      if (!first) setRooms([savedRoom("previous", 10)]);
+      setAppState("profile", "initalJoin", first);
+      let reject!: (error: Error) => void;
+      const join = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((_, no) => {
+              reject = no;
+            }),
+        )
+        .mockImplementationOnce(async () => {
+          await historyStore.recordRoomJoin(
+            appState.profile.roomId,
+            "test-server",
+            appState.profile.password,
+            100,
+          );
+          setAppState("profile", "initalJoin", false);
+        });
+      setup({ join });
+      await screen.findByRole("dialog");
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: first
+            ? "common.action.continue"
+            : "common.join_form.history.add",
+        }),
+      );
+      fireEvent.input(
+        screen.getByLabelText(
+          "common.join_form.room_id.title",
+        ),
+        {
+          target: { value: "new-room" },
+        },
+      );
+      fireEvent.input(
+        screen.getByLabelText(
+          "common.join_form.password.title",
+        ),
+        {
+          target: { value: "wrong-password" },
+        },
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "client.menu.connect",
+        }),
+      );
+      await waitFor(() =>
+        expect(join).toHaveBeenCalledOnce(),
+      );
+      const initialHistory = first ? [] : ["previous"];
+      expect(
+        appState.message.conversations.map(
+          (room) => room.title,
+        ),
+      ).toEqual(initialHistory);
+      reject(
+        new Error(
+          first
+            ? "incorrect password"
+            : "connection timeout",
+        ),
+      );
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledOnce(),
+      );
+      expect(
+        await screen.findByLabelText(
+          "common.join_form.room_id.title",
+        ),
+      ).toHaveValue("new-room");
+      expect(screen.queryByRole("list")).toBeNull();
+      expect(
+        screen.getByLabelText(
+          "common.join_form.password.title",
+        ),
+      ).toHaveValue("wrong-password");
+      expect(
+        appState.message.conversations.map(
+          (room) => room.title,
+        ),
+      ).toEqual(initialHistory);
+      fireEvent.input(
+        screen.getByLabelText(
+          "common.join_form.password.title",
+        ),
+        {
+          target: { value: "correct-password" },
+        },
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "client.menu.connect",
+        }),
+      );
+      await waitFor(() =>
+        expect(join).toHaveBeenCalledTimes(2),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).toBeNull(),
+      );
+      expect(
+        appState.message.conversations.filter(
+          (room) => room.title === "new-room",
+        ),
+      ).toMatchObject([
+        {
+          lastJoinedAt: 100,
+          joinPassword: "correct-password",
+        },
+      ]);
+    },
+  );
+
+  it("uses existing rooms in most recently joined order and restores the selected credentials", async () => {
+    setRooms([
+      savedRoom("older", 10),
+      savedRoom("latest", 30),
+      {
+        ...savedRoom("hidden", 40),
+        joinHistoryHidden: true,
+      },
+      {
+        ...savedRoom("elsewhere", 50),
+        namespace: "another-server",
+      },
+    ]);
+    const { completed } = setup();
+    const list = screen.getByRole("list", {
+      name: "common.join_form.history.title",
+    });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) =>
+          within(item)
+            .getAllByRole("button")[0]
+            .getAttribute("aria-label"),
+        ),
+    ).toEqual(["latest", "older"]);
+    expect(
+      screen.queryByRole("button", {
+        name: "hidden",
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "older",
+      }),
+    );
+    expect(completed).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    await waitFor(() =>
+      expect(completed).toHaveBeenCalledWith({
+        cancel: false,
+        result: expect.objectContaining({
+          roomId: "older",
+          password: "saved-password",
+        }),
+      }),
+    );
+    expect(appState.profile.clientId).toBe("uid_saved");
+  });
+
+  it("switches between history and a blank add-room form and falls back to the form after removing the final entry", async () => {
+    setRooms([savedRoom("saved", 10)]);
+    const { completed } = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.join_form.history.add",
+      }),
+    );
+    expect(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+    ).toHaveValue("");
+    expect(screen.queryByRole("list")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.join_form.history.back",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.join_form.history.remove",
+      }),
+    );
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+    ).toHaveValue("");
+    expect(appState.message.conversations).toHaveLength(1);
+    expect(appState.message.conversations[0]).toMatchObject(
+      { joinHistoryHidden: true },
+    );
+    expect(completed).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.close",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit" }),
+    );
+    expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("allows legacy rooms to supply credentials without reusing another room's password", () => {
+    const room = savedRoom("legacy", 10);
+    delete room.joinPassword;
+    setRooms([room]);
+    setAppState(
+      "profile",
+      "password",
+      "unrelated-password",
+    );
+    const { completed } = setup();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    expect(completed).not.toHaveBeenCalled();
+    expect(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+    ).toHaveValue("legacy");
+    expect(
+      screen.getByLabelText(
+        "common.join_form.password.title",
+      ),
+    ).toHaveValue("");
+  });
+
   it("accepts a dropped avatar image through the existing crop and save flow", async () => {
     const drawImage = vi.fn();
     vi.spyOn(
@@ -235,13 +544,41 @@ describe("room settings autosave", () => {
         cancel: false,
         result: expect.objectContaining({
           roomId: "new-room",
-          initalJoin: false,
+          initalJoin: true,
         }),
       }),
     );
     expect(appState.profile.clientId).toBe("uid_saved");
     expect(appState.profile.name).toBe("Alice");
-    expect(appState.profile.initalJoin).toBe(false);
+    expect(appState.profile.initalJoin).toBe(true);
+  });
+
+  it("reopens a failed new room on its form with the entered values, even when other history exists", () => {
+    setRooms([savedRoom("previous", 10)]);
+    setAppState("profile", {
+      initalJoin: true,
+      roomId: "new-room",
+      password: "entered-password",
+    });
+    setup({ retry: true });
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(
+      screen.getByLabelText(
+        "common.join_form.room_id.title",
+      ),
+    ).toHaveValue("new-room");
+    expect(
+      screen.getByLabelText(
+        "common.join_form.password.title",
+      ),
+    ).toHaveValue("entered-password");
+    expect(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    ).toBeVisible();
+    expect(appState.profile.initalJoin).toBe(true);
+    expect(appState.message.conversations).toHaveLength(1);
   });
 
   it("saves profile, password and automatic-connection settings without submitting", async () => {

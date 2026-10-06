@@ -17,7 +17,10 @@ const messages: readonly [RegExp, ErrorKey][] = [
     /^(incorrect|invalid) password$/i,
     "errors.incorrect_password",
   ],
-  [/^connection timeout$/i, "errors.connection_timeout"],
+  [
+    /^(connection|join acknowledgement) timeout$/i,
+    "errors.connection_timeout",
+  ],
   [
     /^(socket connection error|connection failed|failed to fetch|network error|network unavailable)$/i,
     "errors.connection_failed",

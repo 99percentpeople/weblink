@@ -47,8 +47,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { appState } from "@/libs/state/app-state";
+import { getRoomJoinHistory } from "@/libs/application/messaging/room-join-history";
+import { messageStores } from "@/libs/application/messaging/message-store";
+import { getRoomNamespace } from "@/libs/application/room-identity";
+import { RoomJoinHistoryList } from "./room-join-history-list";
+import { ArrowLeft } from "lucide-solid";
 
 export const createRoomDialog = () => {
+  const namespace = getRoomNamespace();
+  const rooms = createMemo(() =>
+    getRoomJoinHistory(
+      appState.message.conversations,
+      namespace,
+    ),
+  );
   const [step, setStep] = createSignal<"profile" | "room">(
     "profile",
   );
@@ -56,6 +68,17 @@ export const createRoomDialog = () => {
     createSignal(false);
   const [uploadingAvatar, setUploadingAvatar] =
     createSignal(false);
+  const [roomFormVisible, setRoomFormVisible] =
+    createSignal(true);
+  const [selectedRoomId, setSelectedRoomId] = createSignal<
+    string | null
+  >(null);
+  const showRoomHistory = () =>
+    !roomFormVisible() && rooms().length > 0;
+  const selectedRoom = () =>
+    rooms().find(
+      (room) => room.roomId === selectedRoomId(),
+    ) ?? rooms()[0];
   const avatarInputId = createUniqueId();
   const passwordInputId = createUniqueId();
   let profileForm: HTMLFormElement | undefined;
@@ -84,22 +107,64 @@ export const createRoomDialog = () => {
     profileForm?.requestSubmit();
   };
 
+  const submitRoom = () => {
+    if (uploadingAvatar()) return;
+    if (!profileForm?.checkValidity()) {
+      setStep("profile");
+      queueMicrotask(() => profileForm?.reportValidity());
+      return;
+    }
+    if (showRoomHistory()) {
+      const room = selectedRoom();
+      if (!room) return;
+      const password =
+        room.joinPassword !== undefined
+          ? room.joinPassword
+          : appState.profile.roomId === room.roomId
+            ? appState.profile.password
+            : null;
+      setClientProfile({ roomId: room.roomId, password });
+      // Legacy rooms have no saved credentials. Let the user supply or confirm them.
+      if (room.joinPassword === undefined) {
+        setRoomFormVisible(true);
+        return;
+      }
+    }
+    submit({ ...appState.profile });
+  };
+  const addRoom = () => {
+    setClientProfile({ roomId: "", password: null });
+    setRoomFormVisible(true);
+    setShowPassword(false);
+  };
+  const removeRoom = (roomId: string) => {
+    const room = rooms().find(
+      (item) => item.roomId === roomId,
+    );
+    if (room)
+      messageStores.hideRoomFromJoinHistory(room.id);
+    if (selectedRoomId() === roomId)
+      setSelectedRoomId(rooms()[0]?.roomId ?? null);
+    if (!rooms().length) addRoom();
+  };
+
   const {
     open: openDialog,
     close,
     submit,
   } = createDialog({
-    class:
-      "h-[34rem] sm:max-w-md [&_[data-slot=dialog-body]]:flex-1",
+    class: "gap-3 p-4 sm:max-w-md",
     title: () => t("common.join_form.title"),
     description: () =>
       t(
         step() === "profile"
           ? "common.join_form.profile_description"
-          : "common.join_form.room_description",
+          : showRoomHistory()
+            ? "common.join_form.history.description"
+            : "common.join_form.room_description",
       ),
     content: () => (
-      <div class="flex min-h-0 flex-col gap-5 p-1">
+      <div class="flex min-h-0 flex-col gap-3 p-1">
         <nav
           class="flex items-center px-1"
           aria-label={t("common.join_form.title")}
@@ -113,7 +178,7 @@ export const createRoomDialog = () => {
             onClick={() => setStep("profile")}
           >
             <span
-              class="border-border text-muted-foreground flex size-7 shrink-0
+              class="border-border text-muted-foreground flex size-6 shrink-0
                 items-center justify-center rounded-full border text-xs
                 font-semibold transition-colors"
               classList={{
@@ -156,7 +221,7 @@ export const createRoomDialog = () => {
             onClick={() => setStep("room")}
           >
             <span
-              class="border-border text-muted-foreground flex size-7 shrink-0
+              class="border-border text-muted-foreground flex size-6 shrink-0
                 items-center justify-center rounded-full border text-xs
                 font-semibold transition-colors"
               classList={{
@@ -180,14 +245,14 @@ export const createRoomDialog = () => {
 
         <form
           ref={profileForm}
-          class="grid gap-4"
+          class="grid gap-3"
           classList={{ hidden: step() !== "profile" }}
           onSubmit={(ev) => {
             ev.preventDefault();
             setStep("room");
           }}
         >
-          <label class="flex flex-col gap-2">
+          <label class="flex flex-col gap-1.5">
             <span class="input-label">
               {t("common.join_form.name")}
             </span>
@@ -206,7 +271,7 @@ export const createRoomDialog = () => {
           </label>
 
           <DropArea
-            class="relative flex flex-col gap-2"
+            class="relative flex flex-col gap-1.5"
             disabled={uploadingAvatar()}
             onDrop={(event) => {
               const files = Array.from(
@@ -244,7 +309,7 @@ export const createRoomDialog = () => {
                 disabled={uploadingAvatar()}
                 onClick={() => avatarFileInput?.click()}
               >
-                <Avatar class="size-14">
+                <Avatar class="size-12">
                   <AvatarImage
                     src={
                       appState.profile.avatar ?? undefined
@@ -291,7 +356,7 @@ export const createRoomDialog = () => {
                     </span>
                   </InputGroupButton>
                 </InputGroup>
-                <p class="muted mt-1.5">
+                <p class="muted mt-1">
                   {t("common.join_form.avatar_description")}
                 </p>
               </div>
@@ -312,7 +377,7 @@ export const createRoomDialog = () => {
             </div>
           </DropArea>
 
-          <div class="bg-muted/40 flex items-center gap-3 rounded-lg px-3 py-2.5">
+          <div class="bg-muted/40 flex items-center gap-2 rounded-lg px-2.5 py-2">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1">
                 <p class="text-muted-foreground text-xs font-medium">
@@ -365,25 +430,40 @@ export const createRoomDialog = () => {
           </div>
         </form>
 
+        <Show when={step() === "room" && showRoomHistory()}>
+          <RoomJoinHistoryList
+            rooms={rooms()}
+            selected={selectedRoom()?.roomId ?? null}
+            onSelect={setSelectedRoomId}
+            onDelete={removeRoom}
+            onAdd={addRoom}
+          />
+        </Show>
         <form
           ref={roomForm}
-          class="grid gap-4"
-          classList={{ hidden: step() !== "room" }}
+          class="grid gap-3"
+          hidden={step() !== "room" || showRoomHistory()}
+          classList={{
+            hidden: step() !== "room" || showRoomHistory(),
+          }}
           onSubmit={(ev) => {
             ev.preventDefault();
-            if (uploadingAvatar()) return;
-            if (!profileForm?.checkValidity()) {
-              setStep("profile");
-              queueMicrotask(() =>
-                profileForm?.reportValidity(),
-              );
-              return;
-            }
-            setClientProfile("initalJoin", false);
-            submit({ ...appState.profile });
+            submitRoom();
           }}
         >
-          <label class="flex flex-col gap-2">
+          <Show when={rooms().length > 0}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-7 justify-self-start px-2 text-xs"
+              onClick={() => setRoomFormVisible(false)}
+            >
+              <ArrowLeft />
+              {t("common.join_form.history.back")}
+            </Button>
+          </Show>
+          <label class="flex flex-col gap-1.5">
             <span class="input-label">
               {t("common.join_form.room_id.title")}
             </span>
@@ -400,7 +480,7 @@ export const createRoomDialog = () => {
             />
           </label>
 
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-1.5">
             <div class="flex items-center gap-1">
               <label
                 for={passwordInputId}
@@ -491,9 +571,10 @@ export const createRoomDialog = () => {
               </InputGroupButton>
             </InputGroup>
           </div>
-
+        </form>
+        <Show when={step() === "room"}>
           <Switch
-            class="flex items-center justify-between gap-4 border-t pt-4"
+            class="flex items-center justify-between gap-3 border-t pt-3"
             checked={appState.profile.autoJoin}
             onChange={(isChecked) =>
               setClientProfile("autoJoin", isChecked)
@@ -506,9 +587,13 @@ export const createRoomDialog = () => {
               <SwitchThumb />
             </SwitchControl>
           </Switch>
-        </form>
-        <p class="text-muted-foreground text-xs leading-relaxed">
-          {t("common.join_form.autosave_hint")}
+        </Show>
+        <p class="text-muted-foreground text-xs leading-4">
+          {t(
+            showRoomHistory() && step() === "room"
+              ? "common.join_form.history.hint"
+              : "common.join_form.autosave_hint",
+          )}
         </p>
       </div>
     ),
@@ -518,9 +603,17 @@ export const createRoomDialog = () => {
         fallback={
           <Button
             type="button"
-            class="min-w-24"
-            disabled={uploadingAvatar()}
-            onClick={() => roomForm?.requestSubmit()}
+            size="sm"
+            class="min-w-20"
+            disabled={
+              uploadingAvatar() ||
+              (showRoomHistory() && !selectedRoom())
+            }
+            onClick={() =>
+              showRoomHistory()
+                ? submitRoom()
+                : roomForm?.requestSubmit()
+            }
           >
             {t("client.menu.connect")}
           </Button>
@@ -528,7 +621,8 @@ export const createRoomDialog = () => {
       >
         <Button
           type="button"
-          class="min-w-24"
+          size="sm"
+          class="min-w-20"
           disabled={uploadingAvatar()}
           onClick={goToRoomStep}
         >
@@ -540,6 +634,7 @@ export const createRoomDialog = () => {
       <Button
         type="button"
         variant="outline"
+        size="sm"
         onClick={() => close()}
       >
         {t("common.action.close")}
@@ -547,9 +642,21 @@ export const createRoomDialog = () => {
     ),
   });
 
-  const open = () => {
+  const open = (options: { retry?: boolean } = {}) => {
+    setRoomFormVisible(
+      options.retry || appState.profile.initalJoin,
+    );
+    setSelectedRoomId(
+      rooms().find(
+        (room) => room.roomId === appState.profile.roomId,
+      )?.roomId ??
+        rooms()[0]?.roomId ??
+        null,
+    );
     setStep(
-      appState.profile.initalJoin ? "profile" : "room",
+      !options.retry && appState.profile.initalJoin
+        ? "profile"
+        : "room",
     );
     setShowPassword(false);
     return openDialog();

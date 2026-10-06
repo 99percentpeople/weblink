@@ -55,6 +55,12 @@ describe.each(Object.keys(dictionaries))(
       ],
       [
         new Error(
+          "[WebSocketClientService] join acknowledgement timeout",
+        ),
+        "connection_timeout",
+      ],
+      [
+        new Error(
           "[WebSocketClientService] socket connection error",
         ),
         "connection_failed",

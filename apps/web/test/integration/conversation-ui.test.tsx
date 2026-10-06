@@ -482,7 +482,10 @@ describe("shared conversation UI", () => {
       );
       expect(
         screen.getByRole("menuitem", {
-          name: "conversations.delete",
+          name:
+            kind === "room"
+              ? "conversations.delete_room"
+              : "conversations.delete",
         }),
       ).toHaveAttribute("aria-disabled", "true");
       expect(

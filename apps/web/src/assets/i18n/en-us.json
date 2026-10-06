@@ -388,21 +388,24 @@
       }
     },
     "permissions": {
-      "description": "Connected clients and rooms are remembered here. Forgetting a visible client or the current room resets its permissions; offline entries are removed.",
+      "description": "Manage client and room permissions. Delete history from this list, or open settings to edit or reset permissions. Leave an active room before deleting its history.",
       "clients": "Clients",
       "rooms": "Rooms",
       "empty_clients": "No saved client permissions.",
       "empty_rooms": "No saved room permissions.",
-      "remove": "Remove {{name}}",
+      "last_updated": "Last updated: {{time}}",
       "ask": "Ask every time",
       "allow": "Automatically approve (allowlist)",
       "deny": "Automatically reject (blocklist)",
       "configure": "Permissions for {{name}}",
       "reset": "Reset permissions for {{name}}",
-      "reset_title": "Reset permissions?",
-      "forget_title": "Forget this entry?",
-      "reset_description": "“{{name}}” is still present. Restore default permissions and keep this entry?",
-      "forget_description": "Forget “{{name}}” and remove its saved permissions? Conversation history will be kept."
+      "reset_action": "Reset permissions",
+      "reset_description": "Reset restores default permissions and keeps this entry, join history, passwords and chats.",
+      "delete_room": "Delete history for {{name}}",
+      "remove": "Delete permission history for {{name}}",
+      "remove_title": "Delete permission history?",
+      "remove_description": "Delete the saved permissions for “{{name}}” and remove this entry? Chat history will be kept.",
+      "delete_requires_disconnect": "Disconnect from this client before deleting its permission history."
     },
     "application": {
       "automatic_pip_desktop_description": "Shrink the meeting into an always-on-top window when Weblink goes into the background. Use Return to meeting to restore the window.",
@@ -583,9 +586,20 @@
       "system": "System"
     },
     "join_form": {
+      "history": {
+        "title": "Recent rooms",
+        "description": "Choose a room you joined before, or add a new room.",
+        "add": "Add room",
+        "back": "Back to recent rooms",
+        "remove": "Remove {{room}} from join history",
+        "protected": "Room password saved",
+        "last_joined": "Last joined: {{time}}",
+        "hint": "Choose a room, then select Connect. Removing history clears its saved password but keeps chats and permissions."
+      },
       "title": "Connection Setup",
       "profile_description": "Set the profile shown to other people in the room.",
       "room_description": "Set the room you want to create or join.",
+      "configure_before_join": "Select Edit room information to finish setup before joining a room.",
       "autosave_hint": "Changes save automatically. Select Connect to join the room.",
       "steps": {
         "profile": "Profile",
@@ -860,6 +874,8 @@
     "actions": "Actions for {{name}}",
     "delete": "Delete conversation",
     "delete_title": "Delete conversation",
+    "delete_room": "Delete room records",
+    "delete_room_description": "Delete the join history, saved password, chat history, conversation entry and room permissions for {{name}} from this device? Other members are not affected.",
     "delete_description": "Delete the chat history and conversation list entry for {{name}} from this browser? Other members are not affected.",
     "expand": "Expand conversations",
     "empty": "No matching conversations",
@@ -894,7 +910,8 @@
     "clear": "Clear chat history",
     "clear_title": "Clear chat history",
     "clear_description": "Clear the chat history of {{name}} from this browser? The conversation stays in the list. Other members are not affected.",
-    "delete_requires_exit": "Leave the room before deleting this conversation.",
+    "delete_requires_exit": "Leave the room before deleting its records.",
+    "manage_room_hint": "Clear only removes chat history. Deleting room records also removes join history, the saved password and room permissions.",
     "manage_hint": "Clear removes chat history and keeps the conversation. Delete also removes its entry from the conversation list."
   },
   "meeting": {

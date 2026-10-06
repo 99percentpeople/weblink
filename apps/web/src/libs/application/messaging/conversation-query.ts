@@ -5,6 +5,7 @@ import type {
 import { directConversationId } from "@/libs/domain/conversation";
 import type { Client } from "@/libs/domain/client";
 import type { StoreMessage } from "@/libs/domain/message";
+import { getConversationUpdateTimes } from "./conversation-activity";
 
 export interface ConversationSummary {
   conversation: Conversation;
@@ -15,6 +16,7 @@ export interface ConversationSummary {
   unread: number;
   online: boolean;
   active: boolean;
+  updatedAt: number;
 }
 
 export type ConversationFilter =
@@ -23,7 +25,7 @@ export type ConversationFilter =
   | "direct"
   | "room";
 
-/** Build summaries in one pass over history instead of scanning it per row. */
+/** Build summaries without rescanning all history for each row. */
 export function summarizeConversations(
   conversations: readonly Conversation[],
   clients: readonly Client[],
@@ -32,6 +34,10 @@ export function summarizeConversations(
   onlinePeerIds: ReadonlySet<string>,
   activeRoomId: string | null,
 ): ConversationSummary[] {
+  const updateTimes = getConversationUpdateTimes(
+    conversations,
+    messages,
+  );
   const clientsById = new Map(
     clients.map((client) => [client.clientId, client]),
   );
@@ -83,6 +89,7 @@ export function summarizeConversations(
       const lastMessage = history.at(-1);
       return {
         conversation,
+        updatedAt: updateTimes.get(conversation.id)!,
         title: client?.name ?? conversation.title,
         avatar: client?.avatar ?? undefined,
         lastMessage,
@@ -101,27 +108,8 @@ export function summarizeConversations(
       };
     })
     .sort((a, b) => {
-      const active = Number(b.active) - Number(a.active);
-      if (active) return active;
-      if (a.lastMessage && b.lastMessage) {
-        const activity =
-          a.lastMessage.localSequence !== undefined &&
-          b.lastMessage.localSequence !== undefined
-            ? b.lastMessage.localSequence -
-              a.lastMessage.localSequence
-            : b.lastMessage.createdAt -
-              a.lastMessage.createdAt;
-        if (activity) return activity;
-      } else if (a.lastMessage || b.lastMessage)
-        return a.lastMessage ? -1 : 1;
-      else if (
-        a.conversation.createdAt !==
-        b.conversation.createdAt
-      )
-        return (
-          b.conversation.createdAt -
-          a.conversation.createdAt
-        );
+      const activity = b.updatedAt - a.updatedAt;
+      if (activity) return activity;
       return a.conversation.id.localeCompare(
         b.conversation.id,
       );

@@ -42,18 +42,45 @@ export const setRoomConfig = (
   });
 };
 
-export const forgetClientConfig = (clientId: string) => {
-  const visible = appState.session.clientViewData[clientId];
+export const resetClientConfig = (clientId: string) => {
   setAppState(
     "options",
     "clientConfigs",
     clientId,
-    visible
-      ? reconcile({
-          ...defaultClientConfig,
-          name: visible.name,
-        })
-      : undefined,
+    reconcile({
+      ...defaultClientConfig,
+      name:
+        appState.session.clientViewData[clientId]?.name ??
+        appState.options.clientConfigs[clientId]?.name,
+    }),
+  );
+  if (appState.options.redirectToClient === clientId)
+    setAppState("options", "redirectToClient", undefined);
+};
+
+export const resetRoomConfig = (conversationId: string) => {
+  setAppState(
+    "options",
+    "roomConfigs",
+    conversationId,
+    reconcile({
+      ...defaultRoomConfig,
+      name: appState.options.roomConfigs[conversationId]
+        ?.name,
+    }),
+  );
+};
+
+export const forgetClientConfig = (clientId: string) => {
+  if (appState.session.clientViewData[clientId]) {
+    resetClientConfig(clientId);
+    return;
+  }
+  setAppState(
+    "options",
+    "clientConfigs",
+    clientId,
+    undefined,
   );
   if (appState.options.redirectToClient === clientId)
     setAppState("options", "redirectToClient", undefined);
@@ -63,16 +90,14 @@ export const forgetRoomConfig = (
   conversationId: string,
   activeId: string | null | undefined,
 ) => {
+  if (conversationId === activeId) {
+    resetRoomConfig(conversationId);
+    return;
+  }
   setAppState(
     "options",
     "roomConfigs",
     conversationId,
-    conversationId === activeId
-      ? reconcile({
-          ...defaultRoomConfig,
-          name: appState.options.roomConfigs[conversationId]
-            ?.name,
-        })
-      : undefined,
+    undefined,
   );
 };

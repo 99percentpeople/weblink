@@ -388,21 +388,24 @@
       }
     },
     "permissions": {
-      "description": "在此管理連線過的用戶端與房間。忘記仍可見的用戶端或目前房間時，僅恢復預設權限；離線記錄會從清單移除。",
+      "description": "管理用戶端與房間的權限。清單可刪除歷史記錄；已加入的房間需先退出。點擊設定可修改或重設權限。",
       "clients": "用戶端",
       "rooms": "房間",
       "empty_clients": "尚無已儲存的用戶端權限。",
       "empty_rooms": "尚無已儲存的房間權限。",
-      "remove": "刪除 {{name}}",
+      "last_updated": "上次更新：{{time}}",
       "ask": "每次詢問",
       "allow": "自動批准（白名單）",
       "deny": "自動拒絕（黑名單）",
       "configure": "設定 {{name}} 的權限",
       "reset": "重設 {{name}} 的權限",
-      "reset_title": "恢復預設權限？",
-      "forget_title": "忘記此記錄？",
-      "reset_description": "「{{name}}」仍可見或正在使用中。是否恢復預設權限並保留在清單中？",
-      "forget_description": "是否忘記「{{name}}」並移除已儲存的權限？聊天記錄會保留。"
+      "reset_action": "重設權限",
+      "reset_description": "重設僅恢復預設權限，保留清單項目、加入歷史、密碼和聊天記錄。",
+      "delete_room": "刪除 {{name}} 的歷史記錄",
+      "remove": "刪除 {{name}} 的權限記錄",
+      "remove_title": "刪除權限記錄？",
+      "remove_description": "刪除「{{name}}」儲存的權限並從清單移除？聊天記錄會保留。",
+      "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。"
     },
     "application": {
       "automatic_pip_desktop_description": "Weblink 切到背景時，將會議縮為置頂小視窗。點擊返回會議可還原視窗。",
@@ -591,9 +594,20 @@
       "system": "跟隨系統"
     },
     "join_form": {
+      "history": {
+        "title": "歷史房間",
+        "description": "選擇以前加入的房間，或新增房間。",
+        "add": "新增房間",
+        "back": "返回歷史房間",
+        "remove": "移除 {{room}} 的加入歷史",
+        "protected": "已儲存房間密碼",
+        "last_joined": "最近加入：{{time}}",
+        "hint": "選擇房間後點擊「連線」。移除歷史會清除儲存的密碼，保留聊天和權限。"
+      },
       "title": "連線設定",
       "profile_description": "設定你在房間中顯示的使用者資訊。",
       "room_description": "設定要建立或加入的房間資訊。",
+      "configure_before_join": "請先點擊「編輯房間資訊」完成設定，再加入房間。",
       "autosave_hint": "修改會自動儲存，點擊「連接」後加入房間。",
       "steps": {
         "profile": "使用者資訊",
@@ -860,6 +874,8 @@
     "actions": "{{name}} 的對話操作",
     "delete": "刪除對話",
     "delete_title": "刪除對話",
+    "delete_room": "刪除房間記錄",
+    "delete_room_description": "刪除本機中「{{name}}」的加入歷史、儲存的密碼、聊天記錄、對話清單項目和房間權限設定？不影響其他成員。",
     "delete_description": "刪除此瀏覽器中「{{name}}」的聊天記錄及對話列表項目？不影響其他成員。",
     "expand": "展開對話清單",
     "empty": "沒有符合的對話",
@@ -894,7 +910,8 @@
     "clear": "清空聊天記錄",
     "clear_title": "清空聊天記錄",
     "clear_description": "清空此瀏覽器中「{{name}}」的聊天記錄？對話列表項目會保留，不影響其他成員。",
-    "delete_requires_exit": "請先退出房間，再刪除對話。",
+    "delete_requires_exit": "請先退出房間，再刪除記錄。",
+    "manage_room_hint": "清空僅移除聊天記錄；刪除房間記錄還會清理加入歷史、儲存的密碼和房間權限設定。",
     "manage_hint": "清空僅移除聊天記錄並保留對話；刪除還會移除對話列表項目。"
   },
   "meeting": {

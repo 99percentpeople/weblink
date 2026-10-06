@@ -95,7 +95,6 @@ export class WebSocketClientService implements ClientService {
     string | null
   > | null = null;
   private warnedUnprotectedRoom = false;
-  private warnedLegacyJoinAck = false;
   private joiningSocket: WebSocket | null = null;
   private bufferedSignals: RawSignal[] = [];
   private pendingPeerSignals = new Map<
@@ -768,13 +767,11 @@ export class WebSocketClientService implements ClientService {
             joinStarted = true;
             clearTimeout(connectionTimer);
             joinAckTimer = setTimeout(() => {
-              if (!this.warnedLegacyJoinAck) {
-                this.warnedLegacyJoinAck = true;
-                console.warn(
-                  "[WebSocketClientService] signaling server does not acknowledge joins; using legacy fallback",
-                );
-              }
-              succeed();
+              fail(
+                new Error(
+                  "[WebSocketClientService] join acknowledgement timeout",
+                ),
+              );
             }, WEBSOCKET_JOIN_ACK_TIMEOUT_MS);
             socket.send(
               encodeSignalingEnvelope({

@@ -388,21 +388,24 @@
       }
     },
     "permissions": {
-      "description": "在此管理连接过的客户端与房间。忘记仍可见的客户端或当前房间时，仅恢复默认权限；离线记录会从列表移除。",
+      "description": "管理客户端与房间的权限。列表可删除历史记录；已加入的房间需先退出。点击设置可修改或重置权限。",
       "clients": "客户端",
       "rooms": "房间",
       "empty_clients": "暂无已保存的客户端权限。",
       "empty_rooms": "暂无已保存的房间权限。",
-      "remove": "删除 {{name}}",
+      "last_updated": "上次更新：{{time}}",
       "ask": "每次询问",
       "allow": "自动批准（白名单）",
       "deny": "自动拒绝（黑名单）",
       "configure": "设置 {{name}} 的权限",
       "reset": "重置 {{name}} 的权限",
-      "reset_title": "恢复默认权限？",
-      "forget_title": "忘记此记录？",
-      "reset_description": "“{{name}}”仍可见或正在使用中。是否恢复默认权限并保留在列表中？",
-      "forget_description": "是否忘记“{{name}}”并移除已保存的权限？聊天记录会保留。"
+      "reset_action": "重置权限",
+      "reset_description": "重置仅恢复默认权限，保留列表项、加入历史、密码和聊天记录。",
+      "delete_room": "删除 {{name}} 的历史记录",
+      "remove": "删除 {{name}} 的权限记录",
+      "remove_title": "删除权限记录？",
+      "remove_description": "删除“{{name}}”保存的权限并从列表移除？聊天记录会保留。",
+      "delete_requires_disconnect": "请先断开与此客户端的连接，再删除权限记录。"
     },
     "application": {
       "automatic_pip_desktop_description": "Weblink 切到后台时，将会议缩为置顶小窗。点击返回会议可恢复窗口。",
@@ -591,9 +594,20 @@
       "system": "跟随系统"
     },
     "join_form": {
+      "history": {
+        "title": "历史房间",
+        "description": "选择以前加入的房间，或添加新的房间。",
+        "add": "添加房间",
+        "back": "返回历史房间",
+        "remove": "移除 {{room}} 的加入历史",
+        "protected": "已保存房间密码",
+        "last_joined": "最近加入：{{time}}",
+        "hint": "选择房间后点击“连接”。移除历史会清除保存的密码，保留聊天和权限。"
+      },
       "title": "连接设置",
       "profile_description": "设置你在房间中显示的用户信息。",
       "room_description": "设置要创建或加入的房间信息。",
+      "configure_before_join": "请先点击“编辑房间信息”完成设置，再加入房间。",
       "autosave_hint": "修改会自动保存，点击“连接”后加入房间。",
       "steps": {
         "profile": "用户信息",
@@ -860,6 +874,8 @@
     "actions": "{{name}} 的会话操作",
     "delete": "删除会话",
     "delete_title": "删除会话",
+    "delete_room": "删除房间记录",
+    "delete_room_description": "删除本机中“{{name}}”的加入历史、保存的密码、聊天记录、会话列表项和房间权限配置？不影响其他成员。",
     "delete_description": "删除此浏览器中“{{name}}”的聊天记录及会话列表项？不影响其他成员。",
     "expand": "展开会话列表",
     "empty": "没有匹配的会话",
@@ -894,7 +910,8 @@
     "clear": "清空聊天记录",
     "clear_title": "清空聊天记录",
     "clear_description": "清空此浏览器中“{{name}}”的聊天记录？会话列表项会保留，不影响其他成员。",
-    "delete_requires_exit": "请先退出房间，再删除会话。",
+    "delete_requires_exit": "请先退出房间，再删除记录。",
+    "manage_room_hint": "清空仅移除聊天记录；删除房间记录还会清理加入历史、保存的密码和房间权限配置。",
     "manage_hint": "清空仅移除聊天记录并保留会话；删除还会移除会话列表项。"
   },
   "meeting": {

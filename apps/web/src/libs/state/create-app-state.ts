@@ -77,6 +77,7 @@ import { getRoomNamespace } from "@/libs/application/room-identity";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { AppPermissions } from "./create-app-permissions";
 import { createAppSettings } from "./create-app-settings";
+import { createConversationActivity } from "./create-conversation-activity";
 import { platform } from "@/libs/platform/runtime";
 
 /** Services are owned by the application composition scope, independently of views. */
@@ -85,6 +86,15 @@ export function createAppState(
   speedTestApproval: SpeedTestApprovalController,
   permissions: AppPermissions,
 ): AppStateContextProps {
+  createConversationActivity(
+    () =>
+      Object.values(sessionService.clientViewData)
+        .filter(
+          (client) => client?.onlineStatus === "online",
+        )
+        .map((client) => client.clientId),
+    messageStores,
+  );
   const localStream = localStreamService.stream;
   const settings = createAppSettings({
     platform,
@@ -450,6 +460,17 @@ export function createAppState(
         },
       }),
     getLocalStream: () => localStream(),
+    onJoined: (profile) => {
+      void messageStores
+        .recordRoomJoin(
+          profile.roomId.trim(),
+          namespace,
+          profile.password,
+        )
+        .catch((error) =>
+          console.error("Could not save room join", error),
+        );
+    },
     onMemberJoined: (roomId, client) => {
       const id = roomId.trim();
       messageStores.recordRoomMember(

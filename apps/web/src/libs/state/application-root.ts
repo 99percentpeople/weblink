@@ -31,6 +31,8 @@ import { createMeetingSession } from "./create-meeting-session";
 import { createAppDialogs } from "./create-app-dialogs";
 import { initializeApplication } from "./initialize-application";
 import { provideContext } from "./provide-context";
+import { messageStores } from "@/libs/application/messaging/message-store";
+import { getRoomNamespace } from "@/libs/application/room-identity";
 import {
   defaultViewScopes,
   ViewScopesContext,
@@ -92,6 +94,8 @@ export function createApplicationRoot(
                 const actions = createRoomActions({
                   state,
                   dialog: createRoomDialog(),
+                  history: messageStores,
+                  namespace: getRoomNamespace(),
                 });
                 return provideContext(
                   RoomActionsContext,

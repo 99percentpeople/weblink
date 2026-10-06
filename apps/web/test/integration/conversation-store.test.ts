@@ -59,6 +59,79 @@ beforeEach(() => {
 });
 
 describe("conversation storage", () => {
+  it("reuses persisted room metadata for joins and removes only the join shortcut", async () => {
+    const id = roomConversationId("test-server", "room");
+    const repo = repository(
+      {},
+      {
+        clients: [],
+        messages: [roomMessage()],
+        labels: [],
+        conversations: [
+          {
+            id,
+            kind: "room",
+            roomId: "room",
+            namespace: "test-server",
+            title: "Saved name",
+            labelIds: ["label"],
+            createdAt: 1,
+          },
+        ],
+      },
+    );
+    const store = new MessageStores(repo);
+    // Recording before hydration must retain the existing record and its title.
+    await store.recordRoomJoin(
+      "room",
+      "test-server",
+      "secret",
+      100,
+    );
+    expect(store.conversations).toHaveLength(1);
+    expect(
+      repo.records.conversations.get(id),
+    ).toMatchObject({
+      title: "Saved name",
+      labelIds: ["label"],
+      createdAt: 1,
+      lastJoinedAt: 100,
+      joinPassword: "secret",
+      joinHistoryHidden: false,
+    });
+    store.hideRoomFromJoinHistory(id);
+    expect(
+      repo.records.conversations.get(id),
+    ).toMatchObject({ joinHistoryHidden: true });
+    expect(
+      repo.records.conversations.get(id),
+    ).not.toHaveProperty("joinPassword", "secret");
+    expect(store.getConversationMessages(id)).toHaveLength(
+      1,
+    );
+    expect(repo.records.messages.size).toBe(1);
+    await store.recordRoomJoin(
+      "room",
+      "test-server",
+      null,
+      200,
+    );
+    expect(
+      repo.records.conversations.get(id),
+    ).toMatchObject({
+      lastJoinedAt: 200,
+      joinPassword: null,
+      joinHistoryHidden: false,
+    });
+    expect(store.conversations).toHaveLength(1);
+    const reloaded = new MessageStores(repo);
+    await reloaded.initialize();
+    expect(reloaded.conversations[0]).toMatchObject({
+      lastJoinedAt: 200,
+      joinHistoryHidden: false,
+    });
+  });
+
   it.each(["direct", "room"] as const)(
     "clears %s history while retaining conversation metadata and other histories",
     async (kind) => {

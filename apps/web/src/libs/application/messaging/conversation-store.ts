@@ -182,6 +182,58 @@ export class ConversationStore {
     )!;
   }
 
+  recordRoomJoin(
+    roomId: string,
+    namespace: string,
+    password: string | null,
+    joinedAt: number,
+  ): void {
+    const room = this.ensureRoomConversation(
+      roomId,
+      namespace,
+    );
+    const index = this.conversations.findIndex(
+      (item) => item.id === room.id,
+    );
+    this.dependencies.setConversations(index, {
+      lastJoinedAt: joinedAt,
+      updatedAt: Math.max(room.updatedAt ?? 0, joinedAt),
+      joinPassword: password,
+      joinHistoryHidden: false,
+    });
+    this.persist(this.conversations[index]);
+  }
+
+  recordActivity(id: string, updatedAt: number): void {
+    const index = this.conversations.findIndex(
+      (conversation) => conversation.id === id,
+    );
+    if (
+      index === -1 ||
+      (this.conversations[index].updatedAt ?? 0) >=
+        updatedAt
+    )
+      return;
+    this.dependencies.setConversations(
+      index,
+      "updatedAt",
+      updatedAt,
+    );
+    this.persist(this.conversations[index]);
+  }
+
+  hideRoomFromJoinHistory(id: string): void {
+    const index = this.conversations.findIndex(
+      (item) => item.id === id && item.kind === "room",
+    );
+    if (index === -1) return;
+    this.dependencies.setConversations(index, {
+      joinHistoryHidden: true,
+      joinPassword: undefined,
+    });
+    this.persist(this.conversations[index]);
+  }
+
   recordRoomMember(
     roomConversationId: string,
     peerId: string,

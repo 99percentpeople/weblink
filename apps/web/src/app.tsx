@@ -74,7 +74,6 @@ const InnerApp = (props: ParentProps) => {
   const [search, setSearch] = useSearchParams();
 
   const { open: openAboutDialog } = createAboutDialog();
-  const onJoinRoom = roomActions.join;
   createEffect(
     on(
       () => search.dialog,
@@ -165,7 +164,7 @@ const InnerApp = (props: ParentProps) => {
         "disconnected" &&
       appState.profile.autoJoin
     ) {
-      await onJoinRoom();
+      await roomActions.autoJoin();
     }
   };
 

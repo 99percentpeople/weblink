@@ -80,6 +80,7 @@ export interface ClientService {
     callback: (client: TransferClient) => void,
   ): void;
 
+  /** Resolves only after the server accepts and acknowledges room membership. */
   createClient(options?: ClientJoinOptions): Promise<void>;
   updateClient(options: UpdateClientOptions): Promise<void>;
 

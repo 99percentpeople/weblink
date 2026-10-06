@@ -126,9 +126,10 @@ describe("conversation queries", () => {
     );
     expect(result[0].unread).toBe(1);
   });
-  it("uses local arrival order for activity and deleted read cursors despite remote clock skew", () => {
+  it("uses local activity time and deleted read cursors despite remote clock skew", () => {
     const conversation: Conversation = {
       ...conversations[1],
+      updatedAt: 40,
       lastReadMessageId: "deleted",
       lastReadAt: 100000,
       lastReadSequence: 2,
@@ -153,7 +154,10 @@ describe("conversation queries", () => {
       },
     ];
     const result = summarizeConversations(
-      [conversations[0], conversation],
+      [
+        { ...conversations[0], updatedAt: 30 },
+        conversation,
+      ],
       [],
       history,
       self,
@@ -165,6 +169,51 @@ describe("conversation queries", () => {
     ).toEqual([roomId, directId]);
     expect(result[0].unread).toBe(1);
     expect(result[0].preview).toBe("new-low-clock");
+  });
+  it("sorts by last update across online peers, empty conversations and the active room", () => {
+    const result = summarizeConversations(
+      [
+        { ...conversations[0], updatedAt: 50 },
+        { ...conversations[1], updatedAt: 20 },
+        { ...conversations[2], updatedAt: 40 },
+      ],
+      [],
+      [
+        message(
+          "active-room-message",
+          roomId,
+          "alice",
+          999999,
+        ),
+      ],
+      self,
+      new Set(["alice"]),
+      roomId,
+    );
+    expect(
+      result.map((item) => item.conversation.id),
+    ).toEqual([directId, otherId, roomId]);
+    expect(result.map((item) => item.updatedAt)).toEqual([
+      50, 40, 20,
+    ]);
+  });
+
+  it("falls back to joins, messages and creation time for older records", () => {
+    const result = summarizeConversations(
+      conversations.map((conversation) =>
+        conversation.id === roomId
+          ? { ...conversation, lastJoinedAt: 30 }
+          : conversation,
+      ),
+      [],
+      [message("legacy", directId, "alice", 20)],
+      self,
+      new Set(),
+      null,
+    );
+    expect(result.map((item) => item.updatedAt)).toEqual([
+      30, 20, 3,
+    ]);
   });
   it("combines search with selected labels using AND, with OR between labels", () => {
     expect(

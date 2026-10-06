@@ -10,6 +10,8 @@ export {
   setRoomConfig,
   forgetClientConfig,
   forgetRoomConfig,
+  resetClientConfig,
+  resetRoomConfig,
 } from "@/libs/state/permission-options";
 import { sanitizeTurnServers } from "@/libs/domain/ice-server";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";

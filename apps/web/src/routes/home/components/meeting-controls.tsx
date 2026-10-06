@@ -431,41 +431,6 @@ export function MeetingControls(props: {
                 </button>
               </ControlSlot>
             </Show>
-            <Show when={props.onTogglePanel}>
-              <ControlSlot visible={!props.compact}>
-                <button
-                  type="button"
-                  class="meeting-control"
-                  classList={{
-                    "is-active": props.panelOpen,
-                  }}
-                  aria-expanded={props.panelOpen}
-                  aria-controls="meeting-side-panel"
-                  aria-label={t(
-                    props.panelOpen
-                      ? "meeting.hide_panel"
-                      : "meeting.show_panel",
-                  )}
-                  title={t(
-                    props.panelOpen
-                      ? "meeting.hide_panel"
-                      : "meeting.show_panel",
-                  )}
-                  onClick={() => {
-                    closeMenu();
-                    props.onTogglePanel?.();
-                  }}
-                >
-                  <Show
-                    when={props.panelOpen}
-                    fallback={<PanelRightOpen />}
-                  >
-                    <PanelRightClose />
-                  </Show>
-                  <span>{t("meeting.panel")}</span>
-                </button>
-              </ControlSlot>
-            </Show>
             <Show
               when={props.pip?.supported() && props.pip}
             >
@@ -523,6 +488,41 @@ export function MeetingControls(props: {
                   </button>
                 </div>
               )}
+            </Show>
+            <Show when={props.onTogglePanel}>
+              <ControlSlot visible={!props.compact}>
+                <button
+                  type="button"
+                  class="meeting-control"
+                  classList={{
+                    "is-active": props.panelOpen,
+                  }}
+                  aria-expanded={props.panelOpen}
+                  aria-controls="meeting-side-panel"
+                  aria-label={t(
+                    props.panelOpen
+                      ? "meeting.hide_panel"
+                      : "meeting.show_panel",
+                  )}
+                  title={t(
+                    props.panelOpen
+                      ? "meeting.hide_panel"
+                      : "meeting.show_panel",
+                  )}
+                  onClick={() => {
+                    closeMenu();
+                    props.onTogglePanel?.();
+                  }}
+                >
+                  <Show
+                    when={props.panelOpen}
+                    fallback={<PanelRightOpen />}
+                  >
+                    <PanelRightClose />
+                  </Show>
+                  <span>{t("meeting.panel")}</span>
+                </button>
+              </ControlSlot>
             </Show>
           </div>
           <button

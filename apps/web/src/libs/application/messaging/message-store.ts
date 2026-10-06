@@ -120,6 +120,11 @@ export class MessageStores {
       repository,
       {
         onStored: (message) => {
+          if (message.conversationId)
+            this.metadata.recordActivity(
+              message.conversationId,
+              Date.now(),
+            );
           for (const listener of this.storedListeners) {
             try {
               listener(message);
@@ -313,6 +318,35 @@ export class MessageStores {
       roomId,
       namespace,
     );
+  }
+  async recordRoomJoin(
+    roomId: string,
+    namespace: string,
+    password: string | null,
+    joinedAt = Date.now(),
+  ): Promise<void> {
+    await this.initialize();
+    this.metadata.recordRoomJoin(
+      roomId,
+      namespace,
+      password,
+      joinedAt,
+    );
+  }
+  async recordClientOnline(
+    peerId: string,
+    updatedAt = Date.now(),
+  ): Promise<void> {
+    await this.initialize();
+    const conversation =
+      this.ensureDirectConversation(peerId);
+    this.metadata.recordActivity(
+      conversation.id,
+      updatedAt,
+    );
+  }
+  hideRoomFromJoinHistory(id: string): void {
+    this.metadata.hideRoomFromJoinHistory(id);
   }
   recordRoomMember(
     roomConversationId: string,

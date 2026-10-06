@@ -7,6 +7,7 @@ import {
 } from "@/components/dialogs/delete-conversation-dialog";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { appState } from "@/libs/state/app-state";
+import { deleteConversationRecord } from "@/libs/state/delete-conversation-record";
 import { t } from "@/i18n";
 
 export function createConversationActions(
@@ -33,7 +34,7 @@ export function createConversationActions(
     try {
       const confirmed = await (
         action === "clear" ? clearDialog : deleteDialog
-      ).open(conversation.title);
+      ).open(conversation.title, conversation.kind);
       // A peer may reconnect or the user may join while confirmation is open.
       if (
         !confirmed.result ||
@@ -45,7 +46,7 @@ export function createConversationActions(
         return false;
       if (action === "clear")
         messageStores.clearConversation(id);
-      else messageStores.deleteConversation(id);
+      else deleteConversationRecord(id);
       return true;
     } finally {
       setBusy(false);
@@ -66,20 +67,25 @@ export function ConversationActions(props: {
   const actions = createConversationActions(
     (id) => id !== props.conversationId || props.online,
   );
-  const exists = () =>
-    appState.message.conversations.some(
+  const conversation = () =>
+    appState.message.conversations.find(
       (item) => item.id === props.conversationId,
     );
+  const isRoom = () => conversation()?.kind === "room";
   return (
     <div class="space-y-3">
       <p class="text-muted-foreground text-xs leading-relaxed">
-        {t("conversations.manage_hint")}
+        {t(
+          isRoom()
+            ? "conversations.manage_room_hint"
+            : "conversations.manage_hint",
+        )}
       </p>
       <div class="flex flex-wrap gap-2">
         <Button
           type="button"
           variant="outline"
-          disabled={actions.busy() || !exists()}
+          disabled={actions.busy() || !conversation()}
           onClick={() =>
             void actions.clear(props.conversationId)
           }
@@ -91,7 +97,9 @@ export function ConversationActions(props: {
           type="button"
           variant="destructive"
           disabled={
-            actions.busy() || !exists() || props.online
+            actions.busy() ||
+            !conversation() ||
+            props.online
           }
           onClick={async () => {
             const id = props.conversationId;
@@ -103,7 +111,11 @@ export function ConversationActions(props: {
           }}
         >
           <Trash2 class="size-4" />
-          {t("conversations.delete")}
+          {t(
+            isRoom()
+              ? "conversations.delete_room"
+              : "conversations.delete",
+          )}
         </Button>
       </div>
       <Show when={props.online}>
