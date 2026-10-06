@@ -1,4 +1,8 @@
 import {
+  SettingHeading,
+  SettingField,
+} from "./setting-layout";
+import {
   createEffect,
   createSignal,
   For,
@@ -207,37 +211,41 @@ export default function NativeCaptureSettings() {
       when={capabilities.captureSupported() || running()}
     >
       <div class="flex flex-col gap-3">
-        <h4 class="h4">{label("title")}</h4>
-        <p class="muted">{label("description")}</p>
-        <label class="flex flex-col gap-2">
-          <span class="text-sm font-medium">
-            {label("source")}
-          </span>
-          <select
-            class="bg-background border-input h-10 w-full rounded-md border
-              px-3 text-sm"
-            value={selected()}
-            disabled={sourceBusy() || running()}
-            onChange={(event) =>
-              setSelected(event.currentTarget.value)
-            }
-          >
-            <option value="">
-              {label("select_source")}
-            </option>
-            <For each={sources()}>
-              {(source) => (
-                <option
-                  value={source.id}
-                  selected={selected() === source.id}
-                >
-                  {label(source.kind)} · {source.name} (
-                  {source.width} × {source.height})
-                </option>
-              )}
-            </For>
-          </select>
-        </label>
+        <SettingHeading description={label("description")}>
+          {label("title")}
+        </SettingHeading>
+
+        <SettingField label={label("source")}>
+          {(ids) => (
+            <select
+              class="bg-background border-input h-10 w-full rounded-md border
+                px-3 text-sm"
+              value={selected()}
+              disabled={sourceBusy() || running()}
+              onChange={(event) =>
+                setSelected(event.currentTarget.value)
+              }
+              id={ids.id}
+              aria-labelledby={ids.labelId}
+              aria-describedby={ids.descriptionId}
+            >
+              <option value="">
+                {label("select_source")}
+              </option>
+              <For each={sources()}>
+                {(source) => (
+                  <option
+                    value={source.id}
+                    selected={selected() === source.id}
+                  >
+                    {label(source.kind)} · {source.name} (
+                    {source.width} × {source.height})
+                  </option>
+                )}
+              </For>
+            </select>
+          )}
+        </SettingField>
         <div class="flex flex-wrap gap-2">
           <Button
             variant="outline"

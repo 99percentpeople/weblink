@@ -113,6 +113,15 @@
         "description": "当启用时，应用程序将保持屏幕常亮"
       }
     },
+    "list": {
+      "bulk_edit": "批量编辑",
+      "save": "保存",
+      "add": "添加",
+      "edit": "编辑",
+      "remove": "移除",
+      "inline_hint": "按 Enter 添加，点击标签编辑。",
+      "bulk_hint": "每行一项，保存后统一生效。"
+    },
     "connection": {
       "title": "连接",
       "auto_join": {

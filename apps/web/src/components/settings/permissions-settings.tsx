@@ -1,4 +1,8 @@
 import {
+  SettingSection,
+  SettingHeading,
+} from "./setting-layout";
+import {
   For,
   Show,
   createMemo,
@@ -138,24 +142,20 @@ export default function PermissionsSettings() {
   };
   return (
     <>
-      <section
-        class="settings-section @container"
-        aria-labelledby="permissions-settings"
+      <SettingSection
+        title={t("app_menu.settings_permissions")}
+        id="permissions-settings"
+        class="@container"
+        description={t("setting.permissions.description")}
       >
-        <h3 id="permissions-settings" class="h3">
-          {t("app_menu.settings_permissions")}
-        </h3>
-        <p class="muted">
-          {t("setting.permissions.description")}
-        </p>
         <For each={["client", "room"] as const}>
           {(kind) => (
             <>
-              <h3 class="h3">
+              <SettingHeading>
                 {t(
                   `setting.permissions.${kind === "client" ? "clients" : "rooms"}`,
                 )}
-              </h3>
+              </SettingHeading>
               <Show
                 when={entries().some(
                   (entry) => entry.kind === kind,
@@ -246,7 +246,7 @@ export default function PermissionsSettings() {
             </>
           )}
         </For>
-      </section>
+      </SettingSection>
       <Dialog
         open={!!deleting()}
         onOpenChange={(open) => {

@@ -13,13 +13,7 @@ import type {
 } from "@weblink/platform";
 import { createDialog } from "./dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-  SwitchDescription,
-} from "@/components/ui/switch";
+import { SettingSwitch } from "@/components/settings/setting-controls";
 import { Input } from "@/components/ui/input";
 import {
   Tabs,
@@ -349,23 +343,12 @@ export function createNativeScreenDialog(
             </p>
           </div>
         </Tabs>
-        <Switch
+        <SettingSwitch
+          label={label("share_audio")}
+          description={label("share_audio_description")}
           checked={audio()}
           onChange={setAudio}
-          class="flex items-center justify-between gap-4"
-        >
-          <div class="space-y-1">
-            <SwitchLabel>
-              {label("share_audio")}
-            </SwitchLabel>
-            <SwitchDescription class="text-muted-foreground text-xs">
-              {label("share_audio_description")}
-            </SwitchDescription>
-          </div>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
+        />
       </div>
     ),
     confirm: (

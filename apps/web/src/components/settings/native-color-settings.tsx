@@ -1,16 +1,11 @@
+import { SettingRow } from "./setting-layout";
+import { SettingSelect } from "./setting-controls";
 import { Show } from "solid-js";
 import type {
   NativeColorMatrix,
   NativeColorRange,
 } from "@weblink/platform";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+
 import { appState } from "@/libs/state/app-state";
 import { nativeScreenOptions } from "@/libs/application/meeting-video-settings";
 import { setAppOptions } from "@/options";
@@ -32,74 +27,45 @@ export default function NativeColorSettings() {
     label(`color_range_${value}`);
   return (
     <>
-      <div class="flex flex-col gap-2">
-        <Label>{label("color_format")}</Label>
-        <p>YUV 4:2:0 · 8-bit · SDR</p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label>{label("color_matrix")}</Label>
-        <Select<NativeColorMatrix>
-          modal
-          value={selected().colorMatrix}
-          disabled={vp8()}
-          options={
-            vp8() ? ["bt601"] : ["auto", "bt709", "bt601"]
-          }
-          onChange={(value) =>
-            value &&
-            !vp8() &&
-            setAppOptions("nativeColorMatrix", value)
-          }
-          itemComponent={(item) => (
-            <SelectItem item={item.item}>
-              {matrixLabel(item.item.rawValue)}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-label={label("color_matrix")}>
-            <SelectValue<NativeColorMatrix>>
-              {(state) =>
-                matrixLabel(state.selectedOption())
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label>{label("color_range")}</Label>
-        <Select<NativeColorRange>
-          modal
-          value={selected().colorRange}
-          disabled={vp8()}
-          options={
-            vp8() ? ["limited"] : ["limited", "full"]
-          }
-          onChange={(value) =>
-            value &&
-            !vp8() &&
-            setAppOptions("nativeColorRange", value)
-          }
-          itemComponent={(item) => (
-            <SelectItem item={item.item}>
-              {rangeLabel(item.item.rawValue)}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-label={label("color_range")}>
-            <SelectValue<NativeColorRange>>
-              {(state) =>
-                rangeLabel(state.selectedOption())
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">{label("color_description")}</p>
-        <Show when={vp8()}>
-          <p class="muted">{label("color_vp8")}</p>
-        </Show>
-      </div>
+      <SettingRow label={label("color_format")}>
+        <span class="text-sm">YUV 4:2:0 · 8-bit · SDR</span>
+      </SettingRow>
+      <SettingSelect<NativeColorMatrix>
+        modal
+        value={selected().colorMatrix}
+        disabled={vp8()}
+        options={
+          vp8() ? ["bt601"] : ["auto", "bt709", "bt601"]
+        }
+        onChange={(value) =>
+          value &&
+          !vp8() &&
+          setAppOptions("nativeColorMatrix", value)
+        }
+        label={label("color_matrix")}
+        optionLabel={(option) => matrixLabel(option)}
+      />
+      <SettingSelect<NativeColorRange>
+        modal
+        value={selected().colorRange}
+        disabled={vp8()}
+        options={vp8() ? ["limited"] : ["limited", "full"]}
+        onChange={(value) =>
+          value &&
+          !vp8() &&
+          setAppOptions("nativeColorRange", value)
+        }
+        label={label("color_range")}
+        description={label("color_description")}
+        hint={
+          <>
+            <Show when={vp8()}>
+              <p class="muted">{label("color_vp8")}</p>
+            </Show>
+          </>
+        }
+        optionLabel={(option) => rangeLabel(option)}
+      />
     </>
   );
 }

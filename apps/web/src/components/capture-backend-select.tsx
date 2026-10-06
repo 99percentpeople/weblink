@@ -1,15 +1,9 @@
+import { SettingSelect } from "./settings/setting-controls";
 import type {
   CaptureBackend,
   CaptureBackendInfo,
 } from "@weblink/platform";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+
 import { t } from "@/i18n";
 
 export function captureBackendAvailable(
@@ -48,29 +42,17 @@ export default function CaptureBackendSelect(props: {
           ?.name ??
         `${id.toUpperCase()} (${t("meeting.native_screen.unavailable")})`);
   return (
-    <div class="flex flex-col gap-2">
-      <Label>{label()}</Label>
-      <Select<CaptureBackend>
-        modal
-        value={props.value}
-        options={options()}
-        disabled={props.disabled || !props.backends.length}
-        onChange={(value) => {
-          if (value) props.onChange(value);
-        }}
-        itemComponent={(item) => (
-          <SelectItem item={item.item}>
-            {name(item.item.rawValue)}
-          </SelectItem>
-        )}
-      >
-        <SelectTrigger aria-label={label()}>
-          <SelectValue<CaptureBackend>>
-            {(state) => name(state.selectedOption())}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent />
-      </Select>
-    </div>
+    <SettingSelect<CaptureBackend>
+      modal
+      value={props.value}
+      options={options()}
+      disabled={props.disabled || !props.backends.length}
+      onChange={(value) => {
+        if (value) props.onChange(value);
+      }}
+      label={label()}
+      optionLabel={name}
+      renderValue={(state) => name(state.selectedOption())}
+    />
   );
 }

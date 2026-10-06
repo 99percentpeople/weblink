@@ -68,8 +68,8 @@ const DrawerContent = <T extends ValidComponent = "div">(
       <DrawerOverlay />
       <DrawerPrimitive.Content
         class={cn(
-          `fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col
-          rounded-t-[10px] border bg-background after:absolute
+          `bg-background fixed inset-x-0 bottom-0 z-50 mt-24 flex
+          h-auto flex-col rounded-t-xl border after:absolute
           after:inset-x-0 after:top-full after:h-1/2 after:bg-inherit
           data-[transitioning]:transition-transform
           data-[transitioning]:duration-300 md:select-none`,
@@ -77,7 +77,7 @@ const DrawerContent = <T extends ValidComponent = "div">(
         )}
         {...rest}
       >
-        <div class="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+        <div class="bg-muted mx-auto mt-4 h-2 w-[100px] rounded-full" />
         {props.children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
@@ -152,7 +152,7 @@ const DrawerDescription = <
   return (
     <DrawerPrimitive.Description
       class={cn(
-        "text-sm text-muted-foreground",
+        "text-muted-foreground text-sm",
         props.class,
       )}
       {...rest}

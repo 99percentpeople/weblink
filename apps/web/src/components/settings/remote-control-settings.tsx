@@ -1,34 +1,18 @@
+import {
+  SettingSection,
+  SettingHeading,
+} from "./setting-layout";
+import {
+  SettingSelect,
+  SettingSwitch,
+  SettingSlider,
+} from "./setting-controls";
 import { For, Show } from "solid-js";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
-import { Input } from "@/components/ui/input";
-import {
-  MAX_REMOTE_FILE_BYTES,
-  resolveRemoteFileLimit,
-} from "@/libs/domain/protocol/remote-file-limits";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Slider,
-  SliderFill,
-  SliderLabel,
-  SliderThumb,
-  SliderTrack,
-  SliderValueLabel,
-} from "@/components/ui/slider";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+import { resolveRemoteFileLimit } from "@/libs/domain/protocol/remote-file-limits";
+
 import {
   TOUCH_SAMPLE_RATES,
   resolveRemoteTouchOptions,
@@ -61,6 +45,11 @@ export default function RemoteControlSettings() {
       appState.options.remoteKeyboard,
     ).clipboard;
   const prefix = "setting.remote_control.";
+  const mebibyte = 1024 * 1024;
+  const fileLimit = () =>
+    resolveRemoteFileLimit(
+      appState.options.remoteFileMaxSize,
+    ) / mebibyte;
   const toggle = (
     key:
       | "tapToClick"
@@ -69,8 +58,7 @@ export default function RemoteControlSettings() {
       | "naturalScroll"
       | "forwardProperties",
   ) => (
-    <Switch
-      class="flex w-full items-center justify-between gap-3"
+    <SettingSwitch
       checked={options()[key]}
       onChange={(value) =>
         setAppOptions("remoteTouch", key, value)
@@ -79,162 +67,103 @@ export default function RemoteControlSettings() {
         key === "naturalScroll" &&
         !options().twoFingerScroll
       }
-    >
-      <SwitchLabel>{t(`${prefix}${key}`)}</SwitchLabel>
-      <SwitchControl>
-        <SwitchThumb />
-      </SwitchControl>
-    </Switch>
+      label={t(`${prefix}${key}`)}
+      description={
+        key === "forwardProperties"
+          ? t(`${prefix}touch_properties_description`)
+          : undefined
+      }
+    />
   );
   return (
-    <section
-      class="settings-section"
-      aria-labelledby="remote-control-settings"
+    <SettingSection
+      id="remote-control-settings"
+      title={t("app_menu.settings_remote_control")}
     >
-      <h3 id="remote-control-settings" class="h3">
-        {t("app_menu.settings_remote_control")}
-      </h3>
-      <h4 class="h3">{t(`${prefix}pointer_heading`)}</h4>
-      <div class="flex flex-col gap-2">
-        <Label id="remote-pointer-mode">
-          {t(`${prefix}pointer.title`)}
-        </Label>
-        <Select<RemotePointerMode>
-          modal
-          disallowEmptySelection
-          options={["local", "capture"]}
-          value={pointer().mode}
-          onChange={(value) =>
-            value &&
-            setAppOptions("remotePointer", "mode", value)
-          }
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {t(`${prefix}pointer.${props.item.rawValue}`)}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-labelledby="remote-pointer-mode">
-            <SelectValue<RemotePointerMode>>
-              {(state) =>
-                t(
-                  `${prefix}pointer.${state.selectedOption()}`,
-                )
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">
-          {t(
-            `${prefix}pointer.${pointer().mode}_description`,
-          )}
-        </p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Switch
-          class="flex w-full items-center justify-between gap-3"
-          checked={pointer().syncCursor}
-          disabled={pointer().mode !== "local"}
-          onChange={(value) =>
-            setAppOptions(
-              "remotePointer",
-              "syncCursor",
-              value,
-            )
-          }
-        >
-          <SwitchLabel>
-            {t(`${prefix}cursor_sync.title`)}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t(`${prefix}cursor_sync.description`)}
-        </p>
-      </div>
-      <h4 class="h3">{t(`${prefix}keyboard_heading`)}</h4>
+      <SettingHeading>
+        {t(`${prefix}pointer_heading`)}
+      </SettingHeading>
+      <SettingSelect<RemotePointerMode>
+        modal
+        disallowEmptySelection
+        options={["local", "capture"]}
+        value={pointer().mode}
+        onChange={(value) =>
+          value &&
+          setAppOptions("remotePointer", "mode", value)
+        }
+        label={t(`${prefix}pointer.title`)}
+        renderValue={(state) =>
+          t(`${prefix}pointer.${state.selectedOption()}`)
+        }
+        description={t(
+          `${prefix}pointer.${pointer().mode}_description`,
+        )}
+        optionLabel={(option) =>
+          t(`${prefix}pointer.${option}`)
+        }
+      />
+      <SettingSwitch
+        checked={pointer().syncCursor}
+        disabled={pointer().mode !== "local"}
+        onChange={(value) =>
+          setAppOptions(
+            "remotePointer",
+            "syncCursor",
+            value,
+          )
+        }
+        label={t(`${prefix}cursor_sync.title`)}
+        description={t(`${prefix}cursor_sync.description`)}
+      />
+      <SettingHeading>
+        {t(`${prefix}keyboard_heading`)}
+      </SettingHeading>
       <RemoteKeyboardSettings />
-      <h4 class="h3">{t(`${prefix}touch_heading`)}</h4>
-      <p class="muted">{t(`${prefix}description`)}</p>
-      <div class="flex flex-col gap-2">
-        <Label id="remote-touch-mode">
-          {t(`${prefix}mode.title`)}
-        </Label>
-        <Select<TouchMode>
-          modal
-          disallowEmptySelection
-          value={options().mode}
-          onChange={(value) =>
-            value &&
-            setAppOptions("remoteTouch", "mode", value)
-          }
-          options={["trackpad", "direct"]}
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {t(`${prefix}mode.${props.item.rawValue}`)}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-labelledby="remote-touch-mode">
-            <SelectValue<TouchMode>>
-              {(state) =>
-                t(`${prefix}mode.${state.selectedOption()}`)
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">
-          {t(`${prefix}mode.${options().mode}_description`)}
-        </p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label id="remote-touch-sample-rate">
-          {t(`${prefix}sample_rate.title`)}
-        </Label>
-        <Select<TouchSampleRate>
-          modal
-          disallowEmptySelection
-          options={[...TOUCH_SAMPLE_RATES]}
-          value={options().sampleRate}
-          onChange={(value) =>
-            value &&
-            setAppOptions(
-              "remoteTouch",
-              "sampleRate",
-              value,
-            )
-          }
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {props.item.rawValue} Hz
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger aria-labelledby="remote-touch-sample-rate">
-            <SelectValue<TouchSampleRate>>
-              {(state) => `${state.selectedOption()} Hz`}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">
-          {t(`${prefix}sample_rate.description`)}
-        </p>
-      </div>
+      <SettingHeading
+        description={t(`${prefix}description`)}
+      >
+        {t(`${prefix}touch_heading`)}
+      </SettingHeading>
+
+      <SettingSelect<TouchMode>
+        modal
+        disallowEmptySelection
+        value={options().mode}
+        onChange={(value) =>
+          value &&
+          setAppOptions("remoteTouch", "mode", value)
+        }
+        options={["trackpad", "direct"]}
+        label={t(`${prefix}mode.title`)}
+        description={t(
+          `${prefix}mode.${options().mode}_description`,
+        )}
+        optionLabel={(option) =>
+          t(`${prefix}mode.${option}`)
+        }
+      />
+      <SettingSelect<TouchSampleRate>
+        modal
+        disallowEmptySelection
+        options={[...TOUCH_SAMPLE_RATES]}
+        value={options().sampleRate}
+        onChange={(value) =>
+          value &&
+          setAppOptions("remoteTouch", "sampleRate", value)
+        }
+        label={t(`${prefix}sample_rate.title`)}
+        renderValue={(state) =>
+          `${state.selectedOption()} Hz`
+        }
+        description={t(`${prefix}sample_rate.description`)}
+        optionLabel={(option) => <>{option} Hz</>}
+      />
       <Show when={options().mode === "direct"}>
-        <div class="flex flex-col gap-2">
-          {toggle("forwardProperties")}
-          <p class="muted">
-            {t(`${prefix}touch_properties_description`)}
-          </p>
-        </div>
+        {toggle("forwardProperties")}
       </Show>
       <Show when={options().mode === "trackpad"}>
-        <Slider
+        <SettingSlider
           minValue={0.25}
           maxValue={3}
           step={0.05}
@@ -249,57 +178,23 @@ export default function RemoteControlSettings() {
           getValueLabel={({ values }) =>
             `${values[0].toFixed(2)}×`
           }
-          class="gap-2"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <SliderLabel>
-              {t(`${prefix}pointer_speed`)}
-            </SliderLabel>
-            <SliderValueLabel />
-          </div>
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
+          label={t(`${prefix}pointer_speed`)}
+        />
         {toggle("tapToClick")}
-        <div class="flex flex-col gap-2">
-          <Label id="remote-long-press">
-            {t(`${prefix}long_press.title`)}
-          </Label>
-          <Select<LongPressAction>
-            modal
-            disallowEmptySelection
-            value={options().longPress}
-            onChange={(value) =>
-              value &&
-              setAppOptions(
-                "remoteTouch",
-                "longPress",
-                value,
-              )
-            }
-            options={["drag", "right-click", "none"]}
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>
-                {t(
-                  `${prefix}long_press.${props.item.rawValue}`,
-                )}
-              </SelectItem>
-            )}
-          >
-            <SelectTrigger aria-labelledby="remote-long-press">
-              <SelectValue<LongPressAction>>
-                {(state) =>
-                  t(
-                    `${prefix}long_press.${state.selectedOption()}`,
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent />
-          </Select>
-        </div>
+        <SettingSelect<LongPressAction>
+          modal
+          disallowEmptySelection
+          value={options().longPress}
+          onChange={(value) =>
+            value &&
+            setAppOptions("remoteTouch", "longPress", value)
+          }
+          options={["drag", "right-click", "none"]}
+          label={t(`${prefix}long_press.title`)}
+          optionLabel={(option) =>
+            t(`${prefix}long_press.${option}`)
+          }
+        />
         <For
           each={
             [
@@ -311,7 +206,7 @@ export default function RemoteControlSettings() {
         >
           {toggle}
         </For>
-        <Slider
+        <SettingSlider
           minValue={0.25}
           maxValue={3}
           step={0.05}
@@ -327,230 +222,137 @@ export default function RemoteControlSettings() {
           getValueLabel={({ values }) =>
             `${values[0].toFixed(2)}×`
           }
-          class="gap-2"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <SliderLabel>
-              {t(`${prefix}scroll_speed`)}
-            </SliderLabel>
-            <SliderValueLabel />
-          </div>
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
-        <div class="flex flex-col gap-2">
-          <Label id="remote-three-finger-tap">
-            {t(`${prefix}three_finger_tap.title`)}
-          </Label>
-          <Select<ThreeFingerTapAction>
-            modal
-            disallowEmptySelection
-            value={options().threeFingerTap}
-            onChange={(value) =>
-              value &&
-              setAppOptions(
-                "remoteTouch",
-                "threeFingerTap",
-                value,
-              )
-            }
-            options={["keyboard", "none"]}
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>
-                {t(
-                  `${prefix}three_finger_tap.${props.item.rawValue}`,
-                )}
-              </SelectItem>
-            )}
-          >
-            <SelectTrigger aria-labelledby="remote-three-finger-tap">
-              <SelectValue<ThreeFingerTapAction>>
-                {(state) =>
-                  t(
-                    `${prefix}three_finger_tap.${state.selectedOption()}`,
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent />
-          </Select>
-          <p class="muted">
-            {t(`${prefix}three_finger_tap.description`)}
-          </p>
-        </div>
-      </Show>
-      <h4 class="h3">{t(`${prefix}general_heading`)}</h4>
-      <div class="flex flex-col gap-2">
-        <Switch
-          class="flex w-full items-center justify-between gap-3"
-          checked={pointer().fileDrop}
-          onChange={(value) =>
-            setAppOptions(
-              "remotePointer",
-              "fileDrop",
-              value,
-            )
-          }
-        >
-          <SwitchLabel>
-            {t(`${prefix}file_drop.title`)}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t(`${prefix}file_drop.description`)}
-        </p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Switch
-          class="flex w-full items-center justify-between gap-3"
-          checked={clipboardEnabled()}
-          onChange={(value) =>
-            setAppOptions(
-              "remoteKeyboard",
-              "clipboard",
-              value,
-            )
-          }
-        >
-          <SwitchLabel>
-            {t("setting.remote_control.clipboard.title")}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t(
-            "setting.remote_control.clipboard.description",
-          )}
-        </p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label id="remote-clipboard-files">
-          {t(`${prefix}clipboard_files.title`)}
-        </Label>
-        <Select<ClipboardFileDestination>
+          label={t(`${prefix}scroll_speed`)}
+        />
+        <SettingSelect<ThreeFingerTapAction>
           modal
           disallowEmptySelection
-          placeholder={t(
-            `${prefix}clipboard_files.loading`,
-          )}
-          disabled={
-            !clipboardEnabled() || !clipboardAccess.ready
-          }
-          value={
-            resolveRemoteKeyboardOptions(
-              appState.options.remoteKeyboard,
-            ).clipboardFiles
-          }
+          value={options().threeFingerTap}
           onChange={(value) =>
             value &&
-            (value !== "clipboard" ||
-              clipboardAccess.writeFiles) &&
             setAppOptions(
-              "remoteKeyboard",
-              "clipboardFiles",
+              "remoteTouch",
+              "threeFingerTap",
               value,
             )
           }
-          options={["clipboard", "cache", "off"]}
-          optionDisabled={(value) =>
-            value === "clipboard" &&
-            !clipboardAccess.writeFiles
-          }
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {t(
-                `${prefix}clipboard_files.${props.item.rawValue}`,
-              )}
-            </SelectItem>
+          options={["keyboard", "none"]}
+          label={t(`${prefix}three_finger_tap.title`)}
+          description={t(
+            `${prefix}three_finger_tap.description`,
           )}
-        >
-          <SelectTrigger aria-labelledby="remote-clipboard-files">
-            <SelectValue<ClipboardFileDestination>>
-              {(state) =>
-                t(
-                  `${prefix}clipboard_files.${state.selectedOption()}`,
-                )
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">
-          {t(`${prefix}clipboard_files.description`)}
-        </p>
-        <Show
-          when={
-            clipboardEnabled() &&
-            clipboardAccess.ready &&
-            !clipboardAccess.writeFiles
+          optionLabel={(option) =>
+            t(`${prefix}three_finger_tap.${option}`)
           }
-        >
-          <p class="muted">
-            {t(`${prefix}clipboard_files.unavailable`)}
-          </p>
-        </Show>
-      </div>
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-3">
-          <Label for="remote-file-max-size">
-            {t(`${prefix}file_size_limit.title`)}
-          </Label>
-          <div class="flex items-center gap-2">
-            <Input
-              id="remote-file-max-size"
-              class="w-24"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={MAX_REMOTE_FILE_BYTES / 1024 / 1024}
-              step={1}
-              value={
-                resolveRemoteFileLimit(
-                  appState.options.remoteFileMaxSize,
-                ) /
-                1024 /
-                1024
+        />
+      </Show>
+      <SettingHeading>
+        {t(`${prefix}general_heading`)}
+      </SettingHeading>
+      <SettingSwitch
+        checked={pointer().fileDrop}
+        onChange={(value) =>
+          setAppOptions("remotePointer", "fileDrop", value)
+        }
+        label={t(`${prefix}file_drop.title`)}
+        description={t(`${prefix}file_drop.description`)}
+      />
+      <SettingSwitch
+        checked={clipboardEnabled()}
+        onChange={(value) =>
+          setAppOptions(
+            "remoteKeyboard",
+            "clipboard",
+            value,
+          )
+        }
+        label={t("setting.remote_control.clipboard.title")}
+        description={t(
+          "setting.remote_control.clipboard.description",
+        )}
+      />
+      <SettingSelect<ClipboardFileDestination>
+        modal
+        disallowEmptySelection
+        placeholder={t(`${prefix}clipboard_files.loading`)}
+        disabled={
+          !clipboardEnabled() || !clipboardAccess.ready
+        }
+        value={
+          resolveRemoteKeyboardOptions(
+            appState.options.remoteKeyboard,
+          ).clipboardFiles
+        }
+        onChange={(value) =>
+          value &&
+          (value !== "clipboard" ||
+            clipboardAccess.writeFiles) &&
+          setAppOptions(
+            "remoteKeyboard",
+            "clipboardFiles",
+            value,
+          )
+        }
+        options={["clipboard", "cache", "off"]}
+        optionDisabled={(value) =>
+          value === "clipboard" &&
+          !clipboardAccess.writeFiles
+        }
+        label={t(`${prefix}clipboard_files.title`)}
+        description={t(
+          `${prefix}clipboard_files.description`,
+        )}
+        hint={
+          <>
+            <Show
+              when={
+                clipboardEnabled() &&
+                clipboardAccess.ready &&
+                !clipboardAccess.writeFiles
               }
-              onChange={(event) => {
-                const value =
-                  event.currentTarget.valueAsNumber;
-                const bytes = Number.isFinite(value)
-                  ? Math.min(
-                      MAX_REMOTE_FILE_BYTES,
-                      Math.max(1, Math.round(value)) *
-                        1024 *
-                        1024,
-                    )
-                  : resolveRemoteFileLimit(
-                      appState.options.remoteFileMaxSize,
-                    );
-                setAppOptions("remoteFileMaxSize", bytes);
-                event.currentTarget.value = String(
-                  bytes / 1024 / 1024,
-                );
-              }}
-              aria-describedby="remote-file-max-size-description"
-            />
-            <span class="text-muted-foreground text-sm">
-              MiB
-            </span>
-          </div>
-        </div>
-        <p
-          id="remote-file-max-size-description"
-          class="muted"
-        >
-          {t(`${prefix}file_size_limit.description`)}
-        </p>
-      </div>
+            >
+              <p class="muted">
+                {t(`${prefix}clipboard_files.unavailable`)}
+              </p>
+            </Show>
+          </>
+        }
+        optionLabel={(option) =>
+          t(`${prefix}clipboard_files.${option}`)
+        }
+      />
+      <SettingSelect<number>
+        modal
+        disallowEmptySelection
+        label={t(`${prefix}file_size_limit.title`)}
+        description={t(
+          `${prefix}file_size_limit.description`,
+        )}
+        options={[
+          ...new Set([
+            1,
+            5,
+            10,
+            20,
+            32,
+            64,
+            128,
+            256,
+            512,
+            fileLimit(),
+          ]),
+        ].sort((a, b) => a - b)}
+        value={fileLimit()}
+        optionLabel={(value) => `${value} MiB`}
+        onChange={(value) => {
+          if (value !== null)
+            setAppOptions(
+              "remoteFileMaxSize",
+              value * mebibyte,
+            );
+        }}
+      />
       <p class="muted">{t(`${prefix}changes`)}</p>
-    </section>
+    </SettingSection>
   );
 }

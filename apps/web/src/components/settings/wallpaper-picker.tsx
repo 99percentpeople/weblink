@@ -1,3 +1,4 @@
+import { SettingSlider } from "./setting-controls";
 import {
   createMemo,
   createSignal,
@@ -16,14 +17,7 @@ import {
   IconWallpaper,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import {
-  Slider,
-  SliderFill,
-  SliderLabel,
-  SliderThumb,
-  SliderTrack,
-  SliderValueLabel,
-} from "@/components/ui/slider";
+
 import { t } from "@/i18n";
 import { cacheManager } from "@/libs/application/cache-service";
 import { appState } from "@/libs/state/app-state";
@@ -258,12 +252,11 @@ export default function WallpaperPicker() {
         </div>
       </fieldset>
 
-      <Slider
+      <SettingSlider
         minValue={0}
         maxValue={1}
         step={0.01}
         disabled={!hasSelection()}
-        class="mt-1"
         getValueLabel={({ values }) =>
           `${(values[0] * 100).toFixed(0)}%`
         }
@@ -276,20 +269,10 @@ export default function WallpaperPicker() {
             1 - value[0],
           )
         }
-      >
-        <div class="flex w-full items-center justify-between gap-3">
-          <SliderLabel>
-            {t(
-              "setting.appearance.background_image_opacity.title",
-            )}
-          </SliderLabel>
-          <SliderValueLabel class="text-muted-foreground text-xs tabular-nums" />
-        </div>
-        <SliderTrack>
-          <SliderFill />
-          <SliderThumb />
-        </SliderTrack>
-      </Slider>
+        label={t(
+          "setting.appearance.background_image_opacity.title",
+        )}
+      />
     </fieldset>
   );
 }

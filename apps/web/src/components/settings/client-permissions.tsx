@@ -10,7 +10,7 @@ export function ClientPermissions(props: {
   const config = () =>
     appState.options.clientConfigs[props.clientId];
   return (
-    <div class="space-y-5">
+    <div class="setting-group">
       <PermissionSelect<Decision>
         label={t("app_menu.settings_remote_control")}
         options={["ask", "allow", "deny"]}

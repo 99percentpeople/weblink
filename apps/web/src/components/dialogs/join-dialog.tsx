@@ -22,12 +22,8 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+import { SettingSwitch } from "@/components/settings/setting-controls";
+import { SettingSection } from "@/components/settings/setting-layout";
 import {
   IconCasino,
   IconContentCopy,
@@ -573,20 +569,15 @@ export const createRoomDialog = () => {
           </div>
         </form>
         <Show when={step() === "room"}>
-          <Switch
-            class="flex items-center justify-between gap-3 border-t pt-3"
-            checked={appState.profile.autoJoin}
-            onChange={(isChecked) =>
-              setClientProfile("autoJoin", isChecked)
-            }
-          >
-            <SwitchLabel>
-              {t("common.join_form.auto_join")}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
+          <SettingSection class="border-t">
+            <SettingSwitch
+              label={t("common.join_form.auto_join")}
+              checked={appState.profile.autoJoin}
+              onChange={(isChecked) =>
+                setClientProfile("autoJoin", isChecked)
+              }
+            />
+          </SettingSection>
         </Show>
         <p class="text-muted-foreground text-xs leading-4">
           {t(

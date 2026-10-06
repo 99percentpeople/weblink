@@ -238,6 +238,20 @@ Application source paths in the sections below are relative to `apps/web/`.
     or private-chat links into Home, retaining invitations and media hashes.
     `/file` and `/setting` are compatibility entries that open the respective
     dialog on Home; the one-shot `dialog` parameter is then removed.
+  - Settings pages and settings-like controls in dialogs use
+    `components/settings/setting-layout.tsx` for sections, headings
+    and labeled fields, and `setting-controls.tsx` for switches, selects, sliders
+    and shortcut recorders. Keep values, permissions and save callbacks in the
+    feature page. Shared spacing, typography and control widths belong in
+    `settings.css`; selectors stay beside their labels, while multiline fields
+    opt into `layout="stacked"`. Action buttons use `layout="compact"` so their
+    column fits the button and aligns it to the right. Custom fields receive stable label/description
+    IDs through `SettingField`'s render callback. Dividers go before later
+    settings or content groups, using general siblings so hints and wrappers
+    do not interrupt them; never add a border to each row's bottom edge.
+    Containers with settings participate as a whole, with padding above their
+    content. Wrap custom content in `SettingBlock` for shared vertical spacing;
+    its `separated` option can explicitly add a group divider.
   - `src/components/settings/`: appearance, connection, transfer,
     advanced and about sections in a shared settings dialog. Desktop uses a
     category rail and mobile uses horizontal tabs. Options keep their existing
@@ -273,8 +287,12 @@ Application source paths in the sections below are relative to `apps/web/`.
     manager and composer. Sending existing content uses `FileSource`
     (`File` or `{ kind: "library", localFileId }`), preserving drafts and the
     conversation captured when the picker opened.
-  - `global.css` owns the shared light/dark blue-gray palette and radius scale:
-    menu items 8px, controls 12px, panels 16px and dialogs/toolbars 20px. Meeting
+  - `global.css` owns the shared light/dark blue-gray palette and radius scale.
+    Set `:root --radius` to tune all non-circular corners. Tailwind's `rounded-*`
+    scale derives proportionally from it: `sm` for tags/menu items, `md` for
+    controls, `lg` for panels, and `xl` for dialogs/toolbars (8/12/16/20px by
+    default). Component CSS uses `@reference` and `@apply rounded-*`; keep
+    circular controls on `rounded-full` and avoid fixed corner values. Meeting
     CSS uses those tokens; the picture-in-picture document mirrors theme changes.
     Home's component-specific presentation is colocated in JSX using Tailwind;
     `routes/home/index.css` retains shared controls and coordinated grid,

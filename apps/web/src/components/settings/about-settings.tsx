@@ -1,3 +1,9 @@
+import {
+  SettingRow,
+  SettingSection,
+  SettingHeading,
+  SettingBlock,
+} from "./setting-layout";
 import { createSignal, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
 import { Eraser, RotateCcw } from "lucide-solid";
@@ -78,30 +84,26 @@ export default function AboutSettings() {
   };
 
   return (
-    <section class="settings-section">
-      <AboutContent />
-      <section class="space-y-1 border-t pt-5">
-        <h3 class="text-sm font-semibold">
+    <SettingSection>
+      <SettingBlock>
+        <AboutContent />
+      </SettingBlock>
+      <SettingBlock separated>
+        <SettingHeading>
           {t("setting.about.maintenance")}
-        </h3>
-        <div class="divide-border divide-y">
-          <div
-            class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center
-              sm:justify-between sm:gap-6"
+        </SettingHeading>
+        <div class="setting-group">
+          <SettingRow
+            layout="compact"
+            label={t("setting.about.reset_options")}
+            description={t(
+              "setting.about.reset_description",
+            )}
           >
-            <div class="min-w-0 space-y-1">
-              <h4 class="text-sm font-medium">
-                {t("setting.about.reset_options")}
-              </h4>
-              <p class="text-muted-foreground text-xs leading-relaxed">
-                {t("setting.about.reset_description")}
-              </p>
-            </div>
             <Button
               type="button"
               variant="outline"
-              class="text-destructive hover:text-destructive self-start
-                sm:self-auto"
+              class="text-destructive hover:text-destructive"
               disabled={pending() !== null}
               aria-busy={pending() === "reset"}
               onClick={() => void maintain("reset")}
@@ -114,26 +116,20 @@ export default function AboutSettings() {
               </Show>
               {t("setting.about.reset_options")}
             </Button>
-          </div>
+          </SettingRow>
           <Show when={cacheSupported()}>
-            <div
-              class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center
-                sm:justify-between sm:gap-6"
+            <SettingRow
+              layout="compact"
+              label={t(
+                "setting.about.clear_service_worker_cache",
+              )}
+              description={t(
+                "setting.about.cache_description",
+              )}
             >
-              <div class="min-w-0 space-y-1">
-                <h4 class="text-sm font-medium">
-                  {t(
-                    "setting.about.clear_service_worker_cache",
-                  )}
-                </h4>
-                <p class="text-muted-foreground text-xs leading-relaxed">
-                  {t("setting.about.cache_description")}
-                </p>
-              </div>
               <Button
                 type="button"
                 variant="outline"
-                class="self-start sm:self-auto"
                 disabled={pending() !== null}
                 aria-busy={pending() === "cache"}
                 onClick={() => void maintain("cache")}
@@ -148,10 +144,10 @@ export default function AboutSettings() {
                   "setting.about.clear_service_worker_cache",
                 )}
               </Button>
-            </div>
+            </SettingRow>
           </Show>
         </div>
-      </section>
-    </section>
+      </SettingBlock>
+    </SettingSection>
   );
 }

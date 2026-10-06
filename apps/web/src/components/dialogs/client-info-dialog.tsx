@@ -15,12 +15,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SettingSwitch } from "@/components/settings/setting-controls";
 import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+  SettingBlock,
+  SettingHeading,
+  SettingSection,
+} from "@/components/settings/setting-layout";
 import {
   Tabs,
   TabsList,
@@ -66,7 +66,7 @@ function Metric(props: {
       <dt class="text-muted-foreground text-xs">
         {props.label}
       </dt>
-      <dd class="mt-1 font-mono text-sm break-words tabular-nums">
+      <dd class="mt-1 break-words font-mono text-sm tabular-nums">
         {props.children}
       </dd>
     </div>
@@ -149,7 +149,7 @@ export function ClientInfoPanel(props: {
           justify-between gap-2 rounded-lg p-3"
       >
         <div class="min-w-0">
-          <p class="font-medium break-all">
+          <p class="break-all font-medium">
             {client()?.name ?? props.clientId ?? "—"}
           </p>
           <p class="text-muted-foreground text-xs">
@@ -244,14 +244,14 @@ export function ClientInfoPanel(props: {
                       class="text-muted-foreground hover:text-foreground
                         focus-visible:ring-ring inline-flex size-4 items-center
                         justify-center rounded-full transition-colors
-                        focus-visible:ring-2 focus-visible:outline-none"
+                        focus-visible:outline-none focus-visible:ring-2"
                       aria-label={t(
                         "common.client_info_dialog.summary_note",
                       )}
                     >
                       <IconInfo class="size-3.5" />
                     </TooltipTrigger>
-                    <TooltipContent class="max-w-72 leading-relaxed whitespace-normal">
+                    <TooltipContent class="max-w-72 whitespace-normal leading-relaxed">
                       {t(
                         "common.client_info_dialog.summary_note",
                       )}
@@ -341,7 +341,7 @@ export function ClientInfoPanel(props: {
               {t("common.action.copy")}
             </Button>
           </div>
-          <p class="text-muted-foreground text-xs whitespace-normal">
+          <p class="text-muted-foreground whitespace-normal text-xs">
             {t("common.client_info_dialog.raw_note")}
           </p>
           <Textarea
@@ -352,7 +352,7 @@ export function ClientInfoPanel(props: {
             value={raw()}
             spellcheck={false}
             class="scrollbar-thin min-h-0 w-full flex-1 resize-none
-              overflow-auto font-mono text-xs whitespace-pre"
+              overflow-auto whitespace-pre font-mono text-xs"
           />
           <Show when={copyState() !== "idle"}>
             <p role="status" class="text-sm">
@@ -367,22 +367,20 @@ export function ClientInfoPanel(props: {
             </p>
           </Show>
         </TabsContent>
-        <TabsContent
-          value="settings"
-          class="min-h-80 space-y-6 pt-2"
-        >
-          <div>
-            <h3 class="text-sm font-medium">
+        <TabsContent value="settings" class="min-h-80 pt-2">
+          <SettingSection>
+            <SettingHeading
+              description={t(
+                "client.config.preferences_description",
+              )}
+            >
               {t("client.config.preferences")}
-            </h3>
-            <p class="text-muted-foreground text-xs">
-              {t("client.config.preferences_description")}
-            </p>
-          </div>
-
-          <div class="space-y-2">
-            <Switch
-              class="flex items-center justify-between gap-4"
+            </SettingHeading>
+            <SettingSwitch
+              label={t("client.config.redirect.title")}
+              description={t(
+                "client.config.redirect.description",
+              )}
               checked={
                 !!props.clientId &&
                 appState.options.redirectToClient ===
@@ -395,23 +393,14 @@ export function ClientInfoPanel(props: {
                   checked ? props.clientId : undefined,
                 );
               }}
-            >
-              <div class="min-w-0 space-y-1">
-                <SwitchLabel>
-                  {t("client.config.redirect.title")}
-                </SwitchLabel>
-              </div>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-            <p class="text-muted-foreground text-xs whitespace-normal">
-              {t("client.config.redirect.description")}
-            </p>
-          </div>
-          <div class="space-y-2">
-            <Switch
-              class="flex items-center justify-between gap-4"
+            />
+            <SettingSwitch
+              label={t(
+                "client.config.provide_file_list.title",
+              )}
+              description={t(
+                "client.config.provide_file_list.description",
+              )}
               checked={
                 clientConfig()?.provideFileList ?? true
               }
@@ -421,68 +410,51 @@ export function ClientInfoPanel(props: {
                   provideFileList: checked,
                 });
               }}
-            >
-              <div class="min-w-0 space-y-1">
-                <SwitchLabel>
-                  {t(
-                    "client.config.provide_file_list.title",
-                  )}
-                </SwitchLabel>
-              </div>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-            <p class="text-muted-foreground text-xs whitespace-normal">
-              {t(
-                "client.config.provide_file_list.description",
-              )}
-            </p>
-          </div>
-
-          <div class="space-y-2">
-            <h3 class="text-sm font-medium">
-              {t("client.config.actions")}
-            </h3>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Show when={info()?.clipboard}>
-                {(clipboard) => (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    class="justify-start gap-2"
-                    onClick={() =>
-                      void openClipboardHistoryDialog(
-                        clipboard,
-                      )
-                    }
-                  >
-                    <IconAssignment class="size-4" />
-                    {t("client.menu.clipboard")}
-                  </Button>
-                )}
-              </Show>
-              <Show when={props.clientId}>
-                {(id) => (
-                  <div class="sm:col-span-2">
-                    <ConversationActions
-                      conversationId={
-                        props.conversationId ??
-                        directConversationId(
-                          appState.profile.clientId,
-                          id(),
+            />
+            <SettingBlock separated>
+              <SettingHeading>
+                {t("client.config.actions")}
+              </SettingHeading>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Show when={info()?.clipboard}>
+                  {(clipboard) => (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      class="justify-start gap-2"
+                      onClick={() =>
+                        void openClipboardHistoryDialog(
+                          clipboard,
                         )
                       }
-                      online={
-                        info()?.onlineStatus === "online"
-                      }
-                      onDeleted={props.onDeleted}
-                    />
-                  </div>
-                )}
-              </Show>
-            </div>
-          </div>
+                    >
+                      <IconAssignment class="size-4" />
+                      {t("client.menu.clipboard")}
+                    </Button>
+                  )}
+                </Show>
+                <Show when={props.clientId}>
+                  {(id) => (
+                    <div class="sm:col-span-2">
+                      <ConversationActions
+                        conversationId={
+                          props.conversationId ??
+                          directConversationId(
+                            appState.profile.clientId,
+                            id(),
+                          )
+                        }
+                        online={
+                          info()?.onlineStatus === "online"
+                        }
+                        onDeleted={props.onDeleted}
+                      />
+                    </div>
+                  )}
+                </Show>
+              </div>
+            </SettingBlock>
+          </SettingSection>
         </TabsContent>
       </Tabs>
     </div>

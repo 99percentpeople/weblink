@@ -4,19 +4,9 @@ import { createMemo, createEffect, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { toast } from "solid-sonner";
 import {
-  Switch,
-  SwitchLabel,
-  SwitchControl,
-  SwitchThumb,
-} from "@/components/ui/switch";
-import {
-  Slider,
-  SliderFill,
-  SliderLabel,
-  SliderThumb,
-  SliderTrack,
-  SliderValueLabel,
-} from "@/components/ui/slider";
+  SettingSlider,
+  SettingSwitch,
+} from "@/components/settings/setting-controls";
 import { createDebounceAsync } from "@/libs/hooks/debounce";
 import {
   setAppState,
@@ -83,8 +73,10 @@ export const SpeakerTrackConstraints = (props: {
   };
   return (
     <>
-      <Switch
-        class="flex items-center justify-between gap-2"
+      <SettingSwitch
+        label={t(
+          "common.media_selection_dialog.constraints.suppress_local_audio_playback",
+        )}
         disabled={
           !capabilities().suppressLocalAudioPlayback
         }
@@ -97,16 +89,7 @@ export const SpeakerTrackConstraints = (props: {
             value,
           );
         }}
-      >
-        <SwitchLabel>
-          {t(
-            "common.media_selection_dialog.constraints.suppress_local_audio_playback",
-          )}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
+      />
     </>
   );
 };
@@ -177,74 +160,46 @@ export const MicrophoneTrackConstraints = (props: {
 
   return (
     <>
-      <Switch
-        class="flex items-center justify-between gap-2"
+      <SettingSwitch
+        label={t(
+          "common.media_selection_dialog.constraints.auto_gain_control",
+        )}
         disabled={!capabilities().autoGainControl}
         checked={enableConstraints.autoGainControl}
         onChange={(value) => {
           applyConstraints("autoGainControl", value);
         }}
-      >
-        <SwitchLabel>
-          {t(
-            "common.media_selection_dialog.constraints.auto_gain_control",
-          )}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
-      <Switch
-        class="flex items-center justify-between gap-2"
+      />
+      <SettingSwitch
+        label={t(
+          "common.media_selection_dialog.constraints.echo_cancellation",
+        )}
         disabled={!capabilities().echoCancellation}
         checked={enableConstraints.echoCancellation}
         onChange={(value) => {
           applyConstraints("echoCancellation", value);
         }}
-      >
-        <SwitchLabel>
-          {t(
-            "common.media_selection_dialog.constraints.echo_cancellation",
-          )}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
-      <Switch
-        class="flex items-center justify-between gap-2"
+      />
+      <SettingSwitch
+        label={t(
+          "common.media_selection_dialog.constraints.noise_suppression",
+        )}
         disabled={!capabilities().noiseSuppression}
         checked={enableConstraints.noiseSuppression}
         onChange={(value) => {
           applyConstraints("noiseSuppression", value);
         }}
-      >
-        <SwitchLabel>
-          {t(
-            "common.media_selection_dialog.constraints.noise_suppression",
-          )}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
-      <Switch
-        class="flex items-center justify-between gap-2"
+      />
+      <SettingSwitch
+        label={t(
+          "common.media_selection_dialog.constraints.voice_isolation",
+        )}
         disabled={!capabilities().voiceIsolation}
         checked={enableConstraints.voiceIsolation}
         onChange={(value) => {
           applyConstraints("voiceIsolation", value);
         }}
-      >
-        <SwitchLabel>
-          {t(
-            "common.media_selection_dialog.constraints.voice_isolation",
-          )}
-        </SwitchLabel>
-        <SwitchControl>
-          <SwitchThumb />
-        </SwitchControl>
-      </Switch>
+      />
     </>
   );
 };
@@ -298,37 +253,24 @@ export const VideoTrackConstraints = (props: {
     });
 
   return (
-    <div class="flex flex-col gap-2">
-      <Show when={capabilities().frameRate}>
-        <Slider
-          minValue={1}
-          maxValue={120}
-          value={[
-            typeof enableConstraints.frameRate === "number"
-              ? enableConstraints.frameRate
-              : (enableConstraints.frameRate?.max ?? 60),
-          ]}
-          onChange={(value) => {
-            setEnableConstraints("frameRate", value[0]);
-            applyConstraints({ max: value[0] });
-          }}
-          getValueLabel={({ values }) => `${values[0]} FPS`}
-          class="gap-2"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <SliderLabel>
-              {t(
-                "common.media_selection_dialog.constraints.max_frame_rate",
-              )}
-            </SliderLabel>
-            <SliderValueLabel />
-          </div>
-          <SliderTrack>
-            <SliderFill />
-            <SliderThumb />
-          </SliderTrack>
-        </Slider>
-      </Show>
-    </div>
+    <Show when={capabilities().frameRate}>
+      <SettingSlider
+        label={t(
+          "common.media_selection_dialog.constraints.max_frame_rate",
+        )}
+        minValue={1}
+        maxValue={120}
+        value={[
+          typeof enableConstraints.frameRate === "number"
+            ? enableConstraints.frameRate
+            : (enableConstraints.frameRate?.max ?? 60),
+        ]}
+        onChange={(value) => {
+          setEnableConstraints("frameRate", value[0]);
+          applyConstraints({ max: value[0] });
+        }}
+        getValueLabel={({ values }) => `${values[0]} FPS`}
+      />
+    </Show>
   );
 };

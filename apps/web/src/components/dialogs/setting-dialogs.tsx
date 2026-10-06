@@ -2,12 +2,7 @@ import { t } from "@/i18n";
 import { createDialog } from "./dialog";
 import { createSignal } from "solid-js";
 import { Button } from "@/components/ui/button";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+import { SettingSwitch } from "@/components/settings/setting-controls";
 
 export const createResetOptionsDialog = () => {
   const { open, close, submit } = createDialog({
@@ -52,22 +47,13 @@ export const createClearServiceWorkerCacheDialog = () => {
             "common.clear_service_worker_cache_dialog.content",
           )}
         </p>
-        <div>
-          <Switch
-            class="flex items-center justify-between text-sm"
-            checked={reload()}
-            onChange={(isChecked) => setReload(isChecked)}
-          >
-            <SwitchLabel>
-              {t(
-                "common.clear_service_worker_cache_dialog.reload",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-        </div>
+        <SettingSwitch
+          label={t(
+            "common.clear_service_worker_cache_dialog.reload",
+          )}
+          checked={reload()}
+          onChange={(isChecked) => setReload(isChecked)}
+        />
       </>
     ),
     cancel: (

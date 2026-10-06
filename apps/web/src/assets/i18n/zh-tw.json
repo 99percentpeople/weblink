@@ -113,6 +113,15 @@
         "description": "當啟用時，應用程式將保持螢幕常亮"
       }
     },
+    "list": {
+      "bulk_edit": "批次編輯",
+      "save": "儲存",
+      "add": "新增",
+      "edit": "編輯",
+      "remove": "移除",
+      "inline_hint": "按 Enter 新增，點擊標籤編輯。",
+      "bulk_hint": "每行一項，儲存後統一生效。"
+    },
     "connection": {
       "title": "連接",
       "auto_join": {

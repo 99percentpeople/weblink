@@ -1,3 +1,5 @@
+import { SettingSection } from "./setting-layout";
+import { SettingSwitch } from "./setting-controls";
 import { For, Show } from "solid-js";
 import { BellRing, LoaderCircle } from "lucide-solid";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -6,12 +8,7 @@ import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import { t } from "@/i18n";
 import { Button } from "@/components/ui/button";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+
 import { toast } from "solid-sonner";
 
 export default function NotificationSettings() {
@@ -34,13 +31,10 @@ export default function NotificationSettings() {
     "sound",
   ] as const;
   return (
-    <section
-      class="settings-section"
-      aria-labelledby="notification-settings"
+    <SettingSection
+      id="notification-settings"
+      title={t("app_menu.settings_notifications")}
     >
-      <h3 id="notification-settings" class="h3">
-        {t("app_menu.settings_notifications")}
-      </h3>
       <div class="flex flex-col gap-2">
         <p
           class="text-sm leading-relaxed"
@@ -120,28 +114,19 @@ export default function NotificationSettings() {
       </div>
       <For each={keys}>
         {(key) => (
-          <div class="flex flex-col gap-2">
-            <Switch
-              class="flex w-full items-center justify-between gap-3"
-              checked={appState.options.notifications[key]}
-              disabled={
-                key !== "enabled" &&
-                !appState.options.notifications.enabled
-              }
-              onChange={(value) =>
-                setAppOptions("notifications", key, value)
-              }
-            >
-              <SwitchLabel>
-                {t(`setting.notifications.${key}`)}
-              </SwitchLabel>
-              <SwitchControl>
-                <SwitchThumb />
-              </SwitchControl>
-            </Switch>
-          </div>
+          <SettingSwitch
+            checked={appState.options.notifications[key]}
+            disabled={
+              key !== "enabled" &&
+              !appState.options.notifications.enabled
+            }
+            onChange={(value) =>
+              setAppOptions("notifications", key, value)
+            }
+            label={t(`setting.notifications.${key}`)}
+          />
         )}
       </For>
-    </section>
+    </SettingSection>
   );
 }

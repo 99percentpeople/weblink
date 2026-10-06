@@ -1,15 +1,10 @@
+import { SettingHeading } from "./setting-layout";
+import { SettingSelect } from "./setting-controls";
 import type { NativeMediaCapabilitiesSnapshot } from "@/libs/state/create-app-media-capabilities";
 import type { NativeReadbackBuffers } from "@weblink/platform";
 import { createMemo, Show } from "solid-js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSection,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { SelectSection } from "@/components/ui/select";
+
 import CaptureBackendSelect from "@/components/capture-backend-select";
 import NativeColorSettings from "./native-color-settings";
 import { appState } from "@/libs/state/app-state";
@@ -162,11 +157,13 @@ export default function NativeMediaSettings(props: {
     return grouped;
   });
   return (
-    <div class="flex flex-col gap-5">
-      <h3 class="h3">{label("native_capture")}</h3>
-      <p class="muted">
-        {label("native_encoder_description")}
-      </p>
+    <div class="setting-group">
+      <SettingHeading
+        description={label("native_encoder_description")}
+      >
+        {label("native_capture")}
+      </SettingHeading>
+
       <Show when={props.available.backendsLoading}>
         <p class="muted" role="status">
           {label("backends_loading")}
@@ -207,100 +204,68 @@ export default function NativeMediaSettings(props: {
           {label("backends_unavailable")}
         </p>
       </Show>
-      <div class="flex flex-col gap-2">
-        <Label>{label("readback_buffers")}</Label>
-        <Select<NativeReadbackBuffers>
-          modal
-          value={
-            nativeScreenOptions(appState.options)
-              .readbackBuffers
-          }
-          options={[1, 2, 3]}
-          onChange={(value) => {
-            if (value === 1 || value === 2 || value === 3)
-              setAppOptions("nativeReadbackBuffers", value);
-          }}
-          itemComponent={(item) => (
-            <SelectItem item={item.item}>
-              {label(
-                `readback_buffers_${item.item.rawValue}`,
-              )}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger
-            aria-label={label("readback_buffers")}
-          >
-            <SelectValue<NativeReadbackBuffers>>
-              {(state) =>
-                label(
-                  `readback_buffers_${state.selectedOption()}`,
-                )
+      <SettingSelect<NativeReadbackBuffers>
+        modal
+        value={
+          nativeScreenOptions(appState.options)
+            .readbackBuffers
+        }
+        options={[1, 2, 3]}
+        onChange={(value) => {
+          if (value === 1 || value === 2 || value === 3)
+            setAppOptions("nativeReadbackBuffers", value);
+        }}
+        label={label("readback_buffers")}
+        description={label("readback_buffers_description")}
+        optionLabel={(option) =>
+          label(`readback_buffers_${option}`)
+        }
+      />
+      <SettingSelect<EncodingOption, EncodingGroup>
+        modal
+        value={selected()}
+        disabled={
+          props.available.failed ||
+          props.available.encodingLoading
+        }
+        options={options()}
+        optionValue="id"
+        optionTextValue="label"
+        optionDisabled="disabled"
+        optionGroupChildren="options"
+        onChange={(value) => {
+          if (!value || value.disabled) return;
+          setAppOptions({
+            nativeScreenEncoder: value.encoder,
+            nativeScreenCodec: value.codec,
+          });
+        }}
+        sectionComponent={(section) => (
+          <SelectSection class="text-muted-foreground px-2 py-1.5 text-xs font-medium">
+            {section.section.rawValue.label}
+          </SelectSection>
+        )}
+        label={label("native_encoder")}
+        hint={
+          <>
+            <Show
+              when={
+                props.available.encodingLoading ||
+                props.available.failed
               }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <p class="muted">
-          {label("readback_buffers_description")}
-        </p>
-      </div>
-      <div class="flex flex-col gap-2">
-        <Label>{label("native_encoder")}</Label>
-        <Select<EncodingOption, EncodingGroup>
-          modal
-          value={selected()}
-          disabled={
-            props.available.failed ||
-            props.available.encodingLoading
-          }
-          options={options()}
-          optionValue="id"
-          optionTextValue="label"
-          optionDisabled="disabled"
-          optionGroupChildren="options"
-          onChange={(value) => {
-            if (!value || value.disabled) return;
-            setAppOptions({
-              nativeScreenEncoder: value.encoder,
-              nativeScreenCodec: value.codec,
-            });
-          }}
-          itemComponent={(item) => (
-            <SelectItem item={item.item}>
-              {item.item.rawValue.label}
-            </SelectItem>
-          )}
-          sectionComponent={(section) => (
-            <SelectSection class="text-muted-foreground px-2 py-1.5 text-xs font-medium">
-              {section.section.rawValue.label}
-            </SelectSection>
-          )}
-        >
-          <SelectTrigger
-            aria-label={label("native_encoder")}
-          >
-            <SelectValue<EncodingOption>>
-              {(state) => state.selectedOption().label}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-        <Show
-          when={
-            props.available.encodingLoading ||
-            props.available.failed
-          }
-        >
-          <p class="muted" role="status">
-            {label(
-              props.available.encodingLoading
-                ? "encoders_loading"
-                : "native_unavailable",
-            )}
-          </p>
-        </Show>
-      </div>
+            >
+              <p class="muted" role="status">
+                {label(
+                  props.available.encodingLoading
+                    ? "encoders_loading"
+                    : "native_unavailable",
+                )}
+              </p>
+            </Show>
+          </>
+        }
+        optionLabel={(option) => option.label}
+      />
       <Show
         when={
           !props.available.encodingLoading &&
@@ -308,10 +273,10 @@ export default function NativeMediaSettings(props: {
           !selected().disabled
         }
       >
-        <div class="flex flex-col gap-5">
-          <h4 class="font-medium">
+        <div class="setting-group">
+          <SettingHeading>
             {label("native_advanced")}
-          </h4>
+          </SettingHeading>
           <NativeColorSettings />
         </div>
       </Show>

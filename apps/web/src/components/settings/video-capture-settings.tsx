@@ -1,3 +1,4 @@
+import { SettingSelect } from "./setting-controls";
 import { createEffect, For, Show } from "solid-js";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
@@ -7,14 +8,6 @@ import {
   videoResolutions,
 } from "@/libs/application/meeting-video-settings";
 import { useAppState } from "@/libs/state/app-state-context";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 
 export default function VideoCaptureSettings(props: {
   frameRates?: readonly number[] | null;
@@ -53,70 +46,52 @@ export default function VideoCaptureSettings(props: {
           const label = (value: string) =>
             kind === "resolution" ? value : `${value} FPS`;
           return (
-            <div class="flex flex-col gap-2">
-              <Label>
-                {t(`setting.meeting_settings.${kind}`)}
-              </Label>
-              <Select
-                modal
-                value={
-                  kind === "resolution"
-                    ? appState.options.videoResolution
-                    : String(
-                        appState.options.videoFrameRate,
-                      )
-                }
-                options={options()}
-                onChange={(value) => {
-                  if (!value) return;
-                  if (kind === "resolution")
-                    setAppOptions(
-                      "videoResolution",
-                      value as keyof typeof videoResolutions,
-                    );
-                  else
-                    setAppOptions(
-                      "videoFrameRate",
-                      Number(value),
-                    );
-                }}
-                itemComponent={(props) => (
-                  <SelectItem item={props.item}>
-                    {label(props.item.rawValue)}
-                  </SelectItem>
-                )}
-              >
-                <SelectTrigger
-                  aria-label={t(
-                    `setting.meeting_settings.${kind}`,
-                  )}
-                >
-                  <SelectValue<string>>
-                    {(state) =>
-                      label(
-                        state.selectedOption() ??
-                          String(
-                            appState.options.videoFrameRate,
-                          ),
-                      )
+            <SettingSelect<string>
+              modal
+              value={
+                kind === "resolution"
+                  ? appState.options.videoResolution
+                  : String(appState.options.videoFrameRate)
+              }
+              options={options()}
+              onChange={(value) => {
+                if (!value) return;
+                if (kind === "resolution")
+                  setAppOptions(
+                    "videoResolution",
+                    value as keyof typeof videoResolutions,
+                  );
+                else
+                  setAppOptions(
+                    "videoFrameRate",
+                    Number(value),
+                  );
+              }}
+              label={t(`setting.meeting_settings.${kind}`)}
+              renderValue={(state) =>
+                label(
+                  state.selectedOption() ??
+                    String(appState.options.videoFrameRate),
+                )
+              }
+              hint={
+                <>
+                  <Show
+                    when={
+                      kind === "frame_rate" &&
+                      props.showDescription !== false
                     }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent />
-              </Select>
-              <Show
-                when={
-                  kind === "frame_rate" &&
-                  props.showDescription !== false
-                }
-              >
-                <p class="muted">
-                  {t(
-                    "setting.meeting_settings.capture_description",
-                  )}
-                </p>
-              </Show>
-            </div>
+                  >
+                    <p class="muted">
+                      {t(
+                        "setting.meeting_settings.capture_description",
+                      )}
+                    </p>
+                  </Show>
+                </>
+              }
+              optionLabel={(option) => label(option)}
+            />
           );
         }}
       </For>

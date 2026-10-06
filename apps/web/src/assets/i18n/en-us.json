@@ -113,6 +113,15 @@
         "description": "When enabled, the app will keep the screen on"
       }
     },
+    "list": {
+      "bulk_edit": "Bulk edit",
+      "save": "Save",
+      "add": "Add",
+      "edit": "Edit",
+      "remove": "Remove",
+      "inline_hint": "Press Enter to add; click a tag to edit.",
+      "bulk_hint": "One entry per line. Save to apply all changes."
+    },
     "connection": {
       "title": "Connection",
       "auto_join": {

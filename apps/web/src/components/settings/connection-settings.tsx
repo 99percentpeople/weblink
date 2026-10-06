@@ -1,6 +1,8 @@
+import { SettingSection } from "./setting-layout";
+import { SettingTagList } from "./setting-tag-list";
+import { SettingSwitch } from "./setting-controls";
 import { userErrorMessage } from "@/libs/user-error";
 import {
-  createEffect,
   createMemo,
   createSignal,
   For,
@@ -9,21 +11,13 @@ import {
 import { reconcile } from "solid-js/store";
 import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+
 import { t } from "@/i18n";
 import {
   IceServerDiagnostics,
   type IceServerDiagnosticResult,
 } from "@/libs/application/ice-server-diagnostics";
 import { cn } from "@/libs/cn";
-import { textareaAutoResize } from "@/libs/hooks/input-resize";
 import { appState } from "@/libs/state/app-state";
 import {
   getDefaultAppOptions,
@@ -38,6 +32,8 @@ function CheckAvailabilityButton(props: {
   const [checking, setChecking] = createSignal(false);
   return (
     <Button
+      type="button"
+      size="sm"
       variant="outline"
       disabled={checking()}
       onClick={async () => {
@@ -104,188 +100,141 @@ export function ConnectionSettings(
   );
 
   return (
-    <section
-      class="settings-section"
-      aria-labelledby="connection"
+    <SettingSection
+      id="connection"
+      title={t("setting.connection.title")}
     >
-      <h3 id="connection" class="h3">
-        {t("setting.connection.title")}
-      </h3>
-      <label class="flex flex-col gap-2">
-        <Label>
-          {t("setting.connection.stun_servers.title")}
-        </Label>
-        <Textarea
-          class="scrollbar-thin resize-none overflow-x-auto text-nowrap"
-          placeholder="stun:stun.l.google.com:19302"
-          ref={(ref) => {
-            createEffect(() => {
-              textareaAutoResize(ref, () =>
-                appState.options.servers.stuns.toString(),
-              );
-            });
-          }}
-          value={
-            appState.options.servers.stuns.join("\n") +
-            (appState.options.servers.stuns ? "\n" : "")
-          }
-          onChange={(ev) => {
-            const value = ev.currentTarget.value
-              .trim()
-              .split("\n")
-              .filter((v) => v.trim() !== "");
-            setAppOptions("servers", "stuns", value);
-          }}
-        />
-        <p class="muted">
-          {t("setting.connection.stun_servers.description")}
-        </p>
-        <div class="flex gap-2 self-end">
-          <Show
-            when={
-              import.meta.env.WEBLINK_STUN_SERVERS &&
-              import.meta.env.WEBLINK_STUN_SERVERS !==
-                appState.options.servers.stuns.join(",")
-            }
-          >
-            <Button
-              variant="outline"
-              onClick={() =>
-                setAppOptions(
-                  "servers",
-                  "stuns",
-                  getDefaultAppOptions().servers.stuns,
-                )
+      <SettingTagList
+        label={t("setting.connection.stun_servers.title")}
+        description={t(
+          "setting.connection.stun_servers.description",
+        )}
+        placeholder="stun:stun.l.google.com:19302"
+        values={appState.options.servers.stuns}
+        onChange={(values) =>
+          setAppOptions("servers", "stuns", values)
+        }
+        errorMessage={(error) =>
+          userErrorMessage(error, "errors.ice_config")
+        }
+        actions={
+          <>
+            <Show
+              when={
+                import.meta.env.WEBLINK_STUN_SERVERS &&
+                import.meta.env.WEBLINK_STUN_SERVERS !==
+                  appState.options.servers.stuns.join(",")
               }
             >
-              {t("common.action.reset")}
-            </Button>
-          </Show>
-          <Show
-            when={
-              appState.options.servers.stuns.length > 0 &&
-              appState.options.servers.stuns
-            }
-          >
-            {(stuns) => (
-              <CheckAvailabilityButton
-                check={() =>
-                  diagnostics.checkStunServers(stuns())
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setAppOptions(
+                    "servers",
+                    "stuns",
+                    getDefaultAppOptions().servers.stuns,
+                  )
                 }
-              />
-            )}
-          </Show>
-        </div>
-      </label>
-      <label class="flex flex-col gap-2">
-        <Label>
-          {t("setting.connection.turn_servers.title")}
-        </Label>
-        <Textarea
-          class="scrollbar-thin resize-none overflow-x-auto text-nowrap"
-          ref={(ref) => {
-            createEffect(() => {
-              textareaAutoResize(
-                ref,
-                () =>
-                  appState.options.servers.turns?.toString() ??
-                  "",
-              );
-            });
-          }}
-          placeholder={
-            "turn:turn1.example.com:3478|user1|pass1|longterm\nturns:turn2.example.com:5349|user2|pass2|hmac"
-          }
-          value={
-            turnServersValue() +
-            (turnServersValue() ? "\n" : "")
-          }
-          onChange={(ev) => {
-            try {
-              const turns = parseTurnServers(
-                ev.currentTarget.value.trim(),
-              );
-              setAppOptions(
-                "servers",
-                "turns",
-                reconcile(turns),
-              );
-            } catch (error) {
-              toast.error(
-                userErrorMessage(
-                  error,
-                  "errors.ice_config",
-                ),
-              );
-            }
-          }}
-        />
-        <p class="muted">
-          {t("setting.connection.turn_servers.description")}
-        </p>
-        <div class="flex gap-2 self-end">
-          <Show
-            when={
-              import.meta.env.VITE_TURN_SERVERS &&
-              import.meta.env.VITE_TURN_SERVERS !==
-                turnServersValue().split("\n").join(",")
-            }
-          >
-            <Button
-              variant="outline"
-              onClick={() =>
-                setAppOptions(
-                  "servers",
-                  "turns",
-                  getDefaultAppOptions().servers.turns,
-                )
+              >
+                {t("common.action.reset")}
+              </Button>
+            </Show>
+            <Show
+              when={
+                appState.options.servers.stuns.length > 0 &&
+                appState.options.servers.stuns
               }
             >
-              {t("common.action.reset")}
-            </Button>
-          </Show>
-          <Show
-            when={
-              appState.options.servers.turns.length > 0 &&
-              appState.options.servers.turns
-            }
-          >
-            {(turns) => (
-              <CheckAvailabilityButton
-                check={() =>
-                  diagnostics.checkTurnServers(turns())
+              {(stuns) => (
+                <CheckAvailabilityButton
+                  check={() =>
+                    diagnostics.checkStunServers(stuns())
+                  }
+                />
+              )}
+            </Show>
+          </>
+        }
+      />
+      <SettingTagList
+        label={t("setting.connection.turn_servers.title")}
+        description={t(
+          "setting.connection.turn_servers.description",
+        )}
+        placeholder="turn:turn.example.com:3478|user|password|longterm"
+        values={turnServersValue()
+          .split("\n")
+          .filter(Boolean)}
+        itemLabel={(value) => {
+          const [url, username] = value.split("|");
+          return username ? `${url} · ${username}` : url;
+        }}
+        onChange={(values) => {
+          const turns = parseTurnServers(values.join("\n"));
+          setAppOptions(
+            "servers",
+            "turns",
+            reconcile(turns),
+          );
+        }}
+        errorMessage={(error) =>
+          userErrorMessage(error, "errors.ice_config")
+        }
+        actions={
+          <>
+            <Show
+              when={
+                import.meta.env.VITE_TURN_SERVERS &&
+                import.meta.env.VITE_TURN_SERVERS !==
+                  turnServersValue().split("\n").join(",")
+              }
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setAppOptions(
+                    "servers",
+                    "turns",
+                    getDefaultAppOptions().servers.turns,
+                  )
                 }
-              />
-            )}
-          </Show>
-        </div>
-      </label>
-      <div class="flex flex-col gap-2">
-        <Switch
-          class="flex items-center justify-between"
-          checked={appState.options.shareServersWithOthers}
-          onChange={(isChecked) =>
-            setAppOptions(
-              "shareServersWithOthers",
-              isChecked,
-            )
-          }
-        >
-          <SwitchLabel>
-            {t(
-              "setting.connection.share_servers_with_others.title",
-            )}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </Switch>
-        <p class="muted">
-          {t(
-            "setting.connection.share_servers_with_others.description",
-          )}
-        </p>
-      </div>
-    </section>
+              >
+                {t("common.action.reset")}
+              </Button>
+            </Show>
+            <Show
+              when={
+                appState.options.servers.turns.length > 0 &&
+                appState.options.servers.turns
+              }
+            >
+              {(turns) => (
+                <CheckAvailabilityButton
+                  check={() =>
+                    diagnostics.checkTurnServers(turns())
+                  }
+                />
+              )}
+            </Show>
+          </>
+        }
+      />
+      <SettingSwitch
+        checked={appState.options.shareServersWithOthers}
+        onChange={(isChecked) =>
+          setAppOptions("shareServersWithOthers", isChecked)
+        }
+        label={t(
+          "setting.connection.share_servers_with_others.title",
+        )}
+        description={t(
+          "setting.connection.share_servers_with_others.description",
+        )}
+      />
+    </SettingSection>
   );
 }

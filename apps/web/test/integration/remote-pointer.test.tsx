@@ -14,6 +14,7 @@ import {
   screen,
   waitFor,
 } from "@solidjs/testing-library";
+import userEvent from "@testing-library/user-event";
 import { createSignal, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { NativeKeyboardEvent } from "@weblink/platform";
@@ -1400,34 +1401,59 @@ it("releases ordinary-mode keyboard focus with the shared shortcut without endin
   expect(fixture.control.input).toHaveBeenCalledOnce();
 });
 
-it("stores one shared file size limit without changing either feature switch", () => {
+it("stores one shared file size limit without changing either feature switch", async () => {
   render(() => (
     <SettingsStateProvider>
       <RemoteControlSettings />
     </SettingsStateProvider>
   ));
-  const input = screen.getByRole("spinbutton", {
-    name: "setting.remote_control.file_size_limit.title",
+  const select = screen.getByRole("button", {
+    name: /setting.remote_control.file_size_limit.title/,
   });
-  expect(input).toHaveValue(64);
-  fireEvent.change(input, { target: { value: "128" } });
+  expect(select).toHaveTextContent("64 MiB");
+  await userEvent.click(select);
+  for (const value of [1, 5, 10, 20, 32, 64, 128, 256, 512])
+    expect(
+      screen.getByRole("option", { name: `${value} MiB` }),
+    ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("option", { name: "128 MiB" }),
+  );
   expect(appState.options.remoteFileMaxSize).toBe(
     128 * 1024 * 1024,
   );
+  expect(select).toHaveTextContent("128 MiB");
   expect(appState.options.remotePointer.fileDrop).toBe(
     false,
   );
   expect(appState.options.remoteKeyboard.clipboard).toBe(
     false,
   );
-  fireEvent.change(input, { target: { value: "0" } });
-  expect(input).toHaveValue(1);
-  fireEvent.change(input, { target: { value: "999" } });
-  expect(input).toHaveValue(512);
-  fireEvent.change(input, { target: { value: "" } });
-  expect(input).toHaveValue(512);
+});
+it("keeps a previously saved custom file limit in the selection", async () => {
+  setAppState(
+    "options",
+    "remoteFileMaxSize",
+    99 * 1024 * 1024,
+  );
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const select = screen.getByRole("button", {
+    name: /setting.remote_control.file_size_limit.title/,
+  });
+  expect(select).toHaveTextContent("99 MiB");
+  await userEvent.click(select);
+  expect(
+    screen.getByRole("option", { name: "99 MiB" }),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("option", { name: "64 MiB" }),
+  );
   expect(appState.options.remoteFileMaxSize).toBe(
-    512 * 1024 * 1024,
+    64 * 1024 * 1024,
   );
 });
 it("persists cursor, clipboard and file drop switches independently", () => {

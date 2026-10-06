@@ -1,0 +1,287 @@
+@reference "../../global.css";
+
+/* Settings layout tokens. Keep option-specific pages free of row styling. */
+.settings-section {
+  --setting-row-padding: 1rem;
+  --setting-column-gap: 1.5rem;
+  --setting-control-width: 14rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+.setting-section-header {
+  padding-bottom: 1rem;
+}
+.setting-section-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.setting-group-heading {
+  padding: 1.5rem 0 0.5rem;
+}
+.setting-group-heading:first-child {
+  padding-top: 0;
+}
+.setting-group-heading h4 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+/* Separate later entries even when hints or layout wrappers sit between them.
+   Container borders separate whole groups; their first row stays borderless. */
+.settings-section
+  :is(
+    .setting-item,
+    .setting-block,
+    .setting-group,
+    :has(.setting-item)
+  )
+  ~ :is(
+    .setting-item,
+    .setting-block,
+    .setting-group,
+    :has(.setting-item)
+  ) {
+  border-top: 1px solid
+    color-mix(in srgb, var(--border) 65%, transparent);
+
+  &:not(.setting-item) {
+    padding-top: var(--setting-row-padding, 1rem);
+  }
+}
+.setting-block {
+  min-width: 0;
+  padding: var(--setting-row-padding, 1rem) 0;
+}
+.setting-block[data-separated] {
+  border-top: 1px solid
+    color-mix(in srgb, var(--border) 65%, transparent);
+}
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(
+      10rem,
+      var(--setting-control-width, 14rem)
+    );
+  align-items: center;
+  gap: 0.5rem var(--setting-column-gap, 1.5rem);
+  min-width: 0;
+  width: 100%;
+  padding: var(--setting-row-padding, 1rem) 0;
+}
+.setting-label,
+.setting-control {
+  min-width: 0;
+}
+.setting-label,
+.setting-label > label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.setting-description,
+.setting-hint {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.setting-description:empty,
+.setting-hint:empty {
+  display: none;
+}
+.setting-section-header > .setting-description,
+.setting-group-heading > .setting-description {
+  margin-top: 0.375rem;
+}
+.setting-description p,
+.setting-hint p {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.setting-row > .setting-description,
+.setting-hint {
+  grid-column: 1 / -1;
+}
+.setting-row[data-layout="compact"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.setting-row[data-layout="stacked"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.setting-control
+  > :is(
+    input,
+    textarea,
+    select,
+    button[aria-haspopup="listbox"]
+  ) {
+  max-width: 100%;
+}
+.setting-row[data-disabled] .setting-label {
+  color: var(--muted-foreground);
+}
+.setting-slider {
+  width: 100%;
+}
+.setting-slider-control {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.25rem 0.125rem 0.5rem;
+}
+.setting-slider-control > label {
+  align-self: flex-end;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.setting-shortcut {
+  padding: var(--setting-row-padding, 1rem) 0;
+}
+.setting-shortcut > .setting-description {
+  margin-top: 0.375rem;
+}
+.setting-shortcut label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 767px) {
+  .setting-row[data-layout="row"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 45%);
+  }
+  .setting-section-header h3 {
+    font-size: 1rem;
+  }
+  .setting-row {
+    --setting-column-gap: 1rem;
+  }
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+
+.setting-tag-input {
+  @apply rounded-md;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  min-width: 0;
+  border: 1px solid var(--input);
+  background: var(--background);
+  transition:
+    border-color 150ms,
+    box-shadow 150ms;
+}
+.setting-tag-input:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--ring) 20%, transparent);
+}
+.setting-tag-input[data-invalid] {
+  border-color: var(--destructive);
+}
+.setting-tag {
+  @apply rounded-sm;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  font-size: 0.75rem;
+}
+.setting-tag[data-editing] {
+  border-color: var(--ring);
+  background: var(--accent);
+}
+.setting-tag-label {
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  cursor: text;
+}
+.setting-tag-remove {
+  @apply rounded-r-sm;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  align-self: stretch;
+  width: 1.75rem;
+  color: var(--muted-foreground);
+  border-left: 1px solid var(--border);
+}
+.setting-tag-remove:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.setting-tag-remove svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.setting-tag-label:focus-visible,
+.setting-tag-remove:focus-visible {
+  @apply rounded-sm;
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.setting-tag-draft {
+  flex: 1 1 12rem;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.375rem;
+  background: transparent;
+  font-size: 0.8125rem;
+  outline: none;
+}
+.setting-tag-draft::placeholder {
+  color: var(--muted-foreground);
+}
+.setting-tag-bulk {
+  max-height: 18rem;
+  resize: vertical;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+.setting-tag-toolbar,
+.setting-tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.setting-tag-toolbar {
+  justify-content: space-between;
+}
+.setting-tag-actions {
+  margin-left: auto;
+}
+.setting-tag-error {
+  margin-top: 0.5rem;
+  color: var(--destructive);
+  font-size: 0.75rem;
+}

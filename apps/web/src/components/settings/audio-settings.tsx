@@ -1,14 +1,9 @@
+import { SettingHeading } from "./setting-layout";
+import { SettingSelect } from "./setting-controls";
 import { createMemo, For, Show } from "solid-js";
 import { useAppState } from "@/libs/state/app-state-context";
 import { audioSamplingChoices } from "@/libs/application/audio-sampling-capabilities";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
@@ -31,8 +26,10 @@ export default function AudioSettings() {
   );
   return (
     <>
-      <h3 class="h3">{label("title")}</h3>
-      <p class="muted">{label("description")}</p>
+      <SettingHeading description={label("description")}>
+        {label("title")}
+      </SettingHeading>
+
       <Show when={capabilities.native() !== null}>
         <AudioCodecSelect
           title={t(
@@ -77,62 +74,48 @@ export default function AudioSettings() {
                       : "channels.stereo",
                   );
           return (
-            <div class="flex flex-col gap-2">
-              <Label>{name()}</Label>
-              <Select<string>
-                modal
-                value={value()}
-                options={options()}
-                optionDisabled={(option) =>
-                  option !== "auto" &&
+            <SettingSelect<string>
+              modal
+              value={value()}
+              options={options()}
+              optionDisabled={(option) =>
+                option !== "auto" &&
+                !supported().includes(Number(option))
+              }
+              onChange={(value) => {
+                if (
+                  !value ||
+                  (value !== "auto" &&
+                    !supported().includes(Number(value)))
+                )
+                  return;
+                if (kind === "sample_rate")
+                  setAppOptions(
+                    "audioSampleRate",
+                    value === "auto" ? null : Number(value),
+                  );
+                else
+                  setAppOptions(
+                    "audioChannelCount",
+                    value === "auto"
+                      ? null
+                      : (Number(value) as 1 | 2),
+                  );
+              }}
+              label={name()}
+              renderValue={(state) =>
+                optionName(state.selectedOption() ?? "auto")
+              }
+              optionLabel={(option) => (
+                <>
+                  {optionName(option)}
+                  {option !== "auto" &&
                   !supported().includes(Number(option))
-                }
-                onChange={(value) => {
-                  if (
-                    !value ||
-                    (value !== "auto" &&
-                      !supported().includes(Number(value)))
-                  )
-                    return;
-                  if (kind === "sample_rate")
-                    setAppOptions(
-                      "audioSampleRate",
-                      value === "auto"
-                        ? null
-                        : Number(value),
-                    );
-                  else
-                    setAppOptions(
-                      "audioChannelCount",
-                      value === "auto"
-                        ? null
-                        : (Number(value) as 1 | 2),
-                    );
-                }}
-                itemComponent={(item) => (
-                  <SelectItem item={item.item}>
-                    {optionName(item.item.rawValue)}
-                    {item.item.rawValue !== "auto" &&
-                    !supported().includes(
-                      Number(item.item.rawValue),
-                    )
-                      ? ` (${label("unavailable")})`
-                      : ""}
-                  </SelectItem>
-                )}
-              >
-                <SelectTrigger aria-label={name()}>
-                  <SelectValue<string>>
-                    {(state) =>
-                      optionName(
-                        state.selectedOption() ?? "auto",
-                      )
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent />
-              </Select>
-            </div>
+                    ? ` (${label("unavailable")})`
+                    : ""}
+                </>
+              )}
+            />
           );
         }}
       </For>

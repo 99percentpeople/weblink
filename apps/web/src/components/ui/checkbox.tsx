@@ -31,22 +31,22 @@ export const CheckboxControl = <
       <CheckboxPrimitive.Input
         class="[&:focus-visible+div]:ring-ring
           [&:focus-visible+div]:ring-offset-background
+          [&:focus-visible+div]:outline-none
           [&:focus-visible+div]:ring-[1.5px]
-          [&:focus-visible+div]:ring-offset-2
-          [&:focus-visible+div]:outline-none"
+          [&:focus-visible+div]:ring-offset-2"
       />
       <CheckboxPrimitive.Control
         class={cn(
-          `peer border-input dark:bg-input/30 data-[checked]:bg-primary
+          `border-input dark:bg-input/30 data-[checked]:bg-primary
           data-[checked]:text-primary-foreground
           dark:data-[checked]:bg-primary data-[checked]:border-primary
           focus-visible:border-ring focus-visible:ring-ring/50
           aria-invalid:ring-destructive/20
           dark:aria-invalid:ring-destructive/40
-          aria-invalid:border-destructive size-4 shrink-0
-          rounded-[4px] border shadow-xs transition-shadow
-          outline-none focus-visible:ring-[3px]
-          disabled:cursor-not-allowed disabled:opacity-50`,
+          aria-invalid:border-destructive rounded-xs shadow-xs peer
+          size-4 shrink-0 border outline-none transition-shadow
+          focus-visible:ring-[3px] disabled:cursor-not-allowed
+          disabled:opacity-50`,
           local.class,
         )}
         {...rest}

@@ -1,12 +1,7 @@
+import { SettingHeading } from "./setting-layout";
+import { SettingSelect } from "./setting-controls";
 import { createMemo } from "solid-js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+
 import { useAppState } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
@@ -22,62 +17,39 @@ export default function BrowserEncodingSettings() {
     ...new Set(capabilities.browserVideoCodecs()),
   ]);
   return (
-    <div class="flex flex-col gap-5">
-      <h3 class="h3">
-        {t("setting.meeting_settings.browser_encoding")}
-      </h3>
-      <p class="muted">
-        {t(
+    <div class="setting-group">
+      <SettingHeading
+        description={t(
           "setting.meeting_settings.browser_encoding_description",
         )}
-      </p>
-      <label class="flex flex-col gap-2">
-        <Label>
-          {t(
-            "setting.meeting_settings.stream.preferred_video_codec.title",
-          )}
-        </Label>
-        <Select
-          modal
-          value={
-            appState.options.preferredVideoCodec ?? "auto"
-          }
-          disabled={!canGetRtpCapabilities()}
-          onChange={(value) => {
-            setAppOptions(
-              "preferredVideoCodec",
-              value === "auto" ? null : value,
-            );
-          }}
-          options={preferredVideoCodecOptions()}
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {props.item.rawValue === "auto"
-                ? t(
-                    "setting.meeting_settings.stream.preferred_video_codec.auto",
-                  )
-                : props.item.rawValue}
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger
-            aria-label={t(
-              "setting.meeting_settings.stream.preferred_video_codec.title",
-            )}
-          >
-            <SelectValue<string>>
-              {(state) =>
-                state.selectedOption() === "auto"
-                  ? t(
-                      "setting.meeting_settings.stream.preferred_video_codec.auto",
-                    )
-                  : state.selectedOption()
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-      </label>
+      >
+        {t("setting.meeting_settings.browser_encoding")}
+      </SettingHeading>
+
+      <SettingSelect<string>
+        modal
+        value={
+          appState.options.preferredVideoCodec ?? "auto"
+        }
+        disabled={!canGetRtpCapabilities()}
+        onChange={(value) => {
+          setAppOptions(
+            "preferredVideoCodec",
+            value === "auto" ? null : value,
+          );
+        }}
+        options={preferredVideoCodecOptions()}
+        label={t(
+          "setting.meeting_settings.stream.preferred_video_codec.title",
+        )}
+        optionLabel={(option) =>
+          option === "auto"
+            ? t(
+                "setting.meeting_settings.stream.preferred_video_codec.auto",
+              )
+            : option
+        }
+      />
       <AudioCodecSelect
         title={t(
           "setting.meeting_settings.audio.codec.title",

@@ -1,18 +1,16 @@
 import { t } from "@/i18n";
 import { createSignal, createEffect, Show } from "solid-js";
-import { Label } from "@/components/ui/label";
+import {
+  SettingHeading,
+  SettingSection,
+} from "@/components/settings/setting-layout";
 import { createDialog } from "./dialog";
 import {
   MicrophoneTrackConstraints,
   SpeakerTrackConstraints,
   VideoTrackConstraints,
 } from "@/routes/home/components/track-constaints";
-import {
-  Switch,
-  SwitchLabel,
-  SwitchControl,
-  SwitchThumb,
-} from "@/components/ui/switch";
+import { SettingSwitch } from "@/components/settings/setting-controls";
 import VideoCaptureSettings from "@/components/settings/video-capture-settings";
 import {
   appState,
@@ -63,38 +61,38 @@ export const createApplyConstraintsDialog = () => {
       <div class="flex flex-col gap-2">
         <Show when={microphoneAudioTrack()}>
           {(track) => (
-            <div class="border-border flex flex-col gap-2 rounded-md border p-2">
-              <Label class="font-bold">
+            <SettingSection class="border-border rounded-lg border p-3">
+              <SettingHeading>
                 {t(
                   "common.media_selection_dialog.microphone_constraints",
                 )}
-              </Label>
+              </SettingHeading>
               <MicrophoneTrackConstraints track={track()} />
-            </div>
+            </SettingSection>
           )}
         </Show>
         <Show when={speakerAudioTrack()}>
           {(track) => (
-            <div class="border-border flex flex-col gap-2 rounded-md border p-2">
-              <Label class="font-bold">
+            <SettingSection class="border-border rounded-lg border p-3">
+              <SettingHeading>
                 {t(
                   "common.media_selection_dialog.speaker_constraints",
                 )}
-              </Label>
+              </SettingHeading>
               <SpeakerTrackConstraints track={track()} />
-            </div>
+            </SettingSection>
           )}
         </Show>
         <Show when={videoTrack()}>
           {(track) => (
-            <div class="border-border flex flex-col gap-2 rounded-md border p-2">
-              <Label class="font-bold">
+            <SettingSection class="border-border rounded-lg border p-3">
+              <SettingHeading>
                 {t(
                   "common.media_selection_dialog.video_constraints",
                 )}
-              </Label>
+              </SettingHeading>
               <VideoTrackConstraints track={track()} />
-            </div>
+            </SettingSection>
           )}
         </Show>
       </div>
@@ -114,13 +112,15 @@ export const createPresetSpeakerTrackConstraintsDialog =
     return createDialog({
       title: () => t("common.action.settings"),
       content: () => (
-        <div class="flex flex-col gap-2">
-          <Switch
+        <SettingSection>
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.suppress_local_audio_playback",
+            )}
             disabled={
               appState.media.constraints.speaker
                 .suppressLocalAudioPlayback === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.speaker
                 .suppressLocalAudioPlayback === true
@@ -134,22 +134,15 @@ export const createPresetSpeakerTrackConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.suppress_local_audio_playback",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.auto_gain_control",
+            )}
             disabled={
               appState.media.constraints.speaker
                 .autoGainControl === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.speaker
                 .autoGainControl === true
@@ -163,22 +156,15 @@ export const createPresetSpeakerTrackConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.auto_gain_control",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.echo_cancellation",
+            )}
             disabled={
               appState.media.constraints.speaker
                 .echoCancellation === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.speaker
                 .echoCancellation === true
@@ -192,22 +178,15 @@ export const createPresetSpeakerTrackConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.echo_cancellation",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.noise_suppression",
+            )}
             disabled={
               appState.media.constraints.speaker
                 .noiseSuppression === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.speaker
                 .noiseSuppression === true
@@ -221,17 +200,8 @@ export const createPresetSpeakerTrackConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.noise_suppression",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-        </div>
+          />
+        </SettingSection>
       ),
     });
   };
@@ -241,13 +211,15 @@ export const createPresetMicrophoneConstraintsDialog =
     return createDialog({
       title: () => t("common.action.settings"),
       content: () => (
-        <div class="flex flex-col gap-2">
-          <Switch
+        <SettingSection>
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.auto_gain_control",
+            )}
             disabled={
               appState.media.constraints.microphone
                 .autoGainControl === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.microphone
                 .autoGainControl === true
@@ -261,22 +233,15 @@ export const createPresetMicrophoneConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.auto_gain_control",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.echo_cancellation",
+            )}
             disabled={
               appState.media.constraints.microphone
                 .echoCancellation === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.microphone
                 .echoCancellation === true
@@ -290,22 +255,15 @@ export const createPresetMicrophoneConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.echo_cancellation",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.noise_suppression",
+            )}
             disabled={
               appState.media.constraints.microphone
                 .noiseSuppression === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.microphone
                 .noiseSuppression === true
@@ -319,22 +277,15 @@ export const createPresetMicrophoneConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.noise_suppression",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-          <Switch
+          />
+          <SettingSwitch
+            label={t(
+              "common.media_selection_dialog.constraints.voice_isolation",
+            )}
             disabled={
               appState.media.constraints.microphone
                 .voiceIsolation === undefined
             }
-            class="flex items-center justify-between gap-2"
             checked={
               appState.media.constraints.microphone
                 .voiceIsolation === true
@@ -348,17 +299,8 @@ export const createPresetMicrophoneConstraintsDialog =
                 value,
               )
             }
-          >
-            <SwitchLabel>
-              {t(
-                "common.media_selection_dialog.constraints.voice_isolation",
-              )}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </Switch>
-        </div>
+          />
+        </SettingSection>
       ),
     });
   };
@@ -367,8 +309,8 @@ export const createPresetVideoConstraintsDialog = () =>
   createDialog({
     title: () => t("app_menu.settings_meeting"),
     content: () => (
-      <div class="flex flex-col gap-2">
+      <SettingSection>
         <VideoCaptureSettings />
-      </div>
+      </SettingSection>
     ),
   });

@@ -1,10 +1,9 @@
+import { SettingSwitch } from "@/components/settings/setting-controls";
 import {
-  Switch,
-  SwitchControl,
-  SwitchDescription,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+  SettingBlock,
+  SettingHeading,
+  SettingSection,
+} from "@/components/settings/setting-layout";
 import { ConversationActions } from "@/components/conversations/conversation-actions";
 import { appState } from "@/libs/state/app-state";
 import { resolveRoomConfig } from "@/libs/state/app-options";
@@ -19,21 +18,21 @@ export function RoomSettings(props: {
   onDeleted?(): void;
 }) {
   return (
-    <div class="space-y-5">
+    <SettingSection>
       <RoomPermissions
         conversationId={props.conversationId}
       />
-      <section class="space-y-3 border-t pt-5">
-        <h3 class="text-sm font-medium">
+      <SettingBlock separated>
+        <SettingHeading>
           {t("room_dialog.actions")}
-        </h3>
+        </SettingHeading>
         <ConversationActions
           conversationId={props.conversationId}
           online={props.online}
           onDeleted={props.onDeleted}
         />
-      </section>
-    </div>
+      </SettingBlock>
+    </SettingSection>
   );
 }
 
@@ -47,7 +46,7 @@ export function RoomPermissions(props: {
       props.conversationId,
     );
   return (
-    <div class="space-y-5">
+    <div class="setting-group">
       <Show
         when={props.control !== "select"}
         fallback={
@@ -73,27 +72,18 @@ export function RoomPermissions(props: {
           />
         }
       >
-        <Switch
-          class="flex flex-col gap-2"
+        <SettingSwitch
+          label={t("room_dialog.auto_download.title")}
+          description={t(
+            "room_dialog.auto_download.description",
+          )}
           checked={config().autoDownloadFiles}
           onChange={(enabled) =>
             setRoomConfig(props.conversationId, {
               autoDownloadFiles: enabled,
             })
           }
-        >
-          <div class="flex items-center justify-between gap-4">
-            <SwitchLabel>
-              {t("room_dialog.auto_download.title")}
-            </SwitchLabel>
-            <SwitchControl>
-              <SwitchThumb />
-            </SwitchControl>
-          </div>
-          <SwitchDescription class="muted">
-            {t("room_dialog.auto_download.description")}
-          </SwitchDescription>
-        </Switch>
+        />
       </Show>
     </div>
   );
