@@ -47,14 +47,62 @@ export const defaultClientConfig: ClientConfig = {
 export type RoomConfig = {
   name?: string;
   autoDownloadFiles: boolean;
-  /** Maximum size in bytes, inclusive. */
-  autoDownloadMaxSize: number;
 };
 
 export const defaultRoomConfig: RoomConfig = {
   autoDownloadFiles: false,
-  autoDownloadMaxSize: 5 * 1024 * 1024,
 };
+
+const defaultAutoDownloadMaxSize = 5 * 1024 * 1024;
+
+type StoredRoomConfig = Partial<RoomConfig> & {
+  autoDownloadMaxSize?: unknown;
+};
+
+/** Move legacy size preferences out of permissions without broadening enabled rooms' limits. */
+export function resolveRoomDownloadOptions(options: {
+  autoDownloadMaxSize?: unknown;
+  roomConfigs?: Record<
+    string,
+    StoredRoomConfig | undefined
+  >;
+}): Pick<AppOption, "autoDownloadMaxSize" | "roomConfigs"> {
+  const validSize = (size: unknown): size is number =>
+    typeof size === "number" &&
+    Number.isSafeInteger(size) &&
+    size > 0;
+  const roomConfigs: AppOption["roomConfigs"] = {};
+  const savedLimits: number[] = [];
+  const enabledLimits: number[] = [];
+  for (const [id, config] of Object.entries(
+    options.roomConfigs ?? {},
+  )) {
+    if (!config) continue;
+    const { autoDownloadMaxSize, ...permissions } = config;
+    roomConfigs[id] = {
+      ...defaultRoomConfig,
+      ...permissions,
+    };
+    const limit = validSize(autoDownloadMaxSize)
+      ? autoDownloadMaxSize
+      : defaultAutoDownloadMaxSize;
+    savedLimits.push(limit);
+    if (config.autoDownloadFiles) enabledLimits.push(limit);
+  }
+  const limits = enabledLimits.length
+    ? enabledLimits
+    : savedLimits;
+  return {
+    roomConfigs,
+    autoDownloadMaxSize: validSize(
+      options.autoDownloadMaxSize,
+    )
+      ? options.autoDownloadMaxSize
+      : limits.length
+        ? Math.min(...limits)
+        : defaultAutoDownloadMaxSize,
+  };
+}
 
 export const resolveRoomConfig = (
   options: {
@@ -65,6 +113,18 @@ export const resolveRoomConfig = (
   ...defaultRoomConfig,
   ...options.roomConfigs[conversationId],
 });
+
+export const getRoomAutoDownloadLimit = (
+  options: Pick<
+    AppOption,
+    "autoDownloadMaxSize" | "roomConfigs"
+  >,
+  conversationId: string,
+): number =>
+  resolveRoomConfig(options, conversationId)
+    .autoDownloadFiles
+    ? options.autoDownloadMaxSize
+    : 0;
 
 export const resolveClientConfig = (
   options: {
@@ -89,6 +149,8 @@ export type AppOption = {
   // Receiver
   maxMomeryCacheSlices: number;
   automaticDownload: boolean;
+  /** Shared automatic file-receiving limit in bytes, inclusive. */
+  autoDownloadMaxSize: number;
 
   // Sender
   enableClipboard: boolean;
@@ -243,6 +305,7 @@ export const getDefaultAppOptions = (): AppOption => {
     shareServersWithOthers: true,
     backgroundImageOpacity: 0.5,
     automaticDownload: false,
+    autoDownloadMaxSize: defaultAutoDownloadMaxSize,
     clientConfigs: {},
     permissionHistoryImported: false,
     roomConfigs: {},

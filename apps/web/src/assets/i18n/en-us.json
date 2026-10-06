@@ -172,6 +172,10 @@
       "automatic_download": {
         "title": "Automatic download",
         "description": "Automatic download after receiving"
+      },
+      "auto_download_limit": {
+        "title": "Automatic download size limit",
+        "description": "Shared by all rooms allowed to download files automatically. Larger files can still be downloaded manually."
       }
     },
     "about": {
@@ -397,6 +401,8 @@
       "ask": "Ask every time",
       "allow": "Automatically approve (allowlist)",
       "deny": "Automatically reject (blocklist)",
+      "allowed": "Allow",
+      "disallowed": "Don't allow",
       "configure": "Permissions for {{name}}",
       "reset": "Reset permissions for {{name}}",
       "reset_action": "Reset permissions",
@@ -1081,9 +1087,8 @@
     "settings": "Room settings",
     "settings_unavailable": "Join a room to configure its settings.",
     "auto_download": {
-      "title": "Automatically download small files",
-      "description": "Automatically receive new small files in this room. This preference applies only to this browser and does not download files from history.",
-      "limit": "Maximum file size"
+      "title": "Allow automatic file downloads",
+      "description": "Automatically receive new files in this room within the shared size limit in Transfer settings. Files from history are not downloaded automatically."
     },
     "members": "Members",
     "previous_members": "Previous members",

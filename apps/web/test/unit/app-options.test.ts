@@ -3,20 +3,23 @@ import {
   getDefaultAppOptions,
   resolveClientConfig,
   resolveRoomConfig,
+  resolveRoomDownloadOptions,
+  getRoomAutoDownloadLimit,
 } from "@/libs/state/app-options";
 
 describe("app options", () => {
-  it("defaults room downloads to off at 5 MB and isolates room preferences", () => {
+  it("keeps room permission switches independent while sharing the application size limit", () => {
     const options = getDefaultAppOptions();
     expect(
       resolveRoomConfig(options, "room:server-a:meeting"),
     ).toEqual({
       autoDownloadFiles: false,
-      autoDownloadMaxSize: 5 * 1024 * 1024,
     });
+    expect(options.autoDownloadMaxSize).toBe(
+      5 * 1024 * 1024,
+    );
     options.roomConfigs["room:server-a:meeting"] = {
       autoDownloadFiles: true,
-      autoDownloadMaxSize: 10 * 1024 * 1024,
     };
     expect(
       resolveRoomConfig(options, "room:server-a:meeting")
@@ -26,6 +29,103 @@ describe("app options", () => {
       resolveRoomConfig(options, "room:server-b:meeting")
         .autoDownloadFiles,
     ).toBe(false);
+    options.roomConfigs["another-enabled-room"] = {
+      autoDownloadFiles: true,
+    };
+    options.autoDownloadMaxSize = 10 * 1024 * 1024;
+    expect(
+      getRoomAutoDownloadLimit(
+        options,
+        "room:server-a:meeting",
+      ),
+    ).toBe(options.autoDownloadMaxSize);
+    expect(
+      getRoomAutoDownloadLimit(
+        options,
+        "another-enabled-room",
+      ),
+    ).toBe(options.autoDownloadMaxSize);
+    expect(
+      getRoomAutoDownloadLimit(
+        options,
+        "room:server-b:meeting",
+      ),
+    ).toBe(0);
+  });
+
+  it("migrates the smallest enabled room limit and removes size fields from permissions", () => {
+    const saved = {
+      roomConfigs: {
+        first: {
+          name: "First",
+          autoDownloadFiles: true,
+          autoDownloadMaxSize: 10 * 1024 * 1024,
+        },
+        second: {
+          autoDownloadFiles: true,
+          autoDownloadMaxSize: 20 * 1024 * 1024,
+        },
+        disabled: {
+          autoDownloadFiles: false,
+          autoDownloadMaxSize: 1024 * 1024,
+        },
+      },
+    };
+    const migrated = resolveRoomDownloadOptions(saved);
+    expect(migrated.autoDownloadMaxSize).toBe(
+      10 * 1024 * 1024,
+    );
+    expect(migrated.roomConfigs).toEqual({
+      first: { name: "First", autoDownloadFiles: true },
+      second: { autoDownloadFiles: true },
+      disabled: { autoDownloadFiles: false },
+    });
+    expect(
+      saved.roomConfigs.first.autoDownloadMaxSize,
+    ).toBe(10 * 1024 * 1024);
+    expect(resolveRoomDownloadOptions(migrated)).toEqual(
+      migrated,
+    );
+    expect(
+      resolveRoomDownloadOptions({
+        ...saved,
+        autoDownloadMaxSize: 50 * 1024 * 1024,
+      }).autoDownloadMaxSize,
+    ).toBe(50 * 1024 * 1024);
+  });
+
+  it("preserves saved limits when all rooms are disabled and falls back for invalid sizes", () => {
+    expect(
+      resolveRoomDownloadOptions({
+        roomConfigs: {
+          room: {
+            autoDownloadFiles: false,
+            autoDownloadMaxSize: 1024 * 1024,
+          },
+        },
+      }).autoDownloadMaxSize,
+    ).toBe(1024 * 1024);
+    for (const size of [
+      undefined,
+      null,
+      0,
+      -1,
+      NaN,
+      Infinity,
+      "large",
+    ]) {
+      expect(
+        resolveRoomDownloadOptions({
+          autoDownloadMaxSize: size,
+          roomConfigs: {
+            room: {
+              autoDownloadFiles: true,
+              autoDownloadMaxSize: size,
+            },
+          },
+        }).autoDownloadMaxSize,
+      ).toBe(5 * 1024 * 1024);
+    }
   });
   it("does not expose the signaling URL as a user option", () => {
     expect(getDefaultAppOptions()).not.toHaveProperty(

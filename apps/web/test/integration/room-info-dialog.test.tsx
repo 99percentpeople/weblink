@@ -632,7 +632,7 @@ describe("room dialog and shared meeting device ownership", () => {
     expect(getDisplayMedia).not.toHaveBeenCalled();
   });
 
-  it("configures small-file downloads for the selected room without opening devices", async () => {
+  it("configures only the selected room's auto-download permission without changing the app size limit", async () => {
     setup();
     fireEvent.click(
       screen.getByRole("button", {
@@ -649,24 +649,17 @@ describe("room dialog and shared meeting device ownership", () => {
       name: "room_dialog.auto_download.title",
     });
     expect(toggle).not.toBeChecked();
-    const limit = within(dialog).getByRole("combobox", {
-      name: /^room_dialog\.auto_download\.limit/,
-    });
-    expect(limit).toBeDisabled();
-    expect(limit).toHaveTextContent("5 MB");
+    const limit = appState.options.autoDownloadMaxSize;
     fireEvent.click(toggle);
-    expect(limit).toBeEnabled();
-    await userEvent.click(limit);
-    await userEvent.click(
-      await screen.findByRole("option", { name: "10 MB" }),
-    );
     expect(
       resolveRoomConfig(appState.options, "current"),
     ).toEqual({
       name: "Current room",
       autoDownloadFiles: true,
-      autoDownloadMaxSize: 10 * 1024 * 1024,
     });
+    expect(appState.options.autoDownloadMaxSize).toBe(
+      limit,
+    );
     expect(
       resolveRoomConfig(appState.options, "history")
         .autoDownloadFiles,

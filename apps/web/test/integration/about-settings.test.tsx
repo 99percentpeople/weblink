@@ -127,10 +127,10 @@ beforeEach(() => {
     backgroundPreset: "linen",
     redirectToClient: "peer",
     clientConfigs: { peer: { provideFileList: false } },
+    autoDownloadMaxSize: 1024,
     roomConfigs: {
       room: {
         autoDownloadFiles: true,
-        autoDownloadMaxSize: 1024,
       },
     },
   });

@@ -13,6 +13,10 @@ import type { ChunkMetaData } from "@/libs/domain/file";
 import { P2PProtocol } from "@/libs/domain/protocol/protocol";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import {
+  getDefaultAppOptions,
+  getRoomAutoDownloadLimit,
+} from "@/libs/state/app-options";
+import {
   FakeRtcTransport,
   deferred,
   makeSession,
@@ -231,6 +235,30 @@ describe("room file authorization and explicit pulls", () => {
     expect(f.files.receiveFileOffer).not.toHaveBeenCalled();
     // Declining an automatic download must not prevent a manual request.
     await f.service.requestFile(f.offer);
+    expect(f.files.receiveFileOffer).toHaveBeenCalledOnce();
+  });
+
+  it("applies changes to the shared size limit while retaining the room opt-in", async () => {
+    const f = setup();
+    const options = getDefaultAppOptions();
+    options.roomConfigs["room-conversation"] = {
+      autoDownloadFiles: true,
+    };
+    f.autoDownloadLimit.mockImplementation((id) =>
+      getRoomAutoDownloadLimit(options, id),
+    );
+    options.autoDownloadMaxSize = f.offer.fileSize - 1;
+    await f.service.autoDownloadFile(f.offer);
+    expect(f.files.receiveFileOffer).not.toHaveBeenCalled();
+
+    options.autoDownloadMaxSize = f.offer.fileSize;
+    await f.service.autoDownloadFile(f.offer);
+    expect(f.files.receiveFileOffer).toHaveBeenCalledOnce();
+
+    options.roomConfigs[
+      "room-conversation"
+    ].autoDownloadFiles = false;
+    await f.service.autoDownloadFile(f.offer);
     expect(f.files.receiveFileOffer).toHaveBeenCalledOnce();
   });
 

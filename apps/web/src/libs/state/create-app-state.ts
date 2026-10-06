@@ -32,7 +32,7 @@ import {
 } from "@/libs/state/app-state";
 import {
   resolveClientConfig,
-  resolveRoomConfig,
+  getRoomAutoDownloadLimit,
 } from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/application/rtc/rtc-service";
 import {
@@ -289,15 +289,11 @@ export function createAppState(
     getMessages: () => appState.message.messages,
     getSession: (peerId) => sessionService.sessions[peerId],
     getLocalClientId: () => appState.profile.clientId,
-    getAutoDownloadLimit: (conversationId) => {
-      const config = resolveRoomConfig(
+    getAutoDownloadLimit: (conversationId) =>
+      getRoomAutoDownloadLimit(
         appState.options,
         conversationId,
-      );
-      return config.autoDownloadFiles
-        ? config.autoDownloadMaxSize
-        : 0;
-    },
+      ),
   });
   onCleanup(() => roomFiles.dispose());
   const conversationMessaging =

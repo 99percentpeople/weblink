@@ -172,6 +172,10 @@
       "automatic_download": {
         "title": "自動下載",
         "description": "接收完成後自動下載"
+      },
+      "auto_download_limit": {
+        "title": "自動下載檔案大小上限",
+        "description": "所有允許自動下載的房間共用此上限。超過上限的檔案仍可手動下載。"
       }
     },
     "advanced_settings": {
@@ -397,6 +401,8 @@
       "ask": "每次詢問",
       "allow": "自動批准（白名單）",
       "deny": "自動拒絕（黑名單）",
+      "allowed": "允許",
+      "disallowed": "不允許",
       "configure": "設定 {{name}} 的權限",
       "reset": "重設 {{name}} 的權限",
       "reset_action": "重設權限",
@@ -1081,9 +1087,8 @@
     "settings": "房間設定",
     "settings_unavailable": "加入房間後可配置房間設定。",
     "auto_download": {
-      "title": "自動下載小檔案",
-      "description": "自動接收此房間新收到的小檔案。設定僅在本機生效，不會補下載歷史檔案。",
-      "limit": "檔案大小上限"
+      "title": "允許自動下載檔案",
+      "description": "自動接收此房間新收到且未超過傳輸設定中統一大小上限的檔案，不會補下載歷史檔案。"
     },
     "members": "成員列表",
     "previous_members": "歷史成員",

@@ -1,4 +1,12 @@
-import { Show } from "solid-js";
+import { Show, createUniqueId } from "solid-js";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Switch,
   SwitchControl,
@@ -21,6 +29,8 @@ import { setAppOptions, CompressionLevel } from "@/options";
 import { appState } from "@/libs/state/app-state";
 
 export default function TransferSettings() {
+  const limitId = createUniqueId();
+  const megabyte = 1024 * 1024;
   return (
     <section class="settings-section">
       <h3 id="sender" class="h3">
@@ -121,6 +131,59 @@ export default function TransferSettings() {
       <h3 id="receiver" class="h3">
         {t("setting.receiver.title")}
       </h3>
+      <div class="flex flex-col gap-2">
+        <Label for={limitId}>
+          {t("setting.receiver.auto_download_limit.title")}
+        </Label>
+        <Select<number>
+          modal
+          disallowEmptySelection
+          value={
+            appState.options.autoDownloadMaxSize / megabyte
+          }
+          options={[
+            ...new Set([
+              1,
+              5,
+              10,
+              20,
+              50,
+              100,
+              appState.options.autoDownloadMaxSize /
+                megabyte,
+            ]),
+          ].sort((a, b) => a - b)}
+          onChange={(size) => {
+            if (size !== null)
+              setAppOptions(
+                "autoDownloadMaxSize",
+                size * megabyte,
+              );
+          }}
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>
+              {props.item.rawValue} MB
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger
+            id={limitId}
+            aria-label={t(
+              "setting.receiver.auto_download_limit.title",
+            )}
+          >
+            <SelectValue<number>>
+              {(state) => `${state.selectedOption()} MB`}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p class="muted">
+          {t(
+            "setting.receiver.auto_download_limit.description",
+          )}
+        </p>
+      </div>
       <div class="flex flex-col gap-2">
         <Switch
           class="flex items-center justify-between"

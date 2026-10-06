@@ -16,6 +16,7 @@ import {
 } from "@solidjs/testing-library";
 import { reconcile } from "solid-js/store";
 import { createRoot } from "solid-js";
+import userEvent from "@testing-library/user-event";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import {
   appState,
@@ -67,7 +68,13 @@ vi.mock(
   "@/components/conversations/conversation-actions",
   () => ({ ConversationActions: () => null }),
 );
+let animationStyle: HTMLStyleElement;
 beforeEach(() => {
+  // jsdom does not finish the select's exit animation.
+  animationStyle = document.createElement("style");
+  animationStyle.textContent =
+    "* { animation-name: none !important; }";
+  document.head.append(animationStyle);
   setAppState(reconcile(createInitialAppState()));
   setAppState("roomStatus", "roomId", "room-current");
   fixture.store = undefined;
@@ -80,6 +87,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  animationStyle.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -218,7 +226,6 @@ it("forgets offline entries but resets visible clients and the current room to d
   ).toEqual({
     name: "Current",
     autoDownloadFiles: false,
-    autoDownloadMaxSize: 5 * 1024 * 1024,
   });
   forgetRoomConfig("room-offline", "room-current");
   expect(
@@ -226,7 +233,7 @@ it("forgets offline entries but resets visible clients and the current room to d
   ).toBeUndefined();
 });
 
-it("opens independent client and room settings and preserves the other entry's permissions", async () => {
+it("edits client and room permissions through selects and preserves the other entry's permissions", async () => {
   setClientConfig("alice", {
     name: "Alice",
     remoteControl: "allow",
@@ -245,19 +252,59 @@ it("opens independent client and room settings and preserves the other entry's p
       name: "setting.permissions.configure: Alice",
     }),
   );
+  const clientDialog = await screen.findByRole("dialog");
+  expect(clientDialog).toHaveTextContent("Alice");
   expect(
-    await screen.findByRole("dialog"),
-  ).toHaveTextContent("Alice");
-  const files = screen.getByRole("switch", {
-    name: "client.config.provide_file_list.title",
-  });
-  fireEvent.click(files);
+    within(clientDialog).queryByRole("switch"),
+  ).toBeNull();
+  const choose = async (
+    label: string,
+    decision: string,
+  ) => {
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: (name) => name.startsWith(label),
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("option", {
+        name: `setting.permissions.${decision}`,
+      }),
+    );
+  };
+  for (const decision of [
+    "deny",
+    "ask",
+    "allow",
+  ] as const) {
+    await choose(
+      "app_menu.settings_remote_control",
+      decision,
+    );
+    expect(
+      appState.options.clientConfigs.alice?.remoteControl,
+    ).toBe(decision === "ask" ? undefined : decision);
+  }
+  await choose(
+    "client.config.provide_file_list.title",
+    "disallowed",
+  );
   expect(
     appState.options.clientConfigs.alice?.provideFileList,
   ).toBe(false);
   expect(
     appState.options.clientConfigs.bob?.provideFileList,
   ).toBe(false);
+  await choose(
+    "client.config.provide_file_list.title",
+    "allowed",
+  );
+  expect(
+    appState.options.clientConfigs.alice?.provideFileList,
+  ).toBe(true);
+  expect(
+    appState.options.clientConfigs.alice?.remoteControl,
+  ).toBe("allow");
   fireEvent.click(
     screen.getByRole("button", { name: "Dismiss" }),
   );
@@ -266,18 +313,27 @@ it("opens independent client and room settings and preserves the other entry's p
       name: "setting.permissions.configure: Meeting",
     }),
   );
+  const roomDialog = await screen.findByRole("dialog");
+  expect(roomDialog).toHaveTextContent("Meeting");
   expect(
-    await screen.findByRole("dialog"),
-  ).toHaveTextContent("Meeting");
-  fireEvent.click(
-    screen.getByRole("switch", {
-      name: "room_dialog.auto_download.title",
-    }),
+    within(roomDialog).queryByRole("switch"),
+  ).toBeNull();
+  await choose(
+    "room_dialog.auto_download.title",
+    "allowed",
   );
   expect(
     appState.options.roomConfigs["room-current"]
       ?.autoDownloadFiles,
   ).toBe(true);
+  await choose(
+    "room_dialog.auto_download.title",
+    "disallowed",
+  );
+  expect(
+    appState.options.roomConfigs["room-current"]
+      ?.autoDownloadFiles,
+  ).toBe(false);
   fireEvent.click(
     screen.getByRole("button", { name: "Dismiss" }),
   );

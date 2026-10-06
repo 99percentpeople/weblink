@@ -5,22 +5,13 @@ import {
   SwitchLabel,
   SwitchThumb,
 } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { ConversationActions } from "@/components/conversations/conversation-actions";
 import { appState } from "@/libs/state/app-state";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import { setRoomConfig } from "@/options";
 import { t } from "@/i18n";
-import { createUniqueId } from "solid-js";
-
-const megabyte = 1024 * 1024;
+import { Show } from "solid-js";
+import { PermissionSelect } from "@/components/settings/permission-select";
 
 export function RoomSettings(props: {
   conversationId: string;
@@ -48,8 +39,8 @@ export function RoomSettings(props: {
 
 export function RoomPermissions(props: {
   conversationId: string;
+  control?: "switch" | "select";
 }) {
-  const limitId = createUniqueId();
   const config = () =>
     resolveRoomConfig(
       appState.options,
@@ -57,63 +48,53 @@ export function RoomPermissions(props: {
     );
   return (
     <div class="space-y-5">
-      <Switch
-        class="flex flex-col gap-2"
-        checked={config().autoDownloadFiles}
-        onChange={(enabled) =>
-          setRoomConfig(props.conversationId, {
-            autoDownloadFiles: enabled,
-          })
+      <Show
+        when={props.control !== "select"}
+        fallback={
+          <PermissionSelect<"allowed" | "disallowed">
+            label={t("room_dialog.auto_download.title")}
+            description={t(
+              "room_dialog.auto_download.description",
+            )}
+            options={["allowed", "disallowed"]}
+            value={
+              config().autoDownloadFiles
+                ? "allowed"
+                : "disallowed"
+            }
+            optionLabel={(decision) =>
+              t(`setting.permissions.${decision}`)
+            }
+            onChange={(decision) =>
+              setRoomConfig(props.conversationId, {
+                autoDownloadFiles: decision === "allowed",
+              })
+            }
+          />
         }
       >
-        <div class="flex items-center justify-between gap-4">
-          <SwitchLabel>
-            {t("room_dialog.auto_download.title")}
-          </SwitchLabel>
-          <SwitchControl>
-            <SwitchThumb />
-          </SwitchControl>
-        </div>
-        <SwitchDescription class="muted">
-          {t("room_dialog.auto_download.description")}
-        </SwitchDescription>
-      </Switch>
-      <div class="flex flex-col gap-2">
-        <Label for={limitId}>
-          {t("room_dialog.auto_download.limit")}
-        </Label>
-        <Select<number>
-          modal
-          disallowEmptySelection
-          value={config().autoDownloadMaxSize / megabyte}
-          options={[1, 5, 10, 20, 50, 100]}
-          disabled={!config().autoDownloadFiles}
-          onChange={(size) => {
-            if (size !== null)
-              setRoomConfig(props.conversationId, {
-                autoDownloadMaxSize: size * megabyte,
-              });
-          }}
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>
-              {props.item.rawValue} MB
-            </SelectItem>
-          )}
+        <Switch
+          class="flex flex-col gap-2"
+          checked={config().autoDownloadFiles}
+          onChange={(enabled) =>
+            setRoomConfig(props.conversationId, {
+              autoDownloadFiles: enabled,
+            })
+          }
         >
-          <SelectTrigger
-            id={limitId}
-            role="combobox"
-            aria-label={t(
-              "room_dialog.auto_download.limit",
-            )}
-          >
-            <SelectValue<number>>
-              {(state) => `${state.selectedOption()} MB`}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent />
-        </Select>
-      </div>
+          <div class="flex items-center justify-between gap-4">
+            <SwitchLabel>
+              {t("room_dialog.auto_download.title")}
+            </SwitchLabel>
+            <SwitchControl>
+              <SwitchThumb />
+            </SwitchControl>
+          </div>
+          <SwitchDescription class="muted">
+            {t("room_dialog.auto_download.description")}
+          </SwitchDescription>
+        </Switch>
+      </Show>
     </div>
   );
 }

@@ -255,8 +255,9 @@ in the offer. Filenames contain 1–1024 UTF-16 code units, MIME types at most 2
 file size is a nonnegative safe integer, and chunk size is a positive safe
 integer. Room/token/profile bounds match room text. The recipient durably stores
 the offer before ACKing it. That ACK means metadata was received, not downloaded.
-The receiver may opt in locally to request newly received small files up to a
-per-room size limit (default 5 MiB, auto-download off). This uses the same
+The receiver may opt in locally per room to request newly received small files
+up to the application-wide size limit in Transfer settings (default 5 MiB,
+auto-download off for each room). This uses the same
 `request-room-file` flow as a manual download, without changing the protocol or
 replaying offers from history. Duplicate receipts and paused or failed transfers
 do not automatically start another request.

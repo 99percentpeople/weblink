@@ -298,9 +298,10 @@ Application source paths in the sections below are relative to `apps/web/`.
     Room file cards show metadata without loading remote bytes on mount.
     Locally cached images, video and audio render inline, so senders can see
     their own media immediately and recipients see it after a manual or opted-in
-    small-file download. The room dialog's settings tab stores per-room,
-    browser-local auto-download preferences: off by default, with an inclusive
-    5 MiB default limit. It uses the namespaced room conversation identity.
+    small-file download. The room dialog's settings tab stores a browser-local
+    auto-download permission per namespaced room conversation, off by default.
+    Transfer settings provide one application-wide, inclusive size limit
+    (5 MiB by default); room permission resets do not change this limit.
     `file-attachment-bubble.tsx` shares media, metadata and download presentation
     across private and room messages. `local-file-media.tsx` joins images/videos
     to each conversation's PhotoSwipe gallery and uses native audio controls.

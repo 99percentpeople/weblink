@@ -328,6 +328,7 @@ export default function PermissionsSettings() {
                     fallback={
                       <RoomPermissions
                         conversationId={entry().id}
+                        control="select"
                       />
                     }
                   >

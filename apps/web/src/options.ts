@@ -38,6 +38,7 @@ import {
   getDefaultAppOptions,
   parseTurnServers,
   resolveClientConfig,
+  resolveRoomDownloadOptions,
 } from "@/libs/state/app-options";
 
 export type {
@@ -115,6 +116,7 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        ...resolveRoomDownloadOptions(parsed),
         ...resolveAudioSampling(parsed),
         notifications: resolveNotificationOptions(
           parsed.notifications,
