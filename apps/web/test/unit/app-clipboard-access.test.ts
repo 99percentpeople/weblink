@@ -113,7 +113,7 @@ const ready = () =>
   );
 
 it.each([true, false])(
-  "resolves the first default from file capability (%s), without enabling synchronization",
+  "uses file cache even when browser custom formats are supported (%s), without enabling synchronization",
   async (supported) => {
     const api = browser(supported);
     const { access } = mount();
@@ -124,12 +124,14 @@ it.each([true, false])(
     await ready();
     expect(
       appState.options.remoteKeyboard.clipboardFiles,
-    ).toBe(supported ? "clipboard" : "cache");
+    ).toBe("cache");
+    expect(access.writeFiles).toBe(false);
+    expect(access.write).toBe(true);
     expect(appState.options.remoteKeyboard.clipboard).toBe(
       false,
     );
     expect(api.query).toHaveBeenCalledTimes(2);
-    expect(api.supports).toHaveBeenCalledOnce();
+    expect(api.supports).not.toHaveBeenCalled();
     expect(api.read).not.toHaveBeenCalled();
     expect(api.write).not.toHaveBeenCalled();
   },
@@ -172,7 +174,8 @@ it("waits for denied permission before choosing a default, then preserves it on 
   ).toBe("cache");
   api.writePermission.state = "granted";
   api.writePermission.dispatchEvent(new Event("change"));
-  expect(access.writeFiles).toBe(true);
+  expect(access.writeFiles).toBe(false);
+  expect(access.write).toBe(true);
   expect(
     appState.options.remoteKeyboard.clipboardFiles,
   ).toBe("cache");
@@ -201,8 +204,14 @@ it.each(["clipboard", "cache", "off"] as const)(
     ).toBe(choice);
   },
 );
-it("keeps a clipboard default when permission is revoked instead of importing into file cache", async () => {
+it("keeps a saved clipboard choice when permission is revoked instead of importing into file cache", async () => {
   const api = browser();
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "clipboard",
+  );
   const { access } = mount();
   await ready();
   api.writePermission.state = "denied";
@@ -228,13 +237,13 @@ it("uses API support when querying permissions fails synchronously or asynchrono
   expect(access).toMatchObject({
     read: true,
     write: true,
-    writeFiles: true,
+    writeFiles: false,
     readPermission: "unknown",
     writePermission: "unknown",
   });
   expect(
     appState.options.remoteKeyboard.clipboardFiles,
-  ).toBe("clipboard");
+  ).toBe("cache");
 });
 it("waits for shared native capabilities and reuses subsequent updates", async () => {
   const api = browser(false);

@@ -6,10 +6,7 @@ import {
   type Accessor,
 } from "solid-js";
 import type { RuntimeCapabilities } from "@weblink/platform";
-import {
-  browserClipboardAccess,
-  supportsBrowserClipboardFiles,
-} from "@/libs/application/clipboard-content";
+import { browserClipboardAccess } from "@/libs/application/clipboard-content";
 import { appState, setAppState } from "./app-state";
 
 /** AppState owns clipboard discovery and permission listeners for all views. */
@@ -21,7 +18,6 @@ export function createAppClipboardAccess(options: {
   runtimeReady(): Promise<void>;
 }): void {
   const browser = browserClipboardAccess();
-  const files = supportsBrowserClipboardFiles();
   const [runtimeReady, setRuntimeReady] =
     createSignal(false);
   const [permissionsReady, setPermissionsReady] =
@@ -46,10 +42,7 @@ export function createAppClipboardAccess(options: {
       (native ||
         (browser.write &&
           access.writePermission !== "denied"));
-    const writeFiles =
-      ready &&
-      (native ||
-        (files && access.writePermission !== "denied"));
+    const writeFiles = ready && native;
     setAppState("capabilities", "clipboard", {
       ready,
       native,

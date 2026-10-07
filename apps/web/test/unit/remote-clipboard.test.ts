@@ -259,6 +259,12 @@ it("accepts a real system paste without clipboard APIs or action buttons", async
 });
 it("updates read and write permissions independently without probing clipboard contents", async () => {
   const { write, read } = browser(true);
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "clipboard",
+  );
   const readPermission = Object.assign(new EventTarget(), {
     state: "denied",
   });
@@ -414,28 +420,53 @@ it("allows file-cache copying and context-menu watching without browser clipboar
   );
   expect(actions.canCopy()).toBe(false);
 });
-it("excludes files when a previously selected clipboard destination loses binary API support", async () => {
-  browser(true);
-  vi.stubGlobal(
-    "ClipboardItem",
-    class {
-      static supports = () => false;
-    },
-  );
+it.each([true, false])(
+  "excludes files from a saved browser clipboard choice even with custom format support (selection=%s)",
+  async (selection) => {
+    browser(true);
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        static supports = (type: string) =>
+          type === "text/plain" || type.startsWith("web ");
+        constructor(readonly data: unknown) {}
+      },
+    );
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "clipboardFiles",
+      "clipboard",
+    );
+    const { actions, copy } = await mountClipboard();
+    expect(actions.copy(selection)).toBe(true);
+    await vi.waitFor(() =>
+      expect(copy).toHaveBeenCalledWith(
+        "peer",
+        expect.anything(),
+        selection,
+        expect.objectContaining({
+          files: false,
+          formats: ["text/plain"],
+        }),
+      ),
+    );
+  },
+);
+it("requests cache files without text or images when browser writing is unavailable", async () => {
+  vi.stubGlobal("navigator", {});
   setAppState(
     "options",
     "remoteKeyboard",
     "clipboardFiles",
-    "clipboard",
+    "cache",
   );
   const { actions, copy } = await mountClipboard();
-  expect(actions.copy()).toBe(true);
-  await vi.waitFor(() =>
-    expect(copy).toHaveBeenCalledWith(
-      "peer",
-      expect.anything(),
-      true,
-      expect.objectContaining({ files: false }),
-    ),
+  actions.copy();
+  expect(copy).toHaveBeenCalledWith(
+    "peer",
+    expect.anything(),
+    true,
+    expect.objectContaining({ files: true, formats: [] }),
   );
 });

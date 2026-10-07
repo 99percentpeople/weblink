@@ -124,10 +124,11 @@ Context and view definitions arriving together must rebuild through the native
 entry dependency without missing-context errors. It also checks root disposal
 and keeps the source workspace unchanged.
 
-`bun run test:e2e:clipboard` checks custom binary clipboard formats in Chromium.
+`bun run test:e2e:clipboard` checks standard text clipboard interoperability in Chromium.
 It starts a promised write from Ctrl+C, delays the data beyond transient activation,
-and verifies file names and bytes using a real Ctrl+V paste event. The disposable
-browser context receives clipboard permissions for the local test origin.
+and verifies Unicode text and line breaks using a real Ctrl+V paste event, with no
+custom formats. The disposable browser context receives clipboard permissions for
+the local test origin.
 `bun run test:e2e:clipboard-cache` covers copying a multi-chunk remote file into File
 cache through real WebRTC data channels, compression/merge/fingerprint Workers and
 IndexedDB. It resets the controller input epoch after 8 MiB has arrived, then

@@ -384,7 +384,7 @@
       },
       "clipboard": {
         "title": "Synchronize remote clipboard",
-        "description": "Enable on the controller to copy and paste text, RTF, images and files. Folders are zipped first. Writing requires local clipboard APIs and permission; system paste still works when programmatic reading is unavailable."
+        "description": "Enable on the controller to synchronize the clipboard. Web controllers receive only text, rich text and image formats supported by the browser; Windows desktop controllers also support file clipboard entries. Writing requires local APIs and permission; system paste still works when programmatic reading is unavailable."
       },
       "clipboard_files": {
         "loading": "Checking clipboard availability…",
@@ -393,7 +393,7 @@
         "clipboard": "Clipboard",
         "cache": "File cache",
         "off": "Off",
-        "description": "File cache needs no clipboard permission. Files written by the browser can be pasted back into Weblink, but not directly into a system file manager. Off affects file copying only, not text, images or pasting files to the remote computer."
+        "description": "Browsers cannot write clipboard files that can be pasted into a system file manager, even over HTTPS, so Web controllers do not receive files through clipboard synchronization. To receive files, choose File cache, which needs no clipboard permission; folders are zipped first. Off affects file copying only, not text, images or sending files to the remote computer through system paste."
       },
       "emergency_shortcut": {
         "title": "Host emergency stop shortcut",

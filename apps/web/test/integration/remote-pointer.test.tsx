@@ -1001,7 +1001,7 @@ it.each(["local", "capture"] as const)(
   },
 );
 it.each([false, true])(
-  "gates clipboard file destination by actual binary write support (%s)",
+  "disables browser file clipboard even with custom format support (%s)",
   async (supported) => {
     const browserNavigator = navigator;
     vi.stubGlobal(
@@ -1047,20 +1047,18 @@ it.each([false, true])(
     });
     expect(
       clipboard.getAttribute("aria-disabled") === "true",
-    ).toBe(!supported);
-    if (supported) fireEvent.click(clipboard);
-    else
-      fireEvent.click(
-        screen.getByRole("option", {
-          name: "setting.remote_control.clipboard_files.off",
-        }),
-      );
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole("option", {
+        name: "setting.remote_control.clipboard_files.off",
+      }),
+    );
     expect(
       appState.options.remoteKeyboard.clipboardFiles,
-    ).toBe(supported ? "clipboard" : "off");
+    ).toBe("off");
   },
 );
-it("updates clipboard file availability when browser write permission changes", async () => {
+it("keeps browser file clipboard disabled across write permission changes", async () => {
   const permission = Object.assign(new EventTarget(), {
     state: "granted",
   });
@@ -1125,7 +1123,7 @@ it("updates clipboard file availability when browser write permission changes", 
         name: "setting.remote_control.clipboard_files.clipboard",
       })
     ).getAttribute("aria-disabled"),
-  ).not.toBe("true");
+  ).toBe("true");
 });
 it("shares native discovery and permission observers across settings and repeated remote input mounts", async () => {
   const permission = Object.assign(new EventTarget(), {

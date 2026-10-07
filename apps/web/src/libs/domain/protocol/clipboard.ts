@@ -12,6 +12,14 @@ export const CLIPBOARD_MAX_BYTES = remoteBundleLimit(
 export const CLIPBOARD_MAX_ENTRIES = 4096;
 export const CLIPBOARD_CHUNK_SIZE = 128 * 1024;
 export type ClipboardContentKind = "text" | "binary";
+export const CLIPBOARD_FORMATS = [
+  "text/plain",
+  "text/html",
+  "text/rtf",
+  "image/png",
+] as const;
+export type ClipboardFormat =
+  (typeof CLIPBOARD_FORMATS)[number];
 export type ClipboardRequest = {
   grantId: string;
   operationId: string;
@@ -29,6 +37,8 @@ export type ClipboardRequest = {
   kind?: ClipboardContentKind;
   /** Read requests may exclude files/directories before native file access. */
   files?: boolean;
+  /** Accepted non-file formats. Omission keeps all formats for older/native clients. */
+  formats?: ClipboardFormat[];
   /** Controller-selected file budget, fixed when an operation starts. */
   maxFileBytes?: number;
 };
@@ -55,6 +65,19 @@ export function validClipboardRequest(
       v.action === "read" || v.action === "read-current"
     ) ||
       typeof v.files !== "boolean")
+  )
+    return false;
+  if (
+    v.formats !== undefined &&
+    (!(
+      v.action === "read" || v.action === "read-current"
+    ) ||
+      !Array.isArray(v.formats) ||
+      v.formats.length > CLIPBOARD_FORMATS.length ||
+      new Set(v.formats).size !== v.formats.length ||
+      !v.formats.every((format) =>
+        CLIPBOARD_FORMATS.includes(format),
+      ))
   )
     return false;
   if (

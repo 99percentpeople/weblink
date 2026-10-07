@@ -19,7 +19,8 @@ import type {
 } from "@/libs/domain/remote-control/pointer";
 import {
   fromNativeClipboard,
-  fromBrowserPaste,
+  fromPaste,
+  browserClipboardFormats,
   beginBrowserClipboardWrite,
   readBrowserClipboard,
   toNativeClipboard,
@@ -111,10 +112,7 @@ export function createRemoteClipboard(props: {
     void received.catch(() => {});
     const reserved =
       selection && access.write && !access.native
-        ? beginBrowserClipboardWrite(
-            received,
-            fileDestination === "clipboard",
-          )
+        ? beginBrowserClipboardWrite(received)
         : undefined;
     void reserved?.catch(() => {});
     void props
@@ -127,6 +125,11 @@ export function createRemoteClipboard(props: {
             fileDestination === "cache" ||
             (fileDestination === "clipboard" &&
               access.writeFiles),
+          formats: access.native
+            ? undefined
+            : access.write
+              ? browserClipboardFormats()
+              : [],
           receive: async (content, signal) => {
             signal.throwIfAborted();
             if (!valid())
@@ -167,7 +170,7 @@ export function createRemoteClipboard(props: {
                   entry.type !== "file",
               )
             ) {
-              // Keep the successfully reserved binary bundle if a richer native format is rejected.
+              // Keep the successfully reserved text if a richer format is rejected.
               try {
                 await write(content, grant);
               } catch (error) {
@@ -232,9 +235,9 @@ export function createRemoteClipboard(props: {
     event.preventDefault();
     event.stopPropagation();
     pasteContent(
-      fromBrowserPaste(
+      fromPaste(
         event.clipboardData,
-        access.read,
+        undefined,
         resolveRemoteFileLimit(
           appState.options.remoteFileMaxSize,
         ),

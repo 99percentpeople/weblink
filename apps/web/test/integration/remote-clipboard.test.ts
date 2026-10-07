@@ -466,6 +466,138 @@ describe("authorized remote clipboard", () => {
     ]);
     expect(s.cacheFile).not.toHaveBeenCalled();
   });
+  it.each([true, false])(
+    "filters unsupported formats on the host before transfer (selection=%s)",
+    async (selection) => {
+      const s = setup();
+      // Invalid RTF data must not even be decoded for a browser that cannot write it.
+      s.native.read.mockResolvedValue({
+        sequence: 8,
+        entries: [
+          ...copiedFiles,
+          { type: "text/rtf", data: "invalid base64!" },
+          { type: "text/plain", data: btoa("text") },
+          { type: "text/html", data: btoa("<b>text</b>") },
+          { type: "image/png", data: btoa("image") },
+        ],
+      });
+      const formats = [
+        "text/plain",
+        "text/html",
+        "image/png",
+      ] as const;
+      const content = await s.a.service.copy(
+        "peer1",
+        s.control,
+        selection,
+        { files: false, formats: [...formats] },
+      );
+      expect(content.map((e) => e.type)).toEqual(formats);
+      expect(s.native.read).toHaveBeenCalledWith(
+        expect.anything(),
+        selection ? 7 : undefined,
+        false,
+        64 * 1024 * 1024,
+      );
+      expect(s.cacheFile).not.toHaveBeenCalled();
+    },
+  );
+  it.each([true, false])(
+    "does not open a transfer for unsupported-only clipboard contents (selection=%s)",
+    async (selection) => {
+      const s = setup();
+      s.native.read.mockResolvedValue({
+        sequence: 8,
+        entries: [
+          ...copiedFiles,
+          { type: "text/rtf", data: btoa("rtf") },
+        ],
+      });
+      const receive = vi.fn(async () => {});
+      expect(
+        await s.a.service.copy(
+          "peer1",
+          s.control,
+          selection,
+          {
+            files: false,
+            formats: ["text/plain", "image/png"],
+            receive,
+          },
+        ),
+      ).toEqual([]);
+      expect(receive).toHaveBeenCalledWith(
+        [],
+        expect.any(AbortSignal),
+      );
+      expect(s.a.caches.size).toBe(0);
+      expect(s.b.caches.size).toBe(0);
+      expect(s.a.service.tasks()).toEqual([]);
+      expect(s.b.service.tasks()).toEqual([]);
+    },
+  );
+  it("receives cache files without unsupported alternatives when no browser write formats exist", async () => {
+    const s = setup();
+    s.destination("cache");
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        ...copiedFiles,
+        { type: "text/rtf", data: "invalid base64!" },
+        { type: "text/plain", data: btoa("text") },
+      ],
+    });
+    expect(
+      await s.a.service.copy("peer1", s.control, true, {
+        files: true,
+        formats: [],
+      }),
+    ).toEqual([]);
+    expect(s.cacheFile).toHaveBeenCalledOnce();
+    expect(s.cacheFile.mock.calls[0][0].name).toBe(
+      "data.bin",
+    );
+  });
+  it("filters unsupported alternatives received from an older host that ignores formats", async () => {
+    const s = setup();
+    const send = s.a.transport.sendImpl!;
+    s.a.transport.sendImpl = (
+      session,
+      message,
+      options,
+    ) => {
+      if (
+        message.type === "remote-clipboard" &&
+        (message.action === "read" ||
+          message.action === "read-current")
+      ) {
+        const { formats: _formats, ...legacy } = message;
+        return send(session, legacy, options);
+      }
+      return send(session, message, options);
+    };
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        { type: "text/plain", data: btoa("text") },
+        { type: "text/rtf", data: btoa("rtf") },
+      ],
+    });
+    const receive = vi.fn(async () => {});
+    const content = await s.a.service.copy(
+      "peer1",
+      s.control,
+      true,
+      { files: false, formats: ["text/plain"], receive },
+    );
+    expect(content.map((e) => e.type)).toEqual([
+      "text/plain",
+    ]);
+    expect(receive).toHaveBeenCalledWith(
+      content,
+      expect.any(AbortSignal),
+    );
+  });
   it("does not mark a file copy complete when the controller clipboard write fails", async () => {
     const s = setup();
     s.native.read.mockResolvedValue({

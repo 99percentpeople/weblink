@@ -1125,13 +1125,21 @@ semantics are not transported. Each operation uses the shared remote file limit 
 initial capability and permission discovery completes: choose Clipboard if file
 writing is available, otherwise File cache, then persist that choice. Saved choices
 are never replaced by later permission changes. The selector requires completed
-discovery and clipboard synchronization to be enabled. Clipboard is selectable only with native clipboard
-capability or a browser write API supporting Weblink's custom binary format, and no
-known denied write permission. File cache remains available without clipboard APIs;
+discovery and clipboard synchronization to be enabled. Clipboard is selectable only
+with native clipboard capability. Browser custom formats do not provide native
+file-manager paste, even over HTTPS, so Web controllers never advertise file clipboard
+writing. File cache remains available without clipboard APIs;
 it uses the existing file-library import, deduplication and pinning flow. Off excludes
 files and directories before the native adapter reads their bytes. It does not affect
 text, images or files pasted into the host. Unavailable persisted clipboard choices
-also exclude files, without silently changing the user's chosen destination.
+also exclude files, without silently changing the user's chosen destination or
+importing files into the cache.
+Browser read requests include an optional `formats` list of writable non-file MIME
+types. Hosts filter alternatives before packing or transferring them; `files: false`
+also excludes files and directories before native file access. An empty `formats`
+list allows File cache to receive files without transferring unusable text/images.
+Omitting the list preserves native and older-client behavior. Older hosts may ignore
+the optional list, so controllers also filter unsupported alternatives on receipt.
 
 The portable `remote-clipboard` request binds a one-shot `operationId` to the current
 native `grantId` and its authenticated peer session. Explicit copy samples the host
@@ -1182,16 +1190,14 @@ Failed clipboard tasks retain an expandable diagnostic error for troubleshooting
 
 Controllers intercept Ctrl+C/Ctrl+V only on the active remote input surface. Browser
 paste consumes the real paste event, preserving line breaks instead of typing Enter.
-The browser copy gesture starts a promised ClipboardItem before the remote reply,
-preserving write activation across the transfer. It includes a text alternative and,
-when supported and selected, `web application/x-weblink-clipboard` containing the
-validated binary bundle. It then attempts supported rich/image formats automatically.
-Browser paste captures the real event as a fallback, and uses the async read API
-during that gesture to recover custom file names and bytes when available. A denied
-write does not create a separate save action; a later copy gesture requests fresh
+The browser copy gesture starts a promised text ClipboardItem before the remote reply,
+preserving text write activation across the transfer. It then attempts supported
+rich/image formats automatically. Browser paste consumes formats and actual files
+exposed by the real paste event, without probing the async read API for custom bundles.
+A denied write does not create a separate save action; a later copy gesture requests fresh
 content. Browser controllers can write only formats supported by their clipboard
-API. The Weblink custom format can be pasted back into Weblink with async read access;
-it does not publish native file-drop paths for file managers. Windows desktop controllers
+API; they do not read or write Weblink custom clipboard formats. To receive copied
+files on the Web, select File cache and download them. Windows desktop controllers
 write all supported formats and file-drop paths directly. Received
 files remain in local temporary directories while referenced by the clipboard;
 replaced snapshots have a 30-minute grace period and are collected on subsequent

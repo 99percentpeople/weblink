@@ -8,6 +8,7 @@ import type { ClipboardFileDestination } from "../domain/remote-control/keyboard
 import { createUuid } from "../domain/ids";
 import type {
   ClipboardContentKind,
+  ClipboardFormat,
   ClipboardRequest,
 } from "../domain/protocol/clipboard";
 import type { RequestContext } from "../domain/protocol/request-manager";
@@ -67,6 +68,7 @@ interface Job extends ClipboardTransferJob {
 }
 export interface ClipboardCopyOptions {
   files?: boolean;
+  formats?: ClipboardFormat[];
   receive?(
     content: ClipboardContent,
     signal: AbortSignal,
@@ -425,9 +427,17 @@ export class RemoteClipboard {
         files:
           job.fileDestination !== "off" &&
           options.files !== false,
+        formats: options.formats,
       });
       this.check(job);
       let content = job.content ?? [];
+      // Older hosts may ignore the optional format filter.
+      if (options.formats)
+        content = content.filter(
+          (entry) =>
+            entry.type === "file" ||
+            options.formats!.includes(entry.type),
+        );
       const files = content.filter(
         (entry) => entry.type === "file",
       );
@@ -629,16 +639,18 @@ export class RemoteClipboard {
             job.maxFileBytes,
           );
         this.check(job);
-        // The native adapter can return no alternatives when files were excluded.
-        const entries =
-          message.files === false
-            ? snapshot.entries.filter(
-                (entry) =>
-                  entry.type !== "file" &&
-                  entry.type !== "directory",
-              )
-            : snapshot.entries;
-        if (!entries.length && message.files === false) {
+        // Filter before packaging or sending unsupported formats to the controller.
+        const entries = snapshot.entries.filter((entry) =>
+          entry.type === "file" ||
+          entry.type === "directory"
+            ? message.files !== false
+            : !message.formats ||
+              message.formats.includes(entry.type),
+        );
+        if (
+          !entries.length &&
+          (message.files === false || message.formats)
+        ) {
           this.stop(job);
           return;
         }

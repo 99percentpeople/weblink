@@ -15,14 +15,14 @@ import {
   readBrowserClipboard,
   writeBrowserClipboard,
   beginBrowserClipboardWrite,
-  supportsBrowserClipboardFiles,
-  fromBrowserPaste,
-  WEB_CLIPBOARD_FORMAT,
+  browserClipboardFormats,
+  fromPaste,
 } from "@/libs/application/clipboard-content";
 import {
   validClipboardRequest,
   CLIPBOARD_MAX_BYTES,
 } from "@/libs/domain/protocol/clipboard";
+import { handleDropItems } from "@/libs/utils/process-file";
 vi.mock("@/libs/utils/process-file", () => ({
   compressFiles: vi.fn(
     async (files, name) =>
@@ -243,17 +243,62 @@ describe("clipboard content boundaries", () => {
     ])
       expect(validClipboardRequest(invalid)).toBe(false);
   });
+  it("validates optional read format filters without changing legacy requests", () => {
+    const base = { grantId: "grant", operationId: "op" };
+    for (const action of ["read", "read-current"]) {
+      for (const formats of [
+        undefined,
+        [],
+        ["text/plain", "image/png"],
+      ])
+        expect(
+          validClipboardRequest({
+            ...base,
+            action,
+            formats,
+          }),
+        ).toBe(true);
+      for (const formats of [
+        null,
+        "text/plain",
+        ["file"],
+        ["web application/x-weblink-clipboard"],
+        ["text/plain", "text/plain"],
+        [1],
+      ])
+        expect(
+          validClipboardRequest({
+            ...base,
+            action,
+            formats,
+          }),
+        ).toBe(false);
+    }
+    for (const action of [
+      "prepare",
+      "watch",
+      "unwatch",
+      "changed",
+      "offer",
+    ])
+      expect(
+        validClipboardRequest({
+          ...base,
+          action,
+          formats: [],
+        }),
+      ).toBe(false);
+  });
 });
 
-function customClipboard(supported = true) {
+function browserClipboard() {
   const saved = new Map<string, Blob>();
   class Item {
     static supports = (type: string) =>
-      type === WEB_CLIPBOARD_FORMAT
-        ? supported
-        : ["text/plain", "text/html", "image/png"].includes(
-            type,
-          );
+      type.startsWith("web ") ||
+      ["text/plain", "text/html", "image/png"].includes(
+        type,
+      );
     constructor(
       readonly data: Record<string, Blob | Promise<Blob>>,
     ) {}
@@ -280,37 +325,49 @@ function customClipboard(supported = true) {
   });
   return { saved, write, read };
 }
-it("round trips binary files and filenames through the custom browser clipboard format", async () => {
-  const s = customClipboard();
+it("writes supported standard formats without packaging files or unsupported RTF", async () => {
+  const s = browserClipboard();
   const content = [
+    {
+      type: "text/plain" as const,
+      blob: new Blob(["text"]),
+    },
+    {
+      type: "text/html" as const,
+      blob: new Blob(["<b>text</b>"]),
+    },
+    {
+      type: "image/png" as const,
+      blob: new Blob([new Uint8Array([0, 255])]),
+    },
+    {
+      type: "text/rtf" as const,
+      blob: new Blob(["{\\rtf1 text}"]),
+    },
     {
       type: "file" as const,
       name: "中文.bin",
       blob: new Blob([new Uint8Array([0, 255, 128, 1])]),
     },
   ];
-  expect(supportsBrowserClipboardFiles()).toBe(true);
+  expect(browserClipboardFormats()).toEqual([
+    "text/plain",
+    "text/html",
+    "image/png",
+  ]);
   await writeBrowserClipboard(content);
   expect([...s.saved.keys()]).toEqual([
-    WEB_CLIPBOARD_FORMAT,
+    "text/plain",
+    "text/html",
+    "image/png",
   ]);
   const restored = await readBrowserClipboard();
   expect(await toNativeClipboard(restored)).toEqual(
-    await toNativeClipboard(content),
-  );
-  const paste = await fromBrowserPaste(
-    {
-      getData: () => "",
-      items: [],
-    } as unknown as DataTransfer,
-    true,
-  );
-  expect(await toNativeClipboard(paste)).toEqual(
-    await toNativeClipboard(content),
+    await toNativeClipboard(content.slice(0, 3)),
   );
 });
-it("starts the custom write during the gesture and waits for the transferred bytes", async () => {
-  const s = customClipboard();
+it("starts a standard text write during the gesture and waits for the transferred bytes", async () => {
+  const s = browserClipboard();
   let resolve!: (
     content: import("@/libs/application/clipboard-content").ClipboardContent,
   ) => void;
@@ -318,42 +375,56 @@ it("starts the custom write during the gesture and waits for the transferred byt
     new Promise((yes) => {
       resolve = yes;
     }),
-    true,
   );
   expect(s.write).toHaveBeenCalledOnce();
   expect(s.saved.size).toBe(0);
   resolve([
     {
-      type: "file",
-      name: "data.bin",
-      blob: new Blob(["abc"]),
+      type: "text/plain",
+      blob: new Blob(["中文\nabc"]),
     },
   ]);
   await pending;
   expect(await s.saved.get("text/plain")!.text()).toBe(
-    "data.bin",
+    "中文\nabc",
   );
-  expect((await readBrowserClipboard())[0].name).toBe(
-    "data.bin",
-  );
+  expect([...s.saved.keys()]).toEqual(["text/plain"]);
 });
-it("preserves real paste data when custom clipboard reading is denied", async () => {
-  const s = customClipboard();
+it("uses actual system paste data without reading custom browser formats", async () => {
+  const s = browserClipboard();
   s.read.mockRejectedValue(
     new DOMException("Denied", "NotAllowedError"),
   );
-  const content = await fromBrowserPaste(
-    {
-      getData: (type: string) =>
-        type === "text/plain" ? "actual paste" : "",
-      items: [],
-    } as unknown as DataTransfer,
-    true,
-  );
+  const content = await fromPaste({
+    getData: (type: string) =>
+      type === "text/plain" ? "actual paste" : "",
+    items: [],
+  } as unknown as DataTransfer);
   expect(await content[0].blob.text()).toBe("actual paste");
+  expect(s.read).not.toHaveBeenCalled();
 });
-it("does not silently turn unsupported or malformed binary clipboard data into filenames", async () => {
-  const s = customClipboard(false);
+it("keeps actual files exposed by the browser paste event for sending to the host", async () => {
+  const s = browserClipboard();
+  const file = new File(
+    [new Uint8Array([0, 255, 128])],
+    "local.bin",
+  );
+  vi.mocked(handleDropItems).mockResolvedValueOnce([file]);
+  const content = await fromPaste({
+    getData: () => "",
+    items: [],
+  } as unknown as DataTransfer);
+  expect(content).toEqual([
+    { type: "file", name: "local.bin", blob: file },
+  ]);
+  expect(s.read).not.toHaveBeenCalled();
+});
+it("preserves the clipboard instead of writing files as names or custom bundles", async () => {
+  const s = browserClipboard();
+  s.saved.set(
+    "text/plain",
+    new Blob(["existing clipboard"]),
+  );
   const content = [
     {
       type: "file" as const,
@@ -363,10 +434,43 @@ it("does not silently turn unsupported or malformed binary clipboard data into f
   ];
   await expect(
     writeBrowserClipboard(content),
-  ).rejects.toThrow("unavailable");
+  ).rejects.toThrow(
+    "No supported browser clipboard format",
+  );
   expect(s.write).not.toHaveBeenCalled();
-  s.saved.set(WEB_CLIPBOARD_FORMAT, new Blob(["bad"]));
-  await expect(readBrowserClipboard()).rejects.toThrow();
+  expect(await s.saved.get("text/plain")!.text()).toBe(
+    "existing clipboard",
+  );
+  await expect(
+    beginBrowserClipboardWrite(Promise.resolve(content)),
+  ).rejects.toThrow("No plain text alternative");
+  expect(await s.saved.get("text/plain")!.text()).toBe(
+    "existing clipboard",
+  );
+});
+it("ignores custom clipboard bundles and keeps standard text alternatives", async () => {
+  const s = browserClipboard();
+  s.saved.set(
+    "web application/x-weblink-clipboard",
+    new Blob(["old bundle"]),
+  );
+  s.saved.set("text/plain", new Blob(["standard text"]));
+  const content = await readBrowserClipboard();
+  expect(content.map((e) => e.type)).toEqual([
+    "text/plain",
+  ]);
+  expect(await content[0].blob.text()).toBe(
+    "standard text",
+  );
+});
+it("conservatively excludes RTF when per-format detection is unavailable", () => {
+  browserClipboard();
+  vi.stubGlobal("ClipboardItem", class {});
+  expect(browserClipboardFormats()).toEqual([
+    "text/plain",
+    "text/html",
+    "image/png",
+  ]);
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -383,6 +487,7 @@ it("supports text-only browser APIs without requiring ClipboardItem or a context
     write: true,
   });
   const content = await readBrowserClipboard();
+  expect(browserClipboardFormats()).toEqual(["text/plain"]);
   expect(await content[0].blob.text()).toBe(
     "clipboard text",
   );

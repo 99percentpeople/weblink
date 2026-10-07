@@ -1,7 +1,9 @@
 import type { ClipboardEntry } from "@weblink/platform";
 import {
   CLIPBOARD_MAX_ENTRIES,
+  CLIPBOARD_FORMATS,
   type ClipboardContentKind,
+  type ClipboardFormat,
 } from "../domain/protocol/clipboard";
 import {
   compressFiles,
@@ -16,15 +18,9 @@ import {
 
 const WEB_CLIPBOARD_MIME =
   "application/x-weblink-clipboard";
-export const WEB_CLIPBOARD_FORMAT = `web ${WEB_CLIPBOARD_MIME}`;
 
 export type ClipboardContent = {
-  type:
-    | "text/plain"
-    | "text/html"
-    | "text/rtf"
-    | "image/png"
-    | "file";
+  type: ClipboardFormat | "file";
   name?: string;
   blob: Blob;
 }[];
@@ -38,13 +34,7 @@ export function clipboardContentKind(
     ? "binary"
     : "text";
 }
-const formats = [
-  "text/plain",
-  "text/html",
-  "text/rtf",
-  "image/png",
-  "file",
-];
+const formats = [...CLIPBOARD_FORMATS, "file"];
 export function checkContent(
   content: ClipboardContent,
   maxFileBytes = MAX_REMOTE_FILE_BYTES,
@@ -333,11 +323,6 @@ export async function readBrowserClipboard(): Promise<ClipboardContent> {
     ];
   }
   const items = await navigator.clipboard.read();
-  for (const item of items)
-    if (item.types.includes(WEB_CLIPBOARD_FORMAT))
-      return unpackClipboard(
-        await item.getType(WEB_CLIPBOARD_FORMAT),
-      );
   const result: ClipboardContent = [];
   for (const item of items)
     for (const type of item.types)
@@ -353,52 +338,45 @@ export async function readBrowserClipboard(): Promise<ClipboardContent> {
   checkContent(result);
   return result;
 }
-export function supportsBrowserClipboardFiles(): boolean {
-  return (
-    typeof navigator.clipboard?.write === "function" &&
-    typeof ClipboardItem !== "undefined" &&
-    ClipboardItem.supports?.(WEB_CLIPBOARD_FORMAT) === true
+/** Only interoperable clipboard formats; web custom bundles are not native files. */
+export function browserClipboardFormats(): ClipboardFormat[] {
+  const api = globalThis.navigator?.clipboard;
+  if (
+    typeof ClipboardItem === "undefined" ||
+    typeof api?.write !== "function"
+  )
+    return typeof api?.writeText === "function"
+      ? ["text/plain"]
+      : [];
+  return CLIPBOARD_FORMATS.filter((type) =>
+    typeof ClipboardItem.supports === "function"
+      ? ClipboardItem.supports(type)
+      : type !== "text/rtf",
   );
 }
 
 /** Start writing within the copy gesture, before a potentially long network transfer. */
 export function beginBrowserClipboardWrite(
   content: Promise<ClipboardContent>,
-  files: boolean,
 ): Promise<void> | undefined {
   if (
     typeof ClipboardItem === "undefined" ||
-    typeof navigator.clipboard?.write !== "function"
+    typeof navigator.clipboard?.write !== "function" ||
+    !browserClipboardFormats().includes("text/plain")
   )
     return;
-  const custom = files && supportsBrowserClipboardFiles();
   const text = content.then((entries) => {
     checkContent(entries);
     const plain = entries.find(
       (entry) => entry.type === "text/plain",
     );
     if (plain) return plain.blob;
-    if (!custom)
-      throw new Error("No plain text alternative");
-    return new Blob(
-      [
-        entries
-          .filter((entry) => entry.type === "file")
-          .map((entry) => entry.name)
-          .join("\n"),
-      ],
-      { type: "text/plain" },
-    );
+    throw new Error("No plain text alternative");
   });
   void text.catch(() => {});
   const data: Record<string, Promise<Blob>> = {
     "text/plain": text,
   };
-  if (custom) {
-    const bundle = content.then(packClipboard);
-    void bundle.catch(() => {});
-    data[WEB_CLIPBOARD_FORMAT] = bundle;
-  }
   try {
     return navigator.clipboard.write([
       new ClipboardItem(data),
@@ -408,32 +386,6 @@ export function beginBrowserClipboardWrite(
   }
 }
 
-/** Keep event data alive as the fallback; custom binary formats require the async read API. */
-export function fromBrowserPaste(
-  data: DataTransfer,
-  readCustom: boolean,
-  maxFileBytes = MAX_REMOTE_FILE_BYTES,
-): Promise<ClipboardContent> {
-  const fallback = fromPaste(data, undefined, maxFileBytes);
-  void fallback.catch(() => {});
-  if (
-    !readCustom ||
-    typeof navigator.clipboard?.read !== "function"
-  )
-    return fallback;
-  return navigator.clipboard.read().then(
-    async (items) => {
-      for (const item of items)
-        if (item.types.includes(WEB_CLIPBOARD_FORMAT))
-          return unpackClipboard(
-            await item.getType(WEB_CLIPBOARD_FORMAT),
-            maxFileBytes,
-          );
-      return fallback;
-    },
-    () => fallback,
-  );
-}
 export async function writeBrowserClipboard(
   content: ClipboardContent,
 ): Promise<void> {
@@ -456,22 +408,15 @@ export async function writeBrowserClipboard(
     );
     return;
   }
+  const supported = browserClipboardFormats();
   const data = Object.fromEntries(
     content
       .filter(
         (e) =>
-          e.type !== "file" &&
-          (typeof ClipboardItem.supports !== "function" ||
-            ClipboardItem.supports(e.type)),
+          e.type !== "file" && supported.includes(e.type),
       )
       .map((e) => [e.type, e.blob]),
   );
-  if (content.some((entry) => entry.type === "file")) {
-    if (!supportsBrowserClipboardFiles())
-      throw new Error("Browser file clipboard unavailable");
-    data[WEB_CLIPBOARD_FORMAT] =
-      await packClipboard(content);
-  }
   if (!Object.keys(data).length)
     return Promise.reject(
       new Error("No supported browser clipboard format"),
