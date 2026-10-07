@@ -9,6 +9,26 @@ const configured = {
 };
 
 describe("CI build environment", () => {
+  it.each([
+    "https://dev.webl.ink",
+    "https://webl.ink",
+    "http://localhost:5173",
+  ])("accepts the public sharing URL %s", (url) => {
+    expect(() =>
+      checkBuildEnv({ ...configured, VITE_SHARE_URL: url }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    "dev.webl.ink",
+    "tauri://localhost",
+    "javascript:alert(1)",
+  ])("rejects invalid public sharing URL %s", (url) => {
+    expect(() =>
+      checkBuildEnv({ ...configured, VITE_SHARE_URL: url }),
+    ).toThrow("VITE_SHARE_URL");
+  });
+
   it("requires configured STUN while allowing backend-managed TURN", () => {
     expect(checkBuildEnv(configured)).toEqual({
       stuns: 2,

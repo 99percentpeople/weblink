@@ -66,6 +66,12 @@ Optional static/HMAC TURN settings use the `VITE_TURN_SERVERS` secret; managed
 TURN credentials come from the signaling backend. Public variables also configure
 pull-request builds without deployment secrets.
 Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.local`.
+`VITE_SHARE_URL` sets the public frontend URL used by room links and QR codes.
+The `Preview` and `production` GitHub Environments can override it; their desktop
+workflows default to `https://dev.webl.ink` and `https://webl.ink`, respectively.
+Local desktop development defaults to `https://dev.webl.ink`, while local packaged
+builds default to `https://webl.ink`. Set this variable to your own frontend URL
+when self-hosting, so invitations never use the desktop window's internal origin.
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.
 

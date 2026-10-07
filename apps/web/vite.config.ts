@@ -210,6 +210,13 @@ export default defineConfig(({ command, mode }) => {
     define: {
       ...(desktop
         ? {
+            "import.meta.env.VITE_SHARE_URL":
+              JSON.stringify(
+                desktopEnv.VITE_SHARE_URL ||
+                  (command === "serve"
+                    ? "https://dev.webl.ink"
+                    : "https://webl.ink"),
+              ),
             "import.meta.env.VITE_WEBSOCKET_URL":
               JSON.stringify(
                 desktopEnv.VITE_WEBSOCKET_URL ||

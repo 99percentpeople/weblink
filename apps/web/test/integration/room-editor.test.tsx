@@ -15,7 +15,10 @@ import {
   within,
   waitFor,
 } from "@solidjs/testing-library";
-import { createRoomDialog } from "@/components/dialogs/join-dialog";
+import {
+  createRoomDialog,
+  joinUrl,
+} from "@/components/dialogs/join-dialog";
 import { createRoomActions } from "@/libs/state/create-room-actions";
 import { ModalProvider } from "@/components/dialogs/base";
 import { toast } from "solid-sonner";
@@ -82,6 +85,56 @@ afterEach(() => {
   animationStyle.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe("room sharing URL", () => {
+  it.each([
+    "https://dev.webl.ink",
+    "https://webl.ink",
+    "https://self-hosted.example/weblink/",
+  ])(
+    "shares %s instead of the desktop window origin",
+    (base) => {
+      vi.stubEnv("VITE_SHARE_URL", base);
+      vi.stubGlobal("location", {
+        origin: "https://tauri.localhost",
+      });
+      setAppState("profile", {
+        roomId: "room & 中文",
+        password: "password+#?",
+      });
+
+      const url = new URL(joinUrl());
+      expect(url.origin).toBe(new URL(base).origin);
+      expect(url.pathname).toBe(new URL(base).pathname);
+      expect(url.searchParams.get("id")).toBe(
+        "room & 中文",
+      );
+      expect(url.searchParams.get("pwd")).toBe(
+        "password+#?",
+      );
+
+      setAppState("profile", {
+        roomId: "next-room",
+        password: null,
+      });
+      const updated = new URL(joinUrl());
+      expect(updated.origin).toBe(new URL(base).origin);
+      expect(updated.searchParams.get("id")).toBe(
+        "next-room",
+      );
+      expect(updated.searchParams.has("pwd")).toBe(false);
+    },
+  );
+
+  it("keeps the browser origin when no sharing URL is configured", () => {
+    vi.stubEnv("VITE_SHARE_URL", "");
+    setAppState("profile", "roomId", "browser-room");
+    const url = new URL(joinUrl());
+    expect(url.origin).toBe(location.origin);
+    expect(url.searchParams.get("id")).toBe("browser-room");
+  });
 });
 
 function setup(options?: {

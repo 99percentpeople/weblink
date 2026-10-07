@@ -6,6 +6,21 @@ import { loadEnv } from "vite";
 export function checkBuildEnv(
   env: Record<string, string | undefined>,
 ): { stuns: number; turns: number } {
+  if (env.VITE_SHARE_URL) {
+    try {
+      const url = new URL(env.VITE_SHARE_URL);
+      if (
+        url.protocol !== "http:" &&
+        url.protocol !== "https:"
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        "Configure VITE_SHARE_URL as an absolute HTTP(S) URL in GitHub Environment variables.",
+      );
+    }
+  }
+
   try {
     const url = new URL(env.VITE_WEBSOCKET_URL ?? "");
     if (url.protocol !== "ws:" && url.protocol !== "wss:")

@@ -657,7 +657,9 @@ export const createRoomDialog = () => {
 };
 
 export const joinUrl = createMemo(() => {
-  const url = new URL(location.origin);
+  const url = new URL(
+    import.meta.env.VITE_SHARE_URL || location.origin,
+  );
   url.searchParams.append("id", appState.profile.roomId);
   if (appState.profile.password)
     url.searchParams.append(
