@@ -256,6 +256,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn application_version_comes_from_frontend_manifest() {
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../../../web/package.json")).unwrap();
+        let version = manifest["version"].as_str().unwrap();
+        let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        assert_eq!(context.package_info().version.to_string(), version);
+        assert_eq!(context.config().version.as_deref(), Some(version));
+    }
+
+    #[test]
     fn media_capture_is_allowed_only_for_local_application_content() {
         let local = Url::parse("https://tauri.localhost").unwrap();
         let dev = Url::parse("http://127.0.0.1:1420").unwrap();

@@ -313,7 +313,7 @@
         "title": "Touch mode",
         "trackpad": "Trackpad",
         "direct": "Direct touch",
-        "trackpad_description": "Move one finger to move the cursor. Tap to click, use two fingers to right-click or scroll, and hold to drag.",
+        "trackpad_description": "Move one finger to move the cursor. Tap to click, use two fingers to right-click, scroll or pinch to zoom, and hold to drag.",
         "direct_description": "Send real touch contacts at the corresponding screen positions, including multi-touch and press-and-hold. Gestures are handled by Windows and the remote app. The remote host must support touch input."
       },
       "pointer_speed": "Cursor speed",
@@ -327,6 +327,7 @@
       "tapToClick": "Tap to left-click",
       "twoFingerRightClick": "Two-finger tap to right-click",
       "twoFingerScroll": "Two-finger scrolling",
+      "twoFingerZoom": "Pinch to zoom",
       "naturalScroll": "Natural scrolling",
       "three_finger_tap": {
         "title": "Three-finger tap",
@@ -341,7 +342,7 @@
         "none": "No action"
       },
       "changes": "Changes apply immediately and release any pressed buttons or touches.",
-      "pan_unavailable": "Native touchpad scrolling is unavailable on this host.",
+      "pan_unavailable": "Native touchpad scrolling and zooming are unavailable on this host.",
       "unavailable": "This host does not support direct touch. Select Trackpad in Remote control settings.",
       "keyboard_heading": "Keyboard",
       "touch_heading": "Touch",
@@ -794,8 +795,7 @@
       "title": "About Weblink",
       "description1": "Weblink is a browser-based P2P chat, file transfer, file synchronization and screen sharing tool.",
       "disclaimer": "Disclaimer: This application uses P2P technology, all data is stored in the user's client (browser), the server does not store any user data, only responsible for forwarding signaling. Users should bear the risks of using it at their own risk, and the developers are not responsible for any data loss or privacy breaches.",
-      "web_version": "Web version",
-      "desktop_version": "Desktop version",
+      "version": "Version",
       "author": "Author",
       "license": "License",
       "github": "GitHub Repository"

@@ -313,7 +313,7 @@
         "title": "觸摸模式",
         "trackpad": "觸控板",
         "direct": "直接觸控",
-        "trackpad_description": "單指滑動移動游標，輕點單擊，雙指輕點右鍵或滑動捲動，長按後可拖動。",
+        "trackpad_description": "單指滑動移動游標，輕點單擊，雙指輕點右鍵、滑動捲動或捏合縮放，長按後可拖動。",
         "direct_description": "將觸點對應到遠端螢幕，傳送真正的觸控事件，支援多點觸控和長按。手勢由 Windows 與遠端應用程式處理，需要對端支援觸控輸入。"
       },
       "pointer_speed": "游標移動速度",
@@ -327,6 +327,7 @@
       "tapToClick": "輕點模擬左鍵單擊",
       "twoFingerRightClick": "雙指輕點模擬右鍵",
       "twoFingerScroll": "雙指滑動捲動",
+      "twoFingerZoom": "雙指捏合縮放",
       "naturalScroll": "自然捲動",
       "three_finger_tap": {
         "title": "三指輕點",
@@ -341,7 +342,7 @@
         "none": "不執行操作"
       },
       "changes": "修改立即生效，並釋放目前按住的按鍵和觸點。",
-      "pan_unavailable": "被控端不支援原生觸控板捲動。",
+      "pan_unavailable": "被控端不支援原生觸控板捲動和縮放。",
       "unavailable": "對端不支援直接觸控，請在「遠端控制」設定中選擇「觸控板」。",
       "keyboard_heading": "鍵盤",
       "touch_heading": "觸控",
@@ -783,8 +784,7 @@
       "title": "關於 Weblink",
       "description1": "Weblink 是一款基於瀏覽器的P2P聊天、檔案傳輸、檔案同步和螢幕共享工具。",
       "disclaimer": "免責聲明：此應用程式採用點對點（P2P）技術，所有資料儲存於使用者端（瀏覽器）中，伺服器不儲存任何使用者資料，僅負責轉送訊號。使用者應自行承擔使用風險，開發者不對任何資料遺失或隱私洩露負責。",
-      "web_version": "Web 版本",
-      "desktop_version": "桌面版本",
+      "version": "版本",
       "author": "作者",
       "license": "授權條款",
       "github": "GitHub 儲存庫"

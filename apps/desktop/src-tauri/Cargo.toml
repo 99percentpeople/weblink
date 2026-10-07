@@ -1,5 +1,6 @@
 [package]
 name = "weblink-desktop"
+# Internal crate metadata; the app version is read from apps/web/package.json by Tauri.
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.94"

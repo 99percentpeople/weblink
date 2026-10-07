@@ -15,7 +15,6 @@
     },
     "apps/desktop": {
       "name": "@weblink/desktop",
-      "version": "0.1.0",
       "dependencies": {
         "@tauri-apps/api": "2.12.0",
         "@tauri-apps/plugin-opener": "2.6.0",
@@ -30,7 +29,7 @@
     },
     "apps/web": {
       "name": "@weblink/web",
-      "version": "1.0.7",
+      "version": "1.1.0",
       "dependencies": {
         "@corvu/drawer": "^0.2.4",
         "@corvu/resizable": "^0.2.5",

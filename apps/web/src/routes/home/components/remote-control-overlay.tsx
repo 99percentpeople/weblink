@@ -22,6 +22,7 @@ import { RemoteKeyboard } from "@/libs/domain/remote-control/keyboard";
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { createRemoteCursor } from "@/libs/hooks/remote-cursor";
+import { createCursorCanvas } from "@/libs/hooks/remote-cursor-canvas";
 import { createRemotePointerCapture } from "@/libs/hooks/remote-pointer-capture";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
@@ -88,6 +89,11 @@ export function RemoteControlOverlay(props: {
   );
   const captureMode = () =>
     pointerOptions().mode === "capture";
+  const cursorCanvas = createCursorCanvas(
+    () => surface()?.ownerDocument,
+  );
+  // Capture mode shares the host's native pointer; it needs neither appearance
+  // synchronization nor cursor ownership handoff.
   const cursorStyle = createRemoteCursor(
     control,
     () =>
@@ -96,6 +102,7 @@ export function RemoteControlOverlay(props: {
       !captureMode() &&
       (mouseInside() || mouseDragging()),
     () => pointerOptions().syncCursor,
+    cursorCanvas,
   );
   const touchOptions = createMemo(() =>
     resolveRemoteTouchOptions(appState.options.remoteTouch),
@@ -379,6 +386,7 @@ export function RemoteControlOverlay(props: {
       event.pointerType === "mouse"
         ? { clientX: event.clientX, clientY: event.clientY }
         : undefined;
+    cursorCanvas.move(mousePosition);
     setMouseInside(
       windowActive &&
         event.pointerType === "mouse" &&
@@ -388,6 +396,8 @@ export function RemoteControlOverlay(props: {
   const refreshMouse = () => {
     const element = surface();
     if (!element || !mousePosition) return;
+    cursorCanvas.move(mousePosition);
+    cursorCanvas.refresh();
     const doc = element.ownerDocument;
     const hit = doc.elementFromPoint(
       mousePosition.clientX,

@@ -142,8 +142,8 @@ SolidJS + TypeScript 应用位于 `apps/web`，`apps/desktop` 中的 Tauri 客�
 使用相同前端并在构建时接入桌面适配器。平台契约位于 `packages/platform`，
 原生采集与输入实现位于 `crates`。
 
-共用 Web 应用版本与桌面程序版本独立维护。
-桌面端“关于”和复制的版本信息同时显示两个版本，浏览器端显示 Web 版本。
+Web 与桌面端统一使用 `apps/web/package.json` 中的应用版本。
+“关于”、复制的版本信息、构建元数据和桌面安装包均使用这一版本。
 桌面端目前通过安装新版本程序进行更新。
 
 ## 自部署

@@ -55,6 +55,7 @@ export default function RemoteControlSettings() {
       | "tapToClick"
       | "twoFingerRightClick"
       | "twoFingerScroll"
+      | "twoFingerZoom"
       | "naturalScroll"
       | "forwardProperties",
   ) => (
@@ -200,6 +201,7 @@ export default function RemoteControlSettings() {
             [
               "twoFingerRightClick",
               "twoFingerScroll",
+              "twoFingerZoom",
               "naturalScroll",
             ] as const
           }

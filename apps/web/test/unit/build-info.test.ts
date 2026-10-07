@@ -9,21 +9,19 @@ const commit = "abcdef1" + "2".repeat(33);
 const builtAt = Date.UTC(2026, 8, 24);
 
 describe("build channel metadata", () => {
-  it("preserves the stable package version", () => {
-    expect(
-      createBuildInfo(
-        "1.0.4",
-        "production",
+  it.each(["production", "desktop"])(
+    "preserves the shared package version in %s",
+    (mode) => {
+      expect(
+        createBuildInfo("1.0.4", mode, commit, builtAt),
+      ).toEqual({
+        version: "1.0.4",
+        channel: "stable",
         commit,
-        builtAt,
-      ),
-    ).toEqual({
-      version: "1.0.4",
-      channel: "stable",
-      commit,
-      builtAt: "2026-09-24T00:00:00.000Z",
-    });
-  });
+        builtAt: "2026-09-24T00:00:00.000Z",
+      });
+    },
+  );
 
   it("identifies dev builds by their commit without changing package.json", () => {
     expect(

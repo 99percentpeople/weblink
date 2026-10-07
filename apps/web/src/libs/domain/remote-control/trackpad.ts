@@ -14,7 +14,7 @@ export interface TrackpadPort {
   position(): PointerPosition;
   /** Supported hosts resolve gestures at the actual OS cursor, never a cached coordinate. */
   relative?(event: TrackpadEvent): void;
-  /** Native two-contact pan; no emulated wheel fallback. */
+  /** Native two-contact pan/zoom; no emulated wheel fallback. */
   pan?(gesture: TrackpadPan): void;
   /** Size of the displayed video content in CSS pixels. */
   size(): { width: number; height: number };
@@ -27,6 +27,9 @@ export class Trackpad {
   private cursor: PointerPosition = { x: 0.5, y: 0.5 };
   private scrollOrigin?: PointerPosition;
   private scrollPrevious: PointerPosition = { x: 0, y: 0 };
+  private pinchOrigin = 0;
+  private pinchPrevious = 1;
+  private pinching = false;
   private scrolling = false;
   private scrollTimer?: ReturnType<typeof setTimeout>;
   constructor(
@@ -49,8 +52,13 @@ export class Trackpad {
     if (this.gesture.size === 2) {
       this.scrollOrigin = this.gesture.center();
       this.scrollPrevious = { x: 0, y: 0 };
+      this.pinchOrigin = this.gesture.distance();
+      this.pinchPrevious = 1;
+      this.pinching = false;
       this.scrolling =
-        this.options.twoFingerScroll && !!this.port.pan;
+        (this.options.twoFingerScroll ||
+          this.options.twoFingerZoom) &&
+        !!this.port.pan;
       // End a one-finger drag before the native gesture starts.
       this.release();
       if (this.scrolling)
@@ -117,11 +125,8 @@ export class Trackpad {
         ),
       };
       this.port.move(this.cursor);
-    } else if (
-      this.gesture.size === 2 &&
-      this.options.twoFingerScroll
-    ) {
-      // Sample the latest centroid after both pointer events have arrived.
+    } else if (this.gesture.size === 2) {
+      // Sample centroid and distance after both pointer events have arrived.
       // Send cumulative positions, so event frequency never changes travel distance.
       if (this.scrolling && !this.scrollTimer)
         this.scrollTimer = setTimeout(
@@ -196,19 +201,45 @@ export class Trackpad {
     )
       return;
     const center = this.gesture.center();
-    const scale =
-      this.options.scrollSpeed *
-      (this.options.naturalScroll ? 1 : -1);
+    const scrollScale = this.options.twoFingerScroll
+      ? this.options.scrollSpeed *
+        (this.options.naturalScroll ? 1 : -1)
+      : 0;
     const limit = (v: number) =>
-      Math.max(-2048, Math.min(2048, v * scale));
+      Math.max(-2048, Math.min(2048, v * scrollScale));
     const x = limit(center.x - this.scrollOrigin.x);
     const y = limit(center.y - this.scrollOrigin.y);
+    let scale = 1;
+    if (this.options.twoFingerZoom) {
+      const distance = this.gesture.distance();
+      // Coincident initial contacts cannot define a ratio. Wait for separation.
+      if (this.pinchOrigin < 1) this.pinchOrigin = distance;
+      if (
+        this.pinchOrigin >= 1 &&
+        (this.pinching ||
+          Math.abs(distance - this.pinchOrigin) > 8)
+      ) {
+        this.pinching = true;
+        this.tap = false;
+        scale = Math.max(
+          0.1,
+          Math.min(4, distance / this.pinchOrigin),
+        );
+      }
+    }
     if (
       x === this.scrollPrevious.x &&
-      y === this.scrollPrevious.y
+      y === this.scrollPrevious.y &&
+      scale === this.pinchPrevious
     )
       return;
     this.scrollPrevious = { x, y };
-    this.port.pan?.({ phase: "update", x, y });
+    this.pinchPrevious = scale;
+    this.port.pan?.({
+      phase: "update",
+      x,
+      y,
+      ...(this.pinching ? { scale } : {}),
+    });
   }
 }

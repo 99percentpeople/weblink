@@ -4,6 +4,7 @@ mod environment;
 mod hotkey;
 use crate::shortcut::Shortcut;
 mod pan;
+mod pointer_observer;
 mod safety;
 mod session;
 mod touch;
@@ -49,6 +50,7 @@ enum Command {
 /// Dropping the owner closes the queue and joins after releasing injected keys/buttons.
 pub struct Worker {
     shortcut: safety::ShortcutControl,
+    observations: Arc<safety::Observations>,
     queue: Arc<Mailbox<Command>>,
     status: Arc<Mutex<Status>>,
     observer: Arc<Mutex<Option<thread::Thread>>>,
@@ -129,7 +131,7 @@ impl Worker {
                     let touch = touch::TouchDevice::new();
                     let mut engine =
                         Engine::new(WindowsDevice(safety, touch, pan::PanDevice::new()));
-                    let _ = ready.send(Ok(shortcut));
+                    let _ = ready.send(Ok((shortcut, observations.clone())));
                     loop {
                         let signals = observations.signals();
                         if signals & safety::INVALIDATED != 0 {
@@ -197,8 +199,8 @@ impl Worker {
                 q.close(failure.unwrap_or(Error::Closed));
             })
             .map_err(|_| Error::Unavailable)?;
-        let shortcut = match initialized.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(shortcut)) => shortcut,
+        let (shortcut, observations) = match initialized.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(initialized)) => initialized,
             other => {
                 queue.close(Error::Closed);
                 worker.thread().unpark();
@@ -211,6 +213,7 @@ impl Worker {
         };
         let handle = Self {
             shortcut,
+            observations,
             queue,
             status,
             observer,

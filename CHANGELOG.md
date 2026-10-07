@@ -18,7 +18,7 @@ Weblink 1.1 新增 Windows 原生屏幕共享与远程控制，支持移动端�
 
 ### Improvements
 
-- Show both the shared Web application version and desktop package version in desktop About and copied version information 桌面端“关于”及复制的版本信息同时显示共用 Web 应用版本和桌面程序版本
+- Use the frontend application version for Web and desktop About, copied version information, build metadata and desktop installers Web 与桌面端的“关于”、复制版本信息、构建元数据及桌面安装包统一使用前端应用版本
 - Expand desktop window behavior with tray controls, configurable close actions, launch-at-login preferences, optional hiding after control approval, and a resizable always-on-top native picture-in-picture mode that preserves the meeting and control session 完善桌面端窗口行为，新增托盘操作、可配置关闭行为、开机启动设置、批准远程控制后自动隐藏选项，以及保留会议和控制会话的可缩放置顶原生画中画模式
 - Unify browser and Windows notifications for messages, control requests, speed-test requests and completed transfers, with configurable previews and sound; Windows notifications support inline replies and request approval 统一浏览器与 Windows 的消息、远程控制请求、测速请求及传输完成通知，支持配置内容预览和声音；Windows 通知支持直接回复与批准请求
 - Add recent-room selection with saved connection details, unify client and room permission management, and order conversations and permission records by persisted activity; move automatic-download size limits into shared transfer settings while preserving per-room switches 新增保存连接信息的最近房间选择，统一客户端与房间权限管理，按持久化活动时间排列会话和权限记录；将自动下载大小限制移至统一传输设置，并保留各房间的独立开关

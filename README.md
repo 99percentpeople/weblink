@@ -176,9 +176,9 @@ The SolidJS + TypeScript application lives in `apps/web`. The Tauri app in
 `apps/desktop` builds that same frontend with a desktop adapter, shared contracts
 in `packages/platform`, and native capture/input implementations in `crates`.
 
-The shared Web version and desktop package version are maintained independently.
-Desktop About and copied version information show both; the browser shows its Web
-version. Desktop updates currently require installing a newer package.
+Web and desktop use one application version from `apps/web/package.json`.
+About, copied version information, build metadata, and desktop installers all use
+this version. Desktop updates currently require installing a newer package.
 
 ## Self-hosting
 

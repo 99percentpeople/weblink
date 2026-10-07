@@ -18,6 +18,7 @@ enum Observation {
     Shutdown,
 }
 struct DeviceState {
+    pointer_activity: Mutex<weblink_desktop_input::session::PointerActivity>,
     shortcut_unavailable: AtomicBool,
     shortcut: Mutex<Option<weblink_desktop_input::shortcut::Shortcut>>,
     available: AtomicBool,
@@ -28,6 +29,7 @@ struct DeviceState {
 impl Default for DeviceState {
     fn default() -> Self {
         Self {
+            pointer_activity: Default::default(),
             available: AtomicBool::new(true),
             shortcut_unavailable: AtomicBool::new(false),
             shortcut: Mutex::new(None),
@@ -68,6 +70,9 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn pointer_activity(&self) -> weblink_desktop_input::session::PointerActivity {
+        *self.state.pointer_activity.lock().unwrap()
+    }
     fn configure_shortcut(
         &self,
         shortcut: weblink_desktop_input::shortcut::Shortcut,
@@ -534,7 +539,7 @@ fn cursor_shape_stream_requires_authorization_and_stops_with_input() {
             count.fetch_add(1, Ordering::Relaxed);
             Shape::System { name: "text" }
         });
-        let packet = |grant: &str| json!({"type":"cursor-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1"});
+        let packet = |grant: &str| json!({"type":"cursor-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1", "appearance":true});
         rig.send(packet("unapproved"));
         let grant = rig.approve();
         rig.send(packet(&grant));
@@ -543,6 +548,7 @@ fn cursor_shape_stream_requires_authorization_and_stops_with_input() {
             ("grantId", json!("wrong")),
             ("inputEpoch", json!("old")),
             ("watchId", json!(false)),
+            ("appearance", json!("true")),
         ] {
             let mut invalid = packet(&grant);
             invalid[field] = wrong;
@@ -556,7 +562,7 @@ fn cursor_shape_stream_requires_authorization_and_stops_with_input() {
         assert!(rig.sender.sent.lock().unwrap().iter().any(|v| *v
             == json!({"type":"cursor-state",
             "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1", "sequence":1,
-            "shape":{"type":"system", "name":"text"}})));
+            "shape":{"type":"system", "name":"text"}, "owner":"viewer"})));
         // Auto-keyboard subscriptions must remain independent of cursor subscriptions.
         rig.send(json!({"type":"text-input-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":null}));
         assert!(rig
@@ -616,6 +622,68 @@ fn cursor_shape_stream_requires_authorization_and_stops_with_input() {
                 .watching());
         }
     }
+}
+
+#[test]
+fn local_mouse_takeover_changes_capture_before_notification_and_keeps_the_viewer_preference() {
+    use weblink_desktop_input::session::PointerActivity;
+    let rig = Rig::new();
+    let grant = rig.approve();
+    rig.input(&grant, 1, 1, json!({"type":"activate"}));
+    let visibility = |visible| {
+        json!({"type":"cursor", "grantId":grant,
+        "generation":"media", "geometryRevision":"layout", "inputEpoch":"epoch-1", "visible":visible})
+    };
+    rig.send(visibility(false));
+    rig.send(json!({"type":"cursor-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":"watch-1", "appearance":false}));
+    assert!(!rig.source.1.load(Ordering::Acquire));
+    let sample = |sequence, local| {
+        *rig.state.pointer_activity.lock().unwrap() = PointerActivity { sequence, local };
+        std::thread::sleep(Duration::from_millis(40));
+        rig.tick();
+        rig.sender
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|v| v["type"] == "cursor-state")
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(sample(1, true)["owner"], "host");
+    assert!(rig.source.1.load(Ordering::Acquire));
+    // A hide request already in flight cannot hide a locally owned cursor.
+    rig.send(visibility(false));
+    assert!(rig.source.1.load(Ordering::Acquire));
+    assert_eq!(sample(2, false)["owner"], "viewer");
+    assert!(!rig.source.1.load(Ordering::Acquire));
+    sample(3, true);
+    rig.send(visibility(true));
+    sample(4, false);
+    assert!(rig.source.1.load(Ordering::Acquire));
+    rig.send(
+        json!({"type":"cursor-watch", "grantId":grant, "inputEpoch":"epoch-1", "watchId":null}),
+    );
+    let count = rig
+        .sender
+        .sent
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|v| v["type"] == "cursor-state")
+        .count();
+    sample(5, true);
+    assert_eq!(
+        rig.sender
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|v| v["type"] == "cursor-state")
+            .count(),
+        count
+    );
 }
 
 #[test]

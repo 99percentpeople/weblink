@@ -215,6 +215,35 @@ it("uses the host relative capability even when negotiated after the overlay mou
   expect(fixture.control.input).not.toHaveBeenCalled();
   expect(fixture.control.move).not.toHaveBeenCalled();
 });
+it("forwards a pure pinch to the host and cancels it when control is disabled", () => {
+  vi.useFakeTimers();
+  const [enabled, setEnabled] = createSignal(true);
+  render(() => (
+    <RemoteControlOverlay enabled={enabled()} />
+  ));
+  touch("down", 1, 60, 80);
+  touch("down", 2, 120, 80);
+  touch("move", 1, 30, 80);
+  touch("move", 2, 150, 80);
+  vi.advanceTimersByTime(9);
+  expect(
+    fixture.control.trackpad.mock.calls.map(
+      ([event]: any[]) => event,
+    ),
+  ).toEqual([
+    { type: "pan", phase: "start" },
+    { type: "pan", phase: "update", x: 0, y: 0, scale: 2 },
+  ]);
+  touch("move", 1, 20, 80);
+  setEnabled(false);
+  vi.advanceTimersByTime(100);
+  expect(fixture.control.trackpad).toHaveBeenCalledTimes(3);
+  expect(fixture.control.trackpad).toHaveBeenLastCalledWith(
+    { type: "pan", phase: "cancel" },
+  );
+  expect(fixture.control.input).not.toHaveBeenCalled();
+  expect(fixture.control.move).not.toHaveBeenCalled();
+});
 it("maps direct touches to video content and cancels contacts on mode change", () => {
   setAppState("options", "remoteTouch", "mode", "direct");
   render(() => <RemoteControlOverlay enabled />);
@@ -293,6 +322,15 @@ it("persists gesture choices and preserves them across direct mode", async () =>
     name: "setting.remote_control.twoFingerScroll",
   });
   fireEvent.click(scroll);
+  const zoom = screen.getByRole("switch", {
+    name: "setting.remote_control.twoFingerZoom",
+  });
+  expect(zoom).toBeEnabled();
+  expect(zoom).toBeChecked();
+  fireEvent.click(zoom);
+  expect(appState.options.remoteTouch.twoFingerZoom).toBe(
+    false,
+  );
   expect(appState.options.remoteTouch.twoFingerScroll).toBe(
     false,
   );

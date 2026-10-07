@@ -11,7 +11,8 @@ the low-level `domain` layer.
 - `apps/web/`: Frontend application, Vite configuration, assets, tests and
   application build/browser scripts. It is a Bun workspace.
 - `apps/desktop/`: Tauri shell and desktop platform adapter. It builds the same
-  frontend in desktop mode, with separate output, version and native permissions.
+  frontend in desktop mode, with separate output and native permissions, and uses
+  the application version from `apps/web/package.json`.
 - `packages/platform/`: Platform capability and adapter contracts used by both
   applications. Vite selects the runtime adapter at build time; browser bundles
   do not import Tauri APIs.

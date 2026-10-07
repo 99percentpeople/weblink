@@ -24,6 +24,7 @@ pub(super) struct Peer {
     pub(super) display: weblink_desktop_input::input::Rect,
     cursor_visibility: bool,
     cursor_visible: bool,
+    cursor_requested: bool,
 }
 impl Peer {
     fn set_cursor_visible(&mut self, visible: bool) {
@@ -81,6 +82,7 @@ impl Host {
                 display,
                 cursor_visibility: capture.cursor_visibility_supported(&binding),
                 cursor_visible: true,
+                cursor_requested: true,
                 binding,
                 endpoint: endpoint.clone(),
                 capture,
@@ -284,14 +286,18 @@ impl Host {
             self.cursor.cancel();
             return;
         }
+        self.cursor.observe_activity(self.worker.pointer_activity());
         if let Some(update) = self.cursor.sample(Instant::now()) {
-            let watch = update.watch;
+            let watch = &update.watch;
             if self.active.as_ref().is_some_and(|a| {
                 a.grant == watch.grant && a.sequencer.epoch() == Some(watch.epoch.as_str())
             }) {
-                if let Some(peer) = self.peers.get(&watch.grant.binding.target.media_id) {
-                    peer.endpoint.send(&serde_json::json!({"type":"cursor-state", "grantId":watch.grant.id,
-                        "inputEpoch":watch.epoch, "watchId":watch.id, "sequence":update.sequence, "shape":update.shape}));
+                if let Some(peer) = self.peers.get_mut(&watch.grant.binding.target.media_id) {
+                    // Apply composition on the host before the one-way notification.
+                    // The viewer's preference survives the temporary local takeover.
+                    peer.set_cursor_visible(self.cursor.host_owns() || peer.cursor_requested);
+                    self.cursor
+                        .publish(update, |messages| peer.endpoint.send_cursor_batch(messages));
                 }
             }
         }
@@ -439,12 +445,19 @@ impl Host {
                     .as_str()
                     .filter(|id| protocol::valid_id(id))
                 {
-                    self.cursor.watch(super::cursor::Watch {
-                        grant: active.grant.clone(),
-                        epoch: active.sequencer.epoch().unwrap().into(),
-                        id: id.into(),
-                        display: peer.display,
-                    });
+                    let Some(appearance) = value["appearance"].as_bool() else {
+                        return;
+                    };
+                    self.cursor.watch(
+                        super::cursor::Watch {
+                            grant: active.grant.clone(),
+                            epoch: active.sequencer.epoch().unwrap().into(),
+                            id: id.into(),
+                            display: peer.display,
+                            appearance,
+                        },
+                        self.worker.pointer_activity(),
+                    );
                 }
             }
             return;
@@ -463,7 +476,8 @@ impl Host {
                         && !status.input_suspended
                 })
             }) {
-                peer.set_cursor_visible(visible);
+                peer.cursor_requested = visible;
+                peer.set_cursor_visible(visible || self.cursor.host_owns());
             }
             return;
         }

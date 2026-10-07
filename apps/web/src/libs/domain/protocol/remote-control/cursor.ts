@@ -2,6 +2,7 @@
 export const MAX_CURSOR_MESSAGE_BYTES = 24 * 1024;
 export const MAX_CURSOR_PNG_BYTES = 16 * 1024;
 export const MAX_CURSOR_SIZE = 128;
+export type RemoteCursorOwner = "host" | "viewer";
 export const CURSOR_NAMES = [
   "default",
   "text",
@@ -18,17 +19,40 @@ export const CURSOR_NAMES = [
   "nwse-resize",
   "none",
 ] as const;
+export type RemoteCursorImage = {
+  type: "image";
+  png: string;
+  /** Native PNG dimensions and hotspot in source pixels; never pre-shrunk for transmission. */
+  width: number;
+  height: number;
+  hotspotX: number;
+  hotspotY: number;
+  /** Host monitor scaling in percent. CSS size = source pixels * 100 / sourceScale. */
+  sourceScale: number;
+};
+export function cursorGeometry(image: RemoteCursorImage): {
+  width: number;
+  height: number;
+  hotspotX: number;
+  hotspotY: number;
+} {
+  return {
+    width: (image.width * 100) / image.sourceScale,
+    height: (image.height * 100) / image.sourceScale,
+    hotspotX: (image.hotspotX * 100) / image.sourceScale,
+    hotspotY: (image.hotspotY * 100) / image.sourceScale,
+  };
+}
+export type RemoteCursorFrame = {
+  image: RemoteCursorImage;
+  durationMs: number;
+};
 export type RemoteCursorShape =
   | { type: "unknown" }
   | { type: "system"; name: (typeof CURSOR_NAMES)[number] }
-  | {
-      type: "image";
-      png: string;
-      width: number;
-      height: number;
-      hotspotX: number;
-      hotspotY: number;
-    };
+  | RemoteCursorImage
+  // Assembled from bounded cursor-asset packets, never parsed as one large message.
+  | { type: "animation"; frames: RemoteCursorFrame[] };
 
 export function parseRemoteCursorShape(
   value: unknown,
@@ -44,17 +68,28 @@ export function parseRemoteCursorShape(
       type: "system",
       name: v.name as (typeof CURSOR_NAMES)[number],
     };
-  const { width, height, hotspotX, hotspotY, png } = v;
+  const {
+    width,
+    height,
+    hotspotX,
+    hotspotY,
+    png,
+    sourceScale,
+  } = v;
   if (
     v.type !== "image" ||
+    typeof sourceScale !== "number" ||
+    !Number.isInteger(sourceScale) ||
+    sourceScale < 100 ||
+    sourceScale > 500 ||
     typeof width !== "number" ||
     !Number.isInteger(width) ||
     width < 1 ||
-    width > MAX_CURSOR_SIZE ||
+    width * 100 > MAX_CURSOR_SIZE * sourceScale ||
     typeof height !== "number" ||
     !Number.isInteger(height) ||
     height < 1 ||
-    height > MAX_CURSOR_SIZE ||
+    height * 100 > MAX_CURSOR_SIZE * sourceScale ||
     typeof hotspotX !== "number" ||
     !Number.isInteger(hotspotX) ||
     hotspotX < 0 ||
@@ -91,5 +126,6 @@ export function parseRemoteCursorShape(
     height,
     hotspotX,
     hotspotY,
+    sourceScale,
   };
 }

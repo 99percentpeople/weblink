@@ -95,17 +95,6 @@ export default defineConfig(({ command, mode }) => {
   const desktopEnv = desktop
     ? loadEnv(mode, process.cwd(), envPrefix)
     : {};
-  const desktopVersion = desktop
-    ? JSON.parse(
-        readFileSync(
-          new URL(
-            "../desktop/package.json",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      ).version
-    : null;
   const buildInfo = createBuildInfo(
     packageJson.version,
     mode,
@@ -180,15 +169,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
       webLinkBranding(),
-      buildInfoPlugin(
-        desktopVersion
-          ? {
-              ...buildInfo,
-              version: desktopVersion,
-              webVersion: buildInfo.version,
-            }
-          : buildInfo,
-      ),
+      buildInfoPlugin(buildInfo),
       solidPlugin(),
       solidSvg({
         svgo: {
@@ -247,7 +228,6 @@ export default defineConfig(({ command, mode }) => {
           }
         : {}),
       __APP_VERSION__: JSON.stringify(buildInfo.version),
-      __DESKTOP_VERSION__: JSON.stringify(desktopVersion),
       __APP_LICENSE__: JSON.stringify(packageJson.license),
       __APP_AUTHOR_NAME__: JSON.stringify(
         packageJson.author.name,

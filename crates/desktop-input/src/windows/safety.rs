@@ -32,6 +32,7 @@ pub(super) struct Observations {
     owner: thread::Thread,
     grant_epoch: AtomicU64,
     emergency_epoch: AtomicU64,
+    pointer_activity: AtomicU64,
 }
 impl Observations {
     pub fn new() -> Self {
@@ -41,6 +42,7 @@ impl Observations {
             owner: thread::current(),
             grant_epoch: AtomicU64::new(0),
             emergency_epoch: AtomicU64::new(0),
+            pointer_activity: AtomicU64::new(0),
         }
     }
     pub fn authorize(&self, epoch: u64) {
@@ -48,6 +50,24 @@ impl Observations {
     }
     pub fn grant_epoch(&self) -> u64 {
         self.grant_epoch.load(Ordering::Acquire)
+    }
+    pub fn pointer_moved(&self, local: bool) {
+        if self.grant_epoch() != 0 && !self.closed.load(Ordering::Acquire) {
+            // One atomic snapshot carries both sequence and origin. No allocation,
+            // locking, polling wakeups or per-movement network messages.
+            let _ =
+                self.pointer_activity
+                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+                        Some((old.wrapping_add(2) & !1) | u64::from(local))
+                    });
+        }
+    }
+    pub fn pointer_activity(&self) -> crate::session::PointerActivity {
+        let value = self.pointer_activity.load(Ordering::Acquire);
+        crate::session::PointerActivity {
+            sequence: value >> 1,
+            local: value & 1 != 0,
+        }
     }
     pub fn emergency(&self, epoch: u64) {
         if epoch != 0 && epoch == self.grant_epoch() && !self.closed.load(Ordering::Acquire) {
@@ -128,13 +148,18 @@ fn settings_invalidated(
 struct Listener {
     hwnd: HWND,
     hotkey: Option<ShortcutListener>,
+    pointer: Option<super::pointer_observer::Listener>,
     session: bool,
     class: HSTRING,
     old_dpi: DPI_AWARENESS_CONTEXT,
     pub layout: Layout,
 }
 impl Listener {
-    fn new(observations: Arc<Observations>, shortcut: Shortcut) -> Result<Self, Error> {
+    fn new(
+        observations: Arc<Observations>,
+        shortcut: Shortcut,
+        marker: usize,
+    ) -> Result<Self, Error> {
         unsafe {
             let old_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             if old_dpi.0.is_null() {
@@ -181,12 +206,17 @@ impl Listener {
                 let mut s = Self {
                     hwnd,
                     hotkey: None,
+                    pointer: None,
                     session: false,
                     class,
                     old_dpi,
                     layout,
                 };
-                s.hotkey = Some(ShortcutListener::new(shortcut, observations)?);
+                s.hotkey = Some(ShortcutListener::new(shortcut, observations.clone())?);
+                s.pointer = Some(super::pointer_observer::Listener::new(
+                    marker,
+                    observations,
+                )?);
                 WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)
                     .map_err(|_| Error::Unavailable)?;
                 s.session = true;
@@ -203,6 +233,7 @@ impl Drop for Listener {
     fn drop(&mut self) {
         unsafe {
             self.hotkey.take();
+            self.pointer.take();
             if self.session {
                 let _ = WTSUnRegisterSessionNotification(self.hwnd);
             }
@@ -264,7 +295,7 @@ impl Safety {
             .name("weblink-input-events".into())
             .spawn(move || {
                 let _exit = ObserverExit(shared.clone());
-                let mut native = match Listener::new(shared.clone(), shortcut) {
+                let mut native = match Listener::new(shared.clone(), shortcut, marker) {
                     Ok(native) => native,
                     Err(e) => {
                         let _ = ready.send(Err(e));
@@ -293,7 +324,7 @@ impl Safety {
                         }
                         poll = Instant::now();
                     }
-                    // Wake on lifecycle/keyboard messages, not a polling sleep. Never run SendInput here.
+                    // Wake on lifecycle/input messages, not a polling sleep. Never run SendInput here.
                     unsafe {
                         let wait = Duration::from_millis(100)
                             .saturating_sub(poll.elapsed())
@@ -398,6 +429,27 @@ impl Drop for Safety {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mouse_origin_observation_requires_a_live_grant_and_retains_native_order() {
+        let observations = Observations::new();
+        observations.pointer_moved(true);
+        assert_eq!(observations.pointer_activity().sequence, 0);
+        observations.authorize(1);
+        for (index, local) in [true, true, false, true].into_iter().enumerate() {
+            observations.pointer_moved(local);
+            assert_eq!(
+                observations.pointer_activity(),
+                crate::session::PointerActivity {
+                    sequence: index as u64 + 1,
+                    local,
+                }
+            );
+        }
+        observations.authorize(0);
+        observations.pointer_moved(false);
+        assert!(observations.pointer_activity().local);
+        assert_eq!(observations.pointer_activity().sequence, 4);
+    }
     #[test]
     fn emergency_requires_current_grant_and_cannot_revoke_a_replacement() {
         let observations = Observations::new();

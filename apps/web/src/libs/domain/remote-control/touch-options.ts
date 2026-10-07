@@ -18,6 +18,7 @@ export interface RemoteTouchOptions {
   tapToClick: boolean;
   twoFingerRightClick: boolean;
   twoFingerScroll: boolean;
+  twoFingerZoom: boolean;
   naturalScroll: boolean;
   longPress: LongPressAction;
   threeFingerTap: ThreeFingerTapAction;
@@ -32,6 +33,7 @@ export const defaultRemoteTouchOptions: Readonly<RemoteTouchOptions> =
     tapToClick: true,
     twoFingerRightClick: true,
     twoFingerScroll: true,
+    twoFingerZoom: true,
     naturalScroll: true,
     longPress: "drag",
     threeFingerTap: "keyboard",
@@ -58,6 +60,7 @@ export function resolveRemoteTouchOptions(
       | "tapToClick"
       | "twoFingerRightClick"
       | "twoFingerScroll"
+      | "twoFingerZoom"
       | "naturalScroll"
       | "forwardProperties",
   ) =>
@@ -75,6 +78,7 @@ export function resolveRemoteTouchOptions(
     tapToClick: boolean("tapToClick"),
     twoFingerRightClick: boolean("twoFingerRightClick"),
     twoFingerScroll: boolean("twoFingerScroll"),
+    twoFingerZoom: boolean("twoFingerZoom"),
     naturalScroll: boolean("naturalScroll"),
     threeFingerTap:
       v.threeFingerTap === "none" ? "none" : "keyboard",

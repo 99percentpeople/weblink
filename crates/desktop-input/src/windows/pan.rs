@@ -86,6 +86,7 @@ pub(super) struct PanDevice {
     active: bool,
     used: bool,
     position: (i32, i32),
+    scale: f64,
     direction: f64,
     clock: Instant,
     timestamp: u32,
@@ -102,6 +103,7 @@ impl PanDevice {
             active: false,
             used: false,
             position: (0, 0),
+            scale: 1.0,
             direction: 1.0,
             clock: Instant::now(),
             timestamp: 0,
@@ -114,6 +116,7 @@ impl PanDevice {
         let handle = self.handle.ok_or(Error::Unavailable)?;
         self.timestamp =
             (self.clock.elapsed().as_millis() as u32).max(self.timestamp.saturating_add(1));
+        let locations = contact_locations(self.position, self.scale);
         let frame = [0, 1].map(|id| POINTER_TYPE_INFO {
             r#type: PT_TOUCHPAD,
             Anonymous: POINTER_TYPE_INFO_0 {
@@ -122,8 +125,8 @@ impl PanDevice {
                         pointerType: PT_TOUCHPAD,
                         pointerId: id,
                         ptHimetricLocation: POINT {
-                            x: 59_000 + 2_000 * id as i32 + self.position.0,
-                            y: 60_000 + self.position.1,
+                            x: locations[id as usize].0,
+                            y: locations[id as usize].1,
                         },
                         // Touchpad transitions are inferred from contact presence by Windows.
                         pointerFlags: POINTER_FLAG_CONFIDENCE
@@ -154,15 +157,21 @@ impl PanDevice {
                     return Err(Error::Unavailable);
                 }
                 self.position = (0, 0);
+                self.scale = 1.0;
                 self.clock = Instant::now();
                 self.timestamp = 0;
                 self.active = true;
                 self.used = true; // Cleanup also covers a partially injected start.
                 self.inject(true)
             }
-            Pan::Update { x, y } if self.active => {
-                let scale = 2540.0 / 96.0 * self.direction;
-                self.position = ((x * scale).round() as i32, (y * scale).round() as i32);
+            Pan::Update { x, y, scale } if self.active => {
+                let displacement_scale = 2540.0 / 96.0 * self.direction;
+                self.position = (
+                    (x * displacement_scale).round() as i32,
+                    (y * displacement_scale).round() as i32,
+                );
+                // Scroll direction changes translation only, never pinch direction.
+                self.scale = scale;
                 self.inject(true)
             }
             Pan::End if self.active => {
@@ -190,6 +199,44 @@ impl PanDevice {
         self.active = false;
         self.used = false;
         Ok(())
+    }
+}
+
+fn contact_locations(position: (i32, i32), scale: f64) -> [(i32, i32); 2] {
+    // Start 20 mm apart and vary the span around the same centroid. Windows
+    // recognizes native zoom from relative contact distance, including pure pinch.
+    let radius = (1_000.0 * scale).round() as i32;
+    [-1, 1].map(|side| (60_000 + position.0 + side * radius, 60_000 + position.1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::contact_locations;
+
+    #[test]
+    fn pinch_changes_span_without_moving_the_centroid() {
+        for scale in [0.1, 0.5, 1.0, 2.0, 4.0] {
+            let [(left, y1), (right, y2)] = contact_locations((120, -80), scale);
+            assert_eq!((left + right) / 2, 60_120);
+            assert_eq!((y1, y2), (59_920, 59_920));
+            assert_eq!(right - left, (2_000.0 * scale) as i32);
+        }
+    }
+
+    #[test]
+    fn maximum_pan_and_pinch_stay_inside_the_synthetic_surface() {
+        for x in [-2048.0_f64, 2048.0] {
+            for y in [-2048.0_f64, 2048.0] {
+                let position = (
+                    (x * 2540.0 / 96.0).round() as i32,
+                    (y * 2540.0 / 96.0).round() as i32,
+                );
+                for (x, y) in contact_locations(position, 4.0) {
+                    assert!((0..120_000).contains(&x));
+                    assert!((0..120_000).contains(&y));
+                }
+            }
+        }
     }
 }
 impl Drop for PanDevice {

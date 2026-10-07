@@ -1,8 +1,9 @@
 import { createUuid } from "../ids";
+import { CursorAssets } from "../protocol/remote-control/cursor-assets";
 import {
   MAX_CURSOR_MESSAGE_BYTES,
-  parseRemoteCursorShape,
   type RemoteCursorShape,
+  type RemoteCursorOwner,
 } from "../protocol/remote-control/cursor";
 import type { TrackpadEvent } from "./trackpad-types";
 import type { TouchSampleRate } from "./touch-options";
@@ -33,6 +34,10 @@ export const CONTROL_CHANNEL = "weblink-control";
 export const POINTER_CHANNEL = "weblink-pointer";
 const HIGH_WATER = 16 * 1024;
 export type PointerPosition = { x: number; y: number };
+type CursorListener = (
+  shape: RemoteCursorShape | undefined,
+  owner: RemoteCursorOwner,
+) => void;
 export type PointerEvent =
   | RemoteKeyEvent
   | RemoteTextEvent
@@ -139,22 +144,28 @@ export class RemotePointer extends EventTarget {
       this.cursorVisible = visible;
   }
   private cursorShapeAvailable = false;
-  private cursorListeners = new Set<
-    (shape: RemoteCursorShape | undefined) => void
+  private cursorListeners = new Map<
+    CursorListener,
+    boolean
   >();
   private cursorWatch?: {
     id: string;
     sequence: number;
     latest?: RemoteCursorShape;
+    owner: RemoteCursorOwner;
+    appearance: boolean;
+    assets: CursorAssets;
   };
   watchCursor(
-    listener: (
-      shape: RemoteCursorShape | undefined,
-    ) => void,
+    listener: CursorListener,
+    appearance = true,
   ): () => void {
-    this.cursorListeners.add(listener);
+    this.cursorListeners.set(listener, appearance);
     this.syncCursorWatch();
-    listener(this.cursorWatch?.latest);
+    listener(
+      this.cursorWatch?.latest,
+      this.cursorWatch?.owner ?? "viewer",
+    );
     return () => {
       this.cursorListeners.delete(listener);
       this.syncCursorWatch();
@@ -170,25 +181,37 @@ export class RemotePointer extends EventTarget {
       return;
     if (!this.cursorListeners.size) {
       if (this.cursorWatch) {
+        const appearance = this.cursorWatch.appearance;
         this.cursorWatch = undefined;
         this.send({
           type: "cursor-watch",
           grantId: state.grantId,
           inputEpoch: this.epoch,
           watchId: null,
+          appearance,
         });
       }
       return;
     }
-    if (this.cursorWatch) return;
+    const appearance = [
+      ...this.cursorListeners.values(),
+    ].some(Boolean);
+    if (this.cursorWatch?.appearance === appearance) return;
     const id = createUuid();
-    this.cursorWatch = { id, sequence: 0 };
+    this.cursorWatch = {
+      id,
+      sequence: 0,
+      assets: new CursorAssets(),
+      owner: "viewer",
+      appearance,
+    };
     if (
       !this.send({
         type: "cursor-watch",
         grantId: state.grantId,
         inputEpoch: this.epoch,
         watchId: id,
+        appearance,
       })
     )
       this.cursorWatch = undefined;
@@ -436,6 +459,7 @@ export class RemotePointer extends EventTarget {
     }
     if (
       v.type !== "cursor-state" &&
+      v.type !== "cursor-asset" &&
       new TextEncoder().encode(data).length > 4096
     )
       return;
@@ -494,7 +518,10 @@ export class RemotePointer extends EventTarget {
       this.changed();
       return;
     }
-    if (v.type === "cursor-state") {
+    if (
+      v.type === "cursor-state" ||
+      v.type === "cursor-asset"
+    ) {
       const watch = this.cursorWatch;
       if (
         this.active &&
@@ -502,20 +529,31 @@ export class RemotePointer extends EventTarget {
         v.grantId === this.session.state.grantId &&
         v.inputEpoch === this.epoch &&
         watch &&
-        v.watchId === watch.id &&
-        typeof v.sequence === "number" &&
-        Number.isSafeInteger(v.sequence) &&
-        v.sequence > watch.sequence
+        v.watchId === watch.id
       ) {
-        const shape = parseRemoteCursorShape(v.shape);
+        if (v.type === "cursor-asset") {
+          watch.assets.receive(v);
+          return;
+        }
+        if (
+          !(
+            typeof v.sequence === "number" &&
+            Number.isSafeInteger(v.sequence) &&
+            v.sequence > watch.sequence &&
+            (v.owner === "host" || v.owner === "viewer")
+          )
+        )
+          return;
+        const shape = watch.assets.resolve(v.shape);
         if (shape) {
           watch.sequence = v.sequence;
           watch.latest = shape;
+          watch.owner = v.owner as RemoteCursorOwner;
           for (const listener of [
-            ...this.cursorListeners,
+            ...this.cursorListeners.keys(),
           ]) {
             if (watch !== this.cursorWatch) break;
-            listener(shape);
+            listener(shape, watch.owner);
           }
         }
       }
@@ -643,8 +681,8 @@ export class RemotePointer extends EventTarget {
     this.relativeMotion = undefined;
     clearTimeout(this.moveTimer);
     this.moveTimer = undefined;
-    for (const listener of [...this.cursorListeners])
-      listener(undefined);
+    for (const listener of [...this.cursorListeners.keys()])
+      listener(undefined, "viewer");
   }
   input(event: PointerEvent): boolean {
     const state = this.session?.state;

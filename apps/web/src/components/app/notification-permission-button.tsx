@@ -30,7 +30,7 @@ export function NotificationPermissionButton() {
         type="button"
         variant="ghost"
         size="sm"
-        class="max-sm:px-2"
+        class="text-[12px] max-md:hidden"
         aria-label={label()}
         title={label()}
         aria-busy={permission.busy()}
@@ -52,7 +52,7 @@ export function NotificationPermissionButton() {
             aria-hidden="true"
           />
         </Show>
-        <span class="max-sm:hidden">{label()}</span>
+        <span>{label()}</span>
       </Button>
     </Show>
   );

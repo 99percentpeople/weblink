@@ -566,6 +566,9 @@ mod tests {
         for (i, gesture) in [
             serde_json::json!({"phase":"start"}),
             serde_json::json!({"phase":"update","x":0.25,"y":-32.5}),
+            serde_json::json!({"phase":"update","x":0,"y":0,"scale":2}),
+            serde_json::json!({"phase":"update","x":0,"y":0,"scale":0.1}),
+            serde_json::json!({"phase":"update","x":0,"y":0,"scale":4}),
             serde_json::json!({"phase":"end"}),
         ]
         .into_iter()
@@ -585,6 +588,10 @@ mod tests {
         for action in [
             serde_json::json!({"type":"pan","phase":"update","x":2049,"y":0}),
             serde_json::json!({"type":"pan","phase":"update","x":0}),
+            serde_json::json!({"type":"pan","phase":"update","x":0,"y":0,"scale":0}),
+            serde_json::json!({"type":"pan","phase":"update","x":0,"y":0,"scale":4.1}),
+            serde_json::json!({"type":"pan","phase":"update","x":0,"y":0,"scale":null}),
+            serde_json::json!({"type":"pan","phase":"update","x":0,"y":0,"scale":"2"}),
             serde_json::json!({"type":"pan","phase":"unknown"}),
         ] {
             let value = serde_json::json!({"type":"input","grantId":"grant","generation":"connection","geometryRevision":"geometry","inputEpoch":"epoch","activationSequence":1,"sequence":5,"event":{"type":"trackpad","action":action}});

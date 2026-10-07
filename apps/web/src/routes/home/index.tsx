@@ -662,7 +662,12 @@ export default function Home() {
                 />
               </MeetingControlStatus>
             </Show>
-            <Show when={devices.access.needsPermission()}>
+            <Show
+              when={
+                !isMobile() &&
+                devices.access.needsPermission()
+              }
+            >
               <button
                 type="button"
                 class="meeting-icon-button meeting-permission-button"

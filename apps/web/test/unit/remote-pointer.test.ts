@@ -167,7 +167,10 @@ describe("remote pointer transport", () => {
     );
     const listener = vi.fn();
     const stop = c.watchCursor(listener);
-    expect(listener).toHaveBeenLastCalledWith(undefined);
+    expect(listener).toHaveBeenLastCalledWith(
+      undefined,
+      "viewer",
+    );
     expect(r.sent).toHaveLength(0);
     approve();
     activate();
@@ -176,6 +179,7 @@ describe("remote pointer transport", () => {
     const reply = {
       ...watch,
       type: "cursor-state",
+      owner: "viewer",
       sequence: 1,
       shape: { type: "system", name: "text" },
     };
@@ -186,6 +190,8 @@ describe("remote pointer transport", () => {
       { inputEpoch: "old" },
       { sequence: 0 },
       { sequence: 1.5 },
+      { owner: "invalid" },
+      { owner: undefined },
       {
         shape: {
           type: "system",
@@ -198,15 +204,24 @@ describe("remote pointer transport", () => {
     r.receive(reply);
     r.receive(reply);
     expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenLastCalledWith(reply.shape);
+    expect(listener).toHaveBeenLastCalledWith(
+      reply.shape,
+      "viewer",
+    );
     const second = vi.fn();
     const count = r.sent.length;
     const stopSecond = c.watchCursor(second);
-    expect(second).toHaveBeenLastCalledWith(reply.shape);
+    expect(second).toHaveBeenLastCalledWith(
+      reply.shape,
+      "viewer",
+    );
     stopSecond();
     expect(r.sent).toHaveLength(count);
     c.resetInput();
-    expect(listener).toHaveBeenLastCalledWith(undefined);
+    expect(listener).toHaveBeenLastCalledWith(
+      undefined,
+      "viewer",
+    );
     activate();
     const resumed = r.sent.at(-1);
     expect(resumed.watchId).not.toBe(watch.watchId);
@@ -217,12 +232,14 @@ describe("remote pointer transport", () => {
     r.receive({
       ...resumed,
       type: "cursor-state",
+      owner: "viewer",
       sequence: 1,
       shape: { type: "unknown" },
     });
-    expect(listener).toHaveBeenLastCalledWith({
-      type: "unknown",
-    });
+    expect(listener).toHaveBeenLastCalledWith(
+      { type: "unknown" },
+      "viewer",
+    );
     stop();
     expect(r.sent.at(-1)).toEqual({
       ...resumed,
@@ -232,6 +249,7 @@ describe("remote pointer transport", () => {
     r.receive({
       ...resumed,
       type: "cursor-state",
+      owner: "viewer",
       sequence: 2,
       shape: reply.shape,
     });
@@ -245,6 +263,138 @@ describe("remote pointer transport", () => {
     const stop = c.watchCursor(vi.fn());
     stop();
     expect(r.sent).toHaveLength(count);
+  });
+  it("accepts only current cursor assets, resolves cached animations without requests, and discards them on a new epoch", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    const listener = vi.fn();
+    c.watchCursor(listener);
+    approve();
+    activate();
+    const watch = r.sent.at(-1);
+    const image = {
+      type: "image",
+      sourceScale: 100,
+      width: 1,
+      height: 1,
+      hotspotX: 0,
+      hotspotY: 0,
+      png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlLkAAAAASUVORK5CYII=",
+    };
+    const asset = {
+      ...watch,
+      type: "cursor-asset",
+      assetId: 0,
+      count: 2,
+      index: 0,
+      durationMs: 50,
+      image,
+    };
+    const state = {
+      ...watch,
+      type: "cursor-state",
+      owner: "viewer",
+      sequence: 1,
+      shape: { type: "cached", assetId: 0 },
+    };
+    const sent = r.sent.length;
+    for (const patch of [
+      { watchId: "old" },
+      { grantId: "wrong" },
+      { inputEpoch: "old" },
+    ])
+      r.receive({ ...asset, ...patch });
+    r.receive({ ...asset, index: 1 });
+    r.receive(state);
+    expect(listener).toHaveBeenLastCalledWith(
+      { type: "unknown" },
+      "viewer",
+    );
+    r.receive(asset);
+    r.receive({ ...asset, index: 1, durationMs: 100 });
+    r.receive({ ...state, sequence: 2 });
+    const shape = listener.mock.lastCall?.[0];
+    expect(shape).toMatchObject({
+      type: "animation",
+      frames: [{ durationMs: 50 }, { durationMs: 100 }],
+    });
+    r.receive({ ...state, sequence: 3 });
+    expect(listener.mock.lastCall?.[0]).toBe(shape);
+    expect(r.sent).toHaveLength(sent);
+    c.resetInput();
+    activate();
+    const resumed = r.sent.at(-1);
+    r.receive(asset);
+    r.receive({ ...asset, index: 1 });
+    r.receive({
+      ...state,
+      ...resumed,
+      type: "cursor-state",
+    });
+    expect(listener).toHaveBeenLastCalledWith(
+      { type: "unknown" },
+      "viewer",
+    );
+  });
+  it("keeps ownership-only watches lightweight and delivers ownership without echoing packets", () => {
+    const { c, r, approve, activate } = setup(
+      10,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    );
+    const listener = vi.fn();
+    c.watchCursor(listener, false);
+    approve();
+    activate();
+    const watch = r.sent.at(-1);
+    expect(watch.appearance).toBe(false);
+    const count = r.sent.length;
+    const host = {
+      ...watch,
+      type: "cursor-state",
+      sequence: 1,
+      owner: "host",
+      shape: { type: "unknown" },
+    };
+    r.receive(host);
+    expect(listener).toHaveBeenLastCalledWith(
+      host.shape,
+      "host",
+    );
+    r.receive({
+      ...host,
+      sequence: 2,
+      owner: "viewer",
+      shape: { type: "system", name: "default" },
+    });
+    expect(listener).toHaveBeenLastCalledWith(
+      { type: "system", name: "default" },
+      "viewer",
+    );
+    r.receive(host); // old ownership cannot override the newer native observation
+    expect(listener).toHaveBeenLastCalledWith(
+      { type: "system", name: "default" },
+      "viewer",
+    );
+    expect(r.sent).toHaveLength(count);
+    const stopAppearance = c.watchCursor(vi.fn(), true);
+    expect(r.sent.at(-1).appearance).toBe(true);
+    expect(r.sent.at(-1).watchId).not.toBe(watch.watchId);
+    stopAppearance();
+    expect(r.sent.at(-1).appearance).toBe(false);
   });
   it("streams focus snapshots for the active subscription and rejects stale sequence, watch and epoch", () => {
     const { c, r, approve, activate } = setup(
@@ -942,11 +1092,21 @@ it("negotiates native pan explicitly and preserves ordered start/motion/end with
       phase: "update",
       x: 0,
       y: 32,
+      scale: 2,
     });
     c.trackpad({ type: "pan", phase: "end" });
     expect(
       r.sent.slice(before).map((p) => p.event.action.phase),
     ).toEqual(supported ? ["start", "update", "end"] : []);
+    if (supported) {
+      expect(r.sent.at(-2).event.action).toEqual({
+        type: "pan",
+        phase: "update",
+        x: 0,
+        y: 32,
+        scale: 2,
+      });
+    }
     expect(m.sent).toHaveLength(0);
   }
 });

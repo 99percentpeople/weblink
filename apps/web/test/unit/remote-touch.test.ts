@@ -124,6 +124,152 @@ it("keeps cumulative native displacement independent of event granularity, with 
     scroll(100, { twoFingerScroll: false }),
   ).toBeUndefined();
 });
+it.each(TOUCH_SAMPLE_RATES)(
+  "sends a stationary-centroid pinch at %i Hz and flushes its final scale before release",
+  (sampleRate) => {
+    const { p, pan, input, move } = pad({ sampleRate });
+    p.down(1, 40, 40);
+    p.down(2, 80, 40);
+    p.move(1, 20, 40);
+    p.move(2, 100, 40);
+    const interval = Math.ceil(1000 / sampleRate);
+    vi.advanceTimersByTime(interval - 1);
+    expect(pan).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: 0,
+      y: 0,
+      scale: 2,
+    });
+    p.move(1, 50, 40);
+    p.move(2, 70, 40);
+    p.up(1, 50, 40);
+    p.move(2, 100, 50);
+    p.up(2, 100, 50);
+    expect(
+      pan.mock.calls.slice(-2).map(([event]) => event),
+    ).toEqual([
+      { phase: "update", x: 0, y: 0, scale: 0.5 },
+      { phase: "end" },
+    ]);
+    expect(input).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+it("keeps pinch independent from scroll speed, direction and enablement", () => {
+  for (const twoFingerScroll of [false, true]) {
+    const { p, pan } = pad({
+      twoFingerScroll,
+      scrollSpeed: 2,
+      naturalScroll: false,
+    });
+    p.down(1, 40, 40);
+    p.down(2, 80, 40);
+    p.move(1, 30, 60);
+    p.move(2, 110, 60);
+    vi.advanceTimersByTime(9);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: twoFingerScroll ? -20 : 0,
+      y: twoFingerScroll ? -40 : 0,
+      scale: 2,
+    });
+    p.cancel();
+  }
+});
+it("ignores small span jitter while scrolling, and keeps scrolling when pinch is disabled", () => {
+  for (const twoFingerZoom of [false, true]) {
+    const { p, pan } = pad({ twoFingerZoom });
+    p.down(1, 40, 40);
+    p.down(2, 80, 40);
+    p.move(1, 38, 60);
+    p.move(2, 82, 60);
+    vi.advanceTimersByTime(9);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: 0,
+      y: 20,
+    });
+    p.move(1, 20, 80);
+    p.move(2, 100, 80);
+    vi.advanceTimersByTime(9);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: 0,
+      y: 40,
+      ...(twoFingerZoom ? { scale: 2 } : {}),
+    });
+    p.cancel();
+  }
+});
+it("cancels pinch without flushing queued motion and resets its origin for the next gesture", () => {
+  const { p, pan } = pad();
+  p.down(1, 40, 40);
+  p.down(2, 80, 40);
+  p.move(1, 20, 40);
+  p.move(2, 100, 40);
+  p.cancel();
+  vi.advanceTimersByTime(100);
+  expect(pan.mock.calls.map(([event]) => event)).toEqual([
+    { phase: "start" },
+    { phase: "cancel" },
+  ]);
+  p.down(1, 20, 40);
+  p.down(2, 100, 40);
+  p.move(1, 40, 40);
+  p.move(2, 80, 40);
+  vi.advanceTimersByTime(9);
+  expect(pan).toHaveBeenLastCalledWith({
+    phase: "update",
+    x: 0,
+    y: 0,
+    scale: 0.5,
+  });
+  p.cancel();
+  expect(vi.getTimerCount()).toBe(0);
+});
+it("bounds scale and allows a pinch to return to its original span", () => {
+  const { p, pan } = pad();
+  p.down(1, 40, 40);
+  p.down(2, 80, 40);
+  for (const [left, right, scale] of [
+    [-100, 220, 4],
+    [60, 60, 0.1],
+    [40, 80, 1],
+  ]) {
+    p.move(1, left, 40);
+    p.move(2, right, 40);
+    vi.advanceTimersByTime(9);
+    expect(pan).toHaveBeenLastCalledWith({
+      phase: "update",
+      x: 0,
+      y: 0,
+      scale,
+    });
+  }
+  p.cancel();
+});
+it("waits for a usable span when both contacts initially coincide", () => {
+  const { p, pan } = pad();
+  p.down(1, 60, 40);
+  p.down(2, 60, 40);
+  p.move(1, 40, 40);
+  p.move(2, 80, 40);
+  vi.advanceTimersByTime(9);
+  expect(pan).toHaveBeenCalledTimes(1);
+  p.move(1, 20, 40);
+  p.move(2, 100, 40);
+  vi.advanceTimersByTime(9);
+  expect(pan).toHaveBeenLastCalledWith({
+    phase: "update",
+    x: 0,
+    y: 0,
+    scale: 2,
+  });
+  p.cancel();
+});
 it("samples both fingers once per frame and cancels without replaying queued motion", () => {
   const { p, pan } = pad();
   p.down(1, 40, 40);
@@ -340,6 +486,7 @@ it("restores old preferences with safe defaults and validates persisted values",
       longPressDelay: -5,
       sampleRate: 500,
       forwardProperties: "false",
+      twoFingerZoom: "false",
     }),
   ).toMatchObject({
     mode: "direct",
@@ -350,15 +497,18 @@ it("restores old preferences with safe defaults and validates persisted values",
     threeFingerTap: "keyboard",
     sampleRate: 120,
     forwardProperties: false,
+    twoFingerZoom: true,
   });
   expect(
     resolveRemoteTouchOptions({
       sampleRate: 30,
       forwardProperties: true,
+      twoFingerZoom: false,
     }),
   ).toMatchObject({
     sampleRate: 30,
     forwardProperties: true,
+    twoFingerZoom: false,
   });
 });
 

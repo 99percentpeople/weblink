@@ -7,9 +7,20 @@ use crate::{
 };
 use std::sync::{atomic::AtomicBool, Arc};
 
+/// Last mouse movement observed by the native backend. No coordinates leave the
+/// input actor; the sequence lets a new cursor watch ignore historical activity.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PointerActivity {
+    pub sequence: u64,
+    pub local: bool,
+}
+
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    fn pointer_activity(&self) -> PointerActivity {
+        PointerActivity::default()
+    }
     fn configure_shortcut(&self, _shortcut: crate::shortcut::Shortcut) -> Result<(), Error> {
         Err(Error::Unavailable)
     }

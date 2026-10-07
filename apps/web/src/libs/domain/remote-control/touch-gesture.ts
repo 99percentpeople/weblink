@@ -77,6 +77,15 @@ export class TouchGesture {
       : { x: 0, y: 0 };
   }
 
+  distance(): number {
+    if (this.size !== 2) return 0;
+    const [first, second] = this.fingers.values();
+    return Math.hypot(
+      second.x - first.x,
+      second.y - first.y,
+    );
+  }
+
   clear() {
     this.fingers.clear();
     this.count = this.peak = this.movement = 0;

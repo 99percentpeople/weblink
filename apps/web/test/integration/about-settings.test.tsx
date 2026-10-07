@@ -89,7 +89,6 @@ beforeEach(() => {
   unregister.mockResolvedValue(true);
   registrations.mockResolvedValue([{ unregister }]);
   vi.stubGlobal("__APP_VERSION__", "0.13.0");
-  vi.stubGlobal("__DESKTOP_VERSION__", null);
   vi.stubGlobal(
     "__APP_BUILD_TIME__",
     Date.UTC(2026, 8, 23, 9),
@@ -163,45 +162,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it.each([null, "0.1.0"])(
-  "shows and copies Web and optional desktop versions (%s)",
-  async (desktopVersion) => {
-    vi.stubGlobal("__DESKTOP_VERSION__", desktopVersion);
-    mount();
-    expect(screen.getByText("0.13.0")).toBeInTheDocument();
-    expect(
-      screen.getByText("common.about_dialog.web_version"),
-    ).toBeInTheDocument();
-    if (desktopVersion) {
-      expect(
-        screen.getByText(
-          "common.about_dialog.desktop_version",
-        ),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(desktopVersion),
-      ).toBeInTheDocument();
-    } else {
-      expect(
-        screen.queryByText(
-          "common.about_dialog.desktop_version",
-        ),
-      ).not.toBeInTheDocument();
-    }
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(button("setting.about.copy_version"));
-    await waitFor(() =>
-      expect(copy).toHaveBeenCalledWith(
-        desktopVersion
-          ? "Weblink 0.13.0\nDesktop: 0.1.0\nBuild: 2026-09-23T09:00:00.000Z"
-          : "Weblink 0.13.0\nBuild: 2026-09-23T09:00:00.000Z",
-      ),
-    );
-    expect(toast.success).toHaveBeenCalledWith(
-      "common.notification.copy_success",
-    );
-  },
-);
+it("shows and copies the shared application version with an unambiguous build time", async () => {
+  mount();
+  expect(screen.getByText("0.13.0")).toBeInTheDocument();
+  expect(
+    screen.getByText("common.about_dialog.version"),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(button("setting.about.copy_version"));
+  await waitFor(() =>
+    expect(copy).toHaveBeenCalledWith(
+      "Weblink 0.13.0\nBuild: 2026-09-23T09:00:00.000Z",
+    ),
+  );
+  expect(toast.success).toHaveBeenCalledWith(
+    "common.notification.copy_success",
+  );
+});
 
 it("reports clipboard denial and lets the user retry", async () => {
   copy.mockRejectedValueOnce(new Error("denied"));

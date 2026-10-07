@@ -56,8 +56,8 @@ machine needs WebView2 installed. Only `public` builds save this dependency cach
 
 Stable `vX.Y.Z` web release tags instead call `desktop-production.yml`, using the
 workspace's full release optimizations and producing the
-`weblink-windows-x64-installer` NSIS artifact. Desktop keeps its own application
-version. These workflows upload artifacts without publishing a GitHub Release.
+`weblink-windows-x64-installer` NSIS artifact. Desktop uses the same application
+version as the Web frontend. These workflows upload artifacts without publishing a GitHub Release.
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
 CI builds read `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` from GitHub
@@ -89,12 +89,12 @@ do not become the packaged signaling endpoint.
   source enumeration and physical desktop geometry currently target Windows.
   Extracting shared control orchestration does not make these media/input contracts
   portable or provide macOS/Linux capture support.
-- Desktop version starts at `0.1.0`, independently of the website. Update
-  `apps/desktop/package.json` and its Rust crate version together. Tauri reads
-  the JS manifest version. About shows both the shared Web version from
-  `apps/web/package.json` and the desktop package version; copying version
-  information includes both. Desktop `version.json` retains the desktop package
-  `version` and adds `webVersion` for the bundled shared application.
+- `apps/web/package.json` is the single application version source for Web and
+  desktop. Vite uses it for About, copied version information and `version.json`;
+  Tauri reads the same file for native runtime metadata, executable resources and
+  installer versions. The native build watches the manifest for version changes.
+  `apps/desktop/package.json` has no independent version. Rust crate versions are
+  internal dependency metadata and do not control the application release version.
 - Desktop builds omit the PWA manifest, service worker, share target and web
   update prompt. Updates currently mean installing a newer desktop package;
   automatic updates need a separate signed release channel.
@@ -894,22 +894,78 @@ the current grant, media generation, geometry and active input epoch.
 
 Windows hosts advertise `cursorShape` alongside cursor visibility. The pointer
 settings include **Sync remote cursor appearance**, enabled by default; disabling
-it immediately unsubscribes and restores the default local cursor. Local mouse
+it restores the default local cursor and switches to an ownership-only subscription
+(`appearance: false`), which never captures or transmits image resources. Local mouse
 mode subscribes with `cursor-watch` while the mouse is over the active video or
 has a captured drag. `cursor-state` snapshots carry the grant, input epoch,
-watch ID, increasing sequence and shape. The native control actor samples at
+watch ID, increasing sequence, `owner` (`host` or `viewer`) and shape. The native control actor samples at
 most every 32 ms while subscribed and sends only changes; congestion replaces
 queued snapshots with the latest one. Pause, revocation, disconnect and leaving
 the surface stop the subscription. Text-focus subscriptions are independent.
 
-Standard Windows cursors map to local CSS names (text, pointer, resize, busy,
-help, prohibited and move). Other cursors use PNG plus pixel dimensions and
-hotspot, bounded to 128 × 128 and 16 KiB encoded PNG. The viewer checks the PNG
-header and decode before using it. Host-to-viewer control messages allow 24 KiB;
-viewer input retains the 4 KiB limit. Unknown, oversized or XOR/inverting custom
-cursors keep the captured video cursor and hide the local cursor. Custom animated
-cursors currently use a static frame; standard wait/progress use the local
-system animation. Touch and pointer-lock modes retain the captured video cursor.
+The existing native input listener also observes mouse movement without consuming
+it. Only injected movements carrying this input session's marker count as viewer
+input; physical mouse movement and other local applications take cursor ownership
+on the host. The latest native movement wins. On host takeover, capture includes
+the original cursor before sending one ownership update; the viewer hides its CSS
+cursor, stops local animation and cancels pending decodes without echoing a visibility
+request. Subsequent host movement sends no coordinate or shape updates. The next
+native viewer movement restores its remembered cursor visibility preference and
+sends a viewer-owned snapshot, reusing cached resources. There is no idle timeout,
+poll request, acknowledgement or new input channel. A new watch ignores historical
+mouse activity, and ending a watch restores the captured cursor.
+
+Standard Windows cursor handles map to the viewer's native CSS cursor roles,
+including local wait/progress animation, without sending image resources.
+Private application cursors use the resource stream: static images use a local
+CSS cursor; animated custom cursors preserve their step
+order, per-step duration and hotspots and play on a local canvas. The canvas follows
+viewer mouse events without waiting for a host position and lives outside clipped
+video tiles, moving into the fullscreen container when needed. Touch and pointer-lock
+modes retain the captured video cursor. Website DOM/Canvas cursor effects remain
+part of the video rather than native cursor resources.
+
+Each `cursor-watch` owns 16 resource slots. On first use the host pushes ordered
+`cursor-asset` packets with `assetId`, `index`, `count`, `image` and `durationMs`,
+followed by a `cursor-state` with `shape: { type: "cached", assetId }`. The packets
+carry the same grant, epoch and watch IDs. Repeated frames use an earlier frame
+index as `image` instead of sending its PNG again. A resource has at most 64 steps,
+16–10000 ms per step and 256 KiB of PNG data (bounded by its base64 length).
+Each image is bounded to 128 × 128 logical CSS pixels and 16 KiB PNG, with at most
+1,048,576 source pixels across unique frames in a resource. The viewer validates
+the PNG header and decoded dimensions before use. Index zero replaces a slot;
+incomplete resources are never displayed. Reappearing resources need only a slot
+reference. Definitions precede references on the reliable ordered channel and are
+never coalesced away. Congestion
+defers a whole resource batch, reserving queue room for control messages; animation
+playback sends no frame updates, acknowledgements or cache-miss requests. A new watch
+starts with empty caches. Playback, pending decodes and canvas ownership end with
+the local cursor subscription. Usable local cursors stay visible while a new resource
+decodes, avoiding a video visibility toggle for each shape change.
+
+Windows sends the original PNG pixels, physical dimensions and hotspot, plus
+`sourceScale` (the cursor monitor's scale in percent, 100–500). Logical dimensions
+and hotspots are source pixels multiplied by `100 / sourceScale`, without rounding
+or shrinking the source PNG (for example, 64 pixels at 200% displays at 32 CSS
+pixels). Host scale changes invalidate the cached shape even when the cursor handle
+stays the same. Static cursors declare their source density with CSS `image-set`;
+if unavailable, the local canvas draws them at the same logical size. Animated
+cursors use a canvas with logical CSS dimensions and a backing store sized for the
+viewer's current `devicePixelRatio` (capped at 8 for memory). Viewer DPI or browser
+zoom changes redraw locally, without requesting assets again or changing logical
+size and hotspot. Standard system cursors continue to use the viewer's native style.
+Host-to-viewer control messages allow 24 KiB;
+viewer input retains the 4 KiB limit. Custom monochrome inverting pixels are
+converted to black with a white outline, preserving the shape and hotspot while
+approximating the background-dependent inversion that PNG cannot represent.
+Unknown, oversized or unsupported colored-XOR cursors keep the captured video
+cursor and hide the local cursor. Native animation metadata is obtained through
+the dynamically resolved user32 `GetCursorFrameInfo` export, with bounded sequence
+validation; its ABI is exercised by an off-screen ANI resource test. Unsupported
+animation sequences and browser decode/drawing failures fall back to the video
+cursor. Local playback starts when the resource is ready, without a remote phase
+synchronization round trip. Both endpoints use this resource stream directly,
+without an older-client negotiation branch.
 
 Settings → Remote control provides two pointer behaviors. **Local cursor** is the
 default: mouse coordinates map to the displayed video, and focusing the screen enables
@@ -917,7 +973,10 @@ physical keyboard forwarding. The header keyboard switch can disable it immediat
 **Capture and hide local cursor** uses [Pointer Lock](https://w3c.github.io/pointerlock/)
 after clicking the remote surface. The capture click is consumed locally. Movement,
 buttons and wheel then use the existing relative-pointer channel at the host's current
-cursor position; the frozen local coordinates are not sent. An unsupported or rejected
+cursor position; the frozen local coordinates are not sent. Both ends can move this
+same native cursor. Capture mode does not subscribe to cursor appearance or ownership
+updates, and switching into it cancels the local-mode watch and restores the video
+cursor. An unsupported or rejected
 capture leaves keyboard input local and allows another explicit attempt.
 
 In capture mode, physical keyboard forwarding requires an actual pointer lock on the
@@ -1215,7 +1274,7 @@ prove mobile keyboard presentation or candidate-window behavior.
 ### Mobile touch input
 
 Settings → Remote control stores viewer-side touch preferences. Trackpad mode
-uses relative single-finger motion, tap-to-click, two-finger right click/scroll,
+uses relative single-finger motion, tap-to-click, two-finger right click/scroll/pinch zoom,
 and configurable long-press drag or right click. Long press is triggered by the
 phone browser's `contextmenu` event, with no application timer or delay preference;
 single-finger touch defaults are preserved so the browser can recognize it. It
@@ -1223,7 +1282,7 @@ applies only to a stationary single-finger gesture. Mouse right clicks continue
 through pointer events, and direct touch leaves long-press recognition to Windows.
 Pointer/scroll speed, direction and gesture switches are local preferences. The
 touch sample rate (30/60/120/240 Hz, default 120 Hz) limits movement and scroll
-updates in both modes; actual delivery also depends on browser samples, timers
+and pinch updates in both modes; actual delivery also depends on browser samples, timers
 and transport backpressure. Down/up/cancel transitions and their final movement
 flush bypass this limit. Changes release the current gesture and apply immediately.
 When available, actual coalesced pointer samples are processed in order for gesture
@@ -1247,6 +1306,16 @@ handles scroll recognition and inertia. Capability detection checks the actual
 API/device availability. There is no wheel-emulation fallback for this gesture.
 Pausing, revoking, disconnecting or cancelling ends contacts and native inertia.
 Mouse wheels still use the ordinary wheel input path.
+
+Pinch zoom uses the same ordered pan lifecycle with an optional cumulative `scale`
+on updates (contact distance divided by the initial distance, clamped to 0.1–4).
+The native device varies its two-contact span around the translated centroid;
+Windows and the target application recognize the resulting zoom. Pure pinches
+send updates even when the centroid is stationary. Small span changes within
+8 CSS pixels are ignored until a pinch begins; scroll speed/direction never alter
+the zoom ratio. Scrolling and pinch zoom have independent viewer switches.
+Missing scale means 1 for older viewers; older hosts ignore the additive field,
+so zoom requires the updated desktop host. No protocol-version change is needed.
 
 Direct touch requires the host's additive `ready.touchContacts` capability. It
 sends real Windows `PT_TOUCH` contacts using a dedicated synthetic pointer device,

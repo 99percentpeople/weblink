@@ -1,6 +1,9 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn pointer_activity(&self) -> crate::session::PointerActivity {
+        self.observations.pointer_activity()
+    }
     fn configure_shortcut(&self, shortcut: crate::shortcut::Shortcut) -> Result<(), Error> {
         self.shortcut.configure(shortcut)
     }

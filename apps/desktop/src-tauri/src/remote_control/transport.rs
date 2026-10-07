@@ -108,6 +108,32 @@ impl Endpoint {
             }
         }
     }
+    /// Queue an entire definition followed by its use atomically. Cursor resource
+    /// pressure defers this observation instead of closing the input session.
+    pub fn send_cursor_batch(&self, messages: &[serde_json::Value]) -> bool {
+        if self.is_closed() {
+            return false;
+        }
+        {
+            let mut q = self.outbound.lock().unwrap_or_else(|e| e.into_inner());
+            // Reserve room for authorization/liveness messages during cursor congestion.
+            if q.len() + messages.len() > CAPACITY - 16 {
+                return false;
+            }
+            if let Some(state) = messages.last() {
+                q.retain(|old| {
+                    !(old["type"] == "cursor-state"
+                        && old["grantId"] == state["grantId"]
+                        && old["inputEpoch"] == state["inputEpoch"]
+                        && old["watchId"] == state["watchId"])
+                });
+            }
+            // Never coalesce definitions: a later cached reference can depend on them.
+            q.extend(messages.iter().cloned());
+        }
+        self.flush();
+        !self.is_closed()
+    }
     pub fn dispose(&self) {
         self.closed();
         let sender = self.sender.lock().unwrap_or_else(|e| e.into_inner()).take();
@@ -297,6 +323,26 @@ mod tests {
         let sent = sender.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0]["sequence"], 1000);
+    }
+    #[test]
+    fn cursor_backpressure_keeps_definitions_before_references_and_defers_whole_batches() {
+        let endpoint = Endpoint::new(None);
+        let sender = Arc::new(Fake::default());
+        sender.busy.store(true, Ordering::Release);
+        endpoint.opened(sender.clone());
+        let state = json!({"type":"cursor-state", "grantId":"g", "inputEpoch":"e", "watchId":"w", "sequence":1, "shape":{"type":"cached", "assetId":0}});
+        let definition = json!({"type":"cursor-asset", "assetId":0});
+        assert!(endpoint.send_cursor_batch(&[definition.clone(), state.clone()]));
+        for _ in 0..1000 {
+            assert!(endpoint.send_cursor_batch(std::slice::from_ref(&state)));
+        }
+        assert_eq!(endpoint.outbound.lock().unwrap().len(), 2);
+        assert!(!endpoint.send_cursor_batch(&vec![definition.clone(); CAPACITY]));
+        assert!(!endpoint.is_closed());
+        assert_eq!(endpoint.outbound.lock().unwrap().len(), 2);
+        sender.busy.store(false, Ordering::Release);
+        endpoint.flush();
+        assert_eq!(*sender.sent.lock().unwrap(), vec![definition, state]);
     }
     #[test]
     fn input_overflow_keeps_channel_and_revocation_but_drops_old_gestures() {

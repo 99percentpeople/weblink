@@ -94,11 +94,15 @@ class Control extends EventTarget {
     shape:
       | import("@/libs/domain/protocol/remote-control/cursor").RemoteCursorShape
       | undefined,
+    owner: "host" | "viewer",
   ) => void;
   watchCursor = vi.fn(
-    (listener: NonNullable<Control["cursorListener"]>) => {
+    (
+      listener: NonNullable<Control["cursorListener"]>,
+      _appearance = true,
+    ) => {
       this.cursorListener = listener;
-      listener(undefined);
+      listener(undefined, "viewer");
       return () => {
         this.cursorListener = undefined;
       };
@@ -459,6 +463,68 @@ it("hides the host cursor only over video content with a local mouse", () => {
     fixture.control.setCursorVisible,
   ).toHaveBeenLastCalledWith(true);
 });
+it("draws animation outside the clipped video tile, moves without repainting, and removes it on blur", () => {
+  const images: any[] = [];
+  vi.stubGlobal(
+    "Image",
+    class {
+      naturalWidth = 1;
+      naturalHeight = 1;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        images.push(this);
+      }
+    },
+  );
+  const drawImage = vi.fn();
+  vi.spyOn(
+    HTMLCanvasElement.prototype,
+    "getContext",
+  ).mockReturnValue({
+    drawImage,
+    clearRect: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  render(() => <RemoteControlOverlay enabled />);
+  mouse("move");
+  const image = {
+    type: "image",
+    sourceScale: 100,
+    width: 1,
+    height: 1,
+    hotspotX: 0,
+    hotspotY: 0,
+    png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlLkAAAAASUVORK5CYII=",
+  };
+  fixture.control.cursorListener(
+    {
+      type: "animation",
+      frames: [
+        { image, durationMs: 50 },
+        { image, durationMs: 100 },
+      ],
+    },
+    "viewer",
+  );
+  images[0].onload();
+  const canvas = document.querySelector("canvas");
+  expect(canvas?.parentNode).toBe(document.body);
+  expect(surface().contains(canvas)).toBe(false);
+  expect(drawImage).toHaveBeenCalledOnce();
+  fixture.control.move.mockClear();
+  fixture.control.setCursorVisible.mockClear();
+  mouse("move");
+  expect(fixture.control.move).toHaveBeenCalledOnce();
+  expect(drawImage).toHaveBeenCalledOnce();
+  expect(
+    fixture.control.setCursorVisible,
+  ).not.toHaveBeenCalled();
+  fireEvent(window, new Event("blur"));
+  expect(canvas?.isConnected).toBe(false);
+  expect(
+    fixture.control.setCursorVisible,
+  ).toHaveBeenLastCalledWith(true);
+});
 it.each([
   "blur",
   "hidden",
@@ -499,6 +565,11 @@ it("keeps the host cursor visible before, during and after pointer capture", () 
   expect(
     fixture.control.setCursorVisible,
   ).toHaveBeenLastCalledWith(false);
+  const watches =
+    fixture.control.watchCursor.mock.calls.length;
+  expect(fixture.control.cursorListener).toBeTypeOf(
+    "function",
+  );
   setAppState(
     "options",
     "remotePointer",
@@ -508,11 +579,16 @@ it("keeps the host cursor visible before, during and after pointer capture", () 
   expect(
     fixture.control.setCursorVisible,
   ).toHaveBeenLastCalledWith(true);
+  expect(fixture.control.cursorListener).toBeUndefined();
   fixture.control.setCursorVisible.mockClear();
   mouse("move");
   capture();
   mouse("move");
   key("KeyQ", exitKeys);
+  expect(fixture.control.cursorListener).toBeUndefined();
+  expect(fixture.control.watchCursor).toHaveBeenCalledTimes(
+    watches,
+  );
   expect(
     fixture.control.setCursorVisible.mock.calls.every(
       ([visible]: boolean[]) => visible,
@@ -649,6 +725,9 @@ it("waits for a successful capture before enabling pointer and physical keyboard
     "capture",
   );
   render(() => <RemoteControlOverlay enabled />);
+  expect(
+    fixture.control.watchCursor,
+  ).not.toHaveBeenCalled();
   click();
   key();
   mouse("move");
@@ -681,6 +760,12 @@ it("waits for a successful capture before enabling pointer and physical keyboard
     x: 0.1,
     y: -0.1,
   });
+  expect(
+    fixture.control.watchCursor,
+  ).not.toHaveBeenCalled();
+  expect(
+    fixture.control.setCursorVisible,
+  ).not.toHaveBeenCalled();
   mouse("down", 2);
   mouse("up", 2);
   fireEvent.wheel(surface(), {
@@ -1495,16 +1580,19 @@ it("persists cursor, clipboard and file drop switches independently", () => {
     true,
   );
 });
-it("stops cursor synchronization immediately when the setting is disabled", () => {
+it("keeps ownership handoff while disabling appearance resources", () => {
   render(() => <RemoteControlOverlay enabled />);
   mouse("move");
   expect(fixture.control.cursorListener).toBeTypeOf(
     "function",
   );
-  fixture.control.cursorListener({
-    type: "system",
-    name: "text",
-  });
+  fixture.control.cursorListener(
+    {
+      type: "system",
+      name: "text",
+    },
+    "viewer",
+  );
   expect(surface().style.cursor).toBe("text");
   setAppState(
     "options",
@@ -1512,11 +1600,27 @@ it("stops cursor synchronization immediately when the setting is disabled", () =
     "syncCursor",
     false,
   );
-  expect(fixture.control.cursorListener).toBeUndefined();
+  expect(
+    fixture.control.watchCursor.mock.lastCall?.[1],
+  ).toBe(false);
   expect(surface().style.cursor).toBe("default");
   expect(
     fixture.control.setCursorVisible,
   ).toHaveBeenLastCalledWith(false);
+  fixture.control.setCursorVisible.mockClear();
+  fixture.control.cursorListener(
+    { type: "unknown" },
+    "host",
+  );
+  expect(surface().style.cursor).toBe("none");
+  expect(
+    fixture.control.setCursorVisible,
+  ).not.toHaveBeenCalled();
+  fixture.control.cursorListener(
+    { type: "system", name: "text" },
+    "viewer",
+  );
+  expect(surface().style.cursor).toBe("default");
   setAppState(
     "options",
     "remotePointer",
@@ -1526,6 +1630,9 @@ it("stops cursor synchronization immediately when the setting is disabled", () =
   expect(fixture.control.cursorListener).toBeTypeOf(
     "function",
   );
+  expect(
+    fixture.control.watchCursor.mock.lastCall?.[1],
+  ).toBe(true);
   mouse("leave");
   expect(fixture.control.cursorListener).toBeUndefined();
   expect(

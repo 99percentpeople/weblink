@@ -767,15 +767,30 @@ fn native_pan_uses_current_cursor_and_cancels_on_pause_expiry_revoke_failure_and
         f.0.borrow_mut().cursor = Some((-1000, 600));
         assert!(e.status().pan_supported);
         e.input(&g, pan(Pan::Start), now).unwrap();
-        e.input(&g, pan(Pan::Update { x: 0.0, y: 42.5 }), now)
-            .unwrap();
+        e.input(
+            &g,
+            pan(Pan::Update {
+                x: 0.0,
+                y: 42.5,
+                scale: 2.0,
+            }),
+            now,
+        )
+        .unwrap();
         assert!(matches!(
             f.0.borrow().actions.as_slice(),
             [Action::Move { .. }]
         ));
         assert_eq!(
             f.0.borrow().pans,
-            [Pan::Start, Pan::Update { x: 0.0, y: 42.5 }]
+            [
+                Pan::Start,
+                Pan::Update {
+                    x: 0.0,
+                    y: 42.5,
+                    scale: 2.0
+                }
+            ]
         );
         let before = f.0.borrow().pan_cancels;
         match kind {
@@ -796,7 +811,31 @@ fn native_pan_rejects_invalid_lifecycle_and_mixed_input_without_wheel_fallback()
     use weblink_desktop_input::pan::Pan;
     for invalid in [
         pan(Pan::Start),
-        pan(Pan::Update { x: 2049.0, y: 0.0 }),
+        pan(Pan::Update {
+            x: 2049.0,
+            y: 0.0,
+            scale: 1.0,
+        }),
+        pan(Pan::Update {
+            x: 0.0,
+            y: 0.0,
+            scale: f64::NAN,
+        }),
+        pan(Pan::Update {
+            x: 0.0,
+            y: 0.0,
+            scale: f64::INFINITY,
+        }),
+        pan(Pan::Update {
+            x: 0.0,
+            y: 0.0,
+            scale: 0.0,
+        }),
+        pan(Pan::Update {
+            x: 0.0,
+            y: 0.0,
+            scale: 4.1,
+        }),
         Event::Move(Position { x: 0.5, y: 0.5 }),
         Event::Touch(vec![touch(1, weblink_desktop_input::touch::Phase::Down)]),
     ] {
@@ -833,7 +872,15 @@ fn native_pan_can_end_then_click_or_restart_and_late_updates_cannot_continue_it(
     )
     .unwrap();
     assert_eq!(
-        e.input(&g, pan(Pan::Update { x: 0.0, y: 1.0 }), now),
+        e.input(
+            &g,
+            pan(Pan::Update {
+                x: 0.0,
+                y: 1.0,
+                scale: 1.0
+            }),
+            now
+        ),
         Err(Error::Unavailable)
     );
     assert!(e.status().closed);
