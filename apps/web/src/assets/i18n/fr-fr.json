@@ -1,0 +1,1309 @@
+{
+  "404": {
+    "title": "404 introuvable",
+    "description": "La page que vous recherchez n'existe pas, chemin : {{path}}",
+    "home": "Aller à la maison"
+  },
+  "tasks": {
+    "error_details": "Détails de l'erreur",
+    "pause": "Pause",
+    "resume": "CV",
+    "title": "Tâches",
+    "count": "{{active}} actif · {{total}} total",
+    "active_count": "Tâches actives {{count}}",
+    "search": "Rechercher des fichiers ou des membres…",
+    "local": "Cet appareil",
+    "filters_label": "Filtrer les tâches",
+    "filters": {
+      "status": "Statut",
+      "type": "Taper",
+      "no_results": "Aucune option correspondante"
+    },
+    "kinds": {
+      "file-send": "Envoyer un fichier",
+      "file-receive": "Recevoir le fichier",
+      "speed-test": "Test de vitesse par les pairs",
+      "file-prepare": "Identification du fichier"
+    },
+    "status": {
+      "waiting": "En attente",
+      "running": "En cours",
+      "finalizing": "Sauvegarde / fusion",
+      "paused": "En pause",
+      "completed": "Terminé",
+      "cancelled": "Arrêté",
+      "failed": "Échec"
+    },
+    "empty": "Aucune tâche dans cette vue.",
+    "progress": "Progression du transfert de fichiers",
+    "inspect": "Détails des pairs",
+    "clear_finished": "Effacer terminé",
+    "show_more": "Afficher plus",
+    "action_failed": "L'action a échoué. Vérifiez la connexion et réessayez."
+  },
+  "speed_test": {
+    "background_notice": "Vous pouvez fermer cette boîte de dialogue ou changer d'onglet. Le test se poursuit dans Tâches, où vous pouvez l'arrêter ou afficher le résultat.",
+    "title": "Test de vitesse par les pairs",
+    "description": "Testez cette connexion homologue dans les deux sens sans sélectionner de fichier. Les données sont générées et supprimées en mémoire ; rien n'est enregistré dans le cache de fichiers.",
+    "traffic_notice": "Chaque direction envoie jusqu'à 10 secondes ou 64 Mio, selon la première éventualité (charge utile totale de 128 Mio, plus surcharge de protocole). L’autre pair doit approuver. Suspendez les transferts de fichiers et les appels pour une mesure plus propre.",
+    "start": "Démarrer le test de vitesse",
+    "cancel": "Arrêter l'essai",
+    "accept": "Autoriser le test",
+    "decline": "Refuser",
+    "request": "{{name}} demande un test de vitesse",
+    "remote_running": "Test de vitesse avec {{name}}",
+    "upload": "Cet appareil → homologue",
+    "download": "Pair → cet appareil",
+    "measured_at": "Mesuré à {{time}}",
+    "result_note": "Débit moyen de charge utile reçue, hors lecture de fichiers, compression et écritures sur disque. Cela mesure l'itinéraire direct/TURN sélectionné, et non la bande passante maximale de votre FAI.",
+    "short_sample": "Le plafond d’octets a été rapidement atteint. Un échantillon inférieur à 1 seconde peut être moins stable ; répétez pour comparer.",
+    "phases": {
+      "connecting": "Ouverture du canal de test…",
+      "approval": "En attente d'approbation…",
+      "approval_incoming": "Demande de test de vitesse",
+      "upload": "Tester cet appareil → peer…",
+      "download": "Test homologue → cet appareil…"
+    },
+    "errors": {
+      "busy": "Un test de vitesse ou un transfert de fichiers est déjà actif. Terminez-le ou arrêtez-le d'abord.",
+      "offline": "Connectez-vous à cet homologue avant de démarrer un test de vitesse.",
+      "unsupported": "L'homologue n'a pas reconnu le protocole de test de vitesse. Mettez à jour les deux clients et réessayez.",
+      "declined": "L'homologue a refusé ou la demande d'approbation a expiré.",
+      "cancelled": "Le test de vitesse s'est arrêté.",
+      "timeout": "Le test a expiré. Aucun résultat de vitesse complet n’est disponible.",
+      "closed": "L'homologue a arrêté le test ou la connexion a été interrompue.",
+      "protocol": "Réponse de test invalide ou nombre d'octets incompatible. Le résultat a été rejeté.",
+      "failed": "Le test de vitesse a échoué. Vérifiez la connexion et réessayez."
+    }
+  },
+  "setting": {
+    "appearance": {
+      "title": "Apparence",
+      "theme": {
+        "title": "Thème",
+        "description": "Changer le thème de l'application"
+      },
+      "language": {
+        "title": "Langue",
+        "description": "Changer la langue de l'application",
+        "system": "Suivre le système"
+      },
+      "background_image": {
+        "title": "Fond d’écran",
+        "description": "Choisissez une texture, téléchargez une image ou faites-en une dans l'aperçu.",
+        "click_to_select": "Cliquez pour sélectionner",
+        "preview": "Aperçu",
+        "custom_image": "Image personnalisée",
+        "default": "Arrière-plan par défaut",
+        "upload": "Importer une image",
+        "uploading": "Enregistrement…",
+        "reset": "Restaurer l'arrière-plan par défaut",
+        "textures": "Textures prédéfinies",
+        "drop_to_upload": "Déposer pour utiliser comme fond d'écran",
+        "invalid_image": "Veuillez choisir un fichier image.",
+        "upload_failed": "Impossible d'enregistrer l'image. Veuillez réessayer.",
+        "presets": {
+          "dots": "Points",
+          "grid": "Grille",
+          "diagonal": "Diagonale",
+          "linen": "Lin",
+          "waves": "Flots",
+          "checker": "Damier"
+        }
+      },
+      "background_image_opacity": {
+        "title": "Opacité du fond d’écran"
+      },
+      "wake_lock": {
+        "title": "Garder l'écran allumé",
+        "description": "Lorsqu'elle est activée, l'application gardera l'écran allumé"
+      }
+    },
+    "list": {
+      "bulk_edit": "Modification groupée",
+      "save": "Enregistrer",
+      "add": "Ajouter",
+      "edit": "Modifier",
+      "remove": "Retirer",
+      "inline_hint": "Appuyez sur Entrée pour ajouter ; cliquez sur une balise à modifier.",
+      "bulk_hint": "Une entrée par ligne. Enregistrez pour appliquer toutes les modifications."
+    },
+    "connection": {
+      "title": "Connexion",
+      "auto_join": {
+        "title": "Rejoindre automatiquement",
+        "description": "Rejoindre automatiquement une salle au lancement de l'application"
+      },
+      "stun_servers": {
+        "title": "Serveurs STUN",
+        "description": "Changer les serveurs STUN de l'application, utilisés pour établir des connexions peer-to-peer"
+      },
+      "turn_servers": {
+        "title": "Serveurs TURN",
+        "description": "Configurez des serveurs relais TURN supplémentaires."
+      },
+      "share_servers_with_others": {
+        "title": "Partager des serveurs avec d'autres",
+        "description": "Partagez les serveurs STUN et TURN avec d'autres lors de la génération de l'URL de jointure"
+      },
+      "available": "Disponible"
+    },
+    "sender": {
+      "title": "Paramètres de l'expéditeur de fichiers",
+      "enable_clipboard": {
+        "title": "Activer le Presse-papiers",
+        "description": "Activez l'envoi du presse-papiers en collant dans la zone de discussion privée en dehors de la saisie du message. Le coller dans la saisie du message modifie toujours le brouillon.",
+        "unsupported": "Le Presse-papiers n'est pas pris en charge, veuillez l'utiliser dans un contexte sécurisé"
+      },
+      "chunk_size": {
+        "title": "Taille des fragments"
+      },
+      "block_size": {
+        "title": "Taille du bloc"
+      },
+      "max_buffer_amount": {
+        "title": "Quantité maximale de tampon"
+      },
+      "ordered": {
+        "title": "Respecter l’ordre",
+        "description": "Lorsqu'il est activé, l'expéditeur enverra des blocs dans l'ordre"
+      },
+      "compression_level": {
+        "title": "Niveau de compression",
+        "description": "Modifiez le niveau de compression de l'expéditeur, 0 signifie aucune compression, 9 signifie compression maximale, l'activation de cette option peut réduire la vitesse de transfert des fichiers compressés.",
+        "no_compression": "0 (pas de compression)"
+      },
+      "automatic_cache_deletion": {
+        "title": "Suppression automatique du cache",
+        "description": "Supprime automatiquement le cache après l'envoi"
+      }
+    },
+    "receiver": {
+      "title": "Paramètres du récepteur de fichiers",
+      "max_cached_chunks": {
+        "title": "Nombre maximum de morceaux mis en cache",
+        "description": "Changer le nombre maximum de morceaux mis en cache du récepteur"
+      },
+      "automatic_download": {
+        "title": "Téléchargement automatique",
+        "description": "Téléchargement automatique après réception"
+      },
+      "auto_download_limit": {
+        "title": "Limite automatique de taille de téléchargement",
+        "description": "Partagé par toutes les salles autorisées à télécharger automatiquement les fichiers. Les fichiers plus volumineux peuvent toujours être téléchargés manuellement."
+      }
+    },
+    "about": {
+      "reset_options": "Réinitialiser les préférences",
+      "clear_service_worker_cache": "Vider le cache de l'application",
+      "copy_version": "Copier les informations sur la version",
+      "copy_failed": "Impossible de copier les informations de version. Veuillez réessayer.",
+      "build_time": "Date de compilation",
+      "changelog": "Notes de version",
+      "feedback": "Signaler un problème",
+      "maintenance": "Maintenance",
+      "reset_description": "Restaurez les préférences de l'application, y compris les paramètres de la salle et des membres. L'historique des discussions et les fichiers mis en cache sont conservés.",
+      "reset_failed": "Impossible de réinitialiser les préférences : {{error}}",
+      "cache_description": "Supprimez les ressources de page mises en cache pour résoudre les problèmes de chargement ou de mise à jour. L'historique des discussions, les fichiers mis en cache et les préférences sont conservés."
+    },
+    "advanced_settings": {
+      "advanced_connection": {
+        "title": "Paramètres de connexion avancés",
+        "relay_only": {
+          "title": "Relais uniquement",
+          "description": "Lorsqu'elle est activée, l'application utilisera uniquement le serveur TURN"
+        }
+      },
+      "advanced_sender": {
+        "title": "Paramètres avancés de l'expéditeur de fichiers"
+      },
+      "advanced_receiver": {
+        "title": "Paramètres avancés du récepteur de fichiers"
+      }
+    },
+    "native_capture": {
+      "title": "Test de capture d’écran native",
+      "description": "Capturez localement un affichage ou une fenêtre sélectionnée. Ce test n'enregistre ni n'envoie de vidéo dans une salle.",
+      "source": "Source de capture",
+      "select_source": "Sélectionnez un affichage ou une fenêtre",
+      "monitor": "Écran",
+      "window": "Fenêtre",
+      "refresh": "Actualiser les sources",
+      "start": "Démarrer la capture",
+      "stop": "Arrêter la capture",
+      "frames": "images",
+      "waiting": "En attente de la première image. Assurez-vous que la fenêtre sélectionnée est visible.",
+      "disconnected": "La capture s'est arrêtée car le panneau de test a cessé de répondre.",
+      "hint": "La fermeture de ce panneau arrête la capture. La fréquence d'images reflète les mises à jour réelles et peut tomber à zéro lorsque la source est statique ou réduite.",
+      "state": {
+        "idle": "Prêt",
+        "running": "Capture en cours",
+        "stopped": "Arrêté",
+        "closed": "Source fermée",
+        "failed": "Échec de la capture"
+      }
+    },
+    "meeting_settings": {
+      "resolution": "Limite de résolution vidéo",
+      "frame_rate": "Limite de fréquence d'images vidéo",
+      "capture_description": "Utilisé pour les caméras et le partage d'écran. Les changements de qualité s’appliquent immédiatement.",
+      "native_unavailable": "Les fonctionnalités du codec natif n'ont pas pu être chargées.",
+      "stream": {
+        "title": "Qualité vidéo",
+        "video_max_bitrate": {
+          "title": "Limite de débit d'envoi vidéo"
+        },
+        "degradation_preference": {
+          "title": "Lorsque les ressources sont limitées, priorisez",
+          "balanced": "Équilibrer les détails et la douceur",
+          "maintain-framerate": "Mouvement fluide (fréquence d'images)",
+          "maintain-resolution": "Détails nets (résolution)"
+        },
+        "preferred_video_codec": {
+          "title": "Codec vidéo du navigateur préféré",
+          "auto": "Auto"
+        }
+      },
+      "native_capture": "Capture d'écran et encodage",
+      "native_encoder": "Encodage vidéo de partage d'écran",
+      "native_encoder_auto": "Automatique (préférer un matériel compatible)",
+      "hardware": "Matériel",
+      "software": "Logiciel",
+      "native_encoder_description": "Choisissez les méthodes de capture de bureau et les codecs vidéo pour le prochain partage.",
+      "native_advanced": "Options avancées pour cet encodage",
+      "readback_buffers": "Tampons de relecture GPU",
+      "readback_buffers_1": "Tampon unique",
+      "readback_buffers_2": "Double tampon (par défaut)",
+      "readback_buffers_3": "Triple tampon",
+      "readback_buffers_description": "Un plus grand nombre de tampons permet le traitement des images qui se chevauchent, mais utilise plus de mémoire GPU et peut augmenter la latence. S'applique au prochain partage.",
+      "color_matrix": "Matrice de couleurs",
+      "color_auto": "Automatique (correspondre au codec)",
+      "color_range": "Gamme de couleurs",
+      "color_range_limited": "Limité (16-235, compatibilité plus large)",
+      "color_range_full": "Plein (0-255)",
+      "color_description": "S'applique au prochain partage. La conversion et la lecture utilisent des balises de couleur correspondantes. La gamme complète préserve davantage de niveaux de luminance mais nécessite la prise en charge du récepteur.",
+      "color_vp8": "VP8 utilise la portée limitée BT.601. D'autres codecs restaurent vos paramètres sélectionnés.",
+      "color_format": "Format de couleur de sortie",
+      "audio": {
+        "title": "Capture audio",
+        "auto": "Auto",
+        "unavailable": "Actuellement indisponible",
+        "codec": {
+          "title": "Codec audio préféré",
+          "unsupported": "Les capacités du codec audio ne sont pas disponibles. Un codec compatible sera négocié automatiquement."
+        },
+        "sample_rate": {
+          "title": "Taux d'échantillonnage audio"
+        },
+        "channels": {
+          "title": "Canaux audio",
+          "mono": "Mono",
+          "stereo": "Stéréo (deux canaux)"
+        },
+        "description": "Choisissez une fréquence d'échantillonnage et un nombre de canaux pris en charge pour la prochaine capture.",
+        "sampling_loading": "Chargement des formats audio…",
+        "codecs_loading": "Chargement des codecs audio…",
+        "sampling_failed": "Les formats audio du système ne sont actuellement pas disponibles.",
+        "sampling_unknown": "Les options d'échantillonnage ne sont pas encore disponibles. Utilisez Auto."
+      },
+      "encoders_loading": "Détection des encodeurs vidéo…",
+      "backends_loading": "Chargement des méthodes de capture…",
+      "backends_unavailable": "Les méthodes de capture ne sont actuellement pas disponibles.",
+      "browser_encoding": "Encodage du navigateur",
+      "browser_encoding_description": "Utilisé pour les caméras, les microphones et le partage d’écran du navigateur lors des négociations de connexion ultérieures.",
+      "native_audio_codec": "Codec audio natif"
+    },
+    "remote_control": {
+      "description": "Choisissez comment les gestes tactiles de cet appareil contrôlent un écran distant.",
+      "mode": {
+        "title": "Mode tactile",
+        "trackpad": "Pavé tactile",
+        "direct": "Toucher direct",
+        "trackpad_description": "Déplacez un doigt pour déplacer le curseur. Appuyez pour cliquer, utilisez deux doigts pour cliquer avec le bouton droit, faites défiler ou pincez pour zoomer, et maintenez enfoncé pour faire glisser.",
+        "direct_description": "Envoyez de vrais contacts tactiles aux positions correspondantes de l'écran, y compris multi-touch et appuyez et maintenez. Les gestes sont gérés par Windows et l'application distante. L'hôte distant doit prendre en charge la saisie tactile."
+      },
+      "pointer_speed": "Vitesse du curseur",
+      "sample_rate": {
+        "title": "Fréquence d’échantillonnage tactile",
+        "description": "Définissez le taux d'envoi maximum pour le mouvement et le défilement. Des débits plus élevés peuvent améliorer la fluidité et utiliser plus de bande passante ; le tarif réel dépend de l'appareil, du navigateur et du réseau. Les communiqués de presse et les communiqués sont toujours envoyés immédiatement."
+      },
+      "forwardProperties": "Transmettre les propriétés tactiles",
+      "touch_properties_description": "Transférer la pression et la zone de contact signalées par le navigateur en mode tactile direct. Désactivez-la pour utiliser les paramètres par défaut du système ; le multitouch reste disponible.",
+      "scroll_speed": "Vitesse de défilement à deux doigts",
+      "tapToClick": "Appuyez pour faire un clic gauche",
+      "twoFingerRightClick": "Appuyez avec deux doigts pour faire un clic droit",
+      "twoFingerScroll": "Défilement à deux doigts",
+      "twoFingerZoom": "Pincer pour zoomer",
+      "naturalScroll": "Défilement naturel",
+      "three_finger_tap": {
+        "title": "Toucher à trois doigts",
+        "keyboard": "Afficher le clavier",
+        "none": "Aucun raccourci",
+        "description": "Appuyez sur la surface de contrôle avec trois doigts en mode trackpad pour ouvrir le clavier. Le contrôle du clavier doit être activé."
+      },
+      "long_press": {
+        "title": "Appuyez et maintenez avec un doigt",
+        "drag": "Maintenez pour faire glisser",
+        "right-click": "Clic droit",
+        "none": "Aucune action"
+      },
+      "changes": "Les modifications s’appliquent immédiatement et relâchez tous les boutons ou touches enfoncés.",
+      "pan_unavailable": "Le défilement et le zoom natifs du pavé tactile ne sont pas disponibles sur cet hôte.",
+      "unavailable": "Cet hôte ne prend pas en charge le contact direct. Sélectionnez Trackpad dans les paramètres du contrôle à distance.",
+      "keyboard_heading": "Clavier",
+      "touch_heading": "Tactile",
+      "keyboard": {
+        "title": "Transmettre la saisie clavier",
+        "description": "En mode Curseur local, cliquez sur l'écran pour transférer les touches physiques prises en charge à l'aide de la disposition du clavier distant. Le mode Capture transfère les clés uniquement pendant la capture. Utilisez le commutateur d'en-tête pour désactiver le transfert. Le clavier à l'écran ouvert manuellement fonctionne dans les deux modes."
+      },
+      "exit_shortcut": {
+        "title": "Raccourci pour libérer le pointeur et le clavier",
+        "description": "Relâchez la saisie au clavier et tout pointeur capturé sans mettre fin à la connexion de contrôle. Le raccourci fonctionne également lorsque le transfert clavier est désactivé.",
+        "browser": "Vous pouvez également appuyer sur Échap pour libérer la capture.",
+        "native": "Lorsque le transfert de raccourci système est activé, Escape est envoyé à l'ordinateur distant. Utilisez le raccourci ci-dessus pour libérer la saisie.",
+        "webview": "Lors de l'utilisation de la gestion des clés du navigateur, Escape libère également la capture."
+      },
+      "auto_keyboard": {
+        "title": "Afficher et masquer automatiquement le clavier mobile",
+        "description": "Après avoir appuyé sur l'écran distant, suivez le focus du champ modifiable sur l'hôte Windows. Masquez les claviers automatiquement ouverts lorsque le focus texte se termine. Le licenciement manuel reste en vigueur jusqu'à un autre appui. Certains navigateurs, dont l'iPhone, peuvent toujours nécessiter le bouton du clavier."
+      },
+      "keyboard_collapse": {
+        "title": "Réduire les contrôles lors de la saisie",
+        "description": "Réduisez temporairement la barre d'outils inférieure et la liste d'écrans lorsque le clavier distant est visible. Restaurez leur état précédent à la fermeture du clavier."
+      },
+      "system_keyboard": {
+        "title": "Transmettre les raccourcis système",
+        "description": "Transférez les raccourcis système pris en charge tout en contrôlant l’écran distant. Désactivez cette option pour utiliser la gestion des clés du navigateur. Ctrl+Alt+Suppr reste local."
+      },
+      "pointer_heading": "Pointeur",
+      "pointer": {
+        "title": "Comportement du pointeur",
+        "local": "Curseur local",
+        "capture": "Capturer et masquer le curseur local",
+        "local_description": "Utilisez le curseur local pour pointer vers l'écran distant. Cliquez sur l'écran pour transférer la saisie au clavier ; le commutateur d'en-tête peut désactiver le transfert.",
+        "capture_description": "Cliquez sur l'écran distant pour capturer et masquer le curseur local. Ce n'est que pendant leur capture que les clés physiques sont transmises. Utilisez le raccourci de libération pour libérer à la fois le pointeur et le clavier ; la connexion de contrôle reste active."
+      },
+      "general_heading": "Général",
+      "cursor_sync": {
+        "title": "Synchroniser l'apparence du curseur à distance",
+        "description": "En mode curseur local, faites correspondre le texte distant, la main, le redimensionnement et d'autres formes de curseur."
+      },
+      "clipboard": {
+        "title": "Synchroniser le presse-papiers distant",
+        "description": "Activez cette option sur l’appareil de contrôle pour synchroniser les contenus du presse-papiers pris en charge."
+      },
+      "clipboard_files": {
+        "loading": "Vérification de la disponibilité du presse-papiers…",
+        "unavailable": "L’écriture dans le presse-papiers n’est pas disponible ici. Choisissez Cache de fichiers ou Désactivé.",
+        "title": "Lors de la copie de fichiers",
+        "clipboard": "Presse-papiers",
+        "cache": "Cache de fichiers",
+        "off": "Désactivé",
+        "description": "La version web reçoit les fichiers dans le cache. Sous Windows, l’application de bureau peut aussi les copier dans le presse-papiers. Les dossiers sont compressés en ZIP."
+      },
+      "emergency_shortcut": {
+        "title": "Raccourci d’arrêt d’urgence de l’hôte",
+        "description": "Bureau Windows uniquement. Lorsque cet ordinateur est sous contrôle à distance, ce raccourci l'arrête même lorsque l'application est en arrière-plan. Il ne réserve ni n'intercepte les clés ; d'autres applications peuvent également répondre.",
+        "failed": "Impossible de mettre à jour l'écouteur de raccourci d'urgence. Le réglage précédent a été conservé. Veuillez réessayer."
+      },
+      "file_drop": {
+        "title": "Glisser-déposer de fichiers distants",
+        "description": "Activez sur le contrôleur pour déposer des fichiers sur l’écran distant. Nécessite un hôte de bureau Windows et une application cible qui accepte les suppressions de fichiers. Les dossiers sont compressés en premier."
+      },
+      "file_size_limit": {
+        "title": "Limite de taille de transfert de fichiers",
+        "description": "Partagé par glisser-déposer et copier/coller, en comptant le nombre total d'octets du fichier par opération. Par défaut : 64 Mio ; plage : 1 à 512 Mio. Les dossiers doivent s'adapter avant et après la compression ZIP. Les modifications s'appliquent à l'opération suivante."
+      }
+    },
+    "permissions": {
+      "description": "Gérez les autorisations des clients et des salles. Supprimez l'historique de cette liste ou ouvrez les paramètres pour modifier ou réinitialiser les autorisations. Quittez une salle active avant de supprimer son historique.",
+      "clients": "Clients",
+      "rooms": "Salles",
+      "empty_clients": "Aucune autorisation client enregistrée.",
+      "empty_rooms": "Aucune autorisation de salle enregistrée.",
+      "last_updated": "Dernière mise à jour : {{time}}",
+      "ask": "Toujours demander",
+      "allow": "Approuver automatiquement (liste verte)",
+      "deny": "Rejeter automatiquement (liste de blocage)",
+      "allowed": "Autoriser",
+      "disallowed": "Ne pas autoriser",
+      "configure": "Autorisations pour {{name}}",
+      "reset": "Réinitialiser les autorisations pour {{name}}",
+      "reset_action": "Réinitialiser les autorisations",
+      "reset_description": "La réinitialisation restaure les autorisations par défaut et conserve cette entrée, l'historique des connexions, les mots de passe et les discussions.",
+      "delete_room": "Supprimer l'historique pour {{name}}",
+      "remove": "Supprimer l'historique des autorisations pour {{name}}",
+      "remove_title": "Supprimer l'historique des autorisations ?",
+      "remove_description": "Supprimer les autorisations enregistrées pour « {{name}} » et supprimer cette entrée ? L'historique des discussions sera conservé.",
+      "delete_requires_disconnect": "Déconnectez-vous de ce client avant de supprimer son historique d'autorisations."
+    },
+    "application": {
+      "automatic_pip_desktop_description": "Réduisez la réunion dans une fenêtre toujours visible lorsque le Weblink passe en arrière-plan. Utilisez Retour à la réunion pour restaurer la fenêtre.",
+      "autostart": "Lancer au démarrage",
+      "autostart_description": "Démarrez Weblink automatiquement lorsque vous vous connectez à cet ordinateur.",
+      "autostart_failed": "Impossible de lire ou de mettre à jour les paramètres de démarrage du système.",
+      "autostart_path_mismatch": "L'entrée de démarrage du système ne pointe pas vers cette application. Réparez-le pour utiliser le programme actuel et activez le lancement au démarrage.",
+      "autostart_repair": "Réparer",
+      "automatic_pip_description": "Ouvrez l'image dans l'image lorsque vous quittez la réunion ou envoyez-la en arrière-plan. La disponibilité dépend de la prise en charge du navigateur et de l'autorisation du site.",
+      "close_behavior": {
+        "title": "À la fermeture de la fenêtre",
+        "ask": "Toujours demander",
+        "exit": "Quitter l'application",
+        "tray": "Masquer dans la barre d'état système",
+        "description": "Gardez la salle, le partage et la télécommande en cours d'exécution dans le bac. Utilisez l'icône de la barre d'état pour restaurer la fenêtre ou quitter."
+      },
+      "auto_hide": {
+        "title": "Masquer la fenêtre après avoir approuvé la télécommande",
+        "description": "Masquez la fenêtre de cet appareil dans la barre d’état une fois le contrôle accordé, y compris l’approbation automatique. Le partage et le contrôle continuent."
+      },
+      "close_confirm_title": "Fermer Weblink ?",
+      "close_confirm_description": "Masquez-vous dans la barre d’état pour continuer à partager et à contrôler à distance, ou quittez l’application.",
+      "close_confirm_exit_description": "Quitter entraînera la déconnexion de la salle et arrêtera le partage et le contrôle à distance.",
+      "remember_close_choice": "Mémoriser mon choix",
+      "close_failed": "Impossible de terminer cette action. Veuillez réessayer.",
+      "tray_unavailable": "La barre d'état système n'est pas disponible. La fermeture de la fenêtre vous demandera si vous devez quitter ; le masquage automatique est désactivé.",
+      "update_failed": "Impossible d'appliquer les paramètres de l'application. Veuillez réessayer.",
+      "automatic_pip_unavailable": "L’image dans l’image automatique n’est pas disponible dans ce navigateur ou ce runtime de bureau.",
+      "startup_behavior": {
+        "title": "Au démarrage du système",
+        "tray": "Restez dans la barre d'état système",
+        "window": "Afficher la fenêtre principale",
+        "description": "S'applique lorsque le système lance Weblink lors de la connexion. L'ouverture manuelle du Weblink affiche la fenêtre principale."
+      }
+    },
+    "notifications": {
+      "enabled": "Activer les notifications système",
+      "backgroundOnly": "Notifier uniquement lorsque la fenêtre n'est pas focalisée",
+      "messages": "Nouveaux messages",
+      "controlRequests": "Demandes de contrôle à distance",
+      "speedTestRequests": "Demandes de tests de vitesse",
+      "transfers": "Transfert de fichiers terminé",
+      "preview": "Afficher les aperçus des messages et des fichiers",
+      "sound": "Son de notification",
+      "permission_default": "L'autorisation de notification n'a pas été accordée.",
+      "permission_granted": "Les notifications système sont autorisées.",
+      "permission_denied": "Les notifications sont bloquées. Activez-les dans les paramètres de notification de votre navigateur ou de votre système.",
+      "permission_unavailable": "Les notifications système ne sont pas disponibles dans cet environnement.",
+      "permission_failed": "Impossible de demander l'autorisation de notification.",
+      "allow": "Autoriser les notifications",
+      "requesting": "Demander l'autorisation…",
+      "request_unresolved": "Le navigateur n'a pas confirmé l'autorisation. Vérifiez les paramètres de notification de votre navigateur ou de votre système ; l'autorisation est mise à jour automatiquement à votre retour.",
+      "browser_blocked": "Les notifications sont bloquées. Ouvrez les autorisations de ce site dans votre navigateur et autorisez les notifications.",
+      "new_message": "Nouveau message",
+      "reply": "Envoyer",
+      "reply_placeholder": "Tapez une réponse",
+      "reply_failed": "La réponse n'a pas été envoyée. Votre texte a été conservé dans le brouillon de conversation.",
+      "delivery_failed": "Réponse enregistrée, mais la livraison a échoué. Ouvrez la conversation pour réessayer.",
+      "open": "Ouvrir la conversation",
+      "transfer_completed": "Transfert de fichiers terminé",
+      "loading": "Vérification de la disponibilité des notifications…",
+      "load_failed": "Impossible de lire l'état de notification du système. Le retour à Weblink le vérifie à nouveau automatiquement.",
+      "error_details": "Détails de l'erreur",
+      "permission_unknown": "Le système n'a pas encore fourni de statut de notification. Les notifications suivront les paramètres du système."
+    },
+    "shortcut_input": {
+      "recording": "Appuyez sur une combinaison de touches…",
+      "reset": "Réinitialiser",
+      "hint": "Cliquez pour enregistrer une combinaison avec Ctrl, Alt ou Win / ⌘. Relâchez la clé principale pour enregistrer ; appuyez sur Échap ou cliquez loin pour annuler.",
+      "invalid": "Utilisez Ctrl, Alt ou Win / ⌘ avec une lettre, un chiffre, F1 – F11 ou une touche de navigation. Les raccourcis système réservés ne sont pas disponibles.",
+      "duplicate": "Choisissez un raccourci différent pour libérer la saisie et arrêter le contrôle à distance.",
+      "edit": "Définir le raccourci",
+      "saving": "Enregistrement…"
+    }
+  },
+  "cache": {
+    "title": "Cache de fichiers",
+    "usage": "{{value}} utilisé, {{max}} total, {{remaining}} restant"
+  },
+  "client": {
+    "scroll_to_bottom": "Faire défiler vers le bas",
+    "menu": {
+      "connect": "Connecter",
+      "clipboard": "Presse-papiers"
+    },
+    "config": {
+      "open": "Paramètres clients",
+      "preferences": "Paramètres clients",
+      "preferences_description": "Ces paramètres s'appliquent uniquement à ce client.",
+      "redirect": {
+        "title": "Redirection après connexion",
+        "description": "Ouvrez automatiquement le chat de ce client après sa connexion. Un seul client à la fois peut être la cible de la redirection."
+      },
+      "provide_file_list": {
+        "title": "Fournir une liste de fichiers",
+        "description": "Autoriser ce client à énumérer les fichiers terminés dans le cache local. Lorsqu'elles sont désactivées, les requêtes de liste de fichiers renvoient une liste vide ; le chat, les envois directs de fichiers et les transferts existants ne sont pas affectés."
+      },
+      "actions": "Actions du client"
+    },
+    "index": {
+      "edit_room": "Modifier les informations sur la salle"
+    },
+    "message_editor": {
+      "placeholder": "Tapez un message…"
+    },
+    "message_error": "Une erreur s'est produite",
+    "sync": {
+      "title": "Synchronisation de fichiers",
+      "menu": {
+        "chat": "Discussion"
+      }
+    },
+    "chat": {
+      "compress_folder": "Compresser le dossier"
+    }
+  },
+  "video": {
+    "global_mute": "Muet global",
+    "global_unmute": "Activer le son globalement",
+    "loading_state": {
+      "codec_unsupported": "Impossible de lire la vidéo partagée",
+      "connection_failed": "Connexion vidéo partagée perdue",
+      "initial": "Initialisation...",
+      "loading": "Chargement...",
+      "waiting": "Mise en mémoire tampon...",
+      "stalled": "Connexion interrompue, nouvelle tentative...",
+      "error": "Échec du chargement",
+      "autoplay_blocked": "Votre navigateur a bloqué la lecture automatique. Sélectionnez Lire la vidéo pour continuer.",
+      "play": "Lire la vidéo",
+      "retry": "Réessayer"
+    },
+    "statistics": {
+      "show_overlay": "Afficher les statistiques du flux",
+      "hide_overlay": "Masquer les statistiques du flux",
+      "display": "Affichage",
+      "submitted": "Images soumises",
+      "player_dropped": "Images ignorées par le lecteur",
+      "target_bitrate": "Débit cible du transport",
+      "encoder_bitrate": "Cible de l'encodeur",
+      "bandwidth_estimate": "Estimation de la bande passante",
+      "copy": "Copier les statistiques",
+      "copy_manually": "La copie automatique n'est pas disponible. Sélectionnez le texte ci-dessous pour le copier.",
+      "receive_to_present": "Réception → affichage",
+      "title": "Statistiques de flux",
+      "send": "Envoyer",
+      "receive": "Recevoir",
+      "capture": "Capture locale",
+      "preview": "Aperçu local",
+      "encode": "Encoder",
+      "decode": "Décoder",
+      "buffer": "Tampon",
+      "encoder_queue": "Attente de l'encodeur",
+      "capture_to_encode": "Capturer → codé",
+      "send_queue": "File d’attente d’envoi",
+      "rtt": "RTT"
+    }
+  },
+  "browser_unsupported": {
+    "title": "Désolé, votre navigateur n'est pas pris en charge",
+    "reasons": {
+      "browser_version_too_low": "La version de votre navigateur est trop basse",
+      "browser_does_not_support_webrtc": "Votre navigateur ne prend pas en charge WebRTC"
+    },
+    "description": "Veuillez utiliser un navigateur moderne comme Chrome, Firefox, Safari, Edge ou Opera. Ou activez les fonctionnalités expérimentales WebRTC dans votre navigateur",
+    "version_support_details": "Détails de la prise en charge des versions",
+    "browser": "Navigateur",
+    "version": "Version"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "Mode clair",
+      "dark": "Mode sombre",
+      "system": "Système"
+    },
+    "join_form": {
+      "history": {
+        "title": "Salles récentes",
+        "description": "Choisissez une salle que vous avez déjà rejointe ou ajoutez une nouvelle salle.",
+        "add": "Ajouter une salle",
+        "back": "Retour aux salles récentes",
+        "remove": "Supprimer {{room}} de l'historique des inscriptions",
+        "protected": "Mot de passe de la salle enregistré",
+        "last_joined": "Dernière inscription : {{time}}",
+        "hint": "Choisissez une salle, puis sélectionnez Connecter. La suppression de l'historique efface son mot de passe enregistré mais conserve les discussions et les autorisations."
+      },
+      "title": "Configuration de la connexion",
+      "profile_description": "Définissez le profil affiché aux autres personnes présentes dans la salle.",
+      "room_description": "Définissez la salle que vous souhaitez créer ou rejoindre.",
+      "configure_before_join": "Sélectionnez Modifier les informations sur la salle pour terminer la configuration avant de rejoindre une salle.",
+      "autosave_hint": "Les modifications sont enregistrées automatiquement. Sélectionnez Connecter pour rejoindre la salle.",
+      "steps": {
+        "profile": "Profil",
+        "room": "Salle"
+      },
+      "client_id": {
+        "title": "ID du client",
+        "description": "Généré automatiquement pour identifier ce client"
+      },
+      "room_id": {
+        "title": "ID de la salle"
+      },
+      "name": "Nom",
+      "avatar": "Avatar",
+      "avatar_placeholder": "Saisissez l'URL d'une image",
+      "upload_avatar": "Télécharger",
+      "avatar_description": "Saisissez l'URL d'une image ou choisissez une image sur cet appareil. Vous pouvez également cliquer sur l'avatar pour le télécharger.",
+      "password": {
+        "title": "Mot de passe de la salle",
+        "placeholder": "Saisir ou générer un mot de passe",
+        "description": "Facultatif. Utilisé pour crypter les messages de signalisation entre clients et empêcher d'autres personnes de rejoindre la salle.",
+        "show": "Afficher le mot de passe",
+        "hide": "Masquer le mot de passe",
+        "generate": "Générer"
+      },
+      "auto_join": "Rejoindre automatiquement la prochaine fois",
+      "drop_avatar": "Déposez pour définir votre avatar"
+    },
+    "file_table": {
+      "status": {
+        "merging": "Fusion"
+      },
+      "filter": {
+        "clear_filters": "Effacer les filtres",
+        "selected": "Choisi"
+      },
+      "toggle_columns": "Basculer les colonnes"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "Supprimer des fichiers",
+      "description": "Confirmer la suppression de ces fichiers {{count}} ?"
+    },
+    "delete_file_message_dialog": {
+      "title": "Supprimer le message du fichier",
+      "description": "Confirmez la suppression de ce message de fichier.",
+      "delete_transfer": "Supprimez également la tâche de transfert associée",
+      "delete_cache": "Supprimez également le cache local"
+    },
+    "client_info_dialog": {
+      "tabs": {
+        "session": "Session",
+        "speed": "Test de vitesse",
+        "raw": "Données brutes",
+        "settings": "Paramètres"
+      },
+      "sections": "Rubriques informations clients",
+      "session_subtitle": "Connexion, diagnostics et paramètres client",
+      "sent_bytes": "Nombre total d'octets envoyés",
+      "received_bytes": "Total d'octets reçus",
+      "summary_note": "Les valeurs décrivent la connexion actuelle. Les estimations de bande passante du navigateur ne mesurent pas le débit de DataChannel ; utilisez l'onglet Test de vitesse pour cela.",
+      "raw_note": "Statistiques WebRTC en direct pour le débogage. Les rapports peuvent inclure des adresses réseau ; examinez-les avant de les partager.",
+      "stats_error": "Les statistiques ne sont pas disponibles pour cette connexion. Reconnectez-vous pour les actualiser.",
+      "copied": "Copié.",
+      "error": "La copie a échoué. Sélectionnez et copiez le rapport manuellement.",
+      "title": "Client {{name}}",
+      "status": "Statut",
+      "client_id": "ID du client",
+      "created_at": "Créé à",
+      "stats_reports": "Rapports statistiques",
+      "candidate_type": "Parcours des candidats",
+      "round_trip_time": "Temps de trajet aller-retour",
+      "available_outgoing_bitrate": "Estimation du débit du navigateur",
+      "transport_bytes": "Octets de transport",
+      "leave": "Quitter"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "Supprimer le client",
+      "description": "Cette opération supprime le client et les messages",
+      "content": "Êtes-vous vraiment sûr de vouloir supprimer le client {{name}} et tous les messages ?"
+    },
+    "reset_options_dialog": {
+      "title": "Réinitialiser les préférences",
+      "description": "Cette opération réinitialise les options aux valeurs par défaut, mais n'effacera pas les données utilisateur",
+      "content": "Restaurez les préférences de l'application, y compris les paramètres de la salle et des membres. L'historique des discussions et les fichiers mis en cache sont conservés."
+    },
+    "clear_service_worker_cache_dialog": {
+      "title": "Vider le cache de l'application",
+      "description": "Effacez les ressources de la page mise en cache et la prise en charge hors ligne pour ce site.",
+      "content": "L'historique des discussions, les fichiers mis en cache et les préférences sont conservés. Le rechargement interrompra les appels et transferts actifs.",
+      "reload": "Recharger la page après l'avoir effacée"
+    },
+    "preview_dialog": {
+      "title": "Aperçu",
+      "unsupported_file_type": "Type de fichier non pris en charge"
+    },
+    "send_item_preview_dialog": {
+      "title": "Envoyer l'article",
+      "description": "Etes-vous sûr de vouloir envoyer le fichier {{fileName}} à {{name}} ?"
+    },
+    "status": {
+      "online": "En ligne",
+      "connecting": "Connexion en cours",
+      "reconnecting": "Reconnexion en cours",
+      "offline": "Hors ligne",
+      "leave": "Quitter"
+    },
+    "scan_qrcode_dialog": {
+      "description": "Scannez le code ou partagez le lien pour rejoindre cette salle.",
+      "link": "Lien d'invitation",
+      "shared_by": "Partagé par {{name}}",
+      "save": "Enregistrer le code QR",
+      "save_failed": "Impossible d'enregistrer le code QR. Veuillez réessayer.",
+      "no_room": "Créez une salle pour partager son QR code."
+    },
+    "action": {
+      "copy": "Copier",
+      "copy_link": "Copier le lien",
+      "copy_file_name": "Copier le nom du fichier",
+      "copy_as_png": "Copier au format PNG",
+      "copy_as_svg": "Copier au format SVG",
+      "delete": "Supprimer",
+      "download": "Télécharger",
+      "cancel": "Annuler",
+      "confirm": "Confirmer",
+      "close": "Fermer",
+      "change": "Modifier",
+      "preview": "Aperçu",
+      "send": "Envoyer",
+      "view": "Afficher",
+      "reset": "Réinitialiser",
+      "asc": "Croissant",
+      "desc": "Décroissant",
+      "hide": "Masquer",
+      "share": "Partager",
+      "forward": "Transférer",
+      "add_folder": "Ajouter un dossier",
+      "check_availability": "Vérifier la disponibilité",
+      "reload": "Recharger",
+      "mute": "Couper le son",
+      "unmute": "Activer le son",
+      "settings": "Paramètres",
+      "fullscreen": "Plein écran",
+      "exit_fullscreen": "Quitter le plein écran",
+      "picture_in_picture": "Mode PIP",
+      "exit_picture_in_picture": "Quitter le mode PIP",
+      "continue": "Continuer",
+      "retry": "Réessayer"
+    },
+    "notification": {
+      "copy_success": "Copie réussie",
+      "link_copy_success": "Lien copié",
+      "link_copy_failed": "Échec de la copie du lien",
+      "reset_options_success": "Les options ont été réinitialisées avec succès",
+      "unknown_error": "Erreur inconnue",
+      "processing_files": "Traitement des fichiers...",
+      "new_version_available": "Nouvelle version disponible",
+      "share_failed": "Échec du partage, erreur : {{error}}",
+      "clear_cache_success": "Cache de l'application vidé",
+      "clear_cache_failed": "Impossible de vider le cache de l'application : {{error}}",
+      "copy_failed": "Impossible de copier. Vérifiez les autorisations du presse-papiers et réessayez.",
+      "room_unprotected": "Cette salle ne nécessite pas de mot de passe."
+    },
+    "forward_dialog": {
+      "title": "Transférer des éléments",
+      "placeholder": "Rechercher des clients destinataires…",
+      "no_results_found": "Aucun résultat trouvé"
+    },
+    "about_dialog": {
+      "title": "À propos du Weblink",
+      "description1": "Weblink est un outil de chat P2P, de transfert de fichiers, de synchronisation de fichiers et de partage d'écran basé sur un navigateur.",
+      "disclaimer": "Avertissement : Cette application utilise la technologie P2P, toutes les données sont stockées dans le client (navigateur) de l'utilisateur, le serveur ne stocke aucune donnée utilisateur, uniquement responsable de la transmission de la signalisation. Les utilisateurs doivent supporter les risques liés à leur utilisation à leurs propres risques, et les développeurs ne sont pas responsables de toute perte de données ou violation de la vie privée.",
+      "version": "Version",
+      "author": "Auteur",
+      "license": "Licence",
+      "github": "Dépôt GitHub"
+    },
+    "media_selection_dialog": {
+      "title": "Sélection des médias",
+      "screen": "Écran",
+      "media_device": "Appareil multimédia",
+      "enable_camera": "Activer la caméra",
+      "enable_microphone": "Activer le microphone",
+      "enable_system_audio": "Activer l'audio du système",
+      "enable_program_audio": "Activer l'audio du programme",
+      "obs_audio_setup_tip": "Configuration OBS + VB-CABLE :\n1. Paramètres OBS → Audio → Avancé → Dispositif de surveillance : Entrée CÂBLE.\n2. OBS Edit → Propriétés audio avancées → Surveillance audio : moniteur et sortie.\n3. Dans Weblink, sélectionnez Sortie CÂBLE pour Programme Audio.",
+      "request_camera_permission": "Demander l'autorisation de la caméra",
+      "request_microphone_permission": "Demander l'autorisation du microphone",
+      "select_system_audio_source": "Sélectionnez la source audio du système (auto)",
+      "select_program_audio": "Sélectionnez l'entrée audio du programme (Auto)",
+      "select_microphone": "Sélectionnez Microphone (Automatique)",
+      "select_camera": "Sélectionnez Appareil photo (Auto)",
+      "open_screen": "Écran ouvert",
+      "open_media_device": "Périphérique multimédia ouvert",
+      "current": "Actuel",
+      "preview": "Aperçu",
+      "apply_constraints": "Appliquer des contraintes multimédias",
+      "apply_constraints_description": "Certaines contraintes peuvent ne pas être prises en charge pour changer dynamiquement, veuillez sélectionner un nouveau flux à appliquer",
+      "microphone_constraints": "Contraintes du microphone",
+      "speaker_constraints": "Contraintes audio du système/programme",
+      "not_support_display_media": "Votre navigateur ne prend pas en charge les médias d'affichage",
+      "not_support_user_media": "Votre navigateur ne prend pas en charge les médias utilisateur",
+      "enable_source_required": "Activer au moins une source multimédia",
+      "distinct_audio_inputs_required": "Le microphone et l'audio du programme doivent utiliser des périphériques d'entrée différents",
+      "video_constraints": "Contraintes vidéo",
+      "constraints": {
+        "noise_suppression": "Suppression du bruit",
+        "echo_cancellation": "Annulation de l'écho",
+        "auto_gain_control": "Contrôle automatique du gain",
+        "voice_isolation": "Isolation vocale",
+        "suppress_local_audio_playback": "Supprimer la lecture audio locale",
+        "max_frame_rate": "Fréquence d'images maximale"
+      }
+    },
+    "nav": {
+      "settings": "Paramètres",
+      "share_link": "Partager le lien"
+    },
+    "timeago": {
+      "just_now": "À l’instant"
+    },
+    "starter": {
+      "starter_name": "Guide des liens Web",
+      "welcome": "Bienvenue sur Lien Web ! Rencontrez, discutez, partagez votre écran et transférez des fichiers directement dans votre navigateur. Il s'agit d'un guide stocké localement ; aucune réponse n'est nécessaire.",
+      "connect": "Connectez-vous\nSélectionnez Rejoindre la salle sur Accueil, entrez votre nom, votre avatar, votre identifiant de salle et votre mot de passe facultatif, puis sélectionnez Se connecter. Les modifications sont enregistrées automatiquement. Utilisez le menu de votre avatar en haut à droite pour partager un lien de salle ou un code QR et inviter des amis à vous rejoindre avec les mêmes détails de salle.",
+      "chat": "Discussions et conversations\nChoisissez une discussion en salle ou une conversation privée dans la barre latérale droite. Recherchez des conversations, filtrez-les ou regroupez-les par étiquette et développez la barre latérale pour en faire un espace de travail de discussion complet. Les messages du salon sont envoyés aux membres actuellement en ligne ; chaque navigateur conserve son propre historique.",
+      "files": "Envoyer des fichiers\nJoignez des fichiers dans le composeur de message ou choisissez des fichiers enregistrés dans votre liste de fichiers. Les discussions en salle partagent d'abord les détails des fichiers ; les destinataires sélectionnent Transférer pour recevoir le contenu. Un fichier local identique peut être réutilisé. Les paramètres de la salle proposent également des téléchargements automatiques pour les petits fichiers.",
+      "meeting": "Réunions et photos dans l'image\nUtilisez la barre d'outils inférieure pour contrôler votre microphone, votre caméra et le partage d'écran. Vous pouvez partager votre caméra et votre écran en même temps. Épinglez une vignette pour en faire la vue principale. Ouvrez l'image dans l'image à partir de la barre d'outils ou activez l'image dans l'image automatique dans les paramètres.",
+      "settings": "Fichiers, tâches et paramètres\nSélectionnez votre avatar en haut à droite pour ouvrir la gestion des fichiers, la liste des tâches ou les paramètres. La liste des tâches affiche la progression du transfert et vous permet de suspendre ou de reprendre les transferts. Pour signaler un problème, utilisez le lien de commentaires dans Paramètres → À propos."
+    },
+    "error_boundary": {
+      "title": "Une erreur s'est produite",
+      "description": "Veuillez essayer de rafraîchir la page ou de contacter le développeur, le message d'erreur est :",
+      "reset": "Réinitialiser"
+    },
+    "pagination": {
+      "total": "Fichiers {{count}}",
+      "page_size": "Lignes par page",
+      "page": "{{page}} / {{count}}",
+      "previous": "Page précédente",
+      "next": "Page suivante"
+    },
+    "show_more": "Afficher plus",
+    "clipboard_history": {
+      "title": "Historique du presse-papiers"
+    },
+    "file_drop": {
+      "busy": "Traitement des fichiers, veuillez patienter"
+    }
+  },
+  "conversations": {
+    "title": "Conversations",
+    "search": "Rechercher des conversations",
+    "manage_labels": "Gérer les étiquettes",
+    "new_label": "Nouvelle étiquette",
+    "add_label": "Créer une étiquette",
+    "save_label": "Enregistrer l'étiquette",
+    "rename_label": "Renommer {{name}}",
+    "delete_label": "Supprimer l'étiquette {{name}}",
+    "labels": "Étiquettes",
+    "no_labels": "Créez des étiquettes à l'aide du bouton Étiquettes.",
+    "group_by_label": "Regrouper par étiquette",
+    "filter_all": "Tous",
+    "filter_unread": "Non lus",
+    "filter_direct": "Privées",
+    "filter_room": "Salles",
+    "filter_labels": "Filtrer par libellés",
+    "unlabelled": "Sans étiquette",
+    "online": "En ligne",
+    "current_room": "Salle actuelle",
+    "no_messages": "Pas encore de messages",
+    "unread_count": "{{count}} messages non lus",
+    "actions": "Actions pour {{name}}",
+    "delete": "Supprimer la conversation",
+    "delete_title": "Supprimer la conversation",
+    "delete_room": "Supprimer les enregistrements de salle",
+    "delete_room_description": "Supprimer l'historique des inscriptions, le mot de passe enregistré, l'historique des discussions, les entrées de conversation et les autorisations de salle pour {{name}} de cet appareil ? Les autres membres ne sont pas concernés.",
+    "delete_description": "Supprimer l'historique des discussions et l'entrée de la liste des conversations pour {{name}} de ce navigateur ? Les autres membres ne sont pas concernés.",
+    "expand": "Élargir les conversations",
+    "empty": "Aucune conversation correspondante",
+    "select": "Sélectionnez une conversation pour commencer à discuter.",
+    "delivered_count": "Remis à {{count}} / {{total}}",
+    "delivery_sending": "Envoi en cours",
+    "delivery_delivered": "Remis",
+    "delivery_failed": "Échec",
+    "delivery_unsupported": "Le chat en salle n'est pas pris en charge",
+    "retry_failed": "Réessayer les destinataires ayant échoué",
+    "members_online": "{{count}} membres en ligne",
+    "local_history": "Historique dans ce navigateur",
+    "load_earlier": "Charger les messages précédents",
+    "room_inactive": "Rejoignez cette salle pour envoyer des messages. L’ouverture de son historique ne change pas votre salle actuelle.",
+    "composer_offline": "Non connecté. Connectez-vous à cet homologue pour envoyer des messages.",
+    "room_message": "Envoyez un message à cette salle",
+    "send": "Envoyer le message",
+    "previous_identity": "Cet historique appartient à votre ancienne identité locale. Ouvrez la conversation privée actuelle pour envoyer des messages.",
+    "attach_folder": "Envoyer un dossier",
+    "attach_media": "Envoyer des photos ou des vidéos",
+    "attach_file": "Envoyer un fichier",
+    "file_drop": {
+      "title": "Déposez les fichiers pour les envoyer",
+      "unavailable_title": "Les fichiers ne peuvent pas encore être envoyés"
+    },
+    "room_file_details": "Afficher les détails",
+    "room_file_request": "Cliquez pour transférer",
+    "room_file_offer": "Partagé avec la salle. Le transfert commence lorsqu’un membre demande ce fichier.",
+    "room_file_sender_unavailable": "Pour transférer, rejoignez la salle d'origine pendant que l'expéditeur est en ligne.",
+    "room_file_missing": "Ce fichier n'est plus disponible sur cet appareil.",
+    "back_to_list": "Retour aux conversations",
+    "clear": "Effacer l'historique des discussions",
+    "clear_title": "Effacer l'historique des discussions",
+    "clear_description": "Effacer l'historique des discussions de {{name}} à partir de ce navigateur ? La conversation reste dans la liste. Les autres membres ne sont pas concernés.",
+    "delete_requires_exit": "Quittez la salle avant de supprimer son historique.",
+    "manage_room_hint": "Effacer supprime uniquement l’historique des discussions. La suppression des enregistrements de salle supprime également l'historique des inscriptions, le mot de passe enregistré et les autorisations de salle.",
+    "manage_hint": "Effacer supprime l’historique et conserve la conversation. Supprimer retire également son entrée de la liste."
+  },
+  "meeting": {
+    "source_actions": "Actions pour {{name}}",
+    "pip_title": "Réunion en image dans l’image",
+    "pip_elsewhere": "Votre réunion est dans une autre fenêtre",
+    "pip_elsewhere_hint": "Utilisez la fenêtre d'image dans l'image pour afficher et contrôler la réunion.",
+    "pip_restore": "Ramenez la réunion ici",
+    "feature_source": "Afficher {{name}} dans la vue principale",
+    "pip_automatic": "Image dans l'image automatique",
+    "pip_return": "Retour à la réunion",
+    "pip_failed": "Impossible d'ouvrir l'image dans l'image. Veuillez réessayer.",
+    "controls": "Commandes de réunion",
+    "microphone": "Microphone",
+    "camera": "Caméra",
+    "mute_microphone": "Couper le microphone",
+    "enable_microphone": "Activer le microphone",
+    "disable_camera": "Éteignez l'appareil photo",
+    "enable_camera": "Allumer la caméra",
+    "share_screen": "Partager l'écran",
+    "stop_sharing": "Arrêter le partage",
+    "show_screen_preview": "Afficher l'aperçu de l'écran local",
+    "screen_preview_covered": "Vous partagez votre écran",
+    "screen_preview_covered_hint": "Cliquez pour fermer la couverture et afficher votre écran partagé.",
+    "sharing_audio": "Partager l’audio",
+    "mute_sharing_audio": "Couper le son partagé",
+    "enable_sharing_audio": "Réactiver le son partagé",
+    "sharing_audio_unavailable": "Ce partage n'a pas d'audio. Partagez à nouveau et activez l'audio dans le sélecteur de système.",
+    "sound": "Son",
+    "layout": "Disposition",
+    "grid_layout": "Passer à la disposition en grille",
+    "focus_layout": "Passer à la mise en page ciblée",
+    "leave_room": "Quitter la salle",
+    "pin": "Épingler sur la scène principale",
+    "unpin": "Désépingler la vue",
+    "leave_main_title": "Quitter la vue principale ?",
+    "leave_main_description": "Changer ou désépingler cette vue mettra fin à son contrôle à distance (y compris les demandes en attente), à ​​l'image dans l'image et au plein écran. Le partage d'écran continuera.",
+    "leave_main_confirm": "Terminer les fonctionnalités et continuer",
+    "leave_main_failed": "Impossible de quitter le mode d'affichage actuel. Veuillez le quitter et réessayer.",
+    "title": "Réunion",
+    "in_room": "Dans la salle",
+    "preview": "Aperçu de la réunion",
+    "hide_panel": "Masquer le panneau latéral",
+    "panel": "Panneau latéral",
+    "show_panel": "Afficher le panneau latéral",
+    "close_panels": "Fermer les panneaux latéraux",
+    "conversations": "Conversations",
+    "stage": "Vue principale de la réunion",
+    "preview_hint": "Ceci est votre aperçu local. Rejoignez une salle pour démarrer une réunion.",
+    "join_room": "Rejoindre une salle",
+    "media_error": "Impossible de mettre à jour le média",
+    "media_unavailable": "La caméra et le microphone ne sont pas disponibles. Utilisez HTTPS ou localhost dans un navigateur pris en charge.",
+    "you": "Vous",
+    "side_panel": "Panneau latéral de réunion",
+    "chat": "Discussion",
+    "members": "Participants",
+    "info": "Informations",
+    "select_conversation": "Choisissez une conversation dans la liste ou rejoignez une salle pour discuter.",
+    "members_hint": "Cliquez sur un membre pour discuter en privé. La mise en sourdine d'un homologue ou de la salle n'affecte que la lecture sur cet appareil.",
+    "mute_local_audio": "Couper mon audio sortant",
+    "unmute_local_audio": "Réactiver mon audio sortant",
+    "mute_room_audio": "Couper le son de la salle",
+    "unmute_room_audio": "Réactiver le son de la salle",
+    "open_private_chat": "Discutez avec {{name}}",
+    "mute_member": "Couper le son de {{name}} sur cet appareil",
+    "unmute_member": "Réactiver le son de {{name}} sur cet appareil",
+    "status_online": "En ligne",
+    "status_offline": "Hors ligne",
+    "status_connecting": "Connexion en cours",
+    "status_reconnecting": "Reconnexion en cours",
+    "room_info": "Informations sur la salle",
+    "room_name": "Nom de la salle",
+    "not_joined": "Pas dans une salle",
+    "message_history": "Historique des discussions",
+    "local_history": "Stocké dans ce navigateur uniquement",
+    "history_hint": "Les messages du salon sont envoyés aux membres en ligne une fois envoyés. Les messages hors ligne ne sont pas renvoyés et les nouveaux arrivants ne reçoivent pas l'historique antérieur.",
+    "leave_hint": "Quitter arrête votre microphone et votre vidéo et déconnecte toutes les connexions de la salle, y compris les transferts de fichiers en cours. Votre historique de discussion local est conservé.",
+    "open_room_chat": "Ouvrir le chat de la salle actuelle",
+    "add_sharing": "Ajouter un écran",
+    "screen_source": "Écran {{count}}",
+    "video_source": "Voir {{count}}",
+    "stop_source": "Arrêter {{name}}",
+    "other_sources": "Autres vues",
+    "show_sources": "Afficher d'autres vues",
+    "hide_sources": "Masquer les autres vues",
+    "show_toolbar": "Afficher la barre d'outils",
+    "hide_toolbar": "Masquer la barre d'outils",
+    "sharing_presenter": "{{name}} (Vous, présentez)",
+    "stop_sharing_short": "Arrêt",
+    "audio_devices": "Appareils audio",
+    "camera_devices": "Appareils photo",
+    "microphone_device": "Microphone",
+    "speaker_device": "Conférencier",
+    "camera_device": "Caméra",
+    "default_device": "Valeur par défaut du système",
+    "unnamed_microphone": "Microphone {{count}}",
+    "unnamed_camera": "Caméra {{count}}",
+    "unnamed_speaker": "Haut-parleur {{count}}",
+    "no_microphones": "Aucun microphone trouvé. Vérifiez la connexion et actualisez.",
+    "no_cameras": "Aucune caméra trouvée. Vérifiez la connexion et actualisez.",
+    "no_speakers": "Aucun haut-parleur sélectionnable. Vous pouvez utiliser la valeur par défaut du système.",
+    "output_unsupported": "Ce navigateur utilise le haut-parleur système.",
+    "refresh_devices": "Actualiser les appareils",
+    "close_device_menu": "Fermer la sélection des appareils",
+    "device_unavailable": "Appareil indisponible",
+    "get_permission": "Accorder l'accès",
+    "request_device_permission": "Accorder l'accès à {{device}}",
+    "permission_checking": "Vérification de l'accès à l'appareil…",
+    "permission_needed": "Une autorisation est nécessaire pour répertorier les appareils.",
+    "device_disabled": "L'accès à l'appareil est bloqué",
+    "permission_disabled_hint": "Autorisez l'accès dans les autorisations du site du navigateur ou les paramètres de confidentialité du système, puis actualisez la liste des appareils.",
+    "desktop_permission_disabled_hint": "Autorisez Weblink à utiliser le microphone ou la caméra dans les paramètres de confidentialité du système, puis rallumez l'appareil.",
+    "output_permission_hint": "Ce navigateur a besoin de l'autorisation du microphone pour répertorier les intervenants associés.",
+    "output_default_only": "Ce navigateur a besoin d'un microphone disponible et d'un accès au microphone pour répertorier davantage d'intervenants. Vous pouvez toujours utiliser le haut-parleur par défaut du système ou modifier la sortie dans les paramètres système.",
+    "desktop_output_default_only": "Utilisation du haut-parleur par défaut du système. Vous pouvez modifier le périphérique de sortie dans les paramètres système.",
+    "expand_chat": "Développer la barre latérale",
+    "collapse_chat": "Utiliser la barre latérale compacte",
+    "return_to_stage": "Retour à la réunion",
+    "files": "Fichiers",
+    "online_duration": "Temps dans cette session",
+    "chat_support": "Membres soutenant le chat de groupe",
+    "file_support": "Membres prenant en charge le partage de fichiers",
+    "pip_permission_denied": "Le navigateur n'autorisait pas l'image dans l'image. Revenez à cette page et cliquez sur le bouton image dans l’image pour réessayer.",
+    "pip_not_supported": "L'image dans l'image n'est pas disponible pour ce navigateur ou cette vidéo.",
+    "pip_video_required": "En attente d'une vidéo lisible",
+    "pip_video_elsewhere": "Cette vidéo est diffusée en mode image dans l'image",
+    "pip_video_restore": "Ramenez la vidéo ici",
+    "native_screen": {
+      "share_audio": "Partager l’audio",
+      "share_audio_description": "Partagez la lecture du système, à l'exclusion de l'audio de cette application.",
+      "title": "Partager un écran ou une fenêtre",
+      "preview": "Aperçu des sources",
+      "preview_select": "Sélectionnez une source à prévisualiser",
+      "preview_loading": "Chargement de l'aperçu…",
+      "preview_failed": "Cette source ne peut pas être prévisualisée pour le moment",
+      "preview_retry": "Recharger l'aperçu",
+      "description": "Choisissez un écran ou une fenêtre à partager.",
+      "source": "Source de l'écran",
+      "select": "Choisissez un affichage ou une fenêtre",
+      "empty": "Aucun affichage ou fenêtre disponible",
+      "share": "Partager",
+      "screens": "Écrans",
+      "windows": "Fenêtres",
+      "screen_backend": "Méthode de capture d'écran",
+      "window_backend": "Méthode de capture de fenêtre",
+      "auto_backend": "Automatique",
+      "unavailable": "Indisponible",
+      "search_windows": "Rechercher des fenêtres",
+      "size_unknown": "Taille indisponible",
+      "no_matches": "Aucune fenêtre correspondante",
+      "backend_unavailable": "Cette méthode de capture n'est pas disponible. Modifiez-le dans Paramètres ou rouvrez cette boîte de dialogue et réessayez.",
+      "loading": "Chargement des sources…"
+    }
+  },
+  "room_dialog": {
+    "actions": "Actions de la salle",
+    "open": "Informations et paramètres de la salle",
+    "title": "Paramètres de la salle",
+    "description": "Affichez les informations sur la salle et configurez les appareils de réunion et les préférences de la salle.",
+    "sections": "Sections des paramètres de la salle",
+    "info": "Informations sur la salle",
+    "devices": "Appareils de réunion",
+    "devices_hint": "Les sélections d'appareils s'appliqueront la prochaine fois que vous les activerez à partir de la barre d'outils de la réunion. Accorder l'accès ouvre et libère brièvement un appareil pour le répertorier, sans publier l'audio ou la vidéo de la réunion.",
+    "online_members": "Membres en ligne",
+    "file_hint": "Les offres de fichiers sont réservées aux membres en ligne. Transfert de fichiers sur demande ou lorsque le téléchargement automatique de petits fichiers est activé. L'expéditeur doit rester en ligne et conserver le fichier local.",
+    "inactive_devices": "Rejoignez cette salle pour configurer ses appareils de réunion.",
+    "settings": "Paramètres de la salle",
+    "settings_unavailable": "Rejoignez une salle pour configurer ses paramètres.",
+    "auto_download": {
+      "title": "Autoriser les téléchargements automatiques de fichiers",
+      "description": "Recevez automatiquement de nouveaux fichiers dans cette salle dans la limite de taille partagée dans les paramètres de transfert. Les fichiers de l'historique ne sont pas téléchargés automatiquement."
+    },
+    "members": "Membres",
+    "previous_members": "Membres précédents",
+    "members_not_joined": "Rejoignez cette salle pour voir qui est en ligne.",
+    "no_previous_members": "Aucun membre précédent avec des conversations conservées.",
+    "members_hint": "Les membres précédents n'apparaissent que s'ils ont rejoint cette salle et leur conversation directe est toujours enregistrée localement."
+  },
+  "app_menu": {
+    "title": "Menu du compte",
+    "room_qrcode": "Code QR de la salle",
+    "joining": "Connexion en cours…",
+    "settings_categories": "Catégories de paramètres",
+    "settings_appearance": "Apparence",
+    "settings_connection": "Connexion",
+    "settings_transfer": "Transferts",
+    "settings_advanced": "Avancé",
+    "settings_about": "À propos",
+    "settings_meeting": "Audio et vidéo",
+    "settings_remote_control": "Contrôle à distance",
+    "settings_permissions": "Clients et salles",
+    "settings_application": "Application",
+    "settings_notifications": "Notifications"
+  },
+  "file_library": {
+    "search": "Rechercher des fichiers…",
+    "status": "Disponibilité",
+    "sort": "Trier",
+    "type": "Type de fichier",
+    "status_all": "Tous les états",
+    "status_complete": "Disponible",
+    "status_incomplete": "Incomplet",
+    "sort_recent": "Récemment ajouté",
+    "sort_name": "Nom",
+    "sort_size": "Taille",
+    "type_all": "Tous",
+    "type_image": "Images",
+    "type_video": "Vidéos",
+    "type_audio": "Audio",
+    "type_document": "Documents",
+    "type_other": "Autres",
+    "no_results": "Aucun fichier correspondant",
+    "empty": "Importez des fichiers ou recevez-les dans une conversation",
+    "local_file": "Fichier local",
+    "actions": "Actions sur les fichiers",
+    "action_preview": "Aperçu",
+    "action_download": "Enregistrer sur l'appareil",
+    "action_send": "Envoyer",
+    "action_details": "Détails",
+    "action_delete": "Supprimer le fichier local",
+    "choose": "Choisissez parmi les fichiers",
+    "choose_hint": "Sélectionnez les fichiers disponibles à envoyer à cette conversation.",
+    "selection": "{{count}} sélectionné · {{size}}",
+    "send_count": "Envoyer {{count}} fichiers",
+    "import": "Importer",
+    "reused": "Existe déjà ; contenu local réutilisé",
+    "imported": "Fichiers importés",
+    "delete_description": "Supprimer ces fichiers locaux ? Les références de salles jointes {{count}} deviendront indisponibles. Les messages de discussion resteront.",
+    "aliases": "Noms",
+    "references": "Références des salles jointes",
+    "fingerprint": "Empreinte digitale du contenu",
+    "legacy": "Empreinte digitale calculée au premier envoi",
+    "local_completion": "Déjà sur cet appareil ; transfert ignoré",
+    "related_messages": "Messages associés",
+    "peer_unavailable": "Le destinataire est hors ligne. Reconnectez-vous avant d’envoyer des fichiers.",
+    "drop_files": "Déposez pour enregistrer dans votre cache de fichiers"
+  },
+  "shared_files": {
+    "add": "Ajouter des fichiers",
+    "from_library": "Choisissez dans la bibliothèque",
+    "upload_files": "Importer des fichiers",
+    "upload_folder": "Importer un dossier",
+    "added": "Fichiers ajoutés à votre liste partagée.",
+    "title": "Fichiers partagés",
+    "mine": "Mes fichiers partagés",
+    "shared": "Partagé",
+    "share": "Partager",
+    "unshare": "Arrêter le partage",
+    "filter": "Statut de partage",
+    "filter_all": "Tous les fichiers",
+    "filter_shared": "Partagé",
+    "filter_private": "Non partagé",
+    "choose": "Partager des fichiers de la bibliothèque",
+    "choose_hint": "Les fichiers sélectionnés seront disponibles dans votre liste partagée dans chaque salle.",
+    "share_count": "Partager {{count}} fichiers",
+    "get": "Récupérer",
+    "get_count": "Récupérer la sélection ({{count}})",
+    "search": "Rechercher des fichiers partagés",
+    "refresh": "Actualiser",
+    "asc": "Croissant",
+    "desc": "Décroissant",
+    "disconnected": "Ce membre n'est pas connecté.",
+    "unsupported": "Ce membre ne prend pas en charge les fichiers partagés.",
+    "disabled": "Ce membre n'a pas activé l'accès aux fichiers partagés pour vous.",
+    "empty": "Aucun fichier partagé trouvé.",
+    "loading": "Chargement des fichiers partagés…",
+    "error": "Impossible de charger les fichiers partagés.",
+    "select_all": "Sélectionnez cette page",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page_size": "Fichiers par page",
+    "select_member": "Sélectionnez un membre pour parcourir les fichiers partagés.",
+    "back": "Retour aux membres",
+    "drop_files": "Déposez pour ajouter à vos fichiers partagés"
+  },
+  "room_connection": {
+    "title": "Cette salle est active dans une autre page",
+    "description": "Cette identité peut se connecter à cette salle à partir d'une page à la fois. Changer ici quittera la salle de la page précédente et arrêtera sa réunion et ses transferts.",
+    "switch_here": "Passer à cette page",
+    "switching": "Changement en cours…"
+  },
+  "errors": {
+    "room_in_use": "Cette identité est déjà connectée à cette salle dans un autre onglet ou fenêtre. Partez de là avant de rejoindre ici.",
+    "room_takeover_timeout": "La page précédente n'a pas répondu. Fermez-le et réessayez.",
+    "unexpected": "L'action a échoué. Veuillez réessayer.",
+    "connection_failed": "Impossible de se connecter au serveur de salle. Vérifiez les paramètres de votre réseau et de votre serveur, puis réessayez.",
+    "connection_timeout": "La connexion au serveur de salle a expiré. Vérifiez votre réseau et réessayez.",
+    "connection_closed": "La connexion a été interrompue. Reconnectez-vous et réessayez.",
+    "connection_config": "L'adresse ou la configuration du serveur de salle n'est pas valide. Vérifiez les paramètres de connexion.",
+    "connection_response": "Le serveur a renvoyé une réponse invalide. Vérifiez son adresse ou mettez à jour l'application et le serveur.",
+    "password_required": "Cette salle nécessite un mot de passe. Entrez-le et réessayez.",
+    "incorrect_password": "Le mot de passe de la salle est incorrect. Vérifiez-le et réessayez.",
+    "password_prepare": "Impossible de traiter le mot de passe de la salle. Actualisez la page et réessayez.",
+    "request_timeout": "La demande a expiré. Gardez les deux appareils connectés et réessayez.",
+    "member_offline": "Ce membre n'est pas connecté. Attendez qu'ils se reconnectent et réessayez.",
+    "sharing_disabled": "Ce membre a désactivé l'accès à ses fichiers partagés.",
+    "file_not_shared": "Ce fichier n'est plus partagé ou a été supprimé. Actualisez la liste.",
+    "shared_unsupported": "Ce membre ne prend pas en charge les téléchargements de fichiers partagés. Mettez à jour les deux applications et réessayez.",
+    "file_unavailable": "Le fichier a été supprimé ou ne peut pas être lu. Sélectionnez-le ou récupérez-le à nouveau.",
+    "file_incomplete": "Le fichier n'est pas encore entièrement disponible. Attendez qu'il soit terminé avant de réessayer.",
+    "file_busy": "Ce fichier est déjà en cours de traitement ou de transfert. Attendez que la tâche en cours soit terminée.",
+    "file_failed": "L'opération sur le fichier a échoué. Vérifiez la connexion et le stockage local, puis réessayez.",
+    "file_list_failed": "Impossible de charger la liste des fichiers. Gardez les deux appareils connectés et actualisez la liste.",
+    "verification_failed": "La vérification du fichier reçu a échoué. Récupérez à nouveau le fichier.",
+    "storage_full": "Le stockage local est plein. Supprimez les fichiers dont vous n'avez plus besoin et réessayez.",
+    "storage_unavailable": "Impossible d'accéder à la bibliothèque de fichiers locale. Vérifiez les autorisations de stockage du navigateur et réessayez.",
+    "permission_denied": "L'autorisation a été refusée. Vérifiez les autorisations du navigateur et réessayez.",
+    "cancelled": "L'opération a été annulée.",
+    "avatar_failed": "Impossible de lire cette image. Choisissez une autre image et réessayez.",
+    "ice_unavailable": "Le serveur est indisponible. Vérifiez son adresse, ses informations d'identification et votre réseau.",
+    "ice_credentials": "Impossible d'obtenir les informations d'identification du relais. Vérifiez les informations d'identification du service TURN.",
+    "ice_config": "La configuration du serveur relais n'est pas valide. Vérifiez l'adresse et la méthode d'authentification.",
+    "ice_config_line": "La ligne {{line}} doit contenir l'adresse, le nom d'utilisateur, le mot de passe et la méthode d'authentification, séparés par |.",
+    "ice_auth_line": "La ligne {{line}} possède une méthode d'authentification non prise en charge. Utilisez à long terme ou hmac."
+  },
+  "remote_control": {
+    "clipboard_transfer": {
+      "sending": "Envoi de fichiers du presse-papiers",
+      "receiving": "Réception de fichiers du presse-papiers",
+      "finalizing": "Traitement des fichiers du presse-papiers",
+      "completed": "Transfert de fichier du Presse-papiers terminé",
+      "failed": "Le transfert du fichier du Presse-papiers a échoué",
+      "details": "Ouvrez la liste des tâches pour les détails du transfert."
+    },
+    "request_title": "Autoriser le contrôle à distance ?",
+    "request_description": "{{name}} souhaite contrôler la souris et le clavier de cet ordinateur. L'affichage partagé mappe le pointeur ; le contrôle ne se limite pas à une application ou à un affichage.",
+    "revoke_hint": "Utilisez « Révoquer le contrôle » ou appuyez sur {{shortcut}} sur cet ordinateur pour mettre fin au contrôle.",
+    "decline": "Refuser",
+    "allow": "Autoriser le contrôle",
+    "host_active": "{{name}} peut contrôler cet ordinateur.",
+    "controller_active": "Contrôle de {{name}}",
+    "host_active_short": "Sous contrôle distant",
+    "controller_active_short": "Contrôle en cours",
+    "revoke": "Révoquer le contrôle",
+    "revoke_failed": "Impossible de révoquer le contrôle. Utilisez {{shortcut}} sur l'hôte pour l'arrêter.",
+    "approval_failed": "L'approbation a échoué. La demande a peut-être expiré ou le contrôle n'est pas disponible. Demandez à nouveau le contrôle.",
+    "reconnecting": "Reconnexion du contrôle",
+    "surface": "Contrôle à distance; appuyez sur {{shortcut}} pour relâcher le pointeur et le clavier.",
+    "request": "Demander le contrôle",
+    "waiting": "En attente d'approbation",
+    "cancel": "Annuler la demande",
+    "end": "Terminer le contrôle",
+    "more_choices": "Plus d'options d'approbation",
+    "allow_remember": "Approuver et ajouter à la liste blanche",
+    "deny_remember": "Rejeter et ajouter à la liste de blocage",
+    "share_first_screen": "L’approbation partage l’écran 1 et son audio avec tous les membres de la salle.",
+    "keyboard_control": "Contrôle du clavier",
+    "keyboard_enable": "Activer le contrôle du clavier",
+    "keyboard_disable": "Désactiver le contrôle du clavier",
+    "keyboard_show": "Afficher le clavier",
+    "keyboard_hide": "Masquer le clavier",
+    "keyboard_input": "Tapez sur l'ordinateur distant",
+    "text_too_long": "Le texte est trop long. Envoyez-le en petites parties.",
+    "text_failed": "L'entrée n'a pas pu être entièrement envoyée. Vérifiez le texte distant avant de réessayer.",
+    "system_keyboard_stopped": "Le transfert du clavier système s'est arrêté. Cliquez sur l'écran distant pour réessayer ou désactivez les raccourcis système dans les paramètres du contrôle à distance.",
+    "capture_failed": "Impossible de capturer le pointeur. Cliquez sur l'écran distant pour réessayer ou choisissez Curseur local dans les paramètres du contrôle à distance.",
+    "capture_unavailable": "Cet hôte ne prend pas en charge la capture de pointeur. Choisissez Curseur local dans Paramètres du contrôle à distance.",
+    "capture_hint": "Cliquez pour capturer le pointeur. Appuyez sur {{shortcut}} pour libérer le pointeur et le clavier.",
+    "file_drop": {
+      "hint": "Déposez les fichiers à cet endroit sur l’écran distant",
+      "unavailable": "Le dépôt de fichiers est désactivé, occupé ou indisponible sur cet hôte",
+      "sending": "Envoi des fichiers déposés",
+      "receiving": "Réception des fichiers déposés",
+      "finalizing": "Dépôt des fichiers sur l’ordinateur distant",
+      "completed": "Dépôt des fichiers à distance terminé",
+      "failed": "Échec du dépôt des fichiers à distance",
+      "details": "Ouvrez la liste des tâches pour les détails du transfert."
+    }
+  }
+}

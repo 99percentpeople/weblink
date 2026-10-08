@@ -33,6 +33,7 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
+import { normalizeLocalePreference } from "@/libs/i18n/locale";
 import type { AppOption } from "@/libs/state/app-options";
 import {
   defaultClientConfig,
@@ -117,6 +118,7 @@ export function initializeAppOptions() {
       return {
         ...defaults,
         ...parsed,
+        locale: normalizeLocalePreference(parsed.locale),
         ...resolveRoomDownloadOptions(parsed),
         ...resolveAudioSampling(parsed),
         notifications: resolveNotificationOptions(
@@ -288,10 +290,4 @@ createEffect(() => {
     const servers = parseTurnServers(serverValue);
     setAppOptions("servers", "turns", servers);
   }
-});
-
-createEffect(() => {
-  document
-    .querySelector("html")
-    ?.setAttribute("lang", appState.options.locale);
 });

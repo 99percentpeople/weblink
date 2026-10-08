@@ -8,7 +8,7 @@ import {
 } from "lucide-solid";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
-import { appState } from "@/libs/state/app-state";
+import { resolvedLocale } from "@/libs/state/app-locale";
 import type { RoomConversation } from "@/libs/domain/conversation";
 
 export function RoomJoinHistoryList(props: {
@@ -90,16 +90,13 @@ export function RoomJoinHistoryList(props: {
                         time: new Date(
                           room.lastJoinedAt ??
                             room.createdAt,
-                        ).toLocaleString(
-                          appState.options.locale,
-                          {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          },
-                        ),
+                        ).toLocaleString(resolvedLocale(), {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }),
                       },
                     )}
                   </span>

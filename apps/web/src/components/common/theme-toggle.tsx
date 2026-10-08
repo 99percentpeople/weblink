@@ -22,18 +22,25 @@ export function ThemeToggle() {
         as={Button<"button">}
         variant="ghost"
         size="sm"
-        class="w-9 px-0"
+        class="relative w-9 px-0"
       >
         <IconLightMode
-          class="size-6 scale-100 rotate-0 transition-all dark:scale-0
-            dark:-rotate-90"
+          class="size-6 rotate-0 scale-100 transition-all dark:-rotate-90
+            dark:scale-0"
         />
         <IconDarkMode
-          class="absolute size-6 scale-0 rotate-90 transition-all
-            dark:scale-100 dark:rotate-0"
+          class="absolute size-6 rotate-90 scale-0 transition-all
+            dark:rotate-0 dark:scale-100"
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem
+          class="gap-2"
+          onSelect={() => setColorMode("system")}
+        >
+          <IconComputer class="size-4" />
+          <span>{t("common.theme_toggle.system")}</span>
+        </DropdownMenuItem>
         <DropdownMenuItem
           class="gap-2"
           onSelect={() => setColorMode("light")}
@@ -47,13 +54,6 @@ export function ThemeToggle() {
         >
           <IconDarkMode class="size-4" />
           <span>{t("common.theme_toggle.dark")}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          class="gap-2"
-          onSelect={() => setColorMode("system")}
-        >
-          <IconComputer class="size-4" />
-          <span>{t("common.theme_toggle.system")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

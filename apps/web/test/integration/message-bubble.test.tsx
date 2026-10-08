@@ -485,6 +485,11 @@ describe("message bubble layout", () => {
       "en-us",
       "zh-cn",
       "zh-tw",
+      "ja-jp",
+      "es-es",
+      "ko-kr",
+      "fr-fr",
+      "de-de",
     ] as const) {
       setAppState("options", "locale", locale);
       expect(

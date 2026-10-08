@@ -11,12 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { setAppOptions } from "./options";
 import {
-  Locale,
+  localeOptions,
   localeOptionsMap,
-  setAppOptions,
-} from "./options";
+  type Locale,
+  type SupportedLocale,
+} from "@/libs/i18n/locale";
 import { appState } from "@/libs/state/app-state";
+import { resolvedLocale } from "@/libs/state/app-locale";
 
 import en from "@/assets/i18n/en-us.json";
 
@@ -29,29 +32,40 @@ const dictionaryLoaders = import.meta.glob<{
 ]);
 const englishDictionary = flatten(en);
 
-async function importDictionary(locale: Locale) {
+async function importDictionary(locale: SupportedLocale) {
   const localeKey = locale.toLowerCase();
   if (localeKey === "en-us") return englishDictionary;
   const loader =
     dictionaryLoaders[`./assets/i18n/${localeKey}.json`];
-  if (!localeOptionsMap[localeKey] || !loader) {
+  if (!loader) {
     console.warn(`Locale ${locale} not found`);
     return englishDictionary;
   }
-  const data = await loader();
-  return flatten(data.default);
+  try {
+    const data = await loader();
+    return flatten(data.default);
+  } catch (error) {
+    console.warn(`Could not load locale ${locale}`, error);
+    return englishDictionary;
+  }
 }
 
 const [dict] = createResource(
-  () => appState.options.locale,
+  resolvedLocale,
   importDictionary,
+  { initialValue: englishDictionary },
 );
 
 export const isDictLoaded = createMemo(() => {
   return !dict.loading;
 });
 
-const translate = translator(dict, resolveTemplate);
+// Reading the latest dictionary keeps text mounted while the next chunk loads.
+// A direct resource read would suspend the entire settings dialog.
+const translate = translator(
+  () => dict.latest,
+  resolveTemplate,
+);
 
 const fallback = translator(
   () => englishDictionary,
@@ -65,25 +79,28 @@ const t = (path: string, ...args: any[]): string =>
   fallback(path, ...args) ??
   path;
 
+export const localeLabel = (locale: Locale): string =>
+  locale === "system"
+    ? t("setting.appearance.language.system")
+    : localeOptionsMap[locale];
+
 const LocaleSelector = () => {
   return (
-    <Select
+    <Select<Locale>
       value={appState.options.locale}
       onChange={(value) => {
-        if (value) setAppOptions("locale", value as Locale);
+        if (value) setAppOptions("locale", value);
       }}
-      options={Object.keys(localeOptionsMap)}
+      options={localeOptions}
       itemComponent={(props) => (
         <SelectItem item={props.item}>
-          {localeOptionsMap[props.item.rawValue]}
+          {localeLabel(props.item.rawValue)}
         </SelectItem>
       )}
     >
       <SelectTrigger>
         <SelectValue<Locale>>
-          {(state) =>
-            localeOptionsMap[state.selectedOption()]
-          }
+          {(state) => localeLabel(state.selectedOption())}
         </SelectValue>
       </SelectTrigger>
       <SelectContent />

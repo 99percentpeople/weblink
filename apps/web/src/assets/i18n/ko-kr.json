@@ -1,0 +1,1309 @@
+{
+  "404": {
+    "title": "404 찾을 수 없음",
+    "description": "찾고 있는 페이지가 존재하지 않습니다. 경로: {{path}}",
+    "home": "홈으로 이동"
+  },
+  "tasks": {
+    "error_details": "오류 세부정보",
+    "pause": "정지시키다",
+    "resume": "재개하다",
+    "title": "작업",
+    "count": "{{active}} 활성 · 총 {{total}}",
+    "active_count": "{{count}} 활성 작업",
+    "search": "파일이나 멤버 검색…",
+    "local": "이 장치",
+    "filters_label": "작업 필터링",
+    "filters": {
+      "status": "상태",
+      "type": "유형",
+      "no_results": "일치하는 옵션이 없습니다."
+    },
+    "kinds": {
+      "file-send": "파일 보내기",
+      "file-receive": "파일 받기",
+      "speed-test": "피어 속도 테스트",
+      "file-prepare": "파일 식별"
+    },
+    "status": {
+      "waiting": "대기 중",
+      "running": "진행 중",
+      "finalizing": "저장/병합",
+      "paused": "일시 중지됨",
+      "completed": "완료",
+      "cancelled": "중지됨",
+      "failed": "실패"
+    },
+    "empty": "이 보기에는 작업이 없습니다.",
+    "progress": "파일 전송 진행",
+    "inspect": "피어 세부정보",
+    "clear_finished": "클리어 완료",
+    "show_more": "더 보기",
+    "action_failed": "작업이 실패했습니다. 연결을 확인하고 다시 시도해 보세요."
+  },
+  "speed_test": {
+    "background_notice": "이 대화 상자를 닫거나 탭을 변경할 수 있습니다. 테스트는 작업에서 계속되며, 여기서 중지하거나 결과를 볼 수 있습니다.",
+    "title": "피어 속도 테스트",
+    "description": "파일을 선택하지 않고 양방향으로 이 피어 연결을 테스트합니다. 데이터는 메모리에서 생성되고 폐기됩니다. 파일 캐시에는 아무것도 저장되지 않습니다.",
+    "traffic_notice": "각 방향은 최대 10초 또는 64MiB 중 먼저 도래하는 기간 동안 전송됩니다(총 페이로드 128MiB + 프로토콜 오버헤드). 다른 피어가 승인해야 합니다. 파일 전송을 일시 중지하고 더 깨끗한 측정을 요청합니다.",
+    "start": "속도 테스트 시작",
+    "cancel": "테스트 중지",
+    "accept": "테스트 허용",
+    "decline": "거절",
+    "request": "{{name}}가 속도 테스트를 요청합니다.",
+    "remote_running": "{{name}}를 사용한 속도 테스트",
+    "upload": "이 기기 → 피어",
+    "download": "피어 → 이 장치",
+    "measured_at": "{{time}}에서 측정됨",
+    "result_note": "파일 읽기, 압축, 디스크 쓰기를 제외한 평균 수신 페이로드 처리량입니다. 이는 ISP의 최대 대역폭이 아닌 선택된 직접/TURN 경로를 측정합니다.",
+    "short_sample": "바이트 한도에 빠르게 도달했습니다. 1초 미만의 샘플은 덜 안정적일 수 있습니다. 비교를 반복합니다.",
+    "phases": {
+      "connecting": "테스트 채널을 여는 중…",
+      "approval": "승인을 기다리는 중…",
+      "approval_incoming": "속도 테스트 요청",
+      "upload": "이 기기를 테스트하는 중 → 피어…",
+      "download": "테스트 피어 → 이 기기…"
+    },
+    "errors": {
+      "busy": "속도 테스트 또는 파일 전송이 이미 활성화되어 있습니다. 먼저 끝내거나 중지하십시오.",
+      "offline": "속도 테스트를 시작하기 전에 이 피어에 연결하세요.",
+      "unsupported": "피어가 속도 테스트 프로토콜을 승인하지 않았습니다. 두 클라이언트를 모두 업데이트하고 다시 시도하세요.",
+      "declined": "피어가 거부했거나 승인 요청이 만료되었습니다.",
+      "cancelled": "속도 테스트가 중지되었습니다.",
+      "timeout": "테스트 시간이 초과되었습니다. 완전한 속도 결과는 제공되지 않습니다.",
+      "closed": "피어가 테스트를 중지했거나 연결이 중단되었습니다.",
+      "protocol": "테스트 응답이 잘못되었거나 바이트 수가 일치하지 않습니다. 결과는 폐기되었습니다.",
+      "failed": "속도 테스트에 실패했습니다. 연결을 확인하고 다시 시도해 보세요."
+    }
+  },
+  "setting": {
+    "appearance": {
+      "title": "모양",
+      "theme": {
+        "title": "테마",
+        "description": "앱 테마 변경"
+      },
+      "language": {
+        "title": "언어",
+        "description": "앱 언어 변경",
+        "system": "시스템 설정 따르기"
+      },
+      "background_image": {
+        "title": "배경화면",
+        "description": "텍스처를 선택하고, 이미지를 업로드하거나, 미리보기로 드래그하세요.",
+        "click_to_select": "선택하려면 클릭하세요.",
+        "preview": "미리보기",
+        "custom_image": "맞춤 이미지",
+        "default": "기본 배경",
+        "upload": "이미지 업로드",
+        "uploading": "저장 중…",
+        "reset": "기본 배경 복원",
+        "textures": "사전 설정된 텍스처",
+        "drop_to_upload": "배경화면으로 사용하려면 드롭하세요.",
+        "invalid_image": "이미지 파일을 선택해주세요.",
+        "upload_failed": "이미지를 저장할 수 없습니다. 다시 시도해 주세요.",
+        "presets": {
+          "dots": "도트",
+          "grid": "격자",
+          "diagonal": "대각선",
+          "linen": "리넨",
+          "waves": "파도",
+          "checker": "체크무늬"
+        }
+      },
+      "background_image_opacity": {
+        "title": "배경화면 불투명도"
+      },
+      "wake_lock": {
+        "title": "화면 켜짐 유지",
+        "description": "활성화하면 앱이 화면을 켜진 상태로 유지합니다."
+      }
+    },
+    "list": {
+      "bulk_edit": "일괄 수정",
+      "save": "저장",
+      "add": "추가",
+      "edit": "편집",
+      "remove": "제거",
+      "inline_hint": "추가하려면 Enter를 누르세요. 편집하려면 태그를 클릭하세요.",
+      "bulk_hint": "한 줄에 항목이 하나씩 있습니다. 모든 변경 사항을 적용하려면 저장하세요."
+    },
+    "connection": {
+      "title": "연결",
+      "auto_join": {
+        "title": "자동 참여",
+        "description": "앱이 실행되면 자동으로 채팅방에 참여"
+      },
+      "stun_servers": {
+        "title": "STUN 서버",
+        "description": "P2P 연결을 설정하는 데 사용되는 앱의 STUN 서버를 변경합니다."
+      },
+      "turn_servers": {
+        "title": "TURN 서버",
+        "description": "추가 TURN 릴레이 서버를 구성합니다."
+      },
+      "share_servers_with_others": {
+        "title": "다른 사람과 서버 공유",
+        "description": "조인 URL을 생성할 때 STUN 및 TURN 서버를 다른 사람과 공유하세요."
+      },
+      "available": "사용 가능"
+    },
+    "sender": {
+      "title": "파일 발신자 설정",
+      "enable_clipboard": {
+        "title": "클립보드 활성화",
+        "description": "메시지 입력 외부의 비공개 채팅 영역에 붙여넣어 클립보드 전송을 활성화합니다. 메시지 입력에 붙여넣으면 항상 초안이 편집됩니다.",
+        "unsupported": "클립보드는 지원되지 않습니다. 안전한 환경에서 사용하세요."
+      },
+      "chunk_size": {
+        "title": "청크 크기"
+      },
+      "block_size": {
+        "title": "블록 크기"
+      },
+      "max_buffer_amount": {
+        "title": "최대 버퍼량"
+      },
+      "ordered": {
+        "title": "순서 유지",
+        "description": "활성화되면 발신자는 순서대로 블록을 보냅니다."
+      },
+      "compression_level": {
+        "title": "압축 수준",
+        "description": "보낸 사람의 압축 수준을 변경합니다. 0은 압축 없음, 9는 최대 압축을 의미합니다. 이 옵션을 활성화하면 압축 파일의 전송 속도가 느려질 수 있습니다.",
+        "no_compression": "0(압축 없음)"
+      },
+      "automatic_cache_deletion": {
+        "title": "자동 캐시 삭제",
+        "description": "전송 후 자동으로 캐시 삭제"
+      }
+    },
+    "receiver": {
+      "title": "파일 수신기 설정",
+      "max_cached_chunks": {
+        "title": "최대 캐시된 청크",
+        "description": "수신기의 최대 캐시 청크 변경"
+      },
+      "automatic_download": {
+        "title": "자동 다운로드",
+        "description": "수신 후 자동 다운로드"
+      },
+      "auto_download_limit": {
+        "title": "자동 다운로드 크기 제한",
+        "description": "모든 방에서 공유되며 자동으로 파일을 다운로드할 수 있습니다. 더 큰 파일은 여전히 ​​수동으로 다운로드할 수 있습니다."
+      }
+    },
+    "about": {
+      "reset_options": "환경설정 재설정",
+      "clear_service_worker_cache": "앱 캐시 지우기",
+      "copy_version": "버전 정보 복사",
+      "copy_failed": "버전 정보를 복사할 수 없습니다. 다시 시도해 주세요.",
+      "build_time": "빌드 일시",
+      "changelog": "릴리스 노트",
+      "feedback": "문제 신고",
+      "maintenance": "유지 관리",
+      "reset_description": "채팅방 및 구성원 설정을 포함한 애플리케이션 기본 설정을 복원합니다. 채팅 기록과 캐시된 파일은 보관됩니다.",
+      "reset_failed": "환경설정을 재설정할 수 없습니다: {{error}}",
+      "cache_description": "로드 또는 업데이트 문제를 해결하려면 캐시된 페이지 리소스를 제거하세요. 채팅 기록, 캐시된 파일 및 기본 설정이 유지됩니다."
+    },
+    "advanced_settings": {
+      "advanced_connection": {
+        "title": "고급 연결 설정",
+        "relay_only": {
+          "title": "릴레이 전용",
+          "description": "활성화되면 앱은 TURN 서버만 사용합니다."
+        }
+      },
+      "advanced_sender": {
+        "title": "고급 파일 보낸 사람 설정"
+      },
+      "advanced_receiver": {
+        "title": "고급 파일 수신자 설정"
+      }
+    },
+    "native_capture": {
+      "title": "네이티브 화면 캡처 테스트",
+      "description": "선택한 디스플레이 또는 창을 로컬로 캡처합니다. 이 테스트에서는 비디오를 녹화하거나 채팅방로 전송하지 않습니다.",
+      "source": "캡처 소스",
+      "select_source": "디스플레이 또는 창 선택",
+      "monitor": "디스플레이",
+      "window": "창",
+      "refresh": "소스 새로 고침",
+      "start": "캡처 시작",
+      "stop": "캡처 중지",
+      "frames": "프레임",
+      "waiting": "첫 번째 프레임을 기다리고 있습니다. 선택한 창이 보이는지 확인하세요.",
+      "disconnected": "테스트 패널이 응답을 중지하여 캡처가 중지되었습니다.",
+      "hint": "이 패널을 닫으면 캡처가 중지됩니다. 프레임 속도는 실제 업데이트를 반영하며 소스가 정적이거나 최소화된 경우 0으로 떨어질 수 있습니다.",
+      "state": {
+        "idle": "준비됨",
+        "running": "캡처 중",
+        "stopped": "중지됨",
+        "closed": "소스 폐쇄",
+        "failed": "캡처 실패"
+      }
+    },
+    "meeting_settings": {
+      "resolution": "비디오 해상도 제한",
+      "frame_rate": "비디오 프레임 속도 제한",
+      "capture_description": "카메라 및 화면 공유에 사용됩니다. 품질 변경사항은 즉시 적용됩니다.",
+      "native_unavailable": "기본 코덱 기능을 로드할 수 없습니다.",
+      "stream": {
+        "title": "비디오 품질",
+        "video_max_bitrate": {
+          "title": "비디오 전송 비트 전송률 제한"
+        },
+        "degradation_preference": {
+          "title": "자원이 제한되어 있으면 우선순위를 정하세요",
+          "balanced": "디테일과 부드러움의 균형",
+          "maintain-framerate": "부드러운 동작(프레임 속도)",
+          "maintain-resolution": "선명한 디테일(해상도)"
+        },
+        "preferred_video_codec": {
+          "title": "선호하는 브라우저 비디오 코덱",
+          "auto": "자동"
+        }
+      },
+      "native_capture": "화면 캡처 및 인코딩",
+      "native_encoder": "화면 공유 비디오 인코딩",
+      "native_encoder_auto": "자동(호환 가능한 하드웨어 선호)",
+      "hardware": "하드웨어",
+      "software": "소프트웨어",
+      "native_encoder_description": "다음 공유를 위해 데스크탑 캡처 방법과 비디오 코덱을 선택하십시오.",
+      "native_advanced": "이 인코딩에 대한 고급 옵션",
+      "readback_buffers": "GPU 리드백 버퍼",
+      "readback_buffers_1": "단일 버퍼",
+      "readback_buffers_2": "이중 버퍼(기본값)",
+      "readback_buffers_3": "트리플 버퍼",
+      "readback_buffers_description": "버퍼가 많을수록 프레임 처리가 겹치는 것이 허용되지만 GPU 메모리를 더 많이 사용하고 대기 시간이 늘어날 수 있습니다. 다음 공유에 적용됩니다.",
+      "color_matrix": "컬러 매트릭스",
+      "color_auto": "자동(코덱 일치)",
+      "color_range": "색상 범위",
+      "color_range_limited": "제한됨(16–235, 더 넓은 호환성)",
+      "color_range_full": "전체(0~255)",
+      "color_description": "다음 공유에 적용됩니다. 변환 및 재생은 일치하는 색상 태그를 사용합니다. 전체 범위는 더 많은 휘도 레벨을 유지하지만 수신기 지원이 필요합니다.",
+      "color_vp8": "VP8은 BT.601 제한된 범위를 사용합니다. 다른 코덱은 선택한 설정을 복원합니다.",
+      "color_format": "출력 색상 형식",
+      "audio": {
+        "title": "오디오 캡처",
+        "auto": "자동",
+        "unavailable": "현재는 이용할 수 없습니다",
+        "codec": {
+          "title": "기본 오디오 코덱",
+          "unsupported": "오디오 코덱 기능을 사용할 수 없습니다. 호환 가능한 코덱이 자동으로 협상됩니다."
+        },
+        "sample_rate": {
+          "title": "오디오 샘플링 속도"
+        },
+        "channels": {
+          "title": "오디오 채널",
+          "mono": "단핵증",
+          "stereo": "스테레오(2개 채널)"
+        },
+        "description": "다음 캡처에 대해 지원되는 샘플 속도와 채널 수를 선택합니다.",
+        "sampling_loading": "오디오 형식 로드 중…",
+        "codecs_loading": "오디오 코덱 로드 중…",
+        "sampling_failed": "시스템 오디오 형식은 현재 사용할 수 없습니다.",
+        "sampling_unknown": "샘플링 옵션은 아직 사용할 수 없습니다. 자동을 사용하세요."
+      },
+      "encoders_loading": "비디오 인코더 감지 중...",
+      "backends_loading": "캡처 방법 로드 중…",
+      "backends_unavailable": "현재 캡처 방법을 사용할 수 없습니다.",
+      "browser_encoding": "브라우저 인코딩",
+      "browser_encoding_description": "후속 연결 협상 시 카메라, 마이크, 브라우저 화면 공유에 사용됩니다.",
+      "native_audio_codec": "네이티브 오디오 코덱"
+    },
+    "remote_control": {
+      "description": "이 기기의 터치 동작으로 원격 화면을 제어하는 ​​방법을 선택하세요.",
+      "mode": {
+        "title": "터치 모드",
+        "trackpad": "트랙패드",
+        "direct": "직접 터치",
+        "trackpad_description": "커서를 이동하려면 한 손가락을 움직입니다. 탭하여 클릭하고, 두 손가락을 사용하여 마우스 오른쪽 버튼을 클릭하고, 스크롤하거나 핀치하여 확대/축소하고, 길게 눌러 드래그하세요.",
+        "direct_description": "멀티터치, 길게 누르기를 포함하여 해당 화면 위치에 실제 터치 연락처를 보냅니다. 제스처는 Windows와 원격 앱에서 처리됩니다. 원격 호스트는 터치 입력을 지원해야 합니다."
+      },
+      "pointer_speed": "커서 속도",
+      "sample_rate": {
+        "title": "터치 샘플링 속도",
+        "description": "이동 및 스크롤의 최대 전송 속도를 설정합니다. 속도가 높을수록 부드러움이 향상되고 더 많은 대역폭을 사용할 수 있습니다. 실제 속도는 장치, 브라우저 및 네트워크에 따라 다릅니다. 보도 자료는 항상 즉시 전송됩니다."
+      },
+      "forwardProperties": "터치 속성 전달",
+      "touch_properties_description": "직접 터치 모드에서 브라우저가 보고한 압력 및 접촉 영역을 전달합니다. 시스템 기본값을 사용하려면 끄십시오. 멀티터치는 계속 사용할 수 있습니다.",
+      "scroll_speed": "두 손가락 스크롤 속도",
+      "tapToClick": "탭하여 왼쪽 클릭",
+      "twoFingerRightClick": "마우스 오른쪽 버튼을 클릭하려면 두 손가락으로 탭하세요.",
+      "twoFingerScroll": "두 손가락 스크롤",
+      "twoFingerZoom": "핀치하여 확대/축소",
+      "naturalScroll": "자연스러운 스크롤",
+      "three_finger_tap": {
+        "title": "세 손가락 탭",
+        "keyboard": "키보드 표시",
+        "none": "단축키 없음",
+        "description": "트랙패드 모드에서 세 손가락으로 컨트롤 표면을 탭하여 키보드를 엽니다. 키보드 제어가 활성화되어 있어야 합니다."
+      },
+      "long_press": {
+        "title": "한 손가락으로 길게 누르기",
+        "drag": "길게 누르면 드래그",
+        "right-click": "마우스 오른쪽 버튼을 클릭하세요.",
+        "none": "조치 없음"
+      },
+      "changes": "변경 사항은 즉시 적용되며 누른 버튼이나 터치를 놓습니다.",
+      "pan_unavailable": "이 호스트에서는 기본 터치패드 스크롤 및 확대/축소를 사용할 수 없습니다.",
+      "unavailable": "이 호스트는 직접 터치를 지원하지 않습니다. 리모컨 설정에서 트랙패드를 선택하세요.",
+      "keyboard_heading": "키보드",
+      "touch_heading": "터치",
+      "keyboard": {
+        "title": "키보드 입력 전달",
+        "description": "로컬 커서 모드에서 화면을 클릭하면 원격 키보드 레이아웃을 사용하여 지원되는 물리적 키가 전달됩니다. 캡처 모드는 캡처되는 동안에만 키를 전달합니다. 전달을 끄려면 헤더 스위치를 사용하십시오. 수동으로 열리는 화면 키보드는 두 모드 모두에서 작동합니다."
+      },
+      "exit_shortcut": {
+        "title": "포인터와 키보드 해제 단축키",
+        "description": "제어 연결을 종료하지 않고 키보드 입력과 캡처된 포인터를 해제합니다. 단축키는 키보드 전달이 꺼져 있을 때도 작동합니다.",
+        "browser": "Esc를 눌러 캡처를 해제할 수도 있습니다.",
+        "native": "시스템 바로가기 전달이 활성화되면 Escape가 원격 컴퓨터로 전송됩니다. 입력을 해제하려면 위의 단축키를 사용하세요.",
+        "webview": "브라우저 키 처리를 사용할 때 Escape는 캡처도 해제합니다."
+      },
+      "auto_keyboard": {
+        "title": "모바일 키보드 자동 표시 및 숨기기",
+        "description": "원격 화면을 탭한 후 Windows 호스트의 편집 가능한 필드 포커스를 따릅니다. 텍스트 포커스가 끝나면 자동으로 열린 키보드를 숨깁니다. 수동 해제는 다시 탭할 때까지 적용됩니다. iPhone을 포함한 일부 브라우저에는 여전히 키보드 버튼이 필요할 수 있습니다."
+      },
+      "keyboard_collapse": {
+        "title": "입력하는 동안 컨트롤 축소",
+        "description": "원격 키보드가 표시되면 하단 도구 모음과 화면 목록을 일시적으로 축소합니다. 키보드가 닫히면 이전 상태를 복원합니다."
+      },
+      "system_keyboard": {
+        "title": "시스템 단축키 전달",
+        "description": "원격 화면을 제어하는 ​​동안 지원되는 시스템 바로가기를 전달합니다. 브라우저 키 처리를 사용하려면 이 기능을 끄세요. Ctrl+Alt+Del은 로컬로 유지됩니다."
+      },
+      "pointer_heading": "포인터",
+      "pointer": {
+        "title": "포인터 동작",
+        "local": "로컬 커서",
+        "capture": "로컬 커서 캡처 및 숨기기",
+        "local_description": "로컬 커서를 사용하여 원격 화면을 가리킵니다. 키보드 입력을 전달하려면 화면을 클릭하세요. 헤더 스위치는 전달을 끌 수 있습니다.",
+        "capture_description": "원격 화면을 클릭하면 로컬 커서를 캡처하고 숨길 수 있습니다. 캡처되는 동안에만 물리적 키가 전달됩니다. 포인터와 키보드를 모두 해제하려면 해제 단축키를 사용하세요. 제어 연결은 활성 상태로 유지됩니다."
+      },
+      "general_heading": "일반",
+      "cursor_sync": {
+        "title": "원격 커서 모양 동기화",
+        "description": "로컬 커서 모드에서는 원격 텍스트, 손 모양, 크기 조정 및 기타 커서 모양을 일치시킵니다."
+      },
+      "clipboard": {
+        "title": "원격 클립보드 동기화",
+        "description": "지원되는 클립보드 내용을 동기화하려면 제어 기기에서 활성화하세요."
+      },
+      "clipboard_files": {
+        "loading": "클립보드 사용 가능 여부 확인 중…",
+        "unavailable": "여기서는 파일 클립보드 쓰기가 불가능합니다. 파일 캐시 또는 끄기를 선택합니다.",
+        "title": "파일을 복사할 때",
+        "clipboard": "클립보드",
+        "cache": "파일 캐시",
+        "off": "끔",
+        "description": "웹에서는 파일 캐시로 파일을 받습니다. Windows 데스크톱에서는 클립보드로 복사할 수도 있습니다. 폴더는 ZIP으로 압축됩니다."
+      },
+      "emergency_shortcut": {
+        "title": "호스트 긴급 중지 단축키",
+        "description": "Windows 데스크톱에만 해당됩니다. 이 컴퓨터가 원격 제어 상태에 있는 동안 이 바로가기는 앱이 백그라운드에 있어도 컴퓨터를 중지합니다. 키를 예약하거나 가로채지 않습니다. 다른 앱도 응답할 수 있습니다.",
+        "failed": "긴급 바로가기 리스너를 업데이트할 수 없습니다. 이전 설정이 유지되었습니다. 다시 시도해 주세요."
+      },
+      "file_drop": {
+        "title": "원격 파일 끌어서 놓기",
+        "description": "원격 화면에 파일을 드롭하려면 컨트롤러에서 활성화하세요. Windows 데스크톱 호스트와 파일 삭제를 허용하는 대상 애플리케이션이 필요합니다. 폴더가 먼저 압축됩니다."
+      },
+      "file_size_limit": {
+        "title": "파일 전송 크기 제한",
+        "description": "끌어서 놓기와 복사/붙여넣기로 공유되며 작업당 총 파일 바이트 수를 계산합니다. 기본값: 64MiB; 범위: 1~512MiB. 폴더는 ZIP 압축 전후에 맞아야 합니다. 변경 사항은 다음 작업에 적용됩니다."
+      }
+    },
+    "permissions": {
+      "description": "클라이언트 및 채팅방 권한을 관리합니다. 이 목록에서 기록을 삭제하거나 설정을 열어 권한을 편집하거나 재설정하세요. 기록을 삭제하기 전에 활성 방에서 나가세요.",
+      "clients": "클라이언트",
+      "rooms": "채팅방",
+      "empty_clients": "저장된 클라이언트 권한이 없습니다.",
+      "empty_rooms": "저장된 채팅방 권한이 없습니다.",
+      "last_updated": "마지막 업데이트: {{time}}",
+      "ask": "매번 확인",
+      "allow": "자동 승인(허용 목록)",
+      "deny": "자동 거부(차단 목록)",
+      "allowed": "허용",
+      "disallowed": "허용 안 함",
+      "configure": "{{name}}에 대한 권한",
+      "reset": "{{name}}에 대한 권한 재설정",
+      "reset_action": "권한 재설정",
+      "reset_description": "재설정하면 기본 권한이 복원되고 이 항목, 참여 기록, 비밀번호 및 채팅이 유지됩니다.",
+      "delete_room": "{{name}} 기록 삭제",
+      "remove": "{{name}}에 대한 권한 기록 삭제",
+      "remove_title": "권한 기록을 삭제하시겠습니까?",
+      "remove_description": "“{{name}}”에 대해 저장된 권한을 삭제하고 이 항목을 제거하시겠습니까? 채팅 기록이 유지됩니다.",
+      "delete_requires_disconnect": "권한 기록을 삭제하기 전에 이 클라이언트와의 연결을 끊으세요."
+    },
+    "application": {
+      "automatic_pip_desktop_description": "Weblink가 백그라운드로 전환되면 회의를 항상 켜져 있는 창으로 축소합니다. 창을 복원하려면 회의로 돌아가기를 사용하세요.",
+      "autostart": "시작 시 실행",
+      "autostart_description": "이 컴퓨터에 로그인하면 Weblink가 자동으로 시작됩니다.",
+      "autostart_failed": "시스템 시작 설정을 읽거나 업데이트할 수 없습니다.",
+      "autostart_path_mismatch": "시스템 시작 항목이 이 응용 프로그램을 가리키지 않습니다. 현재 프로그램을 사용하고 시작 시 실행을 활성화하려면 이를 복구하세요.",
+      "autostart_repair": "복구",
+      "automatic_pip_description": "회의에서 나가거나 배경으로 보낼 때 PIP(Picture-in-Picture)를 엽니다. 사용 가능 여부는 브라우저 지원 및 사이트 권한에 따라 다릅니다.",
+      "close_behavior": {
+        "title": "창을 닫을 때",
+        "ask": "매번 확인",
+        "exit": "애플리케이션 종료",
+        "tray": "시스템 트레이에 숨기기",
+        "description": "채팅방, 공유, 원격 제어를 트레이에서 계속 실행하세요. 창을 복원하거나 종료하려면 트레이 아이콘을 사용하세요."
+      },
+      "auto_hide": {
+        "title": "원격 제어 승인 후 창 숨기기",
+        "description": "자동 승인을 포함하여 제어 권한이 부여된 후 이 장치의 창을 트레이에 숨깁니다. 공유와 통제는 계속됩니다."
+      },
+      "close_confirm_title": "Weblink를 닫으시겠습니까?",
+      "close_confirm_description": "공유 및 원격 제어를 계속 실행하려면 트레이로 숨거나 애플리케이션을 종료하세요.",
+      "close_confirm_exit_description": "종료하면 채팅방 연결이 끊어지고 공유 및 원격 제어가 중지됩니다.",
+      "remember_close_choice": "선택 기억하기",
+      "close_failed": "이 작업을 완료할 수 없습니다. 다시 시도해 주세요.",
+      "tray_unavailable": "시스템 트레이를 사용할 수 없습니다. 창을 닫으면 종료할지 묻는 메시지가 표시됩니다. 자동 숨기기가 비활성화되었습니다.",
+      "update_failed": "애플리케이션 설정을 적용할 수 없습니다. 다시 시도해 주세요.",
+      "automatic_pip_unavailable": "이 브라우저 또는 데스크톱 런타임에서는 자동 PIP(Picture-in-Picture)를 사용할 수 없습니다.",
+      "startup_behavior": {
+        "title": "시스템 시작 시",
+        "tray": "시스템 트레이에 머물기",
+        "window": "기본 창 표시",
+        "description": "시스템이 로그인 시 Weblink를 시작할 때 적용됩니다. Weblink를 수동으로 열면 기본 창이 표시됩니다."
+      }
+    },
+    "notifications": {
+      "enabled": "시스템 알림 활성화",
+      "backgroundOnly": "창에 초점이 맞춰져 있지 않을 때만 알림",
+      "messages": "새 메시지",
+      "controlRequests": "원격 제어 요청",
+      "speedTestRequests": "속도 테스트 요청",
+      "transfers": "파일 전송 완료",
+      "preview": "메시지 및 파일 미리보기 표시",
+      "sound": "알림음",
+      "permission_default": "알림 권한이 부여되지 않았습니다.",
+      "permission_granted": "시스템 알림이 허용됩니다.",
+      "permission_denied": "알림이 차단되었습니다. 브라우저 또는 시스템 알림 설정에서 활성화하세요.",
+      "permission_unavailable": "이 환경에서는 시스템 알림을 사용할 수 없습니다.",
+      "permission_failed": "알림 권한을 요청할 수 없습니다.",
+      "allow": "알림 허용",
+      "requesting": "권한을 요청하는 중…",
+      "request_unresolved": "브라우저가 권한을 확인하지 않았습니다. 브라우저 또는 시스템 알림 설정을 확인하세요. 돌아오면 권한이 자동으로 업데이트됩니다.",
+      "browser_blocked": "알림이 차단되었습니다. 브라우저에서 이 사이트의 권한을 열고 알림을 허용하세요.",
+      "new_message": "새 메시지",
+      "reply": "보내기",
+      "reply_placeholder": "답장을 입력하세요",
+      "reply_failed": "답장이 전송되지 않았습니다. 귀하의 텍스트는 대화 초안에 보관되었습니다.",
+      "delivery_failed": "답장이 저장되었으나 전송에 실패했습니다. 다시 시도하려면 대화를 여세요.",
+      "open": "대화 열기",
+      "transfer_completed": "파일 전송 완료",
+      "loading": "알림 사용 가능 여부 확인 중…",
+      "load_failed": "시스템 알림 상태를 읽을 수 없습니다. Weblink로 돌아가면 자동으로 다시 확인됩니다.",
+      "error_details": "오류 세부정보",
+      "permission_unknown": "시스템이 아직 알림 상태를 제공하지 않았습니다. 알림은 시스템 설정을 따릅니다."
+    },
+    "shortcut_input": {
+      "recording": "단축키를 누르세요…",
+      "reset": "초기화",
+      "hint": "Ctrl, Alt 또는 Win / ⌘ 조합을 기록하려면 클릭하세요. 저장하려면 기본 키를 놓으십시오. 취소하려면 Esc를 누르거나 다른 곳을 클릭하세요.",
+      "invalid": "문자, 숫자, F1~F11 또는 탐색 키와 함께 Ctrl, Alt 또는 Win / ⌘를 사용하세요. 예약된 시스템 바로가기는 사용할 수 없습니다.",
+      "duplicate": "입력 해제 및 원격 제어 중지를 위한 다른 단축키를 선택하세요.",
+      "edit": "단축키 지정",
+      "saving": "저장 중…"
+    }
+  },
+  "cache": {
+    "title": "파일 캐시",
+    "usage": "{{value}} 사용됨, 총 {{max}}, 남은 {{remaining}}"
+  },
+  "client": {
+    "scroll_to_bottom": "맨 아래로 스크롤",
+    "menu": {
+      "connect": "연결",
+      "clipboard": "클립보드"
+    },
+    "config": {
+      "open": "클라이언트 설정",
+      "preferences": "클라이언트 설정",
+      "preferences_description": "이러한 설정은 이 클라이언트에만 적용됩니다.",
+      "redirect": {
+        "title": "연결 후 리디렉션",
+        "description": "연결되면 이 클라이언트의 채팅을 자동으로 엽니다. 한 번에 하나의 클라이언트만 리디렉션 대상이 될 수 있습니다."
+      },
+      "provide_file_list": {
+        "title": "파일 목록 제공",
+        "description": "이 클라이언트가 로컬 캐시에 완료된 파일을 열거하도록 허용합니다. 비활성화되면 파일 목록 요청은 빈 목록을 반환합니다. 채팅, 직접 파일 전송 및 기존 전송은 영향을 받지 않습니다."
+      },
+      "actions": "클라이언트 작업"
+    },
+    "index": {
+      "edit_room": "채팅방 정보 편집"
+    },
+    "message_editor": {
+      "placeholder": "메시지를 입력하세요…"
+    },
+    "message_error": "오류가 발생했습니다",
+    "sync": {
+      "title": "파일 동기화",
+      "menu": {
+        "chat": "채팅"
+      }
+    },
+    "chat": {
+      "compress_folder": "폴더 압축"
+    }
+  },
+  "video": {
+    "global_mute": "전역 음소거",
+    "global_unmute": "전역 음소거 해제",
+    "loading_state": {
+      "codec_unsupported": "공유된 비디오를 재생할 수 없습니다",
+      "connection_failed": "공유 비디오 연결이 끊겼습니다.",
+      "initial": "초기화 중...",
+      "loading": "로드 중...",
+      "waiting": "버퍼링 중...",
+      "stalled": "연결이 중단되었습니다. 다시 시도하는 중...",
+      "error": "로드하지 못했습니다.",
+      "autoplay_blocked": "브라우저가 자동 재생을 차단했습니다. 계속하려면 비디오 재생을 선택하세요.",
+      "play": "비디오 재생",
+      "retry": "다시 시도"
+    },
+    "statistics": {
+      "show_overlay": "스트림 통계 표시",
+      "hide_overlay": "스트림 통계 숨기기",
+      "display": "표시",
+      "submitted": "출력 제출됨",
+      "player_dropped": "플레이어가 버린 프레임",
+      "target_bitrate": "전송 목표 비트레이트",
+      "encoder_bitrate": "인코더 타겟",
+      "bandwidth_estimate": "대역폭 추정",
+      "copy": "통계 복사",
+      "copy_manually": "자동 복사를 사용할 수 없습니다. 복사하려면 아래 텍스트를 선택하세요.",
+      "receive_to_present": "수신 → 표시",
+      "title": "스트림 통계",
+      "send": "보내기",
+      "receive": "수신",
+      "capture": "로컬 캡처",
+      "preview": "로컬 미리보기",
+      "encode": "인코딩",
+      "decode": "디코딩",
+      "buffer": "버퍼",
+      "encoder_queue": "인코더 대기",
+      "capture_to_encode": "캡처 → 인코딩",
+      "send_queue": "전송 대기열",
+      "rtt": "RTT"
+    }
+  },
+  "browser_unsupported": {
+    "title": "죄송합니다. 귀하의 브라우저는 지원되지 않습니다",
+    "reasons": {
+      "browser_version_too_low": "브라우저 버전이 너무 낮습니다.",
+      "browser_does_not_support_webrtc": "귀하의 브라우저는 WebRTC를 지원하지 않습니다"
+    },
+    "description": "Chrome, Firefox, Safari, Edge, Opera와 같은 최신 브라우저를 사용하세요. 또는 브라우저에서 실험적인 WebRTC 기능을 켜세요.",
+    "version_support_details": "버전 지원 세부정보",
+    "browser": "브라우저",
+    "version": "버전"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "라이트 모드",
+      "dark": "다크 모드",
+      "system": "시스템"
+    },
+    "join_form": {
+      "history": {
+        "title": "최근 채팅방",
+        "description": "이전에 참여한 방을 선택하거나 새 방을 추가하세요.",
+        "add": "방 추가",
+        "back": "최근 채팅방로 돌아가기",
+        "remove": "가입 기록에서 {{room}} 제거",
+        "protected": "방 비밀번호가 저장되었습니다",
+        "last_joined": "마지막 가입: {{time}}",
+        "hint": "방을 선택한 후 연결을 선택하세요. 기록을 삭제하면 저장된 비밀번호는 지워지지만 채팅 및 권한은 유지됩니다."
+      },
+      "title": "연결 설정",
+      "profile_description": "방에 있는 다른 사람들에게 표시되는 프로필을 설정합니다.",
+      "room_description": "생성하거나 참여하려는 방을 설정하세요.",
+      "configure_before_join": "방에 참여하기 전에 설정을 완료하려면 방 정보 편집을 선택하세요.",
+      "autosave_hint": "변경 사항은 자동으로 저장됩니다. 연결을 선택하여 채팅방에 참여하세요.",
+      "steps": {
+        "profile": "윤곽",
+        "room": "채팅방"
+      },
+      "client_id": {
+        "title": "클라이언트 ID",
+        "description": "이 클라이언트를 식별하기 위해 자동으로 생성됨"
+      },
+      "room_id": {
+        "title": "방ID"
+      },
+      "name": "이름",
+      "avatar": "화신",
+      "avatar_placeholder": "이미지 URL을 입력하세요.",
+      "upload_avatar": "업로드",
+      "avatar_description": "이미지 URL을 입력하거나 이 기기에서 이미지를 선택하세요. 아바타를 클릭하여 업로드할 수도 있습니다.",
+      "password": {
+        "title": "방 비밀번호",
+        "placeholder": "비밀번호를 입력하거나 생성하세요",
+        "description": "선택 과목. 클라이언트 간의 신호 메시지를 암호화하고 다른 사람이 방에 참여하는 것을 방지하는 데 사용됩니다.",
+        "show": "비밀번호 표시",
+        "hide": "비밀번호 숨기기",
+        "generate": "생성하다"
+      },
+      "auto_join": "다음번에는 자동 참여",
+      "drop_avatar": "드롭하여 아바타를 설정하세요."
+    },
+    "file_table": {
+      "status": {
+        "merging": "병합"
+      },
+      "filter": {
+        "clear_filters": "필터 지우기",
+        "selected": "선택된"
+      },
+      "toggle_columns": "열 전환"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "파일 삭제",
+      "description": "{{count}} 파일 삭제를 확인하시겠습니까?"
+    },
+    "delete_file_message_dialog": {
+      "title": "파일 메시지 삭제",
+      "description": "이 파일 메시지 삭제를 확인하세요.",
+      "delete_transfer": "관련 전송 작업도 삭제",
+      "delete_cache": "로컬 캐시도 삭제"
+    },
+    "client_info_dialog": {
+      "tabs": {
+        "session": "세션",
+        "speed": "속도 테스트",
+        "raw": "원시 데이터",
+        "settings": "설정"
+      },
+      "sections": "고객 정보 섹션",
+      "session_subtitle": "연결, 진단 및 클라이언트 설정",
+      "sent_bytes": "전송된 총 바이트",
+      "received_bytes": "수신된 총 바이트",
+      "summary_note": "값은 현재 연결을 설명합니다. 브라우저 대역폭 추정치는 DataChannel 처리량으로 측정되지 않습니다. 이를 위해 속도 테스트 탭을 사용하십시오.",
+      "raw_note": "디버깅을 위한 실시간 WebRTC 통계입니다. 보고서에는 네트워크 주소가 포함될 수 있습니다. 공유하기 전에 검토하세요.",
+      "stats_error": "이 연결에 대한 통계를 사용할 수 없습니다. 새로고침하려면 다시 연결하세요.",
+      "copied": "복사되었습니다.",
+      "error": "복사에 실패했습니다. 보고서를 수동으로 선택하고 복사합니다.",
+      "title": "클라이언트 {{name}}",
+      "status": "상태",
+      "client_id": "클라이언트 ID",
+      "created_at": "생성 날짜",
+      "stats_reports": "통계 보고서",
+      "candidate_type": "후보자 노선",
+      "round_trip_time": "왕복 시간",
+      "available_outgoing_bitrate": "브라우저 비트 전송률 추정",
+      "transport_bytes": "전송 바이트",
+      "leave": "나가기"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "클라이언트 삭제",
+      "description": "이 작업은 클라이언트와 메시지를 삭제합니다.",
+      "content": "클라이언트 {{name}}와 모든 메시지를 삭제하시겠습니까?"
+    },
+    "reset_options_dialog": {
+      "title": "환경설정 재설정",
+      "description": "이 작업을 수행하면 옵션이 기본값으로 재설정되지만 사용자 데이터는 지워지지 않습니다.",
+      "content": "채팅방 및 구성원 설정을 포함한 애플리케이션 기본 설정을 복원합니다. 채팅 기록과 캐시된 파일은 보관됩니다."
+    },
+    "clear_service_worker_cache_dialog": {
+      "title": "앱 캐시 지우기",
+      "description": "이 사이트에 대해 캐시된 페이지 리소스와 오프라인 지원을 지웁니다.",
+      "content": "채팅 기록, 캐시된 파일 및 기본 설정이 유지됩니다. 다시 로드하면 활성 통화 및 전송이 중단됩니다.",
+      "reload": "삭제 후 페이지를 새로고침하세요"
+    },
+    "preview_dialog": {
+      "title": "미리보기",
+      "unsupported_file_type": "지원되지 않는 파일 형식"
+    },
+    "send_item_preview_dialog": {
+      "title": "아이템 보내기",
+      "description": "{{fileName}} 파일을 {{name}}로 보내시겠습니까?"
+    },
+    "status": {
+      "online": "온라인",
+      "connecting": "연결 중",
+      "reconnecting": "다시 연결 중",
+      "offline": "오프라인",
+      "leave": "나가기"
+    },
+    "scan_qrcode_dialog": {
+      "description": "이 방에 참여하려면 코드를 스캔하거나 링크를 공유하세요.",
+      "link": "초대링크",
+      "shared_by": "{{name}}가 공유함",
+      "save": "QR 코드 저장",
+      "save_failed": "QR 코드를 저장할 수 없습니다. 다시 시도해 주세요.",
+      "no_room": "QR 코드를 공유할 방을 설정하세요."
+    },
+    "action": {
+      "copy": "복사",
+      "copy_link": "링크 복사",
+      "copy_file_name": "파일 이름 복사",
+      "copy_as_png": "PNG로 복사",
+      "copy_as_svg": "SVG로 복사",
+      "delete": "삭제",
+      "download": "다운로드",
+      "cancel": "취소",
+      "confirm": "확인",
+      "close": "닫기",
+      "change": "변경",
+      "preview": "미리보기",
+      "send": "보내기",
+      "view": "보기",
+      "reset": "초기화",
+      "asc": "오름차순",
+      "desc": "내림차순",
+      "hide": "숨기기",
+      "share": "공유",
+      "forward": "전달",
+      "add_folder": "폴더 추가",
+      "check_availability": "사용 가능 여부 확인",
+      "reload": "새로고침",
+      "mute": "음소거",
+      "unmute": "음소거 해제",
+      "settings": "설정",
+      "fullscreen": "전체 화면",
+      "exit_fullscreen": "전체 화면 종료",
+      "picture_in_picture": "PIP 모드",
+      "exit_picture_in_picture": "PIP 모드 종료",
+      "continue": "계속",
+      "retry": "다시 시도"
+    },
+    "notification": {
+      "copy_success": "복사 성공",
+      "link_copy_success": "링크가 복사되었습니다",
+      "link_copy_failed": "링크를 복사하지 못했습니다.",
+      "reset_options_success": "옵션이 재설정되었습니다.",
+      "unknown_error": "알 수 없는 오류",
+      "processing_files": "파일 처리 중...",
+      "new_version_available": "새 버전 사용 가능",
+      "share_failed": "공유 실패, 오류: {{error}}",
+      "clear_cache_success": "앱 캐시가 삭제되었습니다.",
+      "clear_cache_failed": "앱 캐시를 지울 수 없습니다: {{error}}",
+      "copy_failed": "복사할 수 없습니다. 클립보드 권한을 확인하고 다시 시도하세요.",
+      "room_unprotected": "이 방에는 비밀번호가 필요하지 않습니다."
+    },
+    "forward_dialog": {
+      "title": "항목 전달",
+      "placeholder": "전달할 클라이언트 검색…",
+      "no_results_found": "검색결과가 없습니다"
+    },
+    "about_dialog": {
+      "title": "Weblink 소개",
+      "description1": "Weblink는 브라우저 기반 P2P 채팅, 파일 전송, 파일 동기화 및 화면 공유 도구입니다.",
+      "disclaimer": "면책조항: 이 애플리케이션은 P2P 기술을 사용하며 모든 데이터는 사용자의 클라이언트(브라우저)에 저장됩니다. 서버는 사용자 데이터를 저장하지 않으며 신호 전달만 담당합니다. 사용자는 자신의 위험을 감수해야 하며, 개발자는 데이터 손실이나 개인 정보 침해에 대해 책임을 지지 않습니다.",
+      "version": "버전",
+      "author": "작가",
+      "license": "특허",
+      "github": "GitHub 저장소"
+    },
+    "media_selection_dialog": {
+      "title": "미디어 선택",
+      "screen": "화면",
+      "media_device": "미디어 장치",
+      "enable_camera": "카메라 활성화",
+      "enable_microphone": "마이크 활성화",
+      "enable_system_audio": "시스템 오디오 활성화",
+      "enable_program_audio": "프로그램 오디오 활성화",
+      "obs_audio_setup_tip": "OBS + VB-CABLE 설정:\n1. OBS 설정 → 오디오 → 고급 → 모니터링 장치: CABLE 입력.\n2. OBS 편집 → 고급 오디오 속성 → 오디오 모니터링: 모니터 및 출력.\n3. Weblink에서 프로그램 오디오용 CABLE 출력을 선택합니다.",
+      "request_camera_permission": "카메라 권한 요청",
+      "request_microphone_permission": "마이크 권한 요청",
+      "select_system_audio_source": "시스템 오디오 소스 선택(자동)",
+      "select_program_audio": "프로그램 오디오 입력 선택(자동)",
+      "select_microphone": "마이크 선택(자동)",
+      "select_camera": "카메라 선택(자동)",
+      "open_screen": "화면 열기",
+      "open_media_device": "오픈 미디어 장치",
+      "current": "현재의",
+      "preview": "미리보기",
+      "apply_constraints": "미디어 제약 조건 적용",
+      "apply_constraints_description": "일부 제약조건은 동적으로 변경하는 것이 지원되지 않을 수 있습니다. 적용할 새 스트림을 선택하세요.",
+      "microphone_constraints": "마이크 제약",
+      "speaker_constraints": "시스템/프로그램 오디오 제약",
+      "not_support_display_media": "귀하의 브라우저는 디스플레이 미디어를 지원하지 않습니다",
+      "not_support_user_media": "귀하의 브라우저는 사용자 미디어를 지원하지 않습니다",
+      "enable_source_required": "하나 이상의 미디어 소스를 활성화하세요.",
+      "distinct_audio_inputs_required": "마이크와 프로그램 오디오는 서로 다른 입력 장치를 사용해야 합니다.",
+      "video_constraints": "비디오 제약",
+      "constraints": {
+        "noise_suppression": "소음 억제",
+        "echo_cancellation": "에코 제거",
+        "auto_gain_control": "자동 이득 제어",
+        "voice_isolation": "음성 격리",
+        "suppress_local_audio_playback": "로컬 오디오 재생 억제",
+        "max_frame_rate": "최대 프레임 속도"
+      }
+    },
+    "nav": {
+      "settings": "설정",
+      "share_link": "링크 공유"
+    },
+    "timeago": {
+      "just_now": "방금"
+    },
+    "starter": {
+      "starter_name": "Weblink 가이드",
+      "welcome": "Weblink에 오신 것을 환영합니다! 브라우저에서 바로 만나고, 채팅하고, 화면을 공유하고, 파일을 전송하세요. 이것은 로컬에 저장된 가이드입니다. 답장이 필요하지 않습니다.",
+      "connect": "연결하기\n홈에서 채팅방 참여를 선택하고 이름, 아바타, 채팅방 ID 및 선택적 비밀번호를 입력한 후 연결을 선택하세요. 변경 사항은 자동으로 저장됩니다. 오른쪽 상단의 아바타 메뉴를 사용하여 채팅방 링크나 QR 코드를 공유하고 동일한 채팅방 세부 정보로 친구를 초대할 수 있습니다.",
+      "chat": "채팅 및 대화\n오른쪽 사이드바에서 채팅방 채팅이나 비공개 대화를 선택하세요. 대화를 검색하고, 라벨별로 필터링하거나 그룹화하고, 사이드바를 전체 채팅 작업 공간으로 확장하세요. 방 메시지는 현재 온라인 상태인 구성원에게 전달됩니다. 각 브라우저는 자체 기록을 유지합니다.",
+      "files": "파일 보내기\n메시지 작성기에서 파일을 첨부하거나 파일 목록에서 저장된 파일을 선택하세요. 채팅방 채팅은 먼저 파일 세부 정보를 공유합니다. 수신자는 전송을 선택하여 콘텐츠를 수신합니다. 동일한 로컬 파일을 재사용할 수 있습니다. 채팅방 설정에서는 작은 파일에 대한 자동 다운로드도 제공합니다.",
+      "meeting": "회의 및 PIP(Picture-in-Picture)\n하단 도구 모음을 사용하여 마이크, 카메라 및 화면 공유를 제어하세요. 카메라와 화면을 동시에 공유할 수 있습니다. 타일을 고정하여 기본 보기로 만듭니다. 도구 모음에서 PIP를 열거나 설정에서 자동 PIP를 활성화하세요.",
+      "settings": "파일, 작업 및 설정\n파일 관리, 작업 목록 또는 설정을 열려면 오른쪽 상단에서 아바타를 선택하세요. 작업 목록에는 전송 진행 상황이 표시되며 전송을 일시 중지하거나 재개할 수 있습니다. 문제를 보고하려면 설정 → 정보에서 피드백 링크를 사용하세요."
+    },
+    "error_boundary": {
+      "title": "오류가 발생했습니다",
+      "description": "페이지를 새로 고치거나 개발자에게 문의하세요. 오류 메시지는 다음과 같습니다.",
+      "reset": "초기화"
+    },
+    "pagination": {
+      "total": "{{count}} 파일",
+      "page_size": "페이지당 행 수",
+      "page": "{{page}} / {{count}}",
+      "previous": "이전 페이지",
+      "next": "다음 페이지"
+    },
+    "show_more": "더 보기",
+    "clipboard_history": {
+      "title": "클립보드 기록"
+    },
+    "file_drop": {
+      "busy": "파일을 처리 중입니다. 잠시 기다려 주세요."
+    }
+  },
+  "conversations": {
+    "title": "대화",
+    "search": "대화 검색",
+    "manage_labels": "라벨 관리",
+    "new_label": "새 라벨",
+    "add_label": "라벨 만들기",
+    "save_label": "라벨 저장",
+    "rename_label": "{{name}} 이름 바꾸기",
+    "delete_label": "라벨 {{name}} 삭제",
+    "labels": "라벨",
+    "no_labels": "라벨 버튼을 사용하여 라벨을 만듭니다.",
+    "group_by_label": "라벨별로 그룹화",
+    "filter_all": "전체",
+    "filter_unread": "읽지 않음",
+    "filter_direct": "개인 대화",
+    "filter_room": "채팅방",
+    "filter_labels": "라벨로 필터링",
+    "unlabelled": "라벨이 지정되지 않음",
+    "online": "온라인",
+    "current_room": "현재 채팅방",
+    "no_messages": "아직 메시지가 없습니다",
+    "unread_count": "{{count}} 읽지 않은 메시지",
+    "actions": "{{name}}에 대한 작업",
+    "delete": "대화 삭제",
+    "delete_title": "대화 삭제",
+    "delete_room": "채팅방 기록 삭제",
+    "delete_room_description": "이 기기에서 {{name}}에 대한 참여 기록, 저장된 비밀번호, 채팅 기록, 대화 항목 및 방 권한을 삭제하시겠습니까? 다른 구성원은 영향을 받지 않습니다.",
+    "delete_description": "이 브라우저에서 {{name}}에 대한 채팅 기록 및 대화 목록 항목을 삭제하시겠습니까? 다른 구성원은 영향을 받지 않습니다.",
+    "expand": "대화 확장",
+    "empty": "일치하는 대화가 없습니다.",
+    "select": "채팅을 시작하려면 대화를 선택하세요.",
+    "delivered_count": "{{count}} / {{total}}명에게 전달됨",
+    "delivery_sending": "전송 중",
+    "delivery_delivered": "전달됨",
+    "delivery_failed": "실패",
+    "delivery_unsupported": "채팅방채팅은 지원되지 않습니다",
+    "retry_failed": "실패한 수신자 재시도",
+    "members_online": "{{count}}명 온라인",
+    "local_history": "이 브라우저의 기록",
+    "load_earlier": "이전 메시지 로드",
+    "room_inactive": "메시지를 보내려면 이 채팅방에 참여하세요. 기록을 열어도 현재 방이 전환되지는 않습니다.",
+    "composer_offline": "연결되지 않았습니다. 메시지를 보내려면 이 피어에 연결하세요.",
+    "room_message": "이 채팅방에 메시지 보내기",
+    "send": "메시지 보내기",
+    "previous_identity": "이 기록은 이전 로컬 ID에 속합니다. 메시지를 보내려면 현재 개인 대화를 여세요.",
+    "attach_folder": "폴더 보내기",
+    "attach_media": "사진이나 동영상 보내기",
+    "attach_file": "파일 보내기",
+    "file_drop": {
+      "title": "여기에 놓아 파일 보내기",
+      "unavailable_title": "아직 파일을 보낼 수 없습니다."
+    },
+    "room_file_details": "세부정보 보기",
+    "room_file_request": "전송하려면 클릭하세요.",
+    "room_file_offer": "채팅방에 공유되었습니다. 참여자가 파일을 요청하면 전송이 시작됩니다.",
+    "room_file_sender_unavailable": "전송하려면 발신자가 온라인 상태일 때 원래 방에 참여하세요.",
+    "room_file_missing": "이 파일은 이 장치에서 더 이상 사용할 수 없습니다.",
+    "back_to_list": "대화로 돌아가기",
+    "clear": "채팅 기록 지우기",
+    "clear_title": "채팅 기록 지우기",
+    "clear_description": "이 브라우저에서 {{name}}의 채팅 기록을 삭제하시겠습니까? 대화는 목록에 유지됩니다. 다른 구성원은 영향을 받지 않습니다.",
+    "delete_requires_exit": "기록을 삭제하기 전에 채팅방에서 나가세요.",
+    "manage_room_hint": "지우기는 채팅 기록만 제거합니다. 채팅방 기록을 삭제하면 참여 기록, 저장된 비밀번호, 채팅방 권한도 제거됩니다.",
+    "manage_hint": "기록 지우기는 채팅 기록만 삭제하고 대화는 유지합니다. 대화 삭제는 목록의 항목도 제거합니다."
+  },
+  "meeting": {
+    "source_actions": "{{name}}에 대한 작업",
+    "pip_title": "회의 PIP 모드",
+    "pip_elsewhere": "회의가 다른 창에 있습니다.",
+    "pip_elsewhere_hint": "PIP 창을 사용하여 회의를 보고 제어할 수 있습니다.",
+    "pip_restore": "회의를 여기로 다시 가져오세요",
+    "feature_source": "기본 보기에 {{name}} 표시",
+    "pip_automatic": "자동 PIP(Picture-In-Picture)",
+    "pip_return": "회의로 돌아가기",
+    "pip_failed": "PIP(Picture-in-Picture)를 열 수 없습니다. 다시 시도해 주세요.",
+    "controls": "회의 제어",
+    "microphone": "마이크",
+    "camera": "카메라",
+    "mute_microphone": "마이크 음소거",
+    "enable_microphone": "마이크 활성화",
+    "disable_camera": "카메라 끄기",
+    "enable_camera": "카메라 켜기",
+    "share_screen": "화면 공유",
+    "stop_sharing": "공유 중지",
+    "show_screen_preview": "로컬 화면 미리보기 표시",
+    "screen_preview_covered": "화면을 공유하고 있습니다.",
+    "screen_preview_covered_hint": "표지를 닫고 공유 화면을 보려면 클릭하세요.",
+    "sharing_audio": "오디오 공유",
+    "mute_sharing_audio": "공유 오디오 음소거",
+    "enable_sharing_audio": "공유 오디오 음소거 해제",
+    "sharing_audio_unavailable": "이 공유에는 오디오가 없습니다. 다시 공유하고 시스템 선택기에서 오디오를 활성화하세요.",
+    "sound": "소리",
+    "layout": "레이아웃",
+    "grid_layout": "그리드 레이아웃으로 전환",
+    "focus_layout": "포커스 레이아웃으로 전환",
+    "leave_room": "채팅방 나가기",
+    "pin": "메인 스테이지에 고정",
+    "unpin": "보기 고정 해제",
+    "leave_main_title": "기본 보기를 종료하시겠습니까?",
+    "leave_main_description": "이 보기를 전환하거나 고정 해제하면 원격 제어(대기 중인 요청 포함), PIP(Picture-in-Picture) 및 전체 화면이 종료됩니다. 화면 공유는 계속됩니다.",
+    "leave_main_confirm": "기능 종료 및 계속",
+    "leave_main_failed": "현재 디스플레이 모드를 종료할 수 없습니다. 종료하고 다시 시도하십시오.",
+    "title": "회의",
+    "in_room": "참여 중인 채팅방",
+    "preview": "회의 미리보기",
+    "hide_panel": "측면 패널 숨기기",
+    "panel": "측면 패널",
+    "show_panel": "측면 패널 표시",
+    "close_panels": "측면 패널 닫기",
+    "conversations": "대화",
+    "stage": "회의 기본 화면",
+    "preview_hint": "이 기기의 미리보기입니다. 회의를 시작하려면 채팅방에 참여하세요.",
+    "join_room": "채팅방에 참여하기",
+    "media_error": "미디어를 업데이트할 수 없습니다.",
+    "media_unavailable": "카메라와 마이크를 사용할 수 없습니다. 지원되는 브라우저에서 HTTPS 또는 localhost를 사용하세요.",
+    "you": "나",
+    "side_panel": "회의 측면 패널",
+    "chat": "채팅",
+    "members": "참가자",
+    "info": "정보",
+    "select_conversation": "목록에서 대화를 선택하거나 채팅방에 참여하세요.",
+    "members_hint": "비공개 채팅을 하려면 회원을 클릭하세요. 피어 또는 채팅방을 음소거하면 이 장치에서의 재생에만 영향을 미칩니다.",
+    "mute_local_audio": "발신 오디오 음소거",
+    "unmute_local_audio": "발신 오디오 음소거 해제",
+    "mute_room_audio": "채팅방 오디오 음소거",
+    "unmute_room_audio": "채팅방 오디오 음소거 해제",
+    "open_private_chat": "{{name}}와 채팅",
+    "mute_member": "이 기기에서 {{name}} 음소거",
+    "unmute_member": "이 기기에서 {{name}} 음소거 해제",
+    "status_online": "온라인",
+    "status_offline": "오프라인",
+    "status_connecting": "연결 중",
+    "status_reconnecting": "다시 연결 중",
+    "room_info": "채팅방 정보",
+    "room_name": "채팅방명",
+    "not_joined": "방에 있지 않음",
+    "message_history": "채팅 기록",
+    "local_history": "이 브라우저에만 저장됨",
+    "history_hint": "채팅방 메시지는 전송되면 온라인으로 회원에게 전달됩니다. 오프라인 메시지는 재전송되지 않으며, 신규 사용자는 이전 기록을 받지 못합니다.",
+    "leave_hint": "나가면 마이크와 비디오가 중지되고 진행 중인 파일 전송을 포함하여 모든 채팅방 연결이 끊어집니다. 귀하의 로컬 채팅 기록이 보관됩니다.",
+    "open_room_chat": "현재 채팅방 채팅 열기",
+    "add_sharing": "화면 추가",
+    "screen_source": "스크린 {{count}}",
+    "video_source": "{{count}} 보기",
+    "stop_source": "{{name}} 중지",
+    "other_sources": "다른 견해",
+    "show_sources": "다른 보기 표시",
+    "hide_sources": "다른 보기 숨기기",
+    "show_toolbar": "툴바 표시",
+    "hide_toolbar": "툴바 숨기기",
+    "sharing_presenter": "{{name}}(당신, 발표 중)",
+    "stop_sharing_short": "멈추다",
+    "audio_devices": "오디오 장치",
+    "camera_devices": "카메라 장치",
+    "microphone_device": "마이크",
+    "speaker_device": "스피커",
+    "camera_device": "카메라",
+    "default_device": "시스템 기본값",
+    "unnamed_microphone": "마이크 {{count}}",
+    "unnamed_camera": "카메라 {{count}}",
+    "unnamed_speaker": "스피커 {{count}}",
+    "no_microphones": "마이크를 찾을 수 없습니다. 연결을 확인하고 새로 고침하세요.",
+    "no_cameras": "카메라를 찾을 수 없습니다. 연결을 확인하고 새로 고침하세요.",
+    "no_speakers": "선택할 수 있는 스피커가 없습니다. 시스템 기본값을 사용할 수 있습니다.",
+    "output_unsupported": "이 브라우저는 시스템 스피커를 사용합니다.",
+    "refresh_devices": "장치 새로 고침",
+    "close_device_menu": "장치 선택 닫기",
+    "device_unavailable": "기기를 사용할 수 없음",
+    "get_permission": "액세스 권한 부여",
+    "request_device_permission": "{{device}}에 대한 액세스 권한 부여",
+    "permission_checking": "기기 액세스 확인 중…",
+    "permission_needed": "기기를 나열하려면 권한이 필요합니다.",
+    "device_disabled": "장치 액세스가 차단되었습니다.",
+    "permission_disabled_hint": "브라우저 사이트 권한 또는 시스템 개인 정보 설정에서 액세스를 허용한 다음 장치 목록을 새로 고칩니다.",
+    "desktop_permission_disabled_hint": "Weblink가 시스템 개인 정보 보호 설정에서 마이크나 카메라를 사용하도록 허용한 다음 장치를 다시 켜십시오.",
+    "output_permission_hint": "이 브라우저에 연결된 스피커를 나열하려면 마이크 권한이 필요합니다.",
+    "output_default_only": "더 많은 발표자를 나열하려면 이 브라우저에 사용 가능한 마이크 및 마이크 액세스 권한이 필요합니다. 시스템 기본 스피커를 계속 사용하거나 시스템 설정에서 출력을 변경할 수 있습니다.",
+    "desktop_output_default_only": "시스템 기본 스피커를 사용합니다. 시스템 설정에서 출력 장치를 변경할 수 있습니다.",
+    "expand_chat": "사이드바 확장",
+    "collapse_chat": "컴팩트 사이드바 사용",
+    "return_to_stage": "회의로 돌아가기",
+    "files": "파일",
+    "online_duration": "이 세션의 시간",
+    "chat_support": "그룹 채팅을 지원하는 회원",
+    "file_support": "파일 공유를 지지하는 회원들",
+    "pip_permission_denied": "브라우저에서 PIP(Picture-in-Picture)를 허용하지 않습니다. 이 페이지로 돌아와서 PIP(Picture-in-Picture) 버튼을 클릭하여 다시 시도하십시오.",
+    "pip_not_supported": "이 브라우저 또는 비디오에서는 PIP(Picture-in-Picture)를 사용할 수 없습니다.",
+    "pip_video_required": "재생 가능한 비디오를 기다리는 중",
+    "pip_video_elsewhere": "이 비디오는 PIP 방식으로 재생됩니다.",
+    "pip_video_restore": "여기로 동영상을 다시 가져오세요.",
+    "native_screen": {
+      "share_audio": "오디오 공유",
+      "share_audio_description": "이 앱의 오디오를 제외하고 시스템 재생을 공유합니다.",
+      "title": "화면 또는 창 공유",
+      "preview": "소스 미리보기",
+      "preview_select": "미리 볼 소스를 선택하세요.",
+      "preview_loading": "미리보기 로드 중…",
+      "preview_failed": "지금은 이 소스를 미리 볼 수 없습니다.",
+      "preview_retry": "미리보기 새로고침",
+      "description": "공유할 화면이나 창을 선택하세요.",
+      "source": "화면 소스",
+      "select": "디스플레이 또는 창 선택",
+      "empty": "사용 가능한 디스플레이나 창이 없습니다.",
+      "share": "공유",
+      "screens": "스크린",
+      "windows": "창",
+      "screen_backend": "화면 캡처 방법",
+      "window_backend": "창 캡처 방법",
+      "auto_backend": "자동",
+      "unavailable": "사용할 수 없음",
+      "search_windows": "창 검색",
+      "size_unknown": "사이즈 확인 불가",
+      "no_matches": "일치하는 창이 없습니다.",
+      "backend_unavailable": "이 캡처 방법을 사용할 수 없습니다. 설정에서 변경하거나 이 대화 상자를 다시 열고 다시 시도하세요.",
+      "loading": "소스 로드 중…"
+    }
+  },
+  "room_dialog": {
+    "actions": "채팅방 작업",
+    "open": "채팅방 정보 및 설정",
+    "title": "채팅방 설정",
+    "description": "채팅방 정보를 보고 회의 장치 및 채팅방 기본 설정을 구성합니다.",
+    "sections": "채팅방 설정 섹션",
+    "info": "채팅방 정보",
+    "devices": "회의 장치",
+    "devices_hint": "장치 선택은 다음에 미팅 도구 모음에서 활성화할 때 적용됩니다. 액세스 권한을 부여하면 회의 오디오나 비디오를 게시하지 않고 장치를 잠시 열었다가 해제하여 나열할 수 있습니다.",
+    "online_members": "온라인 회원",
+    "file_hint": "파일 제안은 온라인 회원에게 제공됩니다. 요청 시 또는 작은 파일 자동 다운로드가 활성화된 경우 파일이 전송됩니다. 보낸 사람은 온라인 상태를 유지하고 로컬 파일을 보관해야 합니다.",
+    "inactive_devices": "회의 장치를 구성하려면 이 채팅방에 참여하세요.",
+    "settings": "채팅방 설정",
+    "settings_unavailable": "설정을 구성하려면 채팅방에 참여하세요.",
+    "auto_download": {
+      "title": "자동 파일 다운로드 허용",
+      "description": "전송 설정의 공유 크기 제한 내에서 이 방의 새 파일을 자동으로 수신합니다. 기록의 파일은 자동으로 다운로드되지 않습니다."
+    },
+    "members": "참여자",
+    "previous_members": "이전 회원",
+    "members_not_joined": "이 방에 참여하여 누가 온라인 상태인지 확인하세요.",
+    "no_previous_members": "보관된 대화가 있는 이전 회원이 없습니다.",
+    "members_hint": "이전 구성원은 이 채팅방에 참여하고 직접 대화가 로컬에 저장된 경우에만 표시됩니다."
+  },
+  "app_menu": {
+    "title": "계정 메뉴",
+    "room_qrcode": "채팅방 QR 코드",
+    "joining": "참여 중…",
+    "settings_categories": "설정 카테고리",
+    "settings_appearance": "모양",
+    "settings_connection": "연결",
+    "settings_transfer": "전송",
+    "settings_advanced": "고급",
+    "settings_about": "정보",
+    "settings_meeting": "오디오 및 비디오",
+    "settings_remote_control": "원격 제어",
+    "settings_permissions": "클라이언트 및 채팅방",
+    "settings_application": "애플리케이션",
+    "settings_notifications": "알림"
+  },
+  "file_library": {
+    "search": "파일 검색…",
+    "status": "사용 가능 여부",
+    "sort": "정렬",
+    "type": "파일 형식",
+    "status_all": "모든 상태",
+    "status_complete": "사용 가능",
+    "status_incomplete": "미완료",
+    "sort_recent": "최근 추가됨",
+    "sort_name": "이름",
+    "sort_size": "크기",
+    "type_all": "전체",
+    "type_image": "이미지",
+    "type_video": "비디오",
+    "type_audio": "오디오",
+    "type_document": "서류",
+    "type_other": "기타",
+    "no_results": "일치하는 파일이 없습니다.",
+    "empty": "파일을 가져오거나 대화에서 받기",
+    "local_file": "로컬 파일",
+    "actions": "파일 작업",
+    "action_preview": "미리보기",
+    "action_download": "장치에 저장",
+    "action_send": "보내기",
+    "action_details": "세부 정보",
+    "action_delete": "로컬 파일 삭제",
+    "choose": "파일에서 선택",
+    "choose_hint": "이 대화에 보낼 수 있는 파일을 선택하세요.",
+    "selection": "{{count}} 선택됨 · {{size}}",
+    "send_count": "파일 {{count}}개 보내기",
+    "import": "가져오기",
+    "reused": "이미 존재합니다. 재사용된 로컬 콘텐츠",
+    "imported": "가져온 파일",
+    "delete_description": "이 로컬 파일을 삭제하시겠습니까? {{count}} 첨부 파일 참조를 사용할 수 없게 됩니다. 채팅 메시지는 그대로 유지됩니다.",
+    "aliases": "이름",
+    "references": "첨부자료 참고",
+    "fingerprint": "콘텐츠 지문",
+    "legacy": "첫 번째 전송 시 지문 계산됨",
+    "local_completion": "이미 이 기기에 있습니다. 전송을 건너뛰었습니다.",
+    "related_messages": "관련 메시지",
+    "peer_unavailable": "수신자가 오프라인 상태입니다. 파일을 보내기 전에 다시 연결하세요.",
+    "drop_files": "파일 캐시에 저장하려면 드롭하세요."
+  },
+  "shared_files": {
+    "add": "파일 추가",
+    "from_library": "라이브러리에서 선택",
+    "upload_files": "파일 업로드",
+    "upload_folder": "폴더 업로드",
+    "added": "공유 목록에 파일이 추가되었습니다.",
+    "title": "공유된 파일",
+    "mine": "내 공유 파일",
+    "shared": "공유됨",
+    "share": "공유",
+    "unshare": "공유 중지",
+    "filter": "공유 상태",
+    "filter_all": "모든 파일",
+    "filter_shared": "공유됨",
+    "filter_private": "공유되지 않음",
+    "choose": "라이브러리에서 파일 공유",
+    "choose_hint": "선택한 파일은 모든 방의 공유 목록에서 사용할 수 있습니다.",
+    "share_count": "파일 {{count}}개 공유",
+    "get": "받기",
+    "get_count": "선택한 파일 받기 ({{count}})",
+    "search": "공유 파일 검색",
+    "refresh": "새로고침",
+    "asc": "오름차순",
+    "desc": "내림차순",
+    "disconnected": "이 회원은 연결되어 있지 않습니다.",
+    "unsupported": "이 회원은 공유 파일을 지원하지 않습니다.",
+    "disabled": "이 구성원은 귀하에 대해 공유 파일 액세스를 활성화하지 않았습니다.",
+    "empty": "공유 파일을 찾을 수 없습니다.",
+    "loading": "공유 파일 로드 중…",
+    "error": "공유 파일을 로드할 수 없습니다.",
+    "select_all": "이 페이지를 선택하세요",
+    "previous": "이전",
+    "next": "다음",
+    "page_size": "페이지당 파일",
+    "select_member": "공유 파일을 탐색할 구성원을 선택하세요.",
+    "back": "회원으로 돌아가기",
+    "drop_files": "공유 파일에 추가하려면 드롭하세요."
+  },
+  "room_connection": {
+    "title": "이 방은 다른 페이지에서 활성화되어 있습니다",
+    "description": "이 ID는 한 번에 한 페이지에서 이 방에 연결할 수 있습니다. 여기로 전환하면 이전 페이지의 채팅방에서 나가고 회의 및 전송이 중지됩니다.",
+    "switch_here": "이 페이지로 전환",
+    "switching": "전환 중…"
+  },
+  "errors": {
+    "room_in_use": "이 ID는 이미 다른 탭이나 창에서 이 방에 연결되어 있습니다. 여기에 합류하기 전에 그곳을 떠나세요.",
+    "room_takeover_timeout": "이전 페이지가 응답하지 않았습니다. 닫고 다시 시도하십시오.",
+    "unexpected": "작업이 실패했습니다. 다시 시도해 주세요.",
+    "connection_failed": "채팅방서버에 연결할 수 없습니다. 네트워크 및 서버 설정을 확인한 후 다시 시도하세요.",
+    "connection_timeout": "채팅방 서버 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.",
+    "connection_closed": "연결이 중단되었습니다. 다시 연결하고 다시 시도해 보세요.",
+    "connection_config": "채팅방 서버 주소 또는 구성이 잘못되었습니다. 연결 설정을 확인하세요.",
+    "connection_response": "서버가 잘못된 응답을 반환했습니다. 주소를 확인하거나 앱과 서버를 업데이트하세요.",
+    "password_required": "이 방에는 비밀번호가 필요합니다. 입력하고 다시 시도하세요.",
+    "incorrect_password": "채팅방 비밀번호가 정확하지 않습니다. 확인하고 다시 시도해 보세요.",
+    "password_prepare": "채팅방 비밀번호를 처리할 수 없습니다. 페이지를 새로 고치고 다시 시도하세요.",
+    "request_timeout": "요청 시간이 초과되었습니다. 두 장치를 모두 연결한 상태로 유지하고 다시 시도하세요.",
+    "member_offline": "이 회원은 연결되어 있지 않습니다. 다시 연결될 때까지 기다린 후 다시 시도하세요.",
+    "sharing_disabled": "이 회원은 공유 파일에 대한 액세스를 비활성화했습니다.",
+    "file_not_shared": "이 파일은 더 이상 공유되지 않거나 삭제되었습니다. 목록을 새로 고칩니다.",
+    "shared_unsupported": "이 회원은 공유 파일 다운로드를 지원하지 않습니다. 두 앱을 모두 업데이트하고 다시 시도해 보세요.",
+    "file_unavailable": "파일이 삭제되었거나 읽을 수 없습니다. 선택하거나 다시 가져오세요.",
+    "file_incomplete": "파일이 아직 완전히 사용 가능하지 않습니다. 다시 시도하기 전에 완료될 때까지 기다리십시오.",
+    "file_busy": "이 파일은 이미 처리 중이거나 전송 중입니다. 현재 작업이 완료될 때까지 기다립니다.",
+    "file_failed": "파일 작업이 실패했습니다. 연결 및 로컬 저장소를 확인한 후 다시 시도하세요.",
+    "file_list_failed": "파일 목록을 로드할 수 없습니다. 두 장치를 모두 연결한 상태로 유지하고 목록을 새로 고치세요.",
+    "verification_failed": "수신된 파일을 확인하지 못했습니다. 파일을 다시 받으세요.",
+    "storage_full": "로컬 저장소가 가득 찼습니다. 더 이상 필요하지 않은 파일을 삭제하고 다시 시도해 보세요.",
+    "storage_unavailable": "로컬 파일 라이브러리에 액세스할 수 없습니다. 브라우저 저장 권한을 확인하고 다시 시도하세요.",
+    "permission_denied": "허가가 거부되었습니다. 브라우저 권한을 확인하고 다시 시도해 보세요.",
+    "cancelled": "작업이 취소되었습니다.",
+    "avatar_failed": "이 이미지를 읽을 수 없습니다. 다른 이미지를 선택하고 다시 시도하세요.",
+    "ice_unavailable": "서버를 사용할 수 없습니다. 주소, 자격 증명 및 네트워크를 확인하세요.",
+    "ice_credentials": "릴레이 자격 증명을 얻을 수 없습니다. TURN 서비스 자격 증명을 확인하세요.",
+    "ice_config": "릴레이 서버 구성이 잘못되었습니다. 주소와 인증방법을 확인하세요.",
+    "ice_config_line": "{{line}} 라인에는 |로 구분된 주소, 사용자 이름, 비밀번호 및 인증 방법이 포함되어야 합니다.",
+    "ice_auth_line": "{{line}} 라인에 지원되지 않는 인증 방법이 있습니다. 장기 또는 hmac를 사용하십시오."
+  },
+  "remote_control": {
+    "clipboard_transfer": {
+      "sending": "클립보드 파일 보내기",
+      "receiving": "클립보드 파일 수신",
+      "finalizing": "클립보드 파일 처리 중",
+      "completed": "클립보드 파일 전송 완료",
+      "failed": "클립보드 파일 전송 실패",
+      "details": "전송 세부정보를 보려면 작업 목록을 엽니다."
+    },
+    "request_title": "원격 제어를 허용하시겠습니까?",
+    "request_description": "{{name}}는 이 컴퓨터의 마우스와 키보드를 제어하려고 합니다. 공유 디스플레이는 포인터를 매핑합니다. 제어는 애플리케이션이나 디스플레이에만 국한되지 않습니다.",
+    "revoke_hint": "제어를 종료하려면 \"제어 취소\"를 사용하거나 이 컴퓨터에서 {{shortcut}}를 누르세요.",
+    "decline": "거절",
+    "allow": "제어 허용",
+    "host_active": "{{name}}는 이 컴퓨터를 제어할 수 있습니다.",
+    "controller_active": "{{name}} 제어",
+    "host_active_short": "원격 제어 중",
+    "controller_active_short": "원격 조작 중",
+    "revoke": "제어권 취소",
+    "revoke_failed": "제어를 취소할 수 없습니다. 이를 중지하려면 호스트에서 {{shortcut}}를 사용하세요.",
+    "approval_failed": "승인에 실패했습니다. 요청이 만료되었거나 제어가 불가능할 수 있습니다. 제어권을 다시 요청하세요.",
+    "reconnecting": "제어 재연결 중",
+    "surface": "원격 제어; {{shortcut}}를 눌러 포인터와 키보드를 놓습니다.",
+    "request": "제어 요청",
+    "waiting": "승인을 기다리는 중",
+    "cancel": "요청 취소",
+    "end": "제어 종료",
+    "more_choices": "추가 승인 옵션",
+    "allow_remember": "승인 및 허용 목록에 추가",
+    "deny_remember": "거부하고 차단 목록에 추가",
+    "share_first_screen": "승인하면 화면 1과 해당 오디오가 채팅방의 모든 참여자에게 공유됩니다.",
+    "keyboard_control": "키보드 제어",
+    "keyboard_enable": "키보드 제어 활성화",
+    "keyboard_disable": "키보드 제어 비활성화",
+    "keyboard_show": "키보드 표시",
+    "keyboard_hide": "키보드 숨기기",
+    "keyboard_input": "원격 컴퓨터에 입력",
+    "text_too_long": "텍스트가 너무 깁니다. 더 작은 부분으로 보내십시오.",
+    "text_failed": "입력을 완전히 보낼 수 없습니다. 다시 시도하기 전에 원격 텍스트를 확인하세요.",
+    "system_keyboard_stopped": "시스템 키보드 전달이 중지되었습니다. 원격 화면을 클릭하여 다시 시도하거나 원격 제어 설정에서 시스템 바로가기를 끄세요.",
+    "capture_failed": "포인터를 캡처할 수 없습니다. 원격 화면을 클릭하여 다시 시도하거나 원격 제어 설정에서 로컬 커서를 선택하세요.",
+    "capture_unavailable": "이 호스트는 포인터 캡처를 지원하지 않습니다. 원격 제어 설정에서 로컬 커서를 선택합니다.",
+    "capture_hint": "포인터를 캡처하려면 클릭하세요. {{shortcut}}를 눌러 포인터와 키보드를 놓습니다.",
+    "file_drop": {
+      "hint": "원격 화면의 이 위치에 파일을 놓으세요",
+      "unavailable": "이 호스트에서는 파일 드롭이 비활성화되었거나 사용 중이거나 사용할 수 없습니다.",
+      "sending": "끌어 놓은 파일 전송 중",
+      "receiving": "끌어 놓은 파일 수신 중",
+      "finalizing": "원격 컴퓨터에 파일 놓는 중",
+      "completed": "원격 파일 끌어 놓기 완료",
+      "failed": "원격 파일 끌어 놓기 실패",
+      "details": "전송 세부정보를 보려면 작업 목록을 엽니다."
+    }
+  }
+}

@@ -80,7 +80,8 @@
       },
       "language": {
         "title": "语言",
-        "description": "更改应用程序的语言"
+        "description": "更改应用程序的语言",
+        "system": "跟随系统"
       },
       "background_image": {
         "title": "墙纸背景",

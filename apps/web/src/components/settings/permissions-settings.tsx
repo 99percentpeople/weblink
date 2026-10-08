@@ -1,3 +1,4 @@
+import { resolvedLocale } from "@/libs/state/app-locale";
 import {
   SettingSection,
   SettingHeading,
@@ -102,7 +103,7 @@ export default function PermissionsSettings() {
     return {
       dateTime: date.toISOString(),
       label: t("setting.permissions.last_updated", {
-        time: date.toLocaleString(appState.options.locale, {
+        time: date.toLocaleString(resolvedLocale(), {
           year: "numeric",
           month: "2-digit",
           day: "2-digit",

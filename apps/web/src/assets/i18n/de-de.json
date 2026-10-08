@@ -1,0 +1,1309 @@
+{
+  "404": {
+    "title": "404 Nicht gefunden",
+    "description": "Die gesuchte Seite existiert nicht, Pfad: {{path}}",
+    "home": "Gehen Sie zu Startseite"
+  },
+  "tasks": {
+    "error_details": "Fehlerdetails",
+    "pause": "Pause",
+    "resume": "Wieder aufnehmen",
+    "title": "Aufgaben",
+    "count": "{{active}} aktiv · {{total}} insgesamt",
+    "active_count": "{{count}} aktive Aufgaben",
+    "search": "Dateien oder Mitglieder durchsuchen…",
+    "local": "Dieses Gerät",
+    "filters_label": "Aufgaben filtern",
+    "filters": {
+      "status": "Status",
+      "type": "Typ",
+      "no_results": "Keine passenden Optionen"
+    },
+    "kinds": {
+      "file-send": "Datei senden",
+      "file-receive": "Datei empfangen",
+      "speed-test": "Peer-Geschwindigkeitstest",
+      "file-prepare": "Dateiidentifikation"
+    },
+    "status": {
+      "waiting": "Wartend",
+      "running": "Läuft",
+      "finalizing": "Speichern / Zusammenführen",
+      "paused": "Pausiert",
+      "completed": "Abgeschlossen",
+      "cancelled": "Gestoppt",
+      "failed": "Fehlgeschlagen"
+    },
+    "empty": "In dieser Ansicht sind keine Aufgaben vorhanden.",
+    "progress": "Fortschritt der Dateiübertragung",
+    "inspect": "Peer-Details",
+    "clear_finished": "Klar fertig",
+    "show_more": "Mehr anzeigen",
+    "action_failed": "Die Aktion ist fehlgeschlagen. Überprüfen Sie die Verbindung und versuchen Sie es erneut."
+  },
+  "speed_test": {
+    "background_notice": "Sie können dieses Dialogfeld schließen oder die Registerkarten wechseln. Der Test wird in „Aufgaben“ fortgesetzt, wo Sie ihn stoppen oder das Ergebnis anzeigen können.",
+    "title": "Peer-Geschwindigkeitstest",
+    "description": "Testen Sie diese Peer-Verbindung in beide Richtungen, ohne eine Datei auszuwählen. Daten werden generiert und im Speicher verworfen; Es wird nichts im Dateicache gespeichert.",
+    "traffic_notice": "Jede Richtung sendet bis zu 10 Sekunden oder 64 MiB, je nachdem, was zuerst eintritt (128 MiB Gesamtnutzlast, plus Protokoll-Overhead). Der andere Peer muss zustimmen. Pausieren Sie Dateiübertragungen und Anrufe für eine sauberere Messung.",
+    "start": "Geschwindigkeitstest starten",
+    "cancel": "Test beenden",
+    "accept": "Test zulassen",
+    "decline": "Ablehnen",
+    "request": "{{name}} fordert einen Geschwindigkeitstest an",
+    "remote_running": "Geschwindigkeitstest mit {{name}}",
+    "upload": "Dieses Gerät → Peer",
+    "download": "Peer → dieses Gerät",
+    "measured_at": "Gemessen bei {{time}}",
+    "result_note": "Durchschnittlicher Durchsatz empfangener Nutzdaten, ohne Dateilesen, Komprimieren und Festplattenschreibvorgänge. Dies misst die ausgewählte Direkt-/TURN-Route, nicht die maximale Bandbreite Ihres ISP.",
+    "short_sample": "Die Byte-Obergrenze wurde schnell erreicht. Eine Probe unter 1 Sekunde ist möglicherweise weniger stabil. Zum Vergleich wiederholen.",
+    "phases": {
+      "connecting": "Testkanal öffnen…",
+      "approval": "Warten auf Genehmigung…",
+      "approval_incoming": "Anfrage zum Geschwindigkeitstest",
+      "upload": "Dieses Gerät wird getestet → Peer…",
+      "download": "Peer → dieses Gerät wird getestet…"
+    },
+    "errors": {
+      "busy": "Ein Geschwindigkeitstest oder eine Dateiübertragung ist bereits aktiv. Beenden oder stoppen Sie es zuerst.",
+      "offline": "Stellen Sie eine Verbindung zu diesem Peer her, bevor Sie einen Geschwindigkeitstest starten.",
+      "unsupported": "Der Peer hat das Geschwindigkeitstestprotokoll nicht bestätigt. Aktualisieren Sie beide Clients und versuchen Sie es erneut.",
+      "declined": "Der Peer hat abgelehnt oder die Genehmigungsanfrage ist abgelaufen.",
+      "cancelled": "Geschwindigkeitstest gestoppt.",
+      "timeout": "Der Test ist abgelaufen. Es ist kein vollständiges Geschwindigkeitsergebnis verfügbar.",
+      "closed": "Der Peer hat den Test abgebrochen oder die Verbindung wurde unterbrochen.",
+      "protocol": "Ungültige Testantwort oder nicht übereinstimmende Byteanzahl. Das Ergebnis wurde verworfen.",
+      "failed": "Der Geschwindigkeitstest ist fehlgeschlagen. Überprüfen Sie die Verbindung und versuchen Sie es erneut."
+    }
+  },
+  "setting": {
+    "appearance": {
+      "title": "Darstellung",
+      "theme": {
+        "title": "Design",
+        "description": "Ändern Sie das Thema der App"
+      },
+      "language": {
+        "title": "Sprache",
+        "description": "Ändern Sie die Sprache der App",
+        "system": "Systemsprache verwenden"
+      },
+      "background_image": {
+        "title": "Hintergrundbild",
+        "description": "Wählen Sie eine Textur, laden Sie ein Bild hoch oder ziehen Sie eines in die Vorschau.",
+        "click_to_select": "Klicken Sie zum Auswählen",
+        "preview": "Vorschau",
+        "custom_image": "Benutzerdefiniertes Bild",
+        "default": "Standardhintergrund",
+        "upload": "Bild hochladen",
+        "uploading": "Wird gespeichert…",
+        "reset": "Standardhintergrund wiederherstellen",
+        "textures": "Voreingestellte Texturen",
+        "drop_to_upload": "Zur Verwendung als Hintergrundbild ablegen",
+        "invalid_image": "Bitte wählen Sie eine Bilddatei aus.",
+        "upload_failed": "Das Bild konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+        "presets": {
+          "dots": "Punkte",
+          "grid": "Raster",
+          "diagonal": "Diagonale",
+          "linen": "Leinen",
+          "waves": "Wellen",
+          "checker": "Schachbrett"
+        }
+      },
+      "background_image_opacity": {
+        "title": "Deckkraft des Hintergrundbilds"
+      },
+      "wake_lock": {
+        "title": "Lassen Sie den Bildschirm eingeschaltet",
+        "description": "Wenn die App aktiviert ist, bleibt der Bildschirm eingeschaltet"
+      }
+    },
+    "list": {
+      "bulk_edit": "Massenbearbeitung",
+      "save": "Speichern",
+      "add": "Hinzufügen",
+      "edit": "Bearbeiten",
+      "remove": "Entfernen",
+      "inline_hint": "Drücken Sie die Eingabetaste, um hinzuzufügen; Klicken Sie auf ein Tag, um es zu bearbeiten.",
+      "bulk_hint": "Ein Eintrag pro Zeile. Speichern, um alle Änderungen zu übernehmen."
+    },
+    "connection": {
+      "title": "Verbindung",
+      "auto_join": {
+        "title": "Automatisch beitreten",
+        "description": "Treten Sie einem Raum automatisch bei, wenn die App gestartet wird"
+      },
+      "stun_servers": {
+        "title": "STUN-Server",
+        "description": "Ändern Sie die STUN-Server der App, die zum Herstellen von Peer-to-Peer-Verbindungen verwendet werden"
+      },
+      "turn_servers": {
+        "title": "TURN-Server",
+        "description": "Konfigurieren Sie zusätzliche TURN-Relay-Server."
+      },
+      "share_servers_with_others": {
+        "title": "Teilen Sie Server mit anderen",
+        "description": "Geben Sie die STUN- und TURN-Server beim Generieren der Beitritts-URL für andere frei"
+      },
+      "available": "Verfügbar"
+    },
+    "sender": {
+      "title": "Dateisendereinstellungen",
+      "enable_clipboard": {
+        "title": "Zwischenablage aktivieren",
+        "description": "Aktivieren Sie das Senden der Zwischenablage durch Einfügen in den privaten Chatbereich außerhalb der Nachrichteneingabe. Beim Einfügen in die Nachrichteneingabe wird der Entwurf immer bearbeitet.",
+        "unsupported": "Die Zwischenablage wird nicht unterstützt. Bitte verwenden Sie sie in einem sicheren Kontext"
+      },
+      "chunk_size": {
+        "title": "Chunk-Größe"
+      },
+      "block_size": {
+        "title": "Blockgröße"
+      },
+      "max_buffer_amount": {
+        "title": "Maximale Puffermenge"
+      },
+      "ordered": {
+        "title": "Reihenfolge beibehalten",
+        "description": "Wenn diese Option aktiviert ist, sendet der Absender Blöcke der Reihe nach"
+      },
+      "compression_level": {
+        "title": "Komprimierungsstufe",
+        "description": "Ändern Sie die Komprimierungsstufe des Absenders. 0 bedeutet keine Komprimierung, 9 bedeutet maximale Komprimierung. Wenn Sie diese Option aktivieren, kann sich die Übertragungsgeschwindigkeit für komprimierte Dateien verringern",
+        "no_compression": "0 (Keine Komprimierung)"
+      },
+      "automatic_cache_deletion": {
+        "title": "Automatisches Cache-Löschen",
+        "description": "Löscht den Cache nach dem Senden automatisch"
+      }
+    },
+    "receiver": {
+      "title": "Dateiempfängereinstellungen",
+      "max_cached_chunks": {
+        "title": "Max. zwischengespeicherte Chunks",
+        "description": "Ändern Sie die maximal zwischengespeicherten Blöcke des Empfängers"
+      },
+      "automatic_download": {
+        "title": "Automatischer Download",
+        "description": "Automatischer Download nach Erhalt"
+      },
+      "auto_download_limit": {
+        "title": "Automatische Beschränkung der Downloadgröße",
+        "description": "Wird von allen Räumen geteilt, denen das automatische Herunterladen von Dateien gestattet ist. Größere Dateien können weiterhin manuell heruntergeladen werden."
+      }
+    },
+    "about": {
+      "reset_options": "Einstellungen zurücksetzen",
+      "clear_service_worker_cache": "App-Cache leeren",
+      "copy_version": "Versionsinformationen kopieren",
+      "copy_failed": "Versionsinformationen konnten nicht kopiert werden. Bitte versuchen Sie es erneut.",
+      "build_time": "Erstellt am",
+      "changelog": "Versionshinweise",
+      "feedback": "Melden Sie ein Problem",
+      "maintenance": "Wartung",
+      "reset_description": "Stellen Sie die Anwendungseinstellungen wieder her, einschließlich Raum- und Mitgliedereinstellungen. Der Chatverlauf und die zwischengespeicherten Dateien bleiben erhalten.",
+      "reset_failed": "Einstellungen konnten nicht zurückgesetzt werden: {{error}}",
+      "cache_description": "Entfernen Sie zwischengespeicherte Seitenressourcen, um Lade- oder Aktualisierungsprobleme zu beheben. Chatverlauf, zwischengespeicherte Dateien und Einstellungen bleiben erhalten."
+    },
+    "advanced_settings": {
+      "advanced_connection": {
+        "title": "Erweiterte Verbindungseinstellungen",
+        "relay_only": {
+          "title": "Nur Relais",
+          "description": "Wenn diese Option aktiviert ist, verwendet die App nur den TURN-Server"
+        }
+      },
+      "advanced_sender": {
+        "title": "Erweiterte Dateisendereinstellungen"
+      },
+      "advanced_receiver": {
+        "title": "Erweiterte Dateiempfängereinstellungen"
+      }
+    },
+    "native_capture": {
+      "title": "Test der nativen Bildschirmaufnahme",
+      "description": "Erfassen Sie eine ausgewählte Anzeige oder ein ausgewähltes Fenster lokal. Bei diesem Test werden keine Videos aufgezeichnet oder an einen Raum gesendet.",
+      "source": "Aufnahmequelle",
+      "select_source": "Wählen Sie eine Anzeige oder ein Fenster aus",
+      "monitor": "Bildschirm",
+      "window": "Fenster",
+      "refresh": "Quellen aktualisieren",
+      "start": "Starten Sie die Aufnahme",
+      "stop": "Stoppen Sie die Aufnahme",
+      "frames": "Einzelbilder",
+      "waiting": "Warten auf den ersten Frame. Stellen Sie sicher, dass das ausgewählte Fenster sichtbar ist.",
+      "disconnected": "Die Aufnahme wurde gestoppt, weil das Testpanel nicht mehr reagierte.",
+      "hint": "Durch das Schließen dieses Panels wird die Aufnahme gestoppt. Die Bildrate spiegelt tatsächliche Aktualisierungen wider und kann auf Null fallen, wenn die Quelle statisch oder minimiert ist.",
+      "state": {
+        "idle": "Bereit",
+        "running": "Aufnahme läuft",
+        "stopped": "Gestoppt",
+        "closed": "Quelle geschlossen",
+        "failed": "Die Aufnahme ist fehlgeschlagen"
+      }
+    },
+    "meeting_settings": {
+      "resolution": "Beschränkung der Videoauflösung",
+      "frame_rate": "Begrenzung der Videobildrate",
+      "capture_description": "Wird für Kameras und Bildschirmfreigabe verwendet. Qualitätsänderungen gelten sofort.",
+      "native_unavailable": "Native Codec-Funktionen konnten nicht geladen werden.",
+      "stream": {
+        "title": "Videoqualität",
+        "video_max_bitrate": {
+          "title": "Bitratenbegrenzung für den Videoversand"
+        },
+        "degradation_preference": {
+          "title": "Wenn die Ressourcen begrenzt sind, setzen Sie Prioritäten",
+          "balanced": "Balance zwischen Details und Glätte",
+          "maintain-framerate": "Reibungslose Bewegung (Bildrate)",
+          "maintain-resolution": "Scharfe Details (Auflösung)"
+        },
+        "preferred_video_codec": {
+          "title": "Bevorzugter Browser-Videocodec",
+          "auto": "Automatisch"
+        }
+      },
+      "native_capture": "Bildschirmaufnahme und Kodierung",
+      "native_encoder": "Videokodierung für Bildschirmfreigabe",
+      "native_encoder_auto": "Automatisch (kompatible Hardware bevorzugen)",
+      "hardware": "Hardware",
+      "software": "Software",
+      "native_encoder_description": "Wählen Sie Desktop-Aufnahmemethoden und Video-Codecs für die nächste Freigabe.",
+      "native_advanced": "Erweiterte Optionen für diese Kodierung",
+      "readback_buffers": "GPU-Rücklesepuffer",
+      "readback_buffers_1": "Einzelpuffer",
+      "readback_buffers_2": "Doppelter Puffer (Standard)",
+      "readback_buffers_3": "Dreifachpuffer",
+      "readback_buffers_description": "Mehr Puffer ermöglichen eine überlappende Frame-Verarbeitung, verbrauchen jedoch mehr GPU-Speicher und können die Latenz erhöhen. Gilt für die nächste Freigabe.",
+      "color_matrix": "Farbmatrix",
+      "color_auto": "Automatisch (passender Codec)",
+      "color_range": "Farbpalette",
+      "color_range_limited": "Begrenzt (16–235, größere Kompatibilität)",
+      "color_range_full": "Voll (0–255)",
+      "color_description": "Gilt für die nächste Freigabe. Konvertierung und Wiedergabe verwenden passende Farb-Tags. Bei Full Range bleiben mehr Helligkeitsstufen erhalten, es ist jedoch Empfängerunterstützung erforderlich.",
+      "color_vp8": "VP8 nutzt die begrenzte Reichweite von BT.601. Andere Codecs stellen Ihre ausgewählten Einstellungen wieder her.",
+      "color_format": "Ausgabefarbformat",
+      "audio": {
+        "title": "Audioaufnahme",
+        "auto": "Automatisch",
+        "unavailable": "Derzeit nicht verfügbar",
+        "codec": {
+          "title": "Bevorzugter Audio-Codec",
+          "unsupported": "Audio-Codec-Funktionen sind nicht verfügbar. Ein kompatibler Codec wird automatisch ausgehandelt."
+        },
+        "sample_rate": {
+          "title": "Audio-Abtastrate"
+        },
+        "channels": {
+          "title": "Audiokanäle",
+          "mono": "Mono",
+          "stereo": "Stereo (zwei Kanäle)"
+        },
+        "description": "Wählen Sie eine unterstützte Abtastrate und Kanalanzahl für die nächste Aufnahme.",
+        "sampling_loading": "Audioformate werden geladen…",
+        "codecs_loading": "Audio-Codecs werden geladen…",
+        "sampling_failed": "Systemaudioformate sind derzeit nicht verfügbar.",
+        "sampling_unknown": "Sampling-Optionen sind noch nicht verfügbar. Verwenden Sie „Automatisch“."
+      },
+      "encoders_loading": "Video-Encoder werden erkannt…",
+      "backends_loading": "Erfassungsmethoden werden geladen…",
+      "backends_unavailable": "Erfassungsmethoden sind derzeit nicht verfügbar.",
+      "browser_encoding": "Browser-Kodierung",
+      "browser_encoding_description": "Wird für Kameras, Mikrofone und die Browser-Bildschirmfreigabe bei späteren Verbindungsaushandlungen verwendet.",
+      "native_audio_codec": "Nativer Audio-Codec"
+    },
+    "remote_control": {
+      "description": "Wählen Sie aus, wie die Touch-Gesten dieses Geräts einen Remote-Bildschirm steuern.",
+      "mode": {
+        "title": "Touch-Modus",
+        "trackpad": "Trackpad",
+        "direct": "Direkte Berührung",
+        "trackpad_description": "Bewegen Sie einen Finger, um den Cursor zu bewegen. Tippen Sie zum Klicken, klicken Sie mit zwei Fingern mit der rechten Maustaste, scrollen oder ziehen Sie die Finger zusammen, um zu zoomen, und halten Sie die Maustaste gedrückt, um zu ziehen.",
+        "direct_description": "Senden Sie echte Touch-Kontakte an die entsprechenden Bildschirmpositionen, einschließlich Multi-Touch und Drücken und Halten. Gesten werden von Windows und der Remote-App verarbeitet. Der Remote-Host muss die Touch-Eingabe unterstützen."
+      },
+      "pointer_speed": "Cursorgeschwindigkeit",
+      "sample_rate": {
+        "title": "Touch-Abtastrate",
+        "description": "Legen Sie die maximale Senderate für Bewegung und Scrollen fest. Höhere Raten können die Glätte verbessern und mehr Bandbreite verbrauchen; Die tatsächliche Rate hängt vom Gerät, Browser und Netzwerk ab. Pressemitteilungen und Mitteilungen werden immer sofort verschickt."
+      },
+      "forwardProperties": "Touch-Eigenschaften weiterleiten",
+      "touch_properties_description": "Leiten Sie den vom Browser gemeldeten Druck- und Kontaktbereich im Direktberührungsmodus weiter. Deaktivieren Sie die Option, um die Systemstandards zu verwenden. Multitouch bleibt verfügbar.",
+      "scroll_speed": "Scrollgeschwindigkeit mit zwei Fingern",
+      "tapToClick": "Tippen Sie, um mit der linken Maustaste zu klicken",
+      "twoFingerRightClick": "Tippen Sie mit zwei Fingern, um mit der rechten Maustaste zu klicken",
+      "twoFingerScroll": "Scrollen mit zwei Fingern",
+      "twoFingerZoom": "Zum Zoomen kneifen",
+      "naturalScroll": "Natürliches Scrollen",
+      "three_finger_tap": {
+        "title": "Drei-Finger-Tippen",
+        "keyboard": "Tastatur anzeigen",
+        "none": "Keine Tastenkombination",
+        "description": "Tippen Sie im Trackpad-Modus mit drei Fingern auf die Bedienoberfläche, um die Tastatur zu öffnen. Die Tastatursteuerung muss aktiviert sein."
+      },
+      "long_press": {
+        "title": "Mit einem Finger drücken und halten",
+        "drag": "Zum Ziehen gedrückt halten",
+        "right-click": "Klicken Sie mit der rechten Maustaste",
+        "none": "Keine Aktion"
+      },
+      "changes": "Änderungen werden sofort wirksam und alle gedrückten Tasten oder Berührungen werden freigegeben.",
+      "pan_unavailable": "Natives Touchpad-Scrollen und Zoomen sind auf diesem Host nicht verfügbar.",
+      "unavailable": "Dieser Host unterstützt keine direkte Berührung. Wählen Sie in den Fernsteuerungseinstellungen „Trackpad“ aus.",
+      "keyboard_heading": "Tastatur",
+      "touch_heading": "Touch",
+      "keyboard": {
+        "title": "Tastatureingaben weiterleiten",
+        "description": "Im lokalen Cursormodus werden durch Klicken auf den Bildschirm unterstützte physische Tasten mithilfe des Remote-Tastaturlayouts weitergeleitet. Der Aufnahmemodus leitet Tasten nur weiter, während sie erfasst werden. Verwenden Sie den Kopfschalter, um die Weiterleitung auszuschalten. Die manuell zu öffnende Bildschirmtastatur funktioniert in beiden Modi."
+      },
+      "exit_shortcut": {
+        "title": "Tastenkombination zum Freigeben von Zeiger und Tastatur",
+        "description": "Geben Sie Tastatureingaben und alle erfassten Zeiger frei, ohne die Steuerverbindung zu beenden. Die Verknüpfung funktioniert auch, wenn die Tastaturweiterleitung deaktiviert ist.",
+        "browser": "Sie können auch Escape drücken, um die Aufnahme freizugeben.",
+        "native": "Wenn die Weiterleitung von Systemverknüpfungen aktiviert ist, wird Escape an den Remote-Computer gesendet. Verwenden Sie die obige Verknüpfung, um die Eingabe freizugeben.",
+        "webview": "Bei Verwendung der Browser-Tastenbehandlung gibt Escape auch die Erfassung frei."
+      },
+      "auto_keyboard": {
+        "title": "Mobile Tastatur automatisch ein- und ausblenden",
+        "description": "Nachdem Sie auf den Remote-Bildschirm getippt haben, folgen Sie dem bearbeitbaren Feldfokus auf dem Windows-Host. Automatisch geöffnete Tastaturen ausblenden, wenn der Textfokus endet. Die manuelle Entlassung bleibt bis zum erneuten Antippen wirksam. Für einige Browser, einschließlich iPhone, ist möglicherweise weiterhin die Tastaturtaste erforderlich."
+      },
+      "keyboard_collapse": {
+        "title": "Reduzieren Sie die Steuerelemente während der Eingabe",
+        "description": "Reduzieren Sie die untere Symbolleiste und die Bildschirmliste vorübergehend, wenn die Remote-Tastatur sichtbar ist. Stellen Sie den vorherigen Zustand wieder her, wenn die Tastatur geschlossen wird."
+      },
+      "system_keyboard": {
+        "title": "Systemtastenkombinationen weiterleiten",
+        "description": "Leiten Sie unterstützte Systemverknüpfungen weiter, während Sie den Remote-Bildschirm steuern. Deaktivieren Sie diese Option, um die Browser-Schlüsselverwaltung zu verwenden. Strg+Alt+Entf bleibt lokal."
+      },
+      "pointer_heading": "Zeiger",
+      "pointer": {
+        "title": "Zeigerverhalten",
+        "local": "Lokaler Cursor",
+        "capture": "Lokalen Cursor erfassen und ausblenden",
+        "local_description": "Verwenden Sie den lokalen Cursor, um auf den Remote-Bildschirm zu zeigen. Klicken Sie auf den Bildschirm, um Tastatureingaben weiterzuleiten. Mit dem Header-Schalter kann die Weiterleitung ausgeschaltet werden.",
+        "capture_description": "Klicken Sie auf den Remote-Bildschirm, um den lokalen Cursor zu erfassen und auszublenden. Nur während der Erfassung werden physische Schlüssel weitergeleitet. Verwenden Sie die Freigabetaste, um sowohl den Zeiger als auch die Tastatur freizugeben. Die Steuerverbindung bleibt aktiv."
+      },
+      "general_heading": "Allgemein",
+      "cursor_sync": {
+        "title": "Synchronisieren Sie das Erscheinungsbild des Remote-Cursors",
+        "description": "Passen Sie im lokalen Cursormodus den Remote-Text, die Hand, die Größe und andere Cursorformen an."
+      },
+      "clipboard": {
+        "title": "Remote-Zwischenablage synchronisieren",
+        "description": "Auf dem steuernden Gerät aktivieren, um unterstützte Inhalte der Zwischenablage zu synchronisieren."
+      },
+      "clipboard_files": {
+        "loading": "Verfügbarkeit der Zwischenablage prüfen…",
+        "unavailable": "Das Schreiben in die Zwischenablage ist hier nicht möglich. Wählen Sie Dateicache oder Aus.",
+        "title": "Beim Kopieren von Dateien",
+        "clipboard": "Zwischenablage",
+        "cache": "Dateicache",
+        "off": "Aus",
+        "description": "Die Webversion empfängt Dateien im Dateicache. Die Windows-Desktop-App kann sie auch in die Zwischenablage kopieren. Ordner werden als ZIP komprimiert."
+      },
+      "emergency_shortcut": {
+        "title": "Tastenkombination für den Notstopp am Host",
+        "description": "Nur Windows-Desktop. Während dieser Computer ferngesteuert wird, stoppt diese Verknüpfung ihn, selbst wenn die App im Hintergrund läuft. Die Schlüssel werden nicht reserviert oder abgefangen; Möglicherweise reagieren auch andere Apps.",
+        "failed": "Der Notfall-Shortcut-Listener konnte nicht aktualisiert werden. Die vorherige Einstellung wurde beibehalten. Bitte versuchen Sie es erneut."
+      },
+      "file_drop": {
+        "title": "Remote-Datei-Drag-and-Drop",
+        "description": "Aktivieren Sie diese Option auf dem Controller, um Dateien auf dem Remote-Bildschirm abzulegen. Erfordert einen Windows-Desktop-Host und eine Zielanwendung, die das Löschen von Dateien akzeptiert. Die Ordner werden zunächst gezippt."
+      },
+      "file_size_limit": {
+        "title": "Größenbeschränkung für Dateiübertragungen",
+        "description": "Wird per Drag-and-Drop und Kopieren/Einfügen geteilt, wobei die gesamten Dateibytes pro Vorgang gezählt werden. Standard: 64 MiB; Bereich: 1–512 MiB. Ordner müssen vor und nach der ZIP-Komprimierung passen. Änderungen gelten für den nächsten Vorgang."
+      }
+    },
+    "permissions": {
+      "description": "Verwalten Sie Clients- und Raumberechtigungen. Löschen Sie den Verlauf aus dieser Liste oder öffnen Sie die Einstellungen, um Berechtigungen zu bearbeiten oder zurückzusetzen. Verlassen Sie einen aktiven Raum, bevor Sie dessen Verlauf löschen.",
+      "clients": "Clients",
+      "rooms": "Räume",
+      "empty_clients": "Keine gespeicherten Clientberechtigungen.",
+      "empty_rooms": "Keine gespeicherten Raumberechtigungen.",
+      "last_updated": "Letzte Aktualisierung: {{time}}",
+      "ask": "Jedes Mal fragen",
+      "allow": "Automatisch genehmigen (Zulassungsliste)",
+      "deny": "Automatisch ablehnen (Sperrliste)",
+      "allowed": "Zulassen",
+      "disallowed": "Nicht zulassen",
+      "configure": "Berechtigungen für {{name}}",
+      "reset": "Berechtigungen für {{name}} zurücksetzen",
+      "reset_action": "Berechtigungen zurücksetzen",
+      "reset_description": "Beim Zurücksetzen werden die Standardberechtigungen wiederhergestellt und dieser Eintrag, der Beitrittsverlauf, die Passwörter und Chats bleiben erhalten.",
+      "delete_room": "Verlauf für {{name}} löschen",
+      "remove": "Berechtigungsverlauf für {{name}} löschen",
+      "remove_title": "Berechtigungsverlauf löschen?",
+      "remove_description": "Die gespeicherten Berechtigungen für „{{name}}“ löschen und diesen Eintrag entfernen? Der Chatverlauf wird gespeichert.",
+      "delete_requires_disconnect": "Trennen Sie die Verbindung zu diesem Client, bevor Sie seinen Berechtigungsverlauf löschen."
+    },
+    "application": {
+      "automatic_pip_desktop_description": "Verkleinern Sie das Meeting auf ein immer im Vordergrund stehendes Fenster, wenn Weblink in den Hintergrund tritt. Verwenden Sie „Zur Besprechung zurückkehren“, um das Fenster wiederherzustellen.",
+      "autostart": "Beim Start starten",
+      "autostart_description": "Starten Sie Weblink automatisch, wenn Sie sich an diesem Computer anmelden.",
+      "autostart_failed": "Die Systemstarteinstellung konnte nicht gelesen oder aktualisiert werden.",
+      "autostart_path_mismatch": "Der Systemstarteintrag verweist nicht auf diese Anwendung. Reparieren Sie es, um das aktuelle Programm zu verwenden und den Start beim Start zu ermöglichen.",
+      "autostart_repair": "Reparieren",
+      "automatic_pip_description": "Öffnen Sie Bild-in-Bild, wenn Sie das Meeting verlassen oder in den Hintergrund verschieben. Die Verfügbarkeit hängt von der Browserunterstützung und der Website-Berechtigung ab.",
+      "close_behavior": {
+        "title": "Beim Schließen des Fensters",
+        "ask": "Jedes Mal fragen",
+        "exit": "Beenden Sie die Anwendung",
+        "tray": "In der Infobereich ausblenden",
+        "description": "Lassen Sie den Raum, die Freigabe und die Fernsteuerung im Fach laufen. Verwenden Sie das Infobereichnsymbol, um das Fenster wiederherzustellen oder zu beenden."
+      },
+      "auto_hide": {
+        "title": "Fenster ausblenden, nachdem die Fernsteuerung genehmigt wurde",
+        "description": "Blenden Sie das Fenster dieses Geräts im Fach aus, nachdem die Kontrolle erteilt wurde, einschließlich der automatischen Genehmigung. Der Austausch und die Kontrolle gehen weiter."
+      },
+      "close_confirm_title": "Weblink schließen?",
+      "close_confirm_description": "Verstecken Sie sich in der Infobereich, um die Freigabe und Fernsteuerung fortzusetzen, oder beenden Sie die Anwendung.",
+      "close_confirm_exit_description": "Beim Beenden wird die Verbindung zum Raum getrennt und die Freigabe und Fernsteuerung wird beendet.",
+      "remember_close_choice": "Auswahl merken",
+      "close_failed": "Diese Aktion konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+      "tray_unavailable": "Die Infobereich ist nicht verfügbar. Beim Schließen des Fensters werden Sie gefragt, ob Sie den Vorgang beenden möchten. Das automatische Ausblenden ist deaktiviert.",
+      "update_failed": "Anwendungseinstellungen konnten nicht angewendet werden. Bitte versuchen Sie es erneut.",
+      "automatic_pip_unavailable": "Automatisches Bild-in-Bild ist in diesem Browser oder dieser Desktop-Laufzeitumgebung nicht verfügbar.",
+      "startup_behavior": {
+        "title": "Beim Systemstart",
+        "tray": "Bleiben Sie in der Infobereich",
+        "window": "Hauptfenster anzeigen",
+        "description": "Gilt, wenn das System Weblink beim Anmelden startet. Beim manuellen Öffnen von Weblink wird das Hauptfenster angezeigt."
+      }
+    },
+    "notifications": {
+      "enabled": "Systembenachrichtigungen aktivieren",
+      "backgroundOnly": "Benachrichtigen Sie nur, wenn das Fenster nicht fokussiert ist",
+      "messages": "Neue Nachrichten",
+      "controlRequests": "Fernsteuerungsanfragen",
+      "speedTestRequests": "Geschwindigkeitstestanfragen",
+      "transfers": "Dateiübertragung abgeschlossen",
+      "preview": "Nachrichten- und Dateivorschauen anzeigen",
+      "sound": "Benachrichtigungston",
+      "permission_default": "Die Benachrichtigungsberechtigung wurde nicht erteilt.",
+      "permission_granted": "Systembenachrichtigungen sind erlaubt.",
+      "permission_denied": "Benachrichtigungen sind blockiert. Aktivieren Sie sie in den Benachrichtigungseinstellungen Ihres Browsers oder Systems.",
+      "permission_unavailable": "Systembenachrichtigungen sind in dieser Umgebung nicht verfügbar.",
+      "permission_failed": "Die Benachrichtigungsberechtigung konnte nicht angefordert werden.",
+      "allow": "Benachrichtigungen zulassen",
+      "requesting": "Bitte um Erlaubnis…",
+      "request_unresolved": "Der Browser hat die Berechtigung nicht bestätigt. Überprüfen Sie die Benachrichtigungseinstellungen Ihres Browsers oder Systems. Die Berechtigung wird automatisch aktualisiert, wenn Sie zurückkehren.",
+      "browser_blocked": "Benachrichtigungen sind blockiert. Öffnen Sie die Berechtigungen dieser Website in Ihrem Browser und erlauben Sie Benachrichtigungen.",
+      "new_message": "Neue Nachricht",
+      "reply": "Senden",
+      "reply_placeholder": "Geben Sie eine Antwort ein",
+      "reply_failed": "Es wurde keine Antwort gesendet. Ihr Text wurde im Konversationsentwurf beibehalten.",
+      "delivery_failed": "Antwort gespeichert, aber die Zustellung ist fehlgeschlagen. Öffnen Sie die Konversation, um es erneut zu versuchen.",
+      "open": "Unterhaltung öffnen",
+      "transfer_completed": "Dateiübertragung abgeschlossen",
+      "loading": "Benachrichtigungsverfügbarkeit prüfen…",
+      "load_failed": "Der Systembenachrichtigungsstatus konnte nicht gelesen werden. Wenn Sie zu Weblink zurückkehren, wird es erneut automatisch überprüft.",
+      "error_details": "Fehlerdetails",
+      "permission_unknown": "Das System hat noch keinen Benachrichtigungsstatus bereitgestellt. Benachrichtigungen folgen den Systemeinstellungen."
+    },
+    "shortcut_input": {
+      "recording": "Tastenkombination drücken…",
+      "reset": "Zurücksetzen",
+      "hint": "Klicken Sie, um eine Kombination mit Strg, Alt oder Win / ⌘ aufzuzeichnen. Lassen Sie die Haupttaste los, um zu speichern. Drücken Sie Esc oder klicken Sie weg, um abzubrechen.",
+      "invalid": "Verwenden Sie Strg, Alt oder Win / ⌘ mit einem Buchstaben, einer Zahl, F1–F11 oder einer Navigationstaste. Reservierte Systemverknüpfungen sind nicht verfügbar.",
+      "duplicate": "Wählen Sie eine andere Tastenkombination zum Freigeben der Eingabe und zum Stoppen der Fernsteuerung.",
+      "edit": "Tastenkombination festlegen",
+      "saving": "Wird gespeichert…"
+    }
+  },
+  "cache": {
+    "title": "Dateicache",
+    "usage": "{{value}} verwendet, {{max}} insgesamt, {{remaining}} übrig"
+  },
+  "client": {
+    "scroll_to_bottom": "Scrollen Sie nach unten",
+    "menu": {
+      "connect": "Verbinden",
+      "clipboard": "Zwischenablage"
+    },
+    "config": {
+      "open": "Client-Einstellungen",
+      "preferences": "Client-Einstellungen",
+      "preferences_description": "Diese Einstellungen gelten nur für diesen Client.",
+      "redirect": {
+        "title": "Weiterleitung nach Verbindung",
+        "description": "Öffnen Sie den Chat dieses Clients automatisch, nachdem er eine Verbindung hergestellt hat. Es kann jeweils nur ein Client das Umleitungsziel sein."
+      },
+      "provide_file_list": {
+        "title": "Dateiliste bereitstellen",
+        "description": "Erlauben Sie diesem Client, abgeschlossene Dateien im lokalen Cache aufzulisten. Wenn diese Option deaktiviert ist, geben Dateilistenanforderungen eine leere Liste zurück. Chat, direkte Dateiversand und bestehende Übertragungen sind davon nicht betroffen."
+      },
+      "actions": "Client-Aktionen"
+    },
+    "index": {
+      "edit_room": "Rauminformationen bearbeiten"
+    },
+    "message_editor": {
+      "placeholder": "Geben Sie eine Nachricht ein…"
+    },
+    "message_error": "Es ist ein Fehler aufgetreten",
+    "sync": {
+      "title": "Dateisynchronisierung",
+      "menu": {
+        "chat": "Chat"
+      }
+    },
+    "chat": {
+      "compress_folder": "Ordner komprimieren"
+    }
+  },
+  "video": {
+    "global_mute": "Globale Stummschaltung",
+    "global_unmute": "Globale Stummschaltung aufheben",
+    "loading_state": {
+      "codec_unsupported": "Geteiltes Video kann nicht abgespielt werden",
+      "connection_failed": "Die freigegebene Videoverbindung wurde unterbrochen",
+      "initial": "Initialisierung...",
+      "loading": "Laden...",
+      "waiting": "Pufferung...",
+      "stalled": "Verbindung unterbrochen, erneuter Versuch...",
+      "error": "Laden fehlgeschlagen",
+      "autoplay_blocked": "Ihr Browser hat die automatische Wiedergabe blockiert. Wählen Sie Video abspielen, um fortzufahren.",
+      "play": "Video abspielen",
+      "retry": "Erneut versuchen"
+    },
+    "statistics": {
+      "show_overlay": "Stream-Statistiken anzeigen",
+      "hide_overlay": "Stream-Statistiken ausblenden",
+      "display": "Darstellung",
+      "submitted": "Übergebene Bilder",
+      "player_dropped": "Vom Player verworfene Bilder",
+      "target_bitrate": "Zielbitrate der Übertragung",
+      "encoder_bitrate": "Encoder-Ziel",
+      "bandwidth_estimate": "Bandbreitenschätzung",
+      "copy": "Statistiken kopieren",
+      "copy_manually": "Das automatische Kopieren ist nicht verfügbar. Wählen Sie den Text unten aus, um ihn zu kopieren.",
+      "receive_to_present": "Empfang → Anzeige",
+      "title": "Stream-Statistiken",
+      "send": "Senden",
+      "receive": "Empfangen",
+      "capture": "Lokale Erfassung",
+      "preview": "Lokale Vorschau",
+      "encode": "Kodieren",
+      "decode": "Dekodieren",
+      "buffer": "Puffer",
+      "encoder_queue": "Encoder warten",
+      "capture_to_encode": "Capture → kodiert",
+      "send_queue": "Sendewarteschlange",
+      "rtt": "RTT"
+    }
+  },
+  "browser_unsupported": {
+    "title": "Leider wird Ihr Browser nicht unterstützt",
+    "reasons": {
+      "browser_version_too_low": "Ihre Browserversion ist zu niedrig",
+      "browser_does_not_support_webrtc": "Ihr Browser unterstützt WebRTC nicht"
+    },
+    "description": "Bitte verwenden Sie einen modernen Browser wie Chrome, Firefox, Safari, Edge oder Opera. Oder aktivieren Sie die experimentellen WebRTC-Funktionen in Ihrem Browser",
+    "version_support_details": "Details zur Versionsunterstützung",
+    "browser": "Browser",
+    "version": "Version"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "Heller Modus",
+      "dark": "Dunkler Modus",
+      "system": "System"
+    },
+    "join_form": {
+      "history": {
+        "title": "Aktuelle Raum",
+        "description": "Wählen Sie einen Raum aus, dem Sie zuvor beigetreten sind, oder fügen Sie einen neuen Raum hinzu.",
+        "add": "Platz hinzufügen",
+        "back": "Zurück zu den letzten Räumen",
+        "remove": "Entfernen Sie {{room}} aus dem Beitrittsverlauf",
+        "protected": "Raumpasswort gespeichert",
+        "last_joined": "Letzter Beitritt: {{time}}",
+        "hint": "Wählen Sie einen Raum und dann „Verbinden“ aus. Durch das Entfernen des Verlaufs wird das gespeicherte Passwort gelöscht, Chats und Berechtigungen bleiben jedoch erhalten."
+      },
+      "title": "Verbindungsaufbau",
+      "profile_description": "Legen Sie fest, welches Profil anderen Personen im Raum angezeigt wird.",
+      "room_description": "Legen Sie den Raum fest, den Sie erstellen oder dem Sie beitreten möchten.",
+      "configure_before_join": "Wählen Sie „Rauminformationen bearbeiten“, um die Einrichtung abzuschließen, bevor Sie einem Raum beitreten.",
+      "autosave_hint": "Änderungen werden automatisch gespeichert. Wählen Sie „Verbinden“, um dem Raum beizutreten.",
+      "steps": {
+        "profile": "Profil",
+        "room": "Raum"
+      },
+      "client_id": {
+        "title": "Client-ID",
+        "description": "Wird automatisch generiert, um diesen Clients zu identifizieren"
+      },
+      "room_id": {
+        "title": "Raum-ID"
+      },
+      "name": "Name",
+      "avatar": "Avatar",
+      "avatar_placeholder": "Geben Sie eine Bild-URL ein",
+      "upload_avatar": "Hochladen",
+      "avatar_description": "Geben Sie eine Bild-URL ein oder wählen Sie ein Bild von diesem Gerät aus. Sie können zum Hochladen auch auf den Avatar klicken.",
+      "password": {
+        "title": "Raumpasswort",
+        "placeholder": "Geben Sie ein Passwort ein oder generieren Sie es",
+        "description": "Optional. Wird verwendet, um Signalnachrichten zwischen Clients zu verschlüsseln und zu verhindern, dass andere dem Raum beitreten.",
+        "show": "Passwort anzeigen",
+        "hide": "Passwort verbergen",
+        "generate": "Erzeugen"
+      },
+      "auto_join": "Nächstes Mal automatisch beitreten",
+      "drop_avatar": "Lassen Sie es fallen, um Ihren Avatar festzulegen"
+    },
+    "file_table": {
+      "status": {
+        "merging": "Zusammenführen"
+      },
+      "filter": {
+        "clear_filters": "Filter löschen",
+        "selected": "Ausgewählt"
+      },
+      "toggle_columns": "Spalten umschalten"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "Dateien löschen",
+      "description": "Bestätigen, dass diese {{count}}-Dateien gelöscht werden?"
+    },
+    "delete_file_message_dialog": {
+      "title": "Dateinachricht löschen",
+      "description": "Bestätigen Sie das Löschen dieser Dateinachricht.",
+      "delete_transfer": "Löschen Sie auch die zugehörige Übertragungsaufgabe",
+      "delete_cache": "Löschen Sie auch den lokalen Cache"
+    },
+    "client_info_dialog": {
+      "tabs": {
+        "session": "Sitzung",
+        "speed": "Geschwindigkeitstest",
+        "raw": "Rohdaten",
+        "settings": "Einstellungen"
+      },
+      "sections": "Abschnitte mit Clientsinformationen",
+      "session_subtitle": "Verbindung, Diagnose und Client-Einstellungen",
+      "sent_bytes": "Gesamtzahl der gesendeten Bytes",
+      "received_bytes": "Insgesamt empfangene Bytes",
+      "summary_note": "Werte beschreiben die aktuelle Verbindung. Bei Schätzungen der Browserbandbreite handelt es sich nicht um den gemessenen DataChannel-Durchsatz. Verwenden Sie dazu die Registerkarte Geschwindigkeitstest.",
+      "raw_note": "Live-WebRTC-Statistiken zum Debuggen. Berichte können Netzwerkadressen enthalten; Überprüfen Sie sie, bevor Sie sie teilen.",
+      "stats_error": "Für diese Verbindung sind keine Statistiken verfügbar. Stellen Sie die Verbindung erneut her, um sie zu aktualisieren.",
+      "copied": "Kopiert.",
+      "error": "Der Kopiervorgang ist fehlgeschlagen. Wählen Sie den Bericht manuell aus und kopieren Sie ihn.",
+      "title": "Kunde {{name}}",
+      "status": "Status",
+      "client_id": "Client-ID",
+      "created_at": "Erstellt am",
+      "stats_reports": "Statistikberichte",
+      "candidate_type": "Kandidatenroute",
+      "round_trip_time": "Hin- und Rückfahrtzeit",
+      "available_outgoing_bitrate": "Schätzung der Browser-Bitrate",
+      "transport_bytes": "Transportbytes",
+      "leave": "Verlassen"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "Client löschen",
+      "description": "Dieser Vorgang löscht den Client und die Nachrichten",
+      "content": "Sind Sie wirklich sicher, dass Sie den Client {{name}} und alle Nachrichten löschen möchten?"
+    },
+    "reset_options_dialog": {
+      "title": "Einstellungen zurücksetzen",
+      "description": "Durch diesen Vorgang werden die Optionen auf die Standardwerte zurückgesetzt, die Benutzerdaten werden jedoch nicht gelöscht",
+      "content": "Stellen Sie die Anwendungseinstellungen wieder her, einschließlich Raum- und Mitgliedereinstellungen. Der Chatverlauf und die zwischengespeicherten Dateien bleiben erhalten."
+    },
+    "clear_service_worker_cache_dialog": {
+      "title": "App-Cache leeren",
+      "description": "Löschen Sie zwischengespeicherte Seitenressourcen und Offline-Unterstützung für diese Website.",
+      "content": "Chatverlauf, zwischengespeicherte Dateien und Einstellungen bleiben erhalten. Durch das Neuladen werden aktive Anrufe und Weiterleitungen unterbrochen.",
+      "reload": "Laden Sie die Seite nach dem Löschen neu"
+    },
+    "preview_dialog": {
+      "title": "Vorschau",
+      "unsupported_file_type": "Nicht unterstützter Dateityp"
+    },
+    "send_item_preview_dialog": {
+      "title": "Artikel senden",
+      "description": "Sind Sie sicher, dass Sie die Datei {{fileName}} an {{name}} senden möchten?"
+    },
+    "status": {
+      "online": "Online",
+      "connecting": "Verbindung wird hergestellt",
+      "reconnecting": "Verbindung wird wiederhergestellt",
+      "offline": "Offline",
+      "leave": "Verlassen"
+    },
+    "scan_qrcode_dialog": {
+      "description": "Scannen Sie den Code oder teilen Sie den Link, um diesem Raum beizutreten.",
+      "link": "Einladungslink",
+      "shared_by": "Geteilt von {{name}}",
+      "save": "QR-Code speichern",
+      "save_failed": "Der QR-Code konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+      "no_room": "Richten Sie einen Raum ein, um dessen QR-Code zu teilen."
+    },
+    "action": {
+      "copy": "Kopieren",
+      "copy_link": "Link kopieren",
+      "copy_file_name": "Dateinamen kopieren",
+      "copy_as_png": "Als PNG kopieren",
+      "copy_as_svg": "Als SVG kopieren",
+      "delete": "Löschen",
+      "download": "Herunterladen",
+      "cancel": "Abbrechen",
+      "confirm": "Bestätigen",
+      "close": "Schließen",
+      "change": "Ändern",
+      "preview": "Vorschau",
+      "send": "Senden",
+      "view": "Anzeigen",
+      "reset": "Zurücksetzen",
+      "asc": "Aufsteigend",
+      "desc": "Absteigend",
+      "hide": "Ausblenden",
+      "share": "Teilen",
+      "forward": "Weiterleiten",
+      "add_folder": "Ordner hinzufügen",
+      "check_availability": "Verfügbarkeit prüfen",
+      "reload": "Neu laden",
+      "mute": "Stummschalten",
+      "unmute": "Stummschaltung aufheben",
+      "settings": "Einstellungen",
+      "fullscreen": "Vollbild",
+      "exit_fullscreen": "Beenden Sie den Vollbildmodus",
+      "picture_in_picture": "PIP-Modus",
+      "exit_picture_in_picture": "Verlassen Sie den PIP-Modus",
+      "continue": "Fortfahren",
+      "retry": "Erneut versuchen"
+    },
+    "notification": {
+      "copy_success": "Kopiererfolg",
+      "link_copy_success": "Link kopiert",
+      "link_copy_failed": "Link konnte nicht kopiert werden",
+      "reset_options_success": "Optionen erfolgreich zurückgesetzt",
+      "unknown_error": "Unbekannter Fehler",
+      "processing_files": "Dateien werden verarbeitet...",
+      "new_version_available": "Neue Version verfügbar",
+      "share_failed": "Freigabe fehlgeschlagen, Fehler: {{error}}",
+      "clear_cache_success": "App-Cache geleert",
+      "clear_cache_failed": "App-Cache konnte nicht geleert werden: {{error}}",
+      "copy_failed": "Kopieren nicht möglich. Überprüfen Sie die Berechtigungen für die Zwischenablage und versuchen Sie es erneut.",
+      "room_unprotected": "Für diesen Raum ist kein Passwort erforderlich."
+    },
+    "forward_dialog": {
+      "title": "Artikel weiterleiten",
+      "placeholder": "Clients zum Weiterleiten suchen…",
+      "no_results_found": "Keine Ergebnisse gefunden"
+    },
+    "about_dialog": {
+      "title": "Über Weblink",
+      "description1": "Weblink ist ein browserbasiertes Tool für P2P-Chat, Dateiübertragung, Dateisynchronisierung und Bildschirmfreigabe.",
+      "disclaimer": "Haftungsausschluss: Diese Anwendung verwendet P2P-Technologie. Alle Daten werden im Client (Browser) des Benutzers gespeichert. Der Server speichert keine Benutzerdaten und ist nur für die Weiterleitung der Signalisierung verantwortlich. Benutzer sollten die Risiken der Nutzung auf eigenes Risiko tragen und die Entwickler sind nicht für Datenverluste oder Datenschutzverletzungen verantwortlich.",
+      "version": "Version",
+      "author": "Autor",
+      "license": "Lizenz",
+      "github": "GitHub-Repository"
+    },
+    "media_selection_dialog": {
+      "title": "Medienauswahl",
+      "screen": "Bildschirm",
+      "media_device": "Mediengerät",
+      "enable_camera": "Kamera aktivieren",
+      "enable_microphone": "Mikrofon aktivieren",
+      "enable_system_audio": "Aktivieren Sie Systemaudio",
+      "enable_program_audio": "Aktivieren Sie Programmaudio",
+      "obs_audio_setup_tip": "OBS + VB-CABLE-Setup:\n1. OBS-Einstellungen → Audio → Erweitert → Überwachungsgerät: KABEL-Eingang.\n2. OBS-Bearbeitung → Erweiterte Audioeigenschaften → Audioüberwachung: Monitor und Ausgabe.\n3. Wählen Sie in Weblink CABLE Output für Program Audio.",
+      "request_camera_permission": "Fordern Sie eine Kameraerlaubnis an",
+      "request_microphone_permission": "Fordern Sie eine Mikrofonberechtigung an",
+      "select_system_audio_source": "System-Audioquelle auswählen (Auto)",
+      "select_program_audio": "Wählen Sie den Programm-Audioeingang (Auto).",
+      "select_microphone": "Mikrofon auswählen (Auto)",
+      "select_camera": "Kamera auswählen (Auto)",
+      "open_screen": "Bildschirm öffnen",
+      "open_media_device": "Öffnen Sie das Mediengerät",
+      "current": "Aktuell",
+      "preview": "Vorschau",
+      "apply_constraints": "Wenden Sie Medienbeschränkungen an",
+      "apply_constraints_description": "Die dynamische Änderung einiger Einschränkungen wird möglicherweise nicht unterstützt. Bitte wählen Sie einen neuen Stream zur Anwendung aus",
+      "microphone_constraints": "Mikrofonbeschränkungen",
+      "speaker_constraints": "System-/Programm-Audioeinschränkungen",
+      "not_support_display_media": "Ihr Browser unterstützt keine Anzeigemedien",
+      "not_support_user_media": "Ihr Browser unterstützt keine Benutzermedien",
+      "enable_source_required": "Aktivieren Sie mindestens eine Medienquelle",
+      "distinct_audio_inputs_required": "Mikrofon und Programmaudio müssen unterschiedliche Eingabegeräte verwenden",
+      "video_constraints": "Videoeinschränkungen",
+      "constraints": {
+        "noise_suppression": "Rauschunterdrückung",
+        "echo_cancellation": "Echounterdrückung",
+        "auto_gain_control": "Automatische Verstärkungsregelung",
+        "voice_isolation": "Sprachisolation",
+        "suppress_local_audio_playback": "Lokale Audiowiedergabe unterdrücken",
+        "max_frame_rate": "Maximale Bildrate"
+      }
+    },
+    "nav": {
+      "settings": "Einstellungen",
+      "share_link": "Link teilen"
+    },
+    "timeago": {
+      "just_now": "Gerade eben"
+    },
+    "starter": {
+      "starter_name": "Weblink-Leitfaden",
+      "welcome": "Willkommen bei Weblink! Treffen, chatten, teilen Sie Ihren Bildschirm und übertragen Sie Dateien direkt in Ihrem Browser. Dies ist ein lokal gespeicherter Leitfaden; Es ist keine Antwort erforderlich.",
+      "connect": "Vernetzen Sie sich\nWählen Sie „Raum beitreten“ auf der Startseite aus, geben Sie Ihren Namen, Ihren Avatar, Ihre Raum-ID und optional Ihr Passwort ein und wählen Sie dann „Verbinden“ aus. Änderungen werden automatisch gespeichert. Verwenden Sie Ihr Avatar-Menü oben rechts, um einen Raumlink oder QR-Code zu teilen und Freunde mit denselben Raumdetails zum Beitritt einzuladen.",
+      "chat": "Chats und Gespräche\nWählen Sie in der rechten Seitenleiste einen Raumchat oder ein privates Gespräch aus. Durchsuchen Sie Konversationen, filtern oder gruppieren Sie sie nach Label und erweitern Sie die Seitenleiste zu einem vollständigen Chat-Arbeitsbereich. Raumnachrichten gehen an Mitglieder, die gerade online sind; Jeder Browser behält seinen eigenen Verlauf.",
+      "files": "Dateien senden\nHängen Sie Dateien im Message Composer an oder wählen Sie gespeicherte Dateien aus Ihrer Dateiliste aus. Raumchats teilen zuerst Dateidetails; Empfänger wählen „Übertragen“, um den Inhalt zu empfangen. Eine identische lokale Datei kann wiederverwendet werden. Die Raumeinstellungen bieten auch automatische Downloads für kleine Dateien.",
+      "meeting": "Meetings und Bild-in-Bild\nVerwenden Sie die untere Symbolleiste, um Ihr Mikrofon, Ihre Kamera und die Bildschirmfreigabe zu steuern. Sie können Ihre Kamera und Ihren Bildschirm gleichzeitig teilen. Stecken Sie eine Kachel fest, um sie zur Hauptansicht zu machen. Öffnen Sie Bild-in-Bild über die Symbolleiste oder aktivieren Sie die automatische Bild-in-Bild-Funktion in den Einstellungen.",
+      "settings": "Dateien, Aufgaben und Einstellungen\nWählen Sie oben rechts Ihren Avatar aus, um die Dateiverwaltung, die Aufgabenliste oder die Einstellungen zu öffnen. Die Aufgabenliste zeigt den Übertragungsfortschritt an und ermöglicht Ihnen, Übertragungen anzuhalten oder fortzusetzen. Um ein Problem zu melden, verwenden Sie den Feedback-Link unter Einstellungen → Info."
+    },
+    "error_boundary": {
+      "title": "Es ist ein Fehler aufgetreten",
+      "description": "Versuchen Sie bitte, die Seite zu aktualisieren oder wenden Sie sich an den Entwickler. Die Fehlermeldung lautet:",
+      "reset": "Zurücksetzen"
+    },
+    "pagination": {
+      "total": "{{count}}-Dateien",
+      "page_size": "Zeilen pro Seite",
+      "page": "{{page}} / {{count}}",
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite"
+    },
+    "show_more": "Mehr anzeigen",
+    "clipboard_history": {
+      "title": "Verlauf der Zwischenablage"
+    },
+    "file_drop": {
+      "busy": "Dateien werden verarbeitet, bitte warten"
+    }
+  },
+  "conversations": {
+    "title": "Gespräche",
+    "search": "Gespräche suchen",
+    "manage_labels": "Etiketten verwalten",
+    "new_label": "Neues Etikett",
+    "add_label": "Etikett erstellen",
+    "save_label": "Etikett speichern",
+    "rename_label": "Benennen Sie {{name}} um",
+    "delete_label": "Label {{name}} löschen",
+    "labels": "Etiketten",
+    "no_labels": "Erstellen Sie Etiketten mit der Schaltfläche „Etiketten“.",
+    "group_by_label": "Nach Label gruppieren",
+    "filter_all": "Alle",
+    "filter_unread": "Ungelesen",
+    "filter_direct": "Privat",
+    "filter_room": "Räume",
+    "filter_labels": "Nach Labels filtern",
+    "unlabelled": "Unbeschriftet",
+    "online": "Online",
+    "current_room": "Aktueller Raum",
+    "no_messages": "Noch keine Nachrichten",
+    "unread_count": "{{count}} ungelesene Nachrichten",
+    "actions": "Aktionen für {{name}}",
+    "delete": "Konversation löschen",
+    "delete_title": "Konversation löschen",
+    "delete_room": "Raumdatensätze löschen",
+    "delete_room_description": "Den Beitrittsverlauf, das gespeicherte Passwort, den Chatverlauf, den Konversationseintrag und die Raumberechtigungen für {{name}} von diesem Gerät löschen? Andere Mitglieder sind nicht betroffen.",
+    "delete_description": "Chatverlauf und Konversationslisteneintrag für {{name}} aus diesem Browser löschen? Andere Mitglieder sind nicht betroffen.",
+    "expand": "Erweitern Sie Gespräche",
+    "empty": "Keine passenden Gespräche",
+    "select": "Wählen Sie eine Konversation aus, um mit dem Chatten zu beginnen.",
+    "delivered_count": "{{count}} / {{total}} zugestellt",
+    "delivery_sending": "Wird gesendet",
+    "delivery_delivered": "Zugestellt",
+    "delivery_failed": "Fehlgeschlagen",
+    "delivery_unsupported": "Raumchat wird nicht unterstützt",
+    "retry_failed": "Versuchen Sie es erneut mit fehlgeschlagenen Empfängern",
+    "members_online": "{{count}} Mitglieder online",
+    "local_history": "Verlauf in diesem Browser",
+    "load_earlier": "Frühere Nachrichten laden",
+    "room_inactive": "Treten Sie diesem Raum bei, um Nachrichten zu senden. Durch das Öffnen des Verlaufs wird Ihr aktueller Raum nicht gewechselt.",
+    "composer_offline": "Nicht verbunden. Stellen Sie eine Verbindung zu diesem Peer her, um Nachrichten zu senden.",
+    "room_message": "Senden Sie diesem Raum eine Nachricht",
+    "send": "Nachricht senden",
+    "previous_identity": "Dieser Verlauf gehört zu deiner früheren lokalen Identität. Öffne die aktuelle private Unterhaltung, um Nachrichten zu senden.",
+    "attach_folder": "Ordner senden",
+    "attach_media": "Senden Sie Fotos oder Videos",
+    "attach_file": "Datei senden",
+    "file_drop": {
+      "title": "Dateien zum Senden hier ablegen",
+      "unavailable_title": "Dateien können noch nicht gesendet werden"
+    },
+    "room_file_details": "Details anzeigen",
+    "room_file_request": "Klicken Sie zum Übertragen",
+    "room_file_offer": "Mit dem Raum geteilt. Die Übertragung beginnt, sobald ein Mitglied diese Datei anfordert.",
+    "room_file_sender_unavailable": "Treten Sie zum Übertragen dem ursprünglichen Raum bei, während der Absender online ist.",
+    "room_file_missing": "Diese Datei ist auf diesem Gerät nicht mehr verfügbar.",
+    "back_to_list": "Zurück zu den Gesprächen",
+    "clear": "Chatverlauf löschen",
+    "clear_title": "Chatverlauf löschen",
+    "clear_description": "Den Chatverlauf von {{name}} in diesem Browser löschen? Die Konversation bleibt in der Liste. Andere Mitglieder sind nicht betroffen.",
+    "delete_requires_exit": "Verlasse den Raum, bevor du seinen Verlauf löschst.",
+    "manage_room_hint": "Durch Löschen wird nur der Chatverlauf entfernt. Durch das Löschen von Raumdatensätzen werden auch der Beitrittsverlauf, das gespeicherte Passwort und die Raumberechtigungen entfernt.",
+    "manage_hint": "Leeren entfernt den Chatverlauf und behält die Unterhaltung. Löschen entfernt zusätzlich den Eintrag aus der Liste."
+  },
+  "meeting": {
+    "source_actions": "Aktionen für {{name}}",
+    "pip_title": "Besprechung im Bild-in-Bild-Modus",
+    "pip_elsewhere": "Ihr Meeting befindet sich in einem anderen Fenster",
+    "pip_elsewhere_hint": "Verwenden Sie das Bild-in-Bild-Fenster, um die Besprechung anzuzeigen und zu steuern.",
+    "pip_restore": "Bringen Sie das Treffen hierher zurück",
+    "feature_source": "{{name}} in der Hauptansicht anzeigen",
+    "pip_automatic": "Automatisches Bild-in-Bild",
+    "pip_return": "Zurück zur Besprechung",
+    "pip_failed": "Bild-in-Bild kann nicht geöffnet werden. Bitte versuchen Sie es erneut.",
+    "controls": "Besprechungssteuerung",
+    "microphone": "Mikrofon",
+    "camera": "Kamera",
+    "mute_microphone": "Mikrofon stumm schalten",
+    "enable_microphone": "Mikrofon aktivieren",
+    "disable_camera": "Schalten Sie die Kamera aus",
+    "enable_camera": "Kamera einschalten",
+    "share_screen": "Bildschirm teilen",
+    "stop_sharing": "Freigabe beenden",
+    "show_screen_preview": "Lokale Bildschirmvorschau anzeigen",
+    "screen_preview_covered": "Sie teilen Ihren Bildschirm",
+    "screen_preview_covered_hint": "Klicken Sie hier, um das Cover zu schließen und Ihren freigegebenen Bildschirm anzuzeigen.",
+    "sharing_audio": "Audio teilen",
+    "mute_sharing_audio": "Geteiltes Audio stumm schalten",
+    "enable_sharing_audio": "Stummschaltung für geteiltes Audio aufheben",
+    "sharing_audio_unavailable": "Diese Freigabe enthält kein Audio. Teilen Sie es erneut und aktivieren Sie Audio in der Systemauswahl.",
+    "sound": "Ton",
+    "layout": "Layout",
+    "grid_layout": "Wechseln Sie zum Rasterlayout",
+    "focus_layout": "Wechseln Sie zum Fokuslayout",
+    "leave_room": "Raum verlassen",
+    "pin": "An die Hauptbühne anheften",
+    "unpin": "Ansicht lösen",
+    "leave_main_title": "Hauptansicht verlassen?",
+    "leave_main_description": "Durch das Wechseln oder Lösen dieser Ansicht werden die Fernsteuerung (einschließlich ausstehender Anfragen), die Bild-in-Bild- und die Vollbildansicht beendet. Die Bildschirmfreigabe wird fortgesetzt.",
+    "leave_main_confirm": "Beenden Sie die Funktionen und fahren Sie fort",
+    "leave_main_failed": "Der aktuelle Anzeigemodus konnte nicht beendet werden. Bitte beenden Sie es und versuchen Sie es erneut.",
+    "title": "Besprechung",
+    "in_room": "Im Raum",
+    "preview": "Besprechungsvorschau",
+    "hide_panel": "Seitenteil ausblenden",
+    "panel": "Seitenteil",
+    "show_panel": "Seitenteil anzeigen",
+    "close_panels": "Seitenleisten schließen",
+    "conversations": "Gespräche",
+    "stage": "Hauptansicht der Besprechung",
+    "preview_hint": "Dies ist deine lokale Vorschau. Tritt einem Raum bei, um eine Besprechung zu starten.",
+    "join_room": "Treten Sie einem Raum bei",
+    "media_error": "Medien konnten nicht aktualisiert werden",
+    "media_unavailable": "Kamera und Mikrofon sind nicht verfügbar. Verwenden Sie HTTPS oder localhost in einem unterstützten Browser.",
+    "you": "Du",
+    "side_panel": "Besprechungsseitenwand",
+    "chat": "Chat",
+    "members": "Teilnehmer",
+    "info": "Info",
+    "select_conversation": "Wählen Sie eine Konversation aus der Liste aus oder treten Sie einem Raum zum Chatten bei.",
+    "members_hint": "Klicken Sie auf ein Mitglied, um privat zu chatten. Das Stummschalten eines Peers oder des Raums wirkt sich nur auf die Wiedergabe auf diesem Gerät aus.",
+    "mute_local_audio": "Schalten Sie mein ausgehendes Audio stumm",
+    "unmute_local_audio": "Heben Sie die Stummschaltung meines ausgehenden Audios auf",
+    "mute_room_audio": "Raumaudio stumm schalten",
+    "unmute_room_audio": "Stummschaltung des Raumaudios aufheben",
+    "open_private_chat": "Chatten Sie mit {{name}}",
+    "mute_member": "{{name}} auf diesem Gerät stummschalten",
+    "unmute_member": "{{name}} auf diesem Gerät wieder hörbar machen",
+    "status_online": "Online",
+    "status_offline": "Offline",
+    "status_connecting": "Verbindung wird hergestellt",
+    "status_reconnecting": "Verbindung wird wiederhergestellt",
+    "room_info": "Rauminformationen",
+    "room_name": "Raumname",
+    "not_joined": "Nicht in einem Raum",
+    "message_history": "Chatverlauf",
+    "local_history": "Wird nur in diesem Browser gespeichert",
+    "history_hint": "Raumnachrichten werden online an die Mitglieder gesendet, wenn sie gesendet werden. Offline-Nachrichten werden nicht erneut zugestellt und Neulinge erhalten keinen früheren Verlauf.",
+    "leave_hint": "Beim Verlassen werden Ihr Mikrofon und Ihr Video gestoppt und alle Raumverbindungen getrennt, einschließlich laufender Dateiübertragungen. Ihr lokaler Chatverlauf wird gespeichert.",
+    "open_room_chat": "Aktuellen Raumchat öffnen",
+    "add_sharing": "Bildschirm hinzufügen",
+    "screen_source": "Bildschirm {{count}}",
+    "video_source": "Siehe {{count}}",
+    "stop_source": "Stoppen Sie {{name}}",
+    "other_sources": "Andere Ansichten",
+    "show_sources": "Andere Ansichten anzeigen",
+    "hide_sources": "Andere Ansichten ausblenden",
+    "show_toolbar": "Symbolleiste anzeigen",
+    "hide_toolbar": "Symbolleiste ausblenden",
+    "sharing_presenter": "{{name}} (Sie, präsentieren)",
+    "stop_sharing_short": "Stoppen",
+    "audio_devices": "Audiogeräte",
+    "camera_devices": "Kamerageräte",
+    "microphone_device": "Mikrofon",
+    "speaker_device": "Lautsprecher",
+    "camera_device": "Kamera",
+    "default_device": "Systemstandard",
+    "unnamed_microphone": "Mikrofon {{count}}",
+    "unnamed_camera": "Kamera {{count}}",
+    "unnamed_speaker": "Lautsprecher {{count}}",
+    "no_microphones": "Kein Mikrofon gefunden. Überprüfen Sie die Verbindung und aktualisieren Sie sie.",
+    "no_cameras": "Keine Kamera gefunden. Überprüfen Sie die Verbindung und aktualisieren Sie sie.",
+    "no_speakers": "Kein wählbarer Lautsprecher. Sie können den Systemstandard verwenden.",
+    "output_unsupported": "Dieser Browser verwendet den Systemlautsprecher.",
+    "refresh_devices": "Geräte aktualisieren",
+    "close_device_menu": "Geräteauswahl schließen",
+    "device_unavailable": "Gerät nicht verfügbar",
+    "get_permission": "Zugriff gewähren",
+    "request_device_permission": "Gewähren Sie Zugriff auf {{device}}",
+    "permission_checking": "Gerätezugriff wird überprüft…",
+    "permission_needed": "Zum Auflisten von Geräten ist eine Genehmigung erforderlich.",
+    "device_disabled": "Der Gerätezugriff ist blockiert",
+    "permission_disabled_hint": "Erlauben Sie den Zugriff in den Browser-Site-Berechtigungen oder System-Datenschutzeinstellungen und aktualisieren Sie dann die Geräteliste.",
+    "desktop_permission_disabled_hint": "Erlauben Sie Weblink in den Datenschutzeinstellungen des Systems, das Mikrofon oder die Kamera zu verwenden, und schalten Sie das Gerät dann wieder ein.",
+    "output_permission_hint": "Dieser Browser benötigt eine Mikrofonberechtigung, um die zugehörigen Sprecher aufzulisten.",
+    "output_default_only": "Dieser Browser benötigt ein verfügbares Mikrofon und Mikrofonzugriff, um weitere Redner aufzulisten. Sie können weiterhin den Standardlautsprecher des Systems verwenden oder die Ausgabe in den Systemeinstellungen ändern.",
+    "desktop_output_default_only": "Verwendung des Standardlautsprechers des Systems. Sie können das Ausgabegerät in den Systemeinstellungen ändern.",
+    "expand_chat": "Seitenleiste erweitern",
+    "collapse_chat": "Verwenden Sie eine kompakte Seitenleiste",
+    "return_to_stage": "Zurück zur Besprechung",
+    "files": "Dateien",
+    "online_duration": "Zeit in dieser Sitzung",
+    "chat_support": "Mitglieder, die den Gruppenchat unterstützen",
+    "file_support": "Mitglieder, die das Teilen von Dateien unterstützen",
+    "pip_permission_denied": "Der Browser erlaubte kein Bild-in-Bild. Kehren Sie zu dieser Seite zurück und klicken Sie auf die Bild-in-Bild-Schaltfläche, um es erneut zu versuchen.",
+    "pip_not_supported": "Bild-in-Bild ist für diesen Browser oder dieses Video nicht verfügbar.",
+    "pip_video_required": "Warten auf abspielbares Video",
+    "pip_video_elsewhere": "Dieses Video wird im Bild-in-Bild-Format abgespielt",
+    "pip_video_restore": "Bringen Sie das Video hierher zurück",
+    "native_screen": {
+      "share_audio": "Audio teilen",
+      "share_audio_description": "Teilen Sie die Systemwiedergabe, ausgenommen Audio von dieser App.",
+      "title": "Geben Sie einen Bildschirm oder ein Fenster frei",
+      "preview": "Quellenvorschau",
+      "preview_select": "Wählen Sie eine Quelle für die Vorschau aus",
+      "preview_loading": "Vorschau wird geladen…",
+      "preview_failed": "Diese Quelle kann derzeit nicht in der Vorschau angezeigt werden",
+      "preview_retry": "Vorschau neu laden",
+      "description": "Wählen Sie einen Bildschirm oder ein Fenster zum Teilen aus.",
+      "source": "Bildschirmquelle",
+      "select": "Wählen Sie eine Anzeige oder ein Fenster",
+      "empty": "Keine verfügbaren Displays oder Fenster",
+      "share": "Teilen",
+      "screens": "Bildschirme",
+      "windows": "Fenster",
+      "screen_backend": "Methode zur Bildschirmaufnahme",
+      "window_backend": "Fenstererfassungsmethode",
+      "auto_backend": "Automatisch",
+      "unavailable": "Nicht verfügbar",
+      "search_windows": "Fenster suchen",
+      "size_unknown": "Größe nicht verfügbar",
+      "no_matches": "Keine passenden Fenster",
+      "backend_unavailable": "Diese Erfassungsmethode ist nicht verfügbar. Ändern Sie es in den Einstellungen oder öffnen Sie dieses Dialogfeld erneut und versuchen Sie es erneut.",
+      "loading": "Quellen werden geladen…"
+    }
+  },
+  "room_dialog": {
+    "actions": "Raumaktionen",
+    "open": "Rauminformationen und Einstellungen",
+    "title": "Raumeinstellungen",
+    "description": "Sehen Sie sich Rauminformationen an und konfigurieren Sie Besprechungsgeräte und Raumpräferenzen.",
+    "sections": "Abschnitte für Raumeinstellungen",
+    "info": "Rauminformationen",
+    "devices": "Besprechungsgeräte",
+    "devices_hint": "Die Geräteauswahl wird übernommen, wenn Sie sie das nächste Mal über die Meeting-Symbolleiste aktivieren. Durch die Gewährung von Zugriff wird ein Gerät kurzzeitig geöffnet und freigegeben, um es aufzulisten, ohne Besprechungsaudio oder -video zu veröffentlichen.",
+    "online_members": "Online-Mitglieder",
+    "file_hint": "Dateiangebote gehen an Online-Mitglieder. Dateiübertragung auf Anfrage oder wenn der automatische Download kleiner Dateien aktiviert ist. Der Absender muss online bleiben und die lokale Datei behalten.",
+    "inactive_devices": "Treten Sie diesem Raum bei, um seine Besprechungsgeräte zu konfigurieren.",
+    "settings": "Raumeinstellungen",
+    "settings_unavailable": "Treten Sie einem Raum bei, um dessen Einstellungen zu konfigurieren.",
+    "auto_download": {
+      "title": "Automatische Dateidownloads zulassen",
+      "description": "Empfangen Sie automatisch neue Dateien in diesem Raum innerhalb der gemeinsamen Größenbeschränkung in den Übertragungseinstellungen. Dateien aus dem Verlauf werden nicht automatisch heruntergeladen."
+    },
+    "members": "Mitglieder",
+    "previous_members": "Ehemalige Mitglieder",
+    "members_not_joined": "Treten Sie diesem Raum bei, um zu sehen, wer online ist.",
+    "no_previous_members": "Keine früheren Mitglieder mit beibehaltenen Unterhaltungen.",
+    "members_hint": "Frühere Mitglieder werden nur angezeigt, wenn sie diesem Raum beigetreten sind und ihre direkte Konversation noch lokal gespeichert ist."
+  },
+  "app_menu": {
+    "title": "Kontomenü",
+    "room_qrcode": "QR-Code des Raums",
+    "joining": "Beitritt läuft…",
+    "settings_categories": "Einstellungskategorien",
+    "settings_appearance": "Darstellung",
+    "settings_connection": "Verbindung",
+    "settings_transfer": "Übertragungen",
+    "settings_advanced": "Erweitert",
+    "settings_about": "Über Weblink",
+    "settings_meeting": "Audio & Video",
+    "settings_remote_control": "Fernsteuerung",
+    "settings_permissions": "Clients und Räume",
+    "settings_application": "Anwendung",
+    "settings_notifications": "Benachrichtigungen"
+  },
+  "file_library": {
+    "search": "Dateien durchsuchen…",
+    "status": "Verfügbarkeit",
+    "sort": "Sortieren",
+    "type": "Dateityp",
+    "status_all": "Alle Status",
+    "status_complete": "Verfügbar",
+    "status_incomplete": "Unvollständig",
+    "sort_recent": "Kürzlich hinzugefügt",
+    "sort_name": "Name",
+    "sort_size": "Größe",
+    "type_all": "Alle",
+    "type_image": "Bilder",
+    "type_video": "Videos",
+    "type_audio": "Audio",
+    "type_document": "Unterlagen",
+    "type_other": "Sonstige",
+    "no_results": "Keine passenden Dateien",
+    "empty": "Importieren Sie Dateien oder empfangen Sie sie in einer Konversation",
+    "local_file": "Lokale Datei",
+    "actions": "Dateiaktionen",
+    "action_preview": "Vorschau",
+    "action_download": "Auf Gerät speichern",
+    "action_send": "Senden",
+    "action_details": "Details",
+    "action_delete": "Lokale Datei löschen",
+    "choose": "Wählen Sie aus Dateien",
+    "choose_hint": "Wählen Sie verfügbare Dateien aus, die Sie an diese Konversation senden möchten.",
+    "selection": "{{count}} ausgewählt · {{size}}",
+    "send_count": "{{count}} Dateien senden",
+    "import": "Importieren",
+    "reused": "Existiert bereits; lokale Inhalte wiederverwendet",
+    "imported": "Dateien importiert",
+    "delete_description": "Diese lokalen Dateien löschen? {{count}}-Anhangsverweise werden nicht mehr verfügbar sein. Chatnachrichten bleiben bestehen.",
+    "aliases": "Namen",
+    "references": "Anhangsreferenzen",
+    "fingerprint": "Fingerabdruck des Inhalts",
+    "legacy": "Beim ersten Senden wird der Fingerabdruck berechnet",
+    "local_completion": "Bereits auf diesem Gerät; Übertragung übersprungen",
+    "related_messages": "Verwandte Nachrichten",
+    "peer_unavailable": "Der Empfänger ist offline. Stellen Sie die Verbindung wieder her, bevor Sie Dateien senden.",
+    "drop_files": "Zum Speichern in Ihrem Dateicache ablegen"
+  },
+  "shared_files": {
+    "add": "Dateien hinzufügen",
+    "from_library": "Wählen Sie aus der Bibliothek",
+    "upload_files": "Dateien hochladen",
+    "upload_folder": "Ordner hochladen",
+    "added": "Zu Ihrer freigegebenen Liste hinzugefügte Dateien.",
+    "title": "Geteilte Dateien",
+    "mine": "Meine freigegebenen Dateien",
+    "shared": "Geteilt",
+    "share": "Teilen",
+    "unshare": "Freigabe beenden",
+    "filter": "Freigabestatus",
+    "filter_all": "Alle Dateien",
+    "filter_shared": "Geteilt",
+    "filter_private": "Nicht geteilt",
+    "choose": "Teilen Sie Dateien aus der Bibliothek",
+    "choose_hint": "Ausgewählte Dateien werden in Ihrer freigegebenen Liste in jedem Raum verfügbar sein.",
+    "share_count": "{{count}} Dateien teilen",
+    "get": "Abrufen",
+    "get_count": "Auswahl abrufen ({{count}})",
+    "search": "Durchsuchen Sie freigegebene Dateien",
+    "refresh": "Aktualisieren",
+    "asc": "Aufsteigend",
+    "desc": "Absteigend",
+    "disconnected": "Dieses Mitglied ist nicht verbunden.",
+    "unsupported": "Dieses Mitglied unterstützt keine freigegebenen Dateien.",
+    "disabled": "Dieses Mitglied hat den Zugriff auf freigegebene Dateien für Sie nicht aktiviert.",
+    "empty": "Keine freigegebenen Dateien gefunden.",
+    "loading": "Geteilte Dateien werden geladen…",
+    "error": "Freigegebene Dateien konnten nicht geladen werden.",
+    "select_all": "Wählen Sie diese Seite aus",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page_size": "Dateien pro Seite",
+    "select_member": "Wählen Sie ein Mitglied aus, um freigegebene Dateien zu durchsuchen.",
+    "back": "Zurück zu den Mitgliedern",
+    "drop_files": "Zum Hinzufügen zu Ihren freigegebenen Dateien ablegen"
+  },
+  "room_connection": {
+    "title": "Dieser Raum ist auf einer anderen Seite aktiv",
+    "description": "Diese Identität kann jeweils von einer Seite aus eine Verbindung zu diesem Raum herstellen. Wenn Sie hierher wechseln, wird der Raum auf der vorherigen Seite verlassen und dessen Besprechung und Übertragungen beendet.",
+    "switch_here": "Wechseln Sie zu dieser Seite",
+    "switching": "Wechsel läuft…"
+  },
+  "errors": {
+    "room_in_use": "Diese Identität ist bereits in einem anderen Tab oder Fenster mit diesem Raum verbunden. Verlassen Sie es dort, bevor Sie sich hier anmelden.",
+    "room_takeover_timeout": "Die vorherige Seite hat nicht geantwortet. Schließen Sie es und versuchen Sie es erneut.",
+    "unexpected": "Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "connection_failed": "Es kann keine Verbindung zum Raumserver hergestellt werden. Überprüfen Sie Ihre Netzwerk- und Servereinstellungen und versuchen Sie es dann erneut.",
+    "connection_timeout": "Zeitüberschreitung beim Herstellen der Verbindung zum Raumserver. Überprüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+    "connection_closed": "Die Verbindung wurde unterbrochen. Stellen Sie die Verbindung wieder her und versuchen Sie es erneut.",
+    "connection_config": "Die Adresse oder Konfiguration des Raumservers ist ungültig. Überprüfen Sie die Verbindungseinstellungen.",
+    "connection_response": "Der Server hat eine ungültige Antwort zurückgegeben. Überprüfen Sie die Adresse oder aktualisieren Sie die App und den Server.",
+    "password_required": "Für diesen Raum ist ein Passwort erforderlich. Geben Sie es ein und versuchen Sie es erneut.",
+    "incorrect_password": "Das Raumpasswort ist falsch. Überprüfen Sie es und versuchen Sie es erneut.",
+    "password_prepare": "Das Raumpasswort kann nicht verarbeitet werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
+    "request_timeout": "Bei der Anfrage ist eine Zeitüberschreitung aufgetreten. Lassen Sie beide Geräte verbunden und versuchen Sie es erneut.",
+    "member_offline": "Dieses Mitglied ist nicht verbunden. Warten Sie, bis die Verbindung wiederhergestellt ist, und versuchen Sie es erneut.",
+    "sharing_disabled": "Dieses Mitglied hat den Zugriff auf seine freigegebenen Dateien deaktiviert.",
+    "file_not_shared": "Diese Datei ist nicht mehr freigegeben oder wurde gelöscht. Aktualisieren Sie die Liste.",
+    "shared_unsupported": "Dieses Mitglied unterstützt keine Downloads gemeinsam genutzter Dateien. Aktualisieren Sie beide Apps und versuchen Sie es erneut.",
+    "file_unavailable": "Die Datei wurde gelöscht oder kann nicht gelesen werden. Wählen Sie es aus oder holen Sie es sich erneut.",
+    "file_incomplete": "Die Datei ist noch nicht vollständig verfügbar. Warten Sie, bis der Vorgang abgeschlossen ist, bevor Sie es erneut versuchen.",
+    "file_busy": "Diese Datei wird bereits verarbeitet oder übertragen. Warten Sie, bis die aktuelle Aufgabe abgeschlossen ist.",
+    "file_failed": "Der Dateivorgang ist fehlgeschlagen. Überprüfen Sie die Verbindung und den lokalen Speicher und versuchen Sie es dann erneut.",
+    "file_list_failed": "Die Dateiliste kann nicht geladen werden. Lassen Sie beide Geräte verbunden und aktualisieren Sie die Liste.",
+    "verification_failed": "Die Überprüfung der empfangenen Datei ist fehlgeschlagen. Holen Sie sich die Datei erneut.",
+    "storage_full": "Der lokale Speicher ist voll. Löschen Sie Dateien, die Sie nicht mehr benötigen, und versuchen Sie es erneut.",
+    "storage_unavailable": "Auf die lokale Dateibibliothek kann nicht zugegriffen werden. Überprüfen Sie die Speicherberechtigungen des Browsers und versuchen Sie es erneut.",
+    "permission_denied": "Die Erlaubnis wurde verweigert. Überprüfen Sie die Browserberechtigungen und versuchen Sie es erneut.",
+    "cancelled": "Der Vorgang wurde abgebrochen.",
+    "avatar_failed": "Dieses Bild kann nicht gelesen werden. Wählen Sie ein anderes Bild und versuchen Sie es erneut.",
+    "ice_unavailable": "Der Server ist nicht verfügbar. Überprüfen Sie die Adresse, die Anmeldeinformationen und Ihr Netzwerk.",
+    "ice_credentials": "Es konnten keine Relay-Anmeldeinformationen abgerufen werden. Überprüfen Sie die Anmeldeinformationen für den TURN-Dienst.",
+    "ice_config": "Die Relay-Server-Konfiguration ist ungültig. Überprüfen Sie die Adresse und die Authentifizierungsmethode.",
+    "ice_config_line": "Die Zeile {{line}} muss Adresse, Benutzername, Passwort und Authentifizierungsmethode enthalten, getrennt durch |.",
+    "ice_auth_line": "Die Leitung {{line}} verfügt über eine nicht unterstützte Authentifizierungsmethode. Verwenden Sie longterm oder hmac."
+  },
+  "remote_control": {
+    "clipboard_transfer": {
+      "sending": "Zwischenablagedateien senden",
+      "receiving": "Zwischenablagedateien werden empfangen",
+      "finalizing": "Verarbeiten von Zwischenablagedateien",
+      "completed": "Die Übertragung der Zwischenablagedatei ist abgeschlossen",
+      "failed": "Die Dateiübertragung in die Zwischenablage ist fehlgeschlagen",
+      "details": "Öffnen Sie die Aufgabenliste für Übertragungsdetails."
+    },
+    "request_title": "Fernsteuerung zulassen?",
+    "request_description": "{{name}} möchte die Maus und Tastatur dieses Computers steuern. Die gemeinsame Anzeige bildet den Zeiger ab; Die Steuerung ist nicht auf eine Anwendung oder ein Display beschränkt.",
+    "revoke_hint": "Verwenden Sie „Kontrolle widerrufen“ oder drücken Sie {{shortcut}} auf diesem Computer, um die Kontrolle zu beenden.",
+    "decline": "Ablehnen",
+    "allow": "Kontrolle zulassen",
+    "host_active": "{{name}} kann diesen Computer steuern.",
+    "controller_active": "Steuerung von {{name}}",
+    "host_active_short": "Wird ferngesteuert",
+    "controller_active_short": "Fernsteuerung aktiv",
+    "revoke": "Kontrolle entziehen",
+    "revoke_failed": "Die Kontrolle konnte nicht widerrufen werden. Verwenden Sie {{shortcut}} auf dem Host, um es zu stoppen.",
+    "approval_failed": "Die Genehmigung ist fehlgeschlagen. Möglicherweise ist die Anforderung abgelaufen oder die Steuerung ist nicht verfügbar. Fordern Sie die Kontrolle erneut an.",
+    "reconnecting": "Steuerung wieder herstellen",
+    "surface": "Fernsteuerung; Drücken Sie {{shortcut}}, um den Zeiger und die Tastatur freizugeben.",
+    "request": "Steuerung anfordern",
+    "waiting": "Warten auf Genehmigung",
+    "cancel": "Anfrage abbrechen",
+    "end": "Steuerung beenden",
+    "more_choices": "Weitere Genehmigungsmöglichkeiten",
+    "allow_remember": "Genehmigen und zur Zulassungsliste hinzufügen",
+    "deny_remember": "Ablehnen und zur Sperrliste hinzufügen",
+    "share_first_screen": "Bei Zustimmung werden Bildschirm 1 und dessen Audio mit allen im Raum geteilt.",
+    "keyboard_control": "Tastatursteuerung",
+    "keyboard_enable": "Tastatursteuerung aktivieren",
+    "keyboard_disable": "Deaktivieren Sie die Tastatursteuerung",
+    "keyboard_show": "Tastatur anzeigen",
+    "keyboard_hide": "Tastatur ausblenden",
+    "keyboard_input": "Geben Sie auf dem Remote-Computer ein",
+    "text_too_long": "Der Text ist zu lang. Versenden Sie es in kleineren Teilen.",
+    "text_failed": "Die Eingabe konnte nicht vollständig gesendet werden. Überprüfen Sie den Remote-Text, bevor Sie es erneut versuchen.",
+    "system_keyboard_stopped": "Die Weiterleitung der Systemtastatur wurde gestoppt. Klicken Sie auf den Remote-Bildschirm, um es erneut zu versuchen, oder deaktivieren Sie die Systemverknüpfungen in den Fernsteuerungseinstellungen.",
+    "capture_failed": "Der Zeiger konnte nicht erfasst werden. Klicken Sie auf den Remote-Bildschirm, um es erneut zu versuchen, oder wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
+    "capture_unavailable": "Dieser Host unterstützt keine Zeigererfassung. Wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
+    "capture_hint": "Klicken Sie, um den Zeiger zu erfassen. Drücken Sie {{shortcut}}, um den Zeiger und die Tastatur freizugeben.",
+    "file_drop": {
+      "hint": "Dateien an dieser Position auf dem entfernten Bildschirm ablegen",
+      "unavailable": "Das Ablegen von Dateien ist auf diesem Host deaktiviert, ausgelastet oder nicht verfügbar",
+      "sending": "Abgelegte Dateien werden gesendet",
+      "receiving": "Abgelegte Dateien werden empfangen",
+      "finalizing": "Dateien werden auf dem entfernten Computer abgelegt",
+      "completed": "Ablegen der Dateien auf dem entfernten Computer abgeschlossen",
+      "failed": "Ablegen der Dateien auf dem entfernten Computer fehlgeschlagen",
+      "details": "Öffnen Sie die Aufgabenliste für Übertragungsdetails."
+    }
+  }
+}

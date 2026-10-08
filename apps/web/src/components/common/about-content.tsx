@@ -10,7 +10,7 @@ import { toast } from "solid-sonner";
 import { Brand } from "./brand";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/constants";
-import { appState } from "@/libs/state/app-state";
+import { resolvedLocale } from "@/libs/state/app-locale";
 import { t } from "@/i18n";
 
 const repositoryUrl =
@@ -68,9 +68,7 @@ export function AboutContent() {
           </dt>
           <dd class="text-sm">
             <time dateTime={builtAt.toISOString()}>
-              {builtAt.toLocaleString(
-                appState.options.locale,
-              )}
+              {builtAt.toLocaleString(resolvedLocale())}
             </time>
           </dd>
         </div>

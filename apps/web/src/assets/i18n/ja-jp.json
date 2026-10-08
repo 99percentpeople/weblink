@@ -1,0 +1,1309 @@
+{
+  "404": {
+    "title": "404 ページが見つかりません",
+    "description": "お探しのページは存在しません。パス：{{path}}",
+    "home": "ホームに戻る"
+  },
+  "tasks": {
+    "error_details": "エラーの詳細",
+    "pause": "一時停止",
+    "resume": "再開",
+    "title": "タスク",
+    "count": "実行中 {{active}} · 合計 {{total}}",
+    "active_count": "実行中のタスク：{{count}} 件",
+    "search": "ファイルやメンバーを検索…",
+    "local": "このデバイス",
+    "filters_label": "タスクを絞り込む",
+    "filters": {
+      "status": "状態",
+      "type": "種類",
+      "no_results": "一致する項目がありません"
+    },
+    "kinds": {
+      "file-send": "ファイルを送信",
+      "file-receive": "ファイル受信",
+      "speed-test": "ピア間速度テスト",
+      "file-prepare": "ファイル識別"
+    },
+    "status": {
+      "waiting": "待機中",
+      "running": "実行中",
+      "finalizing": "保存・結合中",
+      "paused": "一時停止中",
+      "completed": "完了",
+      "cancelled": "停止",
+      "failed": "失敗"
+    },
+    "empty": "この表示にはタスクがありません。",
+    "progress": "ファイル転送の進行状況",
+    "inspect": "接続相手の詳細",
+    "clear_finished": "完了したタスクを消去",
+    "show_more": "さらに表示",
+    "action_failed": "操作に失敗しました。接続を確認して再試行してください。"
+  },
+  "speed_test": {
+    "background_notice": "このダイアログを閉じたり、タブを切り替えたりできます。テストはタスク内で続行され、停止や結果の確認もそこで行えます。",
+    "title": "ピア間速度テスト",
+    "description": "ファイルを選ばずに接続相手との双方向の速度を測定します。データはメモリ内で生成・破棄され、ファイルキャッシュには保存されません。",
+    "traffic_notice": "各方向で最大10秒または64 MiBのいずれかに達するまで送信します（合計128 MiBとプロトコルの通信量）。相手の承認が必要です。正確に測定するにはファイル転送と通話を一時停止してください。",
+    "start": "速度テストを開始",
+    "cancel": "テストを停止",
+    "accept": "テストを許可",
+    "decline": "拒否",
+    "request": "{{name}} が速度テストをリクエストしています",
+    "remote_running": "{{name}} との速度テスト",
+    "upload": "このデバイス → 相手",
+    "download": "相手 → このデバイス",
+    "measured_at": "測定日時：{{time}}",
+    "result_note": "ファイルの読み取り、圧縮、ディスク書き込みを除いた受信データの平均速度です。選択された直接接続またはTURN経路を測定するもので、回線事業者の最大帯域幅ではありません。",
+    "short_sample": "データ量の上限にすぐに達しました。1秒未満の測定は安定しない場合があります。再実行して比較してください。",
+    "phases": {
+      "connecting": "テスト用チャネルを開いています…",
+      "approval": "承認を待っています…",
+      "approval_incoming": "速度テストのリクエスト",
+      "upload": "このデバイス → 相手を測定中…",
+      "download": "相手 → このデバイスを測定中…"
+    },
+    "errors": {
+      "busy": "速度テストまたはファイル転送が実行中です。完了するか停止してからお試しください。",
+      "offline": "速度テストを開始する前に相手に接続してください。",
+      "unsupported": "相手が速度テストのプロトコルに応答しませんでした。両方のクライアントを更新して再試行してください。",
+      "declined": "相手が拒否したか、承認のリクエストが期限切れになりました。",
+      "cancelled": "速度テストを停止しました。",
+      "timeout": "テストがタイムアウトしました。完全な測定結果はありません。",
+      "closed": "相手がテストを停止したか、接続が中断されました。",
+      "protocol": "テストの応答が無効か、バイト数が一致しません。結果を破棄しました。",
+      "failed": "速度テストに失敗しました。接続を確認して再試行してください。"
+    }
+  },
+  "setting": {
+    "appearance": {
+      "title": "外観",
+      "theme": {
+        "title": "テーマ",
+        "description": "アプリのテーマを変更します"
+      },
+      "language": {
+        "title": "言語",
+        "description": "アプリの表示言語を変更します",
+        "system": "システムに合わせる"
+      },
+      "background_image": {
+        "title": "壁紙",
+        "description": "模様を選択するか、画像をアップロードするか、プレビューにドラッグしてください。",
+        "click_to_select": "クリックして選択",
+        "preview": "プレビュー",
+        "custom_image": "カスタム画像",
+        "default": "既定の背景",
+        "upload": "画像をアップロード",
+        "uploading": "保存中…",
+        "reset": "既定の背景に戻す",
+        "textures": "プリセットの模様",
+        "drop_to_upload": "ドロップして壁紙に設定",
+        "invalid_image": "画像ファイルを選択してください。",
+        "upload_failed": "画像を保存できませんでした。再試行してください。",
+        "presets": {
+          "dots": "ドット",
+          "grid": "グリッド",
+          "diagonal": "斜線",
+          "linen": "リネン",
+          "waves": "波",
+          "checker": "市松模様"
+        }
+      },
+      "background_image_opacity": {
+        "title": "壁紙の不透明度"
+      },
+      "wake_lock": {
+        "title": "画面をオンに保つ",
+        "description": "有効にすると画面が自動的にオフになるのを防ぎます"
+      }
+    },
+    "list": {
+      "bulk_edit": "一括編集",
+      "save": "保存",
+      "add": "追加",
+      "edit": "編集",
+      "remove": "削除",
+      "inline_hint": "Enterで追加、タグをクリックして編集します。",
+      "bulk_hint": "1行に1項目を入力してください。保存するとすべての変更が適用されます。"
+    },
+    "connection": {
+      "title": "接続",
+      "auto_join": {
+        "title": "自動参加",
+        "description": "アプリ起動時にルームへ自動参加します"
+      },
+      "stun_servers": {
+        "title": "STUNサーバー",
+        "description": "ピアツーピア接続の確立に使用するSTUNサーバーを変更します"
+      },
+      "turn_servers": {
+        "title": "TURNサーバー",
+        "description": "追加のTURN中継サーバーを設定します。"
+      },
+      "share_servers_with_others": {
+        "title": "サーバーを他のユーザーと共有",
+        "description": "参加URLを生成するときにSTUNとTURNサーバーを共有します"
+      },
+      "available": "利用可能"
+    },
+    "sender": {
+      "title": "ファイル送信設定",
+      "enable_clipboard": {
+        "title": "クリップボードを有効化",
+        "description": "メッセージ入力欄以外の個別チャット領域に貼り付けて、クリップボードの内容を送信できます。入力欄への貼り付けは常に下書きを編集します。",
+        "unsupported": "クリップボードは使用できません。安全なコンテキストで開いてください"
+      },
+      "chunk_size": {
+        "title": "チャンクサイズ"
+      },
+      "block_size": {
+        "title": "ブロックサイズ"
+      },
+      "max_buffer_amount": {
+        "title": "最大バッファ量"
+      },
+      "ordered": {
+        "title": "順序を維持",
+        "description": "有効にするとブロックを順番に送信します"
+      },
+      "compression_level": {
+        "title": "圧縮レベル",
+        "description": "送信時の圧縮レベルを変更します。0は圧縮なし、9は最大圧縮です。圧縮済みファイルでは転送が遅くなる場合があります",
+        "no_compression": "0（圧縮なし）"
+      },
+      "automatic_cache_deletion": {
+        "title": "キャッシュの自動削除",
+        "description": "送信後にキャッシュを自動削除します"
+      }
+    },
+    "receiver": {
+      "title": "ファイル受信設定",
+      "max_cached_chunks": {
+        "title": "キャッシュする最大チャンク数",
+        "description": "受信側でキャッシュするチャンク数の上限を変更します"
+      },
+      "automatic_download": {
+        "title": "自動ダウンロード",
+        "description": "受信後に自動ダウンロードします"
+      },
+      "auto_download_limit": {
+        "title": "自動ダウンロードのサイズ上限",
+        "description": "自動ダウンロードを許可したすべてのルームに適用されます。上限を超えるファイルも手動でダウンロードできます。"
+      }
+    },
+    "about": {
+      "reset_options": "設定をリセット",
+      "clear_service_worker_cache": "アプリのキャッシュを消去",
+      "copy_version": "バージョン情報をコピー",
+      "copy_failed": "バージョン情報をコピーできませんでした。再試行してください。",
+      "build_time": "ビルド日時",
+      "changelog": "リリースノート",
+      "feedback": "問題を報告",
+      "maintenance": "メンテナンス",
+      "reset_description": "ルームやメンバーの設定を含むアプリの設定を初期状態に戻します。チャット履歴とキャッシュ済みファイルは保持されます。",
+      "reset_failed": "設定をリセットできませんでした：{{error}}",
+      "cache_description": "ページのリソースキャッシュを削除し、読み込みや更新の問題を解消します。チャット履歴、キャッシュ済みファイル、設定は保持されます。"
+    },
+    "advanced_settings": {
+      "advanced_connection": {
+        "title": "接続の詳細設定",
+        "relay_only": {
+          "title": "中継のみ使用",
+          "description": "有効にするとTURNサーバーのみを使用します"
+        }
+      },
+      "advanced_sender": {
+        "title": "ファイル送信の詳細設定"
+      },
+      "advanced_receiver": {
+        "title": "ファイル受信の詳細設定"
+      }
+    },
+    "native_capture": {
+      "title": "ネイティブ画面キャプチャのテスト",
+      "description": "選択した画面またはウィンドウをローカルでキャプチャします。録画やルームへの映像送信は行いません。",
+      "source": "キャプチャ元",
+      "select_source": "画面またはウィンドウを選択",
+      "monitor": "画面",
+      "window": "ウィンドウ",
+      "refresh": "キャプチャ元を更新",
+      "start": "キャプチャを開始",
+      "stop": "キャプチャを停止",
+      "frames": "フレーム",
+      "waiting": "最初のフレームを待っています。選択したウィンドウが表示されているか確認してください。",
+      "disconnected": "テストパネルが応答しなくなったためキャプチャを停止しました。",
+      "hint": "このパネルを閉じるとキャプチャが停止します。フレームレートは実際の更新を反映し、画面が静止または最小化されているとゼロになる場合があります。",
+      "state": {
+        "idle": "準備完了",
+        "running": "キャプチャ中",
+        "stopped": "停止",
+        "closed": "キャプチャ元が閉じられました",
+        "failed": "キャプチャ失敗"
+      }
+    },
+    "meeting_settings": {
+      "resolution": "映像の解像度上限",
+      "frame_rate": "映像のフレームレート上限",
+      "capture_description": "カメラと画面共有に使用します。画質の変更はすぐに反映されます。",
+      "native_unavailable": "ネイティブコーデックの機能情報を読み込めませんでした。",
+      "stream": {
+        "title": "映像の品質",
+        "video_max_bitrate": {
+          "title": "映像送信のビットレート上限"
+        },
+        "degradation_preference": {
+          "title": "リソース不足時に優先する項目",
+          "balanced": "精細さと滑らかさのバランス",
+          "maintain-framerate": "滑らかな動き（フレームレート）",
+          "maintain-resolution": "鮮明な細部（解像度）"
+        },
+        "preferred_video_codec": {
+          "title": "優先するブラウザー映像コーデック",
+          "auto": "自動"
+        }
+      },
+      "native_capture": "画面キャプチャとエンコード",
+      "native_encoder": "画面共有の映像エンコード",
+      "native_encoder_auto": "自動（互換性のあるハードウェアを優先）",
+      "hardware": "ハードウェア",
+      "software": "ソフトウェア",
+      "native_encoder_description": "次回の共有に使用するデスクトップキャプチャ方式と映像コーデックを選択します。",
+      "native_advanced": "このエンコードの詳細設定",
+      "readback_buffers": "GPU読み戻しバッファ",
+      "readback_buffers_1": "シングルバッファ",
+      "readback_buffers_2": "ダブルバッファ（既定）",
+      "readback_buffers_3": "トリプルバッファ",
+      "readback_buffers_description": "バッファを増やすとフレーム処理を並行できますが、GPUメモリの使用量と遅延が増える場合があります。次回の共有から適用されます。",
+      "color_matrix": "色変換マトリクス",
+      "color_auto": "自動（コーデックに合わせる）",
+      "color_range": "色範囲",
+      "color_range_limited": "リミテッド（16–235、互換性を優先）",
+      "color_range_full": "フル（0–255）",
+      "color_description": "次回の共有から適用されます。変換と再生で一致する色タグを使用します。フルレンジは輝度の階調を多く保持しますが、受信側の対応が必要です。",
+      "color_vp8": "VP8はBT.601のリミテッドレンジを使用します。他のコーデックでは選択した設定に戻ります。",
+      "color_format": "出力色形式",
+      "audio": {
+        "title": "音声キャプチャ",
+        "auto": "自動",
+        "unavailable": "現在利用できません",
+        "codec": {
+          "title": "優先する音声コーデック",
+          "unsupported": "音声コーデックの機能情報を取得できません。互換性のあるコーデックを自動的に選択します。"
+        },
+        "sample_rate": {
+          "title": "音声サンプルレート"
+        },
+        "channels": {
+          "title": "音声チャネル",
+          "mono": "モノラル",
+          "stereo": "ステレオ（2チャネル）"
+        },
+        "description": "次回のキャプチャに使用する、対応したサンプルレートとチャネル数を選択します。",
+        "sampling_loading": "音声形式を読み込み中…",
+        "codecs_loading": "音声コーデックを読み込み中…",
+        "sampling_failed": "システムの音声形式を現在取得できません。",
+        "sampling_unknown": "サンプリングの選択肢をまだ取得できません。「自動」を使用してください。"
+      },
+      "encoders_loading": "映像エンコーダーを検出中…",
+      "backends_loading": "キャプチャ方式を読み込み中…",
+      "backends_unavailable": "キャプチャ方式を現在取得できません。",
+      "browser_encoding": "ブラウザーのエンコード",
+      "browser_encoding_description": "次回の接続ネゴシエーションで、カメラ、マイク、ブラウザーの画面共有に使用します。",
+      "native_audio_codec": "ネイティブ音声コーデック"
+    },
+    "remote_control": {
+      "description": "このデバイスのタッチ操作でリモート画面を操作する方法を選択します。",
+      "mode": {
+        "title": "タッチモード",
+        "trackpad": "トラックパッド",
+        "direct": "直接タッチ",
+        "trackpad_description": "1本指でカーソルを移動し、タップでクリックします。2本指で右クリック、スクロール、ピンチズームができ、長押しでドラッグできます。",
+        "direct_description": "マルチタッチや長押しを含むタッチ入力を、対応する画面位置に送信します。ジェスチャーはWindowsとリモートアプリが処理します。リモートホストがタッチ入力に対応している必要があります。"
+      },
+      "pointer_speed": "カーソル速度",
+      "sample_rate": {
+        "title": "タッチのサンプルレート",
+        "description": "移動とスクロールの最大送信頻度を設定します。高くすると滑らかになる場合がありますが、通信量が増えます。実際の頻度はデバイス、ブラウザー、ネットワークによって異なります。押下と解放は常に即座に送信します。"
+      },
+      "forwardProperties": "タッチ属性を転送",
+      "touch_properties_description": "直接タッチモードで、ブラウザーが報告する筆圧と接触面積を転送します。オフにするとシステムの既定値を使用します。マルチタッチは引き続き利用できます。",
+      "scroll_speed": "2本指スクロールの速度",
+      "tapToClick": "タップで左クリック",
+      "twoFingerRightClick": "2本指タップで右クリック",
+      "twoFingerScroll": "2本指でスクロール",
+      "twoFingerZoom": "ピンチでズーム",
+      "naturalScroll": "ナチュラルスクロール",
+      "three_finger_tap": {
+        "title": "3本指タップ",
+        "keyboard": "キーボードを表示",
+        "none": "ショートカットなし",
+        "description": "トラックパッドモードで操作面を3本指でタップするとキーボードが開きます。キーボード操作を有効にする必要があります。"
+      },
+      "long_press": {
+        "title": "1本指の長押し",
+        "drag": "長押しでドラッグ",
+        "right-click": "右クリック",
+        "none": "何もしない"
+      },
+      "changes": "変更はすぐに適用され、押下中のボタンやタッチは解放されます。",
+      "pan_unavailable": "このホストではネイティブのタッチパッドスクロールとズームを利用できません。",
+      "unavailable": "このホストは直接タッチに対応していません。リモート操作設定でトラックパッドを選択してください。",
+      "keyboard_heading": "キーボード",
+      "touch_heading": "タッチ",
+      "keyboard": {
+        "title": "キーボード入力を転送",
+        "description": "ローカルカーソルモードでは、画面をクリックすると対応する物理キーをリモート側の配列で転送します。キャプチャモードでは捕捉中のみ転送します。ヘッダーのスイッチで転送をオフにできます。手動で開いた画面キーボードは両モードで使用できます。"
+      },
+      "exit_shortcut": {
+        "title": "ポインターとキーボードを解放するショートカット",
+        "description": "操作接続を維持したまま、キーボード入力と捕捉したポインターを解放します。キーボード転送がオフでも使用できます。",
+        "browser": "Escapeキーでも捕捉を解除できます。",
+        "native": "システムショートカットの転送が有効な場合、Escapeはリモート側に送信されます。入力の解放には上記のショートカットを使用してください。",
+        "webview": "ブラウザーのキー処理を使用する場合、Escapeでも捕捉を解除できます。"
+      },
+      "auto_keyboard": {
+        "title": "モバイルキーボードを自動表示・非表示",
+        "description": "リモート画面をタップした後、Windowsホスト上の入力欄のフォーカスに従います。フォーカスが外れると自動表示したキーボードを閉じます。手動で閉じた場合は次のタップまで閉じたままになります。iPhoneなど一部のブラウザーではキーボードボタンが必要な場合があります。"
+      },
+      "keyboard_collapse": {
+        "title": "入力中は操作バーを折りたたむ",
+        "description": "リモートキーボードの表示中は下部ツールバーと画面一覧を一時的に折りたたみます。キーボードを閉じると元の状態に戻ります。"
+      },
+      "system_keyboard": {
+        "title": "システムショートカットを転送",
+        "description": "リモート操作中に対応するシステムショートカットを転送します。オフにするとブラウザーのキー処理を使用します。Ctrl+Alt+Delはローカルで処理されます。"
+      },
+      "pointer_heading": "ポインター",
+      "pointer": {
+        "title": "ポインターの動作",
+        "local": "ローカルカーソル",
+        "capture": "ローカルカーソルを捕捉して非表示",
+        "local_description": "ローカルカーソルでリモート画面を指します。画面をクリックするとキーボード入力を転送し、ヘッダーのスイッチでオフにできます。",
+        "capture_description": "リモート画面をクリックするとローカルカーソルを捕捉して非表示にします。物理キーは捕捉中のみ転送されます。解放用ショートカットでポインターとキーボードを解放できます。操作接続は維持されます。"
+      },
+      "general_heading": "一般",
+      "cursor_sync": {
+        "title": "リモートカーソルの形状を同期",
+        "description": "ローカルカーソルモードで、テキスト、手、サイズ変更などリモート側のカーソル形状を反映します。"
+      },
+      "clipboard": {
+        "title": "リモートのクリップボードを同期",
+        "description": "操作側で有効にすると、対応するクリップボードの内容を同期します。"
+      },
+      "clipboard_files": {
+        "loading": "クリップボードの利用可否を確認中…",
+        "unavailable": "ここではファイルをクリップボードに書き込めません。「ファイルキャッシュ」または「オフ」を選択してください。",
+        "title": "ファイルをコピーするとき",
+        "clipboard": "クリップボード",
+        "cache": "ファイルキャッシュ",
+        "off": "オフ",
+        "description": "Web版ではファイルキャッシュに受信します。Windowsデスクトップ版ではクリップボードへのコピーも可能です。フォルダーはZIPに圧縮されます。"
+      },
+      "emergency_shortcut": {
+        "title": "ホストの緊急停止ショートカット",
+        "description": "Windowsデスクトップ版のみ。このコンピューターがリモート操作されている間、アプリがバックグラウンドでも停止できます。キーは予約・遮断されないため、他のアプリも反応する場合があります。",
+        "failed": "緊急停止ショートカットの監視を更新できませんでした。以前の設定を保持しています。再試行してください。"
+      },
+      "file_drop": {
+        "title": "リモートへのファイルのドラッグ＆ドロップ",
+        "description": "操作側で有効にするとリモート画面にファイルをドロップできます。Windowsデスクトップのホストと、ファイルのドロップに対応するアプリが必要です。フォルダーは先にZIPに圧縮されます。"
+      },
+      "file_size_limit": {
+        "title": "ファイル転送のサイズ上限",
+        "description": "ドラッグ＆ドロップとコピー＆貼り付けで共有する、1回の操作あたりの合計サイズ上限です。既定値は64 MiB、範囲は1～512 MiBです。フォルダーはZIP圧縮の前後とも上限内である必要があります。変更は次の操作から適用されます。"
+      }
+    },
+    "permissions": {
+      "description": "クライアントとルームの権限を管理します。一覧から履歴を削除するか、設定を開いて権限を編集・リセットできます。参加中のルームの履歴を削除するには、先に退出してください。",
+      "clients": "クライアント",
+      "rooms": "ルーム",
+      "empty_clients": "保存されたクライアント権限はありません。",
+      "empty_rooms": "保存されたルーム権限はありません。",
+      "last_updated": "最終更新：{{time}}",
+      "ask": "毎回確認する",
+      "allow": "自動承認（許可リスト）",
+      "deny": "自動拒否（ブロックリスト）",
+      "allowed": "許可",
+      "disallowed": "許可しない",
+      "configure": "{{name}} の権限",
+      "reset": "{{name}} の権限をリセット",
+      "reset_action": "権限をリセット",
+      "reset_description": "権限を既定値に戻します。この項目、参加履歴、パスワード、チャットは保持されます。",
+      "delete_room": "{{name}} の履歴を削除",
+      "remove": "{{name}} の権限履歴を削除",
+      "remove_title": "権限履歴を削除しますか？",
+      "remove_description": "「{{name}}」の保存済み権限とこの項目を削除しますか？チャット履歴は保持されます。",
+      "delete_requires_disconnect": "権限履歴を削除する前に、このクライアントとの接続を切断してください。"
+    },
+    "application": {
+      "automatic_pip_desktop_description": "Weblinkがバックグラウンドになると、会議を最前面の小さなウィンドウに縮小します。「会議に戻る」で元に戻せます。",
+      "autostart": "ログイン時に起動",
+      "autostart_description": "このコンピューターへのログイン時にWeblinkを自動起動します。",
+      "autostart_failed": "システムの自動起動設定を読み取りまたは更新できませんでした。",
+      "autostart_path_mismatch": "システムの起動項目がこのアプリを参照していません。修復して現在のプログラムを使用し、自動起動を有効にしてください。",
+      "autostart_repair": "修復",
+      "automatic_pip_description": "会議から移動するかバックグラウンドにするとピクチャーインピクチャーを開きます。利用可否はブラウザーの対応とサイトの権限によって異なります。",
+      "close_behavior": {
+        "title": "ウィンドウを閉じるとき",
+        "ask": "毎回確認する",
+        "exit": "アプリを終了",
+        "tray": "システムトレイに隠す",
+        "description": "トレイ内でルーム、共有、リモート操作を継続します。トレイアイコンからウィンドウの復元や終了ができます。"
+      },
+      "auto_hide": {
+        "title": "リモート操作の承認後にウィンドウを隠す",
+        "description": "自動承認を含め、操作を許可した後にこのデバイスのウィンドウをトレイに隠します。共有と操作は継続します。"
+      },
+      "close_confirm_title": "Weblinkを閉じますか？",
+      "close_confirm_description": "トレイに隠すと共有とリモート操作を継続できます。またはアプリを終了します。",
+      "close_confirm_exit_description": "終了するとルームから切断され、共有とリモート操作が停止します。",
+      "remember_close_choice": "選択を記憶する",
+      "close_failed": "操作を完了できませんでした。再試行してください。",
+      "tray_unavailable": "システムトレイを使用できません。ウィンドウを閉じると終了の確認が表示され、自動で隠す機能は無効になります。",
+      "update_failed": "アプリの設定を適用できませんでした。再試行してください。",
+      "automatic_pip_unavailable": "このブラウザーまたはデスクトップ環境では自動ピクチャーインピクチャーを利用できません。",
+      "startup_behavior": {
+        "title": "システム起動時",
+        "tray": "システムトレイに常駐",
+        "window": "メインウィンドウを表示",
+        "description": "ログイン時にシステムがWeblinkを起動する場合に適用されます。手動で開くとメインウィンドウを表示します。"
+      }
+    },
+    "notifications": {
+      "enabled": "システム通知を有効化",
+      "backgroundOnly": "ウィンドウが非アクティブのときのみ通知",
+      "messages": "新着メッセージ",
+      "controlRequests": "リモート操作リクエスト",
+      "speedTestRequests": "速度テストリクエスト",
+      "transfers": "ファイル転送完了",
+      "preview": "メッセージとファイルのプレビューを表示",
+      "sound": "通知音",
+      "permission_default": "通知はまだ許可されていません。",
+      "permission_granted": "システム通知が許可されています。",
+      "permission_denied": "通知がブロックされています。ブラウザーまたはシステムの通知設定で有効にしてください。",
+      "permission_unavailable": "この環境ではシステム通知を利用できません。",
+      "permission_failed": "通知の許可を要求できませんでした。",
+      "allow": "通知を許可",
+      "requesting": "許可を要求中…",
+      "request_unresolved": "ブラウザーがまだ許可を確認していません。ブラウザーまたはシステムの通知設定を確認してください。戻ると自動的に更新されます。",
+      "browser_blocked": "通知がブロックされています。ブラウザーでこのサイトの権限を開き、通知を許可してください。",
+      "new_message": "新着メッセージ",
+      "reply": "送信",
+      "reply_placeholder": "返信を入力",
+      "reply_failed": "返信は送信されませんでした。入力内容は会話の下書きに保存されています。",
+      "delivery_failed": "返信は保存されましたが、配信に失敗しました。会話を開いて再試行してください。",
+      "open": "会話を開く",
+      "transfer_completed": "ファイル転送が完了しました",
+      "loading": "通知の利用可否を確認中…",
+      "load_failed": "システム通知の状態を取得できませんでした。Weblinkに戻ると自動的に再確認します。",
+      "error_details": "エラーの詳細",
+      "permission_unknown": "システムから通知の状態がまだ返されていません。通知はシステム設定に従います。"
+    },
+    "shortcut_input": {
+      "recording": "ショートカットを押してください…",
+      "reset": "リセット",
+      "hint": "クリックしてCtrl、Alt、Win / ⌘を含む組み合わせを記録します。主キーを離して保存し、Escまたは他の場所をクリックしてキャンセルします。",
+      "invalid": "Ctrl、Alt、Win / ⌘と、英字、数字、F1～F11、または移動キーを組み合わせてください。システム予約済みのショートカットは使用できません。",
+      "duplicate": "入力の解放とリモート操作の停止には異なるショートカットを指定してください。",
+      "edit": "ショートカットを記録",
+      "saving": "保存中…"
+    }
+  },
+  "cache": {
+    "title": "ファイルキャッシュ",
+    "usage": "{{value}} 使用済み、合計 {{max}}、残り {{remaining}}"
+  },
+  "client": {
+    "scroll_to_bottom": "一番下までスクロール",
+    "menu": {
+      "connect": "接続",
+      "clipboard": "クリップボード"
+    },
+    "config": {
+      "open": "クライアント設定",
+      "preferences": "クライアント設定",
+      "preferences_description": "これらの設定は、このクライアントにのみ適用されます。",
+      "redirect": {
+        "title": "接続後のリダイレクト",
+        "description": "接続後、このクライアントのチャットを自動的に開きます。一度にリダイレクトターゲットになれるクライアントは 1 つだけです。"
+      },
+      "provide_file_list": {
+        "title": "ファイルリストを提供する",
+        "description": "このクライアントがローカル キャッシュ内の完了したファイルを列挙できるようにします。無効にすると、ファイルリスト要求は空のリストを返します。チャット、ファイルの直接送信、既存の転送は影響を受けません。"
+      },
+      "actions": "クライアントの操作"
+    },
+    "index": {
+      "edit_room": "ルーム情報の編集"
+    },
+    "message_editor": {
+      "placeholder": "メッセージを入力してください…"
+    },
+    "message_error": "エラーが発生しました",
+    "sync": {
+      "title": "ファイル同期",
+      "menu": {
+        "chat": "チャット"
+      }
+    },
+    "chat": {
+      "compress_folder": "フォルダーを圧縮する"
+    }
+  },
+  "video": {
+    "global_mute": "グローバルミュート",
+    "global_unmute": "グローバルミュート解除",
+    "loading_state": {
+      "codec_unsupported": "共有ビデオを再生できません",
+      "connection_failed": "共有ビデオ接続が失われました",
+      "initial": "初期化中...",
+      "loading": "読み込み中...",
+      "waiting": "バッファリング中...",
+      "stalled": "接続が中断されました。再試行しています...",
+      "error": "ロードに失敗しました",
+      "autoplay_blocked": "ブラウザが自動再生をブロックしました。続行するには、「ビデオを再生」を選択します。",
+      "play": "ビデオを再生する",
+      "retry": "再試行"
+    },
+    "statistics": {
+      "show_overlay": "ストリーム統計を表示する",
+      "hide_overlay": "ストリーム統計を非表示にする",
+      "display": "表示",
+      "submitted": "出力済み",
+      "player_dropped": "プレーヤーの破棄フレーム",
+      "target_bitrate": "転送の目標ビットレート",
+      "encoder_bitrate": "エンコーダターゲット",
+      "bandwidth_estimate": "帯域幅の見積もり",
+      "copy": "統計のコピー",
+      "copy_manually": "自動コピーはできません。下のテキストを選択してコピーします。",
+      "receive_to_present": "受信 → 表示",
+      "title": "ストリーム統計",
+      "send": "送信",
+      "receive": "受信",
+      "capture": "ローカルキャプチャ",
+      "preview": "ローカルプレビュー",
+      "encode": "エンコード",
+      "decode": "デコード",
+      "buffer": "バッファ",
+      "encoder_queue": "エンコーダ待機",
+      "capture_to_encode": "キャプチャ → エンコード",
+      "send_queue": "送信キュー",
+      "rtt": "RTT"
+    }
+  },
+  "browser_unsupported": {
+    "title": "申し訳ありませんが、お使いのブラウザはサポートされていません",
+    "reasons": {
+      "browser_version_too_low": "ブラウザのバージョンが低すぎます",
+      "browser_does_not_support_webrtc": "お使いのブラウザは WebRTC をサポートしていません"
+    },
+    "description": "Chrome、Firefox、Safari、Edge、Opera などの最新のブラウザを使用してください。または、ブラウザで実験的な WebRTC 機能をオンにしてください",
+    "version_support_details": "バージョンサポートの詳細",
+    "browser": "ブラウザ",
+    "version": "バージョン"
+  },
+  "common": {
+    "theme_toggle": {
+      "light": "ライトモード",
+      "dark": "ダークモード",
+      "system": "システム"
+    },
+    "join_form": {
+      "history": {
+        "title": "最近のルーム",
+        "description": "以前に参加したルームを選択するか、新しいルームを追加します。",
+        "add": "ルームを追加する",
+        "back": "最近のルームに戻る",
+        "remove": "参加履歴から {{room}} を削除する",
+        "protected": "ルームパスワードが保存されました",
+        "last_joined": "最終参加者: {{time}}",
+        "hint": "ルームを選択し、[接続] を選択します。履歴を削除すると、保存されているパスワードはクリアされますが、チャットと権限は保持されます。"
+      },
+      "title": "接続のセットアップ",
+      "profile_description": "ルーム内の他の人に表示するプロフィールを設定します。",
+      "room_description": "作成または参加したいルームを設定します。",
+      "configure_before_join": "ルームに参加する前に、[ルーム情報の編集] を選択してセットアップを完了します。",
+      "autosave_hint": "変更は自動的に保存されます。 「接続」を選択してルームに参加します。",
+      "steps": {
+        "profile": "プロフィール",
+        "room": "ルーム"
+      },
+      "client_id": {
+        "title": "クライアントID",
+        "description": "このクライアントを識別するために自動的に生成されます"
+      },
+      "room_id": {
+        "title": "ルームID"
+      },
+      "name": "名前",
+      "avatar": "アバター",
+      "avatar_placeholder": "画像のURLを入力してください",
+      "upload_avatar": "アップロード",
+      "avatar_description": "画像の URL を入力するか、このデバイスから画像を選択します。アバターをクリックしてアップロードすることもできます。",
+      "password": {
+        "title": "ルームパスワード",
+        "placeholder": "パスワードを入力または生成します",
+        "description": "オプション。クライアント間のシグナリング メッセージを暗号化し、他のユーザーがルームに参加するのを防ぐために使用されます。",
+        "show": "パスワードを表示",
+        "hide": "パスワードを隠す",
+        "generate": "生成する"
+      },
+      "auto_join": "次回自動参加",
+      "drop_avatar": "ドロップしてアバターを設定します"
+    },
+    "file_table": {
+      "status": {
+        "merging": "結合"
+      },
+      "filter": {
+        "clear_filters": "フィルターをクリアする",
+        "selected": "選択済み"
+      },
+      "toggle_columns": "列の切り替え"
+    },
+    "confirm_delete_files_dialog": {
+      "title": "ファイルの削除",
+      "description": "これらの {{count}} ファイルを削除しますか?"
+    },
+    "delete_file_message_dialog": {
+      "title": "ファイル削除メッセージ",
+      "description": "このファイルの削除を確認するメッセージ。",
+      "delete_transfer": "関連する転送タスクも削除します",
+      "delete_cache": "ローカルキャッシュも削除"
+    },
+    "client_info_dialog": {
+      "tabs": {
+        "session": "セッション",
+        "speed": "スピードテスト",
+        "raw": "生データ",
+        "settings": "設定"
+      },
+      "sections": "クライアント情報セクション",
+      "session_subtitle": "接続、診断、クライアント設定",
+      "sent_bytes": "送信された合計バイト数",
+      "received_bytes": "受信した合計バイト数",
+      "summary_note": "値は現在の接続を表します。ブラウザの帯域幅の推定値は、DataChannel スループットの測定値ではありません。そのためには「速度テスト」タブを使用してください。",
+      "raw_note": "デバッグ用のライブ WebRTC 統計。レポートにはネットワーク アドレスが含まれる場合があります。共有する前に確認してください。",
+      "stats_error": "この接続に関する統計は利用できません。再接続して更新します。",
+      "copied": "コピーされました。",
+      "error": "コピーに失敗しました。レポートを手動で選択してコピーします。",
+      "title": "クライアント {{name}}",
+      "status": "状態",
+      "client_id": "クライアントID",
+      "created_at": "作成日",
+      "stats_reports": "統計レポート",
+      "candidate_type": "候補ルート",
+      "round_trip_time": "往復時間",
+      "available_outgoing_bitrate": "ブラウザのビットレートの推定値",
+      "transport_bytes": "トランスポートバイト",
+      "leave": "退出"
+    },
+    "confirm_delete_client_dialog": {
+      "title": "クライアントの削除",
+      "description": "この操作ではクライアントとメッセージが削除されます",
+      "content": "クライアント {{name}} とすべてのメッセージを削除してもよろしいですか?"
+    },
+    "reset_options_dialog": {
+      "title": "設定をリセットする",
+      "description": "この操作ではオプションがデフォルト値にリセットされますが、ユーザー データは消去されません",
+      "content": "ルームやメンバーの設定を含むアプリケーションの設定を復元します。チャット履歴とキャッシュされたファイルは保持されます。"
+    },
+    "clear_service_worker_cache_dialog": {
+      "title": "アプリのキャッシュをクリアする",
+      "description": "このサイトのキャッシュされたページ リソースとオフライン サポートをクリアします。",
+      "content": "チャット履歴、キャッシュされたファイル、設定は保持されます。リロードすると、アクティブな通話と転送が中断されます。",
+      "reload": "クリア後​​にページをリロードしてください"
+    },
+    "preview_dialog": {
+      "title": "プレビュー",
+      "unsupported_file_type": "サポートされていないファイル形式です"
+    },
+    "send_item_preview_dialog": {
+      "title": "アイテムの送信",
+      "description": "ファイル {{fileName}} を {{name}} に送信してもよろしいですか?"
+    },
+    "status": {
+      "online": "オンライン",
+      "connecting": "接続中",
+      "reconnecting": "再接続中",
+      "offline": "オフライン",
+      "leave": "退出"
+    },
+    "scan_qrcode_dialog": {
+      "description": "このルームに参加するには、コードをスキャンするかリンクを共有してください。",
+      "link": "招待リンク",
+      "shared_by": "{{name}}が共有しました",
+      "save": "QRコードを保存する",
+      "save_failed": "QRコードを保存できませんでした。もう一度試してください。",
+      "no_room": "QR コードを共有するためのルームを設定します。"
+    },
+    "action": {
+      "copy": "コピー",
+      "copy_link": "リンクをコピー",
+      "copy_file_name": "ファイル名をコピーする",
+      "copy_as_png": "PNGとしてコピー",
+      "copy_as_svg": "SVGとしてコピー",
+      "delete": "削除",
+      "download": "ダウンロード",
+      "cancel": "キャンセル",
+      "confirm": "確認",
+      "close": "閉じる",
+      "change": "変更",
+      "preview": "プレビュー",
+      "send": "送信",
+      "view": "表示",
+      "reset": "リセット",
+      "asc": "昇順",
+      "desc": "降順",
+      "hide": "非表示",
+      "share": "共有",
+      "forward": "転送",
+      "add_folder": "フォルダーの追加",
+      "check_availability": "利用可否を確認",
+      "reload": "リロード",
+      "mute": "ミュート",
+      "unmute": "ミュートを解除する",
+      "settings": "設定",
+      "fullscreen": "全画面表示",
+      "exit_fullscreen": "全画面表示を終了する",
+      "picture_in_picture": "PIPモード",
+      "exit_picture_in_picture": "PIP モードを終了する",
+      "continue": "続行",
+      "retry": "再試行"
+    },
+    "notification": {
+      "copy_success": "コピー成功",
+      "link_copy_success": "リンクがコピーされました",
+      "link_copy_failed": "リンクのコピーに失敗しました",
+      "reset_options_success": "オプションが正常にリセットされました",
+      "unknown_error": "不明なエラー",
+      "processing_files": "ファイルを処理しています...",
+      "new_version_available": "新しいバージョンが利用可能になりました",
+      "share_failed": "共有に失敗しました。エラー: {{error}}",
+      "clear_cache_success": "アプリのキャッシュがクリアされました",
+      "clear_cache_failed": "アプリのキャッシュをクリアできませんでした: {{error}}",
+      "copy_failed": "コピーできません。クリップボードのアクセス許可を確認して、再試行してください。",
+      "room_unprotected": "このルームにはパスワードは必要ありません。"
+    },
+    "forward_dialog": {
+      "title": "転送アイテム",
+      "placeholder": "転送先のクライアントを検索…",
+      "no_results_found": "結果が見つかりませんでした"
+    },
+    "about_dialog": {
+      "title": "Weblinkについて",
+      "description1": "Weblink は、ブラウザベースの P2P チャット、ファイル転送、ファイル同期、画面共有ツールです。",
+      "disclaimer": "免責事項: このアプリケーションは P2P テクノロジーを使用しており、すべてのデータはユーザーのクライアント (ブラウザー) に保存されます。サーバーはユーザー データを保存せず、シグナリングの転送のみを担当します。ユーザーは自己の責任で使用するリスクを負う必要があり、開発者はデータ損失やプライバシー侵害に対して責任を負いません。",
+      "version": "バージョン",
+      "author": "著者",
+      "license": "ライセンス",
+      "github": "GitHub リポジトリ"
+    },
+    "media_selection_dialog": {
+      "title": "メディアの選択",
+      "screen": "画面",
+      "media_device": "メディアデバイス",
+      "enable_camera": "カメラを有効にする",
+      "enable_microphone": "マイクを有効にする",
+      "enable_system_audio": "システムオーディオを有効にする",
+      "enable_program_audio": "プログラムオーディオを有効にする",
+      "obs_audio_setup_tip": "OBS + VB-CABLE セットアップ:\n1. OBS 設定 → オーディオ → 詳細 → モニタリングデバイス: ケーブル入力。\n2. OBS 編集 → 詳細オーディオ プロパティ → オーディオ モニタリング: モニタリングと出力。\n3. Weblink で、プログラムオーディオのケーブル出力を選択します。",
+      "request_camera_permission": "カメラの許可をリクエストする",
+      "request_microphone_permission": "マイクの許可をリクエストする",
+      "select_system_audio_source": "システムオーディオソースの選択 (自動)",
+      "select_program_audio": "プログラム音声入力 (自動) を選択します。",
+      "select_microphone": "マイクの選択 (自動)",
+      "select_camera": "カメラを選択 (自動)",
+      "open_screen": "画面を開く",
+      "open_media_device": "オープンメディアデバイス",
+      "current": "現在",
+      "preview": "プレビュー",
+      "apply_constraints": "メディア制約を適用する",
+      "apply_constraints_description": "一部の制約は動的変更がサポートされていない可能性があります。適用する新しいストリームを選択してください",
+      "microphone_constraints": "マイクの制約",
+      "speaker_constraints": "システム/プログラムのオーディオ制約",
+      "not_support_display_media": "お使いのブラウザは表示メディアをサポートしていません",
+      "not_support_user_media": "お使いのブラウザはユーザー メディアをサポートしていません",
+      "enable_source_required": "少なくとも 1 つのメディア ソースを有効にする",
+      "distinct_audio_inputs_required": "マイクとプログラムオーディオは別の入力デバイスを使用する必要があります",
+      "video_constraints": "ビデオの制約",
+      "constraints": {
+        "noise_suppression": "ノイズ対策",
+        "echo_cancellation": "エコーキャンセル",
+        "auto_gain_control": "オートゲインコントロール",
+        "voice_isolation": "音声分離",
+        "suppress_local_audio_playback": "ローカルオーディオの再生を抑制する",
+        "max_frame_rate": "最大フレームレート"
+      }
+    },
+    "nav": {
+      "settings": "設定",
+      "share_link": "リンクを共有する"
+    },
+    "timeago": {
+      "just_now": "たった今"
+    },
+    "starter": {
+      "starter_name": "Weblinkガイド",
+      "welcome": "Weblinkへようこそ!ブラウザーで直接会議、チャット、画面共有、ファイル転送を行えます。これはローカルに保存されたガイドです。返信は必要ありません。",
+      "connect": "つながりましょう\n[ホームでルームに参加] を選択し、名前、アバター、ルーム ID、およびオプションのパスワードを入力して、[接続] を選択します。変更は自動的に保存されます。右上のアバター メニューを使用してルーム リンクまたは QR コードを共有し、同じルーム詳細で友達を招待します。",
+      "chat": "チャットと会話\n右側のサイドバーでルームチャットまたはプライベート会話を選択します。会話を検索し、ラベルでフィルターまたはグループ化し、サイドバーを完全なチャット ワークスペースに展開します。ルームメッセージは現在オンラインのメンバーに送信されます。各ブラウザは独自の履歴を保持します。",
+      "files": "ファイルを送信する\nメッセージ コンポーザでファイルを添付するか、ファイル リストから保存されたファイルを選択します。ルームチャットでは、最初にファイルの詳細を共有します。受信者は「転送」を選択してコンテンツを受信します。同一のローカル ファイルを再利用できます。ルーム設定では、小さなファイルの自動ダウンロードも提供します。",
+      "meeting": "会議とピクチャー・イン・ピクチャー\n下部のツールバーを使用して、マイク、カメラ、画面共有を制御します。カメラと画面を同時に共有できます。タイルを固定してメインビューにします。ツールバーからピクチャー・イン・ピクチャーを開くか、設定で自動ピクチャー・イン・ピクチャーを有効にします。",
+      "settings": "ファイル、タスク、設定\n右上にあるアバターを選択して、ファイル管理、タスク リスト、または設定を開きます。タスク リストには転送の進行状況が表示され、転送を一時停止または再開できます。問題を報告するには、[設定] → [バージョン情報] のフィードバック リンクを使用します。"
+    },
+    "error_boundary": {
+      "title": "エラーが発生しました",
+      "description": "ページを更新するか、開発者に連絡してください。エラー メッセージは次のとおりです。",
+      "reset": "リセット"
+    },
+    "pagination": {
+      "total": "{{count}} ファイル",
+      "page_size": "ページあたりの行数",
+      "page": "{{page}} / {{count}}",
+      "previous": "前のページへ",
+      "next": "次のページ"
+    },
+    "show_more": "もっと見る",
+    "clipboard_history": {
+      "title": "クリップボード履歴"
+    },
+    "file_drop": {
+      "busy": "ファイルを処理しています。お待ちください。"
+    }
+  },
+  "conversations": {
+    "title": "会話",
+    "search": "会話を検索する",
+    "manage_labels": "ラベルの管理",
+    "new_label": "新しいラベル",
+    "add_label": "ラベルの作成",
+    "save_label": "ラベルを保存",
+    "rename_label": "{{name}} の名前を変更",
+    "delete_label": "ラベル {{name}} を削除",
+    "labels": "ラベル",
+    "no_labels": "ラベルボタンを使用してラベルを作成します。",
+    "group_by_label": "ラベルごとにグループ化する",
+    "filter_all": "すべて",
+    "filter_unread": "未読",
+    "filter_direct": "個別チャット",
+    "filter_room": "ルーム",
+    "filter_labels": "ラベルによるフィルター",
+    "unlabelled": "ラベルなし",
+    "online": "オンライン",
+    "current_room": "現在のルーム",
+    "no_messages": "まだメッセージはありません",
+    "unread_count": "{{count}} の未読メッセージ",
+    "actions": "{{name}} のアクション",
+    "delete": "会話を削除する",
+    "delete_title": "会話を削除する",
+    "delete_room": "ルームの記録を削除する",
+    "delete_room_description": "{{name}} の参加履歴、保存されたパスワード、チャット履歴、会話へのエントリ、およびルーム権限をこのデバイスから削除しますか?他のメンバーには影響はありません。",
+    "delete_description": "このブラウザから {{name}} のチャット履歴と会話リストのエントリを削除しますか?他のメンバーには影響はありません。",
+    "expand": "会話を広げる",
+    "empty": "一致する会話はありません",
+    "select": "会話を選択してチャットを開始します。",
+    "delivered_count": "{{count}} / {{total}} に配信済み",
+    "delivery_sending": "送信中",
+    "delivery_delivered": "配信済み",
+    "delivery_failed": "失敗",
+    "delivery_unsupported": "ルームチャットはサポートされていません",
+    "retry_failed": "失敗した受信者を再試行する",
+    "members_online": "{{count}} 人がオンライン",
+    "local_history": "このブラウザの履歴",
+    "load_earlier": "以前のメッセージをロードする",
+    "room_inactive": "このルームに参加してメッセージを送信してください。履歴を開いても、現在のルームは切り替わりません。",
+    "composer_offline": "接続されていません。メッセージを送信するには、このピアに接続します。",
+    "room_message": "このルームにメッセージを送信する",
+    "send": "メッセージを送信",
+    "previous_identity": "この履歴は以前のローカルIDに属しています。現在の個別チャットを開いてメッセージを送信してください。",
+    "attach_folder": "フォルダーを送信",
+    "attach_media": "写真やビデオを送信する",
+    "attach_file": "ファイルを送信",
+    "file_drop": {
+      "title": "ドロップしてファイルを送信",
+      "unavailable_title": "ファイルはまだ送信できません"
+    },
+    "room_file_details": "詳細を見る",
+    "room_file_request": "クリックして転送",
+    "room_file_offer": "ルームに共有されました。メンバーがこのファイルを要求すると転送が始まります。",
+    "room_file_sender_unavailable": "転送するには、送信者がオンライン中に元のルームに参加します。",
+    "room_file_missing": "このファイルはこのデバイスでは使用できなくなりました。",
+    "back_to_list": "会話に戻る",
+    "clear": "チャット履歴をクリアする",
+    "clear_title": "チャット履歴をクリアする",
+    "clear_description": "このブラウザから {{name}} のチャット履歴を消去しますか?会話はリストに残ります。他のメンバーには影響はありません。",
+    "delete_requires_exit": "履歴を削除する前にルームから退出してください。",
+    "manage_room_hint": "[クリア] はチャット履歴のみを削除します。ルームレコードを削除すると、参加履歴、保存されたパスワード、ルーム権限も削除されます。",
+    "manage_hint": "履歴の消去ではチャット履歴のみを削除し、会話を保持します。会話の削除では一覧の項目も削除します。"
+  },
+  "meeting": {
+    "source_actions": "{{name}} のアクション",
+    "pip_title": "会議のピクチャーインピクチャー",
+    "pip_elsewhere": "会議は別のウィンドウで行われます",
+    "pip_elsewhere_hint": "ピクチャ イン ピクチャ ウィンドウを使用して、会議を表示および制御します。",
+    "pip_restore": "会議をここに戻します",
+    "feature_source": "メインビューに{{name}}を表示",
+    "pip_automatic": "自動ピクチャー・イン・ピクチャー",
+    "pip_return": "会議に戻る",
+    "pip_failed": "ピクチャーインピクチャーを開けません。もう一度試してください。",
+    "controls": "会議の操作",
+    "microphone": "マイク",
+    "camera": "カメラ",
+    "mute_microphone": "マイクをミュートする",
+    "enable_microphone": "マイクを有効にする",
+    "disable_camera": "カメラをオフにする",
+    "enable_camera": "カメラをオンにする",
+    "share_screen": "画面を共有する",
+    "stop_sharing": "共有を停止",
+    "show_screen_preview": "ローカル画面のプレビューを表示する",
+    "screen_preview_covered": "画面を共有しています",
+    "screen_preview_covered_hint": "クリックしてカバーを閉じ、共有画面を表示します。",
+    "sharing_audio": "音声を共有",
+    "mute_sharing_audio": "共有音声をミュートする",
+    "enable_sharing_audio": "共有オーディオのミュートを解除する",
+    "sharing_audio_unavailable": "この共有には音声がありません。再度共有し、システム ピッカーでオーディオを有効にします。",
+    "sound": "音声",
+    "layout": "レイアウト",
+    "grid_layout": "グリッドレイアウトに切り替える",
+    "focus_layout": "フォーカスレイアウトに切り替える",
+    "leave_room": "ルームから退出",
+    "pin": "メインステージにピン留めする",
+    "unpin": "ビューの固定を解除する",
+    "leave_main_title": "メインビューから離れますか?",
+    "leave_main_description": "このビューを切り替えるか固定を解除すると、リモート コントロール (保留中のリクエストを含む)、ピクチャ イン ピクチャ、およびフルスクリーンが終了します。画面共有は継続されます。",
+    "leave_main_confirm": "機能を終了して続行する",
+    "leave_main_failed": "現在の表示モードを終了できませんでした。終了して、もう一度試してください。",
+    "title": "会議",
+    "in_room": "参加中のルーム",
+    "preview": "会議のプレビュー",
+    "hide_panel": "サイドパネルを隠す",
+    "panel": "サイドパネル",
+    "show_panel": "サイドパネルを表示",
+    "close_panels": "サイドパネルを閉じる",
+    "conversations": "会話",
+    "stage": "会議のメイン画面",
+    "preview_hint": "このデバイスのプレビューです。ルームに参加して会議を始めましょう。",
+    "join_room": "ルームに参加する",
+    "media_error": "メディアを更新できませんでした",
+    "media_unavailable": "カメラとマイクは使用できません。サポートされているブラウザでは HTTPS または localhost を使用してください。",
+    "you": "自分",
+    "side_panel": "ミーティングサイドパネル",
+    "chat": "チャット",
+    "members": "参加者",
+    "info": "情報",
+    "select_conversation": "リストから会話を選択するか、ルームに参加してチャットします。",
+    "members_hint": "メンバーをクリックしてプライベートにチャットします。ピアまたはルームをミュートすると、このデバイスでの再生にのみ影響します。",
+    "mute_local_audio": "送信音声をミュートします",
+    "unmute_local_audio": "送信音声のミュートを解除する",
+    "mute_room_audio": "ルームの音声をミュートする",
+    "unmute_room_audio": "ルームの音声のミュートを解除する",
+    "open_private_chat": "{{name}} とチャットする",
+    "mute_member": "このデバイスで {{name}} をミュート",
+    "unmute_member": "このデバイスで {{name}} のミュートを解除",
+    "status_online": "オンライン",
+    "status_offline": "オフライン",
+    "status_connecting": "接続中",
+    "status_reconnecting": "再接続中",
+    "room_info": "ルーム情報",
+    "room_name": "ルーム名",
+    "not_joined": "ルームにいない",
+    "message_history": "チャット履歴",
+    "local_history": "このブラウザにのみ保存されます",
+    "history_hint": "ルームメッセージが送信されると、オンラインのメンバーに送信されます。オフライン メッセージは再配信されず、新規ユーザーは以前の履歴を受け取りません。",
+    "leave_hint": "退室するとマイクとビデオが停止し、進行中のファイル転送を含むすべてのルームの接続が切断されます。ローカルチャット履歴は保存されます。",
+    "open_room_chat": "現在のルームチャットを開く",
+    "add_sharing": "追加画面",
+    "screen_source": "画面 {{count}}",
+    "video_source": "{{count}}を見る",
+    "stop_source": "{{name}}を停止します",
+    "other_sources": "その他の見解",
+    "show_sources": "他のビューを表示する",
+    "hide_sources": "他のビューを非表示にする",
+    "show_toolbar": "ツールバーを表示",
+    "hide_toolbar": "ツールバーを隠す",
+    "sharing_presenter": "{{name}} (あなた、プレゼン中)",
+    "stop_sharing_short": "停止",
+    "audio_devices": "オーディオデバイス",
+    "camera_devices": "カメラデバイス",
+    "microphone_device": "マイク",
+    "speaker_device": "スピーカー",
+    "camera_device": "カメラ",
+    "default_device": "システムのデフォルト",
+    "unnamed_microphone": "マイク {{count}}",
+    "unnamed_camera": "カメラ {{count}}",
+    "unnamed_speaker": "スピーカー {{count}}",
+    "no_microphones": "マイクが見つかりません。接続を確認して更新してください。",
+    "no_cameras": "カメラが見つかりません。接続を確認して更新してください。",
+    "no_speakers": "選択可能なスピーカーはありません。システムのデフォルトを使用できます。",
+    "output_unsupported": "このブラウザはシステム スピーカーを使用します。",
+    "refresh_devices": "デバイスをリフレッシュする",
+    "close_device_menu": "デバイスの選択を閉じる",
+    "device_unavailable": "デバイスが使用不可",
+    "get_permission": "アクセスを許可する",
+    "request_device_permission": "{{device}} へのアクセスを許可する",
+    "permission_checking": "デバイスのアクセスを確認しています…",
+    "permission_needed": "デバイスをリストするには許可が必要です。",
+    "device_disabled": "デバイスのアクセスがブロックされています",
+    "permission_disabled_hint": "ブラウザのサイト権限またはシステムのプライバシー設定でアクセスを許可し、デバイスリストを更新します。",
+    "desktop_permission_disabled_hint": "システムのプライバシー設定で Weblink がマイクまたはカメラを使用できるようにしてから、デバイスの電源を再度オンにします。",
+    "output_permission_hint": "このブラウザには、関連するスピーカーを一覧表示するためにマイクの許可が必要です。",
+    "output_default_only": "このブラウザでは、より多くの発言者をリストするには、利用可能なマイクとマイクへのアクセスが必要です。システムのデフォルトのスピーカーを使用したり、システム設定で出力を変更したりすることもできます。",
+    "desktop_output_default_only": "システムのデフォルトのスピーカーを使用します。出力デバイスはシステム設定で変更できます。",
+    "expand_chat": "サイドバーを展開する",
+    "collapse_chat": "コンパクトなサイドバーを使用する",
+    "return_to_stage": "会議に戻る",
+    "files": "ファイル",
+    "online_duration": "このセッションの時間",
+    "chat_support": "グループチャットをサポートするメンバー",
+    "file_support": "ファイル共有をサポートするメンバー",
+    "pip_permission_denied": "ブラウザではピクチャー・イン・ピクチャーが許可されていませんでした。このページに戻り、ピクチャ イン ピクチャ ボタンをクリックして再試行してください。",
+    "pip_not_supported": "このブラウザまたはビデオではピクチャ イン ピクチャを利用できません。",
+    "pip_video_required": "再生可能なビデオを待っています",
+    "pip_video_elsewhere": "このビデオはピクチャーインピクチャーで再生されています",
+    "pip_video_restore": "ビデオをここに戻します",
+    "native_screen": {
+      "share_audio": "音声を共有",
+      "share_audio_description": "このアプリからのオーディオを除いて、システム再生を共有します。",
+      "title": "画面またはウィンドウを共有する",
+      "preview": "ソースプレビュー",
+      "preview_select": "プレビューするソースを選択してください",
+      "preview_loading": "プレビューを読み込み中…",
+      "preview_failed": "このソースは現在プレビューできません",
+      "preview_retry": "プレビューをリロードする",
+      "description": "共有する画面またはウィンドウを選択します。",
+      "source": "画面ソース",
+      "select": "ディスプレイまたはウィンドウを選択してください",
+      "empty": "利用可能なディスプレイまたはウィンドウがありません",
+      "share": "共有",
+      "screens": "スクリーン",
+      "windows": "ウィンドウ",
+      "screen_backend": "画面キャプチャ方法",
+      "window_backend": "ウィンドウキャプチャ方法",
+      "auto_backend": "自動",
+      "unavailable": "利用できません",
+      "search_windows": "ウィンドウを検索",
+      "size_unknown": "サイズがありません",
+      "no_matches": "一致するウィンドウがありません",
+      "backend_unavailable": "このキャプチャ方法は使用できません。 [設定] で変更するか、このダイアログを再度開いて再試行してください。",
+      "loading": "ソースを読み込み中…"
+    }
+  },
+  "room_dialog": {
+    "actions": "ルームの操作",
+    "open": "ルーム情報と設定",
+    "title": "ルーム設定",
+    "description": "ルームの情報を表示し、会議デバイスとルームの設定を構成します。",
+    "sections": "ルーム設定セクション",
+    "info": "ルーム情報",
+    "devices": "会議用デバイス",
+    "devices_hint": "デバイスの選択は、次回会議ツールバーからデバイスを有効にしたときに適用されます。アクセスを許可すると、会議の音声やビデオを公開せずに、デバイスが短時間開いて解放され、一覧表示されます。",
+    "online_members": "オンライン会員",
+    "file_hint": "ファイルのオファーはオンライン メンバーに提供されます。ファイルは、要求された場合、または小さなファイルの自動ダウンロードが有効になっている場合に転送されます。送信者はオンラインを維持し、ローカル ファイルを保持する必要があります。",
+    "inactive_devices": "このルームに参加して、会議デバイスを構成します。",
+    "settings": "ルーム設定",
+    "settings_unavailable": "ルームに参加して設定を構成します。",
+    "auto_download": {
+      "title": "ファイルの自動ダウンロードを許可する",
+      "description": "転送設定の共有サイズ制限内で、このルームの新しいファイルを自動的に受信します。履歴のファイルは自動的にはダウンロードされません。"
+    },
+    "members": "メンバー",
+    "previous_members": "以前のメンバー",
+    "members_not_joined": "このルームに参加して、誰がオンラインであるかを確認してください。",
+    "no_previous_members": "会話が保持されている以前のメンバーはいません。",
+    "members_hint": "以前のメンバーは、このルームに参加した場合にのみ表示され、直接の会話は引き続きローカルに保存されます。"
+  },
+  "app_menu": {
+    "title": "アカウントメニュー",
+    "room_qrcode": "ルームのQRコード",
+    "joining": "参加中…",
+    "settings_categories": "設定カテゴリ",
+    "settings_appearance": "外観",
+    "settings_connection": "接続",
+    "settings_transfer": "転送",
+    "settings_advanced": "詳細設定",
+    "settings_about": "このアプリについて",
+    "settings_meeting": "オーディオとビデオ",
+    "settings_remote_control": "リモート操作",
+    "settings_permissions": "クライアントとルーム",
+    "settings_application": "アプリ",
+    "settings_notifications": "通知"
+  },
+  "file_library": {
+    "search": "ファイルを検索…",
+    "status": "利用状況",
+    "sort": "並べ替え",
+    "type": "ファイルの種類",
+    "status_all": "すべての状態",
+    "status_complete": "利用可能",
+    "status_incomplete": "未完了",
+    "sort_recent": "最近追加された",
+    "sort_name": "名前",
+    "sort_size": "サイズ",
+    "type_all": "すべて",
+    "type_image": "画像",
+    "type_video": "動画",
+    "type_audio": "オーディオ",
+    "type_document": "書類",
+    "type_other": "その他",
+    "no_results": "一致するファイルがありません",
+    "empty": "ファイルをインポートするか、会話で受信します",
+    "local_file": "ローカルファイル",
+    "actions": "ファイルアクション",
+    "action_preview": "プレビュー",
+    "action_download": "デバイスに保存",
+    "action_send": "送信",
+    "action_details": "詳細",
+    "action_delete": "ローカルファイルを削除する",
+    "choose": "ファイルから選択",
+    "choose_hint": "この会話に送信する利用可能なファイルを選択してください。",
+    "selection": "{{count}} 選択済み · {{size}}",
+    "send_count": "{{count}} 件のファイルを送信",
+    "import": "インポート",
+    "reused": "すでに存在します。ローカルコンテンツを再利用",
+    "imported": "インポートされたファイル",
+    "delete_description": "これらのローカル ファイルを削除しますか? {{count}} 添付ファイル参照は使用できなくなります。チャットメッセージは残ります。",
+    "aliases": "名前",
+    "references": "添付資料の参照",
+    "fingerprint": "コンテンツのフィンガープリント",
+    "legacy": "最初の送信時に計算されたフィンガープリント",
+    "local_completion": "すでにこのデバイス上にあります。転送がスキップされました",
+    "related_messages": "関連メッセージ",
+    "peer_unavailable": "受信者はオフラインです。ファイルを送信する前に再接続してください。",
+    "drop_files": "ドロップしてファイルキャッシュに保存します"
+  },
+  "shared_files": {
+    "add": "ファイルを追加する",
+    "from_library": "ライブラリから選ぶ",
+    "upload_files": "ファイルをアップロード",
+    "upload_folder": "フォルダーをアップロード",
+    "added": "ファイルが共有リストに追加されました。",
+    "title": "共有ファイル",
+    "mine": "私の共有ファイル",
+    "shared": "共有中",
+    "share": "共有",
+    "unshare": "共有を停止",
+    "filter": "共有状況",
+    "filter_all": "すべてのファイル",
+    "filter_shared": "共有中",
+    "filter_private": "共有されていません",
+    "choose": "ライブラリからファイルを共有する",
+    "choose_hint": "選択したファイルは、すべてのルームの共有リストで利用できるようになります。",
+    "share_count": "{{count}} 件のファイルを共有",
+    "get": "取得",
+    "get_count": "選択した {{count}} 件を取得",
+    "search": "共有ファイルの検索",
+    "refresh": "更新",
+    "asc": "昇順",
+    "desc": "降順",
+    "disconnected": "このメンバーは接続されていません。",
+    "unsupported": "このメンバーは共有ファイルをサポートしません。",
+    "disabled": "このメンバーはあなたの共有ファイル アクセスを有効にしていません。",
+    "empty": "共有ファイルが見つかりませんでした。",
+    "loading": "共有ファイルをロード中…",
+    "error": "共有ファイルを読み込めませんでした。",
+    "select_all": "このページを選択してください",
+    "previous": "前へ",
+    "next": "次へ",
+    "page_size": "ページあたりのファイル数",
+    "select_member": "共有ファイルを参照するメンバーを選択します。",
+    "back": "メンバーに戻る",
+    "drop_files": "ドロップして共有ファイルに追加します"
+  },
+  "room_connection": {
+    "title": "このルームは別のページでアクティブです",
+    "description": "この ID は、一度に 1 ページずつこのルームに接続できます。ここに切り替えると、前のページのルームから退出し、会議と転送が停止されます。",
+    "switch_here": "このページに切り替える",
+    "switching": "切り替え中…"
+  },
+  "errors": {
+    "room_in_use": "この ID は、別のタブまたはウィンドウでこのルームにすでに接続されています。ここに参加する前にそこを離れてください。",
+    "room_takeover_timeout": "前のページは応答しませんでした。閉じて、もう一度試してください。",
+    "unexpected": "アクションは失敗しました。もう一度試してください。",
+    "connection_failed": "ルームサーバーに接続できません。ネットワークとサーバーの設定を確認して、もう一度試してください。",
+    "connection_timeout": "ルームサーバーへの接続がタイムアウトしました。ネットワークを確認して、もう一度試してください。",
+    "connection_closed": "接続が中断されました。再接続してもう一度お試しください。",
+    "connection_config": "ルームサーバーのアドレスまたは設定が無効です。接続設定を確認してください。",
+    "connection_response": "サーバーが無効な応答を返しました。アドレスを確認するか、アプリとサーバーを更新してください。",
+    "password_required": "このルームにはパスワードが必要です。入力して再試行してください。",
+    "incorrect_password": "ルームのパスワードが間違っています。確認してもう一度試してください。",
+    "password_prepare": "ルームのパスワードを処理できません。ページを更新して、もう一度お試しください。",
+    "request_timeout": "リクエストがタイムアウトになりました。両方のデバイスを接続したままにして、もう一度試してください。",
+    "member_offline": "このメンバーは接続されていません。再接続するのを待って、もう一度試してください。",
+    "sharing_disabled": "このメンバーは共有ファイルへのアクセスを無効にしています。",
+    "file_not_shared": "このファイルはもう共有されていないか、削除されています。リストを更新します。",
+    "shared_unsupported": "このメンバーは共有ファイルのダウンロードをサポートしていません。両方のアプリを更新して、もう一度試してください。",
+    "file_unavailable": "ファイルが削除されているか、読み取ることができません。選択するか、再度取得します。",
+    "file_incomplete": "ファイルはまだ完全には利用できません。完了するまで待ってから再試行してください。",
+    "file_busy": "このファイルはすでに処理または転送中です。現在のタスクが完了するまで待ちます。",
+    "file_failed": "ファイル操作に失敗しました。接続とローカルストレージを確認して、再試行してください。",
+    "file_list_failed": "ファイルリストをロードできません。両方のデバイスを接続したままにし、リストを更新します。",
+    "verification_failed": "受信したファイルの検証に失敗しました。ファイルを再度取得してください。",
+    "storage_full": "ローカルストレージがいっぱいです。不要になったファイルを削除して、もう一度試してください。",
+    "storage_unavailable": "ローカル ファイル ライブラリにアクセスできません。ブラウザのストレージ権限を確認して、再試行してください。",
+    "permission_denied": "許可が拒否されました。ブラウザの権限を確認して、再試行してください。",
+    "cancelled": "操作はキャンセルされました。",
+    "avatar_failed": "この画像を読み取れません。別の画像を選択して、もう一度試してください。",
+    "ice_unavailable": "サーバーが利用できません。アドレス、資格情報、ネットワークを確認してください。",
+    "ice_credentials": "リレー資格情報を取得できません。 TURN サービスの資格情報を確認します。",
+    "ice_config": "中継サーバーの設定が無効です。アドレスと認証方法を確認してください。",
+    "ice_config_line": "{{line}} 行には、アドレス、ユーザー名、パスワード、認証方法を | で区切って含める必要があります。",
+    "ice_auth_line": "{{line}} 行にはサポートされていない認証方法があります。長期または hmac を使用します。"
+  },
+  "remote_control": {
+    "clipboard_transfer": {
+      "sending": "クリップボードファイルの送信",
+      "receiving": "クリップボードファイルの受信",
+      "finalizing": "クリップボードファイルの処理",
+      "completed": "クリップボードファイルの転送が完了しました",
+      "failed": "クリップボードファイルの転送に失敗しました",
+      "details": "転送の詳細については、タスク リストを開いてください。"
+    },
+    "request_title": "遠隔操作を許可しますか?",
+    "request_description": "{{name}} は、このコンピュータのマウスとキーボードを制御したいと考えています。共有ディスプレイはポインタをマップします。制御はアプリケーションやディスプレイに限定されません。",
+    "revoke_hint": "制御を終了するには、「制御の取り消し」を使用するか、このコンピュータで {{shortcut}} を押します。",
+    "decline": "拒否",
+    "allow": "制御を許可する",
+    "host_active": "{{name}} はこのコンピューターを制御できます。",
+    "controller_active": "{{name}}の制御",
+    "host_active_short": "リモート操作されています",
+    "controller_active_short": "リモート操作中",
+    "revoke": "コントロールを取り消す",
+    "revoke_failed": "制御を取り消すことができませんでした。ホスト上で {{shortcut}} を使用して停止します。",
+    "approval_failed": "承認に失敗しました。リクエストの有効期限が切れているか、制御が利用できない可能性があります。再度制御を要求してください。",
+    "reconnecting": "コントロールの再接続",
+    "surface": "リモート操作; {{shortcut}} を押してポインタとキーボードを放します。",
+    "request": "操作権限をリクエスト",
+    "waiting": "承認待ち",
+    "cancel": "リクエストのキャンセル",
+    "end": "操作を終了",
+    "more_choices": "その他の承認オプション",
+    "allow_remember": "承認して許可リストに追加する",
+    "deny_remember": "拒否してブロックリストに追加",
+    "share_first_screen": "承認すると、画面1とその音声がルーム内の全員に共有されます。",
+    "keyboard_control": "キーボードコントロール",
+    "keyboard_enable": "キーボード制御を有効にする",
+    "keyboard_disable": "キーボード制御を無効にする",
+    "keyboard_show": "キーボードを表示",
+    "keyboard_hide": "キーボードを隠す",
+    "keyboard_input": "リモートコンピュータに入力します",
+    "text_too_long": "テキストが長すぎます。小分けにしてお送りください。",
+    "text_failed": "入力を完全に送信できませんでした。再試行する前にリモート テキストを確認してください。",
+    "system_keyboard_stopped": "システムキーボードの転送が停止しました。リモート画面をクリックして再試行するか、リモート コントロール設定でシステム ショートカットをオフにしてください。",
+    "capture_failed": "ポインタをキャプチャできませんでした。リモート画面をクリックして再試行するか、リモートコントロール設定でローカルカーソルを選択してください。",
+    "capture_unavailable": "このホストはポインタ キャプチャをサポートしていません。リモートコントロール設定でローカルカーソルを選択します。",
+    "capture_hint": "クリックしてポインタをキャプチャします。 {{shortcut}} を押してポインタとキーボードを放します。",
+    "file_drop": {
+      "hint": "リモート画面のこの位置にファイルをドロップ",
+      "unavailable": "このホストではファイルのドロップが無効になっているか、ビジー状態であるか使用できません",
+      "sending": "ドロップしたファイルを送信中",
+      "receiving": "ドロップしたファイルを受信中",
+      "finalizing": "リモートコンピューターにファイルをドロップ中",
+      "completed": "リモートへのファイルドロップが完了しました",
+      "failed": "リモートへのファイルドロップに失敗しました",
+      "details": "転送の詳細については、タスク リストを開いてください。"
+    }
+  }
+}

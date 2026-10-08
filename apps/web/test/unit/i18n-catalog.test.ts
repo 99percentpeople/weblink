@@ -3,8 +3,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import en from "@/assets/i18n/en-us.json";
-import cn from "@/assets/i18n/zh-cn.json";
-import tw from "@/assets/i18n/zh-tw.json";
+import languages from "@/assets/i18n/languages.json";
 
 function flatten(
   value: object,
@@ -20,11 +19,19 @@ function flatten(
     ),
   );
 }
-const catalogs = {
-  "en-us": flatten(en),
-  "zh-cn": flatten(cn),
-  "zh-tw": flatten(tw),
-};
+const catalogs = Object.fromEntries(
+  Object.keys(languages).map((locale) => [
+    locale,
+    flatten(
+      JSON.parse(
+        readFileSync(
+          resolve(`src/assets/i18n/${locale}.json`),
+          "utf8",
+        ),
+      ),
+    ),
+  ]),
+);
 const keys = Object.keys(catalogs["en-us"]).sort();
 const placeholders = (value: string) =>
   [...value.matchAll(/\{\{(\w+)\}\}/g)]
@@ -32,6 +39,19 @@ const placeholders = (value: string) =>
     .sort();
 
 describe("translation catalogs", () => {
+  it("registers every language catalog", () => {
+    expect(
+      readdirSync(resolve("src/assets/i18n"))
+        .filter(
+          (name) =>
+            name.endsWith(".json") &&
+            name !== "languages.json",
+        )
+        .map((name) => name.slice(0, -5))
+        .sort(),
+    ).toEqual(Object.keys(languages).sort());
+    expect(catalogs["en-us"]).toEqual(flatten(en));
+  });
   it.each(Object.entries(catalogs))(
     "keeps keys and placeholders consistent in %s",
     (_locale, catalog) => {

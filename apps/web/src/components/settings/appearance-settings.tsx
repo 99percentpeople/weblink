@@ -10,8 +10,12 @@ import {
 
 import { ThemeToggle } from "@/components/common/theme-toggle";
 
-import { t } from "@/i18n";
-import { setAppOptions, localeOptionsMap } from "@/options";
+import { t, localeLabel } from "@/i18n";
+import { setAppOptions } from "@/options";
+import {
+  localeOptions,
+  type Locale,
+} from "@/libs/i18n/locale";
 import WallpaperPicker from "./wallpaper-picker";
 
 import { appState } from "@/libs/state/app-state";
@@ -31,17 +35,17 @@ export default function AppearanceSettings() {
       >
         <ThemeToggle />
       </SettingRow>
-      <SettingSelect<string>
+      <SettingSelect<Locale>
         label={t("setting.appearance.language.title")}
         description={t(
           "setting.appearance.language.description",
         )}
-        options={Object.keys(localeOptionsMap)}
+        options={localeOptions}
         value={appState.options.locale}
         onChange={(value) => {
           if (value) setAppOptions("locale", value);
         }}
-        optionLabel={(value) => localeOptionsMap[value]}
+        optionLabel={localeLabel}
       />
       <SettingBlock>
         <WallpaperPicker />

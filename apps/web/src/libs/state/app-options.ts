@@ -8,7 +8,7 @@ import type {
 } from "@/libs/domain/ice-server";
 import type { CompressionLevel } from "@/libs/domain/transfer/options";
 import type { ClientID, FileID } from "@/libs/domain/ids";
-import languages from "@/assets/i18n/languages.json";
+import type { Locale } from "@/libs/i18n/locale";
 import type { WallpaperPresetId } from "@/libs/wallpapers";
 import {
   defaultApplicationOptions,
@@ -30,7 +30,11 @@ import {
 
 import { DEFAULT_REMOTE_FILE_BYTES } from "../domain/protocol/remote-file-limits";
 
-export type Locale = string;
+export type { Locale } from "@/libs/i18n/locale";
+export {
+  localeOptionsMap,
+  localFromLanguage,
+} from "@/libs/i18n/locale";
 export type ConnectionOptions = IceServerOptions;
 export type { TurnServerOptions, CompressionLevel };
 
@@ -262,23 +266,6 @@ export const signalingWebSocketUrl =
     ? (window as any).env?.VITE_WEBSOCKET_URL
     : undefined);
 
-export const localeOptionsMap = languages as Record<
-  Locale,
-  string
->;
-
-export function localFromLanguage(
-  language: string | null | undefined,
-): Locale {
-  const normalized = language?.trim().toLowerCase();
-  if (!normalized) return "en-us";
-  return (
-    Object.keys(localeOptionsMap).find((locale) =>
-      locale.toLowerCase().includes(normalized),
-    ) ?? "en-us"
-  );
-}
-
 export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
@@ -303,9 +290,7 @@ export const getDefaultAppOptions = (): AppOption => {
     relayOnly: false,
     wakeLock: true,
     compressionLevel: 0,
-    locale: hasNavigator
-      ? localFromLanguage(navigator.language)
-      : "en-us",
+    locale: "system",
     shareServersWithOthers: true,
     backgroundImageOpacity: 0.5,
     automaticDownload: false,

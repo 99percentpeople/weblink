@@ -5,9 +5,14 @@ import { platform } from "@/libs/platform/runtime";
 import { createInitialization } from "@/libs/application/initialization";
 import { createApplicationSettingsSync } from "@/libs/application/application-settings";
 import { appState } from "./app-state";
+import {
+  initializeAppLocale,
+  resolvedLocale,
+} from "./app-locale";
 
 /** Native integration and initialization follow the application scope, not a view. */
 export function initializeApplication(): void {
+  initializeAppLocale();
   onMount(() => {
     const dispose = platform.initialize();
     onCleanup(dispose);
@@ -32,14 +37,11 @@ export function initializeApplication(): void {
   createEffect(() => {
     const { closeBehavior, hideOnRemoteControl } =
       appState.options.application;
-    const locale = appState.options.locale;
+    const locale = resolvedLocale();
     settings.update({
       closeBehavior,
       hideOnRemoteControl,
-      locale:
-        locale === "zh-cn" || locale === "zh-tw"
-          ? locale
-          : "en",
+      locale: locale === "en-us" ? "en" : locale,
     });
   });
   onCleanup(() => settings.close());

@@ -37,8 +37,6 @@ import createAboutDialog from "./components/dialogs/about-dialog";
 import {
   appInitialized,
   backgroundImage,
-  localeOptionsMap,
-  localFromLanguage,
   setAppInitialized,
   setAppOptions,
   setStarterMessageSent,
@@ -170,13 +168,6 @@ const InnerApp = (props: ParentProps) => {
 
   onMount(async () => {
     parseSearchParams();
-    if (!localeOptionsMap[appState.options.locale]) {
-      setAppOptions(
-        "locale",
-        localFromLanguage(navigator.language),
-      );
-    }
-
     if (!appInitialized()) {
       setAppInitialized(true);
       openAboutDialog();

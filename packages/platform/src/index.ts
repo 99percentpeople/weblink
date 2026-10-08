@@ -109,7 +109,15 @@ export interface NativeClipboard {
 export interface NativeApplicationOptions {
   closeBehavior: "ask" | "exit" | "tray";
   hideOnRemoteControl: boolean;
-  locale: "en" | "zh-cn" | "zh-tw";
+  locale:
+    | "en"
+    | "zh-cn"
+    | "zh-tw"
+    | "ja-jp"
+    | "es-es"
+    | "ko-kr"
+    | "fr-fr"
+    | "de-de";
 }
 
 export interface NativeAutostartStatus {

@@ -36,6 +36,16 @@ pub enum Locale {
     Chinese,
     #[serde(rename = "zh-tw")]
     TraditionalChinese,
+    #[serde(rename = "ja-jp")]
+    Japanese,
+    #[serde(rename = "es-es")]
+    Spanish,
+    #[serde(rename = "ko-kr")]
+    Korean,
+    #[serde(rename = "fr-fr")]
+    French,
+    #[serde(rename = "de-de")]
+    German,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -327,6 +337,27 @@ pub fn application_configure(
             ],
             Locale::Chinese => ["显示 Weblink", "撤销对此设备的控制", "退出 Weblink"],
             Locale::TraditionalChinese => ["顯示 Weblink", "撤銷對此裝置的控制", "結束 Weblink"],
+            Locale::Japanese => [
+                "Weblink を表示",
+                "このデバイスの操作権限を取り消す",
+                "Weblink を終了",
+            ],
+            Locale::Spanish => [
+                "Mostrar Weblink",
+                "Revocar el control de este dispositivo",
+                "Salir de Weblink",
+            ],
+            Locale::Korean => ["Weblink 표시", "이 기기의 제어 권한 취소", "Weblink 종료"],
+            Locale::French => [
+                "Afficher Weblink",
+                "Révoquer le contrôle de cet appareil",
+                "Quitter Weblink",
+            ],
+            Locale::German => [
+                "Weblink anzeigen",
+                "Steuerung dieses Geräts widerrufen",
+                "Weblink beenden",
+            ],
         };
         for (item, label) in [&menu.show, &menu.revoke, &menu.exit]
             .into_iter()
@@ -374,5 +405,15 @@ mod tests {
             .hide_on_grant(true));
         let value = serde_json::json!({"closeBehavior":"minimize", "hideOnRemoteControl":false, "locale":"en"});
         assert!(serde_json::from_value::<Options>(value).is_err());
+    }
+
+    #[test]
+    fn wire_options_accept_all_supported_languages() {
+        for locale in [
+            "en", "zh-cn", "zh-tw", "ja-jp", "es-es", "ko-kr", "fr-fr", "de-de",
+        ] {
+            let value = serde_json::json!({"closeBehavior":"ask", "hideOnRemoteControl":false, "locale":locale});
+            assert!(serde_json::from_value::<Options>(value).is_ok(), "{locale}");
+        }
     }
 }

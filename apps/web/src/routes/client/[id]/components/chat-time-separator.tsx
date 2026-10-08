@@ -1,12 +1,12 @@
 import { createMemo } from "solid-js";
-import { appState } from "@/libs/state/app-state";
+import { resolvedLocale } from "@/libs/state/app-locale";
 
 export function ChatTimeSeparator(props: {
   timestamp: number;
 }) {
   const date = createMemo(() => new Date(props.timestamp));
   const label = createMemo(() =>
-    date().toLocaleString(appState.options.locale, {
+    date().toLocaleString(resolvedLocale(), {
       dateStyle: "medium",
       timeStyle: "short",
     }),
@@ -19,7 +19,7 @@ export function ChatTimeSeparator(props: {
       <time
         dateTime={date().toISOString()}
         class="text-muted-foreground bg-muted/50 rounded-full px-3 py-1
-          text-[11px] leading-4 tabular-nums"
+          text-[11px] tabular-nums leading-4"
       >
         {label()}
       </time>

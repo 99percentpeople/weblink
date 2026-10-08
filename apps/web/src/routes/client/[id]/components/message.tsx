@@ -1,3 +1,4 @@
+import { resolvedLocale } from "@/libs/state/app-locale";
 import { MessageRetryButton } from "@/components/conversations/message-retry-button";
 import { userErrorMessage } from "@/libs/user-error";
 import { DirectFileMessageCard as FileMessageCard } from "@/components/conversations/direct-file-message-card";
@@ -97,10 +98,10 @@ export const MessageContent: Component<MessageCardProps> = (
     () => new Date(local.message.createdAt),
   );
   const fullSentAt = createMemo(() =>
-    sentAt().toLocaleString(appState.options.locale),
+    sentAt().toLocaleString(resolvedLocale()),
   );
   const shortSentAt = createMemo(() =>
-    sentAt().toLocaleTimeString(appState.options.locale, {
+    sentAt().toLocaleTimeString(resolvedLocale(), {
       hour: "2-digit",
       minute: "2-digit",
     }),
@@ -455,8 +456,8 @@ export const MessageContent: Component<MessageCardProps> = (
               data-slot="message-bubble"
               title={fullSentAt()}
               class={cn(
-                `text-foreground flex max-w-[88%] min-w-0 flex-col gap-1.5
-                rounded-2xl border px-3.5 py-2.5 shadow-sm select-none
+                `text-foreground flex min-w-0 max-w-[88%] select-none
+                flex-col gap-1.5 rounded-2xl border px-3.5 py-2.5 shadow-sm
                 sm:max-w-[80%] sm:select-text lg:max-w-[75%]`,
                 local.message.type === "file"
                   ? "w-88"
@@ -546,8 +547,8 @@ export const MessageContent: Component<MessageCardProps> = (
                 <div
                   data-slot="message-meta"
                   class="text-muted-foreground flex flex-wrap items-center
-                    justify-end gap-x-1.5 gap-y-1 text-[11px] leading-4
-                    tabular-nums"
+                    justify-end gap-x-1.5 gap-y-1 text-[11px] tabular-nums
+                    leading-4"
                 >
                   <Show when={props.message.error}>
                     {(error) => (

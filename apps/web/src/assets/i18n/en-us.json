@@ -80,7 +80,8 @@
       },
       "language": {
         "title": "Language",
-        "description": "Change the language of the app"
+        "description": "Change the language of the app",
+        "system": "Follow system"
       },
       "background_image": {
         "title": "Wallpaper",
