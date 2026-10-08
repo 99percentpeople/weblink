@@ -9,16 +9,28 @@ export interface BuildInfo {
   builtAt: string;
 }
 
+/** The desktop platform mode can build either release channel. */
+export function resolveBuildChannel(
+  mode: string,
+  override?: string,
+): BuildInfo["channel"] {
+  if (!override) return mode === "dev" ? "dev" : "stable";
+  if (override === "dev" || override === "stable")
+    return override;
+  throw new Error(
+    "WEBLINK_BUILD_CHANNEL must be dev or stable.",
+  );
+}
+
 export function createBuildInfo(
   version: string,
-  mode: string,
+  channel: BuildInfo["channel"],
   commit: string | undefined,
   builtAt = Date.now(),
 ): BuildInfo {
   const hash = /^[a-f\d]{7,40}$/i.test(commit ?? "")
     ? commit!.toLowerCase()
     : null;
-  const channel = mode === "dev" ? "dev" : "stable";
   return {
     version:
       channel === "dev"

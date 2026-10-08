@@ -16,6 +16,7 @@ import {
   buildInfoPlugin,
   createBuildInfo,
   getBuildCommit,
+  resolveBuildChannel,
 } from "./scripts/build-info";
 import {
   BRAND_ASSETS,
@@ -97,7 +98,10 @@ export default defineConfig(({ command, mode }) => {
     : {};
   const buildInfo = createBuildInfo(
     packageJson.version,
-    mode,
+    resolveBuildChannel(
+      desktop && command === "serve" ? "dev" : mode,
+      desktopEnv.WEBLINK_BUILD_CHANNEL,
+    ),
     getBuildCommit(),
   );
   return {
@@ -213,7 +217,7 @@ export default defineConfig(({ command, mode }) => {
             "import.meta.env.VITE_SHARE_URL":
               JSON.stringify(
                 desktopEnv.VITE_SHARE_URL ||
-                  (command === "serve"
+                  (buildInfo.channel === "dev"
                     ? "https://dev.webl.ink"
                     : "https://webl.ink"),
               ),

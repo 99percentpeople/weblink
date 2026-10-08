@@ -60,6 +60,13 @@ workspace's full release optimizations and producing the
 version as the Web frontend. These workflows upload artifacts without publishing a GitHub Release.
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
+The platform mode is separate from the release channel: `desktop-dev.yml` sets
+`WEBLINK_BUILD_CHANNEL=dev`, while `desktop-production.yml` sets it to `stable`.
+Both reuse the Web frontend's build metadata logic. Dev About, copied version
+information and `version.json` report `<package-version>-dev.<short-commit>`;
+stable builds keep the package version. `GITHUB_SHA` supplies the CI commit, with
+local Git as a fallback. Local desktop development uses the dev channel by default;
+packaged builds default to stable unless `WEBLINK_BUILD_CHANNEL=dev` is set.
 CI builds read `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` from GitHub
 Environment variables in `Preview`/`production`, matching the web channel.
 Optional static/HMAC TURN settings use the `VITE_TURN_SERVERS` secret; managed
@@ -69,8 +76,8 @@ Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.
 `VITE_SHARE_URL` sets the public frontend URL used by room links and QR codes.
 The `Preview` and `production` GitHub Environments can override it; their desktop
 workflows default to `https://dev.webl.ink` and `https://webl.ink`, respectively.
-Local desktop development defaults to `https://dev.webl.ink`, while local packaged
-builds default to `https://webl.ink`. Set this variable to your own frontend URL
+Local desktop builds default to `https://dev.webl.ink` for the dev channel and
+`https://webl.ink` for stable. Set this variable to your own frontend URL
 when self-hosting, so invitations never use the desktop window's internal origin.
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.

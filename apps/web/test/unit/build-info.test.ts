@@ -3,17 +3,44 @@ import { describe, expect, it } from "vitest";
 import {
   createBuildInfo,
   buildInfoPlugin,
+  resolveBuildChannel,
 } from "../../scripts/build-info";
 
 const commit = "abcdef1" + "2".repeat(33);
 const builtAt = Date.UTC(2026, 8, 24);
 
 describe("build channel metadata", () => {
+  it.each([
+    ["dev", undefined, "dev"],
+    ["production", undefined, "stable"],
+    ["desktop", undefined, "stable"],
+    ["desktop", "dev", "dev"],
+    ["desktop", "stable", "stable"],
+  ] as const)(
+    "resolves %s with channel %s to %s",
+    (mode, override, expected) => {
+      expect(resolveBuildChannel(mode, override)).toBe(
+        expected,
+      );
+    },
+  );
+
+  it("rejects an invalid channel rather than silently omitting the dev commit", () => {
+    expect(() =>
+      resolveBuildChannel("desktop", "preview"),
+    ).toThrow("WEBLINK_BUILD_CHANNEL");
+  });
+
   it.each(["production", "desktop"])(
     "preserves the shared package version in %s",
     (mode) => {
       expect(
-        createBuildInfo("1.0.4", mode, commit, builtAt),
+        createBuildInfo(
+          "1.0.4",
+          resolveBuildChannel(mode),
+          commit,
+          builtAt,
+        ),
       ).toEqual({
         version: "1.0.4",
         channel: "stable",
@@ -23,15 +50,23 @@ describe("build channel metadata", () => {
     },
   );
 
-  it("identifies dev builds by their commit without changing package.json", () => {
-    expect(
-      createBuildInfo("1.0.4", "dev", commit, builtAt),
-    ).toMatchObject({
-      version: "1.0.4-dev.abcdef1",
-      channel: "dev",
-      commit,
-    });
-  });
+  it.each(["dev", "desktop"])(
+    "identifies %s dev builds by their commit without changing package.json",
+    (mode) => {
+      expect(
+        createBuildInfo(
+          "1.0.4",
+          resolveBuildChannel(mode, "dev"),
+          commit,
+          builtAt,
+        ),
+      ).toMatchObject({
+        version: "1.0.4-dev.abcdef1",
+        channel: "dev",
+        commit,
+      });
+    },
+  );
 
   it.each([undefined, "not-a-hash", "bad\nmetadata"])(
     "handles unavailable/invalid commit metadata (%s)",
@@ -50,7 +85,7 @@ describe("build channel metadata", () => {
     (mode) => {
       const info = createBuildInfo(
         "1.0.4",
-        mode,
+        resolveBuildChannel(mode),
         commit,
         builtAt,
       );

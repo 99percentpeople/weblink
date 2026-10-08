@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 35
     environment: Preview
     env:
+      WEBLINK_BUILD_CHANNEL: dev
       VITE_SHARE_URL: ${{ vars.VITE_SHARE_URL || 'https://dev.webl.ink' }}
       VITE_WEBSOCKET_URL: ${{ vars.VITE_WEBSOCKET_URL }}
       WEBLINK_STUN_SERVERS: ${{ vars.WEBLINK_STUN_SERVERS }}
