@@ -19,7 +19,7 @@ export function getDialogBodyClassName(
   className?: string,
 ): string {
   return cn(
-    "min-h-0 overflow-y-auto overscroll-contain",
+    "min-h-0 min-w-0 overflow-y-auto overscroll-contain",
     className,
   );
 }

@@ -47,7 +47,7 @@ export function createAppDialogs() {
   const [filesOpen, setFilesOpen] = createSignal(false);
   const tasks = createTaskCenterDialog();
   const settings = createDialog({
-    class: "app-settings-dialog",
+    class: "app-tabbed-dialog",
     title: () => t("common.nav.settings"),
     content: () =>
       createComponent(Show, {

@@ -32,6 +32,7 @@ function CheckAvailabilityButton(props: {
   const [checking, setChecking] = createSignal(false);
   return (
     <Button
+      wrap
       type="button"
       size="sm"
       variant="outline"
@@ -127,6 +128,7 @@ export function ConnectionSettings(
               }
             >
               <Button
+                wrap
                 type="button"
                 variant="outline"
                 size="sm"
@@ -192,6 +194,7 @@ export function ConnectionSettings(
               }
             >
               <Button
+                wrap
                 type="button"
                 variant="outline"
                 size="sm"

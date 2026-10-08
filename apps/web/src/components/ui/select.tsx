@@ -23,7 +23,12 @@ export const SelectSection = SelectPrimitive.Section;
 
 type selectTriggerProps<
   T extends ValidComponent = "button",
-> = ParentProps<SelectTriggerProps<T> & { class?: string }>;
+> = ParentProps<
+  SelectTriggerProps<T> & {
+    class?: string;
+    wrap?: boolean;
+  }
+>;
 
 export const SelectTrigger = <
   T extends ValidComponent = "button",
@@ -32,7 +37,7 @@ export const SelectTrigger = <
 ) => {
   const [local, rest] = splitProps(
     props as selectTriggerProps,
-    ["class", "children"],
+    ["class", "children", "wrap"],
   );
 
   return (
@@ -40,18 +45,24 @@ export const SelectTrigger = <
       class={cn(
         `border-input ring-offset-background
         placeholder:text-muted-foreground focus-visible:ring-ring
-        relative flex h-9 w-full items-center justify-end rounded-md
-        border bg-transparent px-3 py-2 text-sm shadow-sm
+        relative flex h-9 w-full min-w-0 items-center gap-2
+        rounded-md border bg-transparent px-3 py-2 text-sm shadow-sm
         transition-shadow focus:outline-none
         focus-visible:ring-[1.5px] disabled:cursor-not-allowed
         disabled:opacity-50`,
+        local.wrap && "h-auto min-h-9",
         local.class,
       )}
       {...rest}
     >
       <div
-        class="[&>*[data-placeholder-shown]]:text-muted-foreground absolute
-          left-2 right-8 truncate text-left"
+        class={cn(
+          `[&>*[data-placeholder-shown]]:text-muted-foreground min-w-0
+          flex-1 text-left`,
+          local.wrap
+            ? "whitespace-normal [overflow-wrap:anywhere]"
+            : "truncate",
+        )}
       >
         {local.children}
       </div>
@@ -61,7 +72,7 @@ export const SelectTrigger = <
         width="1em"
         height="1em"
         viewBox="0 0 24 24"
-        class="flex size-4 items-center justify-center opacity-50"
+        class="flex size-4 shrink-0 items-center justify-center opacity-50"
       >
         <path
           fill="none"
@@ -101,8 +112,8 @@ export const SelectContent = <
           data-[closed]:zoom-out-95 data-[expanded]:zoom-in-95
           relative z-[60] flex
           max-h-[min(--spacing(80),var(--kb-popper-content-available-height))]
-          min-w-32 flex-col overflow-hidden rounded-lg border
-          shadow-md`,
+          min-w-32 max-w-[var(--kb-popper-content-available-width)]
+          flex-col overflow-hidden rounded-lg border shadow-md`,
           local.class,
         )}
         onFocusOutside={(e) => {
@@ -162,7 +173,7 @@ export const SelectItem = <T extends ValidComponent = "li">(
           <title>Checked</title>
         </svg>
       </SelectPrimitive.ItemIndicator>
-      <SelectPrimitive.ItemLabel>
+      <SelectPrimitive.ItemLabel class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
         {local.children}
       </SelectPrimitive.ItemLabel>
     </SelectPrimitive.Item>

@@ -304,51 +304,29 @@ body {
   border: 2px solid var(--card);
   background: var(--primary);
 }
-.app-settings-dialog,
+.app-tabbed-dialog,
 .app-files-dialog {
   width: calc(100% - 2rem);
   max-width: 64rem;
   height: min(46rem, calc(100dvh - 2rem));
 }
+.app-tabbed-dialog-compact {
+  max-width: 44rem;
+}
 .app-files-dialog {
   max-width: 80rem;
   height: min(54rem, calc(100dvh - 2rem));
 }
-.app-settings-dialog [data-slot="dialog-body"],
+.app-tabbed-dialog [data-slot="dialog-body"],
 .app-files-dialog [data-slot="dialog-body"] {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-.app-settings-dialog [data-slot="dialog-footer"],
+.app-tabbed-dialog [data-slot="dialog-footer"],
 .app-files-dialog [data-slot="dialog-footer"] {
   display: none;
-}
-.settings-tabs {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  gap: 20px;
-}
-.settings-categories {
-  flex: 0 0 9rem;
-  width: 9rem;
-  align-self: flex-start;
-}
-.settings-categories [role="tab"] {
-  justify-content: flex-start;
-  height: 40px;
-}
-.settings-content {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  margin: 0 !important;
-  padding: 8px 12px 24px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 .file-manager {
   display: flex;
@@ -361,23 +339,9 @@ body {
   overflow: hidden;
 }
 @media (max-width: 767px) {
-  .app-settings-dialog,
+  .app-tabbed-dialog,
   .app-files-dialog {
     padding: 16px;
-  }
-  .settings-tabs {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .settings-categories {
-    flex: 0 0 auto;
-    width: 100%;
-    overflow-x: auto;
-  }
-  .settings-categories [role="tab"] {
-    flex-shrink: 0;
-    width: auto;
-    justify-content: center;
   }
 }
 

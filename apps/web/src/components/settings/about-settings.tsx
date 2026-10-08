@@ -101,6 +101,7 @@ export default function AboutSettings() {
             )}
           >
             <Button
+              wrap
               type="button"
               variant="outline"
               class="text-destructive hover:text-destructive"
@@ -128,6 +129,7 @@ export default function AboutSettings() {
               )}
             >
               <Button
+                wrap
                 type="button"
                 variant="outline"
                 disabled={pending() !== null}

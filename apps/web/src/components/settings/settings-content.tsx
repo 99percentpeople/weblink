@@ -1,13 +1,12 @@
 import NotificationSettings from "./notification-settings";
 import { For, Match, Switch } from "solid-js";
 import {
-  Tabs,
   TabsContent,
   TabsIndicator,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { createIsMobile } from "@/libs/hooks/create-mobile";
+import { ResponsiveTabs } from "@/components/ui/responsive-tabs";
 import { t } from "@/i18n";
 import AppearanceSettings from "./appearance-settings";
 import ApplicationSettings from "./application-settings";
@@ -39,18 +38,14 @@ export default function SettingsContent(props: {
   onSectionChange(section: SettingsSection): void;
   onClose(): void;
 }) {
-  const isMobile = createIsMobile();
   return (
-    <Tabs
-      class="settings-tabs"
-      orientation={isMobile() ? "horizontal" : "vertical"}
+    <ResponsiveTabs
       value={props.section}
       onChange={(value) =>
         props.onSectionChange(value as SettingsSection)
       }
     >
       <TabsList
-        class="settings-categories"
         aria-label={t("app_menu.settings_categories")}
         onKeyDown={(event) => {
           // Kobalte's collection consumes Escape even though a tab cannot
@@ -75,10 +70,7 @@ export default function SettingsContent(props: {
       </TabsList>
       <For each={settingsSections}>
         {(section) => (
-          <TabsContent
-            value={section}
-            class="settings-content"
-          >
+          <TabsContent value={section}>
             <Switch>
               <Match when={section === "appearance"}>
                 <AppearanceSettings />
@@ -114,6 +106,6 @@ export default function SettingsContent(props: {
           </TabsContent>
         )}
       </For>
-    </Tabs>
+    </ResponsiveTabs>
   );
 }

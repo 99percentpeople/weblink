@@ -5,10 +5,12 @@
   --setting-row-padding: 1rem;
   --setting-column-gap: 1.5rem;
   --setting-control-width: 14rem;
+  container: settings / inline-size;
   display: flex;
   flex-direction: column;
   min-width: 0;
   gap: 0;
+  overflow-wrap: anywhere;
 }
 .setting-section-header {
   padding-bottom: 1rem;
@@ -110,7 +112,7 @@
   grid-column: 1 / -1;
 }
 .setting-row[data-layout="compact"] {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
 }
 .setting-row[data-layout="stacked"] {
   grid-template-columns: minmax(0, 1fr);
@@ -161,9 +163,9 @@
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
-@media (max-width: 767px) {
+@container settings (max-width: 32rem) {
   .setting-row[data-layout="row"] {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 45%);
+    grid-template-columns: minmax(0, 1fr);
   }
   .setting-section-header h3 {
     font-size: 1rem;

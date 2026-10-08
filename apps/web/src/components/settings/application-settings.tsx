@@ -88,6 +88,7 @@ export default function ApplicationSettings() {
                     )}
                   </p>
                   <Button
+                    wrap
                     type="button"
                     variant="outline"
                     size="sm"

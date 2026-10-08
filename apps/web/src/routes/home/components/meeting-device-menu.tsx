@@ -109,7 +109,8 @@ export function MeetingDeviceField(props: {
           for={id}
           class={
             props.variant === "dialog"
-              ? "flex items-center gap-2 [&>svg]:size-4"
+              ? `flex min-w-0 items-center gap-2 [overflow-wrap:anywhere]
+                [&>svg]:size-4 [&>svg]:shrink-0`
               : `flex items-center gap-[7px] [&>svg]:size-[15px]
                 [&>svg]:shrink-0`
           }
@@ -181,6 +182,7 @@ export function MeetingDeviceField(props: {
           )}
         >
           <SelectTrigger
+            wrap={props.variant === "dialog"}
             id={id}
             role="combobox"
             aria-label={t(`meeting.${family()}_device`)}
@@ -188,7 +190,7 @@ export function MeetingDeviceField(props: {
             onKeyDown={beginChoice}
             class={
               props.variant === "dialog"
-                ? "h-10"
+                ? "min-h-10"
                 : `bg-background text-foreground focus-visible:outline-ring
                   min-h-9 min-w-0 rounded-full py-[7px] text-xs
                   focus-visible:outline-2 focus-visible:outline-offset-2
@@ -303,9 +305,10 @@ function MeetingDevicePermissionButton(props: {
         type="button"
         class={
           props.variant === "dialog"
-            ? `border-input hover:bg-muted inline-flex shrink-0
+            ? `border-input hover:bg-muted inline-flex min-w-0 max-w-full
               items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs
-              disabled:opacity-50 [&_svg]:size-4`
+              [overflow-wrap:anywhere] disabled:opacity-50 [&_svg]:size-4
+              [&_svg]:shrink-0`
             : "meeting-icon-button meeting-permission-button"
         }
         aria-label={t("meeting.get_permission")}

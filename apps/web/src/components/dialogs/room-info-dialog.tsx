@@ -8,12 +8,12 @@ import { createDialog } from "./dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Tabs,
   TabsContent,
   TabsIndicator,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { ResponsiveTabs } from "@/components/ui/responsive-tabs";
 import { IconSync } from "@/components/icons";
 import { appState } from "@/libs/state/app-state";
 import type { Conversation } from "@/libs/domain/conversation";
@@ -128,11 +128,11 @@ export function RoomInfoPanel(props: {
   };
   return (
     <div
-      class="flex min-h-0 min-w-0 flex-col gap-4"
+      class="flex min-h-0 min-w-0 flex-1 flex-col gap-4"
       data-slot="room-info-panel"
     >
       <div
-        class="bg-muted/50 flex min-w-0 flex-wrap items-center
+        class="bg-muted/50 flex min-w-0 shrink-0 flex-wrap items-center
           justify-between gap-2 rounded-lg p-3"
       >
         <p class="min-w-0 font-medium [overflow-wrap:anywhere]">
@@ -141,45 +141,28 @@ export function RoomInfoPanel(props: {
             t("meeting.title")}
         </p>
       </div>
-      <Tabs
+      <ResponsiveTabs
         value={props.tab}
         onChange={(value) =>
           props.onTabChange(value as RoomInfoTab)
         }
-        class="min-w-0"
       >
         <TabsList aria-label={t("room_dialog.sections")}>
-          <TabsTrigger
-            value="info"
-            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
-              sm:text-sm"
-          >
+          <TabsTrigger value="info">
             {t("room_dialog.info")}
           </TabsTrigger>
-          <TabsTrigger
-            value="members"
-            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
-              sm:text-sm"
-          >
+          <TabsTrigger value="members">
             {t("room_dialog.members")}
           </TabsTrigger>
-          <TabsTrigger
-            value="devices"
-            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
-              sm:text-sm"
-          >
+          <TabsTrigger value="devices">
             {t("room_dialog.devices")}
           </TabsTrigger>
-          <TabsTrigger
-            value="settings"
-            class="h-auto min-h-8 min-w-0 flex-1 whitespace-normal px-2 text-xs
-              sm:text-sm"
-          >
+          <TabsTrigger value="settings">
             {t("room_dialog.settings")}
           </TabsTrigger>
           <TabsIndicator />
         </TabsList>
-        <TabsContent value="info" class="space-y-4 pt-2">
+        <TabsContent value="info" class="space-y-4">
           <label class="flex min-w-0 flex-col gap-2 text-sm">
             {t("meeting.room_name")}
             <Input
@@ -202,13 +185,13 @@ export function RoomInfoPanel(props: {
             {t("meeting.leave_hint")}
           </p>
         </TabsContent>
-        <TabsContent value="members" class="pt-2">
+        <TabsContent value="members">
           <RoomMembersPanel
             room={conversation()}
             activeRoomId={state.activeRoomConversationId()}
           />
         </TabsContent>
-        <TabsContent value="devices" class="pt-2">
+        <TabsContent value="devices">
           <Show
             when={active() || preview()}
             fallback={
@@ -220,7 +203,7 @@ export function RoomInfoPanel(props: {
             <RoomDeviceSettings />
           </Show>
         </TabsContent>
-        <TabsContent value="settings" class="pt-2">
+        <TabsContent value="settings">
           <Show
             when={props.conversationId}
             fallback={
@@ -238,7 +221,7 @@ export function RoomInfoPanel(props: {
             )}
           </Show>
         </TabsContent>
-      </Tabs>
+      </ResponsiveTabs>
     </div>
   );
 }
@@ -250,8 +233,7 @@ export function createRoomInfoDialog() {
   const [active, setActive] = createSignal(false);
   const [tab, setTab] = createSignal<RoomInfoTab>("info");
   const dialog = createDialog({
-    class:
-      "h-[min(42rem,calc(100dvh-2rem))] [&_[data-slot=dialog-body]]:min-h-0 [&_[data-slot=dialog-body]]:flex-1",
+    class: "app-tabbed-dialog app-tabbed-dialog-compact",
     title: () => t("room_dialog.title"),
     description: () => t("room_dialog.description"),
     onCancel: () => setActive(false),

@@ -30,6 +30,9 @@ const buttonVariants = cva(
         lg: "h-10 px-6 has-[>svg]:px-4",
         icon: "size-9",
       },
+      wrap: {
+        true: "h-auto min-h-9 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -52,6 +55,7 @@ export const Button = <T extends ValidComponent = "button">(
     "class",
     "variant",
     "size",
+    "wrap",
   ]);
 
   return (
@@ -60,6 +64,7 @@ export const Button = <T extends ValidComponent = "button">(
       class={cn(
         buttonVariants({
           size: local.size,
+          wrap: local.wrap,
           variant: local.variant,
         }),
         local.class,

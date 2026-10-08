@@ -83,6 +83,7 @@ export function ConversationActions(props: {
       </p>
       <div class="flex flex-wrap gap-2">
         <Button
+          wrap
           type="button"
           variant="outline"
           disabled={actions.busy() || !conversation()}
@@ -94,6 +95,7 @@ export function ConversationActions(props: {
           {t("conversations.clear")}
         </Button>
         <Button
+          wrap
           type="button"
           variant="destructive"
           disabled={

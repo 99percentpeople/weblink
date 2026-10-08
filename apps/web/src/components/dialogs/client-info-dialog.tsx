@@ -22,12 +22,12 @@ import {
   SettingSection,
 } from "@/components/settings/setting-layout";
 import {
-  Tabs,
   TabsList,
   TabsTrigger,
   TabsIndicator,
   TabsContent,
 } from "@/components/ui/tabs";
+import { ResponsiveTabs } from "@/components/ui/responsive-tabs";
 import { PeerSpeedTest } from "@/components/peer-speed-test";
 import { createClipboardHistoryDialog } from "@/components/dialogs/clipboard-history-dialog";
 import { ConversationActions } from "@/components/conversations/conversation-actions";
@@ -143,16 +143,16 @@ export function ClientInfoPanel(props: {
     value === undefined ? "—" : formatBtyeSize(value);
 
   return (
-    <div class="flex h-full min-h-0 min-w-0 flex-col gap-4">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       <div
-        class="bg-muted/50 flex min-w-0 flex-wrap items-center
+        class="bg-muted/50 flex min-w-0 shrink-0 flex-wrap items-center
           justify-between gap-2 rounded-lg p-3"
       >
         <div class="min-w-0">
           <p class="break-all font-medium">
             {client()?.name ?? props.clientId ?? "—"}
           </p>
-          <p class="text-muted-foreground text-xs">
+          <p class="text-muted-foreground text-xs [overflow-wrap:anywhere]">
             {t(
               "common.client_info_dialog.session_subtitle",
             )}
@@ -160,8 +160,7 @@ export function ClientInfoPanel(props: {
         </div>
         <ConnectionBadge client={info()} />
       </div>
-      <Tabs
-        class="flex min-h-0 flex-1 flex-col"
+      <ResponsiveTabs
         value={props.tab}
         onChange={(value) => {
           setCopyState("idle");
@@ -169,7 +168,6 @@ export function ClientInfoPanel(props: {
         }}
       >
         <TabsList
-          class="shrink-0"
           aria-label={t(
             "common.client_info_dialog.sections",
           )}
@@ -188,10 +186,7 @@ export function ClientInfoPanel(props: {
           </TabsTrigger>
           <TabsIndicator />
         </TabsList>
-        <TabsContent
-          value="session"
-          class="min-h-80 space-y-4 pt-2"
-        >
+        <TabsContent value="session" class="space-y-4">
           <label class="flex flex-col gap-2 text-sm">
             {t("common.client_info_dialog.client_id")}
             <Input
@@ -200,7 +195,7 @@ export function ClientInfoPanel(props: {
               class="font-mono text-xs"
             />
           </label>
-          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <dl class="@min-[24rem]:grid-cols-2 grid grid-cols-1 gap-3">
             <Metric
               label={t(
                 "common.client_info_dialog.candidate_type",
@@ -233,17 +228,19 @@ export function ClientInfoPanel(props: {
             </Metric>
             <Metric
               label={
-                <span class="inline-flex items-center gap-1">
-                  {t(
-                    "common.client_info_dialog.available_outgoing_bitrate",
-                  )}
+                <span class="inline-flex min-w-0 items-center gap-1">
+                  <span class="min-w-0">
+                    {t(
+                      "common.client_info_dialog.available_outgoing_bitrate",
+                    )}
+                  </span>
                   <Tooltip placement="top">
                     <TooltipTrigger
                       as="button"
                       type="button"
                       class="text-muted-foreground hover:text-foreground
-                        focus-visible:ring-ring inline-flex size-4 items-center
-                        justify-center rounded-full transition-colors
+                        focus-visible:ring-ring inline-flex size-4 shrink-0
+                        items-center justify-center rounded-full transition-colors
                         focus-visible:outline-none focus-visible:ring-2"
                       aria-label={t(
                         "common.client_info_dialog.summary_note",
@@ -289,6 +286,7 @@ export function ClientInfoPanel(props: {
             }
           >
             <Button
+              wrap
               type="button"
               variant="outline"
               class="gap-2"
@@ -316,7 +314,7 @@ export function ClientInfoPanel(props: {
             </Button>
           </Show>
         </TabsContent>
-        <TabsContent value="speed" class="min-h-80 pt-2">
+        <TabsContent value="speed">
           <PeerSpeedTest
             clientId={props.clientId}
             connected={info()?.onlineStatus === "online"}
@@ -324,13 +322,14 @@ export function ClientInfoPanel(props: {
         </TabsContent>
         <TabsContent
           value="raw"
-          class="flex min-h-80 flex-1 flex-col gap-3 pt-2"
+          class="flex flex-col gap-3"
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-sm font-medium">
               {t("common.client_info_dialog.stats_reports")}
             </h3>
             <Button
+              wrap
               size="sm"
               variant="outline"
               disabled={
@@ -367,7 +366,7 @@ export function ClientInfoPanel(props: {
             </p>
           </Show>
         </TabsContent>
-        <TabsContent value="settings" class="min-h-80 pt-2">
+        <TabsContent value="settings">
           <SettingSection>
             <SettingHeading
               description={t(
@@ -415,10 +414,11 @@ export function ClientInfoPanel(props: {
               <SettingHeading>
                 {t("client.config.actions")}
               </SettingHeading>
-              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div class="flex min-w-0 flex-col items-start gap-2">
                 <Show when={info()?.clipboard}>
                   {(clipboard) => (
                     <Button
+                      wrap
                       type="button"
                       variant="outline"
                       class="justify-start gap-2"
@@ -435,7 +435,7 @@ export function ClientInfoPanel(props: {
                 </Show>
                 <Show when={props.clientId}>
                   {(id) => (
-                    <div class="sm:col-span-2">
+                    <div class="w-full min-w-0">
                       <ConversationActions
                         conversationId={
                           props.conversationId ??
@@ -456,7 +456,7 @@ export function ClientInfoPanel(props: {
             </SettingBlock>
           </SettingSection>
         </TabsContent>
-      </Tabs>
+      </ResponsiveTabs>
     </div>
   );
 }
@@ -475,8 +475,7 @@ const clientInfoDialog = () => {
       (item) => item.clientId === target(),
     );
   const dialog = createDialog({
-    class:
-      "h-[min(42rem,calc(100dvh-2rem))] [&_[data-slot=dialog-body]]:flex [&_[data-slot=dialog-body]]:min-h-0 [&_[data-slot=dialog-body]]:flex-1 [&_[data-slot=dialog-body]]:flex-col",
+    class: "app-tabbed-dialog app-tabbed-dialog-compact",
     onCancel: () => setActive(false),
     title: () =>
       t("common.client_info_dialog.title", {

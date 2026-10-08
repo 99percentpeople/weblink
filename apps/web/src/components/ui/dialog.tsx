@@ -133,7 +133,8 @@ const DialogHeader: Component<ComponentProps<"div">> = (
   return (
     <div
       class={cn(
-        "flex shrink-0 flex-col space-y-1.5 text-center sm:text-left",
+        `flex min-w-0 shrink-0 flex-col space-y-1.5 pr-6 text-center
+        [overflow-wrap:anywhere] sm:text-left`,
         props.class,
       )}
       {...rest}
@@ -172,7 +173,7 @@ const DialogTitle = <T extends ValidComponent = "h2">(
   return (
     <DialogPrimitive.Title
       class={cn(
-        "text-lg font-semibold leading-none tracking-tight",
+        "text-lg font-semibold leading-snug tracking-tight",
         props.class,
       )}
       {...rest}

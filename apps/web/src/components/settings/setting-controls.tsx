@@ -127,6 +127,7 @@ export function SettingSelect<T, G = never>(
         {(ids) => (
           <>
             <SelectTrigger
+              wrap
               id={ids.id}
               aria-labelledby={ids.labelId}
               aria-describedby={ids.descriptionId}
