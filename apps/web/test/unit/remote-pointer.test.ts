@@ -54,6 +54,7 @@ function setup(
   cursorVisibility?: unknown,
   cursorShape?: unknown,
   fileDrop?: unknown,
+  inputDevices?: unknown,
 ) {
   const c = new RemotePointer("source", "media");
   controllers.push(c);
@@ -79,6 +80,7 @@ function setup(
     cursorVisibility,
     cursorShape,
     fileDrop,
+    inputDevices,
   });
   const approve = () => {
     c.request();
@@ -119,6 +121,102 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("accepts feedback only for the current active grant and epoch", () => {
+    const { c, r, approve, activate } = setup();
+    approve();
+    const activation = activate();
+    const received = vi.fn();
+    const stop = c.watchGamepadFeedback(received);
+    const feedback = {
+      type: "gamepad-feedback",
+      grantId: "grant",
+      inputEpoch: activation.inputEpoch,
+      slot: 0,
+      id: "pad",
+      strongMagnitude: 0.8,
+      weakMagnitude: 0.4,
+      duration: 300,
+    };
+    r.receive({ ...feedback, grantId: "old" });
+    r.receive({ ...feedback, inputEpoch: "old" });
+    r.receive({ ...feedback, duration: 10000 });
+    expect(received).not.toHaveBeenCalled();
+    r.receive(feedback);
+    expect(received).toHaveBeenCalledOnce();
+    c.resetInput();
+    r.receive(feedback);
+    expect(received).toHaveBeenCalledOnce();
+    const next = activate();
+    r.receive(feedback);
+    expect(received).toHaveBeenCalledOnce();
+    r.receive({ ...feedback, inputEpoch: next.inputEpoch });
+    expect(received).toHaveBeenCalledTimes(2);
+    stop();
+    r.receive({ ...feedback, inputEpoch: next.inputEpoch });
+    expect(received).toHaveBeenCalledTimes(2);
+  });
+  it("negotiates optional gamepads, scopes acknowledgements and sends reliable input", () => {
+    const { c, r, m, approve, activate } = setup();
+    const event = {
+      type: "gamepad" as const,
+      action: "connect" as const,
+      slot: 0,
+      id: "pad",
+    };
+    expect(c.gamepadSlots()).toBe(0);
+    approve();
+    activate();
+    expect(c.input(event)).toBe(false);
+    r.receive({
+      type: "input-capabilities",
+      inputDevices: [
+        {
+          kind: "gamepad",
+          availability: "available",
+          maxDevices: 4,
+        },
+      ],
+    });
+    expect(c.gamepadSlots()).toBe(4);
+    expect(c.input(event)).toBe(true);
+    expect(r.sent.at(-1).event).toEqual(event);
+    expect(m.sent).toHaveLength(0);
+    const changed = vi.fn();
+    const stop = c.watchGamepads(changed);
+    const ack = {
+      type: "gamepad-status",
+      grantId: "grant",
+      inputEpoch: r.sent.at(-1).inputEpoch,
+      id: "pad",
+      slot: 0,
+      mounted: false,
+    };
+    r.receive({ ...ack, grantId: "old" });
+    r.receive({ ...ack, inputEpoch: "old" });
+    expect(changed).not.toHaveBeenCalled();
+    r.receive(ack);
+    expect(changed).toHaveBeenCalledWith({
+      id: "pad",
+      slot: 0,
+      mounted: false,
+    });
+    stop();
+    r.receive(ack);
+    expect(changed).toHaveBeenCalledOnce();
+    r.receive({
+      type: "input-capabilities",
+      inputDevices: [
+        {
+          kind: "gamepad",
+          availability: "driverRequired",
+          maxDevices: 4,
+        },
+      ],
+    });
+    expect(c.gamepadSlots()).toBe(0);
+    expect(c.input(event)).toBe(false);
+    expect(c.state()).toBe("active");
+  });
   it("requires host file-drop capability and a live control grant", () => {
     const { c, r, target, approve, activate } = setup(
       undefined,

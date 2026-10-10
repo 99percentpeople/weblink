@@ -1,6 +1,7 @@
 //! Native actor. No Tauri IPC or network handler is exposed by this module.
 mod device;
 mod environment;
+mod gamepad;
 mod hotkey;
 use crate::shortcut::Shortcut;
 mod pan;
@@ -26,6 +27,16 @@ use std::{
 };
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
+pub fn devices() -> crate::devices::Snapshot {
+    crate::devices::Snapshot {
+        capabilities: device::capabilities(
+            pan::PanDevice::new().supported(),
+            touch::TouchDevice::new().supported(),
+            gamepad::GamepadDevice::new().capability(),
+        ),
+        mounted: vec![],
+    }
+}
 /// Read-only availability check shared by the host and focused controller capture.
 pub fn input_desktop_available() -> bool {
     environment::desktop_available()
@@ -75,6 +86,7 @@ impl Worker {
         let exclusive = Exclusive;
         let queue = Arc::new(Mailbox::default());
         let status = Arc::new(Mutex::new(Status {
+            devices: Default::default(),
             input_suspended: false,
             pan_supported: false,
             touch_supported: false,
@@ -129,8 +141,12 @@ impl Worker {
                     };
                     let shortcut = safety.shortcut.clone();
                     let touch = touch::TouchDevice::new();
-                    let mut engine =
-                        Engine::new(WindowsDevice(safety, touch, pan::PanDevice::new()));
+                    let mut engine = Engine::new(WindowsDevice(
+                        safety,
+                        touch,
+                        pan::PanDevice::new(),
+                        gamepad::GamepadDevice::new(),
+                    ));
                     let _ = ready.send(Ok((shortcut, observations.clone())));
                     loop {
                         let signals = observations.signals();

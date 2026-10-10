@@ -71,6 +71,7 @@ vi.mock("@/options", async () => {
   };
 });
 class Control extends EventTarget {
+  gamepadSlots = () => 0;
   value = "active";
   capability = true;
   state = () => this.value;
@@ -1078,7 +1079,7 @@ it("keeps a captured direct contact alive outside the video and after returning"
 it("opens the keyboard in native touchcancel after a three-finger trackpad gesture", () => {
   const { editor, keyboard } = renderKeyboardControl();
   const show = vi.spyOn(keyboard()!, "show");
-  // A real focus handoff resets the remote epoch synchronously.
+  // A focus handoff without held pointer input no longer resets the remote epoch.
   fixture.control.resetInput.mockImplementation(() => {
     fixture.control.value = "activating";
     fixture.control.dispatchEvent(new Event("change"));
@@ -1101,7 +1102,7 @@ it("opens the keyboard in native touchcancel after a three-finger trackpad gestu
   nativeTouch("touchcancel");
   expect(editor).toHaveFocus();
   expect(show).toHaveBeenCalledOnce();
-  expect(fixture.control.resetInput).toHaveBeenCalledOnce();
+  expect(fixture.control.resetInput).not.toHaveBeenCalled();
   fixture.control.value = "active";
   fixture.control.dispatchEvent(new Event("change"));
   fixture.control.input.mockClear();

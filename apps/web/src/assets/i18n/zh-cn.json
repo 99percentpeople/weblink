@@ -349,11 +349,11 @@
       "touch_heading": "触摸",
       "keyboard": {
         "title": "转发键盘输入",
-        "description": "本地光标模式下，点击画面后按对方的键盘布局转发物理按键；捕获模式下，仅在捕获时转发。可通过 Header 中的开关快速关闭。手动打开的软键盘在两种模式下均可使用。"
+        "description": "远程控制连接生效且开关开启时转发实体键盘，无需点击远程画面。本地输入框仍可正常打字，可通过顶部开关随时停止转发。"
       },
       "exit_shortcut": {
         "title": "退出光标和键盘捕获快捷键",
-        "description": "释放键盘输入和已捕获的光标，远控连接保持。关闭键盘转发后仍可使用此快捷键。",
+        "description": "关闭键盘转发并释放已捕获的光标，保留控制连接。重新打开键盘开关即可恢复；关闭转发时仍可使用此快捷键。",
         "browser": "也可按 Escape 释放捕获。",
         "native": "转发系统快捷键时，Escape 会发送到远端，请使用上方快捷键释放输入。",
         "webview": "使用网页按键处理时，也可按 Escape 释放捕获。"
@@ -375,8 +375,8 @@
         "title": "指针行为",
         "local": "本地光标",
         "capture": "捕获并隐藏本地光标",
-        "local_description": "使用本地光标定位远程画面，点击画面后转发键盘输入，可通过 Header 中的键盘开关快速关闭。",
-        "capture_description": "点击远程画面后捕获并隐藏本地光标，仅在捕获时转发物理键盘。使用退出快捷键同时释放光标和键盘，远控连接保持。"
+        "local_description": "使用本地光标定位远程画面。键盘和手柄由各自开关控制，无需点击画面。",
+        "capture_description": "点击远程画面以捕获并隐藏本地光标。键盘和手柄由各自开关控制，无需捕获光标。"
       },
       "general_heading": "通用",
       "cursor_sync": {
@@ -408,6 +408,35 @@
       "file_size_limit": {
         "title": "文件传输大小限制",
         "description": "拖放与复制粘贴共用，每次操作按文件总大小计算。默认 64 MiB，可设置 1–512 MiB；目录压缩前后均需符合限制。修改对下一次操作生效。"
+      },
+      "gamepad_heading": "手柄",
+      "gamepad": {
+        "title": "转发手柄输入",
+        "description": "远程控制连接生效且开关开启时转发最多 4 个标准布局手柄，无需点击画面。浏览器尚未识别时，请先按一下手柄按键。",
+        "vibration": "震动反馈",
+        "vibration_description": "浏览器支持时，将游戏震动传回已连接的手柄；结束控制时自动停止。",
+        "strength": "震动强度",
+        "dead_zone": "摇杆死区",
+        "dead_zone_description": "忽略摇杆的小幅偏移，减少漂移。"
+      },
+      "devices": {
+        "title": "本机输入设备",
+        "description": "查看本机接收远程输入的支持情况。远控结束后，设备会自动释放并卸载。",
+        "keyboard": "键盘",
+        "mouse": "鼠标",
+        "touchpad": "触控板手势",
+        "touchscreen": "触摸屏",
+        "gamepad": "手柄",
+        "available": "可用",
+        "unsupported": "不支持",
+        "driverRequired": "需要驱动",
+        "unavailable": "暂不可用",
+        "error": "无法检测输入设备，请重试。",
+        "driver_description": "Windows 手柄转发需要安装可选驱动。安装时需要管理员确认，Weblink 日常运行无需提权。安装完成后请重新检测。",
+        "install_driver": "安装指南",
+        "driver_retired": "ViGEmBus 已停止维护，不再接收更新。",
+        "checking": "正在检测…",
+        "refresh": "重新检测"
       }
     },
     "permissions": {
@@ -1291,7 +1320,7 @@
     "keyboard_input": "向远端输入文字",
     "text_too_long": "输入过长，请分段发送。",
     "text_failed": "输入未能完整发送，请检查远端内容后重试。",
-    "system_keyboard_stopped": "系统键盘转发已停止。请重新点击控制画面，或在“远程控制”设置中关闭系统快捷键转发。",
+    "system_keyboard_stopped": "系统键盘转发已停止。请重新打开键盘开关重试，或在远程控制设置中关闭系统快捷键。",
     "capture_failed": "无法捕获指针。请重新点击远程画面，或在“远程控制”设置中选择“本地光标”。",
     "capture_unavailable": "对端不支持指针捕获，请在“远程控制”设置中选择“本地光标”。",
     "capture_hint": "点击捕获指针，按 {{shortcut}} 释放光标和键盘。",
@@ -1304,6 +1333,10 @@
       "completed": "远程文件拖放已完成",
       "failed": "远程文件拖放失败",
       "details": "打开任务列表查看传输详情。"
-    }
+    },
+    "gamepad_enable": "启用手柄转发",
+    "gamepad_disable": "停用手柄转发",
+    "gamepad_unavailable": "被控端暂不支持手柄转发，请检查被控端的远程控制设置。",
+    "gamepad_failed": "远端手柄挂载失败或已停止响应。请检查被控端驱动，然后重新连接手柄。"
   }
 }

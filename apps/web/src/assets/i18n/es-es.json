@@ -354,11 +354,11 @@
       "touch_heading": "Entrada táctil",
       "keyboard": {
         "title": "Reenviar entrada de teclado",
-        "description": "En modo cursor local, al hacer clic en la pantalla se reenvían las teclas físicas compatibles con la distribución remota. En modo captura solo se reenvían mientras está capturado. Desactiva el reenvío con el interruptor de la cabecera. El teclado en pantalla abierto manualmente funciona en ambos modos."
+        "description": "Reenvía las teclas físicas cuando el control remoto y este interruptor están activos, sin hacer clic en la pantalla. Los campos de texto locales conservan la escritura normal. Usa el interruptor superior para detener el reenvío."
       },
       "exit_shortcut": {
         "title": "Atajo para liberar puntero y teclado",
-        "description": "Libera la entrada de teclado y el puntero capturado sin finalizar la conexión de control. El atajo también funciona con el reenvío de teclado desactivado.",
+        "description": "Desactiva el reenvío del teclado y libera el cursor capturado sin finalizar la conexión. Vuelve a activar el interruptor del teclado para continuar. El atajo también funciona con el reenvío desactivado.",
         "browser": "También puedes pulsar Escape para liberar la captura.",
         "native": "Con el reenvío de atajos del sistema activado, Escape se envía al equipo remoto. Usa el atajo anterior para liberar la entrada.",
         "webview": "Con el manejo de teclas del navegador, Escape también libera la captura."
@@ -380,8 +380,8 @@
         "title": "Comportamiento del puntero",
         "local": "Cursor local",
         "capture": "Capturar y ocultar el cursor local",
-        "local_description": "Usa el cursor local para señalar la pantalla remota. Haz clic en la pantalla para reenviar el teclado; el interruptor de la cabecera permite desactivarlo.",
-        "capture_description": "Haz clic en la pantalla remota para capturar y ocultar el cursor local. Las teclas físicas solo se reenvían durante la captura. Usa el atajo de liberación para liberar puntero y teclado; la conexión de control continúa activa."
+        "local_description": "Usa el cursor local para señalar la pantalla remota. El teclado y el mando tienen sus propios interruptores y no requieren hacer clic en la pantalla.",
+        "capture_description": "Haz clic en la pantalla remota para capturar y ocultar el cursor local. El teclado y los mandos usan sus propios interruptores y no requieren capturar el cursor."
       },
       "general_heading": "General",
       "cursor_sync": {
@@ -413,6 +413,35 @@
       "file_size_limit": {
         "title": "Límite de tamaño de transferencia",
         "description": "Compartido por arrastrar y soltar y copiar/pegar; cuenta los bytes totales por operación. Predeterminado: 64 MiB; rango: 1–512 MiB. Las carpetas deben caber antes y después de la compresión ZIP. Los cambios se aplican a la próxima operación."
+      },
+      "gamepad_heading": "Mando",
+      "gamepad": {
+        "title": "Reenviar mandos",
+        "description": "Reenvía hasta 4 mandos estándar con el control remoto activo y este interruptor encendido, sin hacer clic en la pantalla. Pulsa un botón del mando si el navegador aún no lo detecta.",
+        "vibration": "Respuesta de vibración",
+        "vibration_description": "Transmite la vibración del juego al mando conectado si el navegador lo permite. Se detiene al finalizar el control.",
+        "strength": "Intensidad de vibración",
+        "dead_zone": "Zona muerta de los sticks",
+        "dead_zone_description": "Ignora movimientos pequeños de los sticks para reducir la deriva."
+      },
+      "devices": {
+        "title": "Dispositivos de entrada locales",
+        "description": "Consulta qué entradas remotas puede recibir este equipo. Los dispositivos se liberan y desconectan al finalizar la sesión.",
+        "keyboard": "Teclado",
+        "mouse": "Ratón",
+        "touchpad": "Gestos del panel táctil",
+        "touchscreen": "Pantalla táctil",
+        "gamepad": "Mando",
+        "available": "Disponible",
+        "unsupported": "No compatible",
+        "driverRequired": "Requiere controlador",
+        "unavailable": "No disponible",
+        "error": "No se pudieron comprobar los dispositivos. Inténtalo de nuevo.",
+        "driver_description": "Los mandos en Windows requieren un controlador opcional. La instalación necesita aprobación de administrador; Weblink se ejecuta sin elevar permisos. Comprueba de nuevo después de instalarlo.",
+        "install_driver": "Guía de instalación",
+        "driver_retired": "ViGEmBus ya no recibe mantenimiento ni actualizaciones.",
+        "checking": "Comprobando…",
+        "refresh": "Comprobar de nuevo"
       }
     },
     "permissions": {
@@ -1291,7 +1320,7 @@
     "keyboard_input": "Escriba en la computadora remota",
     "text_too_long": "El texto es demasiado largo. Envíalo en partes más pequeñas.",
     "text_failed": "La entrada no se pudo enviar completamente. Verifique el texto remoto antes de volver a intentarlo.",
-    "system_keyboard_stopped": "Se detuvo el reenvío del teclado del sistema. Haga clic en la pantalla remota para intentarlo nuevamente o desactive los accesos directos del sistema en la configuración del control remoto.",
+    "system_keyboard_stopped": "El reenvío del teclado del sistema se ha detenido. Vuelve a activar el interruptor del teclado o desactiva los atajos del sistema en los ajustes de control remoto.",
     "capture_failed": "No se pudo capturar el puntero. Haga clic en la pantalla remota para volver a intentarlo o elija Cursor local en la configuración de control remoto.",
     "capture_unavailable": "Este host no admite la captura de puntero. Elija Cursor local en Configuración de control remoto.",
     "capture_hint": "Haga clic para capturar el puntero. Presione {{shortcut}} para soltar el puntero y el teclado.",
@@ -1304,6 +1333,10 @@
       "completed": "Archivos soltados en el equipo remoto",
       "failed": "No se pudieron soltar los archivos en el equipo remoto",
       "details": "Abra la lista de tareas para obtener detalles de la transferencia."
-    }
+    },
+    "gamepad_enable": "Activar el reenvío del mando",
+    "gamepad_disable": "Desactivar el reenvío del mando",
+    "gamepad_unavailable": "El reenvío del mando no está disponible en el equipo remoto. Revisa sus ajustes de control remoto.",
+    "gamepad_failed": "El mando remoto no se pudo conectar o dejó de responder. Comprueba el controlador del equipo remoto y vuelve a conectar el mando."
   }
 }

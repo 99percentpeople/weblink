@@ -18,6 +18,10 @@ enum Observation {
     Shutdown,
 }
 struct DeviceState {
+    gamepad_feedback: Mutex<Vec<(u8, weblink_desktop_input::gamepad::Rumble)>>,
+    gamepad_available: AtomicBool,
+    gamepad_reports: Mutex<Vec<weblink_desktop_input::gamepad::State>>,
+    unmounted: Mutex<Vec<weblink_desktop_input::devices::Key>>,
     pointer_activity: Mutex<weblink_desktop_input::session::PointerActivity>,
     shortcut_unavailable: AtomicBool,
     shortcut: Mutex<Option<weblink_desktop_input::shortcut::Shortcut>>,
@@ -29,6 +33,10 @@ struct DeviceState {
 impl Default for DeviceState {
     fn default() -> Self {
         Self {
+            gamepad_feedback: Default::default(),
+            gamepad_available: AtomicBool::new(false),
+            gamepad_reports: Mutex::default(),
+            unmounted: Mutex::default(),
             pointer_activity: Default::default(),
             available: AtomicBool::new(true),
             shortcut_unavailable: AtomicBool::new(false),
@@ -41,6 +49,44 @@ impl Default for DeviceState {
 }
 struct TestDevice(Arc<DeviceState>);
 impl Device for TestDevice {
+    fn gamepad_feedback(&mut self) -> Vec<(u8, weblink_desktop_input::gamepad::Rumble)> {
+        self.0.gamepad_feedback.lock().unwrap().clone()
+    }
+    fn reset_gamepad_feedback(&mut self, slot: u8) {
+        self.0
+            .gamepad_feedback
+            .lock()
+            .unwrap()
+            .retain(|(s, _)| *s != slot);
+    }
+    fn capabilities(&self) -> Vec<weblink_desktop_input::devices::Capability> {
+        use weblink_desktop_input::devices::{Capability, Kind};
+        Kind::ALL
+            .into_iter()
+            .map(|kind| {
+                Capability::system(
+                    kind,
+                    match kind {
+                        Kind::Keyboard | Kind::Mouse => true,
+                        Kind::Gamepad => self.0.gamepad_available.load(Ordering::Acquire),
+                        _ => false,
+                    },
+                )
+            })
+            .collect()
+    }
+    fn submit_gamepad(
+        &mut self,
+        _: u8,
+        state: weblink_desktop_input::gamepad::State,
+    ) -> Result<(), Error> {
+        self.0.gamepad_reports.lock().unwrap().push(state);
+        Ok(())
+    }
+    fn unmount(&mut self, key: weblink_desktop_input::devices::Key) -> Result<(), Error> {
+        self.0.unmounted.lock().unwrap().push(key);
+        Ok(())
+    }
     fn available(&self) -> bool {
         self.0.available.load(Ordering::Acquire)
     }
@@ -70,6 +116,9 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn gamepad_feedback(&self) -> Vec<weblink_desktop_input::gamepad::Feedback> {
+        self.engine.lock().unwrap().gamepad_feedback(Instant::now())
+    }
     fn pointer_activity(&self) -> weblink_desktop_input::session::PointerActivity {
         *self.state.pointer_activity.lock().unwrap()
     }
@@ -959,6 +1008,155 @@ fn refreshed_or_cancelled_focus_watch_discards_an_inflight_sample() {
             assert!(monitor.take().is_none(), "cancelled watch leaked a sample");
         }
     }
+}
+
+#[test]
+fn device_refresh_preserves_the_channel_and_gamepads_follow_authorized_peer_lifetime() {
+    use weblink_desktop_input::devices::{Availability, Kind};
+    let rig = Rig::new();
+    rig.state.gamepad_available.store(true, Ordering::Release);
+    let devices = rig.service.devices().unwrap();
+    assert!(devices.mounted.is_empty());
+    assert!(devices
+        .capabilities
+        .iter()
+        .any(|c| c.kind == Kind::Gamepad && c.availability == Availability::Available));
+    rig.tick();
+    {
+        let sent = rig.sender.sent.lock().unwrap();
+        assert_eq!(sent.iter().filter(|v| v["type"] == "ready").count(), 1);
+        assert!(sent.iter().any(|v| v["type"] == "input-capabilities"));
+    }
+    let connect = json!({ "type":"gamepad", "action":"connect", "id":"pad", "slot":0 });
+    rig.input("unapproved", 1, 2, connect.clone());
+    assert!(rig
+        .service
+        .status(&rig.owner)
+        .unwrap()
+        .devices
+        .mounted
+        .is_empty());
+    let grant = rig.approve();
+    rig.input(&grant, 1, 1, json!({ "type":"activate" }));
+    rig.input(&grant, 1, 2, connect);
+    assert!(rig
+        .sender
+        .sent
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|v| v["type"] == "gamepad-status" && v["id"] == "pad" && v["mounted"] == true));
+    rig.input(&grant, 1, 3, json!({ "type":"gamepad", "action":"state", "id":"pad", "slot":0, "state": { "buttons":1,"axes":[0,0,0,0],"triggers":[0,0] } }));
+    assert_eq!(
+        rig.state
+            .gamepad_reports
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .buttons,
+        1
+    );
+    assert_eq!(
+        rig.service
+            .status(&rig.owner)
+            .unwrap()
+            .devices
+            .mounted
+            .len(),
+        1
+    );
+    rig.endpoint.closed();
+    rig.tick();
+    assert!(rig
+        .service
+        .status(&rig.owner)
+        .unwrap()
+        .devices
+        .mounted
+        .is_empty());
+    assert_eq!(
+        rig.state
+            .gamepad_reports
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .buttons,
+        0
+    );
+    assert!(rig
+        .state
+        .unmounted
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|key| key.kind == Kind::Gamepad));
+}
+
+#[test]
+fn gamepad_feedback_is_scoped_renewed_and_stops_with_the_grant() {
+    use weblink_desktop_input::gamepad::Rumble;
+    let rig = Rig::new();
+    rig.state.gamepad_available.store(true, Ordering::Release);
+    *rig.state.gamepad_feedback.lock().unwrap() = vec![(
+        0,
+        Rumble {
+            strong: 255,
+            weak: 51,
+        },
+    )];
+    rig.tick();
+    let feedback = || {
+        rig.sender
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|v| v["type"] == "gamepad-feedback")
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert!(feedback().is_empty());
+    let grant = rig.approve();
+    rig.input(&grant, 1, 1, json!({ "type":"activate" }));
+    rig.input(
+        &grant,
+        1,
+        2,
+        json!({ "type":"gamepad", "action":"connect", "id":"pad-one", "slot":0 }),
+    );
+    rig.tick();
+    let first = feedback();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0]["grantId"], grant);
+    assert_eq!(first[0]["inputEpoch"], "epoch-1");
+    assert_eq!(first[0]["id"], "pad-one");
+    assert_eq!(first[0]["strongMagnitude"], 1.0);
+    assert_eq!(first[0]["weakMagnitude"], 0.2);
+    assert_eq!(first[0]["duration"], 300);
+    std::thread::sleep(Duration::from_millis(120));
+    rig.tick();
+    assert!(
+        feedback().len() >= 2,
+        "sustained rumble must renew its short lease"
+    );
+    *rig.state.gamepad_feedback.lock().unwrap() = vec![(0, Rumble::default())];
+    rig.tick();
+    assert_eq!(feedback().last().unwrap()["strongMagnitude"], 0.0);
+    let stopped = feedback().len();
+    rig.tick();
+    assert_eq!(feedback().len(), stopped, "unchanged zero needs no renewal");
+    rig.service.revoke(&rig.owner).unwrap();
+    *rig.state.gamepad_feedback.lock().unwrap() = vec![(
+        0,
+        Rumble {
+            strong: 255,
+            weak: 255,
+        },
+    )];
+    rig.tick();
+    assert_eq!(feedback().len(), stopped);
 }
 
 #[test]

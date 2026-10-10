@@ -18,6 +18,7 @@ import { resolveRemoteFileLimit } from "@/libs/domain/protocol/remote-file-limit
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
+import { resolveRemoteGamepadOptions } from "@/libs/domain/remote-control/gamepad-options";
 import { resolveApplicationOptions } from "@/libs/domain/application-options";
 import { makePersisted } from "@solid-primitives/storage";
 import {
@@ -139,6 +140,9 @@ export function initializeAppOptions() {
         ),
         remoteKeyboard: resolveRemoteKeyboardOptions(
           parsed.remoteKeyboard,
+        ),
+        remoteGamepad: resolveRemoteGamepadOptions(
+          parsed.remoteGamepad,
         ),
         bufferedAmountLowThreshold:
           legacyBufferedAmount !== undefined

@@ -791,6 +791,65 @@ desktop; `synthetic_dxgi_transfer_cost` measures the extra handoff copy using sy
 
 ## Attended remote control
 
+Input devices share the platform-neutral manager in
+`crates/desktop-input/src/devices.rs`. It owns keyboard, mouse, touchpad,
+touchscreen and gamepad resources for the current native authorization grant.
+Persistent input resources mount on first use; capability probes leave no devices
+mounted. A revoked grant, ended capture, disconnected peer, expired native lease
+or orderly shutdown releases input and attempts to unmount every owned device,
+even if another device fails cleanup. Uncertain cleanup closes the authority.
+Pausing input neutralizes held state; it does not revoke remembered consent.
+Keyboard and mouse are logical injection resources, not additional HID devices.
+
+`NativeRemoteControl.devices()` probes local capabilities without opening a
+control owner. Native status snapshots include capabilities and mounted device
+states. Each backend reports `available`, `unsupported`, `driverRequired` or
+`unavailable` independently. New platforms implement the native backend and
+capability probe while retaining the shared authorization and lifetime manager.
+The additive `ready.inputDevices` and `input-capabilities` messages advertise
+these capabilities; older peers retain their existing keyboard/pointer protocol.
+
+Windows gamepads use the optional ViGEmBus driver through a statically linked
+Rust client. Settings → Remote control shows driver availability, the
+[official installation guide](https://docs.nefarius.at/projects/ViGEm/How-to-Install/)
+and a retry action. Installation requires administrator approval; the application
+does not install drivers, elevate itself or require the driver to start. ViGEmBus
+[has been retired](https://docs.nefarius.at/projects/ViGEm/End-of-Life/); its adapter
+is isolated from the portable contract so a replacement need not change sessions.
+Current driver support does not guarantee cleanup after forcibly terminating the
+host process; normal shutdown and remote-peer failure use native cleanup.
+
+During an active remote-control session, the foreground browser controller polls
+the Gamepad API when forwarding is enabled; surface focus and pointer lock are not
+required. It forwards up to four `standard` mapped controllers as complete states
+over the ordered control channel, with the existing grant/epoch/sequence checks.
+Each connection has a fresh identity independent of the browser index or player
+slot. Physical unplug, window focus loss and disposal send disconnects; native lease
+expiry covers lost connections. Unchanged states are renewed every 100 ms and
+the host neutralizes a controller after 500 ms without a report. Optional backend
+failure stops that controller without disabling keyboard or mouse. Nonstandard
+controller mappings are not implemented. Settings persist forwarding, basic
+vibration, vibration strength and stick dead zone; the former boolean forwarding
+preference migrates without changing its value.
+Local device discovery belongs to appState and continues while forwarding is off.
+The header shows the gamepad switch when a standard controller is connected.
+ViGEm's first report can return TargetNotReady or ERROR_BUSY during enumeration.
+Before the first accepted report, the backend tolerates these errors for at most
+two seconds and retries with fresh browser samples without blocking the input actor.
+After an accepted report, failures still trigger cleanup so a failed neutral state
+cannot leave previously pressed buttons held.
+
+ViGEm output notifications return basic two-motor rumble through the ordered
+control channel. The native owner polls nonblocking notifications every 16 ms
+only while an authorized gamepad is active. Feedback carries the grant, input
+epoch and per-connection gamepad identity. Nonzero output is renewed every 100 ms
+with a 300 ms playback duration, bounding vibration after transport loss. The
+browser rejects malformed or stale-session feedback, scales it by the local
+strength preference and uses `vibrationActuator.playEffect("dual-rumble", ...)`.
+Focus loss, hidden documents, unplug, disabled feedback and disposal reset active
+effects. Unsupported actuators leave input forwarding usable. This Xbox 360
+backend does not provide DualSense adaptive triggers or native advanced haptics.
+
 Windows display shares are view-only until the viewer requests control and the
 host approves this request or has saved an allow rule for the client. Browser viewers can request control even though they
 cannot host native input. Window shares and older clients remain view-only.
@@ -1016,8 +1075,8 @@ synchronization round trip. Both endpoints use this resource stream directly,
 without an older-client negotiation branch.
 
 Settings → Remote control provides two pointer behaviors. **Local cursor** is the
-default: mouse coordinates map to the displayed video, and focusing the screen enables
-physical keyboard forwarding. The header keyboard switch can disable it immediately.
+default: mouse coordinates map to the displayed video. Physical keyboard forwarding
+uses its own switch and does not require focusing the screen.
 **Capture and hide local cursor** uses [Pointer Lock](https://w3c.github.io/pointerlock/)
 after clicking the remote surface. The capture click is consumed locally. Movement,
 buttons and wheel then use the existing relative-pointer channel at the host's current
@@ -1025,13 +1084,13 @@ cursor position; the frozen local coordinates are not sent. Both ends can move t
 same native cursor. Capture mode does not subscribe to cursor appearance or ownership
 updates, and switching into it cancels the local-mode watch and restores the video
 cursor. An unsupported or rejected
-capture leaves keyboard input local and allows another explicit attempt.
+capture allows another explicit attempt without changing keyboard forwarding.
 
-In capture mode, physical keyboard forwarding requires an actual pointer lock on the
-active surface; keyboard input stops together with pointer capture.
+Keyboard and gamepad forwarding remain independent of pointer capture in both modes.
 The shared release shortcut (Ctrl+Alt+Shift+Q by default, customizable in keyboard settings)
-releases pointer and keyboard capture together, including when keyboard forwarding is
-disabled. It preserves the approved control connection. Browser Escape may also unlock.
+releases pointer capture and turns off keyboard forwarding, including when forwarding
+is already disabled. The keyboard switch resumes forwarding. The shortcut preserves
+the approved control connection. Browser Escape may also unlock the pointer.
 Blur, hidden documents, mode changes, lost control and teardown release capture and
 held input. A late lock completion is released; returning focus never recaptures.
 The host has a separate customizable emergency revocation shortcut, Ctrl+Alt+Shift+F10 by default.
@@ -1055,13 +1114,17 @@ an explicit capture mode and continues suppressing the keys it forwards.
 
 The keyboard forwarding preference is enabled by default. The keyboard
 switch in the room header appears only while controlling a remote screen that supports
-keyboard input; hosting a share or merely viewing one does not display it.
+keyboard input; hosting a share or merely viewing one does not display it. On mobile
+devices it stays hidden until supported keyboard activity outside local editors is
+observed. Browsers cannot reliably enumerate physical keyboards; this observation
+lasts for the page session and does not gate the soft-keyboard entry point.
 It toggles the same saved preference immediately;
 disabling it releases keyboard input and closes the soft keyboard, while pointer
 control and consent remain active.
 
-Focus the active remote surface (and capture it in capture mode) to forward physical keys. Local chat, settings and
-other inputs do not forward keys. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
+Physical keys are forwarded during active control while the switch is on and the
+page is in the foreground. Local chat, settings text fields and other editors keep
+their normal input. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
 map to the existing Windows scan-code whitelist and use the remote keyboard layout.
 The receiver injects them through the existing [scan-code input path](https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-keybdinput).
 Letters, digits, editing/navigation keys, F1–F12, left/right modifiers and the numeric
@@ -1078,8 +1141,8 @@ the keyboard preference releases owned keys immediately without ending consent.
 
 On Windows Tauri, Settings → Remote control also exposes system-shortcut forwarding,
 enabled by default. It uses a controller-side native keyboard hook only while the
-approved remote surface has focus, owns pointer lock if capture mode is selected, and
-the shared keyboard toggle is on. The
+selected remote surface has active control, no local editor owns input, and the
+shared keyboard toggle is on. The
 foreground native window must also match. In that interval, supported scan codes,
 including Alt/Win combinations, come from the native channel; DOM handlers do not
 send a second copy. Local editors, dialogs and the soft-keyboard editor use their
@@ -1094,8 +1157,8 @@ events older than 100 ms or a sequence gap stop forwarding and reset the input e
 Late startup or delivery cannot attach to a different focused screen. Focus loss,
 window teardown and page navigation stop capture independently of the renderer.
 After stopping, the hook can drain only previously captured key releases for up
-to two seconds; it never captures new background presses. A failed capture requires
-another click on the remote screen, and does not revoke pointer control.
+to two seconds; it never captures new background presses. A failed capture turns off
+keyboard forwarding; its header switch retries without revoking pointer control.
 
 The chosen exit chord is recognized natively, releases pointer lock and keyboard
 capture together, and its final key is not forwarded.
@@ -1239,7 +1302,7 @@ background notifications are not repeated for each chunk. Cancellation stops the
 task and removes its loading notice. No action-bar buttons or separate paste dialog are added.
 Failed clipboard tasks retain an expandable diagnostic error for troubleshooting.
 
-Controllers intercept Ctrl+C/Ctrl+V only on the active remote input surface. Browser
+Controllers intercept Ctrl+C/Ctrl+V during keyboard forwarding outside local editors. Browser
 paste consumes the real paste event, preserving line breaks instead of typing Enter.
 The browser copy gesture starts a promised text ClipboardItem before the remote reply,
 preserving text write activation across the transfer. It then attempts supported

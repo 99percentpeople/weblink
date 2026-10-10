@@ -7,6 +7,7 @@ import {
   untrack,
   type Accessor,
 } from "solid-js";
+import { reconcile } from "solid-js/store";
 import type {
   AudioCaptureFormat,
   CaptureCapabilities,
@@ -15,6 +16,7 @@ import type {
   RuntimeCapabilities,
 } from "@weblink/platform";
 import type { AppPermissions } from "./create-app-permissions";
+import { appState, setAppState } from "./app-state";
 import { browserAudioCodecs } from "@/libs/application/meeting-audio-settings";
 import { browserAudioSampling } from "@/libs/application/audio-sampling-capabilities";
 import {
@@ -42,8 +44,9 @@ export function createAppMediaCapabilities(options: {
   stream: Accessor<MediaStream | null>;
 }) {
   const runtime = options.platform;
-  const [runtimeCapabilities, setRuntimeCapabilities] =
-    createSignal<RuntimeCapabilities>();
+  const runtimeCapabilities = ():
+    | RuntimeCapabilities
+    | undefined => appState.capabilities.runtime;
   const [native, setNative] =
     createSignal<NativeMediaCapabilitiesSnapshot | null>(
       runtime.kind === "desktop"
@@ -241,7 +244,11 @@ export function createAppMediaCapabilities(options: {
       .getCapabilities()
       .then((capabilities) => {
         if (disposed) return;
-        setRuntimeCapabilities(capabilities);
+        setAppState(
+          "capabilities",
+          "runtime",
+          reconcile(capabilities),
+        );
         const desktop = capabilities.runtime === "desktop";
         runtimeLoaded = true;
         setCaptureSupported(

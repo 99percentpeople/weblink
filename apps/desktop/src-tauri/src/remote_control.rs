@@ -30,6 +30,7 @@ pub struct Pending {
 #[derive(Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    pub devices: weblink_desktop_input::devices::Snapshot,
     pub grant_id: Option<String>,
     pub pending: Option<Pending>,
     pub client_id: Option<String>,

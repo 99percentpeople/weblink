@@ -1,3 +1,5 @@
+import type { InputDeviceSnapshot } from "./input";
+export type * from "./input";
 import type { SystemNotifications } from "./notifications";
 export type * from "./notifications";
 
@@ -418,6 +420,7 @@ export interface NativeControlContext {
   sourceId: string;
 }
 export interface NativeControlStatus {
+  devices?: InputDeviceSnapshot;
   grantId?: string | null;
   pending: {
     consentId: string;
@@ -429,6 +432,8 @@ export interface NativeControlStatus {
   closed: boolean;
 }
 export interface NativeRemoteControl {
+  /** Re-probe optional backends; does not request consent or mount a device. */
+  devices?(): Promise<InputDeviceSnapshot>;
   /** Canonical local shortcut, applied atomically; listener failures retain the previous value. */
   configureShortcut?(shortcut: string): Promise<void>;
   open(shortcut?: string): Promise<string>;

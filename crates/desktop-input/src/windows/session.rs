@@ -1,6 +1,13 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn gamepad_feedback(&self) -> Vec<crate::gamepad::Feedback> {
+        self.call(|engine| engine.gamepad_feedback(Instant::now()))
+            .unwrap_or_default()
+    }
+    fn refresh_devices(&self) -> Result<crate::devices::Snapshot, Error> {
+        self.call(|engine| engine.refresh_devices())
+    }
     fn observe_pointer(&self, changed: Option<Arc<dyn Fn() + Send + Sync>>) {
         self.observations.observe_pointer(changed);
     }

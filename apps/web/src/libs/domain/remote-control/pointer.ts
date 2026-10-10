@@ -1,4 +1,12 @@
 import { createUuid } from "../ids";
+import {
+  parseInputCapabilities,
+  parseGamepadFeedback,
+  type GamepadFeedback,
+  type RemoteInputCapability,
+  type RemoteGamepadEvent,
+  type GamepadStatus,
+} from "../protocol/remote-control/input-devices";
 import { CursorAssets } from "../protocol/remote-control/cursor-assets";
 import {
   MAX_CURSOR_MESSAGE_BYTES,
@@ -39,6 +47,7 @@ type CursorListener = (
   owner: RemoteCursorOwner,
 ) => void;
 export type PointerEvent =
+  | RemoteGamepadEvent
   | RemoteKeyEvent
   | RemoteTextEvent
   | { type: "trackpad"; action: TrackpadEvent }
@@ -101,6 +110,40 @@ export function videoPosition(
   return { x: px, y: py };
 }
 export class RemotePointer extends EventTarget {
+  private gamepadFeedbackListeners = new Set<
+    (feedback: GamepadFeedback) => void
+  >();
+  watchGamepadFeedback(
+    listener: (feedback: GamepadFeedback) => void,
+  ): () => void {
+    this.gamepadFeedbackListeners.add(listener);
+    return () => {
+      this.gamepadFeedbackListeners.delete(listener);
+    };
+  }
+  private devices: RemoteInputCapability[] = [];
+  private gamepadListeners = new Set<
+    (status: GamepadStatus) => void
+  >();
+  inputCapabilities(): readonly RemoteInputCapability[] {
+    return this.devices;
+  }
+  gamepadSlots(): number {
+    const capability = this.devices.find(
+      (c) => c.kind === "gamepad",
+    );
+    return capability?.availability === "available"
+      ? capability.maxDevices
+      : 0;
+  }
+  watchGamepads(
+    listener: (status: GamepadStatus) => void,
+  ): () => void {
+    this.gamepadListeners.add(listener);
+    return () => {
+      this.gamepadListeners.delete(listener);
+    };
+  }
   private fileDropAvailable = false;
   fileDropTarget():
     | { grantId: string; target: ControlTarget }
@@ -474,6 +517,7 @@ export class RemotePointer extends EventTarget {
       )
         return;
       this.target = { ...v.target };
+      this.devices = parseInputCapabilities(v.inputDevices);
       this.keyboardAvailable = v.keyboard === true;
       this.fileDropAvailable = v.fileDrop === true;
       this.textAvailable =
@@ -516,6 +560,47 @@ export class RemotePointer extends EventTarget {
         this.persistent,
       );
       this.changed();
+      return;
+    }
+    if (v.type === "input-capabilities" && this.session) {
+      this.devices = parseInputCapabilities(v.inputDevices);
+      this.changed();
+      return;
+    }
+    if (v.type === "gamepad-feedback") {
+      if (
+        this.active &&
+        this.session?.state.type === "granted" &&
+        v.grantId === this.session.state.grantId &&
+        v.inputEpoch === this.epoch
+      ) {
+        const feedback = parseGamepadFeedback(v);
+        if (feedback)
+          for (const listener of this
+            .gamepadFeedbackListeners)
+            listener(feedback);
+      }
+      return;
+    }
+    if (v.type === "gamepad-status") {
+      if (
+        this.active &&
+        this.session?.state.type === "granted" &&
+        v.grantId === this.session.state.grantId &&
+        v.inputEpoch === this.epoch &&
+        Number.isInteger(v.slot) &&
+        (v.slot as number) >= 0 &&
+        (v.slot as number) < 4 &&
+        controlId(v.id) &&
+        typeof v.mounted === "boolean"
+      ) {
+        for (const listener of this.gamepadListeners)
+          listener({
+            slot: v.slot as number,
+            id: v.id,
+            mounted: v.mounted,
+          });
+      }
       return;
     }
     if (
@@ -695,6 +780,15 @@ export class RemotePointer extends EventTarget {
     )
       return false;
     if (event.type === "key" && !this.keyboardAvailable)
+      return false;
+    if (
+      event.type === "gamepad" &&
+      (!Number.isInteger(event.slot) ||
+        event.slot < 0 ||
+        event.slot >= 4 ||
+        (event.action !== "disconnect" &&
+          event.slot >= this.gamepadSlots()))
+    )
       return false;
     if (
       event.type === "text" &&

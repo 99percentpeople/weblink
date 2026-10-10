@@ -2,6 +2,20 @@ use super::*;
 use tauri::State;
 
 #[tauri::command]
+pub async fn remote_control_devices(
+    window: tauri::WebviewWindow,
+    service: State<'_, Shared>,
+) -> Result<weblink_desktop_input::devices::Snapshot, String> {
+    if window.label() != "main" {
+        return Err("Local main window required".into());
+    }
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.devices())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn remote_control_open(
     service: State<'_, Shared>,
     shortcut: Option<weblink_desktop_input::shortcut::Shortcut>,

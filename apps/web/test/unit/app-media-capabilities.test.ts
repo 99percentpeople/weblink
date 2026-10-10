@@ -1,17 +1,32 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createRoot, createSignal } from "solid-js";
+import { reconcile } from "solid-js/store";
 import type {
   AudioCaptureFormat,
   PlatformRuntime,
 } from "@weblink/platform";
 import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
 import type { MeetingDeviceAccessState } from "@/libs/domain/meeting-devices";
+import {
+  appState,
+  createInitialAppState,
+  setAppState,
+} from "@/libs/state/app-state";
 
 const formats: AudioCaptureFormat[] = [
   { sampleRate: 48000, channelCount: 2 },
 ];
 const disposers: (() => void)[] = [];
+beforeEach(() =>
+  setAppState(reconcile(createInitialAppState())),
+);
 afterEach(() => {
   disposers.splice(0).forEach((dispose) => dispose());
   vi.restoreAllMocks();
@@ -126,6 +141,31 @@ it("retains shared runtime capabilities after a failed focus refresh", async () 
   );
   await state.refresh();
   expect(state.runtimeCapabilities()).toBe(previous);
+});
+it("shares runtime updates with appState and clears removed optional capabilities", async () => {
+  const { state, api } = fixture();
+  await state.ready();
+  const capabilities = { ...state.runtimeCapabilities()! };
+  api.getCapabilities.mockResolvedValue({
+    ...capabilities,
+    systemKeyboard: true,
+    nativeClipboard: true,
+  });
+  await state.refresh();
+  expect(
+    appState.capabilities.runtime?.systemKeyboard,
+  ).toBe(true);
+  expect(appState.capabilities.runtime).toBe(
+    state.runtimeCapabilities(),
+  );
+  api.getCapabilities.mockResolvedValue(capabilities);
+  await state.refresh();
+  expect(
+    appState.capabilities.runtime?.systemKeyboard,
+  ).toBeUndefined();
+  expect(
+    appState.capabilities.runtime?.nativeClipboard,
+  ).toBeUndefined();
 });
 it("refreshes audio formats for audio device changes while reusing other native capabilities", async () => {
   const { state, api, setDevices } = fixture();

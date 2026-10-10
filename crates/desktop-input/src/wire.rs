@@ -24,6 +24,10 @@ pub struct Packet {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PointerEvent {
+    Gamepad {
+        #[serde(flatten)]
+        event: crate::gamepad::Event,
+    },
     Text {
         text: String,
     },
@@ -64,6 +68,7 @@ impl PointerEvent {
             x.is_finite() && y.is_finite() && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)
         };
         match *self {
+            Self::Gamepad { ref event } => event.valid(),
             Self::Text { ref text } => crate::input::valid_text(text),
             Self::Key {
                 scan_code,
@@ -89,6 +94,7 @@ impl PointerEvent {
     }
     fn input(&self) -> Event {
         match *self {
+            Self::Gamepad { ref event } => Event::Gamepad(event.clone()),
             Self::Text { ref text } => Event::Text(text.clone()),
             Self::Key {
                 scan_code,

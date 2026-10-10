@@ -96,9 +96,12 @@ impl PanDevice {
         let api = Api::load();
         let handle = api.and_then(Api::create);
         let supported = handle.is_some() && direction().is_ok();
+        if let Some(handle) = handle {
+            unsafe { DestroySyntheticPointerDevice(handle) };
+        }
         Self {
             api,
-            handle,
+            handle: None,
             supported,
             active: false,
             used: false,

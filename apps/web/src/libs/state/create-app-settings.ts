@@ -5,6 +5,8 @@ import { createAppMediaCapabilities } from "./create-app-media-capabilities";
 import { createAppStartup } from "./create-app-startup";
 import { createAppCaptureSources } from "./create-app-capture-sources";
 import { createAppClipboardAccess } from "./create-app-clipboard-access";
+import { createAppInputDevices } from "./create-app-input-devices";
+import { createAppLocalInput } from "./create-app-local-input";
 
 export function createAppSettings(options: {
   platform: PlatformRuntime;
@@ -14,6 +16,7 @@ export function createAppSettings(options: {
   >;
   stream: Accessor<MediaStream | null>;
 }) {
+  createAppLocalInput();
   const mediaCapabilities =
     createAppMediaCapabilities(options);
   createAppClipboardAccess({
@@ -23,6 +26,9 @@ export function createAppSettings(options: {
     runtimeReady: mediaCapabilities.ready,
   });
   return {
+    inputDevices: createAppInputDevices(
+      options.platform.remoteControl,
+    ),
     mediaCapabilities,
     runtimeCapabilities:
       mediaCapabilities.runtimeCapabilities,

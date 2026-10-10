@@ -18,6 +18,12 @@ pub struct PointerActivity {
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    fn gamepad_feedback(&self) -> Vec<crate::gamepad::Feedback> {
+        vec![]
+    }
+    fn refresh_devices(&self) -> Result<crate::devices::Snapshot, Error> {
+        Ok(self.status().devices)
+    }
     /// Install a lightweight invalidation callback for pointer movement. It runs
     /// on the native hook thread and must only notify, never query or inject input.
     fn observe_pointer(&self, _changed: Option<Arc<dyn Fn() + Send + Sync>>) {}
@@ -60,6 +66,24 @@ pub trait Session: Send {
 /// Querying it must not start input injection or register native hooks/hotkeys.
 pub fn supported() -> bool {
     cfg!(target_os = "windows")
+}
+
+/// Read-only backend probe. Creates no persistent devices, input hooks or grants.
+pub fn devices() -> crate::devices::Snapshot {
+    #[cfg(target_os = "windows")]
+    {
+        crate::windows::devices()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        crate::devices::Snapshot {
+            capabilities: crate::devices::Kind::ALL
+                .into_iter()
+                .map(|kind| crate::devices::Capability::system(kind, false))
+                .collect(),
+            mounted: vec![],
+        }
+    }
 }
 
 pub fn start() -> Result<Box<dyn Session>, Error> {

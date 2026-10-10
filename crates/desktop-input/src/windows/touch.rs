@@ -63,6 +63,8 @@ impl TouchDevice {
             active: BTreeMap::new(),
         };
         result.create();
+        // Capability probing must not leave a device mounted before consent.
+        result.destroy();
         result
     }
     fn create(&mut self) {
@@ -74,6 +76,16 @@ impl TouchDevice {
     }
     pub fn supported(&self) -> bool {
         self.enabled
+    }
+    pub fn mount(&mut self) -> Result<(), Error> {
+        if self.handle.is_none() {
+            self.create();
+        }
+        self.handle.map(|_| ()).ok_or(Error::Unavailable)
+    }
+    pub fn unmount(&mut self) {
+        self.destroy();
+        self.active.clear();
     }
     fn inject(&self, actions: &[Action]) -> Result<(), Error> {
         let handle = self.handle.ok_or(Error::Unavailable)?;

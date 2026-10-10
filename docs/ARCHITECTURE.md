@@ -378,7 +378,8 @@ dependency direction: state/UI → application → domain, while application
 may select concrete infrastructure implementations.
 
 - `src/libs/state/`: reactive application state and UI-facing context.
-  - `app-state.ts`: shared store shape, including room/client view state.
+  - `app-state.ts`: shared store shape, including room/client view state and
+    runtime, clipboard and input-device capabilities.
   - `*-context.ts`: stable context contracts and hooks consumed by UI.
   - `application-bootstrap.ts` and `application-root.ts`: native root composition
     and application resource ownership, outside component refresh boundaries.
@@ -399,12 +400,20 @@ may select concrete infrastructure implementations.
     validates application-supported PCM pairs on process-loopback clients without
     starting recording. Browser and native audio codec preferences are separate.
   - `create-app-settings.ts` composes the shared settings discovery. Application
-    and remote-keyboard settings consume the same `runtimeCapabilities` snapshot
-    as media discovery. `create-app-startup.ts` owns native startup preferences
+    and remote-keyboard settings, remote input surfaces and media discovery
+    consume the same `appState.capabilities.runtime` snapshot.
+    `create-app-startup.ts` owns native startup preferences
     and pending writes; `create-app-capture-sources.ts` retains the capture source
     list. Focus and explicit refresh update these snapshots without clearing
     previous values. Closing settings does not discard discovery or startup
     writes; diagnostic capture sessions and polling still stop with their view.
+  - `create-app-input-devices.ts`: app-owned native input-device and driver
+    detection, exposed through `useAppState().inputDevices` with results in
+    `appState.capabilities.inputDevices`. Startup, focus and explicit refresh
+    share in-flight work; failed refreshes retain the last successful result.
+    Settings only render shared state, so detection never suspends the dialog or
+    restarts on tab entry. Detection does not request control or mount devices;
+    app disposal removes listeners and ignores late results.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and

@@ -97,6 +97,7 @@ pub fn run() {
             keyboard::keyboard_renew,
             keyboard::keyboard_stop,
             remote_control::remote_control_open,
+            remote_control::remote_control_devices,
             remote_control::remote_control_configure_shortcut,
             clipboard::clipboard_sequence,
             clipboard::clipboard_watch,

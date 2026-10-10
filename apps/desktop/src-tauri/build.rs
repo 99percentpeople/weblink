@@ -31,6 +31,7 @@ fn main() {
             "keyboard_renew",
             "keyboard_stop",
             "remote_control_open",
+            "remote_control_devices",
             "remote_control_configure_shortcut",
             "clipboard_sequence",
             "clipboard_watch",

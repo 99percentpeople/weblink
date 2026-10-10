@@ -1,4 +1,8 @@
 import { createStore } from "solid-js/store";
+import type {
+  InputDeviceSnapshot,
+  RuntimeCapabilities,
+} from "@weblink/platform";
 import type { FileMetaData } from "@/libs/domain/file";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import type {
@@ -27,6 +31,7 @@ import type {
 import type { ChunkCache } from "@/libs/domain/file";
 import type { AppOption } from "@/libs/state/app-options";
 import { getDefaultAppOptions } from "@/libs/state/app-options";
+import { isMobileInputDevice } from "@/libs/domain/remote-control/local-input";
 
 export type ClientServiceStatus =
   | "connecting"
@@ -283,8 +288,23 @@ export const saveMediaConstraintsToSession = (
   }
 };
 
+export interface InputDeviceAccessState {
+  supported: boolean;
+  ready: boolean;
+  refreshing: boolean;
+  failed: boolean;
+  snapshot: InputDeviceSnapshot | null;
+}
+
 export type AppState = {
   capabilities: {
+    runtime: RuntimeCapabilities | undefined;
+    inputDevices: InputDeviceAccessState;
+    localInput: {
+      mobile: boolean;
+      keyboardObserved: boolean;
+      gamepadCount: number;
+    };
     clipboard: ClipboardAccessState;
   };
   roomStatus: RoomStatus;
@@ -319,6 +339,19 @@ export type AppState = {
 
 export const createInitialAppState = (): AppState => ({
   capabilities: {
+    runtime: undefined,
+    localInput: {
+      mobile: isMobileInputDevice(),
+      keyboardObserved: false,
+      gamepadCount: 0,
+    },
+    inputDevices: {
+      supported: false,
+      ready: false,
+      refreshing: false,
+      failed: false,
+      snapshot: null,
+    },
     clipboard: {
       ready: false,
       native: false,

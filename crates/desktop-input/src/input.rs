@@ -134,6 +134,7 @@ pub(crate) fn valid_text(text: &str) -> bool {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    Gamepad(crate::gamepad::Event),
     Trackpad(crate::trackpad::Event),
     Touch(Vec<crate::touch::Contact>),
     Move(Position),

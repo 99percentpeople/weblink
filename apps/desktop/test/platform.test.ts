@@ -26,6 +26,28 @@ describe("desktop platform boundary", () => {
     document.body.replaceChildren();
   });
 
+  it("queries input capabilities without opening an authorization owner", async () => {
+    const snapshot = {
+      capabilities: [
+        {
+          kind: "gamepad",
+          availability: "driverRequired",
+          maxDevices: 4,
+        },
+      ],
+      mounted: [],
+    };
+    ipc.mockResolvedValue(snapshot);
+    expect(
+      await platform.remoteControl!.devices!(),
+    ).toEqual(snapshot);
+    expect(ipc).toHaveBeenCalledOnce();
+    expect(ipc).toHaveBeenCalledWith(
+      "remote_control_devices",
+      {},
+    );
+  });
+
   it("carries the same file budget across clipboard and native drop IPC", async () => {
     const scope = {
       ownerId: "owner",

@@ -29,6 +29,10 @@ import {
 } from "@/libs/domain/remote-control/pointer-options";
 
 import { DEFAULT_REMOTE_FILE_BYTES } from "../domain/protocol/remote-file-limits";
+import {
+  defaultRemoteGamepadOptions,
+  type RemoteGamepadOptions,
+} from "../domain/remote-control/gamepad-options";
 
 export type { Locale } from "@/libs/i18n/locale";
 export {
@@ -152,6 +156,7 @@ export type AppOption = {
   remotePointer: RemotePointerOptions;
   remoteTouch: RemoteTouchOptions;
   remoteKeyboard: RemoteKeyboardOptions;
+  remoteGamepad: RemoteGamepadOptions;
   /** Shared per-operation file byte limit for remote drop and clipboard. */
   remoteFileMaxSize: number;
   // Receiver
@@ -301,6 +306,7 @@ export const getDefaultAppOptions = (): AppOption => {
     remotePointer: { ...defaultRemotePointerOptions },
     remoteTouch: { ...defaultRemoteTouchOptions },
     remoteKeyboard: { ...defaultRemoteKeyboardOptions },
+    remoteGamepad: { ...defaultRemoteGamepadOptions },
     remoteFileMaxSize: DEFAULT_REMOTE_FILE_BYTES,
     application: { ...defaultApplicationOptions },
     notifications: { ...defaultNotificationOptions },

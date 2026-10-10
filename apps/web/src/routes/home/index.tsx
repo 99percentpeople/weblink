@@ -70,7 +70,7 @@ import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";
 import { createControlState } from "./components/remote-control-action";
-import { RemoteKeyboardToggle } from "./components/remote-keyboard-toggle";
+import { RemoteInputToggles } from "./components/remote-input-toggles";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 import { MeetingChatPanel } from "./components/meeting-chat-panel";
 import { MeetingInfoPanel } from "./components/meeting-info-panel";
@@ -644,7 +644,7 @@ export default function Home() {
                   outgoingControl.control()?.cancel()
                 }
               >
-                <RemoteKeyboardToggle
+                <RemoteInputToggles
                   controls={sources().flatMap((source) => {
                     if (
                       source.id !==

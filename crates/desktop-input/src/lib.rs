@@ -1,6 +1,8 @@
 //! Attended remote-control input. Native ownership stays separate from UI and transport.
 pub mod authorization;
+pub mod devices;
 pub mod engine;
+pub mod gamepad;
 pub mod input;
 pub mod keyboard_capture;
 #[cfg(any(target_os = "windows", test))]

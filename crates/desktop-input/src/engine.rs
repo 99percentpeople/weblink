@@ -1,6 +1,7 @@
 //! Single-owner authorization + pressed-state machine. All device calls are serialized.
 use crate::{
     authorization::{Authority, Backend, Binding, Grant, RequestResult},
+    devices::{self, Capability, Key, Kind, Manager},
     input::*,
     protocol::Signal,
 };
@@ -17,6 +18,34 @@ pub const MAX_INPUT_AGE: Duration = Duration::from_millis(100);
 
 /// Implementations must not block on frontend/network work. Err may mean partial insertion.
 pub trait Device {
+    fn reset_gamepad_feedback(&mut self, _slot: u8) {}
+    /// Nonblocking snapshot of the latest output from each virtual gamepad.
+    fn gamepad_feedback(&mut self) -> Vec<(u8, crate::gamepad::Rumble)> {
+        vec![]
+    }
+    fn submit_gamepad(&mut self, _: u8, _: crate::gamepad::State) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![
+            Capability::system(Kind::Keyboard, true),
+            Capability::system(Kind::Mouse, true),
+            Capability::system(Kind::Touchpad, self.pan_supported()),
+            Capability::system(Kind::Touchscreen, self.touch_supported()),
+            Capability::system(Kind::Gamepad, false),
+        ]
+    }
+    fn refresh_capabilities(&mut self) {}
+    fn mount(&mut self, _: Key) -> Result<(), Error> {
+        Ok(())
+    }
+    fn unmount(&mut self, key: Key) -> Result<(), Error> {
+        match key.kind {
+            Kind::Touchpad => self.cancel_pan(),
+            Kind::Touchscreen => self.cancel_touch(),
+            _ => Ok(()),
+        }
+    }
     fn pan_supported(&self) -> bool {
         false
     }
@@ -49,7 +78,7 @@ pub struct TrustedTarget {
     pub geometry: Geometry,
 }
 struct InputState<D: Device> {
-    device: D,
+    device: Manager<D>,
     targets: HashMap<String, TrustedTarget>,
     invalidated: HashMap<String, Arc<AtomicBool>>,
     held: Vec<Held>,
@@ -65,19 +94,23 @@ impl<D: Device> InputState<D> {
     fn release_action(&mut self, action: Action) -> bool {
         // Cleanup must not double-panic while unwinding a failed device operation.
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.device.submit(&[action])
+            self.device.backend.submit(&[action])
         }))
         .is_ok_and(|result| result.is_ok())
     }
     fn release_all(&mut self) -> bool {
-        let mut ok = true;
+        let mut ok = self.device.release_gamepads();
         self.touches.clear();
         self.panning = false;
-        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.device.cancel_pan()))
-            .is_ok_and(|result| result.is_ok());
+        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.device.backend.cancel_pan()
+        }))
+        .is_ok_and(|result| result.is_ok());
         self.cursor = Default::default();
-        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.device.cancel_touch()))
-            .is_ok_and(|result| result.is_ok());
+        ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.device.backend.cancel_touch()
+        }))
+        .is_ok_and(|result| result.is_ok());
         if let Some(unit) = self.unicode.take() {
             ok &= self.release_action(Action::Unicode { unit, down: false });
         }
@@ -88,9 +121,13 @@ impl<D: Device> InputState<D> {
         if !ok {
             self.failure = Some(Error::Release);
         }
+        self.device.suspend();
         ok
     }
-    fn apply(&mut self, grant: &Grant, event: Event) -> Result<(), Error> {
+    fn apply(&mut self, grant: &Grant, event: Event, now: Instant) -> Result<(), Error> {
+        if let Event::Gamepad(event) = event {
+            return self.device.gamepad(event, now);
+        }
         if self.panning
             && !matches!(
                 event,
@@ -107,12 +144,25 @@ impl<D: Device> InputState<D> {
             .get(&grant.binding.target.media_id)
             .ok_or(Error::Unavailable)?
             .geometry;
+        let kind = match &event {
+            Event::Key { .. } | Event::Text(_) => Some(Kind::Keyboard),
+            Event::Touch(_) => Some(Kind::Touchscreen),
+            Event::Trackpad(crate::trackpad::Event::Pan { .. }) => Some(Kind::Touchpad),
+            Event::ReleaseAll => None,
+            _ => Some(Kind::Mouse),
+        };
+        if let Some(kind) = kind {
+            self.device.ensure(Key::single(kind))?;
+        }
         if let Event::Trackpad(crate::trackpad::Event::Pan { gesture }) = event {
             use crate::pan::Pan;
             if !gesture.valid() {
                 return Err(Error::Invalid);
             }
-            if !self.device.pan_supported() || !self.held.is_empty() || self.unicode.is_some() {
+            if !self.device.backend.pan_supported()
+                || !self.held.is_empty()
+                || self.unicode.is_some()
+            {
                 return Err(Error::Unavailable);
             }
             match gesture {
@@ -120,21 +170,21 @@ impl<D: Device> InputState<D> {
                     // Pan targets the actual cursor, clamped to the authorized shared display.
                     let position = self.cursor.resolve(
                         crate::trackpad::Event::Move { x: 0.0, y: 0.0 },
-                        self.device.cursor_position()?,
+                        self.device.backend.cursor_position()?,
                         geometry,
                     )?;
                     let Event::Move(position) = position else {
                         unreachable!()
                     };
                     let (x, y) = geometry.absolute(position).ok_or(Error::Invalid)?;
-                    self.device.submit(&[Action::Move { x, y }])?;
+                    self.device.backend.submit(&[Action::Move { x, y }])?;
                     self.panning = true;
                 }
                 Pan::Update { .. } | Pan::End if self.panning => (),
                 Pan::Cancel => (),
                 _ => return Err(Error::Invalid),
             }
-            self.device.submit_pan(gesture)?;
+            self.device.backend.submit_pan(gesture)?;
             if matches!(gesture, Pan::End | Pan::Cancel) {
                 self.panning = false;
             }
@@ -143,7 +193,7 @@ impl<D: Device> InputState<D> {
         }
         let event = if let Event::Trackpad(event) = event {
             self.cursor
-                .resolve(event, self.device.cursor_position()?, geometry)?
+                .resolve(event, self.device.backend.cursor_position()?, geometry)?
         } else {
             self.cursor = Default::default();
             event
@@ -157,14 +207,17 @@ impl<D: Device> InputState<D> {
                 .ok_or(Error::Invalid)
         };
         match event {
+            Event::Gamepad(_) => unreachable!("handled above"),
             Event::Trackpad(_) => unreachable!("resolved above"),
             Event::Touch(contacts) => {
-                if !self.device.touch_supported() || !self.held.is_empty() || self.unicode.is_some()
+                if !self.device.backend.touch_supported()
+                    || !self.held.is_empty()
+                    || self.unicode.is_some()
                 {
                     return Err(Error::Unavailable);
                 }
                 let actions = self.touches.frame(&contacts, geometry)?;
-                self.device.submit_touch(&actions)?;
+                self.device.backend.submit_touch(&actions)?;
                 self.submitted += 1;
                 return Ok(());
             }
@@ -210,7 +263,7 @@ impl<D: Device> InputState<D> {
                         return Err(Error::Stale);
                     }
                     self.unicode = Some(unit); // also covers a partially inserted pair
-                    self.device.submit(&[
+                    self.device.backend.submit(&[
                         Action::Unicode { unit, down: true },
                         Action::Unicode { unit, down: false },
                     ])?;
@@ -243,7 +296,7 @@ impl<D: Device> InputState<D> {
                 actions.push(held.up());
             }
         }
-        self.device.submit(&actions)?;
+        self.device.backend.submit(&actions)?;
         if let Some((held, false)) = transition {
             self.held.retain(|h| *h != held);
         }
@@ -258,19 +311,24 @@ impl<D: Device> Backend for InputState<D> {
                 .invalidated
                 .get(&binding.target.media_id)
                 .is_some_and(|flag| flag.load(Ordering::Acquire))
-            && self.device.available()
-            && self
-                .targets
-                .get(&binding.target.media_id)
-                .is_some_and(|t| t.binding == *binding && self.device.geometry_current(t.geometry))
+            && self.device.backend.available()
+            && self.targets.get(&binding.target.media_id).is_some_and(|t| {
+                t.binding == *binding && self.device.backend.geometry_current(t.geometry)
+            })
     }
     fn release(&mut self, _: &Grant) -> bool {
         self.interrupted = true;
-        self.release_all()
+        let released = self.release_all();
+        let unmounted = self.device.unmount_all();
+        if !unmounted {
+            self.failure = Some(Error::Release);
+        }
+        released && unmounted
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Status {
+    pub devices: devices::Snapshot,
     pub input_suspended: bool,
     pub pan_supported: bool,
     pub touch_supported: bool,
@@ -284,10 +342,32 @@ pub struct Engine<D: Device> {
     authority: Authority<InputState<D>>,
 }
 impl<D: Device> Engine<D> {
+    pub fn gamepad_feedback(&mut self, now: Instant) -> Vec<crate::gamepad::Feedback> {
+        let Some(grant) = self.authority.grant().cloned() else {
+            return vec![];
+        };
+        if !self.authority.permits(&grant.binding, &grant.id, now)
+            || self.authority.backend_mut().interrupted
+        {
+            return vec![];
+        }
+        self.authority
+            .backend_mut()
+            .device
+            .gamepad_feedback(now)
+            .into_iter()
+            .map(|(slot, id, rumble)| crate::gamepad::Feedback {
+                grant: grant.clone(),
+                slot,
+                id,
+                rumble,
+            })
+            .collect()
+    }
     pub fn new(device: D) -> Self {
         Self {
             authority: Authority::new(InputState {
-                device,
+                device: Manager::new(device),
                 targets: HashMap::new(),
                 invalidated: HashMap::new(),
                 held: vec![],
@@ -307,14 +387,16 @@ impl<D: Device> Engine<D> {
             return false;
         }
         let state = self.authority.backend_mut();
-        if !state.device.available() || !state.device.geometry_current(target.geometry) {
+        if !state.device.backend.available()
+            || !state.device.backend.geometry_current(target.geometry)
+        {
             return false;
         }
         let id = target.binding.target.media_id.clone();
         if let Some(old) = state.targets.get(&id) {
             return old.binding == target.binding && old.geometry == target.geometry;
         }
-        if state.targets.len() >= 32 || !state.device.geometry_current(target.geometry) {
+        if state.targets.len() >= 32 || !state.device.backend.geometry_current(target.geometry) {
             return false;
         }
         let binding = target.binding.clone();
@@ -410,17 +492,23 @@ impl<D: Device> Engine<D> {
             return Err(Error::Unauthorized);
         }
         let reset = matches!(event, Event::ReleaseAll);
-        let result = self.authority.backend_mut().apply(grant, event);
+        let gamepad = matches!(event, Event::Gamepad(_));
+        let result = self.authority.backend_mut().apply(grant, event, now);
         if reset && result.is_ok() {
             self.authority.backend_mut().interrupted = false;
         }
         if let Err(error) = result {
-            self.fail(error);
+            if error != Error::Unavailable || !gamepad {
+                self.fail(error);
+            }
         }
         result
     }
     pub fn tick(&mut self, now: Instant) {
         self.authority.tick(now);
+        if !self.authority.backend_mut().device.expire_gamepads(now) {
+            self.fail(Error::Release);
+        }
     }
     pub(crate) fn wait_duration(&self, now: Instant) -> Option<Duration> {
         self.authority.wait_duration(now)
@@ -450,14 +538,23 @@ impl<D: Device> Engine<D> {
         let pending_consent = self.authority.pending_consent().map(str::to_owned);
         let state = self.authority.backend_mut();
         Status {
+            devices: state.device.snapshot(),
             input_suspended: state.interrupted,
-            pan_supported: state.device.pan_supported(),
-            touch_supported: state.device.touch_supported(),
+            pan_supported: state.device.backend.pan_supported(),
+            touch_supported: state.device.backend.touch_supported(),
             pending_consent,
             grant,
             closed,
             failure: state.failure,
             submitted: state.submitted,
         }
+    }
+    pub fn refresh_devices(&mut self) -> devices::Snapshot {
+        self.authority
+            .backend_mut()
+            .device
+            .backend
+            .refresh_capabilities();
+        self.authority.backend_mut().device.snapshot()
     }
 }

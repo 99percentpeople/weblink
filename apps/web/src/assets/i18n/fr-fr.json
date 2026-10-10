@@ -354,11 +354,11 @@
       "touch_heading": "Tactile",
       "keyboard": {
         "title": "Transmettre la saisie clavier",
-        "description": "En mode Curseur local, cliquez sur l'écran pour transférer les touches physiques prises en charge à l'aide de la disposition du clavier distant. Le mode Capture transfère les clés uniquement pendant la capture. Utilisez le commutateur d'en-tête pour désactiver le transfert. Le clavier à l'écran ouvert manuellement fonctionne dans les deux modes."
+        "description": "Transmet les touches physiques lorsque le contrôle à distance et cet interrupteur sont actifs, sans cliquer sur l’écran distant. Les champs de texte locaux restent utilisables. L’interrupteur du haut permet d’arrêter la transmission."
       },
       "exit_shortcut": {
         "title": "Raccourci pour libérer le pointeur et le clavier",
-        "description": "Relâchez la saisie au clavier et tout pointeur capturé sans mettre fin à la connexion de contrôle. Le raccourci fonctionne également lorsque le transfert clavier est désactivé.",
+        "description": "Désactive la transmission du clavier et libère le curseur capturé sans fermer la connexion. Réactivez l’interrupteur du clavier pour reprendre. Le raccourci fonctionne aussi lorsque la transmission est désactivée.",
         "browser": "Vous pouvez également appuyer sur Échap pour libérer la capture.",
         "native": "Lorsque le transfert de raccourci système est activé, Escape est envoyé à l'ordinateur distant. Utilisez le raccourci ci-dessus pour libérer la saisie.",
         "webview": "Lors de l'utilisation de la gestion des clés du navigateur, Escape libère également la capture."
@@ -380,8 +380,8 @@
         "title": "Comportement du pointeur",
         "local": "Curseur local",
         "capture": "Capturer et masquer le curseur local",
-        "local_description": "Utilisez le curseur local pour pointer vers l'écran distant. Cliquez sur l'écran pour transférer la saisie au clavier ; le commutateur d'en-tête peut désactiver le transfert.",
-        "capture_description": "Cliquez sur l'écran distant pour capturer et masquer le curseur local. Ce n'est que pendant leur capture que les clés physiques sont transmises. Utilisez le raccourci de libération pour libérer à la fois le pointeur et le clavier ; la connexion de contrôle reste active."
+        "local_description": "Utilisez le curseur local sur l’écran distant. Le clavier et la manette ont leurs propres commutateurs, sans devoir cliquer sur l’écran.",
+        "capture_description": "Cliquez sur l’écran distant pour capturer et masquer le curseur local. Le clavier et les manettes disposent de leurs propres interrupteurs et ne nécessitent pas la capture du curseur."
       },
       "general_heading": "Général",
       "cursor_sync": {
@@ -413,6 +413,35 @@
       "file_size_limit": {
         "title": "Limite de taille de transfert de fichiers",
         "description": "Partagé par glisser-déposer et copier/coller, en comptant le nombre total d'octets du fichier par opération. Par défaut : 64 Mio ; plage : 1 à 512 Mio. Les dossiers doivent s'adapter avant et après la compression ZIP. Les modifications s'appliquent à l'opération suivante."
+      },
+      "gamepad_heading": "Manette",
+      "gamepad": {
+        "title": "Transmettre les manettes",
+        "description": "Transmet jusqu’à 4 manettes standard lorsque le contrôle à distance et cet interrupteur sont actifs. Aucun clic sur l’écran n’est nécessaire. Appuyez sur un bouton si le navigateur ne détecte pas encore la manette.",
+        "vibration": "Retour de vibration",
+        "vibration_description": "Transmet les vibrations du jeu à la manette connectée si le navigateur le permet. S’arrête à la fin du contrôle.",
+        "strength": "Intensité des vibrations",
+        "dead_zone": "Zone morte des sticks",
+        "dead_zone_description": "Ignore les petits mouvements des sticks pour réduire la dérive."
+      },
+      "devices": {
+        "title": "Périphériques de saisie locaux",
+        "description": "Vérifiez les entrées à distance prises en charge par cet appareil. Les périphériques sont libérés et déconnectés à la fin de la session.",
+        "keyboard": "Clavier",
+        "mouse": "Souris",
+        "touchpad": "Gestes du pavé tactile",
+        "touchscreen": "Écran tactile",
+        "gamepad": "Manette",
+        "available": "Disponible",
+        "unsupported": "Non pris en charge",
+        "driverRequired": "Pilote requis",
+        "unavailable": "Indisponible",
+        "error": "Impossible de vérifier les périphériques. Réessayez.",
+        "driver_description": "Les manettes sous Windows nécessitent un pilote facultatif. Son installation demande une autorisation administrateur ; Weblink fonctionne sans élévation de privilèges. Vérifiez à nouveau après installation.",
+        "install_driver": "Guide d’installation",
+        "driver_retired": "ViGEmBus est abandonné et ne reçoit plus de mises à jour.",
+        "checking": "Vérification…",
+        "refresh": "Vérifier à nouveau"
       }
     },
     "permissions": {
@@ -1291,7 +1320,7 @@
     "keyboard_input": "Tapez sur l'ordinateur distant",
     "text_too_long": "Le texte est trop long. Envoyez-le en petites parties.",
     "text_failed": "L'entrée n'a pas pu être entièrement envoyée. Vérifiez le texte distant avant de réessayer.",
-    "system_keyboard_stopped": "Le transfert du clavier système s'est arrêté. Cliquez sur l'écran distant pour réessayer ou désactivez les raccourcis système dans les paramètres du contrôle à distance.",
+    "system_keyboard_stopped": "La transmission du clavier système s’est arrêtée. Réactivez l’interrupteur du clavier ou désactivez les raccourcis système dans les paramètres de contrôle à distance.",
     "capture_failed": "Impossible de capturer le pointeur. Cliquez sur l'écran distant pour réessayer ou choisissez Curseur local dans les paramètres du contrôle à distance.",
     "capture_unavailable": "Cet hôte ne prend pas en charge la capture de pointeur. Choisissez Curseur local dans Paramètres du contrôle à distance.",
     "capture_hint": "Cliquez pour capturer le pointeur. Appuyez sur {{shortcut}} pour libérer le pointeur et le clavier.",
@@ -1304,6 +1333,10 @@
       "completed": "Dépôt des fichiers à distance terminé",
       "failed": "Échec du dépôt des fichiers à distance",
       "details": "Ouvrez la liste des tâches pour les détails du transfert."
-    }
+    },
+    "gamepad_enable": "Activer la transmission de la manette",
+    "gamepad_disable": "Désactiver la transmission de la manette",
+    "gamepad_unavailable": "La transmission de la manette est indisponible sur l’hôte. Vérifiez ses paramètres de contrôle à distance.",
+    "gamepad_failed": "La manette distante n’a pas pu être connectée ou ne répond plus. Vérifiez le pilote sur l’hôte, puis reconnectez la manette."
   }
 }

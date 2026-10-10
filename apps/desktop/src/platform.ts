@@ -72,6 +72,7 @@ export const platform: PlatformRuntime = {
   mediaPermissionPolicy: "automatic",
   supportsServiceWorker: false,
   remoteControl: {
+    devices: () => invoke("remote_control_devices"),
     configureShortcut: (shortcut) =>
       invoke("remote_control_configure_shortcut", {
         shortcut,

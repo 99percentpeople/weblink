@@ -28,6 +28,7 @@ import type { AppPermissions } from "./create-app-permissions";
 import type { AppMediaCapabilities } from "./create-app-media-capabilities";
 import type { AppStartup } from "./create-app-startup";
 import type { AppCaptureSources } from "./create-app-capture-sources";
+import type { AppInputDevices } from "./create-app-input-devices";
 export interface AppStateContextProps {
   remoteFileDrop: Pick<RemoteFileDrop, "drop">;
   remoteClipboard: Pick<
@@ -36,6 +37,7 @@ export interface AppStateContextProps {
   >;
   permissions: AppPermissions;
   mediaCapabilities: AppMediaCapabilities;
+  inputDevices: AppInputDevices;
   runtimeCapabilities: AppMediaCapabilities["runtimeCapabilities"];
   startup: AppStartup;
   captureSources: AppCaptureSources;

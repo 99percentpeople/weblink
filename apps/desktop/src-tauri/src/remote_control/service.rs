@@ -60,6 +60,21 @@ pub struct Service {
     observer: Mutex<Option<Observer>>,
 }
 impl Service {
+    pub fn devices(&self) -> Result<weblink_desktop_input::devices::Snapshot, String> {
+        let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(owner) = owner.filter(|owner| owner.live()) {
+            let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+            if !host.worker.status().closed {
+                let devices = host.worker.refresh_devices().map_err(input_error)?;
+                owner.publish(host.snapshot());
+                if let Some(wake) = &host.wake {
+                    wake.unpark();
+                }
+                return Ok(devices);
+            }
+        }
+        Ok(weblink_desktop_input::session::devices())
+    }
     pub fn with_shortcut<T>(
         &self,
         use_shortcut: impl FnOnce(weblink_desktop_input::shortcut::Shortcut) -> T,
@@ -396,6 +411,7 @@ impl Service {
         if let Signal::Grant { grant_id, .. } = &signal {
             let binding = h.peers.get(&media).ok_or("Media ended")?.binding.clone();
             h.active = Some(Active {
+                gamepad_feedback: Default::default(),
                 sequencer: Sequencer::new(
                     grant_id.clone(),
                     media.clone(),

@@ -6,8 +6,46 @@ pub(super) struct WindowsDevice(
     pub Safety,
     pub super::touch::TouchDevice,
     pub super::pan::PanDevice,
+    pub super::gamepad::GamepadDevice,
 );
 impl Device for WindowsDevice {
+    fn reset_gamepad_feedback(&mut self, slot: u8) {
+        self.3.reset_feedback(slot);
+    }
+    fn gamepad_feedback(&mut self) -> Vec<(u8, crate::gamepad::Rumble)> {
+        self.3.feedback()
+    }
+    fn capabilities(&self) -> Vec<crate::devices::Capability> {
+        capabilities(
+            self.pan_supported(),
+            self.touch_supported(),
+            self.3.capability(),
+        )
+    }
+    fn refresh_capabilities(&mut self) {
+        self.3.refresh();
+    }
+    fn submit_gamepad(&mut self, slot: u8, state: crate::gamepad::State) -> Result<(), Error> {
+        self.3.submit(slot, state)
+    }
+    fn mount(&mut self, key: crate::devices::Key) -> Result<(), Error> {
+        match key.kind {
+            crate::devices::Kind::Touchscreen => self.1.mount(),
+            crate::devices::Kind::Gamepad => self.3.mount(key.slot),
+            _ => Ok(()),
+        }
+    }
+    fn unmount(&mut self, key: crate::devices::Key) -> Result<(), Error> {
+        match key.kind {
+            crate::devices::Kind::Touchscreen => {
+                self.1.unmount();
+                Ok(())
+            }
+            crate::devices::Kind::Touchpad => self.2.cancel(),
+            crate::devices::Kind::Gamepad => self.3.unmount(key.slot),
+            _ => Ok(()),
+        }
+    }
     fn pan_supported(&self) -> bool {
         self.2.supported()
     }
@@ -75,6 +113,20 @@ impl Device for WindowsDevice {
             Err(Error::Injection)
         }
     }
+}
+pub(super) fn capabilities(
+    pan: bool,
+    touch: bool,
+    gamepad: crate::devices::Capability,
+) -> Vec<crate::devices::Capability> {
+    use crate::devices::{Capability, Kind};
+    vec![
+        Capability::system(Kind::Keyboard, true),
+        Capability::system(Kind::Mouse, true),
+        Capability::system(Kind::Touchpad, pan),
+        Capability::system(Kind::Touchscreen, touch),
+        gamepad,
+    ]
 }
 fn to_input(action: Action, marker: usize) -> INPUT {
     let keyboard = |scan: u16, flags: KEYBD_EVENT_FLAGS| INPUT {

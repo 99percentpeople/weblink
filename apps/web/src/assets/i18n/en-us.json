@@ -349,11 +349,11 @@
       "touch_heading": "Touch",
       "keyboard": {
         "title": "Forward keyboard input",
-        "description": "In Local cursor mode, clicking the screen forwards supported physical keys using the remote keyboard layout. Capture mode forwards keys only while captured. Use the header switch to turn forwarding off. The manually opened on-screen keyboard works in both modes."
+        "description": "Forward physical keys whenever remote control and this switch are enabled, without clicking the remote screen. Local text fields keep normal typing. Use the header switch to stop forwarding."
       },
       "exit_shortcut": {
         "title": "Release pointer and keyboard shortcut",
-        "description": "Release keyboard input and any captured pointer without ending the control connection. The shortcut also works when keyboard forwarding is off.",
+        "description": "Turn off keyboard forwarding and release any captured pointer without ending the control connection. Turn the keyboard switch back on to resume. The shortcut also works when forwarding is off.",
         "browser": "You can also press Escape to release capture.",
         "native": "With system shortcut forwarding enabled, Escape is sent to the remote computer. Use the shortcut above to release input.",
         "webview": "When using browser key handling, Escape also releases capture."
@@ -375,8 +375,8 @@
         "title": "Pointer behavior",
         "local": "Local cursor",
         "capture": "Capture and hide local cursor",
-        "local_description": "Use the local cursor to point at the remote screen. Click the screen to forward keyboard input; the header switch can turn forwarding off.",
-        "capture_description": "Click the remote screen to capture and hide the local cursor. Only while captured are physical keys forwarded. Use the release shortcut to free both the pointer and keyboard; the control connection stays active."
+        "local_description": "Use the local cursor to point at the remote screen. Keyboard and gamepad forwarding use their own switches and do not require clicking the screen.",
+        "capture_description": "Click the remote screen to capture and hide the local cursor. Keyboard and gamepad forwarding use their own switches and do not require pointer capture."
       },
       "general_heading": "General",
       "cursor_sync": {
@@ -408,6 +408,35 @@
       "file_size_limit": {
         "title": "File transfer size limit",
         "description": "Shared by drag and drop and copy/paste, counting total file bytes per operation. Default: 64 MiB; range: 1–512 MiB. Folders must fit before and after ZIP compression. Changes apply to the next operation."
+      },
+      "gamepad_heading": "Gamepad",
+      "gamepad": {
+        "title": "Forward gamepads",
+        "description": "Forward up to 4 standard browser gamepads while remote control is active and this switch is on. No screen click is needed. Press a gamepad button first if the browser has not detected it.",
+        "vibration": "Vibration feedback",
+        "vibration_description": "Play game vibration on the connected controller when supported by the browser. Stops when control ends.",
+        "strength": "Vibration strength",
+        "dead_zone": "Stick dead zone",
+        "dead_zone_description": "Ignore small stick movements to reduce drift."
+      },
+      "devices": {
+        "title": "Host input devices",
+        "description": "Check which remote inputs this device can receive. Devices are released and unmounted when the session ends.",
+        "keyboard": "Keyboard",
+        "mouse": "Mouse",
+        "touchpad": "Touchpad gestures",
+        "touchscreen": "Touchscreen",
+        "gamepad": "Gamepad",
+        "available": "Available",
+        "unsupported": "Not supported",
+        "driverRequired": "Driver required",
+        "unavailable": "Unavailable",
+        "error": "Unable to check input devices. Try again.",
+        "driver_description": "Windows gamepad forwarding needs an optional driver. Installing it requires administrator approval; Weblink itself runs normally without elevation. After installation, check again.",
+        "install_driver": "Installation guide",
+        "driver_retired": "ViGEmBus has been retired and no longer receives updates.",
+        "checking": "Checking…",
+        "refresh": "Check again"
       }
     },
     "permissions": {
@@ -1291,7 +1320,7 @@
     "keyboard_input": "Type on the remote computer",
     "text_too_long": "Text is too long. Send it in smaller parts.",
     "text_failed": "Input could not be fully sent. Check the remote text before trying again.",
-    "system_keyboard_stopped": "System keyboard forwarding stopped. Click the remote screen to try again, or turn off system shortcuts in Remote control settings.",
+    "system_keyboard_stopped": "System keyboard forwarding stopped. Turn the keyboard switch back on to retry, or turn off system shortcuts in Remote control settings.",
     "capture_failed": "Could not capture the pointer. Click the remote screen to retry, or choose Local cursor in Remote control settings.",
     "capture_unavailable": "This host does not support pointer capture. Choose Local cursor in Remote control settings.",
     "capture_hint": "Click to capture the pointer. Press {{shortcut}} to release the pointer and keyboard.",
@@ -1304,6 +1333,10 @@
       "completed": "Remote file drop completed",
       "failed": "Remote file drop failed",
       "details": "Open the task list for transfer details."
-    }
+    },
+    "gamepad_enable": "Enable gamepad forwarding",
+    "gamepad_disable": "Disable gamepad forwarding",
+    "gamepad_unavailable": "Gamepad forwarding is unavailable on the host. Check Remote control settings on the host.",
+    "gamepad_failed": "The remote gamepad could not be mounted or stopped responding. Check the driver on the host, then reconnect the gamepad."
   }
 }

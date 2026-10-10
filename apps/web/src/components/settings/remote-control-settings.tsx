@@ -31,6 +31,8 @@ import {
   type ClipboardFileDestination,
 } from "@/libs/domain/remote-control/keyboard-options";
 import RemoteKeyboardSettings from "./remote-keyboard-settings";
+import InputDeviceSettings from "./input-device-settings";
+import RemoteGamepadSettings from "./remote-gamepad-settings";
 
 export default function RemoteControlSettings() {
   const clipboardAccess = appState.capabilities.clipboard;
@@ -81,6 +83,7 @@ export default function RemoteControlSettings() {
       id="remote-control-settings"
       title={t("app_menu.settings_remote_control")}
     >
+      <InputDeviceSettings />
       <SettingHeading>
         {t(`${prefix}pointer_heading`)}
       </SettingHeading>
@@ -121,6 +124,10 @@ export default function RemoteControlSettings() {
         {t(`${prefix}keyboard_heading`)}
       </SettingHeading>
       <RemoteKeyboardSettings />
+      <SettingHeading>
+        {t(`${prefix}gamepad_heading`)}
+      </SettingHeading>
+      <RemoteGamepadSettings />
       <SettingHeading
         description={t(`${prefix}description`)}
       >

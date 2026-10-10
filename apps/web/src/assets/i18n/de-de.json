@@ -354,11 +354,11 @@
       "touch_heading": "Touch",
       "keyboard": {
         "title": "Tastatureingaben weiterleiten",
-        "description": "Im lokalen Cursormodus werden durch Klicken auf den Bildschirm unterstützte physische Tasten mithilfe des Remote-Tastaturlayouts weitergeleitet. Der Aufnahmemodus leitet Tasten nur weiter, während sie erfasst werden. Verwenden Sie den Kopfschalter, um die Weiterleitung auszuschalten. Die manuell zu öffnende Bildschirmtastatur funktioniert in beiden Modi."
+        "description": "Leitet physische Tasten bei aktiver Fernsteuerung und eingeschaltetem Schalter weiter, ohne Klick auf den Bildschirm. Lokale Textfelder bleiben normal nutzbar. Mit dem Schalter oben lässt sich die Weiterleitung stoppen."
       },
       "exit_shortcut": {
         "title": "Tastenkombination zum Freigeben von Zeiger und Tastatur",
-        "description": "Geben Sie Tastatureingaben und alle erfassten Zeiger frei, ohne die Steuerverbindung zu beenden. Die Verknüpfung funktioniert auch, wenn die Tastaturweiterleitung deaktiviert ist.",
+        "description": "Schaltet die Tastaturweiterleitung aus und gibt den erfassten Zeiger frei, ohne die Verbindung zu beenden. Zum Fortsetzen den Tastaturschalter einschalten. Das Kürzel funktioniert auch bei ausgeschalteter Weiterleitung.",
         "browser": "Sie können auch Escape drücken, um die Aufnahme freizugeben.",
         "native": "Wenn die Weiterleitung von Systemverknüpfungen aktiviert ist, wird Escape an den Remote-Computer gesendet. Verwenden Sie die obige Verknüpfung, um die Eingabe freizugeben.",
         "webview": "Bei Verwendung der Browser-Tastenbehandlung gibt Escape auch die Erfassung frei."
@@ -380,8 +380,8 @@
         "title": "Zeigerverhalten",
         "local": "Lokaler Cursor",
         "capture": "Lokalen Cursor erfassen und ausblenden",
-        "local_description": "Verwenden Sie den lokalen Cursor, um auf den Remote-Bildschirm zu zeigen. Klicken Sie auf den Bildschirm, um Tastatureingaben weiterzuleiten. Mit dem Header-Schalter kann die Weiterleitung ausgeschaltet werden.",
-        "capture_description": "Klicken Sie auf den Remote-Bildschirm, um den lokalen Cursor zu erfassen und auszublenden. Nur während der Erfassung werden physische Schlüssel weitergeleitet. Verwenden Sie die Freigabetaste, um sowohl den Zeiger als auch die Tastatur freizugeben. Die Steuerverbindung bleibt aktiv."
+        "local_description": "Verwenden Sie den lokalen Cursor auf dem Remote-Bildschirm. Tastatur und Gamepad haben eigene Schalter; ein Klick auf den Bildschirm ist nicht erforderlich.",
+        "capture_description": "Klicke auf den entfernten Bildschirm, um den lokalen Zeiger zu erfassen und auszublenden. Tastatur und Gamepads nutzen eigene Schalter und benötigen keine Zeigererfassung."
       },
       "general_heading": "Allgemein",
       "cursor_sync": {
@@ -413,6 +413,35 @@
       "file_size_limit": {
         "title": "Größenbeschränkung für Dateiübertragungen",
         "description": "Wird per Drag-and-Drop und Kopieren/Einfügen geteilt, wobei die gesamten Dateibytes pro Vorgang gezählt werden. Standard: 64 MiB; Bereich: 1–512 MiB. Ordner müssen vor und nach der ZIP-Komprimierung passen. Änderungen gelten für den nächsten Vorgang."
+      },
+      "gamepad_heading": "Gamepad",
+      "gamepad": {
+        "title": "Gamepads weiterleiten",
+        "description": "Leitet bei aktiver Fernsteuerung und eingeschaltetem Schalter bis zu 4 Standard-Gamepads weiter. Kein Bildschirmklick nötig. Drücke eine Gamepad-Taste, falls es noch nicht erkannt wurde.",
+        "vibration": "Vibrationsfeedback",
+        "vibration_description": "Überträgt Spielvibrationen auf den verbundenen Controller, sofern der Browser dies unterstützt. Stoppt am Ende der Steuerung.",
+        "strength": "Vibrationsstärke",
+        "dead_zone": "Stick-Totzone",
+        "dead_zone_description": "Ignoriert kleine Stickbewegungen, um Drift zu reduzieren."
+      },
+      "devices": {
+        "title": "Eingabegeräte dieses Computers",
+        "description": "Prüfen Sie, welche Ferneingaben dieses Gerät empfangen kann. Die Geräte werden am Sitzungsende freigegeben und getrennt.",
+        "keyboard": "Tastatur",
+        "mouse": "Maus",
+        "touchpad": "Touchpad-Gesten",
+        "touchscreen": "Touchscreen",
+        "gamepad": "Gamepad",
+        "available": "Verfügbar",
+        "unsupported": "Nicht unterstützt",
+        "driverRequired": "Treiber erforderlich",
+        "unavailable": "Nicht verfügbar",
+        "error": "Eingabegeräte konnten nicht geprüft werden. Erneut versuchen.",
+        "driver_description": "Für Gamepads unter Windows ist ein optionaler Treiber erforderlich. Die Installation benötigt Administratorrechte; Weblink selbst läuft ohne erhöhte Rechte. Danach erneut prüfen.",
+        "install_driver": "Installationsanleitung",
+        "driver_retired": "ViGEmBus wird nicht mehr gepflegt und erhält keine Updates.",
+        "checking": "Wird geprüft…",
+        "refresh": "Erneut prüfen"
       }
     },
     "permissions": {
@@ -1291,7 +1320,7 @@
     "keyboard_input": "Geben Sie auf dem Remote-Computer ein",
     "text_too_long": "Der Text ist zu lang. Versenden Sie es in kleineren Teilen.",
     "text_failed": "Die Eingabe konnte nicht vollständig gesendet werden. Überprüfen Sie den Remote-Text, bevor Sie es erneut versuchen.",
-    "system_keyboard_stopped": "Die Weiterleitung der Systemtastatur wurde gestoppt. Klicken Sie auf den Remote-Bildschirm, um es erneut zu versuchen, oder deaktivieren Sie die Systemverknüpfungen in den Fernsteuerungseinstellungen.",
+    "system_keyboard_stopped": "Die Systemtastaturweiterleitung wurde beendet. Schalte die Tastatur erneut ein oder deaktiviere Systemtastenkürzel in den Fernsteuerungseinstellungen.",
     "capture_failed": "Der Zeiger konnte nicht erfasst werden. Klicken Sie auf den Remote-Bildschirm, um es erneut zu versuchen, oder wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
     "capture_unavailable": "Dieser Host unterstützt keine Zeigererfassung. Wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
     "capture_hint": "Klicken Sie, um den Zeiger zu erfassen. Drücken Sie {{shortcut}}, um den Zeiger und die Tastatur freizugeben.",
@@ -1304,6 +1333,10 @@
       "completed": "Ablegen der Dateien auf dem entfernten Computer abgeschlossen",
       "failed": "Ablegen der Dateien auf dem entfernten Computer fehlgeschlagen",
       "details": "Öffnen Sie die Aufgabenliste für Übertragungsdetails."
-    }
+    },
+    "gamepad_enable": "Gamepad-Weiterleitung aktivieren",
+    "gamepad_disable": "Gamepad-Weiterleitung deaktivieren",
+    "gamepad_unavailable": "Gamepad-Weiterleitung ist auf dem Host nicht verfügbar. Prüfe dort die Fernsteuerungseinstellungen.",
+    "gamepad_failed": "Das entfernte Gamepad konnte nicht verbunden werden oder reagiert nicht mehr. Treiber auf dem Host prüfen und Gamepad erneut verbinden."
   }
 }
