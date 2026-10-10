@@ -1,6 +1,8 @@
 use super::{
-    binding::GeometrySource, input_error, transport::Endpoint, ControlEvent, Observer, Pending,
-    Snapshot,
+    binding::{GeometryChanges, GeometrySource, GeometryWatches},
+    input_error,
+    transport::Endpoint,
+    ControlEvent, Observer, Pending, Snapshot,
 };
 use std::{
     collections::HashMap,
@@ -20,7 +22,8 @@ pub(super) struct Peer {
     pub(super) endpoint: Arc<Endpoint>,
     pub(super) capture: Arc<dyn GeometrySource>,
     pub(super) ready: bool,
-    pub(super) last_geometry: Instant,
+    geometry_revision: u64,
+    geometry_changes: Arc<GeometryChanges>,
     pub(super) display: weblink_desktop_input::input::Rect,
     cursor_visibility: bool,
     cursor_visible: bool,
@@ -52,6 +55,7 @@ pub(super) struct Host {
     pub(super) wake: Option<std::thread::Thread>,
     pub(super) worker: Box<dyn Session>,
     pub(super) peers: HashMap<String, Peer>,
+    pub(super) geometry_watches: GeometryWatches,
     pub(super) pending: Option<Consent>,
     pub(super) active: Option<Active>,
     pub(super) cursor: super::cursor::Monitor,
@@ -68,6 +72,9 @@ impl Host {
         let binding = target.binding.clone();
         let media = binding.target.media_id.clone();
         let endpoint = Arc::new(Endpoint::new(self.wake.clone()));
+        let geometry_changes =
+            self.geometry_watches
+                .subscribe(capture.clone(), &binding, self.wake.clone())?;
         if self.peers.contains_key(&media)
             || !self
                 .worker
@@ -87,7 +94,8 @@ impl Host {
                 endpoint: endpoint.clone(),
                 capture,
                 ready: false,
-                last_geometry: Instant::now(),
+                geometry_revision: 0,
+                geometry_changes,
             },
         );
         if let Some(wake) = &self.wake {
@@ -198,8 +206,9 @@ impl Host {
         let ids: Vec<_> = self.peers.keys().cloned().collect();
         for id in ids {
             let peer = self.peers.get_mut(&id).unwrap();
-            if now.duration_since(peer.last_geometry) >= Duration::from_millis(100) {
-                peer.last_geometry = now;
+            let geometry_revision = peer.geometry_changes.revision();
+            if peer.geometry_revision != geometry_revision {
+                peer.geometry_revision = geometry_revision;
                 if !peer.capture.is_current(&peer.binding) {
                     peer.endpoint.closed();
                 }
@@ -268,7 +277,18 @@ impl Host {
         }
         self.sample_cursor();
     }
+    pub(super) fn wait_duration(&self, now: Instant) -> Option<Duration> {
+        let consent = self
+            .pending
+            .as_ref()
+            .map(|p| (p.requested + Duration::from_secs(30)).saturating_duration_since(now));
+        consent
+            .into_iter()
+            .chain(self.cursor.wait_duration(now))
+            .min()
+    }
     fn sample_cursor(&mut self) {
+        self.cursor.observe_activity(self.worker.pointer_activity());
         if !self.cursor.due(Instant::now()) {
             return;
         }
@@ -286,7 +306,6 @@ impl Host {
             self.cursor.cancel();
             return;
         }
-        self.cursor.observe_activity(self.worker.pointer_activity());
         if let Some(update) = self.cursor.sample(Instant::now()) {
             let watch = &update.watch;
             if self.active.as_ref().is_some_and(|a| {

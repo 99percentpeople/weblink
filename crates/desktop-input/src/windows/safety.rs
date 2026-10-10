@@ -5,11 +5,11 @@ use crate::shortcut::Shortcut;
 use std::{
     cell::RefCell,
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
-        mpsc, Arc,
+        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
+        mpsc, Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use windows::{
     core::{w, HSTRING},
@@ -17,13 +17,12 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::{
-            LibraryLoader::GetModuleHandleW,
-            RemoteDesktop::*,
-            Threading::{GetCurrentProcessId, GetCurrentThreadId},
+            LibraryLoader::GetModuleHandleW, RemoteDesktop::*, Threading::GetCurrentProcessId,
         },
         UI::{HiDpi::*, WindowsAndMessaging::*},
     },
 };
+mod events;
 
 pub(super) const INVALIDATED: u8 = 2;
 pub(super) struct Observations {
@@ -33,6 +32,7 @@ pub(super) struct Observations {
     grant_epoch: AtomicU64,
     emergency_epoch: AtomicU64,
     pointer_activity: AtomicU64,
+    pointer_changed: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl Observations {
     pub fn new() -> Self {
@@ -43,6 +43,7 @@ impl Observations {
             grant_epoch: AtomicU64::new(0),
             emergency_epoch: AtomicU64::new(0),
             pointer_activity: AtomicU64::new(0),
+            pointer_changed: Mutex::new(None),
         }
     }
     pub fn authorize(&self, epoch: u64) {
@@ -53,14 +54,28 @@ impl Observations {
     }
     pub fn pointer_moved(&self, local: bool) {
         if self.grant_epoch() != 0 && !self.closed.load(Ordering::Acquire) {
-            // One atomic snapshot carries both sequence and origin. No allocation,
-            // locking, polling wakeups or per-movement network messages.
+            // One atomic snapshot carries both sequence and origin. The observer
+            // only coalesces invalidations; no pixels or network traffic in hooks.
             let _ =
                 self.pointer_activity
                     .fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
                         Some((old.wrapping_add(2) & !1) | u64::from(local))
                     });
+            let changed = self
+                .pointer_changed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            if let Some(changed) = changed {
+                changed();
+            }
         }
+    }
+    pub fn observe_pointer(&self, changed: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self
+            .pointer_changed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = changed;
     }
     pub fn pointer_activity(&self) -> crate::session::PointerActivity {
         let value = self.pointer_activity.load(Ordering::Acquire);
@@ -149,6 +164,7 @@ struct Listener {
     hwnd: HWND,
     hotkey: Option<ShortcutListener>,
     pointer: Option<super::pointer_observer::Listener>,
+    desktop: Option<events::DesktopSwitch>,
     session: bool,
     class: HSTRING,
     old_dpi: DPI_AWARENESS_CONTEXT,
@@ -207,6 +223,7 @@ impl Listener {
                     hwnd,
                     hotkey: None,
                     pointer: None,
+                    desktop: None,
                     session: false,
                     class,
                     old_dpi,
@@ -220,6 +237,11 @@ impl Listener {
                 WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)
                     .map_err(|_| Error::Unavailable)?;
                 s.session = true;
+                s.desktop = Some(events::DesktopSwitch::new()?);
+                // Check again after registration to cover a switch during setup.
+                if !desktop_available() || super::environment::layout().as_ref() != Ok(&s.layout) {
+                    return Err(Error::Unavailable);
+                }
                 Ok(s)
             })();
             if init.is_err() {
@@ -234,6 +256,7 @@ impl Drop for Listener {
         unsafe {
             self.hotkey.take();
             self.pointer.take();
+            self.desktop.take();
             if self.session {
                 let _ = WTSUnRegisterSessionNotification(self.hwnd);
             }
@@ -252,14 +275,18 @@ impl Drop for ObserverExit {
 }
 
 #[derive(Clone)]
-pub(super) struct ShortcutControl(
-    mpsc::SyncSender<(Shortcut, mpsc::SyncSender<Result<(), Error>>)>,
-);
+pub(super) struct ShortcutControl {
+    send: mpsc::SyncSender<(Shortcut, mpsc::SyncSender<Result<(), Error>>)>,
+    wake: Arc<events::Wake>,
+}
 impl ShortcutControl {
     pub fn configure(&self, shortcut: Shortcut) -> Result<(), Error> {
         let (send, receive) = mpsc::sync_channel(1);
-        self.0.send((shortcut, send)).map_err(|_| Error::Closed)?;
-        // Listener processes requests every <=100ms; channel disconnect also wakes this wait.
+        self.send
+            .send((shortcut, send))
+            .map_err(|_| Error::Closed)?;
+        self.wake.notify();
+        // The command wakes the message owner; disconnect also wakes the reply.
         // No timeout that could report failure followed by a late successful update.
         receive.recv().map_err(|_| Error::Closed)?
     }
@@ -270,7 +297,7 @@ pub(super) struct Safety {
     pub shortcut: ShortcutControl,
     stop: Arc<AtomicBool>,
     listener: Option<JoinHandle<()>>,
-    listener_id: Arc<AtomicU32>,
+    wake: Arc<events::Wake>,
     _dpi: InputDpi,
     pub layout: Layout,
     pub marker: usize,
@@ -286,8 +313,8 @@ impl Safety {
         let stop = Arc::new(AtomicBool::new(false));
         let shared = observations.clone();
         let stopping = stop.clone();
-        let listener_id = Arc::new(AtomicU32::new(0));
-        let id = listener_id.clone();
+        let wake = Arc::new(events::Wake::new()?);
+        let notified = wake.clone();
         let (ready, initialized) = mpsc::sync_channel(1);
         let (configure, requests) =
             mpsc::sync_channel::<(Shortcut, mpsc::SyncSender<Result<(), Error>>)>(1);
@@ -302,9 +329,7 @@ impl Safety {
                         return;
                     }
                 };
-                id.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
                 let _ = ready.send(Ok(native.layout.clone()));
-                let mut poll = Instant::now();
                 while !stopping.load(Ordering::Acquire) {
                     pump();
                     while let Ok((shortcut, reply)) = requests.try_recv() {
@@ -318,41 +343,29 @@ impl Safety {
                     if stopping.load(Ordering::Acquire) {
                         break;
                     }
-                    if poll.elapsed() >= Duration::from_millis(100) {
-                        if !desktop_available() || layout().as_ref() != Ok(&native.layout) {
-                            shared.signal(INVALIDATED);
-                        }
-                        poll = Instant::now();
-                    }
-                    // Wake on lifecycle/input messages, not a polling sleep. Never run SendInput here.
+                    // Display/settings/session messages and the desktop-switch
+                    // hook cover environment changes. Local commands and stop
+                    // signal the event, including before this wait starts.
                     unsafe {
-                        let wait = Duration::from_millis(100)
-                            .saturating_sub(poll.elapsed())
-                            .as_millis()
-                            .max(1) as u32;
-                        if MsgWaitForMultipleObjectsEx(None, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
-                            == WAIT_FAILED
+                        if MsgWaitForMultipleObjectsEx(
+                            Some(&[notified.handle()]),
+                            u32::MAX,
+                            QS_ALLINPUT,
+                            MWMO_INPUTAVAILABLE,
+                        ) == WAIT_FAILED
                         {
                             shared.signal(INVALIDATED);
                             break;
                         }
                     }
                 }
-                id.store(0, Ordering::Release);
             })
             .map_err(|_| Error::Unavailable)?;
         let layout = match initialized.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(layout)) => layout,
             result => {
                 stop.store(true, Ordering::Release);
-                unsafe {
-                    let _ = PostThreadMessageW(
-                        listener_id.load(Ordering::Acquire),
-                        WM_NULL,
-                        WPARAM(0),
-                        LPARAM(0),
-                    );
-                }
+                wake.notify();
                 let _ = listener.join();
                 return Err(match result {
                     Ok(Err(e)) => e,
@@ -362,10 +375,13 @@ impl Safety {
         };
         let safety = Self {
             observations,
-            shortcut: ShortcutControl(configure),
+            shortcut: ShortcutControl {
+                send: configure,
+                wake: wake.clone(),
+            },
             stop,
             listener: Some(listener),
-            listener_id,
+            wake,
             _dpi: dpi,
             layout,
             marker,
@@ -412,14 +428,7 @@ impl Safety {
 impl Drop for Safety {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        unsafe {
-            let _ = PostThreadMessageW(
-                self.listener_id.load(Ordering::Acquire),
-                WM_NULL,
-                WPARAM(0),
-                LPARAM(0),
-            );
-        }
+        self.wake.notify();
         if let Some(listener) = self.listener.take() {
             let _ = listener.join();
         }
@@ -429,6 +438,31 @@ impl Drop for Safety {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "Requires an unlocked Windows desktop; installs passive listeners and sends no input"]
+    fn native_safety_commands_and_shutdown_wake_an_idle_listener() {
+        let (ready, initialized) = mpsc::channel();
+        let (stop, stopping) = mpsc::channel();
+        let (done, finished) = mpsc::channel();
+        let owner = thread::spawn(move || {
+            let safety = Safety::new(None, Shortcut::default()).unwrap();
+            ready.send(safety.shortcut.clone()).unwrap();
+            stopping.recv().unwrap();
+            drop(safety);
+            done.send(()).unwrap();
+        });
+        let shortcut = initialized.recv_timeout(Duration::from_secs(5)).unwrap();
+        // No input, settings messages or periodic environment scan is required
+        // for this command to reach the message owner's blocking wait.
+        shortcut
+            .configure("ctrl-alt-shift-f9".to_owned().try_into().unwrap())
+            .unwrap();
+        shortcut.configure(Shortcut::default()).unwrap();
+        stop.send(()).unwrap();
+        finished.recv_timeout(Duration::from_secs(2)).unwrap();
+        owner.join().unwrap();
+        assert_eq!(shortcut.configure(Shortcut::default()), Err(Error::Closed));
+    }
     #[test]
     fn mouse_origin_observation_requires_a_live_grant_and_retains_native_order() {
         let observations = Observations::new();

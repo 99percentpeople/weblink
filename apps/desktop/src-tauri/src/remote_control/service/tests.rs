@@ -213,8 +213,25 @@ impl Drop for TestSession {
         self.shutdown();
     }
 }
-struct Source(AtomicBool, AtomicBool);
+struct Source(
+    AtomicBool,
+    AtomicBool,
+    Mutex<HashMap<String, Box<dyn Fn() + Send>>>,
+);
 impl GeometrySource for Source {
+    fn watch(
+        self: Arc<Self>,
+        _: &Binding,
+        changed: Box<dyn Fn() + Send>,
+    ) -> Result<crate::remote_control::binding::GeometryWatch, String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.2.lock().unwrap().insert(id.clone(), changed);
+        Ok(crate::remote_control::binding::GeometryWatch::new(
+            move || {
+                self.2.lock().unwrap().remove(&id);
+            },
+        ))
+    }
     fn cursor_visibility_supported(&self, _: &Binding) -> bool {
         true
     }
@@ -420,7 +437,11 @@ impl Rig {
         let owner = service
             .start(|| Ok(Box::new(TestSession::new(state.clone()))))
             .unwrap();
-        let source = Arc::new(Source(AtomicBool::new(true), AtomicBool::new(true)));
+        let source = Arc::new(Source(
+            AtomicBool::new(true),
+            AtomicBool::new(true),
+            Mutex::default(),
+        ));
         let endpoint = service
             .owner(&owner)
             .unwrap()
@@ -1051,19 +1072,52 @@ fn source_end_cancels_pending_consent_and_geometry_change_releases_active_input(
     let grant = rig.approve();
     rig.activate_and_hold(&grant, 1);
     rig.source.0.store(false, Ordering::Release);
-    rig.service
-        .owner(&rig.owner)
-        .unwrap()
-        .host
-        .lock()
-        .unwrap()
-        .peers
-        .get_mut("media")
-        .unwrap()
-        .last_geometry = Instant::now() - Duration::from_secs(1);
+    for changed in rig.source.2.lock().unwrap().values() {
+        changed();
+    }
     rig.tick();
     assert!(rig.endpoint.is_closed());
     rig.released();
+}
+
+#[test]
+fn connected_host_sleeps_until_capture_invalidation_and_unsubscribes_on_removal() {
+    let rig = Rig::new();
+    thread::sleep(Duration::from_millis(60));
+    let reads = rig.state.status_reads.load(Ordering::Relaxed);
+    thread::sleep(Duration::from_millis(350));
+    assert_eq!(rig.state.status_reads.load(Ordering::Relaxed), reads);
+    rig.source.0.store(false, Ordering::Release);
+    for changed in rig.source.2.lock().unwrap().values() {
+        changed();
+    }
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while !rig.endpoint.is_closed() {
+        assert!(
+            Instant::now() < deadline,
+            "Capture notification did not wake host"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    rig.service.close();
+    assert!(rig.source.2.lock().unwrap().is_empty());
+}
+
+#[test]
+fn viewers_share_one_capture_subscription_until_the_last_peer_leaves() {
+    let rig = Rig::new();
+    let owner = rig.service.owner(&rig.owner).unwrap();
+    let mut host = owner.host.lock().unwrap();
+    host.register(
+        rig.source.clone(),
+        target(&rig.owner, "capture", "other-viewer"),
+    )
+    .unwrap();
+    assert_eq!(rig.source.2.lock().unwrap().len(), 1);
+    host.remove_peer("media");
+    assert_eq!(rig.source.2.lock().unwrap().len(), 1);
+    host.remove_peer("other-viewer");
+    assert!(rig.source.2.lock().unwrap().is_empty());
 }
 
 #[test]

@@ -1,6 +1,9 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn observe_pointer(&self, changed: Option<Arc<dyn Fn() + Send + Sync>>) {
+        self.observations.observe_pointer(changed);
+    }
     fn pointer_activity(&self) -> crate::session::PointerActivity {
         self.observations.pointer_activity()
     }

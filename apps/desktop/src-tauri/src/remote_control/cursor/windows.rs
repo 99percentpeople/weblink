@@ -14,6 +14,7 @@ use windows::Win32::{
 const MAX_SIZE: i32 = 128;
 const MAX_PNG: usize = 16 * 1024;
 mod animation;
+pub(super) mod events;
 
 #[derive(Default)]
 pub(super) struct Detector {
@@ -21,6 +22,9 @@ pub(super) struct Detector {
     cached: Option<(usize, u32, Instant, Shape)>,
 }
 impl Detector {
+    pub(super) fn invalidate(&mut self) {
+        self.cached = None;
+    }
     pub(super) fn read(&mut self, display: Rect) -> Shape {
         let mut info = CURSORINFO {
             cbSize: size_of::<CURSORINFO>() as u32,

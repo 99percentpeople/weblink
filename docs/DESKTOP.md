@@ -930,8 +930,12 @@ it restores the default local cursor and switches to an ownership-only subscript
 (`appearance: false`), which never captures or transmits image resources. Local mouse
 mode subscribes with `cursor-watch` while the mouse is over the active video or
 has a captured drag. `cursor-state` snapshots carry the grant, input epoch,
-watch ID, increasing sequence, `owner` (`host` or `viewer`) and shape. The native control actor samples at
-most every 32 ms while subscribed and sends only changes; congestion replaces
+watch ID, increasing sequence, `owner` (`host` or `viewer`) and shape. Windows cursor
+shape/visibility events and the existing native movement observer invalidate the
+snapshot. The control actor samples only after an invalidation, coalescing changes
+to at most one sample every 32 ms; an unchanged cursor has no sampling timer.
+Shape events invalidate bitmap caches even when Windows reuses a cursor handle.
+The actor sends only changes; congestion replaces
 queued snapshots with the latest one. Pause, revocation, disconnect and leaving
 the surface stop the subscription. Text-focus subscriptions are independent.
 
@@ -1397,6 +1401,10 @@ local to the capture service lifetime. Native `display_geometry(session_id)` als
 requires an active monitor capture and does not renew its lease. This inventory
 is not an authorization or a display-change subscription; input integration must
 invalidate ownership on topology/session events as well as query failures.
+The control owner subscribes to capture lifecycle/dimension changes and revalidates
+the bound geometry when notified, without a periodic capture-status query. Viewers
+of one capture share a subscription; the last peer leaving cancels it. Native input environment notifications separately
+invalidate topology/session changes that do not resize the captured source.
 Windows queries use [EnumDisplaySettingsExW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsexw)
 for physical pixels independent of DPI virtualization.
 
@@ -1429,7 +1437,11 @@ epoch and movement barriers before enqueueing input. Queue acceptance and succes
 do not prove that the target application rendered an action.
 
 An independent native thread pumps keyboard and system notifications; it never
-injects input or waits for the input worker. The input worker checks the two-second
+injects input or waits for the input worker. Display/settings/session messages and
+the desktop-switch WinEvent invalidate its environment. Shortcut reconfiguration
+and shutdown signal a waitable event, so this listener needs no periodic desktop
+enumeration. The input worker retains its bounded authorization recheck for external
+invalidation flags, and checks the two-second
 heartbeat deadline without frontend timers. The host does not use ordinary local
 input or idle time as an interruption signal: using this computer, including its Weblink window, does not
 interrupt remote control or prevent local approval. Explicit revoke and the

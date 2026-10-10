@@ -9,7 +9,7 @@ use std::{
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use weblink_desktop_capture::{media::control::Port, CaptureService};
 use weblink_desktop_input::{
@@ -210,6 +210,7 @@ impl Service {
                 wake: None,
                 worker,
                 peers: HashMap::new(),
+                geometry_watches: Default::default(),
                 pending: None,
                 active: None,
                 text_focus: Default::default(),
@@ -230,6 +231,9 @@ impl Service {
                 let notified = weak.upgrade().is_some_and(|owner| {
                     let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
                     host.text_focus.set_waker(thread::current());
+                    host.cursor.set_waker(thread::current());
+                    host.worker
+                        .observe_pointer(Some(host.cursor.pointer_changed()));
                     host.worker.set_waker(thread::current())
                 });
                 while let Some(owner) = weak.upgrade() {
@@ -248,24 +252,27 @@ impl Service {
                         owner.watch.lock().unwrap_or_else(|e| e.into_inner()).take();
                         break;
                     }
-                    let (active, cursor) = {
+                    let wait = {
                         let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
                         host.tick();
                         owner.publish(host.snapshot());
-                        (!host.peers.is_empty(), host.cursor.watching())
+                        host.wait_duration(Instant::now())
                     };
                     drop(owner);
-                    // Channel arrivals wake this wait immediately. The timeout
-                    // still services safety/liveness state without incoming input.
-                    // unpark retains a token when arrival races with this park.
-                    if active || !notified {
-                        thread::park_timeout(if cursor {
-                            super::cursor::INTERVAL
-                        } else {
-                            Duration::from_millis(100)
-                        });
+                    // Channels, capture, pointer and backend status wake the owner.
+                    // Only pending consent / changed-cursor rate limiting need a
+                    // deadline. Unknown backends retain their existing safety bound.
+                    let wait = if notified {
+                        wait
                     } else {
-                        thread::park();
+                        Some(
+                            wait.unwrap_or(Duration::from_millis(100))
+                                .min(Duration::from_millis(100)),
+                        )
+                    };
+                    match wait {
+                        Some(wait) => thread::park_timeout(wait),
+                        None => thread::park(),
                     }
                 }
             })

@@ -18,6 +18,9 @@ pub struct PointerActivity {
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    /// Install a lightweight invalidation callback for pointer movement. It runs
+    /// on the native hook thread and must only notify, never query or inject input.
+    fn observe_pointer(&self, _changed: Option<Arc<dyn Fn() + Send + Sync>>) {}
     fn pointer_activity(&self) -> PointerActivity {
         PointerActivity::default()
     }
