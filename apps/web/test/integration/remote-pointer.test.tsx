@@ -365,6 +365,136 @@ it.each([
     }
   },
 );
+it.each([false, true])(
+  "keeps input sessions when entering and leaving fullscreen with native keyboard=%s",
+  async (native) => {
+    fixture.control.gamepadCapacity = 4;
+    let frameId = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.spyOn(
+      window,
+      "requestAnimationFrame",
+    ).mockImplementation((callback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    });
+    vi.spyOn(
+      window,
+      "cancelAnimationFrame",
+    ).mockImplementation((id) => {
+      frames.delete(id);
+    });
+    const frame = () => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      callbacks.forEach((callback) =>
+        callback(performance.now()),
+      );
+    };
+    const pad = {
+      index: 0,
+      id: "standard-pad",
+      connected: true,
+      mapping: "standard",
+      axes: [0, 0, 0, 0],
+      buttons: [],
+    };
+    vi.stubGlobal(
+      "navigator",
+      Object.assign(Object.create(navigator), {
+        getGamepads: () => [pad],
+      }),
+    );
+    const close = vi.fn(async () => {});
+    const start = vi.fn(async () => ({
+      close,
+      renew: vi.fn(async () => {}),
+    }));
+    if (native) {
+      Object.assign(platform, {
+        keyboard: {
+          supported: vi.fn(async () => true),
+          start,
+        },
+      });
+      setAppState("capabilities", "runtime", {
+        runtime: "desktop",
+        os: "windows",
+        version: null,
+        nativeScreenCapture: false,
+        displayRefreshRates: [],
+        remoteInput: true,
+        systemKeyboard: true,
+      });
+    }
+    const [enabled, setEnabled] = createSignal(true);
+    const [fullscreen, setFullscreen] = createSignal(false);
+    const [layoutVisible] = createSignal(true);
+    // MeetingTile derives enabled from fullscreen/layout. The dependencies
+    // change on presentation transitions even while the value remains true.
+    render(() => (
+      <RemoteControlOverlay
+        enabled={
+          enabled() && (fullscreen() || layoutVisible())
+        }
+      />
+    ));
+    await Promise.resolve();
+    frame();
+    const connection =
+      fixture.control.input.mock.calls.find(
+        ([event]: [{ action: string }]) =>
+          event.action === "connect",
+      )[0];
+    fixture.control.resetInput.mockClear();
+    for (const active of [true, false, true, false]) {
+      setFullscreen(active);
+      fireEvent(document, new Event("fullscreenchange"));
+      await Promise.resolve();
+      frame();
+    }
+    expect(
+      fixture.control.input.mock.calls.filter(
+        ([event]: [{ action: string }]) =>
+          event.action === "connect",
+      ),
+    ).toHaveLength(1);
+    expect(
+      fixture.control.input.mock.calls.some(
+        ([event]: [{ action: string }]) =>
+          event.action === "disconnect",
+      ),
+    ).toBe(false);
+    expect(
+      fixture.control.resetInput,
+    ).not.toHaveBeenCalled();
+    expect(
+      fixture.control.watchGamepads,
+    ).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledTimes(native ? 1 : 0);
+    expect(close).not.toHaveBeenCalled();
+    pad.axes[0] = 0.75;
+    frame();
+    expect(fixture.control.input).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "gamepad",
+        action: "state",
+        id: connection.id,
+        state: expect.objectContaining({
+          axes: [0.75, 0, 0, 0],
+        }),
+      }),
+    );
+    setEnabled(false);
+    expect(fixture.control.input).toHaveBeenCalledWith({
+      type: "gamepad",
+      action: "disconnect",
+      id: connection.id,
+      slot: connection.slot,
+    });
+    expect(close).toHaveBeenCalledTimes(native ? 1 : 0);
+  },
+);
 function mouse(phase: string, button = 0) {
   const event = new MouseEvent(`pointer${phase}`, {
     bubbles: true,

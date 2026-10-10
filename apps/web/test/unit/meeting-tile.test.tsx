@@ -560,6 +560,7 @@ describe("native PiP on a meeting tile", () => {
 
 it("enables remote input for an unpinned fullscreen tile and releases it on exit", () => {
   class Control extends EventTarget {
+    gamepadSlots = () => 0;
     state = () => "active";
     supportsText = () => false;
     supportsKeyboard = () => false;
@@ -581,6 +582,7 @@ it("enables remote input for an unpinned fullscreen tile and releases it on exit
 
 it("keeps non-fullscreen keyboard input alive when IME collapses the meeting layout", () => {
   class Control extends EventTarget {
+    gamepadSlots = () => 0;
     state = () => "active";
     supportsText = () => true;
     supportsKeyboard = () => true;
@@ -626,6 +628,7 @@ it("keeps non-fullscreen keyboard input alive when IME collapses the meeting lay
 
 it("keeps one remote control action across request, cancellation, active control and recovery", () => {
   class Control extends EventTarget {
+    gamepadSlots = () => 0;
     value = "viewing";
     state = () => this.value;
     update(value: string) {
@@ -752,6 +755,7 @@ it("synchronizes the screen peer clipboard without adding action buttons", () =>
     write: true,
   });
   class Control extends EventTarget {
+    gamepadSlots = () => 0;
     state = () => "active";
     supportsText = () => false;
     supportsKeyboard = () => false;

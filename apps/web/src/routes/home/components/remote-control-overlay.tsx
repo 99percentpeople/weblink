@@ -48,8 +48,11 @@ export function RemoteControlOverlay(props: {
   const { control, state } = createVideoRemoteControl();
   const [surface, setSurface] =
     createSignal<HTMLDivElement>();
+  // Fullscreen/layout dependencies can change while control stays enabled.
+  // Resource owners must restart only when the effective value changes.
+  const enabled = createMemo(() => props.enabled);
   const interactive = () =>
-    props.enabled &&
+    enabled() &&
     (state() === "active" || state() === "activating");
   let captureClick = false;
   const held = new Set<number>();
@@ -92,7 +95,7 @@ export function RemoteControlOverlay(props: {
   const cursorStyle = createRemoteCursor(
     control,
     () =>
-      props.enabled &&
+      enabled() &&
       state() === "active" &&
       !captureMode() &&
       (mouseInside() || mouseDragging()),
@@ -137,9 +140,7 @@ export function RemoteControlOverlay(props: {
   const capture = createRemotePointerCapture({
     element: surface,
     enabled: () =>
-      props.enabled &&
-      state() === "active" &&
-      captureMode(),
+      enabled() && state() === "active" && captureMode(),
     released: resetInput,
     failed: () =>
       toast.error(t("remote_control.capture_failed")),
@@ -152,7 +153,7 @@ export function RemoteControlOverlay(props: {
   const [localEditing, setLocalEditing] =
     createSignal(false);
   const sessionInputActive = () =>
-    props.enabled && pageActive() && state() === "active";
+    enabled() && pageActive() && state() === "active";
   const keyboardActive = () =>
     sessionInputActive() && !localEditing();
   createEffect(() => {
@@ -589,7 +590,7 @@ export function RemoteControlOverlay(props: {
   };
   createEffect(() => {
     const element = surface();
-    if (!element || !props.enabled) return;
+    if (!element || !enabled()) return;
     const doc = element.ownerDocument;
     const win = doc.defaultView ?? window;
     const life = new AbortController();
@@ -773,7 +774,7 @@ export function RemoteControlOverlay(props: {
     const keyboard = pendingKeyboard;
     pendingKeyboard = undefined;
     if (
-      props.enabled &&
+      enabled() &&
       keyboard === props.keyboard?.() &&
       keyboard?.available()
     )
@@ -873,7 +874,7 @@ export function RemoteControlOverlay(props: {
     });
   };
   return (
-    <Show when={props.enabled && state() !== "unavailable"}>
+    <Show when={enabled() && state() !== "unavailable"}>
       <RemoteFileDropArea
         active={interactive()}
         enabled={pointerOptions().fileDrop}
