@@ -9,6 +9,9 @@ use std::{
 
 mod backend;
 mod cursor;
+// Production event producers are Windows-only until another native backend exists.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+mod lifecycle;
 mod observers;
 pub use observers::StatusObserver;
 pub mod geometry;
@@ -131,6 +134,8 @@ struct Frames {
     height: u32,
     last: Option<Instant>,
     closed: bool,
+    #[cfg_attr(not(any(windows, test)), allow(dead_code))]
+    changed: lifecycle::Changed,
     /// Apply before capture starts, so queued startup frames cannot contain a cursor.
     cursor_hidden: bool,
     media: Option<Arc<media::MediaSession>>,
@@ -139,6 +144,23 @@ struct Frames {
     /// Picker snapshots must not introduce WGC's capture indicator.
     #[cfg(windows)]
     thumbnail: bool,
+}
+
+#[cfg(any(windows, test))]
+impl Frames {
+    fn arrived(&mut self, width: u32, height: u32, now: Instant) {
+        self.count += 1;
+        self.last = Some(now);
+        if (self.width, self.height) != (width, height) {
+            (self.width, self.height) = (width, height);
+            self.changed.notify();
+        }
+    }
+    fn finish(&mut self) {
+        if !std::mem::replace(&mut self.closed, true) {
+            self.changed.notify();
+        }
+    }
 }
 
 trait Session {
@@ -206,6 +228,7 @@ struct Engine<B> {
     next_id: u64,
     layout: geometry::LayoutTracker,
     observers: observers::Observers,
+    changed: lifecycle::Changed,
 }
 
 impl<B: Backend> Engine<B> {
@@ -217,6 +240,7 @@ impl<B: Backend> Engine<B> {
             next_id: 0,
             layout: geometry::LayoutTracker::default(),
             observers: Default::default(),
+            changed: Default::default(),
         }
     }
 
@@ -291,6 +315,7 @@ impl<B: Backend> Engine<B> {
             #[cfg(windows)]
             sink,
             media,
+            changed: self.changed.clone(),
             ..Frames::default()
         }));
         let Opened {
@@ -298,6 +323,9 @@ impl<B: Backend> Engine<B> {
             source,
             method,
         } = self.open(source_id, options, frames.clone())?;
+        if let Some(media) = &frames.lock().unwrap_or_else(|e| e.into_inner()).media {
+            media.set_changed(self.changed.clone());
+        }
         let started = Instant::now();
         self.next_id += 1;
         let id = self.next_id.to_string();
@@ -407,6 +435,7 @@ impl<B: Backend> Engine<B> {
             .clone();
         let media_error = media.as_ref().and_then(|m| m.error());
         if let Some(media) = media {
+            media.set_changed(Default::default());
             media.close();
         }
         let result = active
@@ -460,6 +489,10 @@ impl<B: Backend> Engine<B> {
             Self::sample(active, now);
             self.observers.notify(&active.status);
         }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.active.values().map(|a| a.heartbeat + LEASE).min()
     }
 
     fn status(&mut self, id: &str, now: Instant) -> Result<CaptureStatus> {
@@ -531,6 +564,7 @@ type CaptureSink = Arc<dyn surface::FrameSink>;
 type CaptureSink = ();
 
 enum Command {
+    Changed,
     CursorSupported(String, mpsc::Sender<bool>),
     CursorVisible(String, bool, mpsc::Sender<Result<()>>),
     DisplayLayout(mpsc::Sender<Result<geometry::DisplayLayout>>),
@@ -572,11 +606,10 @@ pub struct CaptureService {
 
 fn receive_command<T>(
     receiver: &mpsc::Receiver<T>,
-    active: bool,
+    deadline: Option<Instant>,
 ) -> std::result::Result<T, mpsc::RecvTimeoutError> {
-    if active {
-        // Active sources still need bounded source-close and lease-expiry checks.
-        receiver.recv_timeout(Duration::from_millis(250))
+    if let Some(deadline) = deadline {
+        receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
     } else {
         // Commands, including shutdown and a new capture, wake an idle service.
         receiver
@@ -587,14 +620,26 @@ fn receive_command<T>(
 
 impl CaptureService {
     pub fn new() -> std::io::Result<Self> {
+        Self::with_backend(backend::NativeBackend::new)
+    }
+
+    fn with_backend<B: Backend + 'static>(
+        create: impl FnOnce() -> B + Send + 'static,
+    ) -> std::io::Result<Self> {
         let (commands, receiver) = mpsc::channel();
+        let events = commands.clone();
+        let changed = lifecycle::Changed::new(move || {
+            let _ = events.send(Command::Changed);
+        });
         let worker = thread::Builder::new()
             .name("weblink-capture".into())
             .spawn(move || {
-                let mut engine = Engine::new(backend::NativeBackend::new());
+                let mut engine = Engine::new(create());
+                engine.changed = changed;
                 loop {
                     engine.tick(Instant::now());
-                    match receive_command(&receiver, !engine.active.is_empty()) {
+                    match receive_command(&receiver, engine.deadline()) {
+                        Ok(Command::Changed) => engine.changed.acknowledge(),
                         Ok(Command::CursorSupported(id, reply)) => {
                             let _ = reply.send(
                                 engine

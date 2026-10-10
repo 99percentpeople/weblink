@@ -65,6 +65,7 @@ pub struct MediaSession {
     options: Mutex<MediaOptions>,
     notify: Arc<tokio::sync::Notify>,
     error: Mutex<Option<String>>,
+    changed: Arc<crate::lifecycle::Subscription>,
     closed: AtomicBool,
     cursor_visible: AtomicBool,
     started: Instant,
@@ -209,6 +210,7 @@ impl MediaSession {
         if !source.set_color_space(Some(color)) || !preview_source.set_color_space(Some(color)) {
             return Err("Invalid native video color space".into());
         }
+        let changed = Arc::new(crate::lifecycle::Subscription::default());
         let session = Arc::new(Self {
             // 0..0 asks the receiver to decode and present complete frames
             // immediately, without a second presentation queue. In Chromium,
@@ -220,7 +222,11 @@ impl MediaSession {
             audio: options
                 .audio
                 .then(|| {
-                    audio::Loopback::start(options.audio_sample_rate, options.audio_channel_count)
+                    audio::Loopback::start(
+                        options.audio_sample_rate,
+                        options.audio_channel_count,
+                        changed.clone(),
+                    )
                 })
                 .transpose()?,
             peers: Mutex::new(HashMap::new()),
@@ -236,6 +242,7 @@ impl MediaSession {
             options: Mutex::new(options),
             notify: Arc::new(tokio::sync::Notify::new()),
             error: Mutex::new(None),
+            changed,
             closed: AtomicBool::new(false),
             cursor_visible: AtomicBool::new(true),
             started: Instant::now(),
@@ -345,6 +352,19 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
             .or_else(|| self.audio.as_ref().and_then(audio::Loopback::error))
+    }
+
+    fn fail(&self, error: String) {
+        *self.error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
+        self.changed.notify();
+    }
+
+    pub(crate) fn set_changed(&self, changed: crate::lifecycle::Changed) {
+        self.changed.set(changed);
+        // An audio/conversion failure may have happened before the owner attached.
+        if self.error().is_some() {
+            self.changed.notify();
+        }
     }
 
     fn reap_failed_encoders(&self) {

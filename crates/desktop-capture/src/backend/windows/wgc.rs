@@ -1,5 +1,6 @@
 use crate::{Frames, Result, Session};
 mod display;
+mod exit;
 pub(super) use display::start as start_display;
 use std::{
     sync::{mpsc, Arc, Mutex},
@@ -79,19 +80,52 @@ pub(super) fn start<T: TryInto<GraphicsCaptureItemType> + Send + 'static>(
         minimum_update_interval,
         DirtyRegionSettings::Default,
         ColorFormat::Bgra8,
-        frames,
+        frames.clone(),
     );
     let control = Handler::start_free_threaded(settings).map_err(|e| e.to_string())?;
-    Ok(Box::new(WindowsSession(control)))
+    // The library owns the capture loop; observing the actual thread exit also
+    // catches failures that bypass Handler::on_closed (including a panic).
+    let callback = control.callback();
+    let halt = control.halt_handle();
+    let thread = control.into_thread_handle();
+    let exited = exit::ThreadExit::new(&thread, frames);
+    let control = CaptureControl::new(thread, halt, callback);
+    match exited {
+        Ok(exited) => Ok(Box::new(WindowsSession {
+            control: Some(control),
+            exited: Some(exited),
+        })),
+        Err(error) => {
+            let _ = control.stop();
+            Err(error)
+        }
+    }
 }
 
-struct WindowsSession(CaptureControl<Handler, String>);
+struct WindowsSession {
+    control: Option<CaptureControl<Handler, String>>,
+    exited: Option<exit::ThreadExit>,
+}
+impl WindowsSession {
+    fn close(&mut self) -> Result<()> {
+        // Cancel/join callbacks before joining the capture thread or freeing its state.
+        self.exited.take();
+        self.control
+            .take()
+            .map_or(Ok(()), |control| control.stop().map_err(|e| e.to_string()))
+    }
+}
 impl Session for WindowsSession {
     fn is_finished(&self) -> bool {
-        self.0.is_finished()
+        self.control.as_ref().is_none_or(|c| c.is_finished())
     }
-    fn stop(self: Box<Self>) -> Result<()> {
-        self.0.stop().map_err(|e| e.to_string())
+    fn stop(mut self: Box<Self>) -> Result<()> {
+        self.close()
+    }
+}
+impl Drop for WindowsSession {
+    fn drop(&mut self) {
+        let _ = self.close();
     }
 }
 
@@ -123,7 +157,7 @@ impl GraphicsCaptureApiHandler for Handler {
         Ok(())
     }
     fn on_closed(&mut self) -> std::result::Result<(), Self::Error> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).closed = true;
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).finish();
         Ok(())
     }
 }

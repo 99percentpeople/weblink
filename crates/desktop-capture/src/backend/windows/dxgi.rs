@@ -29,6 +29,13 @@ struct Duplication {
     output: IDXGIOutputDuplication,
     rotation: Rotation,
 }
+
+struct Finished(Arc<Mutex<Frames>>);
+impl Drop for Finished {
+    fn drop(&mut self) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).finish();
+    }
+}
 impl Duplication {
     fn open(monitor: Option<usize>) -> Result<Self> {
         unsafe {
@@ -198,6 +205,10 @@ pub(super) fn start(monitor: usize, frames: Arc<Mutex<Frames>>) -> Result<Box<dy
                     return Err(error);
                 }
             };
+            // Startup errors return to the caller and may trigger WGC fallback
+            // with these same frames. Only an opened session can close them.
+            // Arm before announcing readiness so even an immediate exit wakes it.
+            let _finished = Finished(frames.clone());
             if ready.send(Ok(())).is_err() {
                 return Ok(());
             }
@@ -253,5 +264,26 @@ impl Session for DxgiSession {
 impl Drop for DxgiSession {
     fn drop(&mut self) {
         let _ = self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_dxgi_start_leaves_shared_frames_open_for_fallback() {
+        let (send, receive) = mpsc::channel();
+        let frames = Arc::new(Mutex::new(Frames {
+            changed: crate::lifecycle::Changed::new(move || {
+                let _ = send.send(());
+            }),
+            ..Default::default()
+        }));
+        // A null monitor cannot match an attached display. Failure must be
+        // synchronous; an Auto caller can reuse these frames for WGC.
+        assert!(start(0, frames.clone()).is_err());
+        assert!(!frames.lock().unwrap().closed);
+        assert_eq!(receive.try_recv(), Err(mpsc::TryRecvError::Empty));
     }
 }

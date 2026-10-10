@@ -26,6 +26,7 @@ impl<B: Backend> Engine<B> {
                 .ok_or("Missing capture source")?;
             let frames = Arc::new(Mutex::new(Frames {
                 cursor_hidden: true,
+                changed: self.changed.clone(),
                 ..Frames::default()
             }));
             // Keep DXGI and its media alive until the replacement has started.

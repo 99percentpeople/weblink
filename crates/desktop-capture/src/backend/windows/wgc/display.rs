@@ -97,7 +97,7 @@ pub(in super::super) fn start(
                 callback_frames
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .closed = true;
+                    .finish();
                 Ok(())
             }))
             .map_err(|e| e.to_string())?,
@@ -180,7 +180,7 @@ pub(in super::super) fn start(
                     callback_frames
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
-                        .closed = true;
+                        .finish();
                 }
                 Ok(())
             }))
@@ -232,7 +232,10 @@ impl Session for DisplaySession {
 }
 impl Drop for DisplaySession {
     fn drop(&mut self) {
-        self.frames.lock().unwrap_or_else(|e| e.into_inner()).closed = true;
+        self.frames
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .finish();
         if let Some(token) = self.arrived.take() {
             let _ = self.pool.RemoveFrameArrived(token);
         }

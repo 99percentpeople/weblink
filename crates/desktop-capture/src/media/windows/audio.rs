@@ -31,7 +31,11 @@ pub(super) struct Loopback {
 }
 
 impl Loopback {
-    pub fn start(rate: u32, channels: u32) -> Result<Self> {
+    pub fn start(
+        rate: u32,
+        channels: u32,
+        changed: Arc<crate::lifecycle::Subscription>,
+    ) -> Result<Self> {
         let source = NativeAudioSource::new(AudioSourceOptions::default(), rate, channels, 0);
         let events = Arc::new(events::Events::new()?);
         let enabled = Arc::new(AtomicBool::new(true));
@@ -58,6 +62,7 @@ impl Loopback {
                     let _ = ready.try_send(Err(error.clone()));
                     if !worker_events.stopped() {
                         *worker_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
+                        changed.notify();
                     }
                 }
             })

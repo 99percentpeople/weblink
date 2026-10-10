@@ -1,6 +1,7 @@
 use super::*;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+mod lifecycle;
 
 #[derive(Default, Clone)]
 struct Fake {
@@ -13,6 +14,7 @@ struct Fake {
     queried_running: Rc<Cell<Option<CaptureMethod>>>,
     support_probes: Rc<Cell<usize>>,
     frames: Rc<RefCell<Option<Arc<Mutex<Frames>>>>>,
+    frame_events: Option<mpsc::Sender<Arc<Mutex<Frames>>>>,
     monitor: Rc<Cell<bool>>,
     displays: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
     #[cfg(windows)]
@@ -83,7 +85,10 @@ impl Backend for Fake {
             return Err("GPU unavailable".into());
         }
         self.finished.set(false);
-        self.frames.replace(Some(frames));
+        self.frames.replace(Some(frames.clone()));
+        if let Some(events) = &self.frame_events {
+            let _ = events.send(frames);
+        }
         Ok(Box::new(self.clone()))
     }
 }
@@ -127,8 +132,8 @@ fn idle_command_wait_has_no_periodic_timeout_and_wakes_for_work_or_disconnect() 
     let (commands, receiver) = mpsc::channel();
     let (reply, result) = mpsc::channel();
     let worker = thread::spawn(move || {
-        reply.send(receive_command(&receiver, false)).unwrap();
-        reply.send(receive_command(&receiver, false)).unwrap();
+        reply.send(receive_command(&receiver, None)).unwrap();
+        reply.send(receive_command(&receiver, None)).unwrap();
     });
     // Longer than the active source check: an empty service must remain asleep.
     assert_eq!(
@@ -146,10 +151,10 @@ fn idle_command_wait_has_no_periodic_timeout_and_wakes_for_work_or_disconnect() 
 }
 
 #[test]
-fn active_command_wait_preserves_periodic_source_and_lease_checks() {
+fn command_wait_expires_at_the_supplied_deadline() {
     let (_commands, receiver) = mpsc::channel::<()>();
     assert_eq!(
-        receive_command(&receiver, true),
+        receive_command(&receiver, Some(Instant::now() + Duration::from_millis(30))),
         Err(mpsc::RecvTimeoutError::Timeout)
     );
 }

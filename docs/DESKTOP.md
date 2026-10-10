@@ -724,9 +724,14 @@ Its 500 ms statistics sampler pauses while the window or document is hidden; sta
 and lease renewal remain independent of that sampler.
 Closing this diagnostic panel stops only the capture it owns.
 
-The native capture service blocks on its command queue when no sessions are active.
-A new command or shutdown wakes it immediately. Active sessions retain the bounded
-250 ms source-closure and lease-expiry checks.
+The native capture service waits on commands and coalesced lifecycle notifications.
+Backend closure/worker exit, media failure and source dimension changes wake the
+owner directly; steady frame arrivals only update counters. The only timed wait
+is the earliest active lease deadline, recalculated after renew/start/stop. With
+no active sessions it waits indefinitely for a command or shutdown. Status reads
+sample counters without scheduling a separate lifecycle poll or renewing a lease.
+Callbacks only notify the owner; stopping and joining resources stay on that owner,
+and delayed notifications from a retired backend cannot end its replacement.
 
 For a native smoke test, run this in an unlocked interactive Windows session:
 

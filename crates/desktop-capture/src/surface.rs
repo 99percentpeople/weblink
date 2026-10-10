@@ -36,12 +36,11 @@ impl super::Frames {
         let mut desc = Default::default();
         unsafe { frame.texture.GetDesc(&mut desc) };
         let mut stats = stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.count += 1;
-        (stats.width, stats.height) = match frame.rotation {
+        let (width, height) = match frame.rotation {
             Rotation::Clockwise90 | Rotation::Clockwise270 => (desc.Height, desc.Width),
             _ => (desc.Width, desc.Height),
         };
-        stats.last = Some(std::time::Instant::now());
+        stats.arrived(width, height, std::time::Instant::now());
         let sink = stats.sink.clone();
         drop(stats);
         if let Some(sink) = sink {

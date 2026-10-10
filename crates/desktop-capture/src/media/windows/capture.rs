@@ -112,8 +112,7 @@ impl MediaSession {
                                 Err(error) => error.to_string(),
                                 _ => unreachable!(),
                             };
-                            *session.error.lock().unwrap_or_else(|e| e.into_inner()) =
-                                Some(message);
+                            session.fail(message);
                             session.close();
                         }
                         break;

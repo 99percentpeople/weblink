@@ -6,6 +6,37 @@ use libwebrtc::{
 };
 mod latency_probe;
 
+#[test]
+fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        for late in [false, true] {
+            let media = MediaSession::new(MediaOptions {
+                encoder: "software".into(),
+                ..Default::default()
+            })
+            .unwrap();
+            let (send, receive) = std::sync::mpsc::channel();
+            let changed = crate::lifecycle::Changed::new(move || {
+                let _ = send.send(());
+            });
+            if late {
+                media.fail("test conversion failure".into());
+            }
+            media.set_changed(changed.clone());
+            if !late {
+                media.fail("test conversion failure".into());
+            }
+            receive.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert_eq!(media.error().as_deref(), Some("test conversion failure"));
+            changed.acknowledge();
+            media.set_changed(Default::default());
+            media.fail("late failure after detach".into());
+            assert!(receive.try_recv().is_err());
+            media.close();
+        }
+    });
+}
+
 // Synchronously drain a synthetic frame in tests that inspect converted pixels.
 // Production awaits GPU completion events without waiting in a graphics call.
 impl MediaSession {
