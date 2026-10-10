@@ -623,12 +623,17 @@ stage times must not be summed as end-to-end latency. This benchmark captures no
 desktop pixels and excludes OS capture, a real network path, browser rendering
 and display scan-out. It checks delivery, without asserting timing thresholds.
 
-DXGI enables D3D immediate-context thread protection before duplication starts:
-DXGI acquisition/release and the asynchronous GPU readback worker share this
-context, so locking only the readback calls is insufficient. Acquisition polls with
-a zero timeout and waits outside the D3D call when no frame is available, allowing
-the conversion worker to map its staging texture without waiting for a new screen
-update. DXGI handles display
+DXGI acquisition/release owns a dedicated D3D device. A second device on the same
+adapter receives frames through one reusable NT-shared texture with keyed ownership;
+the sink copies each borrowed frame into its retained source before releasing it.
+Only the second context is shared with asynchronous readback and is multithread
+protected. This adds one GPU copy but prevents waiting for a desktop update from
+blocking conversion or the final static frame. The bridge adds no frame queue and
+validates sharing before announcing capture readiness. A failed or timed-out
+handoff ends capture without accessing an unowned surface.
+`AcquireNextFrame` waits for arrivals instead of polling every millisecond. Its
+50 ms timeout checks for shutdown on a static desktop; new frames return immediately.
+The API cannot cancel an outstanding wait, so this bound is retained. DXGI handles display
 rotation and its separate color/monochrome cursor. Display
 mode changes, disconnection or access loss end the capture and require selecting
 the source again. Native frames still pass through CPU readback/conversion before
@@ -776,6 +781,13 @@ peers. Ordinary tests skip it because an SSH or CI session has no interactive de
 ```sh
 cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
 ```
+
+The ignored `native_dxgi_final_frame_survives_stop_and_readback_device_is_reusable`
+test also needs an interactive desktop. It checks bounded stopping and reads the
+retained frame after the acquisition device has closed. `native_dxgi_acquire_wait_cost`
+compares timed OS waits with the former one-millisecond polling loop on the current
+desktop; `synthetic_dxgi_transfer_cost` measures the extra handoff copy using synthetic
+1440p textures. Neither measurement includes browser presentation or display latency.
 
 ## Attended remote control
 
