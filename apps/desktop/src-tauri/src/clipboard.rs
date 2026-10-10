@@ -10,6 +10,7 @@ use std::{
 
 const LIMIT: usize = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 4096;
+mod changes;
 struct StagedFiles {
     _directory: tempfile::TempDir,
     bytes: usize,
@@ -153,12 +154,12 @@ pub async fn clipboard_read(
     let max_file_bytes = file_limit(max_file_bytes)?;
     let service = service.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let until = Instant::now() + Duration::from_millis(1800);
-        while after == Some(access(&service, &scope, || Ok(native::sequence()))?) {
-            if Instant::now() >= until {
-                return Err("The remote application did not copy new content".into());
-            }
-            std::thread::sleep(Duration::from_millis(20));
+        access(&service, &scope, || Ok(()))?;
+        if let Some(after) = after {
+            let changed = native::wait_after(after, Duration::from_millis(1800));
+            // Waiting holds no control lock and never extends authorization.
+            access(&service, &scope, || Ok(()))?;
+            changed?;
         }
         // Delayed clipboard rendering belongs to another application and may block.
         // Never hold the control actor lock while asking it for data; revalidate before delivery.
@@ -383,6 +384,9 @@ mod native {
     }
     pub fn sequence() -> u32 {
         0
+    }
+    pub fn wait_after(_: u32, _: Duration) -> Result<(), String> {
+        Err("Clipboard unavailable".into())
     }
     pub fn read() -> Result<(Snapshot, Vec<String>), String> {
         Err("Clipboard unavailable".into())

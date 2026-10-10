@@ -1170,11 +1170,14 @@ the optional list, so controllers also filter unsupported alternatives on receip
 
 The portable `remote-clipboard` request binds a one-shot `operationId` to the current
 native `grantId` and its authenticated peer session. Explicit copy samples the host
-clipboard sequence before sending Ctrl+C, then waits for a newer sequence. Context
-menu copies use `watch`/`changed`/`unwatch` subscriptions and Windows clipboard change
-notifications. Notifications contain no clipboard data, require the current watch
-identity and do not echo application-owned clipboard writes. They never import an
-existing clipboard merely because control was granted.
+clipboard sequence before sending Ctrl+C, then waits for a newer sequence.
+The copy wait subscribes before rechecking the sequence and wakes on Windows
+clipboard notifications, with one completion deadline instead of periodic reads.
+It revalidates the control grant after waiting and before delivering content.
+Context menu copies use `watch`/`changed`/`unwatch` subscriptions and Windows
+clipboard change notifications. Notifications contain no clipboard data, require
+the current watch identity and do not echo application-owned clipboard writes.
+They never import an existing clipboard merely because control was granted.
 
 Clipboard bundles use the existing file sender, receiver, transfer registry,
 compression and backpressure. Text-only content (including HTML/RTF) never creates

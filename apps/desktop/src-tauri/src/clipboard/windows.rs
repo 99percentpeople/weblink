@@ -27,6 +27,18 @@ impl Drop for Watcher {
     }
 }
 pub fn watch(changed: Box<dyn Fn() + Send>) -> Result<Watcher, String> {
+    listen(Box::new(move || {
+        if !WRITING.load(Ordering::Acquire) && sequence() != LAST_WRITE.load(Ordering::Acquire) {
+            changed();
+        }
+    }))
+}
+pub fn wait_after(after: u32, timeout: Duration) -> Result<(), String> {
+    // Copy completion must see every sequence change, including local writes;
+    // continuous sync's echo suppression applies only to watch(), not this wait.
+    changes::wait_for_sequence(after, timeout, sequence, listen)
+}
+fn listen(changed: Box<dyn Fn() + Send>) -> Result<Watcher, String> {
     let (send, recv) = std::sync::mpsc::sync_channel(1);
     let thread = std::thread::Builder::new()
         .name("weblink-clipboard".into())
@@ -59,10 +71,7 @@ pub fn watch(changed: Box<dyn Fn() + Send>) -> Result<Watcher, String> {
             let _ = send.send(Ok(windows::Win32::System::Threading::GetCurrentThreadId()));
             let mut message = MSG::default();
             while GetMessageW(&mut message, None, 0, 0).0 > 0 {
-                if message.message == WM_CLIPBOARDUPDATE
-                    && !WRITING.load(Ordering::Acquire)
-                    && sequence() != LAST_WRITE.load(Ordering::Acquire)
-                {
+                if message.message == WM_CLIPBOARDUPDATE {
                     changed();
                 }
                 let _ = TranslateMessage(&message);
@@ -448,6 +457,30 @@ fn png_dib(data: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clipboard_listener_dispatches_and_shuts_down_without_polling() {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let watcher = listen(Box::new(move || {
+            let _ = send.try_send(());
+        }))
+        .unwrap();
+        // Exercise our real Windows message pump without replacing user clipboard data.
+        unsafe {
+            PostThreadMessageW(
+                watcher.id,
+                WM_CLIPBOARDUPDATE,
+                Default::default(),
+                Default::default(),
+            )
+        }
+        .unwrap();
+        receive.recv_timeout(Duration::from_secs(2)).unwrap();
+        drop(watcher);
+        assert!(matches!(
+            receive.recv_timeout(Duration::from_secs(1)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        ));
+    }
     #[test]
     fn clipboard_png_and_bitmap_round_trip() {
         let mut png = Vec::new();
