@@ -492,8 +492,13 @@ frame rate into one, two (default), or three reusable staging slots, selected by
 **GPU readback buffers** in the native capture settings for the next share.
 More slots allow overlapping work but consume more graphics memory and can add
 latency; they do not increase PCIe bandwidth. GPU copies overlap CPU
-conversion; nonblocking Map polls run outside the capture mutex and yield between
-attempts. The worker processes the newest completed copy and preserves the latest
+conversion. D3D11 completion events wake the worker for nonblocking Map attempts
+outside the capture mutex. If Map still reports pending work, the worker registers
+another completion event; there is no periodic GPU polling. Notification setup
+failures are reported, and a two-second operation deadline detects stalled
+readbacks without providing a polling fallback. Frame-rate admission and static
+repeats keep their own deadlines. The worker processes the newest completed copy
+and preserves the latest
 source when all slots are busy, including the final update before a static scene.
 Readback timing includes asynchronous GPU wait; overlapped stage times are not a
 throughput estimate. Source size/device changes preserve in-flight ownership,

@@ -7,13 +7,13 @@ use libwebrtc::{
 mod latency_probe;
 
 // Synchronously drain a synthetic frame in tests that inspect converted pixels.
-// Production polls on its worker without waiting in a graphics call.
+// Production awaits GPU completion events without waiting in a graphics call.
 impl MediaSession {
     pub(super) fn flush(self: &Arc<Self>) -> Result<()> {
         let _preview = self.subscribe_preview(true, |_| true)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut work = self.capture_step(true)?;
-        while work.pending || work.dirty {
+        while work.pending.is_some() || work.dirty {
             if Instant::now() >= deadline {
                 return Err("Synthetic readback did not complete".into());
             }

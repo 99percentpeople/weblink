@@ -6,6 +6,57 @@ use crate::{
 use libwebrtc::prelude::VideoBuffer;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 
+#[test]
+fn pending_gpu_work_waits_for_an_event_or_its_watchdog() {
+    let now = Instant::now();
+    let cadence = CaptureCadence::new(Duration::from_millis(10), now);
+    let mut work = Work {
+        pending: Some(now + READBACK_TIMEOUT),
+        dirty: true,
+        // A full queue must not retry at an already elapsed frame deadline.
+        has_capacity: false,
+        repeat: true,
+        ..Default::default()
+    };
+    assert_eq!(work.wait(&cadence, now, true), Some(READBACK_TIMEOUT));
+    assert_eq!(
+        work.wait(&cadence, now + READBACK_TIMEOUT, true),
+        Some(Duration::ZERO)
+    );
+    work.dirty = false;
+    work.has_capacity = true;
+    assert_eq!(work.wait(&cadence, now, true), Some(READBACK_TIMEOUT));
+    assert_eq!(Work::default().wait(&cadence, now, true), None);
+}
+
+#[test]
+fn pending_gpu_work_preserves_the_next_frame_deadline() {
+    let now = Instant::now();
+    let interval = Duration::from_millis(10);
+    let mut cadence = CaptureCadence::new(interval, now);
+    cadence.complete(Some(now));
+    let mut work = Work {
+        pending: Some(now + READBACK_TIMEOUT),
+        dirty: true,
+        has_capacity: true,
+        ..Default::default()
+    };
+    assert_eq!(work.wait(&cadence, now, false), Some(interval));
+    work.pending = Some(now + Duration::from_millis(1));
+    assert_eq!(
+        work.wait(&cadence, now, false),
+        Some(Duration::from_millis(1))
+    );
+    work.pending = None;
+    work.dirty = false;
+    work.repeat = true;
+    assert_eq!(work.wait(&cadence, now, true), Some(interval));
+    assert_eq!(
+        work.wait(&cadence, now, false),
+        Some(Duration::from_millis(500))
+    );
+}
+
 fn texture(device: &ID3D11Device, size: (u32, u32), value: u8) -> ID3D11Texture2D {
     let pixels = [value, value, value, 255].repeat((size.0 * size.1) as usize);
     let desc = D3D11_TEXTURE2D_DESC {
@@ -180,8 +231,81 @@ fn pending_readbacks_preserve_pixels_across_new_arrivals_resize_and_device_chang
 }
 
 #[test]
+fn gpu_completion_wakes_for_the_final_frame_and_reused_resize() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let mut source = Readback::default();
+        let notify = Arc::new(tokio::sync::Notify::new());
+        let mut reusable = None;
+        let mut wakeups = 0;
+        for (size, value) in [((32, 16), 32), ((32, 16), 96), ((1920, 1080), 160)]
+            .into_iter()
+            .cycle()
+            .take(36)
+        {
+            let pixels = texture(&device, size, value);
+            source.copy(&frame(&device, &context, &pixels)).unwrap();
+            let mut pending = source
+                .submit_notifying(size, reusable.take(), notify.clone())
+                .unwrap();
+            wakeups += notified_pixels(&notify, &mut pending, value).await;
+            reusable = Some(pending);
+        }
+        println!("GPU events for 36 final-frame readbacks: {wakeups}");
+    });
+}
+
+async fn notified_pixels(
+    notify: &tokio::sync::Notify,
+    pending: &mut PendingReadback,
+    value: u8,
+) -> usize {
+    // Every Map attempt requires another GPU wakeup. A single overall timeout
+    // fails the test; it cannot retry or rescue the final frame.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        let mut wakeups = 0;
+        loop {
+            notify.notified().await;
+            wakeups += 1;
+            if let Some(mapped) = pending.try_map().unwrap() {
+                assert_eq!(&mapped.bytes()[..4], &[value, value, value, 255]);
+                return wakeups;
+            }
+        }
+    })
+    .await
+    .expect("GPU completion did not wake the worker")
+}
+
+#[test]
+fn skipped_readbacks_can_be_reused_without_losing_the_completion_event() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let mut source = Readback::default();
+        let notify = Arc::new(tokio::sync::Notify::new());
+        let size = (1920, 1080);
+        let mut slots = Vec::new();
+        for value in [32, 96, 160] {
+            let pixels = texture(&device, size, value);
+            source.copy(&frame(&device, &context, &pixels)).unwrap();
+            slots.push(source.submit_notifying(size, None, notify.clone()).unwrap());
+        }
+        // Publishing the newest slot skips older ones without mapping them.
+        notified_pixels(&notify, &mut slots[2], 160).await;
+        for skipped in slots.drain(..2) {
+            let pixels = texture(&device, size, 224);
+            source.copy(&frame(&device, &context, &pixels)).unwrap();
+            let mut pending = source
+                .submit_notifying(size, Some(skipped), notify.clone())
+                .unwrap();
+            notified_pixels(&notify, &mut pending, 224).await;
+        }
+    });
+}
+
+#[test]
 fn bounded_readbacks_deliver_the_final_static_update_and_live_resize() {
-    // No await: the background worker stays parked, making admission/poll order
+    // No await: the background worker stays parked, making admission/read order
     // deterministic without touching real capture, the screen, or timing mocks.
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -255,10 +379,10 @@ fn closing_with_pending_readback_releases_slots_without_publishing_late_frames()
             let pixels = texture(&device, (8, 8), 128);
             let _preview = media.subscribe_preview(true, |_| true).unwrap();
             media.frame(frame(&device, &context, &pixels)).unwrap();
-            assert!(media.capture_step(true).unwrap().pending);
+            assert!(media.capture_step(true).unwrap().pending.is_some());
             media.close();
             let state = media.capture_step(false).unwrap();
-            assert!(!state.pending && !state.dirty);
+            assert!(state.pending.is_none() && !state.dirty);
             assert!(media.latest.lock().unwrap().is_none());
             assert_eq!(media.latest_sequence.load(Ordering::Relaxed), 0);
             let state = media.conversion.lock().unwrap();
@@ -282,7 +406,7 @@ fn hiding_during_readback_retains_the_final_static_update_for_resume() {
             let pixels = texture(&device, (8, 8), 128);
             let preview = media.subscribe_preview(true, |_| true).unwrap();
             media.frame(frame(&device, &context, &pixels)).unwrap();
-            assert!(media.capture_step(true).unwrap().pending);
+            assert!(media.capture_step(true).unwrap().pending.is_some());
             preview.set_visible(false);
             media.capture_step(false).unwrap();
             assert!(media.conversion.lock().unwrap().pending.is_empty());

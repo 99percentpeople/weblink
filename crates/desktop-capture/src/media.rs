@@ -9,6 +9,9 @@ pub mod preview;
 #[cfg(any(windows, test))]
 mod bitrate;
 
+#[cfg(any(windows, test))]
+mod cadence;
+
 // Keep in sync with MAX_NATIVE_FRAME_RATE in @weblink/platform.
 pub const MAX_FRAME_RATE: u32 = 1000;
 

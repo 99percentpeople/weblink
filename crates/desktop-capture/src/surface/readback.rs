@@ -1,6 +1,8 @@
 //! Reuse the staging texture instead of allocating one per captured frame.
 use crate::surface::{Cursor, Rotation, TextureFrame};
 use crate::Result;
+use std::sync::Arc;
+use tokio::sync::Notify;
 use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
@@ -8,6 +10,8 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ, D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING,
 };
 use windows::Win32::Graphics::Dxgi::DXGI_ERROR_WAS_STILL_DRAWING;
+
+mod completion;
 
 #[derive(Default)]
 pub(crate) struct Readback {
@@ -177,25 +181,44 @@ impl Readback {
 
     /// Move staging into a bounded worker-owned slot. Subsequent captures only
     /// replace the retained source; they cannot overwrite this pending GPU copy.
+    #[cfg(test)]
     pub fn submit(
         &mut self,
         requested: (u32, u32),
         reusable: Option<PendingReadback>,
     ) -> Result<PendingReadback> {
+        self.submit_notifying(requested, reusable, Arc::new(Notify::new()))
+    }
+
+    pub fn submit_notifying(
+        &mut self,
+        requested: (u32, u32),
+        reusable: Option<PendingReadback>,
+        notify: Arc<Notify>,
+    ) -> Result<PendingReadback> {
+        let mut completion = None;
         if let Some(buffer) = reusable.filter(|b| Some(&b.context) == self.context.as_ref()) {
             self.staging = Some(buffer.texture);
             self.staging_size = buffer.size;
+            // An older skipped slot may still have an outstanding event. Give
+            // that case a fresh wait/event instead of resetting a live query.
+            completion = Some(buffer.completion).filter(|completion| completion.ready());
         }
         self.prepare(requested)?;
-        let pending = PendingReadback {
+        let context = self.context.clone().ok_or("Missing capture context")?;
+        let completion = match completion {
+            Some(completion) => completion,
+            None => completion::Completion::new(&context, notify)
+                .map_err(|error| format!("GPU completion notifications unavailable: {error}"))?,
+        };
+        let mut pending = PendingReadback {
             texture: self.staging.take().ok_or("Missing staging texture")?,
-            context: self.context.clone().ok_or("Missing capture context")?,
+            context,
             size: self.output_size,
+            completion,
         };
         self.prepared = false;
-        // Submit once before polling. DO_NOT_WAIT must not leave the copy sitting
-        // in the driver's command buffer until another blocking graphics call.
-        unsafe { pending.context.Flush() };
+        pending.completion.flush().map_err(|e| e.to_string())?;
         Ok(pending)
     }
 }
@@ -204,11 +227,15 @@ pub(crate) struct PendingReadback {
     texture: ID3D11Texture2D,
     context: ID3D11DeviceContext,
     size: (u32, u32),
+    completion: completion::Completion,
 }
 impl PendingReadback {
     /// Never wait inside the protected immediate context or the capture mutex.
-    /// The worker yields between attempts and can submit other available slots.
+    /// Each attempt is driven by this slot's GPU event, not a polling timer.
     pub fn try_map(&mut self) -> Result<Option<Mapped<'_>>> {
+        if !self.completion.ready() {
+            return Ok(None);
+        }
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         match unsafe {
             self.context.Map(
@@ -221,6 +248,10 @@ impl PendingReadback {
         } {
             Ok(()) => {}
             Err(error) if error.code() == DXGI_ERROR_WAS_STILL_DRAWING => {
+                // Map can still report pending work after the previous flush.
+                // Submit that work and request another event, including when
+                // this is the last frame and no capture arrivals can wake us.
+                self.completion.flush().map_err(|e| e.to_string())?;
                 return Ok(None);
             }
             Err(error) => return Err(error.to_string()),
