@@ -30,13 +30,20 @@ export function MeetingTileActions(
   const [touch, setTouch] = createSignal(false);
   const [open, setOpen] = createSignal(false);
   const [hovered, setHovered] = createSignal(false);
+  const [clicked, setClicked] = createSignal(false);
   const [keyboardFocus, setKeyboardFocus] =
     createSignal(false);
   const [actions, setActions] = createSignal<
     TileActionProps[]
   >([]);
   let keepFocus = false;
+  let container!: HTMLDivElement;
   let trigger: HTMLButtonElement | undefined;
+  const dismiss = () => {
+    setClicked(false);
+    setHovered(false);
+    setKeyboardFocus(false);
+  };
   const select = (action: TileActionProps) => {
     if (action.disabled) return;
     keepFocus = action.keepFocus === true;
@@ -45,17 +52,38 @@ export function MeetingTileActions(
   };
   const compact = () => props.compact || touch();
   const expanded = () =>
-    !compact() && (hovered() || keyboardFocus());
+    !compact() &&
+    (clicked() || hovered() || keyboardFocus());
   onMount(() => {
-    const media = window.matchMedia(
+    const doc = container.ownerDocument;
+    const win = doc.defaultView!;
+    const media = win.matchMedia(
       "(hover: none), (pointer: coarse)",
     );
-    const update = () => setTouch(media.matches);
+    const update = () => {
+      dismiss();
+      setTouch(media.matches);
+    };
     update();
-    media.addEventListener("change", update);
-    onCleanup(() =>
-      media.removeEventListener("change", update),
+    const abort = new AbortController();
+    media.addEventListener("change", update, {
+      signal: abort.signal,
+    });
+    doc.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          clicked() &&
+          !event.composedPath().includes(container)
+        )
+          dismiss();
+      },
+      { capture: true, signal: abort.signal },
     );
+    win.addEventListener("blur", dismiss, {
+      signal: abort.signal,
+    });
+    onCleanup(() => abort.abort());
   });
   return (
     <ActionsContext.Provider
@@ -70,9 +98,13 @@ export function MeetingTileActions(
       }}
     >
       <div
+        ref={container}
         class="meeting-tile-actions"
+        data-expanded={
+          expanded() || open() ? "" : undefined
+        }
         onPointerEnter={(event) => {
-          if (event.pointerType !== "touch")
+          if (event.pointerType === "mouse")
             setHovered(true);
         }}
         onPointerLeave={() => setHovered(false)}
@@ -88,12 +120,22 @@ export function MeetingTileActions(
             !event.currentTarget.contains(
               event.relatedTarget as Node | null,
             )
-          )
+          ) {
+            setClicked(false);
             setKeyboardFocus(false);
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || !expanded()) return;
+          event.preventDefault();
+          event.stopPropagation();
+          trigger?.focus({ preventScroll: true });
+          dismiss();
         }}
       >
         <Show when={!compact()}>
           <button
+            ref={trigger}
             type="button"
             class="meeting-icon-button meeting-tile-actions-trigger"
             aria-label={props.label}
@@ -104,11 +146,8 @@ export function MeetingTileActions(
             }
             onClick={(event) => {
               event.stopPropagation();
-              event.currentTarget.parentElement
-                ?.querySelector<HTMLButtonElement>(
-                  ".meeting-tile-action:not(:disabled)",
-                )
-                ?.focus({ preventScroll: true });
+              if (clicked()) dismiss();
+              else setClicked(true);
             }}
           >
             <Ellipsis />

@@ -310,3 +310,90 @@ describe("meeting action menu keyboard focus", () => {
     expect(f.api.show).not.toHaveBeenCalled();
   });
 });
+
+describe("desktop meeting toolbar interaction", () => {
+  function setupToolbar() {
+    const action = vi.fn();
+    render(() => (
+      <MeetingTileActions compact={false} label="Actions">
+        <MeetingTileAction
+          label="Other action"
+          onAction={action}
+        />
+      </MeetingTileActions>
+    ));
+    const trigger = screen.getByRole("button", {
+      name: "Actions",
+    });
+    const touch = () => {
+      const event = new MouseEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "pointerType", {
+        value: "touch",
+      });
+      fireEvent(trigger, event);
+      fireEvent.click(trigger, { detail: 1 });
+    };
+    return { trigger, touch, action };
+  }
+
+  it("opens on touch even when the primary device supports hover", () => {
+    const f = setupToolbar();
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    f.touch();
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Other action" }),
+    );
+    expect(f.action).toHaveBeenCalledOnce();
+    f.touch();
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("dismisses a clicked toolbar outside and on Escape, then can reopen", () => {
+    const f = setupToolbar();
+    f.touch();
+    fireEvent.pointerDown(document.body);
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    f.touch();
+    const action = screen.getByRole("button", {
+      name: "Other action",
+    });
+    action.focus();
+    fireEvent.keyDown(action, { key: "Escape" });
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(document.activeElement).toBe(f.trigger);
+    f.touch();
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+  });
+
+  it("preserves mouse hover expansion without a click", () => {
+    const f = setupToolbar();
+    const event = new MouseEvent("pointerenter");
+    Object.defineProperty(event, "pointerType", {
+      value: "mouse",
+    });
+    fireEvent(f.trigger.parentElement!, event);
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    fireEvent.pointerLeave(f.trigger.parentElement!);
+    expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+});
