@@ -3,6 +3,7 @@ mod audio;
 mod capture;
 mod compose;
 mod control;
+mod ice;
 mod mf;
 mod pixels;
 mod presentation;
@@ -16,7 +17,7 @@ use crate::surface::{FrameSink, TextureFrame};
 use crate::Result;
 use libwebrtc::{
     media_stream_track::MediaStreamTrack,
-    peer_connection::{IceGatheringState, OfferOptions, PeerConnection, PeerConnectionState},
+    peer_connection::{IceGatheringState, OfferOptions, PeerConnection},
     peer_connection_factory::{
         native::PeerConnectionFactoryExt, ContinualGatheringPolicy, IceTransportsType,
         PeerConnectionFactory, RtcConfiguration,
@@ -73,8 +74,21 @@ pub struct MediaSession {
 
 struct MediaPeer {
     connection: PeerConnection,
+    gathering: Arc<ice::Gathering>,
     preview: bool,
     control: Option<control::Connection>,
+}
+impl MediaPeer {
+    fn close(&self) {
+        // Wake pending offers before detaching callbacks or closing native state.
+        self.gathering.close();
+        if let Some(control) = &self.control {
+            control.close();
+        }
+        self.connection.on_ice_gathering_state_change(None);
+        self.connection.on_ice_candidate(None);
+        self.connection.close();
+    }
 }
 
 impl MediaSession {
@@ -523,6 +537,32 @@ impl MediaSession {
             .inspect_err(|_| {
                 pc.close();
             })?;
+        let gathering = Arc::new(ice::Gathering::new());
+        let completed = gathering.clone();
+        pc.on_ice_gathering_state_change(Some(Box::new(move |state| {
+            if state == IceGatheringState::Complete {
+                completed.complete();
+            }
+        })));
+        let candidates = Arc::new(Mutex::new(Vec::new()));
+        let gathered = candidates.clone();
+        let trickle = on_candidate.is_some();
+        // Install both observers before exposing the peer to close_peer.
+        pc.on_ice_candidate(Some(Box::new(move |candidate| {
+            let candidate = IceCandidate {
+                candidate: candidate.to_string(),
+                sdp_mid: Some(candidate.sdp_mid()),
+                sdp_m_line_index: u16::try_from(candidate.sdp_mline_index()).ok(),
+            };
+            let mut list = gathered.lock().unwrap_or_else(|e| e.into_inner());
+            if list.len() < 256 {
+                list.push(candidate.clone());
+                drop(list);
+                if let Some(handler) = &on_candidate {
+                    handler(candidate);
+                }
+            }
+        })));
         {
             let options = self.options.lock().unwrap_or_else(|e| e.into_inner());
             // Preview keeps its own congestion feedback and encoder, at the selected
@@ -653,6 +693,7 @@ impl MediaSession {
                     id.clone(),
                     MediaPeer {
                         connection: pc.clone(),
+                        gathering: gathering.clone(),
                         preview,
                         control,
                     },
@@ -666,24 +707,6 @@ impl MediaSession {
             }
         }
         self.notify.notify_one();
-        let candidates = Arc::new(Mutex::new(Vec::new()));
-        let gathered = candidates.clone();
-        let trickle = on_candidate.is_some();
-        pc.on_ice_candidate(Some(Box::new(move |candidate| {
-            let candidate = IceCandidate {
-                candidate: candidate.to_string(),
-                sdp_mid: Some(candidate.sdp_mid()),
-                sdp_m_line_index: u16::try_from(candidate.sdp_mline_index()).ok(),
-            };
-            let mut list = gathered.lock().unwrap_or_else(|e| e.into_inner());
-            if list.len() < 256 {
-                list.push(candidate.clone());
-                drop(list);
-                if let Some(handler) = &on_candidate {
-                    handler(candidate);
-                }
-            }
-        })));
         let result = async {
             let offer = pc
                 .create_offer(OfferOptions::default())
@@ -698,23 +721,14 @@ impl MediaSession {
             if trickle {
                 return Ok(sdp);
             }
-            tokio::time::timeout(Duration::from_secs(15), async {
-                while pc.ice_gathering_state() != IceGatheringState::Complete {
-                    if self.closed.load(Ordering::Acquire)
-                        || pc.connection_state() == PeerConnectionState::Closed
-                    {
-                        return Err("Native media connection closed".to_string());
-                    }
-                    tokio::time::sleep(Duration::from_millis(25)).await;
-                }
-                // current_local_description is null while an offer is pending.
-                Ok(super::gathered_sdp(
-                    &sdp,
-                    &candidates.lock().unwrap_or_else(|e| e.into_inner()),
-                ))
-            })
-            .await
-            .map_err(|_| "Native ICE gathering timed out".to_string())?
+            tokio::time::timeout(Duration::from_secs(15), gathering.wait())
+                .await
+                .map_err(|_| "Native ICE gathering timed out".to_string())??;
+            // current_local_description is null while an offer is pending.
+            Ok(super::gathered_sdp(
+                &sdp,
+                &candidates.lock().unwrap_or_else(|e| e.into_inner()),
+            ))
         }
         .await;
         if result.is_err() {
@@ -787,12 +801,7 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .remove(id);
         if let Some(peer) = pc {
-            if let Some(control) = peer.control {
-                control.close();
-            }
-            let pc = peer.connection;
-            pc.on_ice_candidate(None);
-            pc.close();
+            peer.close();
         }
         let encoder = self
             .hardware
@@ -813,12 +822,7 @@ impl MediaSession {
         self.notify.notify_one();
         let peers = std::mem::take(&mut *self.peers.lock().unwrap_or_else(|e| e.into_inner()));
         for (_, peer) in peers {
-            if let Some(control) = peer.control {
-                control.close();
-            }
-            let pc = peer.connection;
-            pc.on_ice_candidate(None);
-            pc.close();
+            peer.close();
         }
         let encoders =
             std::mem::take(&mut *self.hardware.lock().unwrap_or_else(|e| e.into_inner()));

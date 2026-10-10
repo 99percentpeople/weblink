@@ -25,6 +25,7 @@ pub(super) struct Endpoint {
     sender: Mutex<Option<Arc<dyn Sender>>>,
     queue: Mutex<Queue>,
     outbound: Mutex<VecDeque<serde_json::Value>>,
+    output_ready: AtomicBool,
     wake: Option<Thread>,
 }
 impl Endpoint {
@@ -79,11 +80,12 @@ impl Endpoint {
             }
             q.push_back(value);
         }
+        self.output_ready.store(true, Ordering::Release);
         self.flush();
         !self.is_closed()
     }
     pub fn flush(&self) {
-        if self.is_closed() {
+        if self.is_closed() || !self.output_ready.swap(false, Ordering::AcqRel) {
             return;
         }
         let mut q = self.outbound.lock().unwrap_or_else(|e| e.into_inner());
@@ -131,6 +133,7 @@ impl Endpoint {
             // Never coalesce definitions: a later cached reference can depend on them.
             q.extend(messages.iter().cloned());
         }
+        self.output_ready.store(true, Ordering::Release);
         self.flush();
         !self.is_closed()
     }
@@ -165,7 +168,13 @@ impl Endpoint {
 impl Port for Endpoint {
     fn opened(&self, sender: Arc<dyn Sender>) {
         *self.sender.lock().unwrap_or_else(|e| e.into_inner()) = Some(sender);
-        self.wake();
+        self.writable();
+    }
+    fn writable(&self) {
+        if !self.is_closed() {
+            self.output_ready.store(true, Ordering::Release);
+            self.wake();
+        }
     }
     fn message(&self, movement: bool, data: &[u8]) {
         if self.is_closed() {
@@ -213,10 +222,12 @@ mod tests {
     #[derive(Default)]
     struct Fake {
         busy: AtomicBool,
+        attempts: std::sync::atomic::AtomicUsize,
         sent: Mutex<Vec<serde_json::Value>>,
     }
     impl Sender for Fake {
         fn send(&self, data: &[u8]) -> SendResult {
+            self.attempts.fetch_add(1, Ordering::AcqRel);
             if self.busy.load(Ordering::Acquire) {
                 return SendResult::Backpressure;
             }
@@ -231,7 +242,7 @@ mod tests {
     #[test]
     fn channel_events_wake_a_consumer_even_before_it_parks() {
         use std::{sync::mpsc, thread, time::Duration};
-        for event in ["open", "input", "close"] {
+        for event in ["open", "input", "writable", "close"] {
             let start = Arc::new(AtomicBool::new(false));
             let go = start.clone();
             let (done, completed) = mpsc::channel();
@@ -250,6 +261,7 @@ mod tests {
             match event {
                 "open" => endpoint.opened(Arc::new(Fake::default())),
                 "input" => endpoint.message(true, b"movement"),
+                "writable" => endpoint.writable(),
                 _ => endpoint.closed(),
             }
             go.store(true, Ordering::Release);
@@ -257,6 +269,65 @@ mod tests {
             worker.join().unwrap();
             assert!(woken.is_ok(), "{event} did not wake the control consumer");
         }
+    }
+    #[test]
+    fn backpressure_waits_for_a_writable_event_and_ignores_stale_events_after_close() {
+        let endpoint = Endpoint::new(None);
+        let sender = Arc::new(Fake::default());
+        sender.busy.store(true, Ordering::Release);
+        endpoint.opened(sender.clone());
+        let message = json!({"type":"grant", "grantId":"g"});
+        assert!(endpoint.send(&message));
+        assert_eq!(sender.attempts.load(Ordering::Acquire), 1);
+        sender.busy.store(false, Ordering::Release);
+        // Unrelated owner ticks must not probe the blocked DataChannel.
+        for _ in 0..10 {
+            endpoint.flush();
+        }
+        assert_eq!(sender.attempts.load(Ordering::Acquire), 1);
+        endpoint.writable();
+        assert!(sender.sent.lock().unwrap().is_empty());
+        endpoint.flush();
+        assert_eq!(*sender.sent.lock().unwrap(), [message]);
+        assert_eq!(sender.attempts.load(Ordering::Acquire), 2);
+
+        sender.busy.store(true, Ordering::Release);
+        assert!(endpoint.send(&json!({"type":"revoke", "grantId":"g"})));
+        endpoint.dispose();
+        endpoint.writable();
+        endpoint.flush();
+        assert_eq!(sender.attempts.load(Ordering::Acquire), 3);
+        assert!(endpoint.outbound.lock().unwrap().is_empty());
+    }
+    #[test]
+    fn writable_arriving_during_a_blocked_send_is_not_lost_or_reentered() {
+        struct Draining {
+            endpoint: std::sync::Weak<Endpoint>,
+            attempts: std::sync::atomic::AtomicUsize,
+        }
+        impl Sender for Draining {
+            fn send(&self, _: &[u8]) -> SendResult {
+                if self.attempts.fetch_add(1, Ordering::AcqRel) == 0 {
+                    // The callback cannot flush here: the owner holds queue locks.
+                    self.endpoint.upgrade().unwrap().writable();
+                    SendResult::Backpressure
+                } else {
+                    SendResult::Sent
+                }
+            }
+            fn close(&self) {}
+        }
+        let endpoint = Arc::new(Endpoint::new(None));
+        let sender = Arc::new(Draining {
+            endpoint: Arc::downgrade(&endpoint),
+            attempts: std::sync::atomic::AtomicUsize::new(0),
+        });
+        endpoint.opened(sender.clone());
+        assert!(endpoint.send(&json!({"type":"grant", "grantId":"g"})));
+        assert_eq!(endpoint.outbound.lock().unwrap().len(), 1);
+        endpoint.flush();
+        assert_eq!(sender.attempts.load(Ordering::Acquire), 2);
+        assert!(endpoint.outbound.lock().unwrap().is_empty());
     }
     #[test]
     fn congestion_preserves_consent_order_and_coalesces_liveness() {
@@ -273,6 +344,7 @@ mod tests {
         assert_eq!(endpoint.outbound.lock().unwrap().len(), 3);
         assert!(!endpoint.is_closed());
         sender.busy.store(false, Ordering::Release);
+        endpoint.writable();
         endpoint.flush();
         let sent = sender.sent.lock().unwrap();
         assert_eq!(
@@ -305,6 +377,7 @@ mod tests {
             "inputEpoch":"e", "watchId":"new", "sequence":1, "focus":{"type":"unknown"}});
         assert!(endpoint.send(&refreshed));
         sender.busy.store(false, Ordering::Release);
+        endpoint.writable();
         endpoint.flush();
         assert_eq!(*sender.sent.lock().unwrap(), vec![latest, refreshed]);
         assert!(!endpoint.is_closed());
@@ -319,6 +392,7 @@ mod tests {
             assert!(endpoint.send(&json!({"type":"cursor-state", "grantId":"g", "inputEpoch":"e", "watchId":"w", "sequence":sequence, "shape":{"type":"system", "name":"text"}})));
         }
         sender.busy.store(false, Ordering::Release);
+        endpoint.writable();
         endpoint.flush();
         let sent = sender.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
@@ -341,6 +415,7 @@ mod tests {
         assert!(!endpoint.is_closed());
         assert_eq!(endpoint.outbound.lock().unwrap().len(), 2);
         sender.busy.store(false, Ordering::Release);
+        endpoint.writable();
         endpoint.flush();
         assert_eq!(*sender.sent.lock().unwrap(), vec![definition, state]);
     }

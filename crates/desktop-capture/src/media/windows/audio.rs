@@ -1,5 +1,6 @@
 //! WASAPI PCM stays on a native worker and is fed directly to WebRTC.
 mod activation;
+mod events;
 use crate::media::{AudioCaptureFormat, AUDIO_CHANNEL_COUNTS, AUDIO_SAMPLE_RATES};
 use crate::Result;
 use libwebrtc::{
@@ -17,17 +18,13 @@ use std::{
     time::Duration,
 };
 use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::*,
-    System::{
-        Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED},
-        Threading::{CreateEventW, WaitForSingleObject},
-    },
+    System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED},
 };
 
 pub(super) struct Loopback {
     pub source: NativeAudioSource,
-    stop: Arc<AtomicBool>,
+    events: Arc<events::Events>,
     enabled: Arc<AtomicBool>,
     error: Arc<Mutex<Option<String>>>,
     worker: Mutex<Option<JoinHandle<()>>>,
@@ -36,21 +33,21 @@ pub(super) struct Loopback {
 impl Loopback {
     pub fn start(rate: u32, channels: u32) -> Result<Self> {
         let source = NativeAudioSource::new(AudioSourceOptions::default(), rate, channels, 0);
-        let stop = Arc::new(AtomicBool::new(false));
+        let events = Arc::new(events::Events::new()?);
         let enabled = Arc::new(AtomicBool::new(true));
         let worker_enabled = enabled.clone();
         let error = Arc::new(Mutex::new(None));
         let (ready, rx) = mpsc::sync_channel(1);
         let runtime = tokio::runtime::Handle::current();
         let worker_source = source.clone();
-        let worker_stop = stop.clone();
+        let worker_events = events.clone();
         let worker_error = error.clone();
         let worker = thread::Builder::new()
             .name("screen-audio".into())
             .spawn(move || {
                 let result = run(
                     &worker_source,
-                    &worker_stop,
+                    &worker_events,
                     &worker_enabled,
                     &runtime,
                     &ready,
@@ -59,7 +56,7 @@ impl Loopback {
                 );
                 if let Err(error) = result {
                     let _ = ready.try_send(Err(error.clone()));
-                    if !worker_stop.load(Ordering::Acquire) {
+                    if !worker_events.stopped() {
                         *worker_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
                     }
                 }
@@ -67,7 +64,7 @@ impl Loopback {
             .map_err(|e| e.to_string())?;
         let capture = Self {
             source,
-            stop,
+            events,
             enabled,
             error,
             worker: Mutex::new(Some(worker)),
@@ -83,7 +80,7 @@ impl Loopback {
         self.error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
     pub fn close(&self) {
-        self.stop.store(true, Ordering::Release);
+        self.events.stop();
         if let Some(worker) = self.worker.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = worker.join();
         }
@@ -99,12 +96,6 @@ struct Apartment;
 impl Drop for Apartment {
     fn drop(&mut self) {
         unsafe { CoUninitialize() };
-    }
-}
-struct Event(HANDLE);
-impl Drop for Event {
-    fn drop(&mut self) {
-        let _ = unsafe { CloseHandle(self.0) };
     }
 }
 struct Started(IAudioClient);
@@ -168,7 +159,7 @@ pub(super) fn supported_formats() -> Result<Vec<AudioCaptureFormat>> {
 
 fn run(
     source: &NativeAudioSource,
-    stop: &AtomicBool,
+    events: &events::Events,
     enabled: &AtomicBool,
     runtime: &tokio::runtime::Handle,
     ready: &mpsc::SyncSender<Result<()>>,
@@ -183,22 +174,15 @@ fn run(
     let client = activation::excluding_current_process()?;
     initialize(&client, rate, channels)
         .map_err(|e| format!("Could not initialize system audio: {e}"))?;
-    let event =
-        Event(unsafe { CreateEventW(None, false, false, None) }.map_err(|e| e.to_string())?);
-    unsafe { client.SetEventHandle(event.0) }.map_err(|e| e.to_string())?;
+    unsafe { client.SetEventHandle(events.packet_handle()) }.map_err(|e| e.to_string())?;
     let capture: IAudioCaptureClient = unsafe { client.GetService() }.map_err(|e| e.to_string())?;
     unsafe { client.Start() }.map_err(|e| e.to_string())?;
     let _started = Started(client);
     ready.send(Ok(())).map_err(|e| e.to_string())?;
     let mut queue = VecDeque::with_capacity(frame_samples * 4);
     let mut samples = vec![0i16; frame_samples];
-    while !stop.load(Ordering::Acquire) {
-        match unsafe { WaitForSingleObject(event.0, 50) } {
-            WAIT_TIMEOUT => continue,
-            WAIT_OBJECT_0 => {}
-            _ => return Err("System audio event failed".into()),
-        }
-        while !stop.load(Ordering::Acquire)
+    while events.wait()? {
+        while !events.stopped()
             && unsafe { capture.GetNextPacketSize() }.map_err(|e| e.to_string())? > 0
         {
             read_packet(&capture, &mut queue, rate, channels)?;
@@ -207,7 +191,7 @@ fn run(
                 let excess = (queue.len() - frame_samples * 10) / frame_samples * frame_samples;
                 queue.drain(..excess);
             }
-            while queue.len() >= frame_samples && !stop.load(Ordering::Acquire) {
+            while queue.len() >= frame_samples && !events.stopped() {
                 for sample in &mut samples {
                     *sample = queue.pop_front().unwrap();
                 }

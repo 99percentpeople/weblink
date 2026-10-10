@@ -642,7 +642,9 @@ loopback requires Windows build 20348 or newer; disabling audio keeps video-only
 capture available. Startup failures are reported instead of silently omitting
 requested audio. PCM is captured on a dedicated WASAPI worker and sent directly
 to native WebRTC/Opus; it never crosses Tauri IPC. Audio capture ends with the
-screen session. Preview audio is excluded from browser re-publication and local
+screen session. The worker waits on packet-ready and explicit stop events, with
+no periodic stop check; stopping also wakes a silent audio device. Preview audio
+is excluded from browser re-publication and local
 playback, while received audio belongs to its screen's existing mute controls.
 
 Display and window inventories/backend dispatch live separately in
@@ -680,7 +682,10 @@ and incremental ICE candidates. Peers advertising `trickleIce` exchange SDP
 immediately, allowing reachable routes to connect while slow STUN/TURN requests
 continue. Candidates are scoped to their media connection and queued until its
 remote description is applied. Older native receivers use the complete-SDP
-fallback. Old clients keep chat/file/camera functionality but must update to
+fallback. Complete-SDP offers await the native ICE gathering callback or explicit
+peer/session cancellation, with a single gathering timeout. Completion received
+before the wait is retained; closing the peer also releases its waiters.
+Old clients keep chat/file/camera functionality but must update to
 receive native screen shares. A screen is identified by its control session and
 single video transceiver, independently of the ordinary connection's MIDs.
 Peers advertising `multiScreen` send all active publications, each with its own
@@ -832,7 +837,11 @@ overwrite a newer permission decision.
 Input goes directly from those native callbacks to bounded native queues, without
 per-event Tauri IPC. The latter is reserved for local owner lifetime, confirmation
 and status. Channel arrivals wake the host worker immediately; its periodic wait
-only services safety and liveness when no messages arrive. Pointer samples already
+only services safety and liveness when no messages arrive. A congested native
+control sender resumes queued output on DataChannel buffer-drain notifications.
+Those callbacks only wake the owner; serialization and sending remain on the
+owner thread, and unrelated periodic ticks do not retry blocked output.
+Pointer samples already
 due are sent directly, while earlier samples coalesce until their next deadline.
 Messages are limited to 4 KiB, reliable queues to 128 entries and send
 buffers to 16 KiB. Pointer moves coalesce to at most 120 updates/s. Each input is

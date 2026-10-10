@@ -7,12 +7,15 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+#[cfg(test)]
+mod tests;
 pub(super) struct Channels {
     reliable: DataChannel,
     movement: DataChannel,
     port: Arc<dyn Port>,
     closed: AtomicBool,
     opened: AtomicBool,
+    waiting_for_capacity: AtomicBool,
 }
 /// The media owner detaches callbacks while it still holds a strong reference.
 /// A callback's temporary Arc must never become the last owner and unsubscribe itself.
@@ -60,6 +63,7 @@ impl Channels {
             port,
             closed: AtomicBool::new(false),
             opened: AtomicBool::new(false),
+            waiting_for_capacity: AtomicBool::new(false),
         });
         for (movement, channel) in [(false, &this.reliable), (true, &this.movement)] {
             let weak = Arc::downgrade(&this);
@@ -86,6 +90,19 @@ impl Channels {
                 }
             })));
         }
+        let weak = Arc::downgrade(&this);
+        this.reliable
+            .on_buffered_amount_change(Some(Box::new(move |_| {
+                if let Some(this) = weak.upgrade() {
+                    if !this.closed.load(Ordering::Acquire)
+                        && this.waiting_for_capacity.load(Ordering::Acquire)
+                    {
+                        // Only signal the owner. Querying/sending on a WebRTC
+                        // callback thread can re-enter its signaling-thread locks.
+                        this.port.writable();
+                    }
+                }
+            })));
         let weak = Arc::downgrade(&this);
         pc.on_connection_state_change(Some(Box::new(move |state| {
             if matches!(
@@ -120,6 +137,7 @@ impl Channels {
         for c in [&self.reliable, &self.movement] {
             c.on_message(None);
             c.on_state_change(None);
+            c.on_buffered_amount_change(None);
             c.close();
         }
     }
@@ -141,12 +159,25 @@ impl Sender for Outbound {
         {
             return SendResult::Closed;
         }
+        // Arm before testing capacity so a drain between the test and returning
+        // Backpressure cannot be missed. Stay armed until a send succeeds.
+        c.waiting_for_capacity.store(true, Ordering::Release);
         if c.reliable.buffered_amount() + data.len() as u64 > HIGH_WATER {
             return SendResult::Backpressure;
         }
         match c.reliable.send(data, false) {
-            Ok(()) => SendResult::Sent,
-            Err(_) if c.reliable.state() == DataChannelState::Open => SendResult::Backpressure,
+            Ok(()) => {
+                c.waiting_for_capacity.store(false, Ordering::Release);
+                SendResult::Sent
+            }
+            Err(_)
+                if c.reliable.state() == DataChannelState::Open
+                    && c.reliable.buffered_amount() > 0 =>
+            {
+                SendResult::Backpressure
+            }
+            // Without queued bytes there will be no drain notification to retry
+            // an unexpected send failure. End control instead of waiting forever.
             Err(_) => SendResult::Closed,
         }
     }

@@ -40,6 +40,54 @@ fn discovers_process_loopback_formats_without_starting_capture() {
 }
 
 #[test]
+fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
+    use std::{
+        future::{poll_fn, Future},
+        task::Poll,
+    };
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        for close_session in [false, true] {
+            let media = MediaSession::new(MediaOptions {
+                encoder: "software".into(),
+                ..Default::default()
+            })
+            .unwrap();
+            let pc = media
+                .factory
+                .create_peer_connection(Default::default())
+                .unwrap();
+            let gathering = Arc::new(ice::Gathering::new());
+            media.peers.lock().unwrap().insert(
+                "pending".into(),
+                MediaPeer {
+                    connection: pc,
+                    gathering: gathering.clone(),
+                    preview: false,
+                    control: None,
+                },
+            );
+            let mut waiting = Box::pin(gathering.wait());
+            poll_fn(|cx| {
+                assert!(waiting.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            if close_session {
+                media.close();
+            } else {
+                media.close_peer("pending");
+            }
+            gathering.complete();
+            let result = tokio::time::timeout(Duration::from_secs(1), waiting)
+                .await
+                .unwrap();
+            assert_eq!(result.unwrap_err(), "Native media connection closed");
+            assert!(media.peers.lock().unwrap().is_empty());
+        }
+    });
+}
+
+#[test]
 fn sender_timing_rejects_invalid_rtp_ranges_and_pacing_before_native_startup() {
     use libwebrtc::peer_connection_factory::VideoSendOptions;
     for (min, max) in [

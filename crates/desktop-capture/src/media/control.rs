@@ -19,6 +19,8 @@ pub trait Sender: Send + Sync {
 /// Callbacks must not block WebRTC threads. Closing input does not end screen viewing.
 pub trait Port: Send + Sync {
     fn opened(&self, sender: Arc<dyn Sender>);
+    /// Retry queued output on the owner worker, never inside this callback.
+    fn writable(&self);
     fn message(&self, movement: bool, data: &[u8]);
     fn closed(&self);
 }
