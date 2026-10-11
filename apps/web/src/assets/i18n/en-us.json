@@ -285,10 +285,10 @@
       },
       "native_capture": "Screen capture and encoding",
       "native_encoder": "Screen sharing video encoding",
-      "native_encoder_auto": "Automatic (prefer compatible hardware)",
+      "native_encoder_auto": "Auto",
       "hardware": "Hardware",
       "software": "Software",
-      "native_encoder_description": "Choose desktop capture methods and video codecs for the next share.",
+      "native_encoder_description": "Auto exchanges decoder capabilities and selects a common format, preferring hardware encoding. Joining or leaving can reconnect media transports; capture stays active. Manual encoding changes apply to the next share.",
       "native_advanced": "Advanced options for this encoding",
       "readback_buffers": "GPU readback buffers",
       "readback_buffers_1": "Single buffer",
@@ -296,7 +296,7 @@
       "readback_buffers_3": "Triple buffer",
       "readback_buffers_description": "More buffers allow overlapping frame processing, but use more GPU memory and may increase latency. Applies to the next share.",
       "color_matrix": "Colour matrix",
-      "color_auto": "Automatic (match codec)",
+      "color_auto": "Auto",
       "color_range": "Colour range",
       "color_range_limited": "Limited (16–235, wider compatibility)",
       "color_range_full": "Full (0–255)",
@@ -309,7 +309,7 @@
         "unavailable": "Currently unavailable",
         "codec": {
           "title": "Preferred audio codec",
-          "unsupported": "Audio codec capabilities are unavailable. A compatible codec will be negotiated automatically."
+          "unsupported": "Codec discovery is unavailable. Automatic selection uses basic compatibility formats until capabilities are known."
         },
         "sample_rate": {
           "title": "Audio sample rate"
@@ -319,17 +319,18 @@
           "mono": "Mono",
           "stereo": "Stereo (two channels)"
         },
-        "description": "Choose a supported sample rate and channel count for the next capture.",
+        "description": "Defaults: 48 kHz, stereo. Preferences apply to the next capture; browsers may use the nearest device format.",
         "sampling_loading": "Loading audio formats…",
         "codecs_loading": "Loading audio codecs…",
         "sampling_failed": "System audio formats are currently unavailable.",
-        "sampling_unknown": "Sampling options are not available yet. Use Auto."
+        "sampling_unknown": "Sampling capabilities are not available yet. The default preference is 48 kHz, stereo.",
+        "default": "Default"
       },
       "encoders_loading": "Detecting video encoders…",
       "backends_loading": "Loading capture methods…",
       "backends_unavailable": "Capture methods are currently unavailable.",
       "browser_encoding": "Browser encoding",
-      "browser_encoding_description": "Used for cameras, microphones, and browser screen sharing on subsequent connection negotiation.",
+      "browser_encoding_description": "Auto exchanges decoder capabilities and prefers formats supported by every connected peer. Choices update when peers join or leave. Manual choices remain preferences for browser negotiation.",
       "native_audio_codec": "Native audio codec"
     },
     "remote_control": {
@@ -843,10 +844,10 @@
       "obs_audio_setup_tip": "OBS + VB-CABLE setup:\n1. OBS Settings → Audio → Advanced → Monitoring Device: CABLE Input.\n2. OBS Edit → Advanced Audio Properties → Audio Monitoring: Monitor and Output.\n3. In Weblink, select CABLE Output for Program Audio.",
       "request_camera_permission": "Request Camera Permission",
       "request_microphone_permission": "Request Microphone Permission",
-      "select_system_audio_source": "Select System Audio Source (Auto)",
-      "select_program_audio": "Select Program Audio Input (Auto)",
-      "select_microphone": "Select Microphone (Auto)",
-      "select_camera": "Select Camera (Auto)",
+      "select_system_audio_source": "Select System Audio Source (System default)",
+      "select_program_audio": "Select Program Audio Input (System default)",
+      "select_microphone": "Select Microphone (System default)",
+      "select_camera": "Select Camera (System default)",
       "open_screen": "Open Screen",
       "open_media_device": "Open Media Device",
       "current": "Current",
@@ -1113,7 +1114,8 @@
       "windows": "Windows",
       "screen_backend": "Screen capture method",
       "window_backend": "Window capture method",
-      "auto_backend": "Automatic",
+      "auto_backend": "Auto",
+      "default_backend": "Default",
       "unavailable": "Unavailable",
       "search_windows": "Search windows",
       "size_unknown": "Size unavailable",

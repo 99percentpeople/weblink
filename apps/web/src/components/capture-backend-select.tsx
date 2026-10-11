@@ -28,27 +28,39 @@ export default function CaptureBackendSelect(props: {
     t(
       `meeting.native_screen.${props.kind === "monitor" ? "screen_backend" : "window_backend"}`,
     );
+  const automatic = () => props.kind === "monitor";
   const options = () => [
     ...new Set<CaptureBackend>([
-      "auto",
+      ...(automatic() ? ["auto" as const] : []),
       ...props.backends.map((backend) => backend.id),
       props.value,
     ]),
   ];
-  const name = (id: CaptureBackend) =>
-    id === "auto"
-      ? t("meeting.native_screen.auto_backend")
-      : (props.backends.find((backend) => backend.id === id)
-          ?.name ??
-        `${id.toUpperCase()} (${t("meeting.native_screen.unavailable")})`);
+  const name = (id: CaptureBackend) => {
+    if (id === "auto")
+      return t(
+        automatic()
+          ? "meeting.native_screen.auto_backend"
+          : "meeting.native_screen.unavailable",
+      );
+    const backend = props.backends.find(
+      (backend) => backend.id === id,
+    );
+    if (!backend)
+      return `${id.toUpperCase()} (${t("meeting.native_screen.unavailable")})`;
+    return !automatic() && props.backends.length === 1
+      ? `${backend.name} (${t("meeting.native_screen.default_backend")})`
+      : backend.name;
+  };
   return (
     <SettingSelect<CaptureBackend>
       modal
       value={props.value}
       options={options()}
       disabled={props.disabled || !props.backends.length}
-      onChange={(value) => {
-        if (value) props.onChange(value);
+      onChange={(next) => {
+        if (next && next !== props.value)
+          props.onChange(next);
       }}
       label={label()}
       optionLabel={name}

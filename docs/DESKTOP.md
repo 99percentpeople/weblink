@@ -316,7 +316,8 @@ WGC. Availability is probed in the current interactive session. While DXGI captu
 is active, queries reuse that running session as evidence of support; they must
 not attempt a second duplication of an output already owned by this process.
 After capture stops, availability is probed again. Auto prefers DXGI
-for screens and WGC for windows; explicit unavailable choices fail instead of
+for screens and can fall back to WGC on startup failure. Windows select WGC
+explicitly by default; unavailable choices fail instead of
 silently capturing through a different backend. Defaults remain 1080p / 30 fps. Settings → Audio & video
 controls resolution (up to 2160p), frame rate, bitrate and degradation.
 Desktop frame-rate choices use connected displays' current refresh rates, including
@@ -335,12 +336,30 @@ parameter failures are reported to the user.
 
 Software formats come from libwebrtc's sender capabilities. Hardware H.264 and HEVC encoders
 come from Media Foundation hardware-transform enumeration followed by activation
-and input/output type negotiation, not GPU model names. Auto prefers an available
-H.264 hardware encoder by default; an explicit format selects a matching hardware
-encoder when available, otherwise a supported software encoder. Settings combines encoder and format into one
-selector with Auto and the detected hardware/software format combinations.
-Existing preferences remain readable; unavailable saved combinations are marked
-instead of silently replaced. Each remote peer owns its hardware transform and
+and input/output type negotiation, not GPU model names. Automatic encoding exchanges
+browser/WebView decoder MIME capabilities in the existing authenticated media hello.
+The application owns the connected-peer set, including peers whose capabilities are
+still unknown. It intersects local encoding formats with every connected receiver;
+unknown/legacy receivers use H.264/VP8 and Opus/PCMU/PCMA compatibility baselines.
+Native selection prefers available hardware, then AV1, HEVC, VP9, H.264 and VP8;
+browser selection uses this format order. Audio prefers Opus, then G.722, PCMU and
+PCMA. This is a deterministic preference policy, not a device performance benchmark;
+SDP still negotiates profiles/levels and actual decoding is monitored separately.
+An empty common set suspends the affected browser senders or rejects native offers,
+without ending local capture. Manual browser choices retain WebRTC fallback ordering;
+manual native video formats remain fixed; manual audio choices remain preferences.
+Neither rewrites saved user preferences.
+
+Joining, leaving, or a changed capability report reevaluates automatic choices.
+Browser senders renegotiate on their existing connections; native publications notify
+all of their transports only when the resolved format changes, replacing those media
+connections while retaining capture and raw preview. Input channels bound to replaced
+native media connections also reconnect. Each replacement uses the negotiated format's
+hardware/software backend and a scoped factory; capture pixel conversion is shared.
+Settings combines encoder and format into one selector with Auto and detected
+hardware/software format combinations. Stored settings accept fully automatic encoding or a concrete encoder/format pair.
+Other combinations use the automatic default; unavailable saved concrete pairs
+are marked instead of silently replaced. Each remote peer owns its hardware transform and
 encoded-frame source, with independent bitrate and keyframe feedback. A selected
 codec restricts negotiation to that format: incompatible receivers fail instead
 of silently switching codecs. Driver/session limits and accepted resolution/rate
@@ -423,8 +442,10 @@ keyframe. Existing byte debt survives pause and recovery. Fixed codec controls
 are read back on transform initialization, not on every rate update.
 
 Native screen colour settings apply to the next share. Automatic conversion uses
-the BT.709 YUV matrix for a selected H.264/H.265/VP9/AV1 codec and BT.601 when an
-unrestricted software offer can negotiate VP8. Explicit BT.601/BT.709 and limited
+the BT.709 YUV matrix for a fixed H.264/H.265/VP9/AV1 codec and BT.601 when automatic
+format selection can negotiate VP8. This matrix remains fixed during membership
+changes. Explicit BT.709 or full range excludes VP8 from automatic selection.
+Explicit BT.601/BT.709 and limited
 or full range use matching libyuv conversion, raw-preview metadata, MF input/output
 attributes and RTP colour metadata. The RGB primaries and transfer remain sRGB;
 choosing BT.709 changes the YUV matrix, not the source gamut or transfer curve.
@@ -651,6 +672,12 @@ screen session. The worker waits on packet-ready and explicit stop events, with
 no periodic stop check; stopping also wakes a silent audio device. Preview audio
 is excluded from browser re-publication and local
 playback, while received audio belongs to its screen's existing mute controls.
+
+Audio capture defaults are explicit: 48 kHz, stereo. Legacy null sampling preferences
+resolve to these same values. Browser constraints express them as preferences, so the
+device may supply a nearby format; they are not advertised as automatic negotiation.
+Device pickers use “System default”. Capture-backend Auto remains a real selection and
+fallback policy; it is independent of codec negotiation.
 
 Display and window inventories/backend dispatch live separately in
 `crates/desktop-capture/src/backend/windows/{screen,window}.rs`. `CaptureOptions`

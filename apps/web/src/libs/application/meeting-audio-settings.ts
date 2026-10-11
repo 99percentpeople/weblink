@@ -13,7 +13,7 @@ export type MeetingAudioSettings = Partial<
   >
 >;
 
-/** Old or malformed preferences must never prevent capture from starting. */
+/** Malformed preferences must never prevent capture from starting. */
 export function resolveAudioSampling(
   options: MeetingAudioSettings,
 ) {
@@ -21,11 +21,11 @@ export function resolveAudioSampling(
     audioSampleRate:
       audioSampleRates.find(
         (rate) => rate === options.audioSampleRate,
-      ) ?? null,
+      ) ?? 48000,
     audioChannelCount:
       audioChannelCounts.find(
         (count) => count === options.audioChannelCount,
-      ) ?? null,
+      ) ?? 2,
   };
 }
 
@@ -36,12 +36,8 @@ export function meetingAudioConstraints(
   const { audioSampleRate, audioChannelCount } =
     resolveAudioSampling(options);
   return {
-    ...(audioSampleRate === null
-      ? {}
-      : { sampleRate: { ideal: audioSampleRate } }),
-    ...(audioChannelCount === null
-      ? {}
-      : { channelCount: { ideal: audioChannelCount } }),
+    sampleRate: { ideal: audioSampleRate },
+    channelCount: { ideal: audioChannelCount },
   };
 }
 
@@ -50,8 +46,7 @@ export function nativeAudioOptions(
 ) {
   const sampling = resolveAudioSampling(options);
   return {
-    audioSampleRate: sampling.audioSampleRate ?? 48000,
-    audioChannelCount: sampling.audioChannelCount ?? 2,
+    ...sampling,
     audioCodec: options.nativeAudioCodec ?? null,
   };
 }

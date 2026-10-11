@@ -190,6 +190,61 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+it("applies common codecs to live senders and suspends only incompatible media without stopping capture", () => {
+  const capabilities = {
+    codecs: [
+      "video/H264",
+      "video/VP9",
+      "video/AV1",
+      "video/rtx",
+    ].map((mimeType) => ({ mimeType, clockRate: 90000 })),
+  };
+  vi.stubGlobal("RTCRtpSender", {
+    getCapabilities: () => capabilities,
+  });
+  vi.stubGlobal("RTCRtpReceiver", {
+    getCapabilities: () => capabilities,
+  });
+  let automaticVideoCodecs = ["video/vp9", "video/h264"];
+  const { controller, bind } = setup(
+    undefined,
+    undefined,
+    () => ({
+      preferredVideoCodec: null,
+      preferredAudioCodec: null,
+      automaticVideoCodecs,
+    }),
+  );
+  const track = new Track("video", "camera");
+  controller.setStream(asStream(media(track)));
+  const { pc } = bind();
+  const preferences = vi.fn();
+  Object.assign(pc.transceivers[0], {
+    setCodecPreferences: preferences,
+  });
+  expect(controller.refreshCodecs()).toBe(true);
+  expect(
+    preferences.mock.calls
+      .at(-1)?.[0]
+      .map((codec: RTCRtpCodec) => codec.mimeType),
+  ).toEqual(["video/VP9", "video/H264", "video/rtx"]);
+  expect(controller.refreshCodecs()).toBe(false);
+  automaticVideoCodecs = [];
+  controller.refreshCodecs();
+  expect(
+    pc.senders.every((sender) => sender.track === null),
+  ).toBe(true);
+  expect(track.stop).not.toHaveBeenCalled();
+  automaticVideoCodecs = ["video/h264"];
+  controller.refreshCodecs();
+  expect(
+    pc.senders.some(
+      (sender) => sender.track === asTrack(track),
+    ),
+  ).toBe(true);
+  controller.dispose();
+});
+
 it("prefers the selected audio codec with fallbacks and restores automatic ordering", () => {
   const opus = { mimeType: "audio/opus", clockRate: 48000 };
   const pcma = { mimeType: "audio/PCMA", clockRate: 8000 };

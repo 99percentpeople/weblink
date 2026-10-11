@@ -170,7 +170,7 @@ it("defaults audio on, submits the user's choice and resets it when reopened", a
   await waitFor(() =>
     expect(accepted).toHaveBeenCalledWith({
       sourceId: "window-1",
-      backend: "auto",
+      backend: "wgc",
       audio: false,
     }),
   );
@@ -383,7 +383,7 @@ it("waits for selection, shows only the latest thumbnail, and releases images on
   expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   expect(capture.thumbnail).toHaveBeenLastCalledWith(
     "window-2",
-    { backend: "auto" },
+    { backend: "wgc" },
   );
   expect(capture.start).not.toHaveBeenCalled();
   fireEvent.click(

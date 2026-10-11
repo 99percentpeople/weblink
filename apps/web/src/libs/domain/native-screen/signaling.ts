@@ -1,5 +1,9 @@
 import type { ScreenControlSignal } from "./control-request";
 import type { ControlCapabilities } from "../protocol/remote-control";
+import {
+  parseMediaDecodeCapabilities,
+  type MediaDecodeCapabilities,
+} from "../protocol/media-codecs";
 
 export const NATIVE_SCREEN_CHANNEL =
   "weblink-desktop-media";
@@ -12,6 +16,7 @@ export type ScreenSignal =
       receiveScreen: true;
       trickleIce?: true;
       multiScreen?: true;
+      decode?: MediaDecodeCapabilities;
       remoteControl?: ControlCapabilities;
       requestScreen?: true;
     }
@@ -48,7 +53,10 @@ export function parseScreenSignal(
       value.type === "hello" &&
       value.receiveScreen === true
     )
-      return value;
+      return {
+        ...value,
+        decode: parseMediaDecodeCapabilities(value.decode),
+      };
     if (
       typeof value.id !== "string" ||
       !value.id.length ||

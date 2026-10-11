@@ -27,22 +27,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("migrates room limits, persists the global setting and keeps it independent of room resets or deletion", async () => {
+it("restores the global limit, persists edits and keeps it independent of room resets or deletion", async () => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   const megabyte = 1024 * 1024;
   localStorage.setItem(
     STORAGE_KEYS.appOptions,
     JSON.stringify({
+      autoDownloadMaxSize: 2 * megabyte,
       roomConfigs: {
         first: {
           name: "First",
           autoDownloadFiles: true,
-          autoDownloadMaxSize: 2 * megabyte,
         },
         second: {
           name: "Second",
           autoDownloadFiles: true,
-          autoDownloadMaxSize: 20 * megabyte,
         },
       },
     }),
@@ -62,13 +61,6 @@ it("migrates room limits, persists the global setting and keeps it independent o
       second: { name: "Second", autoDownloadFiles: true },
     },
   });
-  expect(
-    savedOptions().roomConfigs.first,
-  ).not.toHaveProperty("autoDownloadMaxSize");
-  expect(
-    savedOptions().roomConfigs.second,
-  ).not.toHaveProperty("autoDownloadMaxSize");
-
   render(() => <TransferSettings />);
   const limit = screen.getByRole("button", {
     name: /^setting\.receiver\.auto_download_limit\.title/,

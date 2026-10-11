@@ -91,6 +91,9 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
             media.peers.lock().unwrap().insert(
                 "pending".into(),
                 MediaPeer {
+                    _factory: media.factory.clone(),
+                    software: true,
+                    encoding: media.options.lock().unwrap().clone(),
                     connection: pc,
                     gathering: gathering.clone(),
                     preview: false,
@@ -172,6 +175,14 @@ impl Drop for Receiver {
 }
 
 async fn connect(media: &MediaSession, id: &str, preview: bool) -> Result<Receiver> {
+    connect_with_codecs(media, id, preview, None).await
+}
+async fn connect_with_codecs(
+    media: &MediaSession,
+    id: &str,
+    preview: bool,
+    codecs: Option<super::super::SendCodecs>,
+) -> Result<Receiver> {
     let factory = PeerConnectionFactory::default();
     let mut config = RtcConfiguration::default();
     config.continual_gathering_policy = ContinualGatheringPolicy::GatherOnce;
@@ -196,7 +207,9 @@ async fn connect(media: &MediaSession, id: &str, preview: bool) -> Result<Receiv
         .on_ice_candidate(Some(Box::new(move |candidate| {
             gathered.lock().unwrap().push(candidate.to_string());
         })));
-    let offer = media.offer(id.into(), vec![], false, preview).await?;
+    let offer = media
+        .offer_configured(id.into(), vec![], false, preview, None, None, codecs)
+        .await?;
     receiver
         .pc
         .set_remote_description(
@@ -245,6 +258,111 @@ async fn decoded(receiver: &Receiver) -> u32 {
             }
         })
         .sum()
+}
+
+#[test]
+fn negotiated_formats_switch_transports_without_replacing_the_media_source() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let media = MediaSession::new(MediaOptions {
+            max_width: 320,
+            max_height: 180,
+            frame_rate: 20,
+            ..Default::default()
+        })
+        .unwrap();
+        let original_color =
+            serde_json::to_value(media.options.lock().unwrap().color_space()).unwrap();
+        assert_eq!(original_color["matrix"], "smpte170m");
+        for (index, codec) in ["video/h264", "video/vp8", "video/h264"]
+            .into_iter()
+            .enumerate()
+        {
+            let id = format!("negotiated-{index}");
+            let receiver = connect_with_codecs(
+                &media,
+                &id,
+                false,
+                Some(super::super::SendCodecs {
+                    video: codec.into(),
+                    audio: "audio/opus".into(),
+                }),
+            )
+            .await
+            .unwrap();
+            let frame = VideoFrame::new(
+                VideoRotation::VideoRotation0,
+                I420Buffer::new_black(320, 180),
+            );
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while decoded(&receiver).await < 3 {
+                    media.publish_frame(&frame);
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            })
+            .await
+            .expect("Negotiated format did not decode");
+            let before = decoded(&receiver).await;
+            media
+                .update_video_settings(VideoSettings {
+                    max_width: 320,
+                    max_height: 180,
+                    frame_rate: 15,
+                    max_bitrate: 500_000,
+                    degradation_preference: "balanced".into(),
+                })
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while decoded(&receiver).await < before + 3 {
+                    media.publish_frame(&frame);
+                    tokio::time::sleep(Duration::from_millis(67)).await;
+                }
+            })
+            .await
+            .expect("Live settings lost the negotiated encoder");
+            let stats = media.stats(&id).await.unwrap();
+            assert!(
+                stats
+                    .iter()
+                    .any(|sample| sample.codec.eq_ignore_ascii_case(codec)),
+                "Wrong codec: {stats:?}"
+            );
+            if codec == "video/vp8" {
+                assert!(media.needs_steady_input());
+            }
+            assert_eq!(
+                serde_json::to_value(media.options.lock().unwrap().color_space()).unwrap(),
+                original_color
+            );
+            media.close_peer(&id);
+            assert!(media.peers.lock().unwrap().is_empty());
+            assert!(media.hardware.lock().unwrap().is_empty());
+            assert!(!media.closed.load(Ordering::Acquire));
+        }
+        if MediaSession::codecs()
+            .iter()
+            .any(|codec| codec == "video/h265")
+        {
+            let offer = media
+                .offer_configured(
+                    "hevc".into(),
+                    vec![],
+                    false,
+                    false,
+                    Some(Box::new(|_| {})),
+                    None,
+                    Some(super::super::SendCodecs {
+                        video: "video/h265".into(),
+                        audio: "audio/opus".into(),
+                    }),
+                )
+                .await
+                .unwrap();
+            assert!(offer.contains("H265/90000"));
+            assert!(!offer.contains("H264/90000"));
+            media.close_peer("hevc");
+        }
+        media.close();
+    });
 }
 
 #[test]
@@ -941,6 +1059,10 @@ fn hardware_selection_matches_codec_and_preserves_h264_default() {
     );
     options.encoder = "auto".into();
     options.codec = Some("video/vp9".into());
+    assert!(select_hardware_encoder(&options, encoders())
+        .unwrap()
+        .is_none());
+    options.encoder = "software".into();
     assert!(select_hardware_encoder(&options, encoders())
         .unwrap()
         .is_none());

@@ -165,10 +165,12 @@ export const platform: PlatformRuntime = {
       preview = false,
       onCandidate,
       control,
+      codecs,
     ) =>
       invoke<string>("capture_offer", {
         sessionId,
         ...(control ? { control } : {}),
+        ...(codecs ? { codecs } : {}),
         peerId,
         relayOnly,
         preview,

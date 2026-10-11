@@ -7,34 +7,6 @@ import {
 } from "@/libs/application/meeting-video-settings";
 
 describe("meeting capture settings", () => {
-  it.each([
-    ["auto", null],
-    ["software", "video/vp9"],
-    ["software", "video/h264"],
-    ["mf:test", "video/h265"],
-  ] as const)(
-    "ignores removed full-chroma preferences for %s / %s",
-    (nativeScreenEncoder, nativeScreenCodec) => {
-      for (const nativeColorFormat of ["rgb", "yuv444"]) {
-        const saved = {
-          ...getDefaultAppOptions(),
-          nativeScreenEncoder,
-          nativeScreenCodec,
-          nativeColorMatrix: "bt709" as const,
-          nativeColorRange: "limited" as const,
-          nativeColorFormat,
-        };
-        const resolved = nativeScreenOptions(saved);
-        expect(resolved).toMatchObject({
-          encoder: nativeScreenEncoder,
-          codec: nativeScreenCodec,
-          colorMatrix: "bt709",
-          colorRange: "limited",
-        });
-        expect(resolved).not.toHaveProperty("colorFormat");
-      }
-    },
-  );
   it("uses the same selected limits for camera, display capture and native capture", () => {
     const options = {
       ...getDefaultAppOptions(),
@@ -91,7 +63,7 @@ describe("meeting capture settings", () => {
       maxBitrate: 128 * 1024,
     });
   });
-  it("preserves valid readback buffer counts and defaults legacy or invalid preferences to two", () => {
+  it("preserves valid readback buffer counts and defaults invalid preferences to two", () => {
     for (const nativeReadbackBuffers of [
       1, 2, 3,
     ] as const) {

@@ -1,9 +1,4 @@
-import { resolveNotificationOptions } from "@/libs/domain/notification-options";
-import { resolveAudioSampling } from "@/libs/application/meeting-audio-settings";
-import {
-  setClientConfig,
-  setRoomConfig,
-} from "@/libs/state/permission-options";
+import { resolveStoredAppOptions } from "@/libs/state/stored-app-options";
 export {
   getClientConfig,
   setClientConfig,
@@ -13,19 +8,11 @@ export {
   resetClientConfig,
   resetRoomConfig,
 } from "@/libs/state/permission-options";
-import { sanitizeTurnServers } from "@/libs/domain/ice-server";
-import { resolveRemoteFileLimit } from "@/libs/domain/protocol/remote-file-limits";
-import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
-import { resolveRemoteTouchOptions } from "@/libs/domain/remote-control/touch-options";
-import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
-import { resolveRemoteGamepadOptions } from "@/libs/domain/remote-control/gamepad-options";
-import { resolveApplicationOptions } from "@/libs/domain/application-options";
 import { makePersisted } from "@solid-primitives/storage";
 import {
   createEffect,
   createSignal,
   onCleanup,
-  untrack,
 } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { SetStoreFunction } from "solid-js/store";
@@ -34,14 +21,10 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
-import { normalizeLocalePreference } from "@/libs/i18n/locale";
 import type { AppOption } from "@/libs/state/app-options";
 import {
-  defaultClientConfig,
   getDefaultAppOptions,
   parseTurnServers,
-  resolveClientConfig,
-  resolveRoomDownloadOptions,
 } from "@/libs/state/app-options";
 
 export type {
@@ -86,85 +69,16 @@ export function initializeAppOptions() {
       return defaults;
     }
 
-    const legacyPip = localStorage.getItem(
-      "meeting-auto-picture-in-picture",
-    );
-    defaults.application = resolveApplicationOptions(
-      undefined,
-      legacyPip,
-    );
-
     const raw = localStorage.getItem(
       STORAGE_KEYS.appOptions,
     );
     if (!raw) return defaults;
 
     try {
-      const parsedValue = JSON.parse(
-        raw,
-      ) as Partial<AppOption> & {
-        channelsNumber?: unknown;
-        showStreamStats?: unknown;
-      };
-      const {
-        channelsNumber: _legacyChannelsNumber,
-        showStreamStats: _removedStreamStats,
-        ...parsed
-      } = parsedValue;
-      const legacyBufferedAmount =
-        parsed.bufferedAmountHighWaterMark === undefined
-          ? parsed.bufferedAmountLowThreshold
-          : undefined;
-
-      return {
-        ...defaults,
-        ...parsed,
-        locale: normalizeLocalePreference(parsed.locale),
-        ...resolveRoomDownloadOptions(parsed),
-        ...resolveAudioSampling(parsed),
-        notifications: resolveNotificationOptions(
-          parsed.notifications,
-        ),
-        application: resolveApplicationOptions(
-          parsed.application,
-          legacyPip,
-        ),
-        remoteFileMaxSize: resolveRemoteFileLimit(
-          parsed.remoteFileMaxSize,
-        ),
-        remotePointer: resolveRemotePointerOptions(
-          parsed.remotePointer,
-        ),
-        remoteTouch: resolveRemoteTouchOptions(
-          parsed.remoteTouch,
-        ),
-        remoteKeyboard: resolveRemoteKeyboardOptions(
-          parsed.remoteKeyboard,
-        ),
-        remoteGamepad: resolveRemoteGamepadOptions(
-          parsed.remoteGamepad,
-        ),
-        bufferedAmountLowThreshold:
-          legacyBufferedAmount !== undefined
-            ? defaults.bufferedAmountLowThreshold
-            : (parsed.bufferedAmountLowThreshold ??
-              defaults.bufferedAmountLowThreshold),
-        bufferedAmountHighWaterMark:
-          legacyBufferedAmount !== undefined
-            ? Math.max(
-                defaults.bufferedAmountHighWaterMark,
-                legacyBufferedAmount,
-              )
-            : (parsed.bufferedAmountHighWaterMark ??
-              defaults.bufferedAmountHighWaterMark),
-        servers: {
-          ...defaults.servers,
-          ...(parsed.servers ?? {}),
-          turns: sanitizeTurnServers(
-            parsed.servers?.turns ?? defaults.servers.turns,
-          ),
-        },
-      } satisfies AppOption;
+      return resolveStoredAppOptions(
+        JSON.parse(raw),
+        defaults,
+      );
     } catch (err) {
       console.warn(
         "[initializeAppOptions] invalid app_options in localStorage",
@@ -175,26 +89,6 @@ export function initializeAppOptions() {
   };
 
   setAppState("options", reconcile(loadFromLocalStorage()));
-
-  // Import existing history once. Forgotten offline entries must not reappear on reload.
-  createEffect(() => {
-    if (
-      appState.message.status !== "ready" ||
-      appState.options.permissionHistoryImported
-    )
-      return;
-    untrack(() => {
-      for (const client of appState.message.clients)
-        if (client.clientId !== appState.profile.clientId)
-          setClientConfig(client.clientId, {
-            name: client.name,
-          });
-      for (const room of appState.message.conversations)
-        if (room.kind === "room")
-          setRoomConfig(room.id, { name: room.title });
-      setAppOptions("permissionHistoryImported", true);
-    });
-  });
 
   createEffect(() => {
     if (typeof localStorage === "undefined") return;

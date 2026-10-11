@@ -48,9 +48,9 @@ export default function AudioSettings() {
           const name = () => label(`${kind}.title`);
           const value = () =>
             String(
-              (kind === "sample_rate"
+              kind === "sample_rate"
                 ? sampling().audioSampleRate
-                : sampling().audioChannelCount) ?? "auto",
+                : sampling().audioChannelCount,
             );
           const supported = () =>
             (kind === "sample_rate"
@@ -58,58 +58,64 @@ export default function AudioSettings() {
               : available().channelCounts) ?? [];
           const options = () => [
             ...new Set([
-              "auto",
+              kind === "sample_rate" ? "48000" : "2",
               ...supported().map(String),
               value(),
             ]),
           ];
-          const optionName = (value: string) =>
-            value === "auto"
-              ? label("auto")
-              : kind === "sample_rate"
+          const isDefault = (value: string) =>
+            value ===
+            (kind === "sample_rate" ? "48000" : "2");
+          const optionName = (value: string) => {
+            const name =
+              kind === "sample_rate"
                 ? `${Number(value) / 1000} kHz`
                 : label(
                     value === "1"
                       ? "channels.mono"
                       : "channels.stereo",
                   );
+            return isDefault(value)
+              ? `${name} (${label("default")})`
+              : name;
+          };
           return (
             <SettingSelect<string>
               modal
               value={value()}
               options={options()}
               optionDisabled={(option) =>
-                option !== "auto" &&
+                !isDefault(option) &&
                 !supported().includes(Number(option))
               }
               onChange={(value) => {
                 if (
                   !value ||
-                  (value !== "auto" &&
+                  (!isDefault(value) &&
                     !supported().includes(Number(value)))
                 )
                   return;
                 if (kind === "sample_rate")
                   setAppOptions(
                     "audioSampleRate",
-                    value === "auto" ? null : Number(value),
+                    Number(value),
                   );
                 else
                   setAppOptions(
                     "audioChannelCount",
-                    value === "auto"
-                      ? null
-                      : (Number(value) as 1 | 2),
+                    Number(value) as 1 | 2,
                   );
               }}
               label={name()}
               renderValue={(state) =>
-                optionName(state.selectedOption() ?? "auto")
+                optionName(
+                  state.selectedOption() ?? value(),
+                )
               }
               optionLabel={(option) => (
                 <>
                   {optionName(option)}
-                  {option !== "auto" &&
+                  {!isDefault(option) &&
                   !supported().includes(Number(option))
                     ? ` (${label("unavailable")})`
                     : ""}

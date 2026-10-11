@@ -102,11 +102,6 @@ export type MediaConstraintsState = {
 };
 
 const mediaConstraintsStorageKey = "mediaConstraints";
-const legacyMicrophoneConstraintsStorageKey =
-  "microphoneConstraints";
-const legacySpeakerConstraintsStorageKey =
-  "speakerConstraints";
-const legacyVideoConstraintsStorageKey = "videoConstraints";
 
 const getSupportedConstraints = () => {
   if (
@@ -176,9 +171,7 @@ const loadMediaConstraintsFromSession = (
   const raw = sessionStorage.getItem(
     mediaConstraintsStorageKey,
   );
-  if (!raw) {
-    return loadLegacyMediaConstraintsFromSession(defaults);
-  }
+  if (!raw) return defaults;
 
   try {
     const parsed = JSON.parse(
@@ -216,56 +209,6 @@ const loadMediaConstraintsFromSession = (
     );
     return defaults;
   }
-};
-
-const loadLegacyConstraints = <T extends object>(
-  key: string,
-): Partial<T> => {
-  if (typeof sessionStorage === "undefined") {
-    return {};
-  }
-
-  const raw = sessionStorage.getItem(key);
-  if (!raw) return {};
-
-  try {
-    const parsed = JSON.parse(raw);
-    return isObject(parsed) ? (parsed as Partial<T>) : {};
-  } catch {
-    return {};
-  }
-};
-
-const loadLegacyMediaConstraintsFromSession = (
-  defaults: MediaConstraintsState,
-): MediaConstraintsState => {
-  const legacyMicrophone =
-    loadLegacyConstraints<MicrophoneConstraintsState>(
-      legacyMicrophoneConstraintsStorageKey,
-    );
-  const legacySpeaker =
-    loadLegacyConstraints<SpeakerConstraintsState>(
-      legacySpeakerConstraintsStorageKey,
-    );
-  const legacyVideo =
-    loadLegacyConstraints<VideoConstraintsState>(
-      legacyVideoConstraintsStorageKey,
-    );
-
-  return {
-    microphone: {
-      ...defaults.microphone,
-      ...legacyMicrophone,
-    },
-    speaker: {
-      ...defaults.speaker,
-      ...legacySpeaker,
-    },
-    video: {
-      ...defaults.video,
-      ...legacyVideo,
-    },
-  };
 };
 
 export const saveMediaConstraintsToSession = (

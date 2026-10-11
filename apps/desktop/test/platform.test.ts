@@ -137,6 +137,10 @@ describe("desktop platform boundary", () => {
       sourceId: "source",
     };
     ipc.mockResolvedValue("offer");
+    const codecs = {
+      video: "video/h265",
+      audio: "audio/opus",
+    };
     await platform.screenShare!.offer(
       "capture",
       "media",
@@ -145,6 +149,7 @@ describe("desktop platform boundary", () => {
       false,
       undefined,
       control,
+      codecs,
     );
     expect(ipc).toHaveBeenLastCalledWith(
       "capture_offer",
@@ -152,6 +157,7 @@ describe("desktop platform boundary", () => {
         sessionId: "capture",
         peerId: "media",
         control,
+        codecs,
       }),
     );
     await platform.remoteControl!.approve(

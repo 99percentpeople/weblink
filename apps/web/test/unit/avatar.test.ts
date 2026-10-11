@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  getDefaultProfile,
-  normalizeStoredProfile,
-} from "@/libs/state/profile-store";
+import { getDefaultProfile } from "@/libs/state/profile-store";
 import {
   getAvatarFallbackColors,
   getAvatarFallbackSvg,
@@ -14,25 +11,6 @@ import { getInitials } from "@/libs/utils/name";
 describe("avatar fallback", () => {
   it("keeps the default avatar field empty", () => {
     expect(getDefaultProfile().avatar).toBeNull();
-  });
-
-  it("migrates legacy DiceBear defaults without clearing custom avatars", () => {
-    const profile = getDefaultProfile();
-
-    expect(
-      normalizeStoredProfile({
-        ...profile,
-        avatar:
-          "https://api.dicebear.com/9.x/initials/svg?seed=Alice",
-      }).avatar,
-    ).toBeNull();
-
-    expect(
-      normalizeStoredProfile({
-        ...profile,
-        avatar: "data:image/png;base64,custom",
-      }).avatar,
-    ).toBe("data:image/png;base64,custom");
   });
 
   it("renders deterministic local colors from the display name", () => {

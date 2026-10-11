@@ -290,10 +290,10 @@
       },
       "native_capture": "화면 캡처 및 인코딩",
       "native_encoder": "화면 공유 비디오 인코딩",
-      "native_encoder_auto": "자동(호환 가능한 하드웨어 선호)",
+      "native_encoder_auto": "자동",
       "hardware": "하드웨어",
       "software": "소프트웨어",
-      "native_encoder_description": "다음 공유를 위해 데스크탑 캡처 방법과 비디오 코덱을 선택하십시오.",
+      "native_encoder_description": "자동은 모든 연결 장치의 공통 형식 중 하드웨어 인코딩을 우선합니다. 참가 및 퇴장 시 미디어 연결이 갱신될 수 있으며 캡처는 유지됩니다. 수동 변경은 다음 공유에 적용됩니다.",
       "native_advanced": "이 인코딩에 대한 고급 옵션",
       "readback_buffers": "GPU 리드백 버퍼",
       "readback_buffers_1": "단일 버퍼",
@@ -301,7 +301,7 @@
       "readback_buffers_3": "트리플 버퍼",
       "readback_buffers_description": "버퍼가 많을수록 프레임 처리가 겹치는 것이 허용되지만 GPU 메모리를 더 많이 사용하고 대기 시간이 늘어날 수 있습니다. 다음 공유에 적용됩니다.",
       "color_matrix": "컬러 매트릭스",
-      "color_auto": "자동(코덱 일치)",
+      "color_auto": "자동",
       "color_range": "색상 범위",
       "color_range_limited": "제한됨(16–235, 더 넓은 호환성)",
       "color_range_full": "전체(0~255)",
@@ -314,7 +314,7 @@
         "unavailable": "현재는 이용할 수 없습니다",
         "codec": {
           "title": "기본 오디오 코덱",
-          "unsupported": "오디오 코덱 기능을 사용할 수 없습니다. 호환 가능한 코덱이 자동으로 협상됩니다."
+          "unsupported": "코덱 기능을 확인할 수 없습니다. 자동 선택은 기능이 확인될 때까지 기본 호환 형식을 사용합니다."
         },
         "sample_rate": {
           "title": "오디오 샘플링 속도"
@@ -324,17 +324,18 @@
           "mono": "단핵증",
           "stereo": "스테레오(2개 채널)"
         },
-        "description": "다음 캡처에 대해 지원되는 샘플 속도와 채널 수를 선택합니다.",
+        "description": "기본값은 48 kHz, 스테레오입니다. 다음 캡처에 적용되며 브라우저는 장치가 지원하는 가까운 형식을 사용할 수 있습니다.",
         "sampling_loading": "오디오 형식 로드 중…",
         "codecs_loading": "오디오 코덱 로드 중…",
         "sampling_failed": "시스템 오디오 형식은 현재 사용할 수 없습니다.",
-        "sampling_unknown": "샘플링 옵션은 아직 사용할 수 없습니다. 자동을 사용하세요."
+        "sampling_unknown": "샘플링 기능을 아직 알 수 없습니다. 기본값은 48 kHz, 스테레오입니다.",
+        "default": "기본값"
       },
       "encoders_loading": "비디오 인코더 감지 중...",
       "backends_loading": "캡처 방법 로드 중…",
       "backends_unavailable": "현재 캡처 방법을 사용할 수 없습니다.",
       "browser_encoding": "브라우저 인코딩",
-      "browser_encoding_description": "후속 연결 협상 시 카메라, 마이크, 브라우저 화면 공유에 사용됩니다.",
+      "browser_encoding_description": "자동은 디코딩 기능을 교환하고 모든 연결 장치가 지원하는 형식을 선택합니다. 참가 및 퇴장 시 다시 평가합니다. 수동 선택은 브라우저 협상에서 우선합니다.",
       "native_audio_codec": "네이티브 오디오 코덱"
     },
     "remote_control": {
@@ -843,10 +844,10 @@
       "obs_audio_setup_tip": "OBS + VB-CABLE 설정:\n1. OBS 설정 → 오디오 → 고급 → 모니터링 장치: CABLE 입력.\n2. OBS 편집 → 고급 오디오 속성 → 오디오 모니터링: 모니터 및 출력.\n3. Weblink에서 프로그램 오디오용 CABLE 출력을 선택합니다.",
       "request_camera_permission": "카메라 권한 요청",
       "request_microphone_permission": "마이크 권한 요청",
-      "select_system_audio_source": "시스템 오디오 소스 선택(자동)",
-      "select_program_audio": "프로그램 오디오 입력 선택(자동)",
-      "select_microphone": "마이크 선택(자동)",
-      "select_camera": "카메라 선택(자동)",
+      "select_system_audio_source": "시스템 오디오 소스 선택 (시스템 기본값)",
+      "select_program_audio": "프로그램 오디오 입력 선택 (시스템 기본값)",
+      "select_microphone": "마이크 선택 (시스템 기본값)",
+      "select_camera": "카메라 선택 (시스템 기본값)",
       "open_screen": "화면 열기",
       "open_media_device": "오픈 미디어 장치",
       "current": "현재의",
@@ -1114,6 +1115,7 @@
       "screen_backend": "화면 캡처 방법",
       "window_backend": "창 캡처 방법",
       "auto_backend": "자동",
+      "default_backend": "기본값",
       "unavailable": "사용할 수 없음",
       "search_windows": "창 검색",
       "size_unknown": "사이즈 확인 불가",

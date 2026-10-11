@@ -281,9 +281,6 @@ beforeEach(() => {
   document.head.append(animationStyle);
   setRoomConflict(false);
   localStorage.removeItem("meeting-toolbar-follows-rail");
-  localStorage.removeItem(
-    "meeting-auto-picture-in-picture",
-  );
   vi.clearAllMocks();
   fixture.getScreenControl.mockReset();
   fixture.getRemoteControl.mockReset();

@@ -707,49 +707,13 @@ it("selects encoding first and keeps SDR advanced options compatible with that c
   });
 });
 
-it("does not replace a saved hardware codec because of a stale RGB preference", async () => {
-  const legacy = {
-    nativeScreenCodec: "video/h265",
-    nativeScreenEncoder: "mf:test:h265",
-    nativeColorFormat: "rgb",
-  };
-  setAppState("options", legacy);
-  render(() => <MeetingSettings />);
-  const encoder = await screen.findByRole("button", {
-    name: /setting.meeting_settings.native_encoder/,
-  });
-  await waitFor(() => expect(encoder).toBeEnabled());
-  expect(encoder).toHaveTextContent("H.265 (GPU)");
-  expect(
-    screen.getByText("YUV 4:2:0 · 8-bit · SDR"),
-  ).toBeInTheDocument();
-  expect(
-    nativeScreenOptions(appState.options),
-  ).not.toHaveProperty("colorFormat");
-  expect(appState.options.nativeScreenCodec).toBe(
-    "video/h265",
-  );
-  expect(appState.options.nativeScreenEncoder).toBe(
-    "mf:test:h265",
-  );
-});
-
 it.each([
   [
     "auto",
-    "video/h264",
-    "H.264 (setting.meeting_settings.native_encoder_auto)",
-  ],
-  [
-    "software",
     null,
-    "setting.meeting_settings.stream.preferred_video_codec.auto (setting.meeting_settings.software)",
+    "setting.meeting_settings.native_encoder_auto",
   ],
-  [
-    "mf:test",
-    null,
-    "setting.meeting_settings.stream.preferred_video_codec.auto (GPU)",
-  ],
+  ["software", "video/vp9", "VP9"],
   ["mf:test", "video/h264", "H.264 (GPU)"],
   ["mf:test:h265", "video/h265", "H.265 (GPU)"],
 ] as const)(
@@ -819,9 +783,32 @@ it("keeps screen and window capture backend preferences independent", async () =
     "meeting.native_screen.screen_backend",
     "DXGI",
   );
+  expect(
+    screen.getByRole("button", {
+      name: /meeting.native_screen.window_backend/,
+    }),
+  ).toHaveTextContent(
+    "WGC (meeting.native_screen.default_backend)",
+  );
+  expect(appState.options.nativeWindowCaptureBackend).toBe(
+    "wgc",
+  );
+  setAppState(
+    "options",
+    "nativeWindowCaptureBackend",
+    "dxgi",
+  );
+  expect(
+    screen.getByRole("button", {
+      name: /meeting.native_screen.window_backend/,
+    }),
+  ).toHaveTextContent("meeting.native_screen.unavailable");
+  expect(appState.options.nativeWindowCaptureBackend).toBe(
+    "dxgi",
+  );
   await choose(
     "meeting.native_screen.window_backend",
-    "WGC",
+    "WGC (meeting.native_screen.default_backend)",
   );
   expect(appState.options.nativeScreenCaptureBackend).toBe(
     "dxgi",
@@ -837,6 +824,11 @@ it("keeps screen and window capture backend preferences independent", async () =
   );
   expect(
     screen.queryByRole("option", { name: "DXGI" }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("option", {
+      name: "meeting.native_screen.auto_backend",
+    }),
   ).toBeNull();
 });
 
@@ -927,7 +919,7 @@ it("keeps distinct Intel encoders with the same name selectable", async () => {
   );
 });
 
-it("saves audio codec, sample rate and channels independently and restores automatic defaults", async () => {
+it("separates automatic codec selection from explicit sampling defaults", async () => {
   render(() => <MeetingSettings />);
   await choose(
     "setting.meeting_settings.audio.codec.title",
@@ -935,7 +927,7 @@ it("saves audio codec, sample rate and channels independently and restores autom
   );
   await choose(
     "setting.meeting_settings.audio.sample_rate.title",
-    "48 kHz",
+    "48 kHz (setting.meeting_settings.audio.default)",
   );
   await choose(
     "setting.meeting_settings.audio.channels.title",
@@ -954,15 +946,17 @@ it("saves audio codec, sample rate and channels independently and restores autom
       name: /audio.sample_rate.title/,
     }),
   ).toHaveTextContent("48 kHz");
-  for (const name of ["codec", "sample_rate", "channels"]) {
-    await choose(
-      `setting.meeting_settings.audio.${name}.title`,
-      "setting.meeting_settings.audio.auto",
-    );
-  }
+  await choose(
+    "setting.meeting_settings.audio.codec.title",
+    "setting.meeting_settings.audio.auto",
+  );
+  await choose(
+    "setting.meeting_settings.audio.channels.title",
+    "setting.meeting_settings.audio.channels.stereo (setting.meeting_settings.audio.default)",
+  );
   expect(appState.options.preferredAudioCodec).toBeNull();
-  expect(appState.options.audioSampleRate).toBeNull();
-  expect(appState.options.audioChannelCount).toBeNull();
+  expect(appState.options.audioSampleRate).toBe(48000);
+  expect(appState.options.audioChannelCount).toBe(2);
 });
 
 it("discovers native audio codecs separately from video capabilities", async () => {

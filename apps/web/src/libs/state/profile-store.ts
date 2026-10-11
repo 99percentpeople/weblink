@@ -9,22 +9,6 @@ import {
 import { createDefaultProfileNames } from "@/libs/domain/profile-defaults";
 import { appState, setAppState } from "./app-state";
 
-const LEGACY_DICEBEAR_INITIALS_PREFIX =
-  "https://api.dicebear.com/9.x/initials/svg";
-
-export const normalizeStoredProfile = (
-  profile: ClientProfile,
-): ClientProfile => ({
-  ...profile,
-  avatar:
-    typeof profile.avatar === "string" &&
-    profile.avatar.startsWith(
-      LEGACY_DICEBEAR_INITIALS_PREFIX,
-    )
-      ? null
-      : profile.avatar,
-});
-
 export const getDefaultProfile = (): ClientProfile => {
   return {
     ...createDefaultProfileNames(),
@@ -54,10 +38,7 @@ export function initializeProfile(
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as ClientProfile;
-        setAppState(
-          "profile",
-          normalizeStoredProfile(parsed),
-        );
+        setAppState("profile", parsed);
       } catch (err) {
         console.warn(
           "[initializeProfile] invalid profile in localStorage",

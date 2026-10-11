@@ -8,10 +8,18 @@ import type {
   VideoStatsSample,
 } from "../video-stats";
 import type { ScreenSignal } from "./signaling";
+import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 
 export interface NativeScreenPublication {
   readonly sourceId: string;
   readonly controlEligible?: boolean;
+  setReceivers?(
+    receivers: readonly (
+      | MediaDecodeCapabilities
+      | undefined
+    )[],
+  ): void;
+  onCodecsChanged?(changed: () => void): () => void;
   getSenderStats?(
     peerId?: string,
   ): Promise<VideoStatsSample[]>;
@@ -73,11 +81,26 @@ export class NativeScreenSender {
   private retries = 0;
   private unsupported = false;
   private timer?: ReturnType<typeof setTimeout>;
+  private readonly unsubscribeCodecs?: () => void;
 
   constructor(
     readonly publication: NativeScreenPublication,
     private readonly port: ScreenSenderPort,
-  ) {}
+  ) {
+    this.unsubscribeCodecs = publication.onCodecsChanged?.(
+      () => {
+        this.stop(true);
+        this.retries = 0;
+        this.unsupported = false;
+        void this.publish();
+      },
+    );
+  }
+
+  dispose(): void {
+    this.unsubscribeCodecs?.();
+    this.stop();
+  }
 
   owns(id: string): boolean {
     return this.outgoing?.id === id;

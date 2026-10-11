@@ -133,13 +133,21 @@ function source() {
         });
       }
     },
-    encoders: async () => [],
+    encoders: async () => [
+      {
+        id: "software",
+        name: "Software",
+        hardware: false,
+        codecs: ["video/vp8"],
+      },
+    ],
     start: async (_source, options) => {
       withAudio = options?.audio === true;
       await audio.resume();
       return status;
     },
-    codecs: async () => ["video/vp8"],
+    codecs: async (kind) =>
+      kind === "audio" ? ["audio/opus"] : ["video/vp8"],
     offer: async (
       _id,
       peerId,
@@ -147,6 +155,8 @@ function source() {
       relayOnly,
       preview,
       onCandidate,
+      _control,
+      codecs,
     ) => {
       offers.push(!!preview);
       const pc = new RTCPeerConnection({
@@ -157,6 +167,31 @@ function source() {
       for (const track of stream.getTracks())
         if (track.kind === "video" || withAudio)
           pc.addTrack(track, stream);
+      if (!preview) {
+        assert(
+          codecs?.video === "video/vp8",
+          "Native offer did not receive the common video codec",
+        );
+        assert(
+          codecs.audio === "audio/opus",
+          "Native offer did not receive the common audio codec",
+        );
+        for (const transceiver of pc.getTransceivers()) {
+          const kind = transceiver.sender.track!.kind as
+            | "audio"
+            | "video";
+          const supported =
+            RTCRtpSender.getCapabilities(kind)!.codecs;
+          transceiver.setCodecPreferences(
+            supported.filter(
+              (codec) =>
+                codec.mimeType.toLowerCase() ===
+                  codecs[kind] ||
+                /\/(rtx|red|ulpfec)$/i.test(codec.mimeType),
+            ),
+          );
+        }
+      }
       pc.onicecandidate = (event) => {
         if (event.candidate?.candidate)
           onCandidate?.(event.candidate.toJSON());

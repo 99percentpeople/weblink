@@ -10,6 +10,7 @@ import type {
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import { readBrowserVideoStats } from "@/libs/domain/video-stats";
 import { monitorNativeCapture } from "./native-capture-monitor";
+import { createNativeCodecSelection } from "./native-codec-selection";
 
 import type { NativeScreenPublication } from "@/libs/domain/native-screen/session";
 const publications = new WeakMap<
@@ -176,9 +177,16 @@ export async function createNativeScreenStream(
       throw new Error("Native preview has no video track");
     originalStop = track.stop.bind(track);
     track.stop = release;
+    const codecs = await createNativeCodecSelection(
+      share,
+      options,
+    );
+    if (closed) throw new Error("Native screen closed");
     const publication: NativeScreenPublication = {
       sourceId: createUuid(),
       controlEligible: status.source?.kind === "monitor",
+      setReceivers: codecs.setReceivers,
+      onCodecsChanged: codecs.onCodecsChanged,
       getSenderStats: (
         peer = rawPreview ? undefined : peerId,
       ) =>
@@ -242,8 +250,9 @@ export async function createNativeScreenStream(
         relay,
         onCandidate,
         control,
-      ) =>
-        control
+      ) => {
+        const selected = codecs.selected();
+        return selected
           ? share.offer(
               id,
               peer,
@@ -252,8 +261,9 @@ export async function createNativeScreenStream(
               false,
               onCandidate,
               control,
+              selected,
             )
-          : onCandidate
+          : control
             ? share.offer(
                 id,
                 peer,
@@ -261,8 +271,19 @@ export async function createNativeScreenStream(
                 relay,
                 false,
                 onCandidate,
+                control,
               )
-            : share.offer(id, peer, servers, relay),
+            : onCandidate
+              ? share.offer(
+                  id,
+                  peer,
+                  servers,
+                  relay,
+                  false,
+                  onCandidate,
+                )
+              : share.offer(id, peer, servers, relay);
+      },
       answer: (peer, answer) =>
         share.answer(id, peer, answer),
       closePeer: (peer) => share.closePeer(id, peer),

@@ -19,25 +19,6 @@ describe("application preferences", () => {
       ).toBe(closeBehavior);
     }
   });
-  it("migrates the old PiP switch without overriding a newer explicit choice", () => {
-    expect(
-      resolveApplicationOptions(undefined, "true"),
-    ).toEqual({
-      automaticPictureInPicture: true,
-      closeBehavior: "ask",
-      hideOnRemoteControl: false,
-    });
-    expect(
-      resolveApplicationOptions(
-        { automaticPictureInPicture: false },
-        "true",
-      ).automaticPictureInPicture,
-    ).toBe(false);
-    expect(
-      resolveApplicationOptions(null, "broken")
-        .automaticPictureInPicture,
-    ).toBe(false);
-  });
   it("does not enable native hiding from malformed persisted options", () => {
     expect(
       resolveApplicationOptions({

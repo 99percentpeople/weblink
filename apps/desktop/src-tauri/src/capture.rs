@@ -131,6 +131,7 @@ pub async fn capture_offer(
     relay_only: bool,
     preview: bool,
     candidates: Option<tauri::ipc::JavaScriptChannelId>,
+    codecs: Option<weblink_desktop_capture::media::SendCodecs>,
 ) -> Result<String, String> {
     let port = if let Some(context) = control {
         if preview {
@@ -157,36 +158,23 @@ pub async fn capture_offer(
             return Err(error);
         }
     };
-    if let Some(port) = port {
-        let callback: Option<weblink_desktop_capture::media::CandidateHandler> =
-            candidates.map(|id| {
-                let channel =
-                    id.channel_on::<_, weblink_desktop_capture::media::IceCandidate>(webview);
-                Box::new(move |candidate| {
-                    let _ = channel.send(candidate);
-                }) as weblink_desktop_capture::media::CandidateHandler
-            });
-        return media
-            .offer_control(peer_id, ice_servers, relay_only, callback, port)
-            .await;
-    }
-    if let Some(channel) = candidates {
-        let channel =
-            channel.channel_on::<_, weblink_desktop_capture::media::IceCandidate>(webview);
-        media
-            .offer_trickle(
-                peer_id,
-                ice_servers,
-                relay_only,
-                preview,
-                Box::new(move |candidate| {
-                    let _ = channel.send(candidate);
-                }),
-            )
-            .await
-    } else {
-        media.offer(peer_id, ice_servers, relay_only, preview).await
-    }
+    let callback: Option<weblink_desktop_capture::media::CandidateHandler> = candidates.map(|id| {
+        let channel = id.channel_on::<_, weblink_desktop_capture::media::IceCandidate>(webview);
+        Box::new(move |candidate| {
+            let _ = channel.send(candidate);
+        }) as weblink_desktop_capture::media::CandidateHandler
+    });
+    media
+        .offer_configured(
+            peer_id,
+            ice_servers,
+            relay_only,
+            preview,
+            callback,
+            port,
+            codecs,
+        )
+        .await
 }
 
 #[tauri::command]

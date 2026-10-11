@@ -28,8 +28,7 @@ export function resolveRemoteGamepadOptions(
       ? Math.max(0, Math.min(max, v[key]))
       : defaultRemoteGamepadOptions[key];
   return {
-    // Preserve the original persisted boolean preference.
-    enabled: value !== false && v.enabled !== false,
+    enabled: v.enabled !== false,
     vibration: v.vibration !== false,
     vibrationStrength: bounded("vibrationStrength", 1),
     deadZone: bounded("deadZone", 0.5),

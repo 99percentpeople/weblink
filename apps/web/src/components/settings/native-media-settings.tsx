@@ -137,8 +137,7 @@ export default function NativeMediaSettings(props: {
       seen.add(item.id);
       return true;
     });
-    // Keep old automatic-format/automatic-encoder combinations and missing
-    // devices visible without rewriting persisted preferences on mount.
+    // Keep unavailable devices visible without rewriting preferences on mount.
     if (!choices.some((item) => item.id === selected().id))
       choices.push(selected());
     const grouped: (EncodingOption | EncodingGroup)[] =
@@ -189,7 +188,7 @@ export default function NativeMediaSettings(props: {
         backends={props.available.backends.window}
         value={
           appState.options.nativeWindowCaptureBackend ??
-          "auto"
+          "wgc"
         }
         disabled={
           props.available.backendsLoading ||

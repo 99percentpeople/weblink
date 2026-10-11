@@ -18,8 +18,11 @@ import { getDefaultAppOptions } from "@/libs/state/app-options";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("audio capture preferences", () => {
-  it("keeps device defaults and native 48 kHz stereo for automatic and legacy settings", () => {
-    expect(meetingAudioConstraints({})).toEqual({});
+  it("uses explicit 48 kHz stereo defaults for browser and native settings", () => {
+    expect(meetingAudioConstraints({})).toEqual({
+      sampleRate: { ideal: 48000 },
+      channelCount: { ideal: 2 },
+    });
     expect(nativeAudioOptions({})).toEqual({
       audioSampleRate: 48000,
       audioChannelCount: 2,
@@ -46,7 +49,7 @@ describe("audio capture preferences", () => {
     });
     expect(native.audio).toBeUndefined();
   });
-  it.each([NaN, Infinity, -1, 0, 96000, "48000"])(
+  it.each([null, NaN, Infinity, -1, 0, 96000, "48000"])(
     "sanitizes invalid saved sampling values (%s)",
     (value) => {
       const options = {
@@ -54,10 +57,13 @@ describe("audio capture preferences", () => {
         audioChannelCount: value,
       } as any;
       expect(resolveAudioSampling(options)).toEqual({
-        audioSampleRate: null,
-        audioChannelCount: null,
+        audioSampleRate: 48000,
+        audioChannelCount: 2,
       });
-      expect(meetingAudioConstraints(options)).toEqual({});
+      expect(meetingAudioConstraints(options)).toEqual({
+        sampleRate: { ideal: 48000 },
+        channelCount: { ideal: 2 },
+      });
     },
   );
   it("does not present RTP repair, comfort noise, or DTMF as audio encoders", () => {

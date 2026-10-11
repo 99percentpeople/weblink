@@ -6,10 +6,10 @@ import {
   trackAudioSampling,
 } from "@/libs/application/audio-sampling-capabilities";
 
-const auto = {
-  audioSampleRate: null,
-  audioChannelCount: null,
-};
+const defaults = {
+  audioSampleRate: 48000,
+  audioChannelCount: 2,
+} as const;
 it("filters app formats against the source's reported ranges", () => {
   expect(
     audioSamplingCapabilities({
@@ -87,7 +87,7 @@ it("reads the selected input and a live shared track without treating another mi
     audioSamplingChoices(
       browserAudioSampling(devices, tracks, "selected"),
       undefined,
-      auto,
+      defaults,
     ),
   ).toEqual({ sampleRates: [48000], channelCounts: [2] });
   expect(
@@ -109,9 +109,11 @@ it("retains native rate/channel pairs instead of inventing their cross product",
       audioChannelCount: 1,
     }),
   ).toEqual({ sampleRates: [16000], channelCounts: [2] });
-  expect(audioSamplingChoices([], formats, auto)).toEqual({
-    sampleRates: [16000, 48000],
-    channelCounts: [1, 2],
+  expect(
+    audioSamplingChoices([], formats, defaults),
+  ).toEqual({
+    sampleRates: [48000],
+    channelCounts: [2],
   });
 });
 it("intersects known sources without treating undisclosed capabilities as supported values", () => {
@@ -119,14 +121,14 @@ it("intersects known sources without treating undisclosed capabilities as suppor
     audioSamplingChoices(
       [{ sampleRates: null, channelCounts: null }],
       undefined,
-      auto,
+      defaults,
     ),
   ).toEqual({ sampleRates: null, channelCounts: null });
   expect(
     audioSamplingChoices(
       [{ sampleRates: [44100], channelCounts: [1] }],
       [{ sampleRate: 48000, channelCount: 2 }],
-      auto,
+      defaults,
     ),
   ).toEqual({ sampleRates: [], channelCounts: [] });
 });

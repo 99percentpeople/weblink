@@ -457,6 +457,11 @@ export interface AudioCaptureFormat {
   channelCount: 1 | 2;
 }
 
+/** Resolved send formats; capture, consent and preview are unchanged. */
+export interface NativeSendCodecs {
+  video: string;
+  audio: string;
+}
 export interface NativeScreenShare {
   /** Raw local presentation. Remote publication remains native WebRTC. */
   preview?(
@@ -494,6 +499,7 @@ export interface NativeScreenShare {
     preview?: boolean,
     onCandidate?: (candidate: RTCIceCandidateInit) => void,
     control?: NativeControlContext,
+    codecs?: NativeSendCodecs,
   ): Promise<string>;
   addIceCandidate(
     sessionId: string,

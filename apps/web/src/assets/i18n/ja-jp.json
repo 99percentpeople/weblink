@@ -290,10 +290,10 @@
       },
       "native_capture": "画面キャプチャとエンコード",
       "native_encoder": "画面共有の映像エンコード",
-      "native_encoder_auto": "自動（互換性のあるハードウェアを優先）",
+      "native_encoder_auto": "自動",
       "hardware": "ハードウェア",
       "software": "ソフトウェア",
-      "native_encoder_description": "次回の共有に使用するデスクトップキャプチャ方式と映像コーデックを選択します。",
+      "native_encoder_description": "自動では全接続先が対応する形式からハードウェアエンコードを優先します。参加・退出でメディア接続が更新される場合もキャプチャは継続します。手動変更は次回の共有に適用します。",
       "native_advanced": "このエンコードの詳細設定",
       "readback_buffers": "GPU読み戻しバッファ",
       "readback_buffers_1": "シングルバッファ",
@@ -301,7 +301,7 @@
       "readback_buffers_3": "トリプルバッファ",
       "readback_buffers_description": "バッファを増やすとフレーム処理を並行できますが、GPUメモリの使用量と遅延が増える場合があります。次回の共有から適用されます。",
       "color_matrix": "色変換マトリクス",
-      "color_auto": "自動（コーデックに合わせる）",
+      "color_auto": "自動",
       "color_range": "色範囲",
       "color_range_limited": "リミテッド（16–235、互換性を優先）",
       "color_range_full": "フル（0–255）",
@@ -314,7 +314,7 @@
         "unavailable": "現在利用できません",
         "codec": {
           "title": "優先する音声コーデック",
-          "unsupported": "音声コーデックの機能情報を取得できません。互換性のあるコーデックを自動的に選択します。"
+          "unsupported": "コーデック能力を取得できません。自動選択では能力が判明するまで基本互換形式を使用します。"
         },
         "sample_rate": {
           "title": "音声サンプルレート"
@@ -324,17 +324,18 @@
           "mono": "モノラル",
           "stereo": "ステレオ（2チャネル）"
         },
-        "description": "次回のキャプチャに使用する、対応したサンプルレートとチャネル数を選択します。",
+        "description": "既定は 48 kHz、ステレオです。次回のキャプチャに適用され、ブラウザーは機器が対応する近い形式を使う場合があります。",
         "sampling_loading": "音声形式を読み込み中…",
         "codecs_loading": "音声コーデックを読み込み中…",
         "sampling_failed": "システムの音声形式を現在取得できません。",
-        "sampling_unknown": "サンプリングの選択肢をまだ取得できません。「自動」を使用してください。"
+        "sampling_unknown": "サンプリング能力はまだ不明です。既定は 48 kHz、ステレオです。",
+        "default": "既定"
       },
       "encoders_loading": "映像エンコーダーを検出中…",
       "backends_loading": "キャプチャ方式を読み込み中…",
       "backends_unavailable": "キャプチャ方式を現在取得できません。",
       "browser_encoding": "ブラウザーのエンコード",
-      "browser_encoding_description": "次回の接続ネゴシエーションで、カメラ、マイク、ブラウザーの画面共有に使用します。",
+      "browser_encoding_description": "自動ではデコード能力を交換し、全接続先が対応する形式を選びます。参加・退出時に再評価します。手動選択はブラウザーのネゴシエーションで優先されます。",
       "native_audio_codec": "ネイティブ音声コーデック"
     },
     "remote_control": {
@@ -843,10 +844,10 @@
       "obs_audio_setup_tip": "OBS + VB-CABLE セットアップ:\n1. OBS 設定 → オーディオ → 詳細 → モニタリングデバイス: ケーブル入力。\n2. OBS 編集 → 詳細オーディオ プロパティ → オーディオ モニタリング: モニタリングと出力。\n3. Weblink で、プログラムオーディオのケーブル出力を選択します。",
       "request_camera_permission": "カメラの許可をリクエストする",
       "request_microphone_permission": "マイクの許可をリクエストする",
-      "select_system_audio_source": "システムオーディオソースの選択 (自動)",
-      "select_program_audio": "プログラム音声入力 (自動) を選択します。",
-      "select_microphone": "マイクの選択 (自動)",
-      "select_camera": "カメラを選択 (自動)",
+      "select_system_audio_source": "システムオーディオソースの選択 (システム既定)",
+      "select_program_audio": "プログラム音声入力 を選択します。 (システム既定)",
+      "select_microphone": "マイクの選択 (システム既定)",
+      "select_camera": "カメラを選択 (システム既定)",
       "open_screen": "画面を開く",
       "open_media_device": "オープンメディアデバイス",
       "current": "現在",
@@ -1114,6 +1115,7 @@
       "screen_backend": "画面キャプチャ方法",
       "window_backend": "ウィンドウキャプチャ方法",
       "auto_backend": "自動",
+      "default_backend": "既定",
       "unavailable": "利用できません",
       "search_windows": "ウィンドウを検索",
       "size_unknown": "サイズがありません",

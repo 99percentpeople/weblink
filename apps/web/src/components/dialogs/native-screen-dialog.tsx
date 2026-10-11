@@ -71,7 +71,8 @@ export function createNativeScreenDialog(
       ? "nativeScreenCaptureBackend"
       : "nativeWindowCaptureBackend";
   const backend = (sourceKind: Kind) =>
-    appState.options[preference(sourceKind)] ?? "auto";
+    appState.options[preference(sourceKind)] ??
+    (sourceKind === "monitor" ? "auto" : "wgc");
   const backends = (sourceKind: Kind) =>
     sourceKind === "monitor"
       ? capabilities().screen

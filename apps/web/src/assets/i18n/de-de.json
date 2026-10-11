@@ -290,10 +290,10 @@
       },
       "native_capture": "Bildschirmaufnahme und Kodierung",
       "native_encoder": "Videokodierung für Bildschirmfreigabe",
-      "native_encoder_auto": "Automatisch (kompatible Hardware bevorzugen)",
+      "native_encoder_auto": "Automatisch",
       "hardware": "Hardware",
       "software": "Software",
-      "native_encoder_description": "Wählen Sie Desktop-Aufnahmemethoden und Video-Codecs für die nächste Freigabe.",
+      "native_encoder_description": "Automatisch bevorzugt Hardware für gemeinsam unterstützte Formate. Bei Teilnehmerwechsel können Medienverbindungen erneuert werden; die Aufnahme läuft weiter. Manuelle Änderungen gelten ab der nächsten Freigabe.",
       "native_advanced": "Erweiterte Optionen für diese Kodierung",
       "readback_buffers": "GPU-Rücklesepuffer",
       "readback_buffers_1": "Einzelpuffer",
@@ -301,7 +301,7 @@
       "readback_buffers_3": "Dreifachpuffer",
       "readback_buffers_description": "Mehr Puffer ermöglichen eine überlappende Frame-Verarbeitung, verbrauchen jedoch mehr GPU-Speicher und können die Latenz erhöhen. Gilt für die nächste Freigabe.",
       "color_matrix": "Farbmatrix",
-      "color_auto": "Automatisch (passender Codec)",
+      "color_auto": "Automatisch",
       "color_range": "Farbpalette",
       "color_range_limited": "Begrenzt (16–235, größere Kompatibilität)",
       "color_range_full": "Voll (0–255)",
@@ -314,7 +314,7 @@
         "unavailable": "Derzeit nicht verfügbar",
         "codec": {
           "title": "Bevorzugter Audio-Codec",
-          "unsupported": "Audio-Codec-Funktionen sind nicht verfügbar. Ein kompatibler Codec wird automatisch ausgehandelt."
+          "unsupported": "Codec-Fähigkeiten sind unbekannt. Automatisch nutzt zunächst kompatible Basisformate."
         },
         "sample_rate": {
           "title": "Audio-Abtastrate"
@@ -324,17 +324,18 @@
           "mono": "Mono",
           "stereo": "Stereo (zwei Kanäle)"
         },
-        "description": "Wählen Sie eine unterstützte Abtastrate und Kanalanzahl für die nächste Aufnahme.",
+        "description": "Standard: 48 kHz, Stereo. Gilt für die nächste Aufnahme; Browser können ein ähnliches Geräteformat verwenden.",
         "sampling_loading": "Audioformate werden geladen…",
         "codecs_loading": "Audio-Codecs werden geladen…",
         "sampling_failed": "Systemaudioformate sind derzeit nicht verfügbar.",
-        "sampling_unknown": "Sampling-Optionen sind noch nicht verfügbar. Verwenden Sie „Automatisch“."
+        "sampling_unknown": "Abtastfähigkeiten sind noch unbekannt. Standardpräferenz: 48 kHz, Stereo.",
+        "default": "Standard"
       },
       "encoders_loading": "Video-Encoder werden erkannt…",
       "backends_loading": "Erfassungsmethoden werden geladen…",
       "backends_unavailable": "Erfassungsmethoden sind derzeit nicht verfügbar.",
       "browser_encoding": "Browser-Kodierung",
-      "browser_encoding_description": "Wird für Kameras, Mikrofone und die Browser-Bildschirmfreigabe bei späteren Verbindungsaushandlungen verwendet.",
+      "browser_encoding_description": "Automatisch tauscht Decoder-Fähigkeiten aus und wählt gemeinsam unterstützte Formate. Bei Beitritt oder Austritt wird neu gewählt. Manuelle Einstellungen bleiben Browser-Präferenzen.",
       "native_audio_codec": "Nativer Audio-Codec"
     },
     "remote_control": {
@@ -843,10 +844,10 @@
       "obs_audio_setup_tip": "OBS + VB-CABLE-Setup:\n1. OBS-Einstellungen → Audio → Erweitert → Überwachungsgerät: KABEL-Eingang.\n2. OBS-Bearbeitung → Erweiterte Audioeigenschaften → Audioüberwachung: Monitor und Ausgabe.\n3. Wählen Sie in Weblink CABLE Output für Program Audio.",
       "request_camera_permission": "Fordern Sie eine Kameraerlaubnis an",
       "request_microphone_permission": "Fordern Sie eine Mikrofonberechtigung an",
-      "select_system_audio_source": "System-Audioquelle auswählen (Auto)",
-      "select_program_audio": "Wählen Sie den Programm-Audioeingang (Auto).",
-      "select_microphone": "Mikrofon auswählen (Auto)",
-      "select_camera": "Kamera auswählen (Auto)",
+      "select_system_audio_source": "System-Audioquelle auswählen (Systemstandard)",
+      "select_program_audio": "Wählen Sie den Programm-Audioeingang. (Systemstandard)",
+      "select_microphone": "Mikrofon auswählen (Systemstandard)",
+      "select_camera": "Kamera auswählen (Systemstandard)",
       "open_screen": "Bildschirm öffnen",
       "open_media_device": "Öffnen Sie das Mediengerät",
       "current": "Aktuell",
@@ -1114,6 +1115,7 @@
       "screen_backend": "Methode zur Bildschirmaufnahme",
       "window_backend": "Fenstererfassungsmethode",
       "auto_backend": "Automatisch",
+      "default_backend": "Standard",
       "unavailable": "Nicht verfügbar",
       "search_windows": "Fenster suchen",
       "size_unknown": "Größe nicht verfügbar",

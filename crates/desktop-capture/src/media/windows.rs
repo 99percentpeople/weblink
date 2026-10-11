@@ -54,6 +54,7 @@ pub struct MediaSession {
     peers: Mutex<HashMap<String, MediaPeer>>,
     hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
     encoder_id: Option<String>,
+    encoders: Vec<EncoderInfo>,
     latest: Mutex<Option<Arc<VideoFrame<libwebrtc::video_frame::I420Buffer>>>>,
     latest_sequence: AtomicU64,
     previews: Mutex<presentation::Watches>,
@@ -74,6 +75,10 @@ pub struct MediaSession {
 }
 
 struct MediaPeer {
+    // Keep the factory that supplied this peer's codec implementation alive.
+    _factory: PeerConnectionFactory,
+    software: bool,
+    encoding: MediaOptions,
     connection: PeerConnection,
     gathering: Arc<ice::Gathering>,
     preview: bool,
@@ -167,16 +172,20 @@ impl MediaSession {
 
     pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
         options.validate()?;
-        let hardware = if options.encoder == "software" {
-            None
+        // Automatic format selection may later use VP8. Resolve the shared
+        // conversion before choosing the initial preview encoder; all formats
+        // can describe BT.601 limited range, and no join changes these pixels.
+        if options.codec.is_none() && options.color_matrix == super::color::ColorMatrix::Auto {
+            options.color_matrix = super::color::ColorMatrix::Bt601;
+        }
+        let encoders = if options.encoder == "software" {
+            Vec::new()
+        } else if options.encoder == "auto" {
+            mf::detect().unwrap_or_default()
         } else {
-            let encoders = if options.encoder == "auto" {
-                mf::detect().unwrap_or_default()
-            } else {
-                mf::detect()?
-            };
-            select_hardware_encoder(&options, encoders)?
+            mf::detect()?
         };
+        let hardware = select_hardware_encoder(&options, encoders.clone())?;
         if let Some(encoder) = &hardware {
             options
                 .codec
@@ -232,6 +241,7 @@ impl MediaSession {
             peers: Mutex::new(HashMap::new()),
             hardware: Mutex::new(HashMap::new()),
             encoder_id,
+            encoders,
             latest: Mutex::new(None),
             latest_sequence: AtomicU64::new(0),
             previews: Mutex::new(Default::default()),
@@ -275,13 +285,15 @@ impl MediaSession {
                 return Err(error);
             }
         }
-        for encoder in self
+        for (id, encoder) in self
             .hardware
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .values()
+            .iter()
         {
-            encoder.update_options(next.clone());
+            if let Some(peer) = peers.get(id) {
+                encoder.update_options(settings.apply(&peer.encoding)?);
+            }
         }
         let resize = (current.max_width, current.max_height) != (next.max_width, next.max_height);
         *current = next;
@@ -488,7 +500,7 @@ impl MediaSession {
         relay: bool,
         preview: bool,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, None, None)
+        self.create_offer(id, servers, relay, preview, None, None, None)
             .await
     }
 
@@ -500,7 +512,7 @@ impl MediaSession {
         preview: bool,
         candidates: CandidateHandler,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, Some(candidates), None)
+        self.create_offer(id, servers, relay, preview, Some(candidates), None, None)
             .await
     }
 
@@ -513,13 +525,62 @@ impl MediaSession {
         port: Arc<dyn super::control::Port>,
     ) -> Result<String> {
         let result = self
-            .create_offer(id, servers, relay, false, candidates, Some(port.clone()))
+            .create_offer(
+                id,
+                servers,
+                relay,
+                false,
+                candidates,
+                Some(port.clone()),
+                None,
+            )
             .await;
         if result.is_err() {
             port.closed();
         }
         result
     }
+    #[allow(clippy::too_many_arguments)]
+    pub async fn offer_configured(
+        &self,
+        id: String,
+        servers: Vec<IceServer>,
+        relay: bool,
+        preview: bool,
+        candidates: Option<CandidateHandler>,
+        port: Option<Arc<dyn super::control::Port>>,
+        codecs: Option<super::SendCodecs>,
+    ) -> Result<String> {
+        let result = self
+            .create_offer(
+                id,
+                servers,
+                relay,
+                preview,
+                candidates,
+                port.clone(),
+                codecs,
+            )
+            .await;
+        if result.is_err() {
+            if let Some(port) = port {
+                port.closed();
+            }
+        }
+        result
+    }
+
+    fn needs_steady_input(&self) -> bool {
+        self.encoder_id.is_none()
+            || self
+                .peers
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .values()
+                .any(|peer| peer.software)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn create_offer(
         &self,
         id: String,
@@ -528,10 +589,43 @@ impl MediaSession {
         preview: bool,
         on_candidate: Option<CandidateHandler>,
         control_port: Option<Arc<dyn super::control::Port>>,
+        codecs: Option<super::SendCodecs>,
     ) -> Result<String> {
         if id.is_empty() || id.len() > 128 {
             return Err("Invalid media peer identifier".into());
         }
+        let current = self
+            .options
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let (options, encoder_id, factory) = if let Some(codecs) = codecs {
+            let options = codecs.apply(&current)?;
+            let hardware = if options.encoder == "software" {
+                None
+            } else {
+                select_hardware_encoder(&options, self.encoders.clone())?
+            };
+            if hardware.is_none() && !Self::software_codecs().contains(&codecs.video) {
+                return Err("Negotiated native video codec is unavailable".into());
+            }
+            if options.audio && !Self::audio_codecs().contains(&codecs.audio) {
+                return Err("Negotiated native audio codec is unavailable".into());
+            }
+            let factory = PeerConnectionFactory::with_screen_video_send_options(
+                libwebrtc::peer_connection_factory::VideoSendOptions {
+                    min_playout_delay_ms: 0,
+                    max_playout_delay_ms: Some(0),
+                    pacing_factor: Some(1.5),
+                    software_h264_external_frame_dropper: true,
+                },
+                hardware.is_some() && codecs.video == "video/h265",
+            )
+            .map_err(|e| e.to_string())?;
+            (options, hardware.map(|encoder| encoder.id), factory)
+        } else {
+            (current, self.encoder_id.clone(), self.factory.clone())
+        };
         let mut config = RtcConfiguration::default();
         config.continual_gathering_policy = ContinualGatheringPolicy::GatherOnce;
         config.ice_transport_type = if relay {
@@ -547,8 +641,7 @@ impl MediaSession {
                 password: s.credential,
             })
             .collect();
-        let pc = self
-            .factory
+        let pc = factory
             .create_peer_connection(config)
             .map_err(|e| e.to_string())?;
         let control = control_port
@@ -584,12 +677,22 @@ impl MediaSession {
             }
         })));
         {
-            let options = self.options.lock().unwrap_or_else(|e| e.into_inner());
+            // Serialize registration with live settings. Capability/factory setup
+            // above may have overlapped a settings update; preserve this peer's
+            // negotiated format while taking the newest capture limits.
+            let current = self.options.lock().unwrap_or_else(|e| e.into_inner());
+            let options = VideoSettings {
+                max_width: current.max_width,
+                max_height: current.max_height,
+                frame_rate: current.frame_rate,
+                max_bitrate: current.max_bitrate,
+                degradation_preference: current.degradation_preference.clone(),
+            }
+            .apply(&options)?;
             // Preview keeps its own congestion feedback and encoder, at the selected
             // resolution. Use the selected hardware encoder locally too; forcing a
             // software preview can trigger CPU adaptation to tiny frame dimensions.
-            let hardware = self
-                .encoder_id
+            let hardware = encoder_id
                 .as_ref()
                 .map(|id| mf::Encoder::new(id.clone(), options.clone(), preview).map(Arc::new))
                 .transpose()?;
@@ -600,9 +703,7 @@ impl MediaSession {
             } else {
                 &self.source
             };
-            let track = self
-                .factory
-                .create_video_track(&format!("screen-{id}"), source.clone());
+            let track = factory.create_video_track(&format!("screen-{id}"), source.clone());
             let transceiver = pc
                 .add_transceiver(
                     MediaStreamTrack::Video(track),
@@ -622,8 +723,7 @@ impl MediaSession {
                 })?;
             let configured = (|| {
                 if let Some(audio) = &self.audio {
-                    let track = self
-                        .factory
+                    let track = factory
                         .create_audio_track(&format!("screen-audio-{id}"), audio.source.clone());
                     let audio_transceiver = pc
                         .add_transceiver(
@@ -639,10 +739,8 @@ impl MediaSession {
                         )
                         .map_err(|e| e.to_string())?;
                     if let Some(codec) = &options.audio_codec {
-                        let mut codecs = self
-                            .factory
-                            .get_rtp_sender_capabilities(MediaType::Audio)
-                            .codecs;
+                        let mut codecs =
+                            factory.get_rtp_sender_capabilities(MediaType::Audio).codecs;
                         // Stable preference ordering keeps all negotiated fallbacks available.
                         codecs.sort_by_key(|candidate| {
                             !candidate.mime_type.eq_ignore_ascii_case(codec)
@@ -653,8 +751,7 @@ impl MediaSession {
                     }
                 }
                 {
-                    let codecs: Vec<_> = self
-                        .factory
+                    let codecs: Vec<_> = factory
                         .get_rtp_sender_capabilities(MediaType::Video)
                         .codecs
                         .into_iter()
@@ -712,6 +809,9 @@ impl MediaSession {
                 peers.insert(
                     id.clone(),
                     MediaPeer {
+                        _factory: factory.clone(),
+                        software: hardware.is_none(),
+                        encoding: options.clone(),
                         connection: pc.clone(),
                         gathering: gathering.clone(),
                         preview,
@@ -882,6 +982,9 @@ fn select_hardware_encoder(
     options: &MediaOptions,
     encoders: Vec<EncoderInfo>,
 ) -> Result<Option<EncoderInfo>> {
+    if options.encoder == "software" {
+        return Ok(None);
+    }
     let requested = options.codec.as_deref().unwrap_or("video/h264");
     if options.encoder == "auto" {
         Ok(encoders

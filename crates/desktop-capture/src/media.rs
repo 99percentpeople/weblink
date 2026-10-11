@@ -36,6 +36,48 @@ pub struct EncoderInfo {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SendCodecs {
+    pub video: String,
+    pub audio: String,
+}
+impl SendCodecs {
+    pub fn apply(&self, current: &MediaOptions) -> crate::Result<MediaOptions> {
+        if !matches!(
+            self.video.as_str(),
+            "video/h264" | "video/h265" | "video/vp8" | "video/vp9" | "video/av1"
+        ) || !matches!(
+            self.audio.as_str(),
+            "audio/opus" | "audio/pcmu" | "audio/pcma" | "audio/g722"
+        ) {
+            return Err("Invalid negotiated media codec".into());
+        }
+        // All transports consume the same converted pixels. Changing a format
+        // must not reinterpret that buffer or change the local preview's colors.
+        let color_matrix = match current.color_matrix {
+            color::ColorMatrix::Auto
+                if current
+                    .codec
+                    .as_deref()
+                    .is_some_and(|codec| codec != "video/vp8") =>
+            {
+                color::ColorMatrix::Bt709
+            }
+            color::ColorMatrix::Auto => color::ColorMatrix::Bt601,
+            matrix => matrix,
+        };
+        let options = MediaOptions {
+            codec: Some(self.video.clone()),
+            audio_codec: Some(self.audio.clone()),
+            color_matrix,
+            ..current.clone()
+        };
+        options.validate()?;
+        Ok(options)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct MediaOptions {
     pub audio: bool,
@@ -298,6 +340,19 @@ pub use windows::{MediaSession, PreviewSubscription};
 pub struct MediaSession;
 #[cfg(not(windows))]
 impl MediaSession {
+    #[allow(clippy::too_many_arguments)]
+    pub async fn offer_configured(
+        &self,
+        _: String,
+        _: Vec<IceServer>,
+        _: bool,
+        _: bool,
+        _: Option<CandidateHandler>,
+        _: Option<std::sync::Arc<dyn control::Port>>,
+        _: Option<SendCodecs>,
+    ) -> crate::Result<String> {
+        Err("Native screen sharing currently requires Windows".into())
+    }
     pub(crate) fn set_changed(&self, _: crate::lifecycle::Changed) {}
     pub fn set_cursor_visible(&self, _: bool) {}
     pub fn pipeline_stats(&self) -> pipeline::PipelineStats {
@@ -370,6 +425,35 @@ impl MediaSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn negotiated_codecs_preserve_capture_color_and_validate_formats() {
+        let select = |video: &str, audio: &str| SendCodecs {
+            video: video.into(),
+            audio: audio.into(),
+        };
+        let current = MediaOptions {
+            codec: Some("video/h264".into()),
+            ..Default::default()
+        };
+        let next = select("video/h265", "audio/opus").apply(&current).unwrap();
+        assert_eq!(next.codec.as_deref(), Some("video/h265"));
+        assert_eq!(next.color_matrix, color::ColorMatrix::Bt709);
+        assert!(select("video/vp8", "audio/opus").apply(&current).is_err());
+        assert!(select("video/invalid", "audio/opus")
+            .apply(&current)
+            .is_err());
+        assert!(select("video/h264", "audio/red").apply(&current).is_err());
+        let automatic = MediaOptions::default();
+        assert_eq!(
+            select("video/h264", "audio/pcma")
+                .apply(&automatic)
+                .unwrap()
+                .color_matrix,
+            color::ColorMatrix::Bt601
+        );
+        assert!(select("video/vp8", "audio/opus").apply(&automatic).is_ok());
+        assert!(!next.audio);
+    }
     #[test]
     fn bitrate_start_hints_preserve_codecs_ice_audio_and_future_limit_changes() {
         let sdp = "v=0\r\ns=contains m= in text\r\nm=video 9 UDP/TLS/RTP/SAVPF 96 97 98\r\na=rtpmap:96 H264/90000\r\na=fmtp:96 profile-level-id=42e01f;packetization-mode=1;x-google-start-bitrate=300\r\na=rtpmap:97 rtx/90000\r\na=fmtp:97 apt=96\r\na=rtpmap:98 VP8/90000\r\na=ice-ufrag:keep\r\na=mid:0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10\r\na=mid:1\r\n";

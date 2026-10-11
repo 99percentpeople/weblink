@@ -285,10 +285,10 @@
       },
       "native_capture": "屏幕采集与编码",
       "native_encoder": "屏幕共享视频编码",
-      "native_encoder_auto": "自动（优先兼容的硬件编码器）",
+      "native_encoder_auto": "自动",
       "hardware": "硬件编码",
       "software": "软件编码",
-      "native_encoder_description": "选择桌面端的采集方式和视频编码，下次共享时生效。",
+      "native_encoder_description": "自动会交换解码能力，从所有连接端共同支持的格式中优先选择硬件编码。成员变化可能重连媒体通道，采集继续运行。手动编码修改在下次共享时生效。",
       "native_advanced": "当前编码的高级选项",
       "readback_buffers": "GPU 读回缓冲",
       "readback_buffers_1": "单缓冲",
@@ -296,7 +296,7 @@
       "readback_buffers_3": "三缓冲",
       "readback_buffers_description": "更多缓冲可重叠处理帧，但会增加显存占用，也可能增加延迟。下次共享时生效。",
       "color_matrix": "色彩矩阵",
-      "color_auto": "自动（匹配编码格式）",
+      "color_auto": "自动",
       "color_range": "颜色范围",
       "color_range_limited": "有限范围（16–235，兼容优先）",
       "color_range_full": "完整范围（0–255）",
@@ -309,7 +309,7 @@
         "unavailable": "当前不可用",
         "codec": {
           "title": "优先音频编码",
-          "unsupported": "暂时无法读取音频编码能力，将自动协商兼容的编码。"
+          "unsupported": "暂时无法读取编码能力。自动选择会先使用基础兼容格式，待能力明确后再调整。"
         },
         "sample_rate": {
           "title": "音频采样率"
@@ -319,17 +319,18 @@
           "mono": "单声道",
           "stereo": "立体声（双声道）"
         },
-        "description": "根据音源能力选择采样率和声道，下次采集时生效。",
+        "description": "默认 48 kHz、立体声。修改在下次采集时生效；浏览器可能采用设备支持的相近格式。",
         "sampling_loading": "正在读取音频格式…",
         "codecs_loading": "正在读取音频编码…",
         "sampling_failed": "系统音频格式暂不可用。",
-        "sampling_unknown": "音源尚未提供采样选项，可保持自动。"
+        "sampling_unknown": "音源尚未提供采样能力。默认首选 48 kHz、立体声。",
+        "default": "默认"
       },
       "encoders_loading": "正在检测视频编码器…",
       "backends_loading": "正在读取采集方式…",
       "backends_unavailable": "采集方式暂不可用。",
       "browser_encoding": "浏览器编码",
-      "browser_encoding_description": "用于摄像头、麦克风及浏览器屏幕共享，后续连接协商时生效。",
+      "browser_encoding_description": "自动会交换解码能力，按所有连接端的共同支持选择编码，成员加入或离开时重新评估。手动选项作为浏览器协商的首选编码。",
       "native_audio_codec": "原生音频编码"
     },
     "remote_control": {
@@ -832,10 +833,10 @@
       "obs_audio_setup_tip": "OBS + VB-CABLE 设置：\n1. OBS 设置 → 音频 → 高级 → 监听设备：CABLE Input。\n2. OBS 编辑 → 高级音频属性 → 音频监听：监听并输出。\n3. Weblink 节目音频选择 CABLE Output。",
       "request_camera_permission": "请求摄像头权限",
       "request_microphone_permission": "请求麦克风权限",
-      "select_system_audio_source": "选择系统音频来源（自动）",
-      "select_program_audio": "选择节目音频输入（自动）",
-      "select_microphone": "选择麦克风 (自动)",
-      "select_camera": "选择摄像头 (自动)",
+      "select_system_audio_source": "选择系统音频来源 (系统默认)",
+      "select_program_audio": "选择节目音频输入 (系统默认)",
+      "select_microphone": "选择麦克风 (系统默认)",
+      "select_camera": "选择摄像头 (系统默认)",
       "open_screen": "打开屏幕",
       "open_media_device": "打开媒体设备",
       "current": "当前",
@@ -1113,7 +1114,8 @@
       "windows": "窗口",
       "screen_backend": "屏幕捕获方式",
       "window_backend": "窗口捕获方式",
-      "auto_backend": "自动选择",
+      "auto_backend": "自动",
+      "default_backend": "默认",
       "unavailable": "不可用",
       "search_windows": "搜索窗口",
       "size_unknown": "尺寸未知",

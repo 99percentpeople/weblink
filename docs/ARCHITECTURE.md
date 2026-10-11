@@ -415,6 +415,10 @@ may select concrete infrastructure implementations.
     restarts on tab entry. Detection does not request control or mount devices;
     app disposal removes listeners and ignores late results.
   - `app-options.ts` and `profile-store.ts`: persisted user configuration.
+    `stored-app-options.ts` reads only the current application settings shape,
+    validates nested options, and drops unknown fields before persistence.
+    Unsupported stored shapes use current defaults; development-era settings
+    are not migrated. Current device selections remain visible when unavailable.
 - `src/libs/application/`: application lifetime and workflow orchestration.
   - `room-service.ts`: owns room join/leave, signaling-client lifetime and
     stale asynchronous join/session rejection. It reserves room/password/client

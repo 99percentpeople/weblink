@@ -153,6 +153,63 @@ afterEach(() => {
 });
 
 describe("negotiation recovery races", () => {
+  it("does not retry codec renegotiation forever when applying SDP fails", async () => {
+    const { negotiation, pc, sendSignal } = harness(false);
+    pc.localDescription = {
+      type: "offer",
+      sdp: "existing",
+    };
+    pc.remoteDescription = {
+      type: "answer",
+      sdp: "existing",
+    };
+    pc.setLocalDescription.mockRejectedValue(
+      new Error("rejected"),
+    );
+    negotiation.requestRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    await flush();
+    negotiation.resumeRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    await flush();
+    expect(pc.setLocalDescription).toHaveBeenCalledTimes(1);
+    expect(sendSignal).not.toHaveBeenCalled();
+    negotiation.reset();
+  });
+  it("coalesces codec changes until an outstanding offer has settled", async () => {
+    const { negotiation, pc, sendSignal } = harness(false);
+    pc.localDescription = {
+      type: "offer",
+      sdp: "existing",
+    };
+    pc.remoteDescription = {
+      type: "answer",
+      sdp: "existing",
+    };
+    pc.signalingState = "have-local-offer";
+    negotiation.requestRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    negotiation.requestRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    await flush();
+    expect(sendSignal).not.toHaveBeenCalled();
+    pc.signalingState = "stable";
+    negotiation.resumeRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    await flush();
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    negotiation.resumeRenegotiation(
+      pc as unknown as RTCPeerConnection,
+    );
+    await flush();
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    negotiation.reset();
+  });
   it.each([false, true])(
     "accepts an earlier remote offer ahead of a queued local intent (polite=%s)",
     async (polite) => {

@@ -285,15 +285,15 @@
         },
         "preferred_video_codec": {
           "title": "Codec vidéo du navigateur préféré",
-          "auto": "Auto"
+          "auto": "Automatique"
         }
       },
       "native_capture": "Capture d'écran et encodage",
       "native_encoder": "Encodage vidéo de partage d'écran",
-      "native_encoder_auto": "Automatique (préférer un matériel compatible)",
+      "native_encoder_auto": "Automatique",
       "hardware": "Matériel",
       "software": "Logiciel",
-      "native_encoder_description": "Choisissez les méthodes de capture de bureau et les codecs vidéo pour le prochain partage.",
+      "native_encoder_description": "Le mode automatique privilégie le matériel pour les formats communs. Les changements de participants peuvent reconnecter les canaux média ; la capture continue. Les changements manuels prennent effet au prochain partage.",
       "native_advanced": "Options avancées pour cet encodage",
       "readback_buffers": "Tampons de relecture GPU",
       "readback_buffers_1": "Tampon unique",
@@ -301,7 +301,7 @@
       "readback_buffers_3": "Triple tampon",
       "readback_buffers_description": "Un plus grand nombre de tampons permet le traitement des images qui se chevauchent, mais utilise plus de mémoire GPU et peut augmenter la latence. S'applique au prochain partage.",
       "color_matrix": "Matrice de couleurs",
-      "color_auto": "Automatique (correspondre au codec)",
+      "color_auto": "Automatique",
       "color_range": "Gamme de couleurs",
       "color_range_limited": "Limité (16-235, compatibilité plus large)",
       "color_range_full": "Plein (0-255)",
@@ -310,11 +310,11 @@
       "color_format": "Format de couleur de sortie",
       "audio": {
         "title": "Capture audio",
-        "auto": "Auto",
+        "auto": "Automatique",
         "unavailable": "Actuellement indisponible",
         "codec": {
           "title": "Codec audio préféré",
-          "unsupported": "Les capacités du codec audio ne sont pas disponibles. Un codec compatible sera négocié automatiquement."
+          "unsupported": "Capacités des codecs indisponibles. Le mode automatique utilise des formats de base compatibles en attendant."
         },
         "sample_rate": {
           "title": "Taux d'échantillonnage audio"
@@ -324,17 +324,18 @@
           "mono": "Mono",
           "stereo": "Stéréo (deux canaux)"
         },
-        "description": "Choisissez une fréquence d'échantillonnage et un nombre de canaux pris en charge pour la prochaine capture.",
+        "description": "Par défaut : 48 kHz, stéréo. Applicable à la prochaine capture ; le navigateur peut utiliser un format proche proposé par le périphérique.",
         "sampling_loading": "Chargement des formats audio…",
         "codecs_loading": "Chargement des codecs audio…",
         "sampling_failed": "Les formats audio du système ne sont actuellement pas disponibles.",
-        "sampling_unknown": "Les options d'échantillonnage ne sont pas encore disponibles. Utilisez Auto."
+        "sampling_unknown": "Capacités d’échantillonnage encore inconnues. Préférence par défaut : 48 kHz, stéréo.",
+        "default": "Par défaut"
       },
       "encoders_loading": "Détection des encodeurs vidéo…",
       "backends_loading": "Chargement des méthodes de capture…",
       "backends_unavailable": "Les méthodes de capture ne sont actuellement pas disponibles.",
       "browser_encoding": "Encodage du navigateur",
-      "browser_encoding_description": "Utilisé pour les caméras, les microphones et le partage d’écran du navigateur lors des négociations de connexion ultérieures.",
+      "browser_encoding_description": "Le mode automatique échange les capacités de décodage et choisit les formats communs. Le choix est réévalué à chaque arrivée ou départ. Les choix manuels restent des préférences du navigateur.",
       "native_audio_codec": "Codec audio natif"
     },
     "remote_control": {
@@ -843,10 +844,10 @@
       "obs_audio_setup_tip": "Configuration OBS + VB-CABLE :\n1. Paramètres OBS → Audio → Avancé → Dispositif de surveillance : Entrée CÂBLE.\n2. OBS Edit → Propriétés audio avancées → Surveillance audio : moniteur et sortie.\n3. Dans Weblink, sélectionnez Sortie CÂBLE pour Programme Audio.",
       "request_camera_permission": "Demander l'autorisation de la caméra",
       "request_microphone_permission": "Demander l'autorisation du microphone",
-      "select_system_audio_source": "Sélectionnez la source audio du système (auto)",
-      "select_program_audio": "Sélectionnez l'entrée audio du programme (Auto)",
-      "select_microphone": "Sélectionnez Microphone (Automatique)",
-      "select_camera": "Sélectionnez Appareil photo (Auto)",
+      "select_system_audio_source": "Sélectionnez la source audio du système (Valeur système par défaut)",
+      "select_program_audio": "Sélectionnez l'entrée audio du programme (Valeur système par défaut)",
+      "select_microphone": "Sélectionnez Microphone (Valeur système par défaut)",
+      "select_camera": "Sélectionnez Appareil photo (Valeur système par défaut)",
       "open_screen": "Écran ouvert",
       "open_media_device": "Périphérique multimédia ouvert",
       "current": "Actuel",
@@ -1114,6 +1115,7 @@
       "screen_backend": "Méthode de capture d'écran",
       "window_backend": "Méthode de capture de fenêtre",
       "auto_backend": "Automatique",
+      "default_backend": "Par défaut",
       "unavailable": "Indisponible",
       "search_windows": "Rechercher des fenêtres",
       "size_unknown": "Taille indisponible",

@@ -15,7 +15,6 @@ import {
   within,
 } from "@solidjs/testing-library";
 import { reconcile } from "solid-js/store";
-import { createRoot } from "solid-js";
 import userEvent from "@testing-library/user-event";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import {
@@ -24,7 +23,6 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import {
-  initializeAppOptions,
   setClientConfig,
   setRoomConfig,
   forgetClientConfig,
@@ -349,55 +347,6 @@ it("edits client and room permissions through selects and preserves the other en
     }),
   );
   expect(screen.queryByText("Bob")).toBeNull();
-});
-
-it("imports existing history once and does not resurrect forgotten records on later history updates", () => {
-  localStorage.clear();
-  let dispose!: () => void;
-  createRoot((cleanup) => {
-    dispose = cleanup;
-    initializeAppOptions();
-  });
-  setAppState("message", "clients", [
-    {
-      clientId: "historic",
-      name: "Historical peer",
-      avatar: null,
-    },
-  ]);
-  setAppState("message", "conversations", [
-    {
-      id: "room-old",
-      kind: "room",
-      roomId: "old",
-      namespace: "server",
-      title: "Old room",
-      labelIds: [],
-      createdAt: 1,
-    },
-  ]);
-  setAppState("message", "status", "ready");
-  expect(
-    appState.options.clientConfigs.historic?.name,
-  ).toBe("Historical peer");
-  expect(
-    appState.options.roomConfigs["room-old"]?.name,
-  ).toBe("Old room");
-  forgetClientConfig("historic");
-  forgetRoomConfig("room-old", undefined);
-  setAppState("message", "clients", [
-    { clientId: "historic", name: "Updated", avatar: null },
-  ]);
-  expect(
-    appState.options.clientConfigs.historic,
-  ).toBeUndefined();
-  expect(
-    appState.options.roomConfigs["room-old"],
-  ).toBeUndefined();
-  expect(appState.options.permissionHistoryImported).toBe(
-    true,
-  );
-  dispose();
 });
 
 it.each(["room-current", "room-offline"])(

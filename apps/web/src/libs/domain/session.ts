@@ -32,6 +32,8 @@ export interface PeerSessionRuntimeOptions {
   ordered: boolean;
   preferredVideoCodec: string | null;
   preferredAudioCodec: string | null;
+  automaticVideoCodecs?: readonly string[];
+  automaticAudioCodecs?: readonly string[];
 }
 
 const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
@@ -146,12 +148,7 @@ export class PeerSession {
       targetClientId: () => this.targetClientId,
       getPeerConnection: () => this.peerConnection,
       getCodecOptions: () => {
-        const { preferredVideoCodec, preferredAudioCodec } =
-          this.getRuntimeOptions();
-        return {
-          preferredVideoCodec,
-          preferredAudioCodec,
-        };
+        return this.getRuntimeOptions();
       },
       getVideoSourceKind,
       getAudioSource,
@@ -357,6 +354,11 @@ export class PeerSession {
     );
 
     this.media.bindConnection(pc, controller.signal);
+    pc.addEventListener(
+      "signalingstatechange",
+      () => this.negotiation.resumeRenegotiation(pc),
+      { signal: controller.signal },
+    );
 
     this.dispatchEvent("peerconnectioninit", pc);
 
@@ -559,6 +561,13 @@ export class PeerSession {
 
   setStream(stream: MediaStream | null) {
     this.media.setStream(stream);
+  }
+
+  refreshMediaCodecs(): void {
+    if (this.media.refreshCodecs() && this.peerConnection)
+      this.negotiation.requestRenegotiation(
+        this.peerConnection,
+      );
   }
 
   createChannel(label: string, protocol: string) {

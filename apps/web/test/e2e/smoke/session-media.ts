@@ -1,4 +1,9 @@
 import { PeerSessionMediaController } from "../../../src/libs/domain/session-media";
+import {
+  commonCodecs,
+  browserCodecs,
+} from "../../../src/libs/domain/media-codecs";
+import type { MediaDecodeCapabilities } from "../../../src/libs/domain/protocol/media-codecs";
 import type { StreamAudioSource } from "../../../src/libs/domain/protocol/messages";
 import { getRemoteAudioVideoTrackId } from "../../../src/routes/home/components/meeting-audio-sources";
 
@@ -100,9 +105,22 @@ export async function runSessionMediaSmoke() {
     trackId: string;
     mid: string;
   }[] = [];
+  const encoders = browserCodecs("send", "video");
+  let decoders: MediaDecodeCapabilities[] = [
+    {
+      video: ["video/vp9", "video/vp8"],
+      audio: ["audio/opus"],
+    },
+  ];
   const codecOptions = () => ({
     preferredVideoCodec: null,
     preferredAudioCodec: null,
+    automaticVideoCodecs: commonCodecs(
+      "video",
+      encoders,
+      decoders,
+    ),
+    automaticAudioCodecs: ["audio/opus"],
   });
   const sending = new PeerSessionMediaController({
     getCodecOptions: codecOptions,
@@ -210,6 +228,48 @@ export async function runSessionMediaSmoke() {
     const screenReceiver = remoteReceiver(screen.track);
     const cameraMid = senderMid(camera.track);
     const screenMid = senderMid(screen.track);
+    const decodedCodec = async (codec: string) => {
+      const stats = await cameraReceiver.getStats();
+      let matched = false;
+      stats.forEach((report) => {
+        if (
+          report.type === "inbound-rtp" &&
+          report.framesDecoded > 0 &&
+          stats
+            .get(report.codecId)
+            ?.mimeType.toLowerCase() === codec
+        )
+          matched = true;
+      });
+      return matched;
+    };
+    await waitUntil(
+      () => decodedCodec("video/vp9"),
+      "automatic VP9 decoding",
+    );
+    decoders.push({
+      video: ["video/vp8"],
+      audio: ["audio/opus"],
+    });
+    sending.refreshCodecs();
+    await negotiate();
+    await waitUntil(
+      () => decodedCodec("video/vp8"),
+      "common VP8 after a limited peer joins",
+    );
+    decoders.pop();
+    sending.refreshCodecs();
+    await negotiate();
+    await waitUntil(
+      () => decodedCodec("video/vp9"),
+      "VP9 after the limited peer leaves",
+    );
+    assert(
+      remoteReceiver(camera.track).track ===
+        cameraReceiver.track &&
+        camera.track.readyState === "live",
+      "codec changes replaced receiver or capture tracks",
+    );
     await waitUntil(
       () =>
         JSON.stringify(sourceNotifications.at(-1)) ===
@@ -388,6 +448,11 @@ export async function runSessionMediaSmoke() {
       audioSourceMetadataMatchedByMid: true,
       emptyRemoteStreamCleared: true,
       borrowedCapturePreserved: true,
+      commonCodecChangesDecoded: [
+        "video/vp9",
+        "video/vp8",
+        "video/vp9",
+      ],
       renegotiationsRequested,
     };
   } finally {

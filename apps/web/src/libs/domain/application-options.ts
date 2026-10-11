@@ -16,16 +16,12 @@ export const defaultApplicationOptions: ApplicationOptions =
     hideOnRemoteControl: false,
   };
 
-/** Import the former meeting preference only when no new value was saved. */
 export function resolveApplicationOptions(
   value?: Partial<ApplicationOptions> | null,
-  legacyPictureInPicture?: string | null,
 ): ApplicationOptions {
   return {
     automaticPictureInPicture:
-      typeof value?.automaticPictureInPicture === "boolean"
-        ? value.automaticPictureInPicture
-        : legacyPictureInPicture === "true",
+      value?.automaticPictureInPicture === true,
     closeBehavior:
       value?.closeBehavior === "tray" ||
       value?.closeBehavior === "exit"

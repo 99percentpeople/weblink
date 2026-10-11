@@ -134,8 +134,8 @@ export function audioSamplingChoices(
   browser: readonly AudioSamplingCapabilities[],
   nativeFormats: readonly AudioCaptureFormat[] | undefined,
   selected: {
-    audioSampleRate: number | null;
-    audioChannelCount: number | null;
+    audioSampleRate: number;
+    audioChannelCount: 1 | 2;
   },
 ): AudioSamplingCapabilities {
   const intersect = (
@@ -164,9 +164,8 @@ export function audioSamplingChoices(
       formats
         ?.filter(
           (format) =>
-            selected.audioChannelCount === null ||
             format.channelCount ===
-              selected.audioChannelCount,
+            selected.audioChannelCount,
         )
         .map((format) => format.sampleRate) ?? null,
     ]),
@@ -175,7 +174,6 @@ export function audioSamplingChoices(
       formats
         ?.filter(
           (format) =>
-            selected.audioSampleRate === null ||
             format.sampleRate === selected.audioSampleRate,
         )
         .map((format) => format.channelCount) ?? null,

@@ -109,6 +109,67 @@ function setup() {
   session.bind(channel as unknown as RTCDataChannel);
   return { session, channel, port };
 }
+
+it("exchanges decoder capabilities on every hello and resets the remote report on channel loss", async () => {
+  const remoteDecodeChanged = vi.fn();
+  const decode = {
+    video: ["video/h264"],
+    audio: ["audio/opus"],
+  };
+  const session = new NativeScreenSession({
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: () => {},
+    error: vi.fn(),
+    decodeCapabilities: () => decode,
+    remoteDecodeChanged,
+  });
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  expect(channel.sent[0].decode).toEqual(decode);
+  channel.receive({
+    type: "hello",
+    receiveScreen: true,
+    decode,
+  });
+  expect(remoteDecodeChanged).toHaveBeenLastCalledWith(
+    decode,
+  );
+  await session.refreshControlCapabilities();
+  expect(channel.sent.at(-1).decode).toEqual(decode);
+  session.dispose();
+  expect(remoteDecodeChanged).toHaveBeenLastCalledWith();
+});
+
+it("replaces all senders of a publication on a codec change and releases callbacks on removal", async () => {
+  const first = setup(),
+    second = setup();
+  const listeners = new Set<() => void>();
+  const source = {
+    ...publication(),
+    onCodecsChanged: (changed: () => void) => {
+      listeners.add(changed);
+      return () => {
+        listeners.delete(changed);
+      };
+    },
+  };
+  for (const { session, channel } of [first, second]) {
+    session.setPublication(source);
+    channel.receive({ type: "hello", receiveScreen: true });
+  }
+  await flush();
+  expect(source.offer).toHaveBeenCalledTimes(2);
+  for (const changed of listeners) changed();
+  await flush();
+  expect(source.closePeer).toHaveBeenCalledTimes(2);
+  expect(source.offer).toHaveBeenCalledTimes(4);
+  first.session.setPublication();
+  expect(listeners.size).toBe(1);
+  second.session.dispose();
+  expect(listeners.size).toBe(0);
+  first.session.dispose();
+});
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("MediaStream", Stream);

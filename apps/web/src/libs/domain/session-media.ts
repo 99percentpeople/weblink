@@ -6,6 +6,8 @@ import type {
 export interface SessionMediaCodecOptions {
   preferredVideoCodec: string | null;
   preferredAudioCodec: string | null;
+  automaticVideoCodecs?: readonly string[];
+  automaticAudioCodecs?: readonly string[];
 }
 
 export type RemoteMediaTrackBinding = {
@@ -203,14 +205,32 @@ export class PeerSessionMediaController {
     const applyForKind = (
       kind: "audio" | "video",
       preferredMimeType: string,
+      automatic?: readonly string[],
     ) => {
-      const codecs =
-        RTCRtpSender.getCapabilities(kind)?.codecs;
+      const codecs = (
+        typeof RTCRtpReceiver !== "undefined"
+          ? RTCRtpReceiver.getCapabilities(kind)
+          : RTCRtpSender.getCapabilities(kind)
+      )?.codecs;
       if (!codecs || codecs.length === 0) return;
 
-      // An empty list restores the browser default after selecting Auto.
-      const ordered = preferredMimeType
-        ? orderCodecs(codecs, preferredMimeType)
+      const allowed =
+        automatic && !preferredMimeType
+          ? codecs.filter(
+              (codec) =>
+                automatic.includes(
+                  codec.mimeType.toLowerCase(),
+                ) ||
+                /\/(rtx|red|ulpfec|flexfec-03|cn|telephone-event)$/i.test(
+                  codec.mimeType,
+                ),
+            )
+          : codecs;
+      // An empty intersection has no sender; keep receive-only negotiation usable.
+      const preference =
+        preferredMimeType || automatic?.[0];
+      const ordered = preference
+        ? orderCodecs(allowed, preference)
         : [];
 
       for (const transceiver of pc.getTransceivers()) {
@@ -222,7 +242,11 @@ export class PeerSessionMediaController {
           continue;
 
         try {
-          transceiver.setCodecPreferences(ordered);
+          transceiver.setCodecPreferences(
+            transceiver.sender.track || preferredMimeType
+              ? ordered
+              : [],
+          );
         } catch (error) {
           console.warn(
             `[PeerSession] setCodecPreferences failed for ${kind}:`,
@@ -232,11 +256,36 @@ export class PeerSessionMediaController {
       }
     };
 
-    const { preferredVideoCodec, preferredAudioCodec } =
-      this.options.getCodecOptions();
+    const {
+      preferredVideoCodec,
+      preferredAudioCodec,
+      automaticVideoCodecs,
+      automaticAudioCodecs,
+    } = this.options.getCodecOptions();
 
-    applyForKind("video", preferredVideoCodec ?? "");
-    applyForKind("audio", preferredAudioCodec ?? "");
+    applyForKind(
+      "video",
+      preferredVideoCodec ?? "",
+      automaticVideoCodecs,
+    );
+    applyForKind(
+      "audio",
+      preferredAudioCodec ?? "",
+      automaticAudioCodecs,
+    );
+  }
+
+  private codecKey = "";
+  refreshCodecs(): boolean {
+    const key = JSON.stringify(
+      this.options.getCodecOptions(),
+    );
+    if (key === this.codecKey) return false;
+    this.codecKey = key;
+    this.syncLocalTracks();
+    const pc = this.options.getPeerConnection();
+    if (pc) this.applyPreferredCodecPreferences(pc);
+    return true;
   }
 
   private handleRemoteTrack(
@@ -484,11 +533,21 @@ export class PeerSessionMediaController {
 
   private syncLocalTracks(): void {
     const stream = this.localStream;
+    const codecOptions = this.options.getCodecOptions();
+    const blocked = (kind: string) =>
+      kind === "video"
+        ? !codecOptions.preferredVideoCodec &&
+          codecOptions.automaticVideoCodecs?.length === 0
+        : !codecOptions.preferredAudioCodec &&
+          codecOptions.automaticAudioCodecs?.length === 0;
     const tracks = new Set(
       stream
         ?.getTracks()
-        .filter((track) => track.readyState !== "ended") ??
-        [],
+        .filter(
+          (track) =>
+            track.readyState !== "ended" &&
+            !blocked(track.kind),
+        ) ?? [],
     );
     for (const [track, controller] of this
       .localTrackListeners) {

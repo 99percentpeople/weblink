@@ -1,4 +1,9 @@
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
+import {
+  browserCodecs,
+  commonCodecs,
+  MediaCodecPeers,
+} from "../domain/media-codecs";
 import { platform } from "@/libs/platform/runtime";
 import { RemoteControlHost } from "./remote-control-host";
 import {
@@ -87,6 +92,25 @@ export class SessionService {
     PeerSession,
     NativeScreenSession
   >();
+  private readonly codecPeers = new MediaCodecPeers();
+  private readonly browserEncoders = {
+    video: browserCodecs("send", "video"),
+    audio: browserCodecs("send", "audio"),
+  };
+  private readonly publications = new Map<
+    PeerSession,
+    ReturnType<typeof getNativeScreenPublication>[]
+  >();
+
+  private refreshMediaCodecs(): void {
+    const receivers = this.codecPeers.receivers();
+    for (const publication of new Set(
+      [...this.publications.values()].flat(),
+    ))
+      publication?.setReceivers?.(receivers);
+    for (const session of Object.values(this.sessions))
+      session.refreshMediaCodecs();
+  }
 
   getVideoStats(
     track: MediaStreamTrack,
@@ -119,6 +143,11 @@ export class SessionService {
       return publication ? [publication] : [];
     });
     const browserStream = browserMediaStream(stream);
+    this.publications.set(session, publications);
+    for (const publication of publications)
+      publication.setReceivers?.(
+        this.codecPeers.receivers(),
+      );
     session.setStream(browserStream);
     this.nativeScreens
       .get(session)
@@ -308,6 +337,16 @@ export class SessionService {
           appState.options.preferredVideoCodec,
         preferredAudioCodec:
           appState.options.preferredAudioCodec,
+        automaticVideoCodecs: commonCodecs(
+          "video",
+          this.browserEncoders.video,
+          this.codecPeers.receivers(),
+        ),
+        automaticAudioCodecs: commonCodecs(
+          "audio",
+          this.browserEncoders.audio,
+          this.codecPeers.receivers(),
+        ),
       }),
       getVideoSourceKind: getMeetingVideoSourceKind,
       getAudioSource: getMeetingAudioSource,
@@ -315,7 +354,15 @@ export class SessionService {
 
     const controller = new AbortController();
     let controlGeneration = createUuid();
+    let mainChannelReady = false;
     const native = new NativeScreenSession({
+      remoteDecodeChanged: (capabilities) => {
+        if (
+          mainChannelReady &&
+          this.codecPeers.set(client.clientId, capabilities)
+        )
+          this.refreshMediaCodecs();
+      },
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),
       requestScreen: (signal) =>
@@ -377,6 +424,16 @@ export class SessionService {
       createEffect(
         on(
           [
+            () => appState.options.preferredVideoCodec,
+            () => appState.options.preferredAudioCodec,
+          ],
+          () => session.refreshMediaCodecs(),
+          { defer: true },
+        ),
+      );
+      createEffect(
+        on(
+          [
             () =>
               appState.options.clientConfigs[
                 client.clientId
@@ -407,7 +464,6 @@ export class SessionService {
       return dispose;
     });
     let opening = false;
-    let mainChannelReady = false;
     let nativeReopenTimer:
       | ReturnType<typeof setTimeout>
       | undefined;
@@ -457,6 +513,8 @@ export class SessionService {
       () => {
         opening = false;
         mainChannelReady = false;
+        if (this.codecPeers.delete(client.clientId))
+          this.refreshMediaCodecs();
         clearTimeout(nativeReopenTimer);
         native.reset();
         controlGeneration = createUuid();
@@ -466,7 +524,15 @@ export class SessionService {
     session.addEventListener(
       "messagechannelchange",
       ({ detail }) => {
+        const wasReady = mainChannelReady;
         mainChannelReady = detail === "ready";
+        if (
+          mainChannelReady
+            ? !wasReady &&
+              this.codecPeers.set(client.clientId)
+            : this.codecPeers.delete(client.clientId)
+        )
+          this.refreshMediaCodecs();
         if (detail === "ready") void openNative();
         else {
           opening = false;
@@ -482,7 +548,11 @@ export class SessionService {
       () => {
         clearTimeout(nativeReopenTimer);
         disposePolicy();
-        native.reset();
+        mainChannelReady = false;
+        this.publications.delete(session);
+        if (this.codecPeers.delete(client.clientId))
+          this.refreshMediaCodecs();
+        native.dispose();
         controlGeneration = createUuid();
         this.nativeScreens.delete(session);
       },

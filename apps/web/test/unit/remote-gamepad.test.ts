@@ -39,13 +39,15 @@ function setup(slots = 4) {
   return { pads, events, failed };
 }
 describe("remote gamepad lifecycle", () => {
-  it("preserves old preferences and bounds vibration and dead zone settings", () => {
-    expect(resolveRemoteGamepadOptions(false).enabled).toBe(
-      false,
-    );
-    expect(resolveRemoteGamepadOptions(true).enabled).toBe(
-      true,
-    );
+  it("preserves current preferences and bounds vibration and dead zone settings", () => {
+    expect(
+      resolveRemoteGamepadOptions({ enabled: false })
+        .enabled,
+    ).toBe(false);
+    expect(
+      resolveRemoteGamepadOptions({ enabled: true })
+        .enabled,
+    ).toBe(true);
     expect(
       resolveRemoteGamepadOptions({
         vibration: false,
@@ -171,7 +173,9 @@ describe("remote gamepad lifecycle", () => {
     expect(
       events.filter((e) => e.action === "connect"),
     ).toHaveLength(1);
-    pads.configure(resolveRemoteGamepadOptions(false));
+    pads.configure(
+      resolveRemoteGamepadOptions({ enabled: false }),
+    );
     expect(events.at(-1)?.action).toBe("disconnect");
   });
   it("keeps input working when haptics are absent or reject without unhandled promises", async () => {

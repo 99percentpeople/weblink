@@ -77,7 +77,6 @@ impl MediaSession {
     pub(super) fn start_capture_worker(session: &Arc<Self>) {
         let weak = Arc::downgrade(session);
         let notify = session.notify.clone();
-        let steady_input = session.encoder_id.is_none();
         let interval = session.frame_interval();
         tokio::spawn(async move {
             let mut cadence = CaptureCadence::new(interval, Instant::now());
@@ -98,6 +97,7 @@ impl MediaSession {
                     continue;
                 }
                 let now = Instant::now();
+                let steady_input = session.needs_steady_input();
                 cadence.set_interval(session.frame_interval(), now);
                 let admit = cadence.ready(now);
                 // One worker operation at a time. GPU events never wait in Map;
@@ -295,7 +295,7 @@ impl MediaSession {
                 .clone();
             let mut sent = self.last_sent.lock().unwrap_or_else(|e| e.into_inner());
             if !self.closed.load(Ordering::Acquire)
-                && (self.encoder_id.is_none() || sent.elapsed() >= Duration::from_millis(500))
+                && (self.needs_steady_input() || sent.elapsed() >= Duration::from_millis(500))
             {
                 if let Some(frame) = latest.as_ref() {
                     work.submitted_at = Some(Instant::now());

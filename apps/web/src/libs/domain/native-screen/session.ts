@@ -1,4 +1,6 @@
 import { ScreenControlRequest } from "./control-request";
+import { browserDecodeCapabilities } from "../media-codecs";
+import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
@@ -33,6 +35,10 @@ export {
 } from "./signaling";
 
 interface ScreenSessionPort {
+  decodeCapabilities?(): MediaDecodeCapabilities;
+  remoteDecodeChanged?(
+    capabilities?: MediaDecodeCapabilities,
+  ): void;
   requestScreen?(
     signal: AbortSignal,
   ): Promise<string | undefined>;
@@ -160,6 +166,9 @@ export class NativeScreenSession {
         receiveScreen: true,
         trickleIce: true,
         multiScreen: true,
+        decode:
+          this.port.decodeCapabilities?.() ??
+          browserDecodeCapabilities(),
         ...(capabilities?.host && this.port.requestScreen
           ? { requestScreen: true as const }
           : {}),
@@ -246,6 +255,9 @@ export class NativeScreenSession {
       receiveScreen: true,
       trickleIce: true,
       multiScreen: true,
+      decode:
+        this.port.decodeCapabilities?.() ??
+        browserDecodeCapabilities(),
       remoteControl: capabilities,
       ...(capabilities?.host && this.port.requestScreen
         ? { requestScreen: true as const }
@@ -273,7 +285,7 @@ export class NativeScreenSession {
       );
     for (const [sourceId, entry] of this.publications) {
       if (next.get(sourceId) !== entry.publication) {
-        entry.stop();
+        entry.dispose();
         this.publications.delete(sourceId);
       }
     }
@@ -285,6 +297,12 @@ export class NativeScreenSession {
         );
     }
     this.publishSelected();
+  }
+  dispose(): void {
+    this.reset();
+    for (const sender of this.publications.values())
+      sender.dispose();
+    this.publications.clear();
   }
   reset(): void {
     this.screenRequest?.abort.abort();
@@ -300,6 +318,7 @@ export class NativeScreenSession {
     const channel = this.channel;
     this.channel = undefined;
     this.ready = false;
+    this.port.remoteDecodeChanged?.();
     this.trickleIce = false;
     this.multiScreen = false;
     this.controlCapabilities = undefined;
@@ -410,6 +429,7 @@ export class NativeScreenSession {
   }
   private async handle(value: ScreenSignal) {
     if (value.type === "hello") {
+      this.port.remoteDecodeChanged?.(value.decode);
       const couldRequest =
         this.controlCapabilities?.request === true;
       this.controlCapabilities = parseControlCapabilities(

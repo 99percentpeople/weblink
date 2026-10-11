@@ -57,6 +57,7 @@ export class PeerNegotiationController {
   }>();
 
   private makingOffer = false;
+  private renegotiationPending = false;
   private ignoreOffer = false;
   private connectionGeneration: string | null = null;
   private readonly retiredConnectionGenerations =
@@ -103,11 +104,13 @@ export class PeerNegotiationController {
     this.signalProcessingTail = Promise.resolve();
     this.connectionGeneration = this.createGeneration();
     this.makingOffer = false;
+    this.renegotiationPending = false;
     this.ignoreOffer = false;
     return this.connectionGeneration;
   }
 
   reset() {
+    this.renegotiationPending = false;
     this.retireGeneration(this.connectionGeneration);
     this.connectionEpoch++;
     this.signalProcessingTail = Promise.resolve();
@@ -136,6 +139,28 @@ export class PeerNegotiationController {
         true,
       );
     });
+  }
+
+  /** Codec preferences do not emit negotiationneeded. Coalesce changes while
+   * another offer/answer owns SDP and resume at stable, without restarting ICE. */
+  requestRenegotiation(pc: RTCPeerConnection): void {
+    if (pc !== this.getPeerConnection()) return;
+    this.renegotiationPending = true;
+    if (
+      this.makingOffer ||
+      pc.signalingState !== "stable" ||
+      !pc.localDescription ||
+      !pc.remoteDescription
+    )
+      return;
+    void this.sendOffer(pc).catch((error) =>
+      this.logFailure(pc, "update codecs", error),
+    );
+  }
+
+  resumeRenegotiation(pc: RTCPeerConnection): void {
+    if (this.renegotiationPending)
+      this.requestRenegotiation(pc);
   }
 
   async sendOffer(pc: RTCPeerConnection) {
@@ -180,6 +205,7 @@ export class PeerNegotiationController {
         }
         // Let the browser generate AND apply SDP atomically. Do not edit SDP
         // or keep a createOffer snapshot across asynchronous media changes.
+        this.renegotiationPending = false;
         await pc.setLocalDescription();
         if (
           epoch !== this.connectionEpoch ||
@@ -201,9 +227,20 @@ export class PeerNegotiationController {
           } satisfies SessionDescriptionSignalData),
         });
       })
+      .catch((error) => {
+        if (epoch === this.connectionEpoch)
+          this.renegotiationPending = false;
+        throw error;
+      })
       .finally(() => {
         if (epoch === this.connectionEpoch)
           this.makingOffer = false;
+        if (
+          epoch === this.connectionEpoch &&
+          this.renegotiationPending &&
+          pc.signalingState === "stable"
+        )
+          this.requestRenegotiation(pc);
       });
     this.signalProcessingTail = processing.catch(() => {});
     await processing;

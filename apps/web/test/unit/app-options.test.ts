@@ -7,7 +7,6 @@ import {
   getDefaultAppOptions,
   resolveClientConfig,
   resolveRoomConfig,
-  resolveRoomDownloadOptions,
   getRoomAutoDownloadLimit,
 } from "@/libs/state/app-options";
 
@@ -82,80 +81,6 @@ describe("app options", () => {
     ).toBe(0);
   });
 
-  it("migrates the smallest enabled room limit and removes size fields from permissions", () => {
-    const saved = {
-      roomConfigs: {
-        first: {
-          name: "First",
-          autoDownloadFiles: true,
-          autoDownloadMaxSize: 10 * 1024 * 1024,
-        },
-        second: {
-          autoDownloadFiles: true,
-          autoDownloadMaxSize: 20 * 1024 * 1024,
-        },
-        disabled: {
-          autoDownloadFiles: false,
-          autoDownloadMaxSize: 1024 * 1024,
-        },
-      },
-    };
-    const migrated = resolveRoomDownloadOptions(saved);
-    expect(migrated.autoDownloadMaxSize).toBe(
-      10 * 1024 * 1024,
-    );
-    expect(migrated.roomConfigs).toEqual({
-      first: { name: "First", autoDownloadFiles: true },
-      second: { autoDownloadFiles: true },
-      disabled: { autoDownloadFiles: false },
-    });
-    expect(
-      saved.roomConfigs.first.autoDownloadMaxSize,
-    ).toBe(10 * 1024 * 1024);
-    expect(resolveRoomDownloadOptions(migrated)).toEqual(
-      migrated,
-    );
-    expect(
-      resolveRoomDownloadOptions({
-        ...saved,
-        autoDownloadMaxSize: 50 * 1024 * 1024,
-      }).autoDownloadMaxSize,
-    ).toBe(50 * 1024 * 1024);
-  });
-
-  it("preserves saved limits when all rooms are disabled and falls back for invalid sizes", () => {
-    expect(
-      resolveRoomDownloadOptions({
-        roomConfigs: {
-          room: {
-            autoDownloadFiles: false,
-            autoDownloadMaxSize: 1024 * 1024,
-          },
-        },
-      }).autoDownloadMaxSize,
-    ).toBe(1024 * 1024);
-    for (const size of [
-      undefined,
-      null,
-      0,
-      -1,
-      NaN,
-      Infinity,
-      "large",
-    ]) {
-      expect(
-        resolveRoomDownloadOptions({
-          autoDownloadMaxSize: size,
-          roomConfigs: {
-            room: {
-              autoDownloadFiles: true,
-              autoDownloadMaxSize: size,
-            },
-          },
-        }).autoDownloadMaxSize,
-      ).toBe(5 * 1024 * 1024);
-    }
-  });
   it("does not expose the signaling URL as a user option", () => {
     expect(getDefaultAppOptions()).not.toHaveProperty(
       "websocketUrl",
