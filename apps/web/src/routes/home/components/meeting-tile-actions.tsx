@@ -140,6 +140,7 @@ export function MeetingTileActions(
             class="meeting-icon-button meeting-tile-actions-trigger"
             aria-label={props.label}
             aria-expanded={expanded()}
+            aria-pressed={clicked()}
             title={props.label}
             onPointerDown={(event) =>
               event.stopPropagation()

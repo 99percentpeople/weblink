@@ -344,8 +344,14 @@ describe("desktop meeting toolbar interaction", () => {
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
       "false",
     );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
     f.touch();
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
       "true",
     );
     fireEvent.click(
@@ -354,6 +360,9 @@ describe("desktop meeting toolbar interaction", () => {
     expect(f.action).toHaveBeenCalledOnce();
     f.touch();
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
       "false",
     );
   });
@@ -365,6 +374,9 @@ describe("desktop meeting toolbar interaction", () => {
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
       "false",
     );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
     f.touch();
     const action = screen.getByRole("button", {
       name: "Other action",
@@ -372,6 +384,9 @@ describe("desktop meeting toolbar interaction", () => {
     action.focus();
     fireEvent.keyDown(action, { key: "Escape" });
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
       "false",
     );
     expect(document.activeElement).toBe(f.trigger);
@@ -390,6 +405,9 @@ describe("desktop meeting toolbar interaction", () => {
     fireEvent(f.trigger.parentElement!, event);
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
       "true",
+    );
+    expect(f.trigger.getAttribute("aria-pressed")).toBe(
+      "false",
     );
     fireEvent.pointerLeave(f.trigger.parentElement!);
     expect(f.trigger.getAttribute("aria-expanded")).toBe(

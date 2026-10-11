@@ -249,7 +249,7 @@
   @apply size-7;
 }
 .meeting-tile-actions {
-  @apply p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cd9] text-white opacity-0;
+  @apply p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cb3] text-white opacity-0;
   --meeting-tile-action-size: --spacing(8.5);
   --meeting-tile-action-gap: --spacing(0.75);
   transition: opacity 0.15s;
