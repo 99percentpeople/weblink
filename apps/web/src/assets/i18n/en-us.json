@@ -188,6 +188,30 @@
         "description": "Shared by all rooms allowed to download files automatically. Larger files can still be downloaded manually."
       }
     },
+    "remote_transfer": {
+      "title": "Remote files and clipboard",
+      "file_drop": {
+        "title": "Remote file drag and drop",
+        "description": "Enable on the controller to drop files onto the remote screen. Requires a Windows desktop host and a target application that accepts file drops. Folders are zipped first."
+      },
+      "clipboard": {
+        "title": "Synchronize remote clipboard",
+        "description": "Enable on the controller to sync supported clipboard content."
+      },
+      "clipboard_files": {
+        "loading": "Checking clipboard availability…",
+        "unavailable": "File clipboard writing is unavailable here. Choose File cache or Off.",
+        "title": "When copying files",
+        "clipboard": "Clipboard",
+        "cache": "File cache",
+        "off": "Off",
+        "description": "Web receives files in File cache. Windows desktop can also copy them to the clipboard. Folders are zipped."
+      },
+      "file_size_limit": {
+        "title": "File transfer size limit",
+        "description": "Shared by drag and drop and copy/paste, counting total file bytes per operation. Default: 64 MiB; range: 1–512 MiB. Folders must fit before and after ZIP compression. Changes apply to the next operation."
+      }
+    },
     "about": {
       "reset_options": "Reset preferences",
       "clear_service_worker_cache": "Clear app cache",
@@ -378,36 +402,14 @@
         "local_description": "Use the local cursor to point at the remote screen. Keyboard and gamepad forwarding use their own switches and do not require clicking the screen.",
         "capture_description": "Click the remote screen to capture and hide the local cursor. Keyboard and gamepad forwarding use their own switches and do not require pointer capture."
       },
-      "general_heading": "General",
       "cursor_sync": {
         "title": "Sync remote cursor appearance",
         "description": "In local cursor mode, match the remote text, hand, resize and other cursor shapes."
-      },
-      "clipboard": {
-        "title": "Synchronize remote clipboard",
-        "description": "Enable on the controller to sync supported clipboard content."
-      },
-      "clipboard_files": {
-        "loading": "Checking clipboard availability…",
-        "unavailable": "File clipboard writing is unavailable here. Choose File cache or Off.",
-        "title": "When copying files",
-        "clipboard": "Clipboard",
-        "cache": "File cache",
-        "off": "Off",
-        "description": "Web receives files in File cache. Windows desktop can also copy them to the clipboard. Folders are zipped."
       },
       "emergency_shortcut": {
         "title": "Host emergency stop shortcut",
         "description": "Windows desktop only. While this computer is under remote control, this shortcut stops it even when the app is in the background. It does not reserve or intercept the keys; other apps may also respond.",
         "failed": "Could not update the emergency shortcut listener. The previous setting was kept. Please try again."
-      },
-      "file_drop": {
-        "title": "Remote file drag and drop",
-        "description": "Enable on the controller to drop files onto the remote screen. Requires a Windows desktop host and a target application that accepts file drops. Folders are zipped first."
-      },
-      "file_size_limit": {
-        "title": "File transfer size limit",
-        "description": "Shared by drag and drop and copy/paste, counting total file bytes per operation. Default: 64 MiB; range: 1–512 MiB. Folders must fit before and after ZIP compression. Changes apply to the next operation."
       },
       "gamepad_heading": "Gamepad",
       "gamepad": {

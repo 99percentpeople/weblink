@@ -193,6 +193,30 @@
         "description": "Wird von allen Räumen geteilt, denen das automatische Herunterladen von Dateien gestattet ist. Größere Dateien können weiterhin manuell heruntergeladen werden."
       }
     },
+    "remote_transfer": {
+      "title": "Remote-Dateien und Zwischenablage",
+      "file_drop": {
+        "title": "Remote-Datei-Drag-and-Drop",
+        "description": "Aktivieren Sie diese Option auf dem Controller, um Dateien auf dem Remote-Bildschirm abzulegen. Erfordert einen Windows-Desktop-Host und eine Zielanwendung, die das Löschen von Dateien akzeptiert. Die Ordner werden zunächst gezippt."
+      },
+      "clipboard": {
+        "title": "Remote-Zwischenablage synchronisieren",
+        "description": "Auf dem steuernden Gerät aktivieren, um unterstützte Inhalte der Zwischenablage zu synchronisieren."
+      },
+      "clipboard_files": {
+        "loading": "Verfügbarkeit der Zwischenablage prüfen…",
+        "unavailable": "Das Schreiben in die Zwischenablage ist hier nicht möglich. Wählen Sie Dateicache oder Aus.",
+        "title": "Beim Kopieren von Dateien",
+        "clipboard": "Zwischenablage",
+        "cache": "Dateicache",
+        "off": "Aus",
+        "description": "Die Webversion empfängt Dateien im Dateicache. Die Windows-Desktop-App kann sie auch in die Zwischenablage kopieren. Ordner werden als ZIP komprimiert."
+      },
+      "file_size_limit": {
+        "title": "Größenbeschränkung für Dateiübertragungen",
+        "description": "Wird per Drag-and-Drop und Kopieren/Einfügen geteilt, wobei die gesamten Dateibytes pro Vorgang gezählt werden. Standard: 64 MiB; Bereich: 1–512 MiB. Ordner müssen vor und nach der ZIP-Komprimierung passen. Änderungen gelten für den nächsten Vorgang."
+      }
+    },
     "about": {
       "reset_options": "Einstellungen zurücksetzen",
       "clear_service_worker_cache": "App-Cache leeren",
@@ -383,36 +407,14 @@
         "local_description": "Verwenden Sie den lokalen Cursor auf dem Remote-Bildschirm. Tastatur und Gamepad haben eigene Schalter; ein Klick auf den Bildschirm ist nicht erforderlich.",
         "capture_description": "Klicke auf den entfernten Bildschirm, um den lokalen Zeiger zu erfassen und auszublenden. Tastatur und Gamepads nutzen eigene Schalter und benötigen keine Zeigererfassung."
       },
-      "general_heading": "Allgemein",
       "cursor_sync": {
         "title": "Synchronisieren Sie das Erscheinungsbild des Remote-Cursors",
         "description": "Passen Sie im lokalen Cursormodus den Remote-Text, die Hand, die Größe und andere Cursorformen an."
-      },
-      "clipboard": {
-        "title": "Remote-Zwischenablage synchronisieren",
-        "description": "Auf dem steuernden Gerät aktivieren, um unterstützte Inhalte der Zwischenablage zu synchronisieren."
-      },
-      "clipboard_files": {
-        "loading": "Verfügbarkeit der Zwischenablage prüfen…",
-        "unavailable": "Das Schreiben in die Zwischenablage ist hier nicht möglich. Wählen Sie Dateicache oder Aus.",
-        "title": "Beim Kopieren von Dateien",
-        "clipboard": "Zwischenablage",
-        "cache": "Dateicache",
-        "off": "Aus",
-        "description": "Die Webversion empfängt Dateien im Dateicache. Die Windows-Desktop-App kann sie auch in die Zwischenablage kopieren. Ordner werden als ZIP komprimiert."
       },
       "emergency_shortcut": {
         "title": "Tastenkombination für den Notstopp am Host",
         "description": "Nur Windows-Desktop. Während dieser Computer ferngesteuert wird, stoppt diese Verknüpfung ihn, selbst wenn die App im Hintergrund läuft. Die Schlüssel werden nicht reserviert oder abgefangen; Möglicherweise reagieren auch andere Apps.",
         "failed": "Der Notfall-Shortcut-Listener konnte nicht aktualisiert werden. Die vorherige Einstellung wurde beibehalten. Bitte versuchen Sie es erneut."
-      },
-      "file_drop": {
-        "title": "Remote-Datei-Drag-and-Drop",
-        "description": "Aktivieren Sie diese Option auf dem Controller, um Dateien auf dem Remote-Bildschirm abzulegen. Erfordert einen Windows-Desktop-Host und eine Zielanwendung, die das Löschen von Dateien akzeptiert. Die Ordner werden zunächst gezippt."
-      },
-      "file_size_limit": {
-        "title": "Größenbeschränkung für Dateiübertragungen",
-        "description": "Wird per Drag-and-Drop und Kopieren/Einfügen geteilt, wobei die gesamten Dateibytes pro Vorgang gezählt werden. Standard: 64 MiB; Bereich: 1–512 MiB. Ordner müssen vor und nach der ZIP-Komprimierung passen. Änderungen gelten für den nächsten Vorgang."
       },
       "gamepad_heading": "Gamepad",
       "gamepad": {

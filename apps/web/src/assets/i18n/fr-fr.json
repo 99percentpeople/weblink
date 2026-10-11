@@ -193,6 +193,30 @@
         "description": "Partagé par toutes les salles autorisées à télécharger automatiquement les fichiers. Les fichiers plus volumineux peuvent toujours être téléchargés manuellement."
       }
     },
+    "remote_transfer": {
+      "title": "Fichiers distants et presse-papiers",
+      "file_drop": {
+        "title": "Glisser-déposer de fichiers distants",
+        "description": "Activez sur le contrôleur pour déposer des fichiers sur l’écran distant. Nécessite un hôte de bureau Windows et une application cible qui accepte les suppressions de fichiers. Les dossiers sont compressés en premier."
+      },
+      "clipboard": {
+        "title": "Synchroniser le presse-papiers distant",
+        "description": "Activez cette option sur l’appareil de contrôle pour synchroniser les contenus du presse-papiers pris en charge."
+      },
+      "clipboard_files": {
+        "loading": "Vérification de la disponibilité du presse-papiers…",
+        "unavailable": "L’écriture dans le presse-papiers n’est pas disponible ici. Choisissez Cache de fichiers ou Désactivé.",
+        "title": "Lors de la copie de fichiers",
+        "clipboard": "Presse-papiers",
+        "cache": "Cache de fichiers",
+        "off": "Désactivé",
+        "description": "La version web reçoit les fichiers dans le cache. Sous Windows, l’application de bureau peut aussi les copier dans le presse-papiers. Les dossiers sont compressés en ZIP."
+      },
+      "file_size_limit": {
+        "title": "Limite de taille de transfert de fichiers",
+        "description": "Partagé par glisser-déposer et copier/coller, en comptant le nombre total d'octets du fichier par opération. Par défaut : 64 Mio ; plage : 1 à 512 Mio. Les dossiers doivent s'adapter avant et après la compression ZIP. Les modifications s'appliquent à l'opération suivante."
+      }
+    },
     "about": {
       "reset_options": "Réinitialiser les préférences",
       "clear_service_worker_cache": "Vider le cache de l'application",
@@ -383,36 +407,14 @@
         "local_description": "Utilisez le curseur local sur l’écran distant. Le clavier et la manette ont leurs propres commutateurs, sans devoir cliquer sur l’écran.",
         "capture_description": "Cliquez sur l’écran distant pour capturer et masquer le curseur local. Le clavier et les manettes disposent de leurs propres interrupteurs et ne nécessitent pas la capture du curseur."
       },
-      "general_heading": "Général",
       "cursor_sync": {
         "title": "Synchroniser l'apparence du curseur à distance",
         "description": "En mode curseur local, faites correspondre le texte distant, la main, le redimensionnement et d'autres formes de curseur."
-      },
-      "clipboard": {
-        "title": "Synchroniser le presse-papiers distant",
-        "description": "Activez cette option sur l’appareil de contrôle pour synchroniser les contenus du presse-papiers pris en charge."
-      },
-      "clipboard_files": {
-        "loading": "Vérification de la disponibilité du presse-papiers…",
-        "unavailable": "L’écriture dans le presse-papiers n’est pas disponible ici. Choisissez Cache de fichiers ou Désactivé.",
-        "title": "Lors de la copie de fichiers",
-        "clipboard": "Presse-papiers",
-        "cache": "Cache de fichiers",
-        "off": "Désactivé",
-        "description": "La version web reçoit les fichiers dans le cache. Sous Windows, l’application de bureau peut aussi les copier dans le presse-papiers. Les dossiers sont compressés en ZIP."
       },
       "emergency_shortcut": {
         "title": "Raccourci d’arrêt d’urgence de l’hôte",
         "description": "Bureau Windows uniquement. Lorsque cet ordinateur est sous contrôle à distance, ce raccourci l'arrête même lorsque l'application est en arrière-plan. Il ne réserve ni n'intercepte les clés ; d'autres applications peuvent également répondre.",
         "failed": "Impossible de mettre à jour l'écouteur de raccourci d'urgence. Le réglage précédent a été conservé. Veuillez réessayer."
-      },
-      "file_drop": {
-        "title": "Glisser-déposer de fichiers distants",
-        "description": "Activez sur le contrôleur pour déposer des fichiers sur l’écran distant. Nécessite un hôte de bureau Windows et une application cible qui accepte les suppressions de fichiers. Les dossiers sont compressés en premier."
-      },
-      "file_size_limit": {
-        "title": "Limite de taille de transfert de fichiers",
-        "description": "Partagé par glisser-déposer et copier/coller, en comptant le nombre total d'octets du fichier par opération. Par défaut : 64 Mio ; plage : 1 à 512 Mio. Les dossiers doivent s'adapter avant et après la compression ZIP. Les modifications s'appliquent à l'opération suivante."
       },
       "gamepad_heading": "Manette",
       "gamepad": {

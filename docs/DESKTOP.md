@@ -1319,6 +1319,10 @@ writes. Staging is bounded to 512 MiB / 128 snapshots and cleared on normal exit
 Actual clipboard interoperability and mobile browser permissions still require
 device acceptance.
 
+Settings → Transfers → Remote files and clipboard groups remote file drag and
+drop, clipboard synchronization, copied-file destinations and the shared remote
+file size limit. These remain controller-side preferences.
+
 Remote file drag and drop is controlled by `remotePointer.fileDrop` (default off).
 Only the controller enables this preference; incoming operations require the existing
 remote-control grant. Web and desktop controllers use the same HTML file-drop surface,

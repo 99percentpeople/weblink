@@ -193,6 +193,30 @@
         "description": "Se aplica a todas las salas con descarga automática permitida. Los archivos más grandes se pueden descargar manualmente."
       }
     },
+    "remote_transfer": {
+      "title": "Archivos remotos y portapapeles",
+      "file_drop": {
+        "title": "Arrastrar y soltar archivos en remoto",
+        "description": "Actívalo en el controlador para soltar archivos en la pantalla remota. Requiere un equipo Windows de escritorio y una aplicación que acepte archivos arrastrados. Las carpetas se comprimen primero en ZIP."
+      },
+      "clipboard": {
+        "title": "Sincronizar portapapeles remoto",
+        "description": "Actívalo en el controlador para sincronizar el contenido compatible del portapapeles."
+      },
+      "clipboard_files": {
+        "loading": "Comprobando disponibilidad del portapapeles…",
+        "unavailable": "No se pueden escribir archivos en el portapapeles aquí. Elige Caché de archivos o Desactivado.",
+        "title": "Al copiar archivos",
+        "clipboard": "Portapapeles",
+        "cache": "Caché de archivos",
+        "off": "Desactivado",
+        "description": "La versión web recibe los archivos en la caché. El escritorio de Windows también permite copiarlos al portapapeles. Las carpetas se comprimen en ZIP."
+      },
+      "file_size_limit": {
+        "title": "Límite de tamaño de transferencia",
+        "description": "Compartido por arrastrar y soltar y copiar/pegar; cuenta los bytes totales por operación. Predeterminado: 64 MiB; rango: 1–512 MiB. Las carpetas deben caber antes y después de la compresión ZIP. Los cambios se aplican a la próxima operación."
+      }
+    },
     "about": {
       "reset_options": "Restablecer preferencias",
       "clear_service_worker_cache": "Borrar caché de la aplicación",
@@ -383,36 +407,14 @@
         "local_description": "Usa el cursor local para señalar la pantalla remota. El teclado y el mando tienen sus propios interruptores y no requieren hacer clic en la pantalla.",
         "capture_description": "Haz clic en la pantalla remota para capturar y ocultar el cursor local. El teclado y los mandos usan sus propios interruptores y no requieren capturar el cursor."
       },
-      "general_heading": "General",
       "cursor_sync": {
         "title": "Sincronizar la apariencia del cursor remoto",
         "description": "En modo cursor local, reproduce las formas remotas de texto, mano, redimensionado y otras."
-      },
-      "clipboard": {
-        "title": "Sincronizar portapapeles remoto",
-        "description": "Actívalo en el controlador para sincronizar el contenido compatible del portapapeles."
-      },
-      "clipboard_files": {
-        "loading": "Comprobando disponibilidad del portapapeles…",
-        "unavailable": "No se pueden escribir archivos en el portapapeles aquí. Elige Caché de archivos o Desactivado.",
-        "title": "Al copiar archivos",
-        "clipboard": "Portapapeles",
-        "cache": "Caché de archivos",
-        "off": "Desactivado",
-        "description": "La versión web recibe los archivos en la caché. El escritorio de Windows también permite copiarlos al portapapeles. Las carpetas se comprimen en ZIP."
       },
       "emergency_shortcut": {
         "title": "Atajo de parada de emergencia del equipo",
         "description": "Solo en el escritorio de Windows. Mientras este equipo esté bajo control remoto, este atajo lo detiene incluso con la aplicación en segundo plano. No reserva ni intercepta las teclas; otras aplicaciones también pueden responder.",
         "failed": "No se pudo actualizar la escucha del atajo de emergencia. Se conservó el ajuste anterior. Inténtalo de nuevo."
-      },
-      "file_drop": {
-        "title": "Arrastrar y soltar archivos en remoto",
-        "description": "Actívalo en el controlador para soltar archivos en la pantalla remota. Requiere un equipo Windows de escritorio y una aplicación que acepte archivos arrastrados. Las carpetas se comprimen primero en ZIP."
-      },
-      "file_size_limit": {
-        "title": "Límite de tamaño de transferencia",
-        "description": "Compartido por arrastrar y soltar y copiar/pegar; cuenta los bytes totales por operación. Predeterminado: 64 MiB; rango: 1–512 MiB. Las carpetas deben caber antes y después de la compresión ZIP. Los cambios se aplican a la próxima operación."
       },
       "gamepad_heading": "Mando",
       "gamepad": {

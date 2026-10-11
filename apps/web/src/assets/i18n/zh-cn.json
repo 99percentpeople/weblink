@@ -188,6 +188,30 @@
         "description": "所有允许自动下载的房间共用此上限。超过上限的文件仍可手动下载。"
       }
     },
+    "remote_transfer": {
+      "title": "远程文件与剪贴板",
+      "file_drop": {
+        "title": "远程文件拖放",
+        "description": "在控制端开启后，可将文件拖入远端画面。需要 Windows 桌面被控端，目标程序需支持文件拖放。目录会打包为 ZIP。"
+      },
+      "clipboard": {
+        "title": "同步远控剪贴板",
+        "description": "在控制端开启，同步当前环境支持的剪贴板内容。"
+      },
+      "clipboard_files": {
+        "loading": "正在检测剪贴板能力…",
+        "unavailable": "当前环境无法写入文件剪贴板，可选择文件缓存或关闭。",
+        "title": "复制文件时",
+        "clipboard": "剪贴板",
+        "cache": "文件缓存",
+        "off": "关闭",
+        "description": "Web 端通过文件缓存接收文件，Windows 桌面端还可写入剪贴板。目录压缩为 ZIP。"
+      },
+      "file_size_limit": {
+        "title": "文件传输大小限制",
+        "description": "拖放与复制粘贴共用，每次操作按文件总大小计算。默认 64 MiB，可设置 1–512 MiB；目录压缩前后均需符合限制。修改对下一次操作生效。"
+      }
+    },
     "advanced_settings": {
       "advanced_connection": {
         "title": "高级连接设置",
@@ -378,36 +402,14 @@
         "local_description": "使用本地光标定位远程画面。键盘和手柄由各自开关控制，无需点击画面。",
         "capture_description": "点击远程画面以捕获并隐藏本地光标。键盘和手柄由各自开关控制，无需捕获光标。"
       },
-      "general_heading": "通用",
       "cursor_sync": {
         "title": "同步远端光标样式",
         "description": "在本地光标模式下，跟随远端显示文本、手形、缩放等光标样式。"
-      },
-      "clipboard": {
-        "title": "同步远控剪贴板",
-        "description": "在控制端开启，同步当前环境支持的剪贴板内容。"
-      },
-      "clipboard_files": {
-        "loading": "正在检测剪贴板能力…",
-        "unavailable": "当前环境无法写入文件剪贴板，可选择文件缓存或关闭。",
-        "title": "复制文件时",
-        "clipboard": "剪贴板",
-        "cache": "文件缓存",
-        "off": "关闭",
-        "description": "Web 端通过文件缓存接收文件，Windows 桌面端还可写入剪贴板。目录压缩为 ZIP。"
       },
       "emergency_shortcut": {
         "title": "被控端紧急停止快捷键",
         "description": "仅 Windows 桌面端可用。在本机授予远控权限后响应，即使应用在后台也能停止远控。不独占或拦截按键，其他程序仍可响应相同组合键。",
         "failed": "无法更新紧急停止快捷键监听，已保留原设置，请重试。"
-      },
-      "file_drop": {
-        "title": "远程文件拖放",
-        "description": "在控制端开启后，可将文件拖入远端画面。需要 Windows 桌面被控端，目标程序需支持文件拖放。目录会打包为 ZIP。"
-      },
-      "file_size_limit": {
-        "title": "文件传输大小限制",
-        "description": "拖放与复制粘贴共用，每次操作按文件总大小计算。默认 64 MiB，可设置 1–512 MiB；目录压缩前后均需符合限制。修改对下一次操作生效。"
       },
       "gamepad_heading": "手柄",
       "gamepad": {

@@ -188,6 +188,30 @@
         "description": "所有允許自動下載的房間共用此上限。超過上限的檔案仍可手動下載。"
       }
     },
+    "remote_transfer": {
+      "title": "遠端檔案與剪貼簿",
+      "file_drop": {
+        "title": "遠端檔案拖放",
+        "description": "在控制端啟用後，可將檔案拖入遠端畫面。需要 Windows 桌面被控端，目標程式需支援檔案拖放。目錄會打包為 ZIP。"
+      },
+      "clipboard": {
+        "title": "同步遠控剪貼簿",
+        "description": "在控制端開啟，同步目前環境支援的剪貼簿內容。"
+      },
+      "clipboard_files": {
+        "loading": "正在偵測剪貼簿能力…",
+        "unavailable": "目前環境無法寫入檔案剪貼簿，可選擇檔案快取或關閉。",
+        "title": "複製檔案時",
+        "clipboard": "剪貼簿",
+        "cache": "檔案快取",
+        "off": "關閉",
+        "description": "Web 端透過檔案快取接收檔案，Windows 桌面端也可寫入剪貼簿。資料夾壓縮為 ZIP。"
+      },
+      "file_size_limit": {
+        "title": "檔案傳輸大小限制",
+        "description": "拖放與複製貼上共用，每次操作按檔案總大小計算。預設 64 MiB，可設定 1–512 MiB；目錄壓縮前後皆需符合限制。修改於下一次操作生效。"
+      }
+    },
     "advanced_settings": {
       "advanced_connection": {
         "title": "進階連接設定",
@@ -378,36 +402,14 @@
         "local_description": "使用本機游標定位遠端畫面。鍵盤和手把由各自開關控制，無需點擊畫面。",
         "capture_description": "點擊遠端畫面以擷取並隱藏本機游標。鍵盤和手把由各自開關控制，無需擷取游標。"
       },
-      "general_heading": "通用",
       "cursor_sync": {
         "title": "同步遠端游標樣式",
         "description": "在本機游標模式下，跟隨遠端顯示文字、手形、縮放等游標樣式。"
-      },
-      "clipboard": {
-        "title": "同步遠控剪貼簿",
-        "description": "在控制端開啟，同步目前環境支援的剪貼簿內容。"
-      },
-      "clipboard_files": {
-        "loading": "正在偵測剪貼簿能力…",
-        "unavailable": "目前環境無法寫入檔案剪貼簿，可選擇檔案快取或關閉。",
-        "title": "複製檔案時",
-        "clipboard": "剪貼簿",
-        "cache": "檔案快取",
-        "off": "關閉",
-        "description": "Web 端透過檔案快取接收檔案，Windows 桌面端也可寫入剪貼簿。資料夾壓縮為 ZIP。"
       },
       "emergency_shortcut": {
         "title": "被控端緊急停止快捷鍵",
         "description": "僅 Windows 桌面端可用。在本機授予遠控權限後回應，即使應用程式在背景也能停止遠控。不獨占或攔截按鍵，其他程式仍可回應相同組合鍵。",
         "failed": "無法更新緊急停止快捷鍵監聽，已保留原設定，請重試。"
-      },
-      "file_drop": {
-        "title": "遠端檔案拖放",
-        "description": "在控制端啟用後，可將檔案拖入遠端畫面。需要 Windows 桌面被控端，目標程式需支援檔案拖放。目錄會打包為 ZIP。"
-      },
-      "file_size_limit": {
-        "title": "檔案傳輸大小限制",
-        "description": "拖放與複製貼上共用，每次操作按檔案總大小計算。預設 64 MiB，可設定 1–512 MiB；目錄壓縮前後皆需符合限制。修改於下一次操作生效。"
       },
       "gamepad_heading": "遊戲控制器",
       "gamepad": {

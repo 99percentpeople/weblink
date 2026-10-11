@@ -23,6 +23,7 @@ import { RemoteControlOverlay } from "@/routes/home/components/remote-control-ov
 import { RemoteKeyboardToggle } from "@/routes/home/components/remote-keyboard-toggle";
 import { RemoteInputToggles } from "@/routes/home/components/remote-input-toggles";
 import RemoteControlSettings from "@/components/settings/remote-control-settings";
+import TransferSettings from "@/components/settings/transfer-settings";
 import { SettingsStateProvider } from "../helpers/settings-state";
 import { platform } from "@/libs/platform/runtime";
 import { createRemoteClipboard } from "@/libs/hooks/create-remote-clipboard";
@@ -1483,29 +1484,29 @@ it.each([false, true])(
     );
     render(() => (
       <SettingsStateProvider>
-        <RemoteControlSettings />
+        <TransferSettings />
       </SettingsStateProvider>
     ));
     const select = screen.getByRole("button", {
-      name: /setting.remote_control.clipboard_files.title/,
+      name: /setting.remote_transfer.clipboard_files.title/,
     });
     expect(select).toBeDisabled();
     fireEvent.click(
       screen.getByRole("switch", {
-        name: "setting.remote_control.clipboard.title",
+        name: "setting.remote_transfer.clipboard.title",
       }),
     );
     await vi.waitFor(() => expect(select).toBeEnabled());
     fireEvent.keyDown(select, { key: "ArrowDown" });
     const clipboard = await screen.findByRole("option", {
-      name: "setting.remote_control.clipboard_files.clipboard",
+      name: "setting.remote_transfer.clipboard_files.clipboard",
     });
     expect(
       clipboard.getAttribute("aria-disabled") === "true",
     ).toBe(true);
     fireEvent.click(
       screen.getByRole("option", {
-        name: "setting.remote_control.clipboard_files.off",
+        name: "setting.remote_transfer.clipboard_files.off",
       }),
     );
     expect(
@@ -1549,11 +1550,11 @@ it("keeps browser file clipboard disabled across write permission changes", asyn
   );
   render(() => (
     <SettingsStateProvider>
-      <RemoteControlSettings />
+      <TransferSettings />
     </SettingsStateProvider>
   ));
   const select = screen.getByRole("button", {
-    name: /setting.remote_control.clipboard_files.title/,
+    name: /setting.remote_transfer.clipboard_files.title/,
   });
   await vi.waitFor(() => expect(select).toBeEnabled());
   permission.state = "denied";
@@ -1561,12 +1562,12 @@ it("keeps browser file clipboard disabled across write permission changes", asyn
   fireEvent.keyDown(select, { key: "ArrowDown" });
   expect(
     await screen.findByRole("option", {
-      name: "setting.remote_control.clipboard_files.clipboard",
+      name: "setting.remote_transfer.clipboard_files.clipboard",
     }),
   ).toHaveAttribute("aria-disabled", "true");
   fireEvent.click(
     screen.getByRole("option", {
-      name: "setting.remote_control.clipboard_files.off",
+      name: "setting.remote_transfer.clipboard_files.off",
     }),
   );
   permission.state = "granted";
@@ -1575,7 +1576,7 @@ it("keeps browser file clipboard disabled across write permission changes", asyn
   expect(
     (
       await screen.findByRole("option", {
-        name: "setting.remote_control.clipboard_files.clipboard",
+        name: "setting.remote_transfer.clipboard_files.clipboard",
       })
     ).getAttribute("aria-disabled"),
   ).toBe("true");
@@ -1648,7 +1649,7 @@ it("shares native discovery and permission observers across settings and repeate
     render(() => (
       <SettingsStateProvider>
         <Show when={open()}>
-          <RemoteControlSettings />
+          <TransferSettings />
           <Consumer />
           <Consumer />
         </Show>
@@ -1672,10 +1673,10 @@ it("shares native discovery and permission observers across settings and repeate
     setOpen(true);
     expect(
       screen.getByRole("button", {
-        name: /setting.remote_control.clipboard_files.title/,
+        name: /setting.remote_transfer.clipboard_files.title/,
       }),
     ).toHaveTextContent(
-      "setting.remote_control.clipboard_files.clipboard",
+      "setting.remote_transfer.clipboard_files.clipboard",
     );
     expect(discovery).toHaveBeenCalledOnce();
     expect(
@@ -1723,15 +1724,15 @@ it("waits for initial permission detection before selecting File cache in settin
   );
   render(() => (
     <SettingsStateProvider>
-      <RemoteControlSettings />
+      <TransferSettings />
     </SettingsStateProvider>
   ));
   const select = screen.getByRole("button", {
-    name: /setting.remote_control.clipboard_files.title/,
+    name: /setting.remote_transfer.clipboard_files.title/,
   });
   expect(select).toBeDisabled();
   expect(select).toHaveTextContent(
-    "setting.remote_control.clipboard_files.loading",
+    "setting.remote_transfer.clipboard_files.loading",
   );
   expect(
     appState.options.remoteKeyboard.clipboardFiles,
@@ -1741,7 +1742,7 @@ it("waits for initial permission detection before selecting File cache in settin
   );
   await waitFor(() => expect(select).toBeEnabled());
   expect(select).toHaveTextContent(
-    "setting.remote_control.clipboard_files.cache",
+    "setting.remote_transfer.clipboard_files.cache",
   );
   expect(
     appState.options.remoteKeyboard.clipboardFiles,
@@ -2043,11 +2044,11 @@ it("turns off keyboard forwarding with the shared shortcut without ending contro
 it("stores one shared file size limit without changing either feature switch", async () => {
   render(() => (
     <SettingsStateProvider>
-      <RemoteControlSettings />
+      <TransferSettings />
     </SettingsStateProvider>
   ));
   const select = screen.getByRole("button", {
-    name: /setting.remote_control.file_size_limit.title/,
+    name: /setting.remote_transfer.file_size_limit.title/,
   });
   expect(select).toHaveTextContent("64 MiB");
   await userEvent.click(select);
@@ -2077,11 +2078,11 @@ it("keeps a previously saved custom file limit in the selection", async () => {
   );
   render(() => (
     <SettingsStateProvider>
-      <RemoteControlSettings />
+      <TransferSettings />
     </SettingsStateProvider>
   ));
   const select = screen.getByRole("button", {
-    name: /setting.remote_control.file_size_limit.title/,
+    name: /setting.remote_transfer.file_size_limit.title/,
   });
   expect(select).toHaveTextContent("99 MiB");
   await userEvent.click(select);
@@ -2095,30 +2096,47 @@ it("keeps a previously saved custom file limit in the selection", async () => {
     64 * 1024 * 1024,
   );
 });
-it("persists cursor, clipboard and file drop switches independently", () => {
+it("keeps remote file settings in Transfers and preserves independent switches across tabs", () => {
+  const [transfer, setTransfer] = createSignal(false);
   render(() => (
     <SettingsStateProvider>
-      <RemoteControlSettings />
+      <Show
+        when={transfer()}
+        fallback={<RemoteControlSettings />}
+      >
+        <TransferSettings />
+      </Show>
     </SettingsStateProvider>
   ));
   const cursor = screen.getByRole("switch", {
     name: "setting.remote_control.cursor_sync.title",
   });
+  expect(cursor).toBeChecked();
+  expect(
+    screen.queryByRole("switch", {
+      name: "setting.remote_transfer.file_drop.title",
+    }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("switch", {
+      name: "setting.remote_transfer.clipboard.title",
+    }),
+  ).toBeNull();
+  fireEvent.click(cursor);
+  setTransfer(true);
   const clipboard = screen.getByRole("switch", {
-    name: "setting.remote_control.clipboard.title",
+    name: "setting.remote_transfer.clipboard.title",
   });
   const drop = screen.getByRole("switch", {
-    name: "setting.remote_control.file_drop.title",
+    name: "setting.remote_transfer.file_drop.title",
   });
   expect(drop).not.toBeChecked();
-  expect(cursor).toBeChecked();
   expect(clipboard).not.toBeChecked();
   expect(
     screen.getByRole("heading", {
-      name: "setting.remote_control.general_heading",
+      name: "setting.remote_transfer.title",
     }),
   ).toBeInTheDocument();
-  fireEvent.click(cursor);
   fireEvent.click(clipboard);
   fireEvent.click(drop);
   expect(appState.options.remotePointer.fileDrop).toBe(
@@ -2133,6 +2151,23 @@ it("persists cursor, clipboard and file drop switches independently", () => {
   expect(appState.options.remoteKeyboard.clipboard).toBe(
     true,
   );
+  setTransfer(false);
+  expect(
+    screen.getByRole("switch", {
+      name: "setting.remote_control.cursor_sync.title",
+    }),
+  ).not.toBeChecked();
+  setTransfer(true);
+  expect(
+    screen.getByRole("switch", {
+      name: "setting.remote_transfer.file_drop.title",
+    }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("switch", {
+      name: "setting.remote_transfer.clipboard.title",
+    }),
+  ).toBeChecked();
 });
 it("keeps ownership handoff while disabling appearance resources", () => {
   render(() => <RemoteControlOverlay enabled />);

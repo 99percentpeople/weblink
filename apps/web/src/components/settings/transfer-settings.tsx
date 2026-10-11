@@ -13,14 +13,18 @@ import { t } from "@/i18n";
 import { setAppOptions, CompressionLevel } from "@/options";
 
 import { appState } from "@/libs/state/app-state";
+import RemoteTransferSettings from "./remote-transfer-settings";
 
 export default function TransferSettings() {
   const megabyte = 1024 * 1024;
   return (
     <SettingSection
-      id="sender"
-      title={t("setting.sender.title")}
+      id="transfer-settings"
+      title={t("app_menu.settings_transfer")}
     >
+      <SettingHeading id="sender">
+        {t("setting.sender.title")}
+      </SettingHeading>
       <SettingSwitch
         disabled={!navigator.clipboard}
         checked={appState.options.enableClipboard}
@@ -128,6 +132,10 @@ export default function TransferSettings() {
           "setting.receiver.automatic_download.description",
         )}
       />
+      <SettingHeading id="remote-transfer">
+        {t("setting.remote_transfer.title")}
+      </SettingHeading>
+      <RemoteTransferSettings />
     </SettingSection>
   );
 }
