@@ -118,6 +118,140 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("native preview ownership", () => {
+  it("allows independent offers concurrently when no encoder is retiring", async () => {
+    const { capture, share } = setup();
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+    );
+    const publication = getNativeScreenPublication(
+      stream.getVideoTracks()[0],
+    )!;
+    let finish!: (sdp: string) => void;
+    vi.mocked(share.offer).mockImplementationOnce(
+      () => new Promise((r) => (finish = r)),
+    );
+    const first = publication.offer("first", [], false);
+    await expect(
+      publication.offer("second", [], false),
+    ).resolves.toBe("offer");
+    expect(share.offer).toHaveBeenCalledTimes(3);
+    finish("first-offer");
+    await first;
+    stream.getVideoTracks()[0].stop();
+  });
+
+  it("waits for retired native encoders before offering a replacement or another receiver", async () => {
+    const { capture, share } = setup();
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+    );
+    const publication = getNativeScreenPublication(
+      stream.getVideoTracks()[0],
+    )!;
+    await publication.offer("first", [], false);
+    let finishClose!: () => void;
+    vi.mocked(share.closePeer).mockImplementationOnce(
+      () => new Promise((r) => (finishClose = r)),
+    );
+    const closing = publication.closePeer("first");
+    const replacement = publication.offer(
+      "replacement",
+      [],
+      false,
+    );
+    const joining = publication.offer("joining", [], false);
+    await flush();
+    expect(share.offer).toHaveBeenCalledTimes(2);
+    finishClose();
+    await Promise.all([closing, replacement, joining]);
+    expect(share.offer).toHaveBeenCalledTimes(4);
+    stream.getVideoTracks()[0].stop();
+  });
+
+  it("releases a late native offer before starting new peers and skips superseded offers", async () => {
+    const { capture, share } = setup();
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+    );
+    const publication = getNativeScreenPublication(
+      stream.getVideoTracks()[0],
+    )!;
+    let finishOffer!: (sdp: string) => void;
+    vi.mocked(share.offer).mockImplementationOnce(
+      () => new Promise((r) => (finishOffer = r)),
+    );
+    const old = publication.offer("old", [], false);
+    await flush();
+    const closing = publication.closePeer("old");
+    const superseded = publication.offer(
+      "superseded",
+      [],
+      false,
+    );
+    const supersededResult = superseded.catch(
+      (error: unknown) => error,
+    );
+    const cancelled = publication.closePeer("superseded");
+    const joining = publication.offer("joining", [], false);
+    await flush();
+    expect(share.offer).toHaveBeenCalledTimes(2);
+    expect(share.closePeer).toHaveBeenCalledWith(
+      "owned",
+      "old",
+    );
+    finishOffer("late-offer");
+    await Promise.all([old, closing, cancelled, joining]);
+    expect(await supersededResult).toMatchObject({
+      name: "AbortError",
+    });
+    expect(share.offer).toHaveBeenCalledTimes(3);
+    expect(share.offer).toHaveBeenLastCalledWith(
+      "owned",
+      "joining",
+      [],
+      false,
+    );
+    // The early close can run before Rust registers its peer. Close once more
+    // after offer completion before admitting the next receiver.
+    expect(share.closePeer).toHaveBeenCalledTimes(2);
+    stream.getVideoTracks()[0].stop();
+  });
+
+  it("does not revive native capture when stopped while waiting for an encoder to close", async () => {
+    const { capture, share } = setup();
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+    );
+    const track = stream.getVideoTracks()[0];
+    const publication = getNativeScreenPublication(track)!;
+    await publication.offer("first", [], false);
+    let finish!: () => void;
+    vi.mocked(share.closePeer).mockImplementationOnce(
+      () => new Promise((r) => (finish = r)),
+    );
+    const closing = publication.closePeer("first");
+    const queued = publication
+      .offer("queued", [], false)
+      .catch((error: unknown) => error);
+    await flush();
+    track.stop();
+    finish();
+    await closing;
+    expect(await queued).toEqual(
+      new Error("Native screen closed"),
+    );
+    expect(share.offer).toHaveBeenCalledTimes(2);
+    expect(capture.stop).toHaveBeenCalledOnce();
+  });
+
   it("releases a raw preview that resolves after cancellation without reviving capture", async () => {
     const { capture, share } = setup();
     let finish!: (preview: any) => void;
