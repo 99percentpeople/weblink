@@ -65,6 +65,8 @@ describe("PeerSession send queue", () => {
 
     const first = session.sendMessage(msg);
     const duplicate = session.sendMessage(msg);
+    // Feature authorization runs before messages enter the transport queue.
+    await Promise.resolve();
 
     expect(sendCalls).toHaveLength(0);
     expect(channels.pendingMessageCount).toBe(1);

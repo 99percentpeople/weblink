@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSessionMessage,
   P2P_ROOM_FILE_PROTOCOL_VERSION,
-  ROOM_FILE_FEATURE,
   requestSpec,
 } from "@/libs/application/rtc/rtc-protocol";
 import { P2PProtocol } from "@/libs/domain/protocol";
@@ -53,48 +52,17 @@ const pull = () =>
   );
 
 describe("room file wire protocol", () => {
-  it("keeps legacy room v1 capabilities and permits unknown bounded features", () => {
-    for (const features of [
-      undefined,
-      [],
-      [ROOM_FILE_FEATURE, "future-feature"],
-    ]) {
-      const message = createSessionMessage(
-        peer,
-        "room-capabilities",
-        { roomId: "room", token: "token", features },
-      );
-      expect(validateSessionMessage(message)).toMatchObject(
-        { version: 1 },
-      );
-    }
-    expect(
-      createSessionMessage(peer, "send-room-text", {
-        ...binding,
-        senderName: "Alice",
-        senderAvatar: null,
-        data: "text",
-      }).version,
-    ).toBe(1);
-  });
-
-  it.each([
-    null,
-    {},
-    [3],
-    [""],
-    ["x".repeat(65)],
-    Array(17).fill("feature"),
-  ])("rejects malformed capabilities %j", (features) => {
-    expect(() =>
-      validateSessionMessage({
-        ...createSessionMessage(peer, "room-capabilities", {
-          roomId: "room",
-          token: "token",
-        }),
-        features,
-      }),
-    ).toThrow();
+  it("exchanges room identity separately from service capabilities", () => {
+    const message = createSessionMessage(
+      peer,
+      "room-capabilities",
+      { roomId: "room", token: "token" },
+    );
+    expect(validateSessionMessage(message)).toMatchObject({
+      roomId: "room",
+      token: "token",
+    });
+    expect(message).not.toHaveProperty("features");
   });
 
   it("creates offers and pulls with independent ids and the defined ACK modes", () => {

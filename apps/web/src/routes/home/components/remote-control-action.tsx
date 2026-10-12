@@ -66,16 +66,21 @@ export function RemoteControlAction(props: {
         ? "remote_control.cancel"
         : controlling()
           ? "remote_control.end"
-          : props.state === "unavailable"
-            ? "remote_control.reconnecting"
-            : "remote_control.request",
+          : props.state === "busy"
+            ? "remote_control.busy"
+            : props.state === "unavailable"
+              ? "remote_control.reconnecting"
+              : "remote_control.request",
     );
   return (
     <MeetingTileAction
       label={label()}
       active={controlling()}
       order={0}
-      disabled={props.state === "unavailable"}
+      disabled={
+        props.state === "unavailable" ||
+        props.state === "busy"
+      }
       onAction={() => {
         if (props.state === "viewing") {
           const control = props.control;
@@ -88,7 +93,10 @@ export function RemoteControlAction(props: {
           };
           if (props.onRequest) props.onRequest(request);
           else request();
-        } else if (props.state !== "unavailable")
+        } else if (
+          props.state !== "unavailable" &&
+          props.state !== "busy"
+        )
           props.control.cancel();
       }}
     >

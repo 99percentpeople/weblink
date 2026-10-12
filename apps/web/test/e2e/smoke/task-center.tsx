@@ -208,6 +208,12 @@ async function main() {
       },
       tasks,
       getSpeedTestState: tasks.latestSpeedTest,
+      peerCapabilities: () => ({
+        messaging: {},
+        files: { content: true, shared: true },
+        clipboard: { inlineText: true },
+        speedTest: { busy: false },
+      }),
       speedTestState: state,
       speedTestApproval: () => undefined,
       startSpeedTest: (peer) => initiator.start(peer),

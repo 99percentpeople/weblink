@@ -77,6 +77,11 @@ vi.mock("lucide-solid", () => {
 });
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    peerCapabilities: () => ({
+      messaging: {},
+      files: { content: true, shared: true },
+      clipboard: { inlineText: true },
+    }),
     conversationMessaging: {
       sendText: (_id: string, text: string) =>
         service.sendRoomText(text),

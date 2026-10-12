@@ -622,7 +622,7 @@ describe("typed file-list responses", () => {
     ],
   };
 
-  it("returns data, not an early ACK, and re-ACKs repeated storage responses", async () => {
+  it("returns data, not an early ACK, and ignores repeated storage responses", async () => {
     const { protocol, transport } = create();
     const pending = protocol.call(
       local,
@@ -650,10 +650,10 @@ describe("typed file-list responses", () => {
     });
     expect(
       transport.sendCalls.map((call) => call.message.type),
-    ).toEqual(["request-storage", "ack", "ack"]);
+    ).toEqual(["request-storage"]);
   });
 
-  it("adapts a handler's returned data to the existing storage/ACK exchange", async () => {
+  it("replays the direct storage response without re-running the handler", async () => {
     const { protocol, transport } = create();
     const handler = vi.fn(() => storage);
     protocol.handle("request-storage", handler);
@@ -671,19 +671,14 @@ describe("typed file-list responses", () => {
       data: storage,
     });
     expect(transport.sendCalls).toHaveLength(1);
-    await transport.emit(local, ack());
     await receiving;
-    expect(transport.sendCalls[1]!.message.type).toBe(
-      "ack",
-    );
     // A duplicate original request replays its response without re-running the handler.
     const duplicate = transport.emit(local, request);
     await flushRtc();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(transport.sendCalls[2]!.message.type).toBe(
+    expect(transport.sendCalls[1]!.message.type).toBe(
       "storage",
     );
-    await transport.emit(local, ack());
     await duplicate;
   });
 
@@ -705,12 +700,51 @@ describe("typed file-list responses", () => {
       a.transport.sendCalls.map(
         (call) => call.message.type,
       ),
-    ).toEqual(["request-storage", "ack"]);
+    ).toEqual(["request-storage"]);
     expect(
       b.transport.sendCalls.map(
         (call) => call.message.type,
       ),
-    ).toEqual(["storage", "ack"]);
+    ).toEqual(["storage"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retries a lost typed response by replaying the cached result without repeating the handler", async () => {
+    const a = create(),
+      b = create();
+    let drop = true;
+    a.transport.sendImpl = (_, message) => {
+      void b.transport.emit(remote, message);
+    };
+    b.transport.sendImpl = (_, message) => {
+      if (drop) {
+        drop = false;
+        return;
+      }
+      void a.transport.emit(local, message);
+    };
+    const handler = vi.fn(() => storage);
+    b.protocol.handle("request-storage", handler);
+    const result = a.protocol.call(
+      local,
+      "request-storage",
+      query,
+      { timeoutMs: 100, retries: 1, retryDelayMs: 0 },
+    );
+    await flushRtc();
+    await vi.advanceTimersByTimeAsync(101);
+    await expect(result).resolves.toEqual(storage);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(
+      a.transport.sendCalls.map(
+        ({ message }) => message.type,
+      ),
+    ).toEqual(["request-storage", "request-storage"]);
+    expect(
+      b.transport.sendCalls.map(
+        ({ message }) => message.type,
+      ),
+    ).toEqual(["storage", "storage"]);
     expect(vi.getTimerCount()).toBe(0);
   });
 

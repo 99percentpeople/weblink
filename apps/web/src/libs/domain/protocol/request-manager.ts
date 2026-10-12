@@ -57,7 +57,7 @@ type Reply =
   | StorageMessage
   | FileOfferResultMessage;
 type PendingRequest = {
-  request: SessionMessage;
+  request: MessageOf<RequestType>;
   complete: (message: Reply) => void;
   fail: (error: Error) => void;
 };
@@ -71,7 +71,6 @@ type SessionState = {
   lifetime: AbortController;
   pending: Map<string, PendingRequest>;
   processed: Map<string, ProcessedRequest>;
-  receivedStorage: Map<string, number>;
   inFlight: Set<string>;
 };
 
@@ -119,7 +118,6 @@ export class P2PRequestManager<
         lifetime: new AbortController(),
         pending: new Map(),
         processed: new Map(),
-        receivedStorage: new Map(),
         inFlight: new Set(),
       };
       this.sessions.set(session, state);
@@ -168,9 +166,7 @@ export class P2PRequestManager<
 
   request(
     session: S,
-    message: MessageOf<
-      RequestType | "storage" | "file-offer-result"
-    >,
+    message: MessageOf<RequestType>,
     options: RequestOptions = {},
     onPrepared?: () => void | Promise<void>,
   ): Promise<Reply> {
@@ -334,17 +330,12 @@ export class P2PRequestManager<
     for (const [key, value] of state.processed)
       if (value.seenAt < cutoff)
         state.processed.delete(key);
-    for (const [key, seenAt] of state.receivedStorage)
-      if (seenAt < cutoff)
-        state.receivedStorage.delete(key);
-    // Bound retained response payloads as well as their lifetime.
-    for (const map of [
-      state.processed,
-      state.receivedStorage,
-    ]) {
-      while (map.size > PROTOCOL_DEDUP_MAX_ENTRIES)
-        map.delete(map.keys().next().value!);
-    }
+    while (
+      state.processed.size > PROTOCOL_DEDUP_MAX_ENTRIES
+    )
+      state.processed.delete(
+        state.processed.keys().next().value!,
+      );
   }
 
   private async receive(
@@ -372,11 +363,7 @@ export class P2PRequestManager<
       )
         return;
       const expected =
-        pending.request.type === "storage" ||
-        pending.request.type === "file-offer-result"
-          ? "receive"
-          : requestSpec[pending.request.type as RequestType]
-              .ack;
+        requestSpec[pending.request.type].ack;
       if (message.mode === expected)
         pending.complete(message);
       return;
@@ -388,10 +375,8 @@ export class P2PRequestManager<
         (request.type === "send-file" ||
           request.type === "send-room-file") &&
         !!request.fingerprint;
-      const key = `file:${message.id}`;
-      if (!expected && !state.receivedStorage.has(key))
-        return;
-      if (expected && request.fid !== message.fid) {
+      if (!expected) return;
+      if (request.fid !== message.fid) {
         pending!.fail(
           new P2PProtocolError(
             "invalid-message",
@@ -400,27 +385,13 @@ export class P2PRequestManager<
         );
         return;
       }
-      state.receivedStorage.set(key, Date.now());
-      await this.send(
-        session,
-        createSessionMessage(
-          session,
-          "ack",
-          { mode: "receive" },
-          { id: message.id },
-        ),
-      );
-      if (expected) pending!.complete(message);
+      pending!.complete(message);
       return;
     }
     if (message.type === "storage") {
       const expected =
         pending?.request.type === "request-storage";
-      if (
-        !expected &&
-        !state.receivedStorage.has(message.id)
-      )
-        return;
+      if (!expected) return;
       if (expected) {
         const query = pending!
           .request as MessageOf<"request-storage">;
@@ -444,18 +415,7 @@ export class P2PRequestManager<
           return;
         }
       }
-      state.receivedStorage.set(message.id, Date.now());
-      // Re-ACK a repeated response too; never lose a receipt through dedup.
-      await this.send(
-        session,
-        createSessionMessage(
-          session,
-          "ack",
-          { mode: "receive" },
-          { id: message.id },
-        ),
-      );
-      if (expected) pending!.complete(message);
+      pending!.complete(message);
       return;
     }
     if (isRequestType(message.type)) {
@@ -563,11 +523,9 @@ export class P2PRequestManager<
         this.prune(state);
       }
       entry.seenAt = Date.now();
-      if (entry.response)
-        await this.request(session, entry.response, {
-          signal: state.lifetime.signal,
-        });
-      await this.send(session, entry.ack);
+      // The result completes the original request. Its retry replays this cached
+      // response, without running the handler or creating a reverse RPC.
+      await this.send(session, entry.response ?? entry.ack);
     } catch (error) {
       if (state.lifetime.signal.aborted) return;
       const reply = createSessionMessage(

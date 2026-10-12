@@ -5,7 +5,9 @@ import type {
 } from "@weblink/platform";
 import { createSignal } from "solid-js";
 import { RemoteScreenConsent } from "./remote-screen-consent";
+import type { ControlCapability } from "../domain/protocol/capabilities";
 export interface RemoteControlPolicy {
+  whitelistOnly?(): boolean;
   decision(clientId: string): "allow" | "deny" | undefined;
   remember(
     clientId: string,
@@ -14,9 +16,40 @@ export interface RemoteControlPolicy {
 }
 /** One frontend owner per room. Native room/window lifetime is independent of UI polling. */
 export class RemoteControlHost {
+  capability(clientId: string): ControlCapability {
+    this.revision();
+    const status = this.state[0]();
+    const reservation = this.screen.reservation();
+    const pending = reservation ?? this.selected[0]();
+    const host =
+      !!this.owner &&
+      !status.closed &&
+      this.exposes(clientId);
+    return {
+      request: true,
+      host,
+      occupancy:
+        status.clientId && status.sourceId
+          ? {
+              state: "controlled",
+              clientId: status.clientId,
+              sourceId: status.sourceId,
+            }
+          : status.clientId
+            ? { state: "unavailable" }
+            : pending
+              ? {
+                  state: "pending",
+                  clientId: pending.clientId,
+                  sourceId: pending.sourceId || null,
+                }
+              : { state: host ? "idle" : "unavailable" },
+    };
+  }
   clipboardScope(clientId: string, grantId: string) {
     if (
       !this.owner ||
+      !this.exposes(clientId) ||
       this.status().clientId !== clientId ||
       this.status().grantId !== grantId ||
       this.status().closed
@@ -37,18 +70,37 @@ export class RemoteControlHost {
   readonly revision = this.ownerRevision[0];
   private readonly state =
     createSignal<NativeControlStatus>({
-      pending: null,
+      pending: [],
       clientId: null,
       closed: true,
     });
+  private readonly selected = createSignal<
+    NativeControlStatus["pending"][number] | null
+  >(null);
+  private readonly decisions = new Set<string>();
   readonly status = () => {
-    const screen = this.screen.pending();
+    const status = this.state[0]();
     return {
-      ...this.state[0](),
+      ...status,
       pending:
-        screen && this.decision(screen.clientId) !== "allow"
-          ? screen
-          : this.state[0]().pending,
+        status.clientId || this.selected[0]()
+          ? []
+          : [
+              ...this.screen
+                .pending()
+                .filter(
+                  (p) =>
+                    this.exposes(p.clientId) &&
+                    !this.decision(p.clientId),
+                ),
+              ...(!this.screen.reservation()
+                ? status.pending.filter(
+                    (p) =>
+                      this.exposes(p.clientId) &&
+                      !this.decision(p.clientId),
+                  )
+                : []),
+            ],
     };
   };
   private decision(clientId: string) {
@@ -56,6 +108,15 @@ export class RemoteControlHost {
     return value === "allow" || value === "deny"
       ? value
       : undefined;
+  }
+  /** One policy for discovery, consent and trusted native bindings. */
+  exposes(clientId: string): boolean {
+    const decision = this.decision(clientId);
+    return (
+      decision !== "deny" &&
+      (!this.policy?.whitelistOnly?.() ||
+        decision === "allow")
+    );
   }
   constructor(
     private readonly platform: PlatformRuntime,
@@ -151,29 +212,43 @@ export class RemoteControlHost {
         return;
       }
       this.recoveryDelay = 1000;
+      this.state[1](status);
+      const selected = this.selected[0]();
       if (
-        status.clientId &&
-        this.decision(status.clientId) === "deny"
-      ) {
-        await this.platform.remoteControl!.revoke(owner);
-        if (!current()) return;
-        status.clientId = null;
+        selected &&
+        (status.clientId ||
+          !status.pending.some(
+            (p) => p.consentId === selected.consentId,
+          ))
+      )
+        this.selected[1](null);
+      if (status.clientId) {
+        this.screen.close();
+        if (!this.exposes(status.clientId))
+          await this.platform.remoteControl!.revoke(owner);
+        return;
       }
-      const pending = status.pending;
-      if (pending) {
-        const decision = this.decision(pending.clientId);
+      for (const pending of status.pending) {
+        if (!current()) return;
+        if (!this.exposes(pending.clientId)) continue;
+        const policy = this.decision(pending.clientId);
         const approved =
-          decision !== "deny" &&
+          policy !== "deny" &&
           this.screen.consume(
             pending.clientId,
             pending.peerGeneration,
             pending.sourceId,
             false,
           );
+        const decision =
+          this.screen.reservation() && !approved
+            ? "deny"
+            : policy;
+        if (this.selected[0]()) return;
         if (decision || approved) {
-          await this.platform.remoteControl!.approve(
+          await this.decideNative(
             owner,
-            pending.consentId,
+            pending,
             decision !== "deny",
           );
           if (
@@ -186,10 +261,9 @@ export class RemoteControlHost {
               pending.peerGeneration,
               pending.sourceId,
             );
-          status.pending = null;
+          if (decision !== "deny") return;
         }
       }
-      if (current()) this.state[1](status);
     } catch (error) {
       // Retry transient command failures only while this exact snapshot is current.
       if (current()) {
@@ -212,12 +286,12 @@ export class RemoteControlHost {
       request: true,
       host:
         !!this.owner &&
-        (!clientId || this.decision(clientId) !== "deny"),
+        (!clientId || this.exposes(clientId)),
     };
   }
   async context(peerGeneration: string, clientId: string) {
     await this.ready;
-    return this.owner && this.decision(clientId) !== "deny"
+    return this.owner && this.exposes(clientId)
       ? { ownerId: this.owner, peerGeneration, clientId }
       : undefined;
   }
@@ -226,34 +300,93 @@ export class RemoteControlHost {
     approve: boolean,
     remember = false,
   ) {
-    const pending = this.status().pending;
-    if (!pending || pending.consentId !== consentId) return;
-    if (
-      approve &&
-      this.decision(pending.clientId) === "deny"
-    )
-      return;
+    const screen = this.screen
+      .pending()
+      .find((p) => p.consentId === consentId);
+    const pending =
+      screen ??
+      this.state[0]().pending.find(
+        (p) => p.consentId === consentId,
+      );
+    if (!pending || !this.exposes(pending.clientId)) return;
     const id = this.owner;
     if (!id) return;
-    if (this.screen.pending()?.consentId === consentId) {
-      if (!(await this.screen.respond(consentId, approve)))
-        return;
-    } else
-      await this.platform.remoteControl!.approve(
-        id,
+    if (
+      approve &&
+      (this.selected[0]() ||
+        this.screen.reservation() ||
+        this.state[0]().clientId)
+    )
+      return;
+    if (screen) {
+      const response = this.screen.respond(
         consentId,
         approve,
       );
-    if (
-      this.owner === id &&
-      this.state[0]().pending?.consentId === consentId
+      // respond reserves synchronously. Reject native candidates while capture starts.
+      const [accepted] = await Promise.all([
+        response,
+        approve ? this.rejectNative(id) : Promise.resolve(),
+      ]);
+      if (!accepted) return;
+    } else if (
+      !(await this.decideNative(id, pending, approve))
     )
-      this.state[1]({ ...this.state[0](), pending: null });
+      return;
     if (this.owner === id && remember)
       this.policy?.remember(
         pending.clientId,
         approve ? "allow" : "deny",
       );
+  }
+  private async rejectNative(owner: string) {
+    for (const pending of this.state[0]().pending) {
+      if (this.owner !== owner) return;
+      await this.decideNative(owner, pending, false);
+    }
+  }
+  private async decideNative(
+    owner: string,
+    pending: NativeControlStatus["pending"][number],
+    approve: boolean,
+  ) {
+    const key = `${owner}:${pending.consentId}`;
+    if (
+      !this.exposes(pending.clientId) ||
+      this.decisions.has(key) ||
+      (approve &&
+        (this.selected[0]() || this.state[0]().clientId))
+    )
+      return false;
+    this.decisions.add(key);
+    if (approve) {
+      this.selected[1](pending);
+      // A native selection also rejects every avatar request.
+      // Keep an approved avatar reservation until its native grant is acknowledged.
+      if (!this.screen.reservation()) this.screen.close();
+    }
+    try {
+      await this.platform.remoteControl!.approve(
+        owner,
+        pending.consentId,
+        approve,
+      );
+      return true;
+    } catch (error) {
+      if (this.selected[0]() === pending)
+        this.selected[1](null);
+      // Cancellation or another native status may already have removed this consent.
+      if (
+        this.owner !== owner ||
+        !this.state[0]().pending.some(
+          (p) => p.consentId === pending.consentId,
+        )
+      )
+        return false;
+      throw error;
+    } finally {
+      this.decisions.delete(key);
+    }
   }
   async requestScreen(
     clientId: string,
@@ -262,9 +395,11 @@ export class RemoteControlHost {
   ) {
     if (
       !(await this.capabilities(clientId)).host ||
+      !this.exposes(clientId) ||
       signal.aborted ||
-      this.status().pending ||
-      this.status().clientId
+      this.screen.reservation() ||
+      this.selected[0]() ||
+      this.state[0]().clientId
     )
       return;
     const result = this.screen.request(
@@ -273,13 +408,12 @@ export class RemoteControlHost {
       signal,
     );
     if (this.decision(clientId) === "allow") {
-      const consent = this.screen.pending();
+      const consent = this.screen
+        .pending()
+        .find((p) => p.clientId === clientId);
       if (consent) {
         try {
-          await this.screen.respond(
-            consent.consentId,
-            true,
-          );
+          await this.approve(consent.consentId, true);
         } catch (error) {
           this.screen.cancelPeer(clientId, generation);
           throw error;
@@ -289,12 +423,25 @@ export class RemoteControlHost {
     return result;
   }
   async policyChanged(clientId: string) {
+    if (!this.exposes(clientId)) {
+      this.screen.cancelClient(clientId);
+      if (this.status().clientId === clientId)
+        await this.revoke();
+      // Native bindings are withdrawn by refreshControlCapabilities. Do not
+      // send a denial that discloses control support to a hidden client.
+      return;
+    }
     const decision = this.decision(clientId);
     if (decision === "allow") {
+      const screen = this.screen
+        .pending()
+        .find((p) => p.clientId === clientId);
+      if (screen)
+        await this.approve(screen.consentId, true);
       const status = this.state[0]();
       if (
         this.owner &&
-        status.pending?.clientId === clientId
+        status.pending.some((p) => p.clientId === clientId)
       )
         await this.receive(
           this.generation,
@@ -303,12 +450,6 @@ export class RemoteControlHost {
         );
       return;
     }
-    if (decision !== "deny") return;
-    const pending = this.status().pending;
-    if (pending?.clientId === clientId)
-      await this.approve(pending.consentId, false);
-    if (this.status().clientId === clientId)
-      await this.revoke();
   }
   async revoke() {
     const id = this.owner;
@@ -316,6 +457,7 @@ export class RemoteControlHost {
   }
   close() {
     this.screen.close();
+    this.selected[1](null);
     ++this.generation;
     clearTimeout(this.timer);
     clearTimeout(this.decisionRetry);
@@ -325,7 +467,7 @@ export class RemoteControlHost {
     this.owner = undefined;
     if (id) this.ownerRevision[1]((value) => value + 1);
     this.state[1]({
-      pending: null,
+      pending: [],
       clientId: null,
       closed: true,
     });

@@ -110,35 +110,66 @@ function setup() {
   return { session, channel, port };
 }
 
-it("exchanges decoder capabilities on every hello and resets the remote report on channel loss", async () => {
-  const remoteDecodeChanged = vi.fn();
-  const decode = {
-    video: ["video/h264"],
-    audio: ["audio/opus"],
-  };
-  const session = new NativeScreenSession({
-    loadIceServers: async () => [],
-    relayOnly: () => false,
-    changed: () => {},
-    error: vi.fn(),
-    decodeCapabilities: () => decode,
-    remoteDecodeChanged,
+it("applies shared decoder snapshots without another media hello", async () => {
+  const { session, channel } = setup();
+  const before = channel.sent.length;
+  session.setRemoteCapabilities({
+    screen: {
+      decode: {
+        video: ["video/h264"],
+        audio: ["audio/opus"],
+      },
+      trickleIce: true,
+      multiScreen: true,
+    },
   });
-  const channel = new Channel();
-  session.bind(channel as unknown as RTCDataChannel);
-  expect(channel.sent[0].decode).toEqual(decode);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    decode,
-  });
-  expect(remoteDecodeChanged).toHaveBeenLastCalledWith(
-    decode,
-  );
-  await session.refreshControlCapabilities();
-  expect(channel.sent.at(-1).decode).toEqual(decode);
+  expect(channel.sent).toHaveLength(before);
   session.dispose();
-  expect(remoteDecodeChanged).toHaveBeenLastCalledWith();
+});
+
+it("keeps receiving video with no common control protocol and ignores control requests", async () => {
+  const { session, channel } = setup();
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: true,
+      multiScreen: true,
+    },
+  });
+  channel.receive({
+    type: "control-request",
+    id: "request",
+  });
+  channel.receive({
+    type: "offer",
+    id: "video",
+    sourceId: "display",
+    sdp: "offer",
+    control: true,
+  });
+  await flush();
+  expect(receivers).toHaveLength(1);
+  expect(receivers[0].answer).toHaveBeenCalled();
+  expect(
+    channel.sent.some(
+      (value) => value.type === "control-result",
+    ),
+  ).toBe(false);
+  session.dispose();
+});
+
+it("does not create a media receiver for an incompatible screen protocol", async () => {
+  const { session, channel } = setup();
+  session.setRemoteCapabilities({ messaging: {} });
+  channel.receive({
+    type: "offer",
+    id: "video",
+    sourceId: "display",
+    sdp: "offer",
+  });
+  await flush();
+  expect(receivers).toHaveLength(0);
+  session.dispose();
 });
 
 it("replaces all senders of a publication on a codec change and releases callbacks on removal", async () => {
@@ -156,7 +187,13 @@ it("replaces all senders of a publication on a codec change and releases callbac
   };
   for (const { session, channel } of [first, second]) {
     session.setPublication(source);
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
   }
   await flush();
   expect(source.offer).toHaveBeenCalledTimes(2);
@@ -178,11 +215,14 @@ beforeEach(() => {
 
 it("retains a failed codec card without retry until the publisher explicitly stops", async () => {
   const { session, channel, port } = setup();
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    multiScreen: true,
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
   });
+
   channel.receive({
     type: "offer",
     id: "hevc",
@@ -217,11 +257,14 @@ it("does not retry a retired receiver when intentional replacement aborts pendin
   port.loadIceServers.mockReturnValue(
     servers.promise as any,
   );
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    multiScreen: true,
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
   });
+
   channel.receive({
     type: "offer",
     id: "old",
@@ -256,11 +299,14 @@ it("retains source identity across transport retries and resets all receiver sta
   for (let cycle = 0; cycle < 5; cycle++) {
     const channel = new Channel();
     session.bind(channel as unknown as RTCDataChannel);
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     channel.receive({
       type: "offer",
       id: `first-${cycle}`,
@@ -298,7 +344,14 @@ it("restores the retry budget after stable decoding and stops a terminal codec f
   const { session, channel } = setup();
   const pub = { ...publication(), controlEligible: true };
   session.setPublication(pub);
-  channel.receive({ type: "hello", receiveScreen: true });
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+  });
+
   await flush();
   for (let cycle = 0; cycle < 6; cycle++) {
     const id = channel.sent
@@ -324,11 +377,18 @@ it("restores the retry budget after stable decoding and stops a terminal codec f
     state: "unsupported",
   });
   await session.refreshControlCapabilities(true);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: false },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   await vi.advanceTimersByTimeAsync(180000);
   expect(pub.offer).toHaveBeenCalledTimes(7);
   session.setPublication();
@@ -343,11 +403,14 @@ it.each([true, false])(
     for (let cycle = 0; cycle < 5; cycle++) {
       const channel = new Channel();
       session.bind(channel as unknown as RTCDataChannel);
-      channel.receive({
-        type: "hello",
-        receiveScreen: true,
-        multiScreen: true,
+      session.setRemoteCapabilities({
+        screen: {
+          decode: { video: null, audio: null },
+          trickleIce: false,
+          multiScreen: true,
+        },
       });
+
       channel.receive({
         type: "offer",
         id: `hevc-${cycle}`,
@@ -396,10 +459,16 @@ it.each(["backoff", "pending-offer", "failed-offers"])(
       await flush();
     };
     try {
-      sender.channel.receive({
-        type: "hello",
-        receiveScreen: true,
-      });
+      const caps = {
+        screen: {
+          decode: { video: null, audio: null },
+          trickleIce: false,
+          multiScreen: false,
+        },
+      };
+      sender.session.setRemoteCapabilities(caps);
+      receiver.session.setRemoteCapabilities(caps);
+
       sender.session.setPublication(pub);
       await flush();
       await deliver();
@@ -447,34 +516,32 @@ it.each(["backoff", "pending-offer", "failed-offers"])(
 );
 
 describe("native screen control", () => {
-  it("keeps control capabilities opt-in and forgets them on disconnect", async () => {
+  it("keeps shared capabilities across media resets and clears them on main disconnect", async () => {
     const { session, channel } = setup();
-    expect(channel.sent[0]).not.toHaveProperty(
-      "remoteControl",
-    );
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      remoteControl: { request: true, host: false },
+    expect(channel.sent).toEqual([]);
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+      control: {
+        ...{ request: true, host: false },
+        occupancy: { state: "idle" },
+      },
     });
+
     await flush();
     expect(session.remoteControlCapabilities).toEqual({
       request: true,
       host: false,
+      occupancy: { state: "idle" },
     });
     session.reset();
-    expect(
-      session.remoteControlCapabilities,
-    ).toBeUndefined();
-  });
-  it("malformed control capabilities do not break legacy screen sharing", async () => {
-    const { session, channel } = setup();
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      remoteControl: { request: true, host: "true" },
-    });
-    await flush();
+    expect(session.remoteControlCapabilities?.host).toBe(
+      false,
+    );
+    session.setRemoteCapabilities(undefined);
     expect(
       session.remoteControlCapabilities,
     ).toBeUndefined();
@@ -498,17 +565,20 @@ describe("native screen control", () => {
         return "trickle-offer";
       },
     );
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      trickleIce: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: true,
+        multiScreen: false,
+      },
     });
+
     session.setPublication(pub);
     await flush();
     expect(
       channel.sent.map((message) => message.type),
-    ).toEqual(["hello", "offer", "candidate"]);
-    const offer = channel.sent[1];
+    ).toEqual(["offer", "candidate"]);
+    const offer = channel.sent[0];
     expect(offer.trickleIce).toBe(true);
     channel.receive({
       type: "answer",
@@ -542,11 +612,14 @@ describe("native screen control", () => {
     port.loadIceServers.mockReturnValue(
       servers.promise as any,
     );
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      trickleIce: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: true,
+        multiScreen: false,
+      },
     });
+
     channel.receive({
       type: "offer",
       id: "incoming",
@@ -589,11 +662,14 @@ describe("native screen control", () => {
     };
     const answered = deferred<void>();
     vi.mocked(pub.answer).mockReturnValue(answered.promise);
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      trickleIce: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: true,
+        multiScreen: false,
+      },
     });
+
     session.setPublication(pub);
     await flush();
     const offer = channel.sent.find(
@@ -622,7 +698,14 @@ describe("native screen control", () => {
     session.setPublication(pub);
     await flush();
     expect(pub.offer).not.toHaveBeenCalled();
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     await flush();
     const offer = channel.sent.find(
       (x) => x.type === "offer",
@@ -664,7 +747,14 @@ describe("native screen control", () => {
     const pending = deferred<string>();
     vi.mocked(pub.offer).mockReturnValue(pending.promise);
     session.setPublication(pub);
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     await flush();
     const peerId = vi.mocked(pub.offer).mock.calls[0][0];
     session.reset();
@@ -676,14 +766,28 @@ describe("native screen control", () => {
     expect(pub.closePeer).toHaveBeenLastCalledWith(peerId);
     const next = new Channel();
     session.bind(next as unknown as RTCDataChannel);
-    next.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     await flush();
     expect(pub.offer).toHaveBeenCalledTimes(2);
     session.reset();
   });
   it("replaces one remote screen using its own connection identity and relay credentials", async () => {
     const { session, channel, port } = setup();
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     channel.receive({
       type: "offer",
       id: "first",
@@ -718,7 +822,14 @@ describe("native screen control", () => {
     port.loadIceServers.mockReturnValue(
       pending.promise as any,
     );
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     channel.receive({
       type: "offer",
       id: "old",
@@ -734,7 +845,14 @@ describe("native screen control", () => {
     const { session, channel, port } = setup();
     const pub = publication();
     session.setPublication(pub);
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     await flush();
     await vi.advanceTimersByTimeAsync(150000);
     expect(pub.offer).toHaveBeenCalledTimes(4);
@@ -746,11 +864,14 @@ describe("native screen control", () => {
     const { session, channel } = setup();
     const first = publication("one"),
       second = publication("two");
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     session.setPublications([first]);
     await flush();
     session.setPublications([first, second, second]);
@@ -788,22 +909,32 @@ describe("native screen control", () => {
     expect(second.closePeer).toHaveBeenCalledOnce();
     const next = new Channel();
     session.bind(next as unknown as RTCDataChannel);
-    next.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     await flush();
     expect(second.offer).toHaveBeenCalledTimes(2);
     expect(first.offer).toHaveBeenCalledTimes(2);
     session.reset();
   });
-  it("sends just one screen to a legacy peer and promotes the next after removal", async () => {
+  it("sends just one screen to a single-screen peer and promotes the next after removal", async () => {
     const { session, channel } = setup();
     const first = publication("one"),
       second = publication("two");
     session.setPublications([first, second]);
-    channel.receive({ type: "hello", receiveScreen: true });
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+
     await flush();
     expect(first.offer).toHaveBeenCalledOnce();
     expect(second.offer).not.toHaveBeenCalled();
@@ -815,11 +946,14 @@ describe("native screen control", () => {
   });
   it("combines remote screens with independent audio owners and preserves the other stream during replacement and stop", async () => {
     const { session, channel, port } = setup();
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     for (const id of ["one", "two"]) {
       channel.receive({
         type: "offer",
@@ -871,11 +1005,14 @@ describe("native screen control", () => {
       second = publication("two");
     const pending = deferred<string>();
     vi.mocked(first.offer).mockReturnValue(pending.promise);
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     session.setPublications([first, second]);
     await flush();
     session.setPublications([second]);
@@ -893,11 +1030,14 @@ describe("native screen control", () => {
     const { session, channel, port } = setup();
     const first = publication("one"),
       second = publication("two");
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      multiScreen: true,
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: true,
+      },
     });
+
     session.setPublications([first, second]);
     await flush();
     channel.bufferedAmount = 262145;
@@ -959,12 +1099,18 @@ it("adds native control only for an eligible display and a capable authenticated
   s.setPublications([display, window]);
   const channel = new Channel();
   s.bind(channel as unknown as RTCDataChannel);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    multiScreen: true,
-    remoteControl: { request: true, host: false },
+  s.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   await flush();
   expect(display.offer).toHaveBeenCalledWith(
     expect.any(String),
@@ -998,7 +1144,7 @@ it("adds native control only for an eligible display and a capable authenticated
   expect(window.closePeer).toHaveBeenCalledTimes(1);
 });
 
-it("announces local control capabilities before publishing when the peer hello arrives during initialization", async () => {
+it("prepares the local input owner before publishing when peer capabilities arrive during initialization", async () => {
   const capabilities = deferred<{
     request: boolean;
     host: boolean;
@@ -1019,21 +1165,26 @@ it("announces local control capabilities before publishing when the peer hello a
   session.setPublication(pub);
   const channel = new Channel();
   session.bind(channel as unknown as RTCDataChannel);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: false },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   await flush();
   expect(pub.offer).not.toHaveBeenCalled();
   capabilities.resolve({ request: true, host: true });
   await flush();
   expect(channel.sent.map((v) => v.type)).toEqual([
-    "hello",
     "offer",
   ]);
-  expect(channel.sent[0].remoteControl.host).toBe(true);
-  expect(channel.sent[1].control).toBe(true);
+  expect(channel.sent[0].control).toBe(true);
   session.reset();
 });
 
@@ -1058,23 +1209,32 @@ it("adds control to an existing display when the viewer advertises request suppo
   const channel = new Channel();
   session.bind(channel as unknown as RTCDataChannel);
   session.setPublications([display, window]);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    multiScreen: true,
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
   });
+
   await flush();
   const first = channel.sent.find(
     (v) => v.type === "offer" && v.sourceId === "display",
   );
   expect(first.control).toBeUndefined();
-  const hello = {
-    type: "hello",
-    receiveScreen: true,
-    multiScreen: true,
-    remoteControl: { request: true, host: false },
+  const caps = {
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
+    control: {
+      request: true,
+      host: false,
+      occupancy: { state: "idle" as const },
+    },
   };
-  channel.receive(hello);
+  session.setRemoteCapabilities(caps);
   await flush();
   expect(display.closePeer).toHaveBeenCalledWith(first.id);
   expect(
@@ -1086,7 +1246,7 @@ it("adds control to an existing display when the viewer advertises request suppo
       .at(-1).control,
   ).toBe(true);
   expect(window.offer).toHaveBeenCalledOnce();
-  channel.receive(hello);
+  session.setRemoteCapabilities(caps);
   await flush();
   expect(display.offer).toHaveBeenCalledTimes(2);
   session.reset();
@@ -1113,11 +1273,18 @@ it("does not attach input after owner preparation finishes for an obsolete chann
   s.setPublication(display);
   const channel = new Channel();
   s.bind(channel as unknown as RTCDataChannel);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: false },
+  s.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   await flush();
   s.reset();
   pending.resolve({
@@ -1156,22 +1323,25 @@ it("ignores a stale capability read after a newer permission refresh", async () 
     ...publication(),
     controlEligible: true,
   });
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: false },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   await session.refreshControlCapabilities();
   await flush();
   initial.resolve({ request: true, host: true });
   await flush();
   expect(
     channel.sent.filter((v) => v.type === "hello"),
-  ).toEqual([
-    expect.objectContaining({
-      remoteControl: { request: true, host: false },
-    }),
-  ]);
+  ).toEqual([]);
   expect(
     channel.sent.find((v) => v.type === "offer").control,
   ).toBeUndefined();
@@ -1193,7 +1363,14 @@ it("retains an owner rebind when a newer permission refresh overtakes it", async
   const pub = { ...publication(), controlEligible: true };
   session.bind(channel as unknown as RTCDataChannel);
   session.setPublication(pub);
-  channel.receive({ type: "hello", receiveScreen: true });
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+  });
+
   await flush();
   const pending = deferred<typeof capabilities>();
   load.mockReturnValueOnce(pending.promise);
@@ -1214,11 +1391,18 @@ it("retains an owner rebind when a newer permission refresh overtakes it", async
 
 it("retries a failed control transport for the same shared source and binds a fresh controller", async () => {
   const { session, channel, port } = setup();
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: true },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: true },
+      occupancy: { state: "idle" },
+    },
   });
+
   channel.receive({
     type: "offer",
     id: "first",
@@ -1294,18 +1478,21 @@ it("refreshes per-peer control capabilities and republishes the same capture wit
   const session = new NativeScreenSession(port);
   const channel = new Channel();
   session.bind(channel as unknown as RTCDataChannel);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    remoteControl: { request: true, host: false },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ request: true, host: false },
+      occupancy: { state: "idle" },
+    },
   });
+
   const pub = { ...publication(), controlEligible: true };
   session.setPublication(pub);
   await flush();
-  expect(
-    channel.sent.find((signal) => signal.type === "hello")
-      .requestScreen,
-  ).toBe(true);
   expect(
     channel.sent.find((signal) => signal.type === "offer")
       .control,
@@ -1313,16 +1500,6 @@ it("refreshes per-peer control capabilities and republishes the same capture wit
   allowed = false;
   await session.refreshControlCapabilities();
   await flush();
-  expect(
-    channel.sent
-      .filter((signal) => signal.type === "hello")
-      .at(-1),
-  ).toMatchObject({ remoteControl: { host: false } });
-  expect(
-    channel.sent
-      .filter((signal) => signal.type === "hello")
-      .at(-1),
-  ).not.toHaveProperty("requestScreen");
   expect(
     channel.sent
       .filter((signal) => signal.type === "offer")
@@ -1370,12 +1547,18 @@ it("cancels an avatar approval before it can return a stale source and clears ca
   const session = new NativeScreenSession(port);
   const channel = new Channel();
   session.bind(channel as unknown as RTCDataChannel);
-  channel.receive({
-    type: "hello",
-    receiveScreen: true,
-    requestScreen: true,
-    remoteControl: { host: true, request: true },
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      ...{ host: true, request: true },
+      occupancy: { state: "idle" },
+    },
   });
+
   expect(session.screenControl.state()).toBe("viewing");
   channel.receive({ type: "control-request", id: "first" });
   await flush();
@@ -1398,12 +1581,18 @@ it.each(["stop", "failure"] as const)(
   "allows a new avatar request after the controlled screen ends through %s",
   async (reason) => {
     const { session, channel } = setup();
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      requestScreen: true,
-      remoteControl: { host: true, request: true },
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+      control: {
+        ...{ host: true, request: true },
+        occupancy: { state: "idle" },
+      },
     });
+
     session.screenControl.request();
     const request = channel.sent.at(-1);
     channel.receive({
@@ -1454,14 +1643,71 @@ it.each(["stop", "failure"] as const)(
     expect(session.screenControl.state()).toBe(
       "requesting",
     );
-    channel.receive({
-      type: "hello",
-      receiveScreen: true,
-      remoteControl: { host: false, request: true },
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+      control: {
+        ...{ host: false, request: true },
+        occupancy: { state: "idle" },
+      },
     });
+
     expect(session.screenControl.state()).toBe(
       "unavailable",
     );
     session.reset();
   },
 );
+
+it("does not defer a hidden control request and replay it after permission is added", async () => {
+  let exposed = false;
+  const request = vi.fn(async () => "screen");
+  const session = new NativeScreenSession({
+    acceptsControlRequests: () => exposed,
+    requestScreen: request,
+    controlCapabilities: { host: true, request: true },
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+  });
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  channel.receive({
+    type: "control-request",
+    id: "hidden-before-discovery",
+  });
+  exposed = true;
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: true,
+      multiScreen: true,
+    },
+    control: {
+      host: false,
+      request: true,
+      occupancy: { state: "unavailable" },
+    },
+  });
+  await flush();
+  expect(request).not.toHaveBeenCalled();
+  expect(
+    channel.sent.some((m) => m.type === "control-result"),
+  ).toBe(false);
+  channel.receive({
+    type: "control-request",
+    id: "allowed",
+  });
+  await flush();
+  expect(request).toHaveBeenCalledOnce();
+  expect(channel.sent).toContainEqual({
+    type: "control-result",
+    id: "allowed",
+    sourceId: "screen",
+  });
+  session.dispose();
+});

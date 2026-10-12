@@ -1,5 +1,5 @@
 import { ScreenControlRequest } from "./control-request";
-import { browserDecodeCapabilities } from "../media-codecs";
+import type { PeerCapabilities } from "../protocol/capabilities";
 import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
@@ -9,10 +9,7 @@ import {
   type NativeScreenView,
 } from "./errors";
 import { bindNativeScreenAudio } from "./tracks";
-import {
-  parseControlCapabilities,
-  type ControlCapabilities,
-} from "../protocol/remote-control";
+import { type ControlCapabilities } from "../protocol/remote-control";
 import {
   readBrowserVideoStats,
   type VideoStatsBatch,
@@ -35,13 +32,15 @@ export {
 } from "./signaling";
 
 interface ScreenSessionPort {
-  decodeCapabilities?(): MediaDecodeCapabilities;
+  clientId?: string;
   remoteDecodeChanged?(
     capabilities?: MediaDecodeCapabilities,
   ): void;
   requestScreen?(
     signal: AbortSignal,
   ): Promise<string | undefined>;
+  /** Synchronous permission check, including before discovery has completed. */
+  acceptsControlRequests?(): boolean;
   cancelScreenRequest?(): void;
   /** Omitted until the corresponding control implementation is ready. */
   controlCapabilities?: ControlCapabilities;
@@ -67,7 +66,7 @@ type Incoming = {
 };
 
 /** Authenticated control channel; each source owns its media connection and retries.
- * Multiple sources require an additive hello capability. Legacy peers keep one. */
+ * Peer capabilities are supplied by the shared message-channel exchange. */
 export class NativeScreenSession {
   readonly screenControl = new ScreenControlRequest(
     (value) => this.send(value),
@@ -79,13 +78,15 @@ export class NativeScreenSession {
   private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
   private listeners?: AbortController;
-  private helloSent = false;
+  private localReady = false;
   private capabilitiesRevision = 0;
   private controlRebindPending = false;
   private ready = false;
   private trickleIce = false;
   private multiScreen = false;
   private controlCapabilities?: ControlCapabilities;
+  private remote?: PeerCapabilities;
+  private deferred: ScreenSignal[] = [];
   get remoteControlCapabilities():
     | ControlCapabilities
     | undefined {
@@ -150,7 +151,7 @@ export class NativeScreenSession {
     this.channel = channel;
     const listeners = (this.listeners =
       new AbortController());
-    const hello = (
+    const prepared = (
       revision: number,
       capabilities?: ControlCapabilities,
     ) => {
@@ -161,41 +162,25 @@ export class NativeScreenSession {
       )
         return;
       this.localCapabilities = capabilities;
-      this.send({
-        type: "hello",
-        receiveScreen: true,
-        trickleIce: true,
-        multiScreen: true,
-        decode:
-          this.port.decodeCapabilities?.() ??
-          browserDecodeCapabilities(),
-        ...(capabilities?.host && this.port.requestScreen
-          ? { requestScreen: true as const }
-          : {}),
-        ...(capabilities
-          ? {
-              remoteControl: {
-                ...capabilities,
-              },
-            }
-          : {}),
-      });
-      this.helloSent = true;
+      this.localReady = true;
       this.publishSelected();
     };
     const open = () => {
+      this.ready = true;
+      this.applyRemoteCapabilities();
       const revision = ++this.capabilitiesRevision;
       if (this.port.loadControlCapabilities)
         void this.port
           .loadControlCapabilities()
           .then((capabilities) =>
-            hello(revision, capabilities),
+            prepared(revision, capabilities),
           )
           .catch((error) => {
             this.port.error(error);
-            hello(revision);
+            prepared(revision);
           });
-      else hello(revision, this.port.controlCapabilities);
+      else
+        prepared(revision, this.port.controlCapabilities);
     };
     channel.addEventListener("open", open, {
       signal: listeners.signal,
@@ -248,22 +233,11 @@ export class NativeScreenSession {
     )
       return;
     const changed =
-      this.localCapabilities?.host !== capabilities?.host;
+      this.canHostControl() !==
+      (capabilities?.host === true &&
+        this.controlCapabilities?.request === true);
     this.localCapabilities = capabilities;
-    this.send({
-      type: "hello",
-      receiveScreen: true,
-      trickleIce: true,
-      multiScreen: true,
-      decode:
-        this.port.decodeCapabilities?.() ??
-        browserDecodeCapabilities(),
-      remoteControl: capabilities,
-      ...(capabilities?.host && this.port.requestScreen
-        ? { requestScreen: true as const }
-        : {}),
-    });
-    this.helloSent = true;
+    this.localReady = true;
     if (changed || this.controlRebindPending)
       this.restartControlSenders();
     this.controlRebindPending = false;
@@ -299,6 +273,7 @@ export class NativeScreenSession {
     this.publishSelected();
   }
   dispose(): void {
+    this.setRemoteCapabilities(undefined);
     this.reset();
     for (const sender of this.publications.values())
       sender.dispose();
@@ -310,7 +285,7 @@ export class NativeScreenSession {
     this.port.cancelScreenRequest?.();
     this.screenControl.setAvailable(false);
     this.localCapabilities = undefined;
-    this.helloSent = false;
+    this.localReady = false;
     this.controlRebindPending = false;
     ++this.capabilitiesRevision;
     this.listeners?.abort();
@@ -318,10 +293,10 @@ export class NativeScreenSession {
     const channel = this.channel;
     this.channel = undefined;
     this.ready = false;
-    this.port.remoteDecodeChanged?.();
     this.trickleIce = false;
     this.multiScreen = false;
-    this.controlCapabilities = undefined;
+    this.deferred = [];
+    this.controlCapabilities = this.remote?.control;
     for (const sender of this.publications.values())
       sender.reset();
     this.stopIncoming();
@@ -381,7 +356,10 @@ export class NativeScreenSession {
   ): NativeScreenSender {
     const sender: NativeScreenSender =
       new NativeScreenSender(publication, {
-        ready: () => this.ready && this.helloSent,
+        ready: () =>
+          this.ready &&
+          this.localReady &&
+          !!this.remote?.screen,
         selected: () => this.selected(sender),
         trickleIce: () => this.trickleIce,
         loadIceServers: () => this.port.loadIceServers(),
@@ -420,6 +398,12 @@ export class NativeScreenSession {
     for (const sender of this.publications.values())
       sender.restartControl();
   }
+  private canHostControl(): boolean {
+    return (
+      this.localCapabilities?.host === true &&
+      this.controlCapabilities?.request === true
+    );
+  }
   private findOutgoing(
     id: string,
   ): NativeScreenSender | undefined {
@@ -427,44 +411,75 @@ export class NativeScreenSession {
       sender.owns(id),
     );
   }
-  private async handle(value: ScreenSignal) {
-    if (value.type === "hello") {
-      this.port.remoteDecodeChanged?.(value.decode);
-      const couldRequest =
-        this.controlCapabilities?.request === true;
-      this.controlCapabilities = parseControlCapabilities(
-        value.remoteControl,
-      );
-      if (!this.controlCapabilities?.host) {
-        for (const entry of this.incoming.values()) {
-          entry.control?.close();
-          entry.control = undefined;
-        }
-      }
-      this.screenControl.setAvailable(
-        value.requestScreen === true &&
-          this.controlCapabilities?.host === true,
-      );
-      if (!this.ready) {
-        this.ready = true;
-        this.trickleIce = value.trickleIce === true;
-        this.multiScreen = value.multiScreen === true;
-        this.controlCapabilities = parseControlCapabilities(
-          value.remoteControl,
+  setRemoteCapabilities(
+    services: PeerCapabilities | undefined,
+  ): void {
+    const couldHost = this.canHostControl();
+    const couldRequest =
+      this.controlCapabilities?.request === true;
+    this.remote = services;
+    this.controlCapabilities = services?.control;
+    if (couldRequest && !services?.control?.request) {
+      this.screenRequest?.abort.abort();
+      this.screenRequest = undefined;
+      this.port.cancelScreenRequest?.();
+    }
+    this.port.remoteDecodeChanged?.(
+      services?.screen?.decode,
+    );
+    if (couldHost !== this.canHostControl())
+      this.restartControlSenders();
+    this.applyRemoteCapabilities();
+  }
+  private applyRemoteCapabilities(): void {
+    this.trickleIce =
+      this.remote?.screen?.trickleIce === true;
+    this.multiScreen =
+      this.remote?.screen?.multiScreen === true;
+    this.screenControl.setAvailable(
+      this.ready &&
+        !!this.remote?.screen &&
+        this.remote?.control?.host === true,
+    );
+    this.screenControl.setHostStatus(
+      this.remote?.control?.occupancy,
+      this.port.clientId ?? "",
+    );
+    for (const entry of this.incoming.values()) {
+      if (this.remote && !this.remote.control?.host) {
+        entry.control?.close();
+        entry.control = undefined;
+      } else
+        entry.control?.setHostStatus(
+          this.remote?.control?.occupancy,
+          this.port.clientId ?? "",
         );
-        this.publishSelected();
-      } else if (
-        couldRequest !==
-        (this.controlCapabilities?.request === true)
-      ) {
-        // Capability loading and policy updates can finish after viewing starts.
-        // Rebuild eligible transports so their offer and data channels agree.
-        this.restartControlSenders();
-        this.publishSelected();
-      }
+    }
+    this.publishSelected();
+    if (this.ready && this.remote) {
+      const pending = this.deferred.splice(0);
+      for (const value of pending)
+        void this.handle(value).catch(this.port.error);
+    }
+  }
+  private async handle(value: ScreenSignal) {
+    if (
+      value.type === "control-request" &&
+      this.port.acceptsControlRequests?.() === false
+    )
+      return;
+    if (!this.ready || !this.remote) {
+      if (this.deferred.length >= 256)
+        throw new Error("Too many pending media signals");
+      this.deferred.push(value);
       return;
     }
-    if (!this.ready) return;
+    if (!this.remote.screen) return;
+    if (
+      value.type.startsWith("control-") &&
+      !this.remote.control
+    )
+      return;
     if (value.type === "control-cancel") {
       if (this.screenRequest?.id === value.id) {
         this.screenRequest.abort.abort();
@@ -493,7 +508,8 @@ export class NativeScreenSession {
       }
       if (
         this.screenRequest === request &&
-        !request.abort.signal.aborted
+        !request.abort.signal.aborted &&
+        this.port.acceptsControlRequests?.() !== false
       )
         this.send({
           type: "control-result",
@@ -573,6 +589,10 @@ export class NativeScreenSession {
         value.sourceId,
         value.id,
       );
+    incoming.control?.setHostStatus(
+      this.remote?.control?.occupancy,
+      this.port.clientId ?? "",
+    );
     this.incoming.set(value.id, incoming);
     this.views.set(value.sourceId, {
       sourceId: value.sourceId,

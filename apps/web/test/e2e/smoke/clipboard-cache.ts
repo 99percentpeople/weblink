@@ -144,6 +144,7 @@ async function main() {
       },
     };
     const service = new RemoteClipboard({
+      supportsInline: () => true,
       platform: (index === 1
         ? {
             clipboard: {

@@ -2228,3 +2228,20 @@ it("keeps ownership handoff while disabling appearance resources", () => {
     fixture.control.setCursorVisible,
   ).toHaveBeenLastCalledWith(true);
 });
+
+it("updates the control exposure preference from remote-control settings", async () => {
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const option = screen.getByRole("switch", {
+    name: "setting.remote_control.whitelist_only.title",
+  });
+  expect(option).not.toBeChecked();
+  fireEvent.click(option);
+  expect(appState.options.remoteControlWhitelistOnly).toBe(
+    true,
+  );
+  expect(option).toBeChecked();
+});

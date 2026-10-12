@@ -8,6 +8,7 @@ import {
 } from "../utils/event-emitter";
 import {
   createSessionMessage,
+  isRequestType,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
 import type { MessageSendOptions } from "./protocol/errors";
@@ -44,6 +45,13 @@ const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
   };
 
 export interface PeerSessionOptions {
+  /** Silently discard incoming messages before handlers or protocol errors can respond. */
+  acceptMessage?: (message: SessionMessage) => boolean;
+  authorizeMessage?: (
+    session: PeerSession,
+    message: SessionMessage,
+    signal?: AbortSignal,
+  ) => void | Promise<void>;
   polite?: boolean;
   iceServers?: RTCIceServer[];
   loadIceServers?: () => Promise<RTCIceServer[]>;
@@ -84,6 +92,8 @@ export class PeerSession {
   private status: PeerSessionStatus = "init";
   private listenController: AbortController | null = null;
   private readonly getRuntimeOptions: () => PeerSessionRuntimeOptions;
+  private readonly authorizeMessage: PeerSessionOptions["authorizeMessage"];
+  private readonly acceptMessage: PeerSessionOptions["acceptMessage"];
 
   constructor(
     sender: SignalingService,
@@ -96,9 +106,13 @@ export class PeerSession {
         DEFAULT_PEER_SESSION_RUNTIME_OPTIONS,
       getVideoSourceKind,
       getAudioSource,
+      authorizeMessage,
+      acceptMessage,
     }: PeerSessionOptions = {},
   ) {
     this.sender = sender;
+    this.authorizeMessage = authorizeMessage;
+    this.acceptMessage = acceptMessage;
     this.polite = polite;
     this.iceServers = iceServers ?? [];
     this.relayOnly = relayOnly;
@@ -139,8 +153,7 @@ export class PeerSession {
         this.createChannel(label, protocol),
       onChannel: (channel) =>
         this.dispatchEvent("channel", channel),
-      onMessage: (message) =>
-        this.dispatchEvent("message", message),
+      onMessage: (message) => this.receiveMessage(message),
       onMessageChannelChange: (state) =>
         this.dispatchEvent("messagechannelchange", state),
     });
@@ -574,10 +587,65 @@ export class PeerSession {
     return this.dataChannels.createChannel(label, protocol);
   }
 
-  sendMessage(
+  private receiveMessage(message: SessionMessage): void {
+    if (
+      message.client !== this.targetClientId ||
+      message.target !== this.clientId ||
+      this.acceptMessage?.(message) === false
+    )
+      return;
+    const signal = this.controller?.signal;
+    const approval = this.authorizeMessage?.(
+      this,
+      message,
+      signal,
+    );
+    if (!approval) {
+      this.dispatchEvent("message", message);
+      return;
+    }
+    void approval
+      .then(() => {
+        if (
+          !signal?.aborted &&
+          this.acceptMessage?.(message) !== false
+        )
+          this.dispatchEvent("message", message);
+      })
+      .catch((error: unknown) => {
+        if (
+          !signal?.aborted &&
+          this.acceptMessage?.(message) !== false &&
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "unsupported-protocol" &&
+          isRequestType(message.type)
+        )
+          void this.dataChannels
+            .sendMessage(
+              createSessionMessage(
+                this,
+                "error",
+                {
+                  error: "unsupported-protocol",
+                },
+                { id: message.id },
+              ),
+              { signal },
+            )
+            .catch(() => {});
+      });
+  }
+
+  async sendMessage(
     message: SessionMessage,
     options: MessageSendOptions = {},
   ): Promise<void> {
+    await this.authorizeMessage?.(
+      this,
+      message,
+      options.signal ?? this.controller?.signal,
+    );
     return this.dataChannels.sendMessage(message, options);
   }
 

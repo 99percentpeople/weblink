@@ -3,10 +3,7 @@ import {
   SettingRow,
   SettingBlock,
 } from "./setting-layout";
-import {
-  SettingSwitch,
-  SettingSelect,
-} from "./setting-controls";
+import { SettingSelect } from "./setting-controls";
 
 import { ThemeToggle } from "@/components/common/theme-toggle";
 
@@ -50,16 +47,6 @@ export default function AppearanceSettings() {
       <SettingBlock>
         <WallpaperPicker />
       </SettingBlock>
-      <SettingSwitch
-        checked={appState.options.wakeLock}
-        onChange={(isChecked) =>
-          setAppOptions("wakeLock", isChecked)
-        }
-        label={t("setting.appearance.wake_lock.title")}
-        description={t(
-          "setting.appearance.wake_lock.description",
-        )}
-      />
     </SettingSection>
   );
 }

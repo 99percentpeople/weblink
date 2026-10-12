@@ -8,7 +8,7 @@ There are three distinct concerns:
 1. **Signaling** discovers room peers and exchanges SDP/ICE until a peer
    connection exists.
 2. **P2P control protocol** exchanges typed JSON requests, replies and
-   notifications over any reliable ordered message transport.
+   notifications over a reliable message transport (ordering is optional).
 3. **Data protocols** such as file payload transfer and speed testing use their
    own channels/state machines and are not encoded as control messages.
 
@@ -110,23 +110,206 @@ The canonical TypeScript wire DTOs and request policy are in
 `domain/protocol/messages.ts`. Runtime validation is in
 `domain/protocol/validation.ts`.
 
+## Shared peer capabilities
+
+Each side sends one `peer-capabilities` notification when the main message channel
+opens. `version: 1` identifies the capability-sync envelope; `revision` is only a
+state sequence number. The initial `update` is a full snapshot:
+
+```ts
+{
+  type: "peer-capabilities",
+  version: 1,
+  // Standard id, createdAt, client and target fields omitted.
+  update: {
+    kind: "snapshot",
+    generation: "connection-id",
+    revision: 1,
+    services: {
+      "messaging/1": {},
+      "files/1": { content: true, shared: true },
+      "room/1": { chat: true, files: true },
+      "screen/1": { decode: { video: null, audio: null }, trickleIce: true, multiScreen: true },
+      "control/1": { request: true, host: true, occupancy: { state: "idle" } },
+      "clipboard/1": { inlineText: true },
+      "fileDrop/1": {},
+      "speedTest/1": { busy: false },
+    },
+  },
+}
+```
+
+`services` is an open map of **service name / protocol major**, such as
+`acme.whiteboard/1`. Compatible optional fields stay within the same major;
+breaking changes use a new key. Each advertised major must have an implemented
+handler. This release implements only `/1` for each built-in feature and has no
+unversioned fallback. Existing payload format discriminators (for example,
+storage page version 3) are parts of the `files/1` contract, not additional
+negotiable feature implementations.
+
+Both sides select the highest common implemented major from the initial exchange,
+without a separate negotiation RPC. The selected major is fixed for this peer
+connection; an update can withdraw it but cannot switch an active operation to
+another handler. Reconnecting starts selection afresh. A future release that
+supports multiple majors must register their actual implementations and keep its
+set of implemented majors stable during a connection. Merely advertising an old
+major does not provide compatibility.
+
+The wire envelope validates bounded objects without interpreting unknown major
+payloads. Only a negotiated, implemented major runs through its own descriptor
+validator. Unknown versions and invalid descriptors disable their corresponding
+feature while leaving other features available. Consumers receive a typed map of
+negotiated descriptors under names such as `control`; the raw versioned offers
+remain in discovery. `PeerCapabilitiesService.protocol(session, service)` returns
+the exact selected handler ID, or `undefined` for unavailable, invalid or withdrawn
+offers. Extension dispatch uses this ID rather than inferring a version from its
+payload. Unknown extension names can be advertised and negotiated
+without changing the sync format; extensions supply their own handlers and
+payload validation.
+
+Message send and receive boundaries enforce the negotiated feature requirements.
+Chat, file transfer, room chat, native screen, control, clipboard, file drop and
+speed testing have independent gates. Room file operations additionally require
+`files`; remote clipboard and file drop require `control`. An incompatible control
+protocol does not disable screen viewing, and incompatible file protocols do not
+disable private or room text chat. Buttons use the same negotiated state. Replies
+to already-authorized requests remain receivable, allowing operations to settle
+after a capability withdrawal. Binary transfers retain their registered operation
+identity; capability announcements do not authorize unsolicited channels or data.
+
+The capability-sync envelope has an independent major. An unknown sync major is
+not interpreted as version 1: discovery settles as unavailable for that transport,
+without disconnecting the peer or blocking base profile/stream metadata. Supporting
+a future sync major requires a real envelope implementation too. Feature additions
+normally require no sync-envelope change.
+
+Service keys start with a letter, contain letters, digits, `.`, `_`, `/` or `-`,
+and are at most 128 characters; `constructor` and `prototype` are reserved. A
+negotiable key ends in a positive safe integer major with no leading zero.
+
+After discovery, only changed entries are sent with `kind: "patch"`. Each included
+entry replaces that service's entire value; omitted services remain unchanged.
+`null` explicitly removes a service. For example, this patch updates occupancy
+and removes an extension without retransmitting files, codecs or room features:
+
+```ts
+{
+  kind: "patch",
+  generation: "connection-id",
+  revision: 12,
+  services: {
+    "control/1": {
+      request: true,
+      host: true,
+      occupancy: { state: "controlled", clientId: "viewer", sourceId: "display" },
+    },
+    "acme.whiteboard/1": null,
+  },
+}
+```
+
+Before the first snapshot, remote support is unknown. A missing service in the
+merged state means unsupported. Consumers wait for discovery or disable
+the action; they do not probe by opening a data channel. File/profile and room
+messages no longer carry feature lists. Media channels use their DataChannel
+open event and the shared capabilities; there is no separate media `hello`.
+
+Announcements are scoped to the actual peer session and checked against both
+peer IDs and the first accepted generation. Each announcement increments the
+sender's revision; the receiver tracks the latest revision **per service**.
+An older patch for a different service still applies, while stale replacements
+or withdrawals for the same service are ignored. A snapshot establishes an
+absence baseline for all omitted keys, while preserving entries changed by newer
+patches. Patches arriving before the first snapshot remain buffered and do not
+expose partial discovery to consumers.
+
+Disconnection clears discovery, cancels waiters and queued announcements, and the
+next open sends a full snapshot. Local changes coalesce while a send is pending;
+patches are computed against the last successfully sent state. Normal updates
+need no receipt or discovery RPC. A failed send retries with a full snapshot.
+
+The merged state has at most 32 services and announcements are limited to 16 KiB.
+A patch can include up to 64 entries to replace a whole set with additions and
+withdrawals. An oversized patch falls back to a full snapshot. The receiver keeps
+at most 128 entry revisions, including withdrawals and updates arriving before
+discovery. If merged state or retained history exceeds those bounds, discovery
+becomes unknown and the receiver sends `update: { kind: "request-snapshot" }` to
+recover a complete baseline. Recovery requests retry while needed and are
+cancelled on recovery or disconnection. New capabilities use this same model
+rather than adding discovery handshakes. Versioned service entries are independently
+updated and withdrawn; changing `control/2` never overwrites `control/1`.
+
+Control discovery is evaluated separately for each peer. The remote-control
+exposure setting enables allowlist-only discovery: clients marked `allow` retain
+`control/1`; unknown clients and clients marked `deny` receive no control entry.
+With the setting off, unknown clients may request local consent; denied clients
+remain hidden. The switch and allow/deny records are local, persistent policy.
+List changes use the existing capability publisher: additions replace only
+`control/1`, withdrawals send `control/1: null`, and unchanged peers receive no
+update. Initial discovery always reflects the current policy.
+
+Hidden control requests are silently discarded before queuing or invoking
+handlers, including before discovery completes. Withdrawing permission cancels
+pending consent, removes native control bindings and revokes an active grant.
+It never prevents screen viewing, messaging or other independent features.
+
+The controlled host owns occupancy for all its screens. While idle, different
+clients may request control concurrently. Unanswered consent requests do not
+reserve occupancy. The host may approve any queued request; that selection
+atomically invalidates all other consent tokens and rejects the other requests,
+including requests from the avatar sharing flow. Declining, cancelling or expiring
+one unanswered request leaves the others available.
+
+`pending` means a controller has been selected and capture/native authorization
+is in progress; both `pending` and `controlled` block competing requests. The
+status publisher broadcasts selection, cancellation, revocation and release;
+a newly connected client receives current occupancy immediately. The avatar
+flow reserves occupancy from approval through capture and native handoff, with
+expiry/cancellation clearing the reservation.
+The pending owner may complete that handoff. Other viewers retain the control
+action but cannot click it until the host reports `idle`. A request guard also
+enforces this outside the UI; native arbitration resolves simultaneous requests.
+An occupancy update does not renegotiate media or replace existing input grants.
+
+`controlled` plus the matching client/source identifies the public owner. It is
+not an input credential: only the requesting peer receives the native grant
+bound to its connection, source, media and geometry, and input starts after its
+activation acknowledgement. Grant IDs and input epochs never enter the public
+snapshot. Capability announcements also do not replace room tokens, file access
+checks, clipboard grants or speed-test consent. Speed-test busy state is checked
+before opening its data channel; the receiver still arbitrates concurrent starts.
+
+Small remote clipboard text/rich-text entries use one `remote-clipboard` request
+with `action: "inline"`, direction, operation/grant IDs and `{type, data}` entries.
+The encoded entry array is limited to 8 KiB and three unique text formats. Larger
+text, images and files use the existing bounded binary channel. Paste completes
+only after native clipboard application; selection copy still prepares a native
+clipboard sequence before injecting Ctrl+C. Retries, cancellation and revocation
+retain the same grant/operation checks.
+
 ## Request types and ACK policy
 
 The request policy is defined once by `requestSpec`:
 
-| Request               | Reply behavior                      |
-| --------------------- | ----------------------------------- |
-| `send-text`           | `ack` mode `receive`                |
-| `room-capabilities`   | `ack` mode `receive`                |
-| `send-room-text`      | `ack` mode `receive`                |
-| `send-room-file`      | `ack` mode `receive`                |
-| `request-room-file`   | `ack` mode `send`                   |
-| `send-clipboard`      | `ack` mode `receive`                |
-| `send-file`           | `ack` mode `receive`                |
-| `request-file`        | `ack` mode `send`                   |
-| `request-shared-file` | `ack` mode `send`                   |
-| `resume-file`         | `ack` mode `receive`                |
-| `request-storage`     | `storage` response plus receipt ACK |
+| Request               | Reply behavior                                                         |
+| --------------------- | ---------------------------------------------------------------------- |
+| `send-text`           | `ack` mode `receive`                                                   |
+| `room-capabilities`   | `ack` mode `receive`                                                   |
+| `send-room-text`      | `ack` mode `receive`                                                   |
+| `send-room-file`      | `file-offer-result` for content offers; otherwise `ack` mode `receive` |
+| `request-room-file`   | `ack` mode `send`                                                      |
+| `send-clipboard`      | `ack` mode `receive`                                                   |
+| `send-file`           | `file-offer-result` for content offers; otherwise `ack` mode `receive` |
+| `request-file`        | `ack` mode `send`                                                      |
+| `request-shared-file` | `ack` mode `send`                                                      |
+| `resume-file`         | `ack` mode `receive`                                                   |
+| `request-storage`     | `storage` response                                                     |
+
+A typed result completes its original request directly; it is not a reverse
+request and receives no additional ACK. A lost result is recovered by retrying
+the original request ID; the receiver replays the cached result without repeating
+the handler. The result of a file offer confirms offer acceptance or reuse, not
+binary transfer completion.
 
 An ACK means the receiving request handler completed successfully. The portable
 protocol itself does not guarantee durable storage, file-transfer completion,
@@ -238,12 +421,10 @@ cross-device exactly-once delivery.
 
 ### Room file offers and explicit downloads (version 1)
 
-Room text and capability envelopes remain version 1. A capability offer may add
-`features: ["room-file-v1"]`; at most 16 nonempty feature strings of at most 64
-UTF-16 code units are allowed. Unknown features are ignored. A peer without the
-file feature can still exchange room text. An ACK alone never proves file
-support: the peer's own capability offer must advertise the feature. Unsupported
-room offers are never automatically converted into private file messages.
+Room text and capability envelopes remain version 1. The shared peer snapshot
+advertises room file support as `services.room.files`. The room handshake still
+binds requests to current room tokens. A room ACK alone does not establish file
+support. Unsupported room offers are never converted into private messages.
 Explicit local forwarding creates a new private copy with a fresh file ID;
 the original room attachment keeps its room-only scope.
 
@@ -291,8 +472,8 @@ never been downloaded does not become a paused transfer merely by being loaded.
 ### Shared directory contract (version 3)
 
 `request-storage` and `storage` require `version: 3` (the message factory supplies
-it). Peers announce `shared-files-v1` in their profile features before browsing or
-fetching. Earlier directory versions and full-cache responses are rejected;
+it). Peers advertise `services.files.shared` in the shared snapshot before
+browsing or fetching. Earlier directory versions and full-cache responses are rejected;
 unsupported peers are reported without falling back to cache enumeration.
 The binary data protocol and signaling remain unchanged.
 
@@ -356,7 +537,11 @@ in-memory metadata index; this is not a persistent database pagination index.
 `chunkSize`, `transferId` (a fresh `shared-transfer_` UUID for local receive
 storage), optional inclusive `ranges`, and `have`. A `have: true` request checks
 current authorization without opening a binary channel, allowing verified local
-content to be reused. Otherwise the provider creates a read-only transfer alias,
+content to be reused. A cache miss sends only `have: false`, combining authorization
+and sender preparation in one request; it does not first probe with `have: true`.
+The receiver creates its binary channel only after this response. A verified
+local copy or a follower of an existing download still requires authorization.
+For `have: false`, the provider creates a read-only transfer alias,
 validates the request against its shared content, and acknowledges setup. Binary
 channels use `<transferId>-0`. New attempts and resumes use fresh control request
 IDs; a resumed task keeps its transfer ID and cached chunks.

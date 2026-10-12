@@ -6,6 +6,9 @@ import {
 } from "../domain/media-codecs";
 import { platform } from "@/libs/platform/runtime";
 import { RemoteControlHost } from "./remote-control-host";
+import { PeerCapabilitiesService } from "./peer-capabilities";
+import { requiredMessageFeatures } from "../domain/protocol/protocol-versions";
+import { browserDecodeCapabilities } from "../domain/media-codecs";
 import {
   NativeScreenSession,
   NATIVE_SCREEN_CHANNEL,
@@ -32,6 +35,7 @@ import {
   Accessor,
   createEffect,
   createRoot,
+  createSignal,
   on,
 } from "solid-js";
 import { setClientConfig } from "@/libs/state/permission-options";
@@ -53,9 +57,37 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
+  private readonly speedBusy = createSignal(false);
+  readonly capabilities = new PeerCapabilitiesService(
+    (session) => ({
+      messaging: {},
+      fileDrop: {},
+      files: { content: true, shared: true },
+      room: { chat: true, files: true },
+      screen: {
+        decode: browserDecodeCapabilities(),
+        trickleIce: true,
+        multiScreen: true,
+      },
+      ...(this.remoteControl.exposes(session.targetClientId)
+        ? {
+            control: this.remoteControl.capability(
+              session.targetClientId,
+            ),
+          }
+        : {}),
+      clipboard: { inlineText: true },
+      speedTest: { busy: this.speedBusy[0]() },
+    }),
+  );
+  setSpeedTestBusy(busy: boolean): void {
+    this.speedBusy[1](busy);
+  }
   readonly remoteControl = new RemoteControlHost(
     platform,
     {
+      whitelistOnly: () =>
+        appState.options.remoteControlWhitelistOnly,
       decision: (id) =>
         appState.options.clientConfigs[id]?.remoteControl,
       remember: (id, remoteControl) =>
@@ -327,6 +359,21 @@ export class SessionService {
     }
 
     const session = new PeerSession(sender, {
+      acceptMessage: (message) =>
+        !requiredMessageFeatures(message.type).includes(
+          "control",
+        ) || this.remoteControl.exposes(client.clientId),
+      authorizeMessage: (peer, message, signal) => {
+        const features = requiredMessageFeatures(
+          message.type,
+        );
+        if (features.length)
+          return this.capabilities.require(
+            peer,
+            features,
+            signal,
+          );
+      },
       polite,
       iceServers,
       loadIceServers: this.loadIceServers,
@@ -356,6 +403,7 @@ export class SessionService {
     let controlGeneration = createUuid();
     let mainChannelReady = false;
     const native = new NativeScreenSession({
+      clientId: session.clientId,
       remoteDecodeChanged: (capabilities) => {
         if (
           mainChannelReady &&
@@ -365,6 +413,8 @@ export class SessionService {
       },
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),
+      acceptsControlRequests: () =>
+        this.remoteControl.exposes(client.clientId),
       requestScreen: (signal) =>
         this.remoteControl.requestScreen(
           client.clientId,
@@ -420,7 +470,18 @@ export class SessionService {
         console.error("Native screen connection", error),
     });
     this.nativeScreens.set(session, native);
+    const disposeCapabilities = this.capabilities.bind(
+      session,
+      (services) => {
+        native.setRemoteCapabilities(services);
+        // Binding can publish before openNative is initialized.
+        queueMicrotask(() => openNative());
+      },
+    );
     const disposePolicy = createRoot((dispose) => {
+      createEffect(() =>
+        this.capabilities.refresh(session),
+      );
       createEffect(
         on(
           [
@@ -439,6 +500,8 @@ export class SessionService {
                 client.clientId
               ]?.remoteControl,
             this.remoteControl.revision,
+            () =>
+              appState.options.remoteControlWhitelistOnly,
           ],
           ([, ownerRevision], previous) => {
             const ownerChanged =
@@ -472,6 +535,7 @@ export class SessionService {
         !session.polite ||
         controller.signal.aborted ||
         !mainChannelReady ||
+        !this.capabilities.get(session)?.screen ||
         opening ||
         !session.peerConnection
       )
@@ -529,7 +593,11 @@ export class SessionService {
         if (
           mainChannelReady
             ? !wasReady &&
-              this.codecPeers.set(client.clientId)
+              this.codecPeers.set(
+                client.clientId,
+                this.capabilities.get(session)?.screen
+                  ?.decode,
+              )
             : this.codecPeers.delete(client.clientId)
         )
           this.refreshMediaCodecs();
@@ -548,6 +616,7 @@ export class SessionService {
       () => {
         clearTimeout(nativeReopenTimer);
         disposePolicy();
+        disposeCapabilities();
         mainChannelReady = false;
         this.publications.delete(session);
         if (this.codecPeers.delete(client.clientId))

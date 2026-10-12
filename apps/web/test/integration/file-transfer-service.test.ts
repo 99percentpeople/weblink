@@ -59,7 +59,9 @@ function setup() {
       };
     },
   };
+  const waitForCapabilities = vi.fn(async () => {});
   const service = new FileTransferService({
+    waitForCapabilities,
     protocol,
     rtc,
     registry: f.registry,
@@ -106,6 +108,7 @@ function setup() {
   };
   return {
     ...f,
+    waitForCapabilities,
     transport,
     protocol,
     sessions,
@@ -143,6 +146,25 @@ const payload = {
 };
 
 describe("file control handlers", () => {
+  it("waits for capability discovery before sending an offer or opening its channel", async () => {
+    const ready = deferred<void>();
+    f.waitForCapabilities.mockReturnValue(ready.promise);
+    f.autoAck();
+    const sending = f.service.sendFile(
+      f.session,
+      new File(["abc"], "a.txt"),
+    );
+    await flushRtc();
+    expect(f.transport.sendCalls).toHaveLength(0);
+    expect(f.session.createChannel).not.toHaveBeenCalled();
+    ready.resolve();
+    await sending;
+    expect(
+      f.transport.sendCalls.some(
+        ({ message }) => message.type === "send-file",
+      ),
+    ).toBe(true);
+  });
   it("waits for an in-flight history write on cancellation and accepts exactly one retained message", async () => {
     const write = deferred<void>();
     const insert =

@@ -113,10 +113,6 @@
       },
       "background_image_opacity": {
         "title": "배경화면 불투명도"
-      },
-      "wake_lock": {
-        "title": "화면 켜짐 유지",
-        "description": "활성화하면 앱이 화면을 켜진 상태로 유지합니다."
       }
     },
     "list": {
@@ -339,6 +335,10 @@
       "native_audio_codec": "네이티브 오디오 코덱"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "원격 제어 기능 공개",
+        "description": "켜면 권한 설정에서 자동 승인으로 지정한 클라이언트에만 원격 제어를 공개하고 다른 요청은 무시합니다. 차단된 클라이언트에는 공개하지 않으며 요청에도 응답하지 않습니다."
+      },
       "description": "이 기기의 터치 동작으로 원격 화면을 제어하는 ​​방법을 선택하세요.",
       "mode": {
         "title": "터치 모드",
@@ -470,6 +470,10 @@
       "delete_requires_disconnect": "권한 기록을 삭제하기 전에 이 클라이언트와의 연결을 끊으세요."
     },
     "application": {
+      "wake_lock": {
+        "title": "화면 켜짐 유지",
+        "description": "활성화하면 앱이 화면을 켜진 상태로 유지합니다."
+      },
       "automatic_pip_desktop_description": "Weblink가 백그라운드로 전환되면 회의를 항상 켜져 있는 창으로 축소합니다. 창을 복원하려면 회의로 돌아가기를 사용하세요.",
       "autostart": "시작 시 실행",
       "autostart_description": "이 컴퓨터에 로그인하면 Weblink가 자동으로 시작됩니다.",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "채팅방 서버 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.",
     "connection_closed": "연결이 중단되었습니다. 다시 연결하고 다시 시도해 보세요.",
     "connection_config": "채팅방 서버 주소 또는 구성이 잘못되었습니다. 연결 설정을 확인하세요.",
+    "unsupported_protocol": "이 기능과 호환되는 프로토콜 버전이 없습니다. 양쪽 클라이언트를 업데이트하세요.",
     "connection_response": "서버가 잘못된 응답을 반환했습니다. 주소를 확인하거나 앱과 서버를 업데이트하세요.",
     "password_required": "이 방에는 비밀번호가 필요합니다. 입력하고 다시 시도하세요.",
     "incorrect_password": "채팅방 비밀번호가 정확하지 않습니다. 확인하고 다시 시도해 보세요.",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "{{line}} 라인에 지원되지 않는 인증 방법이 있습니다. 장기 또는 hmac를 사용하십시오."
   },
   "remote_control": {
+    "busy": "제어 중",
     "clipboard_transfer": {
       "sending": "클립보드 파일 보내기",
       "receiving": "클립보드 파일 수신",

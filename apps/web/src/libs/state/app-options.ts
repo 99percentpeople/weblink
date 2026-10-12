@@ -107,6 +107,8 @@ export type AppOption = {
   remoteTouch: RemoteTouchOptions;
   remoteKeyboard: RemoteKeyboardOptions;
   remoteGamepad: RemoteGamepadOptions;
+  /** Hide control discovery and ignore requests from clients outside the allow list. */
+  remoteControlWhitelistOnly: boolean;
   /** Shared per-operation file byte limit for remote drop and clipboard. */
   remoteFileMaxSize: number;
   // Receiver
@@ -260,6 +262,7 @@ export const getDefaultAppOptions = (): AppOption => {
     remoteTouch: { ...defaultRemoteTouchOptions },
     remoteKeyboard: { ...defaultRemoteKeyboardOptions },
     remoteGamepad: { ...defaultRemoteGamepadOptions },
+    remoteControlWhitelistOnly: false,
     remoteFileMaxSize: DEFAULT_REMOTE_FILE_BYTES,
     application: { ...defaultApplicationOptions },
     notifications: { ...defaultNotificationOptions },

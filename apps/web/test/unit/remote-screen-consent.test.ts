@@ -24,7 +24,7 @@ it("waits for approval, shares once, and binds one-use consent to peer generatio
     new AbortController().signal,
   );
   expect(consent.share).not.toHaveBeenCalled();
-  const id = consent.pending()!.consentId;
+  const id = consent.pending()[0]!.consentId;
   await consent.respond("stale", true);
   expect(consent.share).not.toHaveBeenCalled();
   await consent.respond(id, true);
@@ -58,7 +58,7 @@ it.each(["decline", "cancel", "expire", "leave"])(
       "peer",
       abort.signal,
     );
-    const id = consent.pending()!.consentId;
+    const id = consent.pending()[0]!.consentId;
     if (action === "decline")
       await consent.respond(id, false);
     if (action === "cancel") abort.abort();
@@ -67,7 +67,7 @@ it.each(["decline", "cancel", "expire", "leave"])(
     if (action === "leave") consent.close();
     await consent.respond(id, true);
     expect(await request).toBeUndefined();
-    expect(consent.pending()).toBeNull();
+    expect(consent.pending()).toEqual([]);
     expect(consent.share).not.toHaveBeenCalled();
   },
 );
@@ -88,7 +88,7 @@ it("aborts an in-flight share and refuses a late completion after peer replaceme
     new AbortController().signal,
   );
   const approval = consent.respond(
-    consent.pending()!.consentId,
+    consent.pending()[0]!.consentId,
     true,
   );
   consent.cancelPeer("alice", "peer");
@@ -112,11 +112,11 @@ it("keeps a failed share retryable and rejects simultaneous capture approvals", 
     "peer",
     new AbortController().signal,
   );
-  const id = consent.pending()!.consentId;
+  const id = consent.pending()[0]!.consentId;
   await expect(consent.respond(id, true)).rejects.toThrow(
     "capture failed",
   );
-  expect(consent.pending()?.consentId).toBe(id);
+  expect(consent.pending()[0]?.consentId).toBe(id);
   const approval = consent.respond(id, true);
   expect(await consent.respond(id, true)).toBe(false);
   await approval;
@@ -267,5 +267,81 @@ it.each(["unavailable", "active"] as const)(
     expect(send.mock.calls[1][0].id).not.toBe(id);
     control.setAvailable(false);
     expect(control.state()).toBe("unavailable");
+  },
+);
+
+it("queues different clients without reserving and rejects all losers before capture finishes", async () => {
+  const consent = new RemoteScreenConsent();
+  let finish!: (source: string) => void;
+  consent.share = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = consent.request(
+    "alice",
+    "a",
+    new AbortController().signal,
+  );
+  const second = consent.request(
+    "bob",
+    "b",
+    new AbortController().signal,
+  );
+  const [alice, bob] = consent.pending();
+  expect(consent.reservation()).toBeNull();
+  expect(consent.pending()).toHaveLength(2);
+  const selection = consent.respond(bob.consentId, true);
+  expect(consent.reservation()?.clientId).toBe("bob");
+  await expect(first).resolves.toBeUndefined();
+  await expect(
+    consent.respond(alice.consentId, true),
+  ).resolves.toBe(false);
+  await expect(
+    consent.request(
+      "carol",
+      "c",
+      new AbortController().signal,
+    ),
+  ).resolves.toBeUndefined();
+  expect(consent.share).toHaveBeenCalledOnce();
+  finish("screen");
+  await selection;
+  await expect(second).resolves.toBe("screen");
+  consent.close();
+});
+
+it.each(["decline", "cancel", "expire"])(
+  "keeps other requests selectable after one %s",
+  async (action) => {
+    const consent = new RemoteScreenConsent();
+    consent.share = vi.fn(async () => "screen");
+    const abort = new AbortController();
+    const first = consent.request(
+      "alice",
+      "a",
+      abort.signal,
+    );
+    const alice = consent.pending()[0];
+    await vi.advanceTimersByTimeAsync(10000);
+    const second = consent.request(
+      "bob",
+      "b",
+      new AbortController().signal,
+    );
+    const bob = consent.pending()[1];
+    if (action === "decline")
+      await consent.respond(alice.consentId, false);
+    if (action === "cancel") abort.abort();
+    if (action === "expire")
+      await vi.advanceTimersByTimeAsync(50000);
+    await expect(first).resolves.toBeUndefined();
+    expect(
+      consent.pending().map((p) => p.clientId),
+    ).toEqual(["bob"]);
+    await consent.respond(bob.consentId, true);
+    await expect(second).resolves.toBe("screen");
+    consent.close();
   },
 );

@@ -85,6 +85,7 @@ export class P2PProtocol<
   ): Promise<void> {
     if (
       ![
+        "peer-capabilities",
         "client-profile",
         "stream-state",
         "read-text",

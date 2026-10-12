@@ -11,6 +11,7 @@ export const CLIPBOARD_MAX_BYTES = remoteBundleLimit(
 );
 export const CLIPBOARD_MAX_ENTRIES = 4096;
 export const CLIPBOARD_CHUNK_SIZE = 128 * 1024;
+export const CLIPBOARD_INLINE_BYTES = 8 * 1024;
 export type ClipboardContentKind = "text" | "binary";
 export const CLIPBOARD_FORMATS = [
   "text/plain",
@@ -20,6 +21,32 @@ export const CLIPBOARD_FORMATS = [
 ] as const;
 export type ClipboardFormat =
   (typeof CLIPBOARD_FORMATS)[number];
+export type InlineClipboardEntry = {
+  type: Exclude<ClipboardFormat, "image/png">;
+  data: string;
+};
+export function validInlineClipboard(
+  value: unknown,
+): value is InlineClipboardEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 3 &&
+    value.every(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        ["text/plain", "text/html", "text/rtf"].includes(
+          entry.type,
+        ) &&
+        typeof entry.data === "string",
+    ) &&
+    new Set(value.map((entry) => entry.type)).size ===
+      value.length &&
+    new TextEncoder().encode(JSON.stringify(value))
+      .byteLength <= CLIPBOARD_INLINE_BYTES
+  );
+}
 export type ClipboardRequest = {
   grantId: string;
   operationId: string;
@@ -28,6 +55,7 @@ export type ClipboardRequest = {
     | "read"
     | "read-current"
     | "offer"
+    | "inline"
     | "watch"
     | "unwatch"
     | "changed";
@@ -35,6 +63,7 @@ export type ClipboardRequest = {
   direction?: "copy" | "paste";
   size?: number;
   kind?: ClipboardContentKind;
+  entries?: InlineClipboardEntry[];
   /** Read requests may exclude files/directories before native file access. */
   files?: boolean;
   /** Accepted non-file formats. Omission keeps all formats for older/native clients. */
@@ -49,6 +78,17 @@ export function validClipboardRequest(
     typeof s === "string" &&
     /^[a-zA-Z0-9-]{1,128}$/.test(s);
   if (!id(v.grantId) || !id(v.operationId)) return false;
+  if (v.action === "inline")
+    return (
+      (v.direction === "copy" || v.direction === "paste") &&
+      validInlineClipboard(v.entries) &&
+      v.size === undefined &&
+      v.kind === undefined &&
+      v.files === undefined &&
+      v.formats === undefined &&
+      v.maxFileBytes === undefined
+    );
+  if (v.entries !== undefined) return false;
   if (
     v.maxFileBytes !== undefined &&
     (!validRemoteFileLimit(v.maxFileBytes) ||

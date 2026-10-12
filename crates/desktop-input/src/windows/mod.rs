@@ -90,7 +90,7 @@ impl Worker {
             input_suspended: false,
             pan_supported: false,
             touch_supported: false,
-            pending_consent: None,
+            pending_consents: vec![],
             grant: None,
             failure: None,
             closed: false,

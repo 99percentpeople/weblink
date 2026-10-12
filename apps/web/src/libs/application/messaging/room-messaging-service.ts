@@ -10,7 +10,6 @@ import type { ChunkMetaData } from "@/libs/domain/file";
 import { normalizePeerProfile } from "@/libs/domain/profile";
 import type { PeerSession } from "@/libs/domain/session";
 import type { WebRtcProtocol } from "../rtc/rtc-protocol";
-import { ROOM_FILE_FEATURE } from "@/libs/domain/protocol/messages";
 
 export type RoomChatScope = {
   roomId: string;
@@ -26,6 +25,12 @@ import type { RoomDeliveryStatus } from "@/libs/domain/message";
 
 export interface RoomMessagingServiceOptions {
   supportsFiles?: boolean;
+  remoteChat?(session: PeerSession): boolean | undefined;
+  remoteFiles?(session: PeerSession): boolean | undefined;
+  waitForCapabilities?(
+    session: PeerSession,
+    signal: AbortSignal,
+  ): Promise<unknown>;
   onFileSending?(id: string): Promise<void>;
   supportsContent?(session: PeerSession): boolean;
   reuseFile?(
@@ -79,7 +84,6 @@ type Binding = {
   files: AbortController;
   token: string;
   remoteToken?: string;
-  remoteFeatures?: readonly string[];
   remoteOfferAt: number;
   remoteOfferWaiters: Set<() => void>;
   acknowledged: boolean;
@@ -126,19 +130,12 @@ export class RoomMessagingService {
           binding.remoteOfferAt = message.createdAt;
           if (
             binding.remoteToken &&
-            (binding.remoteToken !== message.token ||
-              (binding.remoteFeatures?.includes(
-                ROOM_FILE_FEATURE,
-              ) &&
-                !message.features?.includes(
-                  ROOM_FILE_FEATURE,
-                )))
+            binding.remoteToken !== message.token
           ) {
             binding.files.abort();
             binding.files = new AbortController();
           }
           binding.remoteToken = message.token;
-          binding.remoteFeatures = message.features;
           this.publishCapabilities();
           for (const ready of binding.remoteOfferWaiters)
             ready();
@@ -200,6 +197,10 @@ export class RoomMessagingService {
       protocol.handle(
         "send-room-file",
         async ({ session, message, signal }) => {
+          await this.options.waitForCapabilities?.(
+            session,
+            signal,
+          );
           const binding = this.validateFileBinding(
             session,
             message,
@@ -278,17 +279,31 @@ export class RoomMessagingService {
     );
   }
 
+  refreshCapabilities(): void {
+    for (const binding of this.bindings.values()) {
+      if (
+        this.options.remoteChat?.(binding.session) === false
+      )
+        this.setCapability(binding, "unsupported");
+      if (!this.options.remoteFiles?.(binding.session)) {
+        binding.files.abort();
+        binding.files = new AbortController();
+      }
+    }
+    this.publishCapabilities();
+  }
+
   private fileCapability(
     binding: Binding,
   ): RoomChatCapability {
     if (!this.options.supportsFiles) return "unsupported";
     if (binding.capability !== "supported")
       return binding.capability;
-    return binding.remoteFeatures?.includes(
-      ROOM_FILE_FEATURE,
-    )
-      ? "supported"
-      : "unsupported";
+    const available = this.options.remoteFiles?.(
+      binding.session,
+    );
+    if (available === undefined) return "checking";
+    return available ? "supported" : "unsupported";
   }
 
   private fileBinding(
@@ -309,9 +324,7 @@ export class RoomMessagingService {
         !binding.session.isMessageChannelReady ||
         (inbound
           ? !this.options.supportsFiles ||
-            !binding.remoteFeatures?.includes(
-              ROOM_FILE_FEATURE,
-            )
+            !this.options.remoteFiles?.(binding.session)
           : this.fileCapability(binding) !== "supported") ||
         !binding.remoteToken
       )
@@ -344,6 +357,10 @@ export class RoomMessagingService {
     );
     const epoch = binding.epoch;
     await binding.handshake;
+    await this.options.waitForCapabilities?.(
+      session,
+      epoch.signal,
+    );
     if (binding.epoch !== epoch)
       throw new Error("Room file session changed");
     return this.fileBinding(binding);
@@ -487,7 +504,6 @@ export class RoomMessagingService {
     binding.files = new AbortController();
     binding.token = createUuid();
     binding.remoteToken = undefined;
-    binding.remoteFeatures = undefined;
     binding.remoteOfferAt = -1;
     binding.acknowledged = false;
     binding.handshake = undefined;
@@ -513,15 +529,24 @@ export class RoomMessagingService {
     ));
     binding.handshake = Promise.resolve().then(async () => {
       try {
+        await this.options.waitForCapabilities?.(
+          binding.session,
+          epoch.signal,
+        );
+        epoch.signal.throwIfAborted();
+        if (
+          this.options.remoteChat?.(binding.session) ===
+          false
+        ) {
+          this.setCapability(binding, "unsupported");
+          return;
+        }
         await this.protocol.call(
           binding.session,
           "room-capabilities",
           {
             roomId: binding.room.roomId,
             token: binding.token,
-            ...(this.options.supportsFiles
-              ? { features: [ROOM_FILE_FEATURE] }
-              : {}),
           },
           {
             signal: epoch.signal,
@@ -835,6 +860,11 @@ export class RoomMessagingService {
   ): Promise<void> {
     const peer = binding.session.targetClientId;
     await binding.handshake;
+    if (message.type === "file")
+      await this.options.waitForCapabilities?.(
+        binding.session,
+        epoch.signal,
+      );
     if (
       !this.isCurrent(binding) ||
       binding.epoch !== epoch ||

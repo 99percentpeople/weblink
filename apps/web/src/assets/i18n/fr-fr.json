@@ -113,10 +113,6 @@
       },
       "background_image_opacity": {
         "title": "Opacité du fond d’écran"
-      },
-      "wake_lock": {
-        "title": "Garder l'écran allumé",
-        "description": "Lorsqu'elle est activée, l'application gardera l'écran allumé"
       }
     },
     "list": {
@@ -339,6 +335,10 @@
       "native_audio_codec": "Codec audio natif"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "Publier la capacité de contrôle à distance",
+        "description": "Afficher le contrôle à distance uniquement aux clients approuvés automatiquement dans les autorisations et ignorer les autres demandes. Les clients bloqués ne peuvent ni découvrir ni demander le contrôle."
+      },
       "description": "Choisissez comment les gestes tactiles de cet appareil contrôlent un écran distant.",
       "mode": {
         "title": "Mode tactile",
@@ -470,6 +470,10 @@
       "delete_requires_disconnect": "Déconnectez-vous de ce client avant de supprimer son historique d'autorisations."
     },
     "application": {
+      "wake_lock": {
+        "title": "Garder l'écran allumé",
+        "description": "Lorsqu'elle est activée, l'application gardera l'écran allumé"
+      },
       "automatic_pip_desktop_description": "Réduisez la réunion dans une fenêtre toujours visible lorsque le Weblink passe en arrière-plan. Utilisez Retour à la réunion pour restaurer la fenêtre.",
       "autostart": "Lancer au démarrage",
       "autostart_description": "Démarrez Weblink automatiquement lorsque vous vous connectez à cet ordinateur.",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "La connexion au serveur de salle a expiré. Vérifiez votre réseau et réessayez.",
     "connection_closed": "La connexion a été interrompue. Reconnectez-vous et réessayez.",
     "connection_config": "L'adresse ou la configuration du serveur de salle n'est pas valide. Vérifiez les paramètres de connexion.",
+    "unsupported_protocol": "Aucune version de protocole compatible pour cette fonctionnalité. Mettez à jour les deux clients.",
     "connection_response": "Le serveur a renvoyé une réponse invalide. Vérifiez son adresse ou mettez à jour l'application et le serveur.",
     "password_required": "Cette salle nécessite un mot de passe. Entrez-le et réessayez.",
     "incorrect_password": "Le mot de passe de la salle est incorrect. Vérifiez-le et réessayez.",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "La ligne {{line}} possède une méthode d'authentification non prise en charge. Utilisez à long terme ou hmac."
   },
   "remote_control": {
+    "busy": "En cours de contrôle",
     "clipboard_transfer": {
       "sending": "Envoi de fichiers du presse-papiers",
       "receiving": "Réception de fichiers du presse-papiers",

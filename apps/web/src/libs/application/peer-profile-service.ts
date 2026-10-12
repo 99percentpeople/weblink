@@ -1,8 +1,4 @@
 import {
-  FILE_CONTENT_FEATURE,
-  SHARED_FILES_FEATURE,
-} from "@/libs/domain/protocol/messages";
-import {
   normalizePeerProfile,
   RTC_PROFILE_PROTOCOL_VERSION,
 } from "@/libs/domain/profile";
@@ -156,10 +152,6 @@ export class PeerProfileService {
         "client-profile",
         {
           profile,
-          features: [
-            FILE_CONTENT_FEATURE,
-            SHARED_FILES_FEATURE,
-          ],
         },
         { createdAt },
       )

@@ -1,3 +1,7 @@
+import {
+  controlBlocked,
+  type ControlOccupancy,
+} from "../protocol/capabilities";
 import { createUuid } from "../ids";
 import {
   parseInputCapabilities,
@@ -65,6 +69,7 @@ export type PointerEvent =
       vertical: number;
     } & PointerPosition);
 export type PointerState =
+  | "busy"
   | "unavailable"
   | "viewing"
   | "requesting"
@@ -372,6 +377,18 @@ export class RemotePointer extends EventTarget {
   ) {
     super();
   }
+  private hostStatus: ControlOccupancy | undefined = {
+    state: "idle",
+  };
+  private clientId = "";
+  setHostStatus(
+    status: ControlOccupancy | undefined,
+    clientId: string,
+  ): void {
+    this.hostStatus = status;
+    this.clientId = clientId;
+    this.changed();
+  }
   state(): PointerState {
     if (
       this.lifetime.signal.aborted ||
@@ -384,6 +401,14 @@ export class RemotePointer extends EventTarget {
     if (s.type === "closed") return "unavailable";
     if (s.type === "granted")
       return this.active ? "active" : "activating";
+    if (
+      s.type === "viewing" &&
+      controlBlocked(this.hostStatus, this.clientId)
+    )
+      return this.hostStatus &&
+        this.hostStatus.state !== "unavailable"
+        ? "busy"
+        : "unavailable";
     return s.type;
   }
   bind(channel: RTCDataChannel) {

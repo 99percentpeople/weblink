@@ -164,6 +164,8 @@ export function userErrorMessage(
       return t("errors.cancelled");
     case "invalid-message":
       return t("errors.connection_response");
+    case "unsupported-protocol":
+      return t("errors.unsupported_protocol");
   }
   // Never expose unknown server messages, internal class names, IDs or stack traces.
   return t(fallback);

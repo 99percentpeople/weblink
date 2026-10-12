@@ -245,6 +245,12 @@ async function main() {
     },
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
+    peerCapabilities: () => ({
+      messaging: {},
+      files: { content: true, shared: true },
+      clipboard: { inlineText: true },
+      speedTest: { busy: false },
+    }),
     speedTestApproval: () => undefined,
     speedTestState: () => ({
       status: "idle",

@@ -231,7 +231,7 @@ describe("message bubble layout", () => {
     );
     expect(view.bubble).toHaveClass(
       "self-end",
-      "rounded-br-md",
+      "rounded-tr-md",
       "bg-primary/10",
       "w-fit",
       "max-w-[88%]",
@@ -262,7 +262,7 @@ describe("message bubble layout", () => {
     );
     expect(view.bubble).toHaveClass(
       "self-start",
-      "rounded-bl-md",
+      "rounded-tl-md",
       "bg-background/90",
     );
     expect(

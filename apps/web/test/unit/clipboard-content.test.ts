@@ -34,6 +34,36 @@ vi.mock("@/libs/utils/process-file", () => ({
   handleDropItems: vi.fn(async () => []),
 }));
 describe("clipboard content boundaries", () => {
+  it("bounds inline text by encoded size and rejects duplicate or binary formats", () => {
+    const request = {
+      grantId: "grant",
+      operationId: "operation",
+      action: "inline",
+      direction: "paste",
+      entries: [{ type: "text/plain", data: "中文🧪" }],
+    };
+    expect(validClipboardRequest(request)).toBe(true);
+    for (const entries of [
+      [],
+      [{ type: "image/png", data: "x" }],
+      [...request.entries, ...request.entries],
+      [{ type: "text/plain", data: "中".repeat(3000) }],
+      [{ type: "text/plain", data: "\u0000".repeat(2000) }],
+    ]) {
+      expect(
+        validClipboardRequest({ ...request, entries }),
+      ).toBe(false);
+    }
+    expect(
+      validClipboardRequest({
+        ...request,
+        action: "prepare",
+      }),
+    ).toBe(false);
+    expect(
+      validClipboardRequest({ ...request, size: 100 }),
+    ).toBe(false);
+  });
   it("counts file totals separately from manifest overhead and text", async () => {
     const content = [
       {

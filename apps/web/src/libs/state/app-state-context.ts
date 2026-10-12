@@ -18,6 +18,7 @@ import type {
 } from "@/libs/domain/file";
 import type { ClientID, FileID } from "@/libs/domain/ids";
 import type { PeerSession } from "@/libs/domain/session";
+import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 import type { ClientJoinOptions } from "@/libs/domain/client";
 import type {
   FileTransferMessage,
@@ -30,6 +31,9 @@ import type { AppStartup } from "./create-app-startup";
 import type { AppCaptureSources } from "./create-app-capture-sources";
 import type { AppInputDevices } from "./create-app-input-devices";
 export interface AppStateContextProps {
+  peerCapabilities(
+    target: ClientID,
+  ): PeerCapabilities | undefined;
   remoteFileDrop: Pick<RemoteFileDrop, "drop">;
   remoteClipboard: Pick<
     RemoteClipboard,

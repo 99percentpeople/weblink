@@ -356,6 +356,7 @@ function makeNode(
   const rooms = roomEnabled
     ? new RoomMessagingService(protocol, {
         supportsFiles: true,
+        remoteFiles: () => true,
         onFileSending: (id) =>
           library?.setShared(id, true) ?? Promise.resolve(),
         supportsContent: (session) =>

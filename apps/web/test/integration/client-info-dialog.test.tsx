@@ -140,6 +140,9 @@ beforeEach(() => {
   };
   vi.mocked(useAppState).mockReturnValue({
     speedTestState: () => state,
+    peerCapabilities: () => ({
+      speedTest: { busy: false },
+    }),
     getSpeedTestState: (id: string) =>
       state.peerId === id ? state : undefined,
     startSpeedTest: start,

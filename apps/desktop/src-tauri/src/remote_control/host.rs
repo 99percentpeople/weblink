@@ -46,6 +46,7 @@ impl Peer {
 pub(super) struct Consent {
     pub(super) view: Pending,
     pub(super) media: String,
+    pub(super) request_id: String,
     pub(super) requested: Instant,
 }
 pub(super) struct Active {
@@ -59,7 +60,7 @@ pub(super) struct Host {
     pub(super) worker: Box<dyn Session>,
     pub(super) peers: HashMap<String, Peer>,
     pub(super) geometry_watches: GeometryWatches,
-    pub(super) pending: Option<Consent>,
+    pub(super) pending: Vec<Consent>,
     pub(super) active: Option<Active>,
     pub(super) cursor: super::cursor::Monitor,
     pub(super) text_focus: super::text_focus::Monitor,
@@ -110,9 +111,13 @@ impl Host {
     pub(super) fn snapshot(&self) -> Snapshot {
         let status = self.worker.status();
         Snapshot {
+            source_id: self
+                .active
+                .as_ref()
+                .map(|a| a.grant.binding.target.source_id.clone()),
             devices: status.devices,
             grant_id: self.active.as_ref().map(|a| a.grant.id.clone()),
-            pending: self.pending.as_ref().map(|p| p.view.clone()),
+            pending: self.pending.iter().map(|p| p.view.clone()).collect(),
             client_id: self
                 .active
                 .as_ref()
@@ -144,9 +149,7 @@ impl Host {
         // the endpoint also closes the viewer's control channels immediately.
         peer.endpoint.dispose();
         let _ = self.worker.invalidate(peer.binding.clone());
-        if self.pending.as_ref().is_some_and(|p| p.media == id) {
-            self.pending = None;
-        }
+        self.pending.retain(|p| p.media != id);
         if self
             .active
             .as_ref()
@@ -173,21 +176,14 @@ impl Host {
     }
     pub(super) fn tick(&mut self) {
         let now = Instant::now();
-        if self.pending.as_ref().is_some_and(|p| {
-            self.worker.status().pending_consent.as_deref() != Some(&p.view.consent_id)
-        }) {
-            self.pending = None;
-        }
+        let consents = self.worker.status().pending_consents;
+        self.pending
+            .retain(|p| consents.contains(&p.view.consent_id));
         if self.worker.status().grant.as_ref() != self.active.as_ref().map(|a| &a.grant) {
             self.end_grant();
         }
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|p| now.duration_since(p.requested) >= Duration::from_secs(30))
-        {
-            self.pending = None;
-        }
+        self.pending
+            .retain(|p| now.duration_since(p.requested) < Duration::from_secs(30));
         self.synchronize_input();
         if let Some(update) = self.text_focus.take() {
             let watch = update.watch;
@@ -298,8 +294,9 @@ impl Host {
     pub(super) fn wait_duration(&self, now: Instant) -> Option<Duration> {
         let consent = self
             .pending
-            .as_ref()
-            .map(|p| (p.requested + Duration::from_secs(30)).saturating_duration_since(now));
+            .iter()
+            .map(|p| (p.requested + Duration::from_secs(30)).saturating_duration_since(now))
+            .min();
         consent
             .into_iter()
             .chain(self.cursor.wait_duration(now))
@@ -483,33 +480,44 @@ impl Host {
         };
         if let Some(signal) = protocol::parse(text.as_bytes()) {
             match &signal {
-                Signal::Request { .. } => match self.worker.request(id.into(), signal) {
-                    Ok(Some(RequestResult::Pending { consent_id })) => {
-                        let _ = self.worker.flush();
-                        self.pending = Some(Consent {
-                            view: Pending {
-                                consent_id,
-                                client_id: peer.binding.client_id.clone(),
-                                source_id: peer.binding.target.source_id.clone(),
-                                peer_generation: peer.binding.peer_generation.clone(),
-                            },
-                            media: id.into(),
-                            requested: Instant::now(),
-                        })
+                Signal::Request { request_id, .. } => {
+                    match self.worker.request(id.into(), signal.clone()) {
+                        Ok(Some(RequestResult::Pending { consent_id })) => {
+                            let _ = self.worker.flush();
+                            self.pending.push(Consent {
+                                view: Pending {
+                                    consent_id,
+                                    client_id: peer.binding.client_id.clone(),
+                                    source_id: peer.binding.target.source_id.clone(),
+                                    peer_generation: peer.binding.peer_generation.clone(),
+                                },
+                                media: id.into(),
+                                request_id: request_id.clone(),
+                                requested: Instant::now(),
+                            })
+                        }
+                        Ok(Some(RequestResult::Reply(reply))) => {
+                            peer.endpoint.send(&reply);
+                        }
+                        _ => {}
                     }
-                    Ok(Some(RequestResult::Reply(reply))) => {
-                        peer.endpoint.send(&reply);
-                    }
-                    _ => {}
-                },
+                }
                 Signal::Cancel { .. } | Signal::Revoke { .. }
                     if self
                         .worker
                         .receive_end(id.into(), signal.clone())
                         .unwrap_or(false) =>
                 {
-                    self.pending = None;
-                    self.end_grant();
+                    let consents = self
+                        .worker
+                        .flush()
+                        .map(|s| s.pending_consents)
+                        .unwrap_or_default();
+                    self.pending
+                        .retain(|p| consents.contains(&p.view.consent_id));
+                    if matches!(signal, Signal::Revoke { .. }) {
+                        self.end_grant();
+                    }
                 }
                 _ => {}
             }

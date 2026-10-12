@@ -274,7 +274,7 @@ fn browser_pointer_attended() {
     // An outstanding request cannot survive media teardown or a replaced owner.
     media.close_peer("probe-media");
     thread::sleep(Duration::from_millis(50));
-    assert!(service.status(&owner).unwrap().pending.is_none());
+    assert!(service.status(&owner).unwrap().pending.is_empty());
     service.end(&owner);
     assert!(service.status(&owner).unwrap().closed);
     capture.stop(session).unwrap();

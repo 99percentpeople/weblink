@@ -286,7 +286,7 @@ function SpeedGauge(props: {
               </div>
             }
           >
-            <div class="font-mono text-4xl font-semibold tracking-tight tabular-nums">
+            <div class="font-mono text-4xl font-semibold tabular-nums tracking-tight">
               {formatMbps(props.value)}
             </div>
             <div class="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
@@ -405,6 +405,15 @@ export function PeerSpeedTest(props: {
   });
 
   const state = () => app.speedTestState();
+  const remote = () =>
+    props.clientId
+      ? app.peerCapabilities(props.clientId)?.speedTest
+      : undefined;
+  const blocked = () =>
+    !props.connected ||
+    running() ||
+    !remote() ||
+    remote()!.busy;
   const current = () =>
     app.getSpeedTestState(props.clientId);
   const running = () => state().status === "running";
@@ -551,7 +560,7 @@ export function PeerSpeedTest(props: {
           }
           idle={idle()}
           showValue={showGaugeValue()}
-          disabled={!props.connected || running()}
+          disabled={blocked()}
           onStart={() => void start()}
         />
       </Show>
@@ -584,7 +593,7 @@ export function PeerSpeedTest(props: {
           <Button
             type="button"
             size="sm"
-            disabled={!props.connected || running()}
+            disabled={blocked()}
             onClick={() => void start()}
           >
             {t("speed_test.start")}
@@ -641,7 +650,10 @@ export function PeerSpeedTest(props: {
         </Show>
         <Show
           when={
-            running() && state().peerId !== props.clientId
+            (running() &&
+              state().peerId !== props.clientId) ||
+            (remote()?.busy &&
+              current()?.status !== "running")
           }
         >
           <p class="text-center">

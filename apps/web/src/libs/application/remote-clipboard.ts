@@ -11,6 +11,10 @@ import type {
   ClipboardFormat,
   ClipboardRequest,
 } from "../domain/protocol/clipboard";
+import {
+  CLIPBOARD_INLINE_BYTES,
+  validInlineClipboard,
+} from "../domain/protocol/clipboard";
 import type { RequestContext } from "../domain/protocol/request-manager";
 import type { FileCacheFactory } from "./cache-service";
 import type { RemoteControlHost } from "./remote-control-host";
@@ -21,6 +25,7 @@ import type { SharedFileTask } from "./task-service";
 import {
   fromNativeClipboard,
   clipboardContentKind,
+  checkContent,
   packClipboard,
   toNativeClipboard,
   unpackClipboard,
@@ -44,6 +49,8 @@ interface Options {
   registry: TransferRegistry;
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
+  supportsInline(session: PeerSession): boolean;
+  supported?(session: PeerSession): boolean;
   maxFileBytes?(): number;
   fileDestination?(): ClipboardFileDestination;
   cacheFile?(
@@ -138,6 +145,7 @@ export class RemoteClipboard {
     job.lifetime.signal.throwIfAborted();
     if (
       this.disposed ||
+      this.options.supported?.(job.session) === false ||
       (!!job.control && !this.options.enabled()) ||
       this.jobs.get(job.session) !== job ||
       this.options.getSession(
@@ -174,6 +182,7 @@ export class RemoteClipboard {
     for (const [session, watch] of this.watching)
       if (
         !this.options.enabled() ||
+        this.options.supported?.(session) === false ||
         watch.control.clipboardGrant() !== watch.grantId ||
         this.options.getSession(session.targetClientId) !==
           session
@@ -302,6 +311,7 @@ export class RemoteClipboard {
     const grantId = control.clipboardGrant();
     if (
       !session ||
+      this.options.supported?.(session) === false ||
       !grantId ||
       control.state() !== "active"
     )
@@ -366,7 +376,12 @@ export class RemoteClipboard {
   ): () => void {
     const session = this.options.getSession(peerId);
     const grantId = control.clipboardGrant();
-    if (!session || !grantId || !this.options.enabled())
+    if (
+      !session ||
+      !grantId ||
+      !this.options.enabled() ||
+      this.options.supported?.(session) === false
+    )
       return () => {};
     this.watching.get(session)?.close();
     const id = createUuid();
@@ -583,7 +598,8 @@ export class RemoteClipboard {
     if (
       message.action === "prepare" ||
       message.action === "read-current" ||
-      (message.action === "offer" &&
+      ((message.action === "offer" ||
+        message.action === "inline") &&
         message.direction === "paste")
     ) {
       // Validate before replacing an existing local operation.
@@ -667,18 +683,31 @@ export class RemoteClipboard {
         )
           throw new Error("Duplicate clipboard offer");
         job.offered = true;
-        const file = await this.transfer(
-          job,
-          message.size!,
-          message.kind!,
-        );
+        let content: ClipboardContent;
+        if (message.action === "inline") {
+          content = message.entries!.map(
+            ({ type, data }) => ({
+              type,
+              blob: new Blob([data], { type }),
+            }),
+          );
+        } else {
+          const file = await this.transfer(
+            job,
+            message.size!,
+            message.kind!,
+          );
+          this.check(job);
+          content = await unpackClipboard(
+            file!,
+            job.maxFileBytes,
+          );
+        }
         this.check(job);
-        const content = await unpackClipboard(
-          file!,
-          job.maxFileBytes,
-        );
-        this.check(job);
-        if (clipboardContentKind(content) !== message.kind)
+        if (
+          message.action !== "inline" &&
+          clipboardContentKind(content) !== message.kind
+        )
           throw new Error(
             "Clipboard content kind mismatch",
           );
@@ -717,6 +746,32 @@ export class RemoteClipboard {
     content: ClipboardContent,
     direction: "copy" | "paste",
   ) {
+    checkContent(content, job.maxFileBytes);
+    if (
+      this.options.supportsInline(job.session) &&
+      clipboardContentKind(content) === "text" &&
+      content.reduce(
+        (size, entry) => size + entry.blob.size,
+        0,
+      ) <= CLIPBOARD_INLINE_BYTES
+    ) {
+      const entries = await Promise.all(
+        content.map(async ({ type, blob }) => ({
+          type,
+          data: await blob.text(),
+        })),
+      );
+      this.check(job);
+      if (validInlineClipboard(entries)) {
+        await this.call(job, {
+          action: "inline",
+          direction,
+          entries,
+        });
+        this.check(job);
+        return;
+      }
+    }
     const file = await packClipboard(
       content,
       job.maxFileBytes,

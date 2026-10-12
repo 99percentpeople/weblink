@@ -464,23 +464,12 @@ export const MessageContent: Component<MessageCardProps> = (
                   : "w-fit",
                 local.joinedNext && "py-2",
                 outgoing()
-                  ? "border-primary/15 bg-primary/10 self-end"
-                  : "border-border/60 bg-background/90 self-start",
-                outgoing()
-                  ? cn(
-                      local.joinedPrevious &&
-                        "rounded-tr-md",
-                      (local.joinedNext ||
-                        !local.joinedPrevious) &&
-                        "rounded-br-md",
-                    )
-                  : cn(
-                      local.joinedPrevious &&
-                        "rounded-tl-md",
-                      (local.joinedNext ||
-                        !local.joinedPrevious) &&
-                        "rounded-bl-md",
-                    ),
+                  ? "border-primary/15 bg-primary/10 self-end rounded-tr-md"
+                  : "border-border/60 bg-background/90 self-start rounded-tl-md",
+                local.joinedNext &&
+                  (outgoing()
+                    ? "rounded-br-md"
+                    : "rounded-bl-md"),
               )}
               {...p}
             >

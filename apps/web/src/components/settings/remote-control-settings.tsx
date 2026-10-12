@@ -68,6 +68,18 @@ export default function RemoteControlSettings() {
       id="remote-control-settings"
       title={t("app_menu.settings_remote_control")}
     >
+      <SettingSwitch
+        checked={
+          appState.options.remoteControlWhitelistOnly
+        }
+        onChange={(value) =>
+          setAppOptions("remoteControlWhitelistOnly", value)
+        }
+        label={t(`${prefix}whitelist_only.title`)}
+        description={t(
+          `${prefix}whitelist_only.description`,
+        )}
+      />
       <InputDeviceSettings />
       <SettingHeading>
         {t(`${prefix}pointer_heading`)}

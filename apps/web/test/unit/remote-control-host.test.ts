@@ -25,7 +25,7 @@ function setup(
     end: vi.fn(async () => {}),
     status: vi.fn(
       async (): Promise<NativeControlStatus> => ({
-        pending: null,
+        pending: [],
         clientId: null,
         closed: false,
       }),
@@ -79,17 +79,95 @@ it("does not let an asynchronous automatic approval overwrite a newer native sna
   emit({
     closed: false,
     clientId: null,
-    pending: {
-      consentId: "consent",
-      clientId: "alice",
-      sourceId: "screen",
-    },
+    pending: [
+      {
+        consentId: "consent",
+        clientId: "alice",
+        sourceId: "screen",
+      },
+    ],
   });
-  emit({ closed: false, clientId: "alice", pending: null });
+  host.screen.share = vi.fn(async () => "other-screen");
+  expect(host.status().pending).toEqual([]);
+  expect(host.capability("bob").occupancy).toMatchObject({
+    state: "pending",
+    clientId: "alice",
+  });
+  await expect(
+    host.requestScreen(
+      "bob",
+      "bob-generation",
+      new AbortController().signal,
+    ),
+  ).resolves.toBeUndefined();
+  expect(host.screen.share).not.toHaveBeenCalled();
+  emit({ closed: false, clientId: "alice", pending: [] });
   finish();
   await flush();
   expect(host.status().clientId).toBe("alice");
   expect(api.approve).toHaveBeenCalledOnce();
+  host.close();
+});
+it("reserves an approved avatar handoff against a competing native request, even with remembered permission", async () => {
+  const { host, api, emit } = setup({
+    decision: () => "allow",
+    remember: vi.fn(),
+  });
+  host.screen.share = async () => "screen";
+  host.start();
+  await flush();
+  await expect(
+    host.requestScreen(
+      "alice",
+      "alice-generation",
+      new AbortController().signal,
+    ),
+  ).resolves.toBe("screen");
+  expect(host.capability("bob").occupancy).toEqual({
+    state: "pending",
+    clientId: "alice",
+    sourceId: "screen",
+  });
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "competing",
+        clientId: "bob",
+        sourceId: "screen",
+        peerGeneration: "bob-generation",
+      },
+    ],
+  });
+  await flush();
+  expect(api.approve).toHaveBeenLastCalledWith(
+    "owner-1",
+    "competing",
+    false,
+  );
+  expect(host.capability("bob").occupancy).toMatchObject({
+    state: "pending",
+    clientId: "alice",
+  });
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "handoff",
+        clientId: "alice",
+        sourceId: "screen",
+        peerGeneration: "alice-generation",
+      },
+    ],
+  });
+  await flush();
+  expect(api.approve).toHaveBeenLastCalledWith(
+    "owner-1",
+    "handoff",
+    true,
+  );
   host.close();
 });
 it("disposes a watcher that finishes registering after leave and ignores its late events", async () => {
@@ -108,7 +186,7 @@ it("disposes a watcher that finishes registering after leave and ignores its lat
   receive({
     closed: false,
     clientId: "stale",
-    pending: null,
+    pending: [],
   });
   finish(unwatch);
   await flush();
@@ -126,7 +204,7 @@ it("reopens a failed worker repeatedly with new owners and fresh consent, and ca
   for (let i = 0; i < 4; i++) {
     const before = await host.context("peer", "alice");
     emit({
-      pending: null,
+      pending: [],
       clientId: "alice",
       closed: true,
     });
@@ -138,7 +216,7 @@ it("reopens a failed worker repeatedly with new owners and fresh consent, and ca
     expect(api.approve).not.toHaveBeenCalled();
   }
   emit({
-    pending: null,
+    pending: [],
     clientId: null,
     closed: true,
   });
@@ -212,7 +290,7 @@ it("retries a failed subscription without ending the owner or requiring new appr
   expect(api.watch).toHaveBeenCalledTimes(2);
   expect(host.status().closed).toBe(false);
   emit({
-    pending: null,
+    pending: [],
     clientId: null,
     closed: true,
   });
@@ -237,19 +315,23 @@ it.each(["allow", "deny"] as const)(
     emit({
       closed: false,
       clientId: null,
-      pending: {
-        consentId: "pending",
-        clientId: "alice",
-        sourceId: "screen",
-      },
+      pending: [
+        {
+          consentId: "pending",
+          clientId: "alice",
+          sourceId: "screen",
+        },
+      ],
     });
     await vi.advanceTimersByTimeAsync(500);
-    expect(api.approve).toHaveBeenCalledWith(
-      "owner-1",
-      "pending",
-      decision === "allow",
-    );
-    expect(host.status().pending).toBeNull();
+    if (decision === "allow")
+      expect(api.approve).toHaveBeenCalledWith(
+        "owner-1",
+        "pending",
+        true,
+      );
+    else expect(api.approve).not.toHaveBeenCalled();
+    expect(host.status().pending).toEqual([]);
     expect((await host.capabilities("alice")).host).toBe(
       decision === "allow",
     );
@@ -277,19 +359,21 @@ it("remembers only the selected answer and automatically approves the subsequent
   );
   await flush();
   expect(host.screen.share).not.toHaveBeenCalled();
-  const pending = host.status().pending!;
+  const pending = host.status().pending[0]!;
   await host.approve(pending.consentId, true);
   expect(await result).toBe("screen");
   expect(remember).not.toHaveBeenCalled();
   emit({
     closed: false,
     clientId: null,
-    pending: {
-      consentId: "native",
-      clientId: "alice",
-      sourceId: "screen",
-      peerGeneration: "peer",
-    },
+    pending: [
+      {
+        consentId: "native",
+        clientId: "alice",
+        sourceId: "screen",
+        peerGeneration: "peer",
+      },
+    ],
   });
   await vi.advanceTimersByTimeAsync(500);
   expect(api.approve).toHaveBeenCalledWith(
@@ -300,15 +384,17 @@ it("remembers only the selected answer and automatically approves the subsequent
   emit({
     closed: false,
     clientId: null,
-    pending: {
-      consentId: "next",
-      clientId: "alice",
-      sourceId: "screen",
-      peerGeneration: "peer",
-    },
+    pending: [
+      {
+        consentId: "next",
+        clientId: "alice",
+        sourceId: "screen",
+        peerGeneration: "peer",
+      },
+    ],
   });
   await vi.advanceTimersByTimeAsync(500);
-  expect(host.status().pending?.consentId).toBe("next");
+  expect(host.status().pending[0]?.consentId).toBe("next");
   await host.approve("stale", false, true);
   expect(remember).not.toHaveBeenCalled();
   await host.approve("next", false, true);
@@ -333,10 +419,10 @@ it("auto-starts sharing only for allowed clients and revokes an active client wh
       new AbortController().signal,
     ),
   ).toBe("screen");
-  expect(host.status().pending).toBeNull();
+  expect(host.status().pending).toEqual([]);
   emit({
     closed: false,
-    pending: null,
+    pending: [],
     clientId: "alice",
   });
   await vi.advanceTimersByTimeAsync(500);
@@ -365,13 +451,17 @@ it("applies a newly saved allow rule to a pending native request without waiting
   emit({
     closed: false,
     clientId: null,
-    pending: {
-      consentId: "pending",
-      clientId: "alice",
-      sourceId: "screen",
-    },
+    pending: [
+      {
+        consentId: "pending",
+        clientId: "alice",
+        sourceId: "screen",
+      },
+    ],
   });
-  expect(host.status().pending?.consentId).toBe("pending");
+  expect(host.status().pending[0]?.consentId).toBe(
+    "pending",
+  );
   decision = "allow";
   await host.policyChanged("alice");
   expect(api.approve).toHaveBeenCalledWith(
@@ -379,7 +469,68 @@ it("applies a newly saved allow rule to a pending native request without waiting
     "pending",
     true,
   );
-  expect(host.status().pending).toBeNull();
+  expect(host.status().pending).toEqual([]);
+  host.close();
+});
+
+it("silently hides a pending native request when its permission changes to deny", async () => {
+  let decision: "deny" | undefined;
+  const { host, api, emit } = setup({
+    decision: () => decision,
+    remember: vi.fn(),
+  });
+  host.start();
+  await flush();
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "pending",
+        clientId: "alice",
+        sourceId: "screen",
+      },
+    ],
+  });
+  decision = "deny";
+  await host.policyChanged("alice");
+  expect(api.approve).not.toHaveBeenCalled();
+  expect(host.status().pending).toEqual([]);
+  expect(
+    await host.context("peer", "alice"),
+  ).toBeUndefined();
+  host.close();
+});
+
+it("releases an approved avatar reservation when the requester is blocked before native handoff", async () => {
+  let decision: "allow" | "deny" = "allow";
+  const { host } = setup({
+    decision: (clientId) =>
+      clientId === "alice" ? decision : undefined,
+    remember: vi.fn(),
+  });
+  host.screen.share = vi.fn(async () => "screen");
+  host.start();
+  await flush();
+  await expect(
+    host.requestScreen(
+      "alice",
+      "alice-generation",
+      new AbortController().signal,
+    ),
+  ).resolves.toBe("screen");
+  decision = "deny";
+  await host.policyChanged("alice");
+  expect(host.capability("bob").occupancy).toEqual({
+    state: "idle",
+  });
+  expect(
+    host.screen.consume(
+      "alice",
+      "alice-generation",
+      "screen",
+    ),
+  ).toBe(false);
   host.close();
 });
 
@@ -396,10 +547,187 @@ it("uses the saved emergency chord at startup and the latest chord after recover
     "ctrl-shift-f8",
   );
   shortcut = "ctrl-alt-f9";
-  emit({ closed: true, pending: null, clientId: null });
+  emit({ closed: true, pending: [], clientId: null });
   await flush();
   await vi.advanceTimersByTimeAsync(1000);
   await flush();
   expect(api.open).toHaveBeenLastCalledWith("ctrl-alt-f9");
+  host.close();
+});
+
+it("selects any avatar request and declines competing native requests before sharing completes", async () => {
+  const { host, api, emit } = setup();
+  let finish!: (source: string) => void;
+  host.screen.share = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  host.start();
+  await flush();
+  const alice = host.requestScreen(
+    "alice",
+    "a",
+    new AbortController().signal,
+  );
+  const bob = host.requestScreen(
+    "bob",
+    "b",
+    new AbortController().signal,
+  );
+  await flush();
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "native",
+        clientId: "carol",
+        sourceId: "screen",
+      },
+    ],
+  });
+  expect(
+    host.status().pending.map((p) => p.clientId),
+  ).toEqual(["alice", "bob", "carol"]);
+  expect(host.capability("dave").occupancy).toEqual({
+    state: "idle",
+  });
+  const pending = host.status().pending;
+  const selected = host.approve(pending[1].consentId, true);
+  await host.approve(pending[0].consentId, true);
+  await host.approve("native", true);
+  await expect(alice).resolves.toBeUndefined();
+  expect(api.approve).toHaveBeenCalledWith(
+    "owner-1",
+    "native",
+    false,
+  );
+  expect(host.capability("carol").occupancy).toMatchObject({
+    state: "pending",
+    clientId: "bob",
+  });
+  await expect(
+    host.requestScreen(
+      "dave",
+      "d",
+      new AbortController().signal,
+    ),
+  ).resolves.toBeUndefined();
+  finish("screen");
+  await selected;
+  await expect(bob).resolves.toBe("screen");
+  expect(host.screen.share).toHaveBeenCalledOnce();
+  host.close();
+});
+
+it("locks native selection before IPC and cancels avatar requests despite simultaneous answers", async () => {
+  const { host, api, emit } = setup();
+  host.screen.share = vi.fn(async () => "screen");
+  let finish!: () => void;
+  api.approve.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  host.start();
+  await flush();
+  const avatar = host.requestScreen(
+    "alice",
+    "a",
+    new AbortController().signal,
+  );
+  await flush();
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "bob",
+        clientId: "bob",
+        sourceId: "screen",
+      },
+      {
+        consentId: "carol",
+        clientId: "carol",
+        sourceId: "screen",
+      },
+    ],
+  });
+  const alice = host.status().pending[0];
+  const selected = host.approve("carol", true);
+  await host.approve("bob", true);
+  await host.approve(alice.consentId, true);
+  expect(api.approve).toHaveBeenCalledWith(
+    "owner-1",
+    "carol",
+    true,
+  );
+  await expect(avatar).resolves.toBeUndefined();
+  expect(host.screen.share).not.toHaveBeenCalled();
+  expect(host.status().pending).toEqual([]);
+  emit({
+    closed: false,
+    clientId: "carol",
+    sourceId: "screen",
+    pending: [],
+  });
+  finish();
+  await selected;
+  expect(host.capability("bob").occupancy).toMatchObject({
+    state: "controlled",
+    clientId: "carol",
+  });
+  emit({ closed: false, clientId: null, pending: [] });
+  expect(host.capability("bob").occupancy).toEqual({
+    state: "idle",
+  });
+  host.close();
+});
+
+it("uses the allow list for disclosure, sharing and native contexts and revokes when removed", async () => {
+  let decision: "allow" | "deny" | undefined;
+  const { host, api, emit } = setup({
+    whitelistOnly: () => true,
+    decision: () => decision,
+    remember: vi.fn(),
+  });
+  host.screen.share = vi.fn(async () => "screen");
+  host.start();
+  await flush();
+  expect(host.exposes("alice")).toBe(false);
+  expect(
+    await host.context("peer", "alice"),
+  ).toBeUndefined();
+  await expect(
+    host.requestScreen(
+      "alice",
+      "peer",
+      new AbortController().signal,
+    ),
+  ).resolves.toBeUndefined();
+  expect(host.status().pending).toEqual([]);
+  expect(host.screen.share).not.toHaveBeenCalled();
+  decision = "allow";
+  await host.policyChanged("alice");
+  expect(host.exposes("alice")).toBe(true);
+  expect(await host.context("peer", "alice")).toMatchObject(
+    { clientId: "alice" },
+  );
+  emit({
+    pending: [],
+    closed: false,
+    clientId: "alice",
+    sourceId: "screen",
+  });
+  decision = undefined;
+  await host.policyChanged("alice");
+  expect(host.exposes("alice")).toBe(false);
+  expect(api.revoke).toHaveBeenCalledWith("owner-1");
+  expect(
+    await host.context("peer", "alice"),
+  ).toBeUndefined();
   host.close();
 });

@@ -108,10 +108,6 @@
       },
       "background_image_opacity": {
         "title": "背景透明度"
-      },
-      "wake_lock": {
-        "title": "保持螢幕常亮",
-        "description": "當啟用時，應用程式將保持螢幕常亮"
       }
     },
     "list": {
@@ -334,6 +330,10 @@
       "native_audio_codec": "原生音訊編碼"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "開放遠端控制能力",
+        "description": "開啟後，僅向權限設定中標為「自動核准（白名單）」的用戶端公開遠端控制，忽略其他用戶端的控制請求。黑名單始終無法探索或請求控制。"
+      },
       "description": "設定本機觸摸手勢如何控制遠端畫面。",
       "mode": {
         "title": "觸摸模式",
@@ -465,6 +465,10 @@
       "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。"
     },
     "application": {
+      "wake_lock": {
+        "title": "保持螢幕常亮",
+        "description": "當啟用時，應用程式將保持螢幕常亮"
+      },
       "automatic_pip_desktop_description": "Weblink 切到背景時，將會議縮為置頂小視窗。點擊返回會議可還原視窗。",
       "autostart": "開機自動啟動",
       "autostart_description": "登入此電腦後自動啟動 Weblink。",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "連線至房間伺服器逾時，請檢查網路後重試。",
     "connection_closed": "連線已中斷，請重新連線後重試。",
     "connection_config": "房間伺服器位址或設定無效，請檢查連線設定。",
+    "unsupported_protocol": "此功能的通訊協定版本不相容，請更新雙方用戶端。",
     "connection_response": "伺服器回應異常，請檢查伺服器位址，或更新應用程式及伺服器後重試。",
     "password_required": "此房間需要密碼，請輸入密碼後重試。",
     "incorrect_password": "房間密碼錯誤，請檢查密碼後重試。",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "第 {{line}} 行的驗證方式不受支援，請使用 longterm 或 hmac。"
   },
   "remote_control": {
+    "busy": "正在被控制",
     "clipboard_transfer": {
       "sending": "正在傳送剪貼簿檔案",
       "receiving": "正在接收剪貼簿檔案",

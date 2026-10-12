@@ -48,7 +48,6 @@ struct Pending {
 }
 enum State {
     Idle,
-    Pending(Pending),
     Granted {
         grant: Grant,
         deadline: Option<Instant>,
@@ -68,6 +67,7 @@ pub struct Authority<B: Backend> {
     backend: B,
     bindings: HashMap<String, Binding>,
     seen: HashMap<(String, String), Instant>,
+    pending: Vec<Pending>,
     state: State,
     closed: bool,
 }
@@ -77,6 +77,7 @@ impl<B: Backend> Authority<B> {
             backend,
             bindings: HashMap::new(),
             seen: HashMap::new(),
+            pending: Vec::new(),
             state: State::Idle,
             closed: false,
         }
@@ -140,11 +141,17 @@ impl<B: Backend> Authority<B> {
         }
         self.seen
             .insert(key, now + Duration::from_millis(REQUEST_TIMEOUT_MS));
-        if !matches!(self.state, State::Idle) {
+        if !matches!(self.state, State::Idle)
+            || self.pending.len() >= 32
+            || self
+                .pending
+                .iter()
+                .any(|p| p.binding.client_id == binding.client_id)
+        {
             return deny(DenialReason::Busy);
         }
         let consent_id = uuid::Uuid::new_v4().to_string();
-        self.state = State::Pending(Pending {
+        self.pending.push(Pending {
             consent_id: consent_id.clone(),
             request_id: request_id.clone(),
             binding,
@@ -158,12 +165,16 @@ impl<B: Backend> Authority<B> {
         if self.closed {
             return None;
         }
-        if !matches!(&self.state, State::Pending(p) if p.consent_id == consent_id) {
+        if !matches!(self.state, State::Idle) {
             return None;
         }
-        let State::Pending(pending) = std::mem::replace(&mut self.state, State::Idle) else {
-            return None;
-        };
+        let index = self
+            .pending
+            .iter()
+            .position(|p| p.consent_id == consent_id)?;
+        let pending = self.pending.remove(index);
+        // Selection and invalidation of all other consent tokens are atomic.
+        self.pending.clear();
         let grant = Grant {
             id: uuid::Uuid::new_v4().to_string(),
             binding: pending.binding,
@@ -181,12 +192,11 @@ impl<B: Backend> Authority<B> {
         Some(signal)
     }
     pub fn decline(&mut self, consent_id: &str) -> Option<Signal> {
-        if !matches!(&self.state, State::Pending(p) if p.consent_id == consent_id) {
-            return None;
-        }
-        let State::Pending(pending) = std::mem::replace(&mut self.state, State::Idle) else {
-            return None;
-        };
+        let index = self
+            .pending
+            .iter()
+            .position(|p| p.consent_id == consent_id)?;
+        let pending = self.pending.remove(index);
         Some(Signal::Deny {
             request_id: pending.request_id,
             reason: DenialReason::Declined,
@@ -197,10 +207,17 @@ impl<B: Backend> Authority<B> {
         if !signal.valid() {
             return false;
         }
+        if let Signal::Cancel { request_id } = signal {
+            let index = self
+                .pending
+                .iter()
+                .position(|p| p.binding.target.media_id == media_id && p.request_id == *request_id);
+            return index.is_some_and(|index| {
+                self.pending.remove(index);
+                true
+            });
+        }
         let matches = match (&self.state, signal) {
-            (State::Pending(p), Signal::Cancel { request_id }) => {
-                p.binding.target.media_id == media_id && p.request_id == *request_id
-            }
             (State::Granted { grant, .. }, Signal::Revoke { grant_id, .. }) => {
                 grant.binding.target.media_id == media_id && grant.id == *grant_id
             }
@@ -233,9 +250,9 @@ impl<B: Backend> Authority<B> {
             return;
         }
         self.bindings.remove(&binding.target.media_id);
+        self.pending.retain(|p| p.binding != *binding);
         let current = match &self.state {
             State::Idle => false,
-            State::Pending(p) => p.binding == *binding,
             State::Granted { grant, .. } => grant.binding == *binding,
         };
         if current {
@@ -246,9 +263,10 @@ impl<B: Backend> Authority<B> {
         if self.closed {
             return;
         }
+        self.pending
+            .retain(|p| now < p.deadline && self.backend.is_current(&p.binding));
         let invalid = match &self.state {
             State::Idle => false,
-            State::Pending(p) => now >= p.deadline || !self.backend.is_current(&p.binding),
             State::Granted { grant, .. } => !self.backend.is_current(&grant.binding),
         };
         if invalid {
@@ -269,14 +287,17 @@ impl<B: Backend> Authority<B> {
     /// safety recheck, with lease/consent deadlines taking precedence.
     pub fn wait_duration(&self, now: Instant) -> Option<Duration> {
         let deadline = match &self.state {
-            State::Idle => return None,
-            State::Pending(p) => Some(p.deadline),
+            State::Idle => match self.pending.iter().map(|p| p.deadline).min() {
+                Some(deadline) => Some(deadline),
+                None => return None,
+            },
             State::Granted { deadline, .. } => *deadline,
         };
         let guard = Duration::from_millis(100);
         Some(deadline.map_or(guard, |at| at.saturating_duration_since(now).min(guard)))
     }
     pub fn revoke(&mut self) {
+        self.pending.clear();
         // Invalidate first: even a failed/panicking release cannot leave permission active.
         if let State::Granted { grant, .. } = std::mem::replace(&mut self.state, State::Idle) {
             let closed = self.closed;
@@ -293,11 +314,11 @@ impl<B: Backend> Authority<B> {
     pub fn is_closed(&self) -> bool {
         self.closed
     }
-    pub fn pending_consent(&self) -> Option<&str> {
-        match &self.state {
-            State::Pending(p) if !self.closed => Some(&p.consent_id),
-            _ => None,
+    pub fn pending_consents(&self) -> Vec<String> {
+        if self.closed {
+            return vec![];
         }
+        self.pending.iter().map(|p| p.consent_id.clone()).collect()
     }
     pub fn grant(&self) -> Option<&Grant> {
         match &self.state {
@@ -309,7 +330,7 @@ impl<B: Backend> Authority<B> {
         &mut self.backend
     }
     pub(crate) fn pending_matches(&self, consent: &str) -> bool {
-        !self.closed && matches!(&self.state, State::Pending(p) if p.consent_id == consent)
+        !self.closed && self.pending.iter().any(|p| p.consent_id == consent)
     }
 }
 

@@ -44,6 +44,7 @@ interface Options {
   registry: TransferRegistry;
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
+  supported?(session: PeerSession): boolean;
   maxFileBytes?(): number;
   getSession(id: string): PeerSession | undefined;
 }
@@ -108,6 +109,7 @@ export class RemoteFileDrop {
     job.lifetime.signal.throwIfAborted();
     if (
       this.disposed ||
+      this.options.supported?.(job.session) === false ||
       this.jobs.get(job.session) !== job ||
       this.options.getSession(
         job.session.targetClientId,
@@ -295,7 +297,12 @@ export class RemoteFileDrop {
   ): Promise<void> {
     const session = this.options.getSession(peerId);
     const target = control.fileDropTarget();
-    if (!session || !target || !this.options.enabled())
+    if (
+      !session ||
+      !target ||
+      !this.options.enabled() ||
+      this.options.supported?.(session) === false
+    )
       throw new Error("Remote file drop unavailable");
     signal?.throwIfAborted();
     const job = this.start(

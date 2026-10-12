@@ -61,17 +61,19 @@ const request = (
 ): NativeControlStatus => ({
   closed: false,
   clientId: null,
-  pending: {
-    consentId,
-    clientId: "peer",
-    sourceId: "screen",
-  },
+  pending: [
+    {
+      consentId,
+      clientId: "peer",
+      sourceId: "screen",
+    },
+  ],
 });
 beforeEach(() => {
   [fixture.status, setStatus] =
     createSignal<NativeControlStatus>({
       closed: false,
-      pending: null,
+      pending: [],
       clientId: null,
     });
   fixture.approve.mockReset().mockResolvedValue(undefined);
@@ -124,7 +126,7 @@ it("shows a non-modal actionable request once across status polls and expires it
   ).toHaveLength(1);
   setStatus({
     closed: false,
-    pending: null,
+    pending: [],
     clientId: null,
   });
   await waitFor(() =>
@@ -318,3 +320,48 @@ it.each([
     expect(fixture.approve).toHaveBeenCalledTimes(1);
   },
 );
+
+it("shows each concurrent request and lets the host choose the second without answering stale notices", async () => {
+  mount();
+  const alice = request("alice").pending[0];
+  const bob = {
+    ...request("bob").pending[0],
+    clientId: "bob",
+  };
+  setStatus({
+    closed: false,
+    clientId: null,
+    pending: [alice, bob],
+  });
+  const buttons = await screen.findAllByRole("button", {
+    name: "remote_control.allow",
+  });
+  expect(buttons).toHaveLength(2);
+  fixture.approve.mockImplementation(async () => {
+    setStatus({
+      closed: false,
+      clientId: "bob",
+      pending: [],
+    });
+  });
+  const second = screen
+    .getByText("remote_control.request_description: bob")
+    .closest("[data-sonner-toast]")!;
+  fireEvent.click(
+    second.querySelector("button[data-action]")!,
+  );
+  expect(fixture.approve).toHaveBeenCalledWith("bob", true);
+  fireEvent.click(
+    buttons.find((button) => !second.contains(button))!,
+  );
+  expect(fixture.approve).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(
+      toast
+        .getToasts()
+        .filter((t) =>
+          String(t.id).startsWith("remote-control:"),
+        ),
+    ).toHaveLength(0),
+  );
+});

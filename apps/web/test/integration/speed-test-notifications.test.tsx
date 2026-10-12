@@ -68,7 +68,9 @@ vi.mock(
   }),
 );
 vi.mock("@/libs/application/session-service", () => ({
-  sessionService: { remoteControl: { status: () => ({}) } },
+  sessionService: {
+    remoteControl: { status: () => ({ pending: [] }) },
+  },
 }));
 vi.mock("solid-sonner", () => ({
   toast: {

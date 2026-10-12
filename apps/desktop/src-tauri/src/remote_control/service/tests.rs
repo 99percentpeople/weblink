@@ -441,11 +441,15 @@ fn observers_push_initial_consent_grant_revoke_and_owner_close_in_order() {
     let next = || receive.recv_timeout(Duration::from_secs(1)).unwrap();
     assert!(!next().closed);
     let consent = rig.request();
-    assert_eq!(next().pending.unwrap().consent_id, consent);
+    assert_eq!(next().pending.first().unwrap().consent_id, consent);
     rig.service.approve(&rig.owner, &consent, true).unwrap();
-    assert_eq!(next().client_id.as_deref(), Some("client"));
+    let controlled = next();
+    assert_eq!(controlled.client_id.as_deref(), Some("client"));
+    assert_eq!(controlled.source_id.as_deref(), Some("source"));
     rig.service.revoke(&rig.owner).unwrap();
-    assert!(next().client_id.is_none());
+    let released = next();
+    assert!(released.client_id.is_none());
+    assert!(released.source_id.is_none());
     rig.tick();
     assert!(receive.try_recv().is_err());
     rig.service.end(&rig.owner);
@@ -535,8 +539,10 @@ impl Rig {
             .status(&self.owner)
             .unwrap()
             .pending
+            .first()
             .unwrap()
             .consent_id
+            .clone()
     }
     fn approve(&self) -> String {
         let consent = self.request();
@@ -1171,7 +1177,7 @@ fn requests_require_current_local_approval_and_decline_never_injects() {
         .is_err());
     assert_eq!(rig.submitted(), 0);
     rig.service.approve(&rig.owner, &consent, false).unwrap();
-    assert!(rig.service.status(&rig.owner).unwrap().pending.is_none());
+    assert!(rig.service.status(&rig.owner).unwrap().pending.is_empty());
     assert!(rig
         .sender
         .sent
@@ -1264,7 +1270,7 @@ fn source_end_cancels_pending_consent_and_geometry_change_releases_active_input(
     let consent = rig.request();
     rig.service.stop_capture("capture");
     assert!(rig.service.approve(&rig.owner, &consent, true).is_err());
-    assert!(rig.service.status(&rig.owner).unwrap().pending.is_none());
+    assert!(rig.service.status(&rig.owner).unwrap().pending.is_empty());
 
     let rig = Rig::new();
     let grant = rig.approve();
@@ -1403,4 +1409,62 @@ fn changing_emergency_shortcut_keeps_owner_and_retains_previous_on_listener_fail
     assert_eq!(*state.shortcut.lock().unwrap(), Some(first));
     assert!(!service.status(&id).unwrap().closed);
     service.close();
+}
+
+#[test]
+fn choosing_a_concurrent_request_grants_one_peer_and_sends_busy_to_the_other() {
+    let rig = Rig::new();
+    let first = rig.request();
+    let mut second = target(&rig.owner, "capture", "media-2");
+    second.binding.client_id = "second-client".into();
+    second.binding.peer_generation = "second-peer".into();
+    let signal =
+        json!({"type":"request", "requestId":"second-request", "target":second.binding.target});
+    let endpoint = rig
+        .service
+        .owner(&rig.owner)
+        .unwrap()
+        .host
+        .lock()
+        .unwrap()
+        .register(rig.source.clone(), second)
+        .unwrap();
+    let sender = Arc::new(TestSender {
+        state: rig.state.clone(),
+        sent: Mutex::default(),
+    });
+    endpoint.opened(sender.clone());
+    rig.tick();
+    endpoint.message(false, &serde_json::to_vec(&signal).unwrap());
+    rig.tick();
+    let pending = rig.service.status(&rig.owner).unwrap().pending;
+    assert_eq!(pending.len(), 2);
+    let chosen = pending
+        .iter()
+        .find(|p| p.client_id == "second-client")
+        .unwrap();
+    rig.service
+        .approve(&rig.owner, &chosen.consent_id, true)
+        .unwrap();
+    assert!(rig.service.approve(&rig.owner, &first, true).is_err());
+    let status = rig.service.status(&rig.owner).unwrap();
+    assert!(status.pending.is_empty());
+    assert_eq!(status.client_id.as_deref(), Some("second-client"));
+    assert_eq!(
+        sender
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m["type"] == "grant")
+            .count(),
+        1
+    );
+    let messages = rig.sender.sent.lock().unwrap();
+    assert!(!messages.iter().any(|m| m["type"] == "grant"));
+    assert!(messages
+        .iter()
+        .any(|m| m["type"] == "deny" && m["requestId"] == "request" && m["reason"] == "busy"));
+    drop(messages);
+    rig.service.end(&rig.owner);
 }

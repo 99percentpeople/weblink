@@ -34,6 +34,16 @@ export default function ApplicationSettings() {
       title={t("app_menu.settings_application")}
     >
       <SettingSwitch
+        checked={appState.options.wakeLock}
+        onChange={(isChecked) =>
+          setAppOptions("wakeLock", isChecked)
+        }
+        label={t("setting.application.wake_lock.title")}
+        description={t(
+          "setting.application.wake_lock.description",
+        )}
+      />
+      <SettingSwitch
         disabled={appState.profile.initalJoin}
         checked={appState.profile.autoJoin}
         onChange={(isChecked) =>

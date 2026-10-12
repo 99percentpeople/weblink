@@ -11,11 +11,9 @@ import {
 } from "@/libs/application/rtc/rtc-protocol";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import { validateSessionMessage } from "@/libs/domain/protocol/validation";
-import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import {
   FakeRtcTransport,
   makeSession,
-  flushRtc,
 } from "../support/rtc-transport";
 const fingerprint = {
   version: 1 as const,
@@ -43,7 +41,7 @@ afterEach(() => {
     .forEach((protocol) => protocol.dispose());
 });
 describe("content negotiation", () => {
-  it("requires a typed file result, ignores ordinary ACKs, and ACKs duplicate results", async () => {
+  it("requires a typed file result, ignores ordinary ACKs, and ignores duplicate results", async () => {
     const { protocol, transport } = setup();
     const local = makeSession(),
       remote = makeSession("b", "a");
@@ -79,7 +77,7 @@ describe("content negotiation", () => {
       transport.sendCalls.filter(
         (call) => call.message.type === "ack",
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
   });
   it("rejects mismatched file responses and malformed content identities", async () => {
     const { protocol, transport } = setup();
@@ -135,18 +133,6 @@ describe("content negotiation", () => {
       reason: "local-job" as const,
     }));
     protocol.handle("send-file", handler);
-    transport.sendImpl = async (_, message) => {
-      if (message.type === "file-offer-result")
-        await transport.emit(
-          local,
-          createSessionMessage(
-            remote,
-            "ack",
-            { mode: "receive" },
-            { id: message.id },
-          ),
-        );
-    };
     const message = createSessionMessage(
       remote,
       "send-file",
@@ -161,47 +147,5 @@ describe("content negotiation", () => {
         (call) => call.message.type === "file-offer-result",
       ),
     ).toHaveLength(2);
-  });
-  it("scopes capability to a session and ignores stale profile advertisements", async () => {
-    const { protocol, transport } = setup();
-    const capabilities = new FileContentCapabilities(
-      protocol,
-      transport,
-    );
-    const local = makeSession(),
-      remote = makeSession("b", "a");
-    expect(capabilities.supports(local)).toBe(false);
-    const profile = {
-      version: 1,
-      profile: { name: "Peer", avatar: null },
-      features: ["file-content-v1"],
-    };
-    await transport.emit(
-      local,
-      createSessionMessage(
-        remote,
-        "client-profile",
-        profile,
-        { createdAt: 2 },
-      ),
-    );
-    await flushRtc();
-    expect(capabilities.supports(local)).toBe(true);
-    await transport.emit(
-      local,
-      createSessionMessage(
-        remote,
-        "client-profile",
-        { ...profile, features: [] },
-        { createdAt: 1 },
-      ),
-    );
-    expect(capabilities.supports(local)).toBe(true);
-    expect(capabilities.supports(makeSession())).toBe(
-      false,
-    );
-    transport.close(local);
-    expect(capabilities.supports(local)).toBe(false);
-    capabilities.dispose();
   });
 });

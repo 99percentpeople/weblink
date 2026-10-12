@@ -7,6 +7,7 @@ import type { Client } from "@/libs/domain/client";
 import { directConversationId } from "@/libs/domain/conversation";
 import { appState } from "@/libs/state/app-state";
 import { ConversationComposer } from "@/components/conversations/conversation-composer";
+import { useAppState } from "@/libs/state/app-state-context";
 
 export const ChatBar: Component<
   Omit<ComponentProps<"div">, "onPaste"> & {
@@ -14,6 +15,7 @@ export const ChatBar: Component<
     onSent?: () => void;
   }
 > = (props) => {
+  const state = useAppState();
   const [local, other] = splitProps(props, [
     "client",
     "class",
@@ -30,6 +32,14 @@ export const ChatBar: Component<
         local.client.clientId,
       )}
       title={local.client.name}
+      textDisabled={
+        !state.peerCapabilities(local.client.clientId)
+          ?.messaging
+      }
+      filesDisabled={
+        !state.peerCapabilities(local.client.clientId)
+          ?.files
+      }
       disabled={
         peer()?.onlineStatus !== "online" ||
         !peer()?.messageChannel

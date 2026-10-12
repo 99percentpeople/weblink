@@ -517,17 +517,25 @@ export class SharedFileTransfers {
       chunkSize: job.info.chunkSize!,
     };
     try {
-      // Check current remote permission even when no binary transfer is necessary.
-      await this.options.protocol.call(
-        session,
-        "request-shared-file",
-        { ...payload, have: true },
-        { signal },
-      );
-      this.check(job, signal);
+      let permission: Promise<unknown> | undefined;
+      const authorizeReuse = (activeSignal: AbortSignal) =>
+        (permission ??= this.options.protocol.call(
+          session,
+          "request-shared-file",
+          { ...payload, have: true },
+          { signal: activeSignal },
+        ));
       const reuse = async (
         completionSignal: AbortSignal,
       ) => {
+        if (
+          !(await this.options.caches.library.hasContent(
+            payload.fingerprint,
+          ))
+        )
+          return false;
+        await authorizeReuse(completionSignal);
+        this.check(job, signal);
         const cache =
           await this.options.caches.library.reuse(
             payload.fingerprint,
@@ -550,8 +558,10 @@ export class SharedFileTransfers {
           job.fileId,
           job.task.id,
         )
-      )
+      ) {
+        await authorizeReuse(signal);
         return;
+      }
       const source = this.options.receives.join(
         payload.fingerprint,
         {
@@ -580,7 +590,10 @@ export class SharedFileTransfers {
           },
         },
       );
-      if (!source) return;
+      if (!source) {
+        await authorizeReuse(signal);
+        return;
+      }
       let cache = this.options.caches.getCache(job.fileId);
       if (!cache) {
         cache = await this.options.caches.createCache(
@@ -594,10 +607,7 @@ export class SharedFileTransfers {
       this.check(job, signal);
       const ranges = await cache.getReqRanges();
       this.check(job, signal);
-      const run = this.register(job, cache, false);
-      await this.options.registry.initialize(run);
-      this.check(job, signal);
-      await this.options.protocol.call(
+      permission = this.options.protocol.call(
         session,
         "request-shared-file",
         {
@@ -607,6 +617,10 @@ export class SharedFileTransfers {
         },
         { signal },
       );
+      await permission;
+      this.check(job, signal);
+      const run = this.register(job, cache, false);
+      await this.options.registry.initialize(run);
       this.check(job, signal);
       const channel = await session.createChannel(
         `${job.fileId}-0`,

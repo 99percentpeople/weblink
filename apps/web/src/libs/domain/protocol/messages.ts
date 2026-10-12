@@ -1,6 +1,7 @@
 import type { FileFingerprint } from "./file-fingerprint";
 import type { ClipboardRequest } from "./clipboard";
 import type { FileDropRequest } from "./file-drop";
+import { CAPABILITY_SYNC_VERSION } from "./protocol-versions";
 export type MessageID = string;
 export type ProtocolPeerID = string;
 export type ProtocolFileID = string;
@@ -9,11 +10,6 @@ export type ProtocolChunkRange = number | [number, number];
 export const P2P_PROFILE_PROTOCOL_VERSION = 1 as const;
 export const P2P_ROOM_CHAT_PROTOCOL_VERSION = 1 as const;
 export const P2P_ROOM_FILE_PROTOCOL_VERSION = 1 as const;
-export const FILE_CONTENT_FEATURE =
-  "file-content-v1" as const;
-export const SHARED_FILES_FEATURE =
-  "shared-files-v1" as const;
-export const ROOM_FILE_FEATURE = "room-file-v1" as const;
 import { CHAT_MAX_TEXT_LENGTH } from "./chat-text";
 export const ROOM_CHAT_MAX_TEXT_LENGTH =
   CHAT_MAX_TEXT_LENGTH;
@@ -57,7 +53,6 @@ export type RoomCapabilitiesMessage =
     version: typeof P2P_ROOM_CHAT_PROTOCOL_VERSION;
     roomId: string;
     token: string;
-    features?: string[];
   };
 
 /** The envelope target is still a peer; room scope belongs to the payload. */
@@ -220,7 +215,6 @@ export type ClientProfileMessage = BaseExchangeMessage & {
   type: "client-profile";
   version: typeof P2P_PROFILE_PROTOCOL_VERSION;
   profile: ProtocolPeerProfile;
-  features?: string[];
 };
 
 export type FileOfferResult = {
@@ -259,6 +253,12 @@ export type RequestSharedFileMessage =
   };
 
 export type SessionMessage =
+  | (BaseExchangeMessage & {
+      type: "peer-capabilities";
+      version: number;
+      /** Opaque until the sync version and update schema have been checked. */
+      update: unknown;
+    })
   | (BaseExchangeMessage &
       FileDropRequest & { type: "remote-file-drop" })
   | (BaseExchangeMessage &
@@ -335,6 +335,7 @@ export const requestSpec = {
 
 export type RequestType = keyof typeof requestSpec;
 export type NotificationType =
+  | "peer-capabilities"
   | "client-profile"
   | "stream-state"
   | "read-text"
@@ -390,26 +391,32 @@ export function createSessionMessage<
       target: peer.targetClientId,
     }),
     type,
-    ...(type === "file-offer-result" ||
-    type === "file-content-ready" ||
-    type === "request-shared-file"
-      ? { version: 1 }
-      : type === "send-room-file" &&
-          "fingerprint" in payload &&
-          payload.fingerprint
-        ? { version: 2 }
-        : type === "client-profile"
-          ? { version: P2P_PROFILE_PROTOCOL_VERSION }
-          : type === "room-capabilities" ||
-              type === "send-room-text"
-            ? { version: P2P_ROOM_CHAT_PROTOCOL_VERSION }
-            : type === "send-room-file" ||
-                type === "request-room-file"
-              ? { version: P2P_ROOM_FILE_PROTOCOL_VERSION }
-              : type === "request-storage" ||
-                  type === "storage"
-                ? { version: P2P_STORAGE_PROTOCOL_VERSION }
-                : {}),
+    ...(type === "peer-capabilities"
+      ? { version: CAPABILITY_SYNC_VERSION }
+      : type === "file-offer-result" ||
+          type === "file-content-ready" ||
+          type === "request-shared-file"
+        ? { version: 1 }
+        : type === "send-room-file" &&
+            "fingerprint" in payload &&
+            payload.fingerprint
+          ? { version: 2 }
+          : type === "client-profile"
+            ? { version: P2P_PROFILE_PROTOCOL_VERSION }
+            : type === "room-capabilities" ||
+                type === "send-room-text"
+              ? { version: P2P_ROOM_CHAT_PROTOCOL_VERSION }
+              : type === "send-room-file" ||
+                  type === "request-room-file"
+                ? {
+                    version: P2P_ROOM_FILE_PROTOCOL_VERSION,
+                  }
+                : type === "request-storage" ||
+                    type === "storage"
+                  ? {
+                      version: P2P_STORAGE_PROTOCOL_VERSION,
+                    }
+                  : {}),
   } as unknown as MessageOf<T>;
 }
 

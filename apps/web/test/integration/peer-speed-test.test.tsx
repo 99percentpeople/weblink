@@ -40,6 +40,9 @@ beforeEach(() => {
   update = setState;
   vi.mocked(useAppState).mockReturnValue({
     speedTestState: state,
+    peerCapabilities: () => ({
+      speedTest: { busy: false },
+    }),
     getSpeedTestState: (peerId: string | null) =>
       state().peerId === peerId ? state() : undefined,
     startSpeedTest: start,
@@ -51,6 +54,30 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("peer speed test panel", () => {
+  it("disables start until peer discovery completes and while the remote peer is busy", () => {
+    const [remote, setRemote] = createSignal<{
+      speedTest: { busy: boolean };
+    }>();
+    vi.mocked(useAppState).mockReturnValue({
+      ...useAppState(),
+      peerCapabilities: remote,
+    });
+    render(() => (
+      <PeerSpeedTest clientId="peer" connected />
+    ));
+    const startButton = () =>
+      screen.getByRole("button", {
+        name: "speed_test.start",
+      });
+    expect(startButton()).toBeDisabled();
+    setRemote({ speedTest: { busy: true } });
+    expect(startButton()).toBeDisabled();
+    expect(
+      screen.getByText("speed_test.errors.busy"),
+    ).toBeInTheDocument();
+    setRemote({ speedTest: { busy: false } });
+    expect(startButton()).not.toBeDisabled();
+  });
   it("starts against the selected client, without any file input", async () => {
     const { container } = render(() => (
       <PeerSpeedTest clientId="peer" connected />

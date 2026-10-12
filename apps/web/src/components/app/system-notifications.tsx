@@ -1,5 +1,6 @@
 import {
   createEffect,
+  mapArray,
   createMemo,
   on,
   onCleanup,
@@ -172,66 +173,70 @@ export function SystemNotificationBridge() {
       });
     },
   );
-  const consent = createMemo(
-    () =>
-      sessionService.remoteControl.status().pending
-        ?.consentId,
-  );
   createEffect(
-    on(consent, () => {
-      const pending =
-        sessionService.remoteControl.status().pending;
-      if (!pending) return;
-      const consentId = pending.consentId;
-      const id = `control:${consentId}`;
-      untrack(() => {
-        void service.show({
-          category: "controlRequests",
-          current: () =>
-            sessionService.remoteControl.status().pending
-              ?.consentId === consentId,
-          notification: {
-            id,
-            title: t("remote_control.request_title"),
-            body: preferences().preview
-              ? t("remote_control.request_description", {
-                  name: name(pending.clientId),
-                })
-              : t("remote_control.request_title"),
-            expiresAt: Date.now() + 5 * 60_000,
-            actions: [
-              {
-                id: "approve",
-                title: t("remote_control.allow"),
-              },
-              {
-                id: "decline",
-                title: t("remote_control.decline"),
-              },
-            ],
-          },
-          async respond(action) {
-            if (
-              action.action === "approve" ||
-              action.action === "decline"
-            ) {
-              try {
-                await sessionService.remoteControl.approve(
-                  consentId,
-                  action.action === "approve",
-                );
-              } catch (error) {
-                toast.error(
-                  t("remote_control.approval_failed"),
-                );
-                throw error;
+    mapArray(
+      () =>
+        sessionService.remoteControl
+          .status()
+          .pending.map((p) => p.consentId),
+      (consentId) => {
+        const pending = sessionService.remoteControl
+          .status()
+          .pending.find((p) => p.consentId === consentId);
+        if (!pending) return;
+        const id = `control:${consentId}`;
+        untrack(() => {
+          void service.show({
+            category: "controlRequests",
+            current: () =>
+              sessionService.remoteControl
+                .status()
+                .pending.some(
+                  (p) => p.consentId === consentId,
+                ),
+            notification: {
+              id,
+              title: t("remote_control.request_title"),
+              body: preferences().preview
+                ? t("remote_control.request_description", {
+                    name: name(pending.clientId),
+                  })
+                : t("remote_control.request_title"),
+              expiresAt: Date.now() + 5 * 60_000,
+              actions: [
+                {
+                  id: "approve",
+                  title: t("remote_control.allow"),
+                },
+                {
+                  id: "decline",
+                  title: t("remote_control.decline"),
+                },
+              ],
+            },
+            async respond(action) {
+              if (
+                action.action === "approve" ||
+                action.action === "decline"
+              ) {
+                try {
+                  await sessionService.remoteControl.approve(
+                    consentId,
+                    action.action === "approve",
+                  );
+                } catch (error) {
+                  toast.error(
+                    t("remote_control.approval_failed"),
+                  );
+                  throw error;
+                }
               }
-            }
-          },
+            },
+          });
         });
-      });
-      onCleanup(() => service.dismiss(id));
-    }),
+        onCleanup(() => service.dismiss(id));
+      },
+    ),
   );
   createEffect(
     on(state.speedTestApproval, (request) => {

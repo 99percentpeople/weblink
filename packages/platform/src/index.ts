@@ -420,6 +420,7 @@ export interface NativeControlContext {
   sourceId: string;
 }
 export interface NativeControlStatus {
+  sourceId?: string | null;
   devices?: InputDeviceSnapshot;
   grantId?: string | null;
   pending: {
@@ -427,7 +428,7 @@ export interface NativeControlStatus {
     clientId: string;
     sourceId: string;
     peerGeneration?: string;
-  } | null;
+  }[];
   clientId: string | null;
   closed: boolean;
 }

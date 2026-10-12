@@ -113,10 +113,6 @@
       },
       "background_image_opacity": {
         "title": "壁紙の不透明度"
-      },
-      "wake_lock": {
-        "title": "画面をオンに保つ",
-        "description": "有効にすると画面が自動的にオフになるのを防ぎます"
       }
     },
     "list": {
@@ -339,6 +335,10 @@
       "native_audio_codec": "ネイティブ音声コーデック"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "リモート操作機能を公開",
+        "description": "有効にすると、権限設定で自動承認に指定したクライアントにのみリモート操作を公開し、他の操作要求は無視します。ブロックしたクライアントには公開せず、要求にも応答しません。"
+      },
       "description": "このデバイスのタッチ操作でリモート画面を操作する方法を選択します。",
       "mode": {
         "title": "タッチモード",
@@ -470,6 +470,10 @@
       "delete_requires_disconnect": "権限履歴を削除する前に、このクライアントとの接続を切断してください。"
     },
     "application": {
+      "wake_lock": {
+        "title": "画面をオンに保つ",
+        "description": "有効にすると画面が自動的にオフになるのを防ぎます"
+      },
       "automatic_pip_desktop_description": "Weblinkがバックグラウンドになると、会議を最前面の小さなウィンドウに縮小します。「会議に戻る」で元に戻せます。",
       "autostart": "ログイン時に起動",
       "autostart_description": "このコンピューターへのログイン時にWeblinkを自動起動します。",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "ルームサーバーへの接続がタイムアウトしました。ネットワークを確認して、もう一度試してください。",
     "connection_closed": "接続が中断されました。再接続してもう一度お試しください。",
     "connection_config": "ルームサーバーのアドレスまたは設定が無効です。接続設定を確認してください。",
+    "unsupported_protocol": "この機能に互換性のあるプロトコルバージョンがありません。両方のクライアントを更新してください。",
     "connection_response": "サーバーが無効な応答を返しました。アドレスを確認するか、アプリとサーバーを更新してください。",
     "password_required": "このルームにはパスワードが必要です。入力して再試行してください。",
     "incorrect_password": "ルームのパスワードが間違っています。確認してもう一度試してください。",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "{{line}} 行にはサポートされていない認証方法があります。長期または hmac を使用します。"
   },
   "remote_control": {
+    "busy": "操作中",
     "clipboard_transfer": {
       "sending": "クリップボードファイルの送信",
       "receiving": "クリップボードファイルの受信",

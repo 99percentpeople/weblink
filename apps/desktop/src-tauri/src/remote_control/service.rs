@@ -226,7 +226,7 @@ impl Service {
                 worker,
                 peers: HashMap::new(),
                 geometry_watches: Default::default(),
-                pending: None,
+                pending: vec![],
                 active: None,
                 text_focus: Default::default(),
                 cursor: Default::default(),
@@ -258,7 +258,7 @@ impl Service {
                             p.endpoint.dispose();
                         }
                         h.worker.shutdown();
-                        h.pending = None;
+                        h.pending.clear();
                         h.end_grant();
                         owner.publish(Snapshot {
                             closed: true,
@@ -372,7 +372,7 @@ impl Service {
         let o = self.owner(id)?;
         let mut h = o.host.lock().unwrap_or_else(|e| e.into_inner());
         h.worker.revoke().map_err(input_error)?;
-        h.pending = None;
+        h.pending.clear();
         h.end_grant();
         o.publish(h.snapshot());
         Ok(())
@@ -395,8 +395,8 @@ impl Service {
         h.tick();
         let p = h
             .pending
-            .as_ref()
-            .filter(|p| p.view.consent_id == consent)
+            .iter()
+            .find(|p| p.view.consent_id == consent)
             .ok_or("Control request expired")?;
         let media = p.media.clone();
         let signal = if approve {
@@ -407,7 +407,18 @@ impl Service {
         .map_err(input_error)?
         .ok_or("Control request expired or input unavailable")?;
         h.worker.flush().map_err(input_error)?;
-        h.pending = None;
+        h.pending.retain(|p| p.view.consent_id != consent);
+        if approve {
+            // The worker already invalidated every losing consent atomically.
+            for pending in std::mem::take(&mut h.pending) {
+                if let Some(peer) = h.peers.get(&pending.media) {
+                    peer.endpoint.send(&Signal::Deny {
+                        request_id: pending.request_id,
+                        reason: weblink_desktop_input::protocol::DenialReason::Busy,
+                    });
+                }
+            }
+        }
         if let Signal::Grant { grant_id, .. } = &signal {
             let binding = h.peers.get(&media).ok_or("Media ended")?.binding.clone();
             h.active = Some(Active {

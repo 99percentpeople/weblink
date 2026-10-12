@@ -63,6 +63,10 @@ export interface FileTransferServiceOptions {
   getChunkSize(): number;
   automaticCacheDeletion?(): boolean;
   supportsContent?(session: PeerSession): boolean;
+  waitForCapabilities?(
+    session: PeerSession,
+    signal: AbortSignal,
+  ): Promise<unknown>;
   validateRoomReady?(
     session: PeerSession,
     message: FileContentReadyMessage,
@@ -829,6 +833,20 @@ export class FileTransferService {
     return true;
   }
 
+  private async supportsContent(
+    op: Operation,
+  ): Promise<boolean> {
+    if (this.deps.waitForCapabilities)
+      await this.step(
+        op,
+        this.deps.waitForCapabilities(
+          op.session,
+          op.controller.signal,
+        ),
+      );
+    return this.deps.supportsContent?.(op.session) === true;
+  }
+
   sendFile(
     session: PeerSession,
     file: FileSource,
@@ -893,7 +911,7 @@ export class FileTransferService {
             mimeType: info.mimetype,
             lastModified: info.lastModified,
             chunkSize,
-            ...(this.deps.supportsContent?.(session) &&
+            ...((await this.supportsContent(op)) &&
             info.fingerprint
               ? { fingerprint: info.fingerprint }
               : {}),
@@ -1024,7 +1042,7 @@ export class FileTransferService {
             await this.deps.messages.flushMessage?.(
               existing.id,
             );
-            if (this.deps.supportsContent?.(session))
+            if (await this.supportsContent(op))
               await this.step(
                 op,
                 this.deps.protocol.call(
@@ -1182,7 +1200,7 @@ export class FileTransferService {
             mimeType: message.mimeType,
             lastModified: message.lastModified,
             chunkSize: message.chunkSize,
-            ...(this.deps.supportsContent?.(session) &&
+            ...((await this.supportsContent(op)) &&
             message.fingerprint
               ? { fingerprint: message.fingerprint }
               : {}),

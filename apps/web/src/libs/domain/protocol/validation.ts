@@ -1,6 +1,8 @@
 import { isFileFingerprint } from "./file-fingerprint";
 import { validClipboardRequest } from "./clipboard";
 import { validFileDropRequest } from "./file-drop";
+import { validCapabilityUpdate } from "./capabilities";
+import { CAPABILITY_SYNC_VERSION } from "./protocol-versions";
 import type {
   ProtocolPeer,
   SessionMessage,
@@ -237,25 +239,25 @@ export function validateSessionMessage(
     return fail();
   let valid = false;
   switch (value.type) {
+    case "peer-capabilities":
+      // An unknown sync major is reported to discovery without interpreting its
+      // payload. It cannot take down unrelated base-connection traffic.
+      valid =
+        integer(value.version) &&
+        (value.version as number) > 0 &&
+        (value.version === CAPABILITY_SYNC_VERSION
+          ? validCapabilityUpdate(value.update)
+          : new TextEncoder().encode(JSON.stringify(value))
+              .byteLength <=
+            16 * 1024);
+      break;
     case "room-capabilities":
       valid =
         value.version === P2P_ROOM_CHAT_PROTOCOL_VERSION &&
         id(value.roomId) &&
         value.roomId.length <= 256 &&
         id(value.token) &&
-        value.token.length <= 128 &&
-        optional(
-          value.features,
-          (features) =>
-            Array.isArray(features) &&
-            features.length <= 16 &&
-            features.every(
-              (feature) =>
-                text(feature) &&
-                feature.length > 0 &&
-                feature.length <= 64,
-            ),
-        );
+        value.token.length <= 128;
       break;
     case "send-room-file":
       valid =
@@ -573,16 +575,6 @@ export function validateSessionMessage(
     case "client-profile":
       valid =
         integer(value.version) &&
-        optional(
-          value.features,
-          (features) =>
-            Array.isArray(features) &&
-            features.length <= 16 &&
-            features.every(
-              (feature) =>
-                text(feature) && feature.length <= 64,
-            ),
-        ) &&
         record(value.profile) &&
         text(value.profile.name) &&
         (value.profile.avatar === null ||

@@ -1,23 +1,36 @@
 import { createSignal } from "solid-js";
 import { createUuid } from "../domain/ids";
 
-/** One pending picker-free share; capture still belongs to the meeting media owner. */
+interface ScreenRequest {
+  id: string;
+  clientId: string;
+  generation: string;
+  abort: AbortController;
+  resolve(sourceId?: string): void;
+}
+
+/** Consent queues independently; only the selected request reserves capture and handoff. */
 export class RemoteScreenConsent {
-  private readonly pendingState = createSignal<{
-    consentId: string;
+  private readonly reserved = createSignal<{
     clientId: string;
     sourceId: string;
-    sharing: true;
   } | null>(null);
+  readonly reservation = this.reserved[0];
+  private expiry?: ReturnType<typeof setTimeout>;
+  private readonly pendingState = createSignal<
+    {
+      consentId: string;
+      clientId: string;
+      sourceId: string;
+      sharing: true;
+    }[]
+  >([]);
   readonly pending = this.pendingState[0];
-  private current?: {
-    id: string;
-    clientId: string;
-    generation: string;
-    abort: AbortController;
-    responding?: boolean;
-    resolve(sourceId?: string): void;
-  };
+  private readonly requests = new Map<
+    string,
+    ScreenRequest
+  >();
+  private selected?: ScreenRequest;
   private approved?: {
     clientId: string;
     generation: string;
@@ -33,7 +46,15 @@ export class RemoteScreenConsent {
     generation: string,
     signal: AbortSignal,
   ) {
-    if (this.current || signal.aborted || !this.share)
+    if (
+      this.reservation() ||
+      signal.aborted ||
+      !this.share ||
+      this.requests.size >= 32 ||
+      [...this.requests.values()].some(
+        (request) => request.clientId === clientId,
+      )
+    )
       return Promise.resolve(undefined);
     const id = createUuid();
     const abort = new AbortController();
@@ -46,10 +67,14 @@ export class RemoteScreenConsent {
       const finish = (sourceId?: string) => {
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
-        if (this.current?.id === id) {
-          this.current = undefined;
-          this.pendingState[1](null);
+        this.requests.delete(id);
+        if (this.selected?.id === id) {
+          this.selected = undefined;
+          if (!sourceId) this.reserved[1](null);
         }
+        this.pendingState[1]((pending) =>
+          pending.filter((p) => p.consentId !== id),
+        );
         resolve(sourceId);
       };
       abort.signal.addEventListener(
@@ -57,36 +82,47 @@ export class RemoteScreenConsent {
         () => finish(),
         { once: true },
       );
-      this.current = {
+      this.requests.set(id, {
         id,
         clientId,
         generation,
         abort,
         resolve: finish,
-      };
-      this.pendingState[1]({
-        consentId: id,
-        clientId,
-        sourceId: "",
-        sharing: true,
       });
+      this.pendingState[1]((pending) => [
+        ...pending,
+        {
+          consentId: id,
+          clientId,
+          sourceId: "",
+          sharing: true,
+        },
+      ]);
     });
   }
   async respond(id: string, accepted: boolean) {
-    const request = this.current;
-    if (!request || request.id !== id) return false;
+    const request = this.requests.get(id);
+    if (!request) return false;
     if (!accepted) {
       request.abort.abort();
       return true;
     }
-    if (request.responding) return false;
-    request.responding = true;
+    if (this.reservation()) return false;
+    // Reserve synchronously before starting capture or allowing a second answer.
+    this.selected = request;
+    this.reserved[1]({
+      clientId: request.clientId,
+      sourceId: "",
+    });
+    for (const other of this.requests.values()) {
+      if (other !== request) other.abort.abort();
+    }
     try {
       const sourceId = await this.share?.(
         request.abort.signal,
       );
       if (
-        this.current !== request ||
+        this.selected !== request ||
         request.abort.signal.aborted
       )
         return false;
@@ -98,10 +134,23 @@ export class RemoteScreenConsent {
         sourceId,
         expires: Date.now() + 30_000,
       };
+      this.reserved[1]({
+        clientId: request.clientId,
+        sourceId,
+      });
+      clearTimeout(this.expiry);
+      this.expiry = setTimeout(
+        () => this.clearApproval(),
+        30_000,
+      );
       request.resolve(sourceId);
       return true;
-    } finally {
-      request.responding = false;
+    } catch (error) {
+      if (this.selected === request) {
+        this.selected = undefined;
+        this.reserved[1](null);
+      }
+      throw error;
     }
   }
   consume(
@@ -119,23 +168,39 @@ export class RemoteScreenConsent {
       grant.expires < Date.now()
     )
       return false;
-    if (consume) this.approved = undefined;
+    if (consume) this.clearApproval();
     return true;
   }
   cancelPeer(clientId: string, generation: string) {
-    if (
-      this.current?.clientId === clientId &&
-      this.current.generation === generation
-    )
-      this.current.abort.abort();
+    for (const request of this.requests.values()) {
+      if (
+        request.clientId === clientId &&
+        request.generation === generation
+      )
+        request.abort.abort();
+    }
     if (
       this.approved?.clientId === clientId &&
       this.approved.generation === generation
     )
-      this.approved = undefined;
+      this.clearApproval();
+  }
+  cancelClient(clientId: string) {
+    for (const request of this.requests.values()) {
+      if (request.clientId === clientId)
+        request.abort.abort();
+    }
+    if (this.approved?.clientId === clientId)
+      this.clearApproval();
   }
   close() {
-    this.current?.abort.abort();
+    for (const request of this.requests.values())
+      request.abort.abort();
+    this.clearApproval();
+  }
+  private clearApproval() {
+    clearTimeout(this.expiry);
     this.approved = undefined;
+    if (!this.selected) this.reserved[1](null);
   }
 }

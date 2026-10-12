@@ -121,6 +121,48 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("blocks competing requests until public occupancy is released, while preserving an existing grant", () => {
+    const { c, r, approve, activate } = setup();
+    const before = r.sent.length;
+    c.setHostStatus(
+      {
+        state: "controlled",
+        clientId: "other",
+        sourceId: "source",
+      },
+      "viewer",
+    );
+    expect(c.state()).toBe("busy");
+    c.request();
+    expect(r.sent).toHaveLength(before);
+    c.setHostStatus(
+      {
+        state: "pending",
+        clientId: "other",
+        sourceId: "source",
+      },
+      "viewer",
+    );
+    c.request();
+    expect(r.sent).toHaveLength(before);
+    c.setHostStatus({ state: "idle" }, "viewer");
+    expect(c.state()).toBe("viewing");
+    approve();
+    activate();
+    c.setHostStatus(
+      {
+        state: "controlled",
+        clientId: "viewer",
+        sourceId: "source",
+      },
+      "viewer",
+    );
+    expect(c.state()).toBe("active");
+    c.cancel();
+    expect(c.state()).toBe("busy");
+    c.setHostStatus({ state: "idle" }, "viewer");
+    expect(c.state()).toBe("viewing");
+  });
   it("accepts feedback only for the current active grant and epoch", () => {
     const { c, r, approve, activate } = setup();
     approve();

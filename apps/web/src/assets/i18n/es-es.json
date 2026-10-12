@@ -113,10 +113,6 @@
       },
       "background_image_opacity": {
         "title": "Opacidad del fondo"
-      },
-      "wake_lock": {
-        "title": "Mantener la pantalla encendida",
-        "description": "Si se activa, la aplicación mantendrá la pantalla encendida"
       }
     },
     "list": {
@@ -339,6 +335,10 @@
       "native_audio_codec": "Códec de audio nativo"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "Publicar la capacidad de control remoto",
+        "description": "Mostrar el control remoto solo a clientes con aprobación automática en Permisos e ignorar las demás solicitudes. Los clientes bloqueados no pueden descubrir ni solicitar el control."
+      },
       "description": "Elige cómo los gestos táctiles de este dispositivo controlan la pantalla remota.",
       "mode": {
         "title": "Modo táctil",
@@ -470,6 +470,10 @@
       "delete_requires_disconnect": "Desconecta de este cliente antes de eliminar su historial de permisos."
     },
     "application": {
+      "wake_lock": {
+        "title": "Mantener la pantalla encendida",
+        "description": "Si se activa, la aplicación mantendrá la pantalla encendida"
+      },
       "automatic_pip_desktop_description": "Reduce la reunión a una ventana siempre visible cuando Weblink pasa a segundo plano. Usa Volver a la reunión para restaurarla.",
       "autostart": "Iniciar al encender",
       "autostart_description": "Inicia Weblink automáticamente al iniciar sesión en este equipo.",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "Se agotó el tiempo de conexión al servidor de sala. Verifique su red e inténtelo nuevamente.",
     "connection_closed": "La conexión fue interrumpida. Vuelve a conectarte y vuelve a intentarlo.",
     "connection_config": "La dirección o configuración del servidor de sala no es válida. Verifique la configuración de conexión.",
+    "unsupported_protocol": "Esta función no tiene una versión de protocolo compatible. Actualiza ambos clientes.",
     "connection_response": "El servidor devolvió una respuesta no válida. Verifique su dirección o actualice la aplicación y el servidor.",
     "password_required": "Esta sala requiere una contraseña. Introdúcela y vuelve a intentarlo.",
     "incorrect_password": "La contraseña de la sala es incorrecta. Compruébalo y vuelve a intentarlo.",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "La línea {{line}} tiene un método de autenticación no compatible. Utilice a largo plazo o hmac."
   },
   "remote_control": {
+    "busy": "En uso",
     "clipboard_transfer": {
       "sending": "Enviar archivos del portapapeles",
       "receiving": "Recibir archivos del portapapeles",

@@ -128,6 +128,7 @@ function setup() {
       reportError: () => {},
     });
     const service = new RemoteClipboard({
+      supportsInline: () => true,
       platform: (i === 1
         ? { clipboard: native }
         : {}) as unknown as PlatformRuntime,
@@ -237,6 +238,46 @@ function setup() {
   };
 }
 describe("authorized remote clipboard", () => {
+  it("copies and pastes small rich text without a transfer channel, and waits for native application before Ctrl+V", async () => {
+    const s = setup();
+    const copied = await s.a.service.copy(
+      "peer1",
+      s.control,
+      false,
+    );
+    expect(await copied[0].blob.text()).toBe("remote text");
+    const rich = [
+      ...copied,
+      {
+        type: "text/html" as const,
+        blob: new Blob(["<b>中文</b>"]),
+      },
+    ];
+    const paste = s.a.service.paste(
+      "peer1",
+      s.control,
+      rich,
+    );
+    await flushRtc();
+    expect(s.native.write).toHaveBeenCalledOnce();
+    expect(s.events).toEqual(["write"]);
+    s.applied.resolve();
+    await paste;
+    expect(s.events).toEqual(["write", "applied", "paste"]);
+    for (const side of [s.a, s.b]) {
+      expect(
+        side.session.createChannel,
+      ).not.toHaveBeenCalled();
+      expect(side.caches.size).toBe(0);
+      expect(
+        side.transport.sendCalls.some(
+          ({ message }) =>
+            message.type === "remote-clipboard" &&
+            message.action === "inline",
+        ),
+      ).toBe(true);
+    }
+  });
   it.each([true, false])(
     "enforces the controller file budget on remote copy (selection=%s)",
     async (selection) => {

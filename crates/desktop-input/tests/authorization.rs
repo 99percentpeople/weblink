@@ -304,3 +304,64 @@ fn unavailable_target_cannot_be_approved_and_denial_prevents_late_consent() {
     ));
     assert!(a.approve(&consent, now).is_none());
 }
+
+fn second_binding(a: &mut Authority<Fake>, fake: &Fake, b: &Binding) -> Binding {
+    let mut second = b.clone();
+    second.client_id = "client-2".into();
+    second.peer_generation = "peer-2".into();
+    second.target.media_id = "media-2".into();
+    fake.current.borrow_mut().push(second.clone());
+    assert!(a.register(second.clone()));
+    second
+}
+
+#[test]
+fn simultaneous_requests_allow_any_selection_and_invalidate_all_losing_tokens() {
+    let (mut a, fake, first, now) = setup();
+    let second = second_binding(&mut a, &fake, &first);
+    let one = pending(&mut a, &first, "r1", now);
+    let two = pending(&mut a, &second, "r2", now);
+    assert_eq!(a.pending_consents(), vec![one.clone(), two.clone()]);
+    assert!(a.grant().is_none());
+    let Signal::Grant { grant_id, .. } = a.approve(&two, now).unwrap() else {
+        panic!()
+    };
+    assert!(a.pending_consents().is_empty());
+    assert!(a.approve(&one, now).is_none());
+    assert!(a.decline(&one).is_none());
+    assert!(a.permits(&second, &grant_id, now));
+    assert!(!a.permits(&first, &grant_id, now));
+    a.revoke();
+    assert!(a.approve(&one, now).is_none());
+    pending(&mut a, &first, "new-request", now);
+}
+
+#[test]
+fn declining_cancelling_expiring_or_invalidating_one_request_preserves_the_other() {
+    for action in ["decline", "cancel", "expire", "invalidate"] {
+        let (mut a, fake, first, now) = setup();
+        let second = second_binding(&mut a, &fake, &first);
+        let one = pending(&mut a, &first, "r1", now);
+        let later = now + Duration::from_secs(10);
+        let two = pending(&mut a, &second, "r2", later);
+        match action {
+            "decline" => {
+                a.decline(&one).unwrap();
+            }
+            "cancel" => {
+                assert!(a.receive_end(
+                    &first.target.media_id,
+                    &Signal::Cancel {
+                        request_id: "r1".into()
+                    }
+                ));
+            }
+            "expire" => a.tick(now + Duration::from_secs(30)),
+            "invalidate" => a.invalidate(&first),
+            _ => unreachable!(),
+        }
+        assert_eq!(a.pending_consents(), vec![two.clone()]);
+        assert!(a.approve(&one, later).is_none());
+        assert!(a.approve(&two, now + Duration::from_secs(30)).is_some());
+    }
+}

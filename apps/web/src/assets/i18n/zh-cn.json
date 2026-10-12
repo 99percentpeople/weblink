@@ -108,10 +108,6 @@
       },
       "background_image_opacity": {
         "title": "背景透明度"
-      },
-      "wake_lock": {
-        "title": "保持屏幕常亮",
-        "description": "当启用时，应用程序将保持屏幕常亮"
       }
     },
     "list": {
@@ -334,6 +330,10 @@
       "native_audio_codec": "原生音频编码"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "开放远程控制能力",
+        "description": "开启后，仅向权限设置中标为“自动批准（白名单）”的客户端公开远程控制，忽略其他客户端的控制请求。黑名单始终无法发现或请求控制。"
+      },
       "description": "设置本机触摸手势如何控制远端画面。",
       "mode": {
         "title": "触摸模式",
@@ -465,6 +465,10 @@
       "delete_requires_disconnect": "请先断开与此客户端的连接，再删除权限记录。"
     },
     "application": {
+      "wake_lock": {
+        "title": "保持屏幕常亮",
+        "description": "当启用时，应用程序将保持屏幕常亮"
+      },
       "automatic_pip_desktop_description": "Weblink 切到后台时，将会议缩为置顶小窗。点击返回会议可恢复窗口。",
       "autostart": "开机自动启动",
       "autostart_description": "登录此电脑后自动启动 Weblink。",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "连接房间服务器超时，请检查网络后重试。",
     "connection_closed": "连接已中断，请重新连接后重试。",
     "connection_config": "房间服务器地址或配置无效，请检查连接设置。",
+    "unsupported_protocol": "此功能的协议版本不兼容，请更新双方客户端。",
     "connection_response": "服务器响应异常，请检查服务器地址，或更新应用和服务器后重试。",
     "password_required": "此房间需要密码，请输入密码后重试。",
     "incorrect_password": "房间密码错误，请检查密码后重试。",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "第 {{line}} 行的认证方式不受支持，请使用 longterm 或 hmac。"
   },
   "remote_control": {
+    "busy": "正在被控制",
     "clipboard_transfer": {
       "sending": "正在发送剪贴板文件",
       "receiving": "正在接收剪贴板文件",

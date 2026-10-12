@@ -173,6 +173,20 @@ async function share(
 }
 
 describe("shared file authorization and independent jobs", () => {
+  it("authorizes and prepares a missing file in one request", async () => {
+    const { a, b } = pair();
+    const { info } = await share(a);
+    await b.shared.download("a", info);
+    const requests = b.transport.sendCalls.filter(
+      ({ message }) =>
+        message.type === "request-shared-file",
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0].message).toMatchObject({
+      have: false,
+    });
+    expect(b.created).toHaveLength(1);
+  });
   it.each([false, true])(
     "cancels a download (paused=%s) terminally and allows a fresh get",
     async (paused) => {

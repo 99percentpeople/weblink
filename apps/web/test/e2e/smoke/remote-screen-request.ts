@@ -1,4 +1,14 @@
 import { RemoteControlHost } from "@/libs/application/remote-control-host";
+import { PeerCapabilitiesService } from "@/libs/application/peer-capabilities";
+import { createEffect, createRoot } from "solid-js";
+import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import type {
+  PeerSession,
+  PeerSessionEventMap,
+} from "@/libs/domain/session";
+import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
+import type { SessionMessage } from "@/libs/domain/protocol/messages";
+import { validateSessionMessage } from "@/libs/domain/protocol/validation";
 import { createMeetingMediaController } from "@/libs/application/meeting-media-service";
 import {
   NativeScreenSession,
@@ -30,11 +40,12 @@ async function until(
 /** Real meeting/signaling/media DataChannels and RTP; only native capture/input are substituted. */
 export async function remoteScreenRequestCheck() {
   let status: NativeControlStatus = {
-    pending: null,
+    pending: [],
     clientId: null,
     closed: false,
   };
   let decision: "allow" | "deny" | undefined;
+  let whitelistOnly = false;
   let receive:
     | ((status: NativeControlStatus) => void)
     | undefined;
@@ -42,6 +53,71 @@ export async function remoteScreenRequestCheck() {
   let captures = 0,
     approvals = 0;
   const errors: unknown[] = [];
+  const capabilityBindings: {
+    refresh(): void;
+    dispose(): void;
+  }[] = [];
+  const screen = {
+    decode: { video: null, audio: null },
+    trickleIce: true,
+    multiScreen: true,
+  };
+  const bindCapabilities = (
+    channel: RTCDataChannel,
+    clientId: string,
+    targetClientId: string,
+    local: () => PeerCapabilities,
+    native: NativeScreenSession,
+  ) => {
+    const events =
+      new MultiEventEmitter<PeerSessionEventMap>();
+    const lifetime = new AbortController();
+    const session = {
+      clientId,
+      targetClientId,
+      get isMessageChannelReady() {
+        return channel.readyState === "open";
+      },
+      addEventListener:
+        events.addEventListener.bind(events),
+      sendMessage: async (message: SessionMessage) =>
+        channel.send(JSON.stringify(message)),
+    } as unknown as PeerSession;
+    const service = new PeerCapabilitiesService(local);
+    channel.addEventListener(
+      "message",
+      (event) =>
+        events.dispatchEvent(
+          "message",
+          validateSessionMessage(JSON.parse(event.data)),
+        ),
+      { signal: lifetime.signal },
+    );
+    channel.addEventListener(
+      "open",
+      () =>
+        events.dispatchEvent(
+          "messagechannelchange",
+          "ready",
+        ),
+      { signal: lifetime.signal },
+    );
+    const unbind = service.bind(session, (services) =>
+      native.setRemoteCapabilities(services),
+    );
+    const dispose = createRoot((stop) => {
+      createEffect(() => service.refresh(session));
+      return stop;
+    });
+    capabilityBindings.push({
+      refresh: () => service.refreshAll(),
+      dispose: () => {
+        dispose();
+        unbind();
+        lifetime.abort();
+      },
+    });
+  };
   const host = new RemoteControlHost(
     {
       getCapabilities: async () => ({ remoteInput: true }),
@@ -69,17 +145,18 @@ export async function remoteScreenRequestCheck() {
           accepted: boolean,
         ) => {
           assert(
-            status.pending?.consentId === id,
+            status.pending[0]?.consentId === id,
             "Approval was not bound to the current request",
           );
           ++approvals;
-          status.pending = null;
+          status.pending = [];
           answer?.(accepted);
           receive?.({ ...status });
         },
       },
     } as unknown as PlatformRuntime,
     {
+      whitelistOnly: () => whitelistOnly,
       decision: () => decision,
       remember: (_client, next) => {
         decision = next;
@@ -142,15 +219,18 @@ export async function remoteScreenRequestCheck() {
         channel.onmessage = (event) => {
           const value = JSON.parse(event.data);
           if (value.type === "request") {
-            status.pending = {
-              consentId: "native-consent",
-              clientId: control.clientId,
-              sourceId: control.sourceId,
-              peerGeneration: control.peerGeneration,
-            };
+            status.pending = [
+              {
+                consentId: "native-consent",
+                clientId: control.clientId,
+                sourceId: control.sourceId,
+                peerGeneration: control.peerGeneration,
+              },
+            ];
             answer = (accepted) => {
               if (accepted) {
                 status.clientId = control.clientId;
+                status.sourceId = control.sourceId;
                 send({
                   type: "grant",
                   requestId: value.requestId,
@@ -242,11 +322,13 @@ export async function remoteScreenRequestCheck() {
     };
     const sender = new NativeScreenSession({
       ...common,
+      clientId: "host",
       changed: () => {},
       loadControlCapabilities: () =>
         host.capabilities(peerId),
       controlContext: () =>
         host.context("peer-generation", peerId),
+      acceptsControlRequests: () => host.exposes(peerId),
       requestScreen: (signal) =>
         host.requestScreen(
           peerId,
@@ -258,6 +340,7 @@ export async function remoteScreenRequestCheck() {
     });
     const receiver = new NativeScreenSession({
       ...common,
+      clientId: peerId,
       controlCapabilities: { request: true, host: false },
       changed: (stream) => {
         streams[index] = stream;
@@ -265,7 +348,38 @@ export async function remoteScreenRequestCheck() {
     });
     senders.push(sender);
     sessions.push(sender, receiver);
-    b.ondatachannel = (e) => receiver.bind(e.channel);
+    b.ondatachannel = (e) => {
+      if (e.channel.label === "capabilities")
+        bindCapabilities(
+          e.channel,
+          peerId,
+          "host",
+          () => ({
+            screen,
+            control: {
+              request: true,
+              host: false,
+              occupancy: { state: "unavailable" },
+            },
+          }),
+          receiver,
+        );
+      else receiver.bind(e.channel);
+    };
+    bindCapabilities(
+      a.createDataChannel("capabilities", {
+        ordered: false,
+      }),
+      "host",
+      peerId,
+      () => ({
+        screen,
+        ...(host.exposes(peerId)
+          ? { control: host.capability(peerId) }
+          : {}),
+      }),
+      sender,
+    );
     sender.bind(
       a.createDataChannel(NATIVE_SCREEN_CHANNEL, {
         protocol: NATIVE_SCREEN_CHANNEL,
@@ -280,14 +394,14 @@ export async function remoteScreenRequestCheck() {
   const videos: HTMLVideoElement[] = [];
   try {
     const viewer = await connect(0);
-    await connect(1);
+    const other = await connect(1);
     await until(
       () => viewer.screenControl.state() === "viewing",
       "Avatar action unavailable without screen",
     );
     viewer.screenControl.request();
     await until(
-      () => !!host.status().pending,
+      () => !!host.status().pending.length,
       "Missing share consent",
     );
     assert(
@@ -296,17 +410,35 @@ export async function remoteScreenRequestCheck() {
     );
     viewer.screenControl.cancel();
     await until(
-      () => !host.status().pending,
+      () =>
+        !host.status().pending.length &&
+        viewer.screenControl.state() === "viewing",
       "Cancelled request remained pending",
     );
     viewer.screenControl.request();
     await until(
-      () => !!host.status().pending,
+      () => !!host.status().pending.length,
       "Second share request missing",
     );
+    await until(
+      () => other.screenControl.state() === "viewing",
+      "An unanswered request blocked another client",
+    );
+    other.screenControl.request();
+    await until(
+      () => host.status().pending.length === 2,
+      "Concurrent requests did not both reach the host",
+    );
     await host.approve(
-      host.status().pending!.consentId,
+      host
+        .status()
+        .pending.find((p) => p.clientId === "viewer")!
+        .consentId,
       true,
+    );
+    await until(
+      () => other.screenControl.state() === "busy",
+      "Losing request was not rejected or did not receive occupancy",
     );
     await until(
       () => viewer.screenControl.state() === "active",
@@ -336,18 +468,46 @@ export async function remoteScreenRequestCheck() {
     }
     decision = "deny";
     await host.policyChanged("viewer");
+    capabilityBindings.forEach((binding) =>
+      binding.refresh(),
+    );
     await senders[0].refreshControlCapabilities();
     await until(
       () =>
-        viewer.remoteControlCapabilities?.host === false &&
+        viewer.remoteControlCapabilities === undefined &&
         viewer.screenControl.state() === "unavailable",
       "Blocked viewer retained control capability",
     );
     decision = undefined;
+    capabilityBindings.forEach((binding) =>
+      binding.refresh(),
+    );
     await senders[0].refreshControlCapabilities();
     await until(
       () => viewer.screenControl.state() === "viewing",
       "Removing rule did not restore request capability",
+    );
+    whitelistOnly = true;
+    await host.policyChanged("viewer");
+    capabilityBindings.forEach((binding) =>
+      binding.refresh(),
+    );
+    await senders[0].refreshControlCapabilities();
+    await until(
+      () =>
+        viewer.remoteControlCapabilities === undefined &&
+        viewer.screenControl.state() === "unavailable",
+      "Whitelist mode did not hide control from an unknown client",
+    );
+    decision = "allow";
+    await host.policyChanged("viewer");
+    capabilityBindings.forEach((binding) =>
+      binding.refresh(),
+    );
+    await senders[0].refreshControlCapabilities();
+    await until(
+      () => viewer.screenControl.state() === "viewing",
+      "Allowlisting did not restore control on the existing connection",
     );
     assert(
       errors.length === 0,
@@ -359,8 +519,12 @@ export async function remoteScreenRequestCheck() {
       roomViewers: streams.length,
       cancelledBeforeCapture: true,
       capabilityRefresh: true,
+      whitelistUpdates: true,
     };
   } finally {
+    capabilityBindings.forEach((binding) =>
+      binding.dispose(),
+    );
     sessions.forEach((session) => session.reset());
     host.close();
     media.dispose();

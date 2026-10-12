@@ -7,7 +7,8 @@ export type P2PProtocolErrorCode =
   | "remote-error"
   | "prepare-failed"
   | "send-failed"
-  | "invalid-message";
+  | "invalid-message"
+  | "unsupported-protocol";
 
 export type RtcProtocolErrorCode = P2PProtocolErrorCode;
 

@@ -1,3 +1,7 @@
+import {
+  controlBlocked,
+  type ControlOccupancy,
+} from "../protocol/capabilities";
 import { createUuid } from "../ids";
 import type {
   PointerState,
@@ -16,6 +20,18 @@ export type ScreenControlSignal =
 /** Avatar action hands off to the existing screen pointer after consent and publication. */
 export class ScreenControlRequest extends EventTarget {
   private available = false;
+  private hostStatus: ControlOccupancy | undefined = {
+    state: "idle",
+  };
+  private clientId = "";
+  setHostStatus(
+    status: ControlOccupancy | undefined,
+    clientId: string,
+  ): void {
+    this.hostStatus = status;
+    this.clientId = clientId;
+    this.changed();
+  }
   private pending?: { id: string; sourceId?: string };
   private timer?: ReturnType<typeof setTimeout>;
   private pointer?: RemotePointer;
@@ -34,7 +50,12 @@ export class ScreenControlRequest extends EventTarget {
       : this.pending
         ? "requesting"
         : this.available
-          ? "viewing"
+          ? controlBlocked(this.hostStatus, this.clientId)
+            ? this.hostStatus &&
+              this.hostStatus.state !== "unavailable"
+              ? "busy"
+              : "unavailable"
+            : "viewing"
           : "unavailable";
   }
   controls(pointer: RemotePointer | undefined): boolean {

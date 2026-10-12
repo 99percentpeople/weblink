@@ -113,10 +113,6 @@
       },
       "background_image_opacity": {
         "title": "Deckkraft des Hintergrundbilds"
-      },
-      "wake_lock": {
-        "title": "Lassen Sie den Bildschirm eingeschaltet",
-        "description": "Wenn die App aktiviert ist, bleibt der Bildschirm eingeschaltet"
       }
     },
     "list": {
@@ -339,6 +335,10 @@
       "native_audio_codec": "Nativer Audio-Codec"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "Fernsteuerungsfunktion freigeben",
+        "description": "Fernsteuerung nur für Clients mit automatischer Genehmigung in den Berechtigungen anzeigen. Andere Steuerungsanfragen werden ignoriert. Gesperrte Clients können die Fernsteuerung weder erkennen noch anfordern."
+      },
       "description": "Wählen Sie aus, wie die Touch-Gesten dieses Geräts einen Remote-Bildschirm steuern.",
       "mode": {
         "title": "Touch-Modus",
@@ -470,6 +470,10 @@
       "delete_requires_disconnect": "Trennen Sie die Verbindung zu diesem Client, bevor Sie seinen Berechtigungsverlauf löschen."
     },
     "application": {
+      "wake_lock": {
+        "title": "Lassen Sie den Bildschirm eingeschaltet",
+        "description": "Wenn die App aktiviert ist, bleibt der Bildschirm eingeschaltet"
+      },
       "automatic_pip_desktop_description": "Verkleinern Sie das Meeting auf ein immer im Vordergrund stehendes Fenster, wenn Weblink in den Hintergrund tritt. Verwenden Sie „Zur Besprechung zurückkehren“, um das Fenster wiederherzustellen.",
       "autostart": "Beim Start starten",
       "autostart_description": "Starten Sie Weblink automatisch, wenn Sie sich an diesem Computer anmelden.",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "Zeitüberschreitung beim Herstellen der Verbindung zum Raumserver. Überprüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
     "connection_closed": "Die Verbindung wurde unterbrochen. Stellen Sie die Verbindung wieder her und versuchen Sie es erneut.",
     "connection_config": "Die Adresse oder Konfiguration des Raumservers ist ungültig. Überprüfen Sie die Verbindungseinstellungen.",
+    "unsupported_protocol": "Für diese Funktion gibt es keine kompatible Protokollversion. Aktualisiere beide Clients.",
     "connection_response": "Der Server hat eine ungültige Antwort zurückgegeben. Überprüfen Sie die Adresse oder aktualisieren Sie die App und den Server.",
     "password_required": "Für diesen Raum ist ein Passwort erforderlich. Geben Sie es ein und versuchen Sie es erneut.",
     "incorrect_password": "Das Raumpasswort ist falsch. Überprüfen Sie es und versuchen Sie es erneut.",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "Die Leitung {{line}} verfügt über eine nicht unterstützte Authentifizierungsmethode. Verwenden Sie longterm oder hmac."
   },
   "remote_control": {
+    "busy": "Wird gesteuert",
     "clipboard_transfer": {
       "sending": "Zwischenablagedateien senden",
       "receiving": "Zwischenablagedateien werden empfangen",

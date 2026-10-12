@@ -7,7 +7,6 @@ import { RemoteClipboard } from "@/libs/application/remote-clipboard";
 import { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 import { resolveRemotePointerOptions } from "@/libs/domain/remote-control/pointer-options";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
-import { FileContentCapabilities } from "@/libs/application/transfer/file-content-capabilities";
 import { completeLocalFile } from "@/libs/application/transfer/file-content-completion";
 import {
   createEffect,
@@ -53,6 +52,7 @@ import type {
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { ConversationHistoryService } from "@/libs/application/messaging/conversation-history-service";
 import { catchError } from "@/libs/catch";
+import { SpeedTestError } from "@/libs/domain/speed-test-protocol";
 import {
   SpeedTestService,
   type SpeedTestState,
@@ -110,11 +110,11 @@ export function createAppState(
     );
   const rtc = createRtcService();
   const protocol = createRtcProtocol();
-  const fileContent = new FileContentCapabilities(
-    protocol,
-    rtc,
-  );
-  onCleanup(() => fileContent.dispose());
+  const waitForCapabilities = (
+    session: PeerSession,
+    signal: AbortSignal,
+  ) =>
+    sessionService.capabilities.whenReady(session, signal);
   const messaging = new PeerMessagingService(
     protocol,
     messageStores,
@@ -162,10 +162,26 @@ export function createAppState(
     >({});
   const roomMessaging = new RoomMessagingService(protocol, {
     supportsFiles: true,
+    waitForCapabilities,
+    remoteChat: (session) => {
+      const services =
+        sessionService.capabilities.get(session);
+      return services && services.room?.chat === true;
+    },
+    remoteFiles: (session) => {
+      const services =
+        sessionService.capabilities.get(session);
+      return (
+        services &&
+        services.room?.files === true &&
+        !!services.files
+      );
+    },
     onFileSending: (id) =>
       cacheManager.library.setShared(id, true),
     supportsContent: (session) =>
-      fileContent.supports(session),
+      sessionService.capabilities.get(session)?.files
+        ?.content === true,
     reuseFile: (message, signal) =>
       files.reuseRoomOffer(message, signal),
     onFileReused: async (message, peerId) => {
@@ -209,6 +225,13 @@ export function createAppState(
       roomMessaging.syncSessions();
     });
   });
+  createEffect(() => {
+    for (const session of Object.values(
+      sessionService.sessions,
+    ))
+      sessionService.capabilities.get(session);
+    untrack(() => roomMessaging.refreshCapabilities());
+  });
   onCleanup(() => roomMessaging.dispose());
   cacheManager.isCacheInUse = (cache) =>
     transferManager.isCacheInUse(cache);
@@ -223,8 +246,15 @@ export function createAppState(
     getChunkSize: () => appState.options.chunkSize,
     automaticCacheDeletion: () =>
       appState.options.automaticCacheDeletion,
+    waitForCapabilities: (session, signal) =>
+      sessionService.capabilities.require(
+        session,
+        ["files"],
+        signal,
+      ),
     supportsContent: (session) =>
-      fileContent.supports(session),
+      sessionService.capabilities.get(session)?.files
+        ?.content === true,
     validateRoomReady: (session, message) => {
       roomMessaging.validateFileBinding(
         session,
@@ -238,6 +268,11 @@ export function createAppState(
   const maxRemoteFileBytes = () =>
     appState.options.remoteFileMaxSize;
   const remoteClipboard = new RemoteClipboard({
+    supported: (session) =>
+      !!sessionService.capabilities.get(session)?.clipboard,
+    supportsInline: (session) =>
+      sessionService.capabilities.get(session)?.clipboard
+        ?.inlineText === true,
     maxFileBytes: maxRemoteFileBytes,
     platform,
     host: sessionService.remoteControl,
@@ -275,6 +310,8 @@ export function createAppState(
   });
   onCleanup(() => remoteClipboard.dispose());
   const remoteFileDrop = new RemoteFileDrop({
+    supported: (session) =>
+      !!sessionService.capabilities.get(session)?.fileDrop,
     maxFileBytes: maxRemoteFileBytes,
     platform,
     host: sessionService.remoteControl,
@@ -360,7 +397,8 @@ export function createAppState(
     getSession: (id) => sessionService.sessions[id],
     canShare: canShareFiles,
     supports: (session) =>
-      fileContent.supportsShared(session),
+      sessionService.capabilities.get(session)?.files
+        ?.shared === true,
     reportError: (error) =>
       toast.error(
         userErrorMessage(error, "errors.file_failed"),
@@ -383,7 +421,8 @@ export function createAppState(
       sessionService.sessions[session.targetClientId] ===
         session && session.isMessageChannelReady,
     supports: (session) =>
-      fileContent.supportsShared(session),
+      sessionService.capabilities.get(session)?.files
+        ?.shared === true,
     canList: canShareFiles,
     onSessionClosed: (handler) =>
       rtc.onSessionClosed(handler),
@@ -425,6 +464,14 @@ export function createAppState(
       status: "idle",
       peerId: null,
     });
+  createEffect(() =>
+    sessionService.setSpeedTestBusy(
+      speedTestState().status === "running" ||
+        Object.values(appState.transfer.transfers).some(
+          Boolean,
+        ),
+    ),
+  );
   const speedTests = new SpeedTestService({
     getConnection: (peerId) =>
       appState.session.sessions[peerId]?.peerConnection,
@@ -436,8 +483,16 @@ export function createAppState(
       setSpeedTestState(state);
       tasks.recordSpeedTest(state);
     },
-    approve: (peerId, signal) =>
-      speedTestApproval.request(
+    approve: async (peerId, signal) => {
+      const session = sessionService.sessions[peerId];
+      if (!session) return false;
+      const services =
+        await sessionService.capabilities.whenReady(
+          session,
+          signal,
+        );
+      if (!services.speedTest) return false;
+      return speedTestApproval.request(
         peerId,
         appState.session.clientViewData[peerId]?.name ??
           appState.message.clients.find(
@@ -445,7 +500,8 @@ export function createAppState(
           )?.name ??
           peerId,
         signal,
-      ),
+      );
+    },
   });
   onCleanup(() => speedTests.dispose());
 
@@ -774,6 +830,9 @@ export function createAppState(
       const session = sessionService.sessions[target];
       if (!session)
         throw new Error(`session ${target} not found`);
+      await sessionService.capabilities.require(session, [
+        "files",
+      ]);
       await action(session);
     });
 
@@ -888,7 +947,8 @@ export function createAppState(
     catalog,
     sharedFiles,
     supportsSharedFiles: (session) =>
-      fileContent.supportsShared(session),
+      sessionService.capabilities.get(session)?.files
+        ?.shared === true,
     retryMessage,
     requestFile,
     resumeFile,
@@ -896,8 +956,27 @@ export function createAppState(
     tasks,
     getSpeedTestState: tasks.latestSpeedTest,
     speedTestState,
+    peerCapabilities: (target) => {
+      const session = sessionService.sessions[target];
+      return session
+        ? sessionService.capabilities.get(session)
+        : undefined;
+    },
     speedTestApproval: speedTestApproval.pending,
-    startSpeedTest: (target) => speedTests.start(target),
+    startSpeedTest: async (target) => {
+      const session = sessionService.sessions[target];
+      if (!session)
+        throw new Error("Peer is not connected");
+      const caps =
+        await sessionService.capabilities.whenReady(
+          session,
+        );
+      if (!caps.speedTest)
+        throw new SpeedTestError("unsupported");
+      if (caps.speedTest.busy)
+        throw new SpeedTestError("busy");
+      await speedTests.start(target);
+    },
     cancelSpeedTest: (target) => speedTests.cancel(target),
     approveSpeedTest: (target) => {
       speedTestApproval.accept(target);

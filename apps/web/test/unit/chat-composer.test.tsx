@@ -22,10 +22,14 @@ import {
   roomConversationId,
 } from "@/libs/domain/conversation";
 import { deferred } from "../support/rtc-transport";
-import { Show } from "solid-js";
+import { Show, createSignal } from "solid-js";
+import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 import { setAppState } from "@/libs/state/app-state";
 
 const service = vi.hoisted(() => ({
+  capabilities: (() => undefined) as () =>
+    | PeerCapabilities
+    | undefined,
   sendText: vi.fn(),
   sendFile: vi.fn(),
   preview: vi.fn(),
@@ -35,6 +39,7 @@ const service = vi.hoisted(() => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    peerCapabilities: () => service.capabilities(),
     conversationMessaging: {
       sendText: (id: string, text: string) =>
         service.sendText(
@@ -116,6 +121,10 @@ const alice = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  service.capabilities = () => ({
+    messaging: {},
+    files: { content: true, shared: true },
+  });
   sessionStorage.clear();
   service.sendText.mockReset();
   service.sendText.mockResolvedValue(undefined);
@@ -611,4 +620,54 @@ describe("shared chat composer adapters", () => {
     expect(service.sendText).toHaveBeenCalledOnce();
     expect(aliceText.value).toBe("Alice draft");
   });
+});
+
+it("independently disables chat and attachments as negotiated capabilities change", async () => {
+  const [remote, setRemote] =
+    createSignal<PeerCapabilities>();
+  service.capabilities = remote;
+  const { container } = render(() => (
+    <ChatBar client={alice} />
+  ));
+  const input = screen.getByRole("textbox");
+  const attach = screen.getByRole("button", {
+    name: "conversations.attach_file",
+  });
+  expect(input).toBeDisabled();
+  expect(attach).toHaveAttribute("aria-disabled", "true");
+  setRemote({ messaging: {} });
+  expect(input).not.toBeDisabled();
+  expect(attach).toHaveAttribute("aria-disabled", "true");
+  const fileInput = container.querySelector(
+    'input[data-attachment="file"]',
+  )!;
+  fireEvent.change(fileInput, {
+    target: { files: [new File(["file"], "disabled.txt")] },
+  });
+  expect(service.sendFile).not.toHaveBeenCalled();
+  fireEvent.input(input, {
+    target: { value: "Still chatting" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "common.action.send",
+    }),
+  );
+  await waitFor(() =>
+    expect(service.sendText).toHaveBeenCalledWith(
+      "Still chatting",
+      "alice",
+    ),
+  );
+  setRemote({ files: { content: true, shared: true } });
+  expect(input).toBeDisabled();
+  await waitFor(() =>
+    expect(attach).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    ),
+  );
+  setRemote({});
+  expect(input).toBeDisabled();
+  expect(attach).toHaveAttribute("aria-disabled", "true");
 });

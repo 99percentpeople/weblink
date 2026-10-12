@@ -108,10 +108,6 @@
       },
       "background_image_opacity": {
         "title": "Wallpaper Opacity"
-      },
-      "wake_lock": {
-        "title": "Keep Screen On",
-        "description": "When enabled, the app will keep the screen on"
       }
     },
     "list": {
@@ -334,6 +330,10 @@
       "native_audio_codec": "Native audio codec"
     },
     "remote_control": {
+      "whitelist_only": {
+        "title": "Expose remote control capability",
+        "description": "Only expose remote control to clients set to Auto-approve (allowlist) in Permissions, and ignore other control requests. Blocklisted clients can never discover or request control."
+      },
       "description": "Choose how this device’s touch gestures control a remote screen.",
       "mode": {
         "title": "Touch mode",
@@ -465,6 +465,10 @@
       "delete_requires_disconnect": "Disconnect from this client before deleting its permission history."
     },
     "application": {
+      "wake_lock": {
+        "title": "Keep Screen On",
+        "description": "When enabled, the app will keep the screen on"
+      },
       "automatic_pip_desktop_description": "Shrink the meeting into an always-on-top window when Weblink goes into the background. Use Return to meeting to restore the window.",
       "autostart": "Launch at startup",
       "autostart_description": "Start Weblink automatically when you sign in to this computer.",
@@ -1259,6 +1263,7 @@
     "connection_timeout": "Connecting to the room server timed out. Check your network and try again.",
     "connection_closed": "The connection was interrupted. Reconnect and try again.",
     "connection_config": "The room server address or configuration is invalid. Check the connection settings.",
+    "unsupported_protocol": "This feature has no compatible protocol version. Update both clients.",
     "connection_response": "The server returned an invalid response. Check its address or update the app and server.",
     "password_required": "This room requires a password. Enter it and try again.",
     "incorrect_password": "The room password is incorrect. Check it and try again.",
@@ -1286,6 +1291,7 @@
     "ice_auth_line": "Line {{line}} has an unsupported authentication method. Use longterm or hmac."
   },
   "remote_control": {
+    "busy": "In use",
     "clipboard_transfer": {
       "sending": "Sending clipboard files",
       "receiving": "Receiving clipboard files",

@@ -332,7 +332,7 @@ pub struct Status {
     pub input_suspended: bool,
     pub pan_supported: bool,
     pub touch_supported: bool,
-    pub pending_consent: Option<String>,
+    pub pending_consents: Vec<String>,
     pub grant: Option<Grant>,
     pub failure: Option<Error>,
     pub closed: bool,
@@ -535,14 +535,14 @@ impl<D: Device> Engine<D> {
     pub fn status(&mut self) -> Status {
         let grant = self.authority.grant().cloned();
         let closed = self.authority.is_closed();
-        let pending_consent = self.authority.pending_consent().map(str::to_owned);
+        let pending_consents = self.authority.pending_consents();
         let state = self.authority.backend_mut();
         Status {
             devices: state.device.snapshot(),
             input_suspended: state.interrupted,
             pan_supported: state.device.backend.pan_supported(),
             touch_supported: state.device.backend.touch_supported(),
-            pending_consent,
+            pending_consents,
             grant,
             closed,
             failure: state.failure,

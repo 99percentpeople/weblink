@@ -46,8 +46,11 @@ export function ChatConversation(props: {
   embedded?: boolean;
   onBack?: () => void;
 }) {
-  const { conversationMessaging, sendClipboard } =
-    useAppState();
+  const {
+    conversationMessaging,
+    sendClipboard,
+    peerCapabilities,
+  } = useAppState();
   const routeLocation = useLocation();
   const client = createMemo<Client | null>(
     () =>
@@ -130,7 +133,11 @@ export function ChatConversation(props: {
   );
 
   const onClipboard = (ev: ClipboardEvent) => {
-    if (!canSend()) return;
+    if (
+      !canSend() ||
+      !peerCapabilities(props.clientId)?.clipboard
+    )
+      return;
     if (
       props.embedded &&
       !(
@@ -147,6 +154,7 @@ export function ChatConversation(props: {
           if (
             data &&
             canSend() &&
+            !!peerCapabilities(props.clientId)?.clipboard &&
             props.clientId === s.targetClientId
           ) {
             void sendClipboard(data, s.targetClientId);
@@ -230,7 +238,10 @@ export function ChatConversation(props: {
         container = element;
       }}
       conversationKey={conversationId()}
-      disabled={!canSend()}
+      disabled={
+        !canSend() ||
+        !peerCapabilities(props.clientId)?.files
+      }
       onSendFile={async (file) => {
         await conversationMessaging.sendFile(
           conversationId(),

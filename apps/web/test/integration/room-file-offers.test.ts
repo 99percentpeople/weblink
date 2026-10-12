@@ -13,7 +13,6 @@ import {
 import { P2PProtocol } from "@/libs/domain/protocol/protocol";
 import {
   createSessionMessage,
-  ROOM_FILE_FEATURE,
   type RoomCapabilitiesMessage,
   type SendRoomFileMessage,
 } from "@/libs/domain/protocol/messages";
@@ -45,8 +44,8 @@ const info = {
 };
 
 function setup(
-  peers: Record<string, string[] | undefined> = {
-    peer: [ROOM_FILE_FEATURE],
+  peers: Record<string, boolean | undefined> = {
+    peer: true,
   },
   acknowledge = true,
   supportsFiles = true,
@@ -90,8 +89,11 @@ function setup(
   };
   const onFileReceived =
     vi.fn<(message: FileTransferMessage) => void>();
+  const waitForCapabilities = vi.fn(async () => {});
   const service = new RoomMessagingService(protocol, {
     supportsFiles,
+    waitForCapabilities,
+    remoteFiles: (session) => peers[session.targetClientId],
     onFileReceived,
     getRoom: () => state.room,
     getSessions: () => [...sessions.values()],
@@ -132,7 +134,6 @@ function setup(
           {
             roomId: "room",
             token: `${session.targetClientId}-token`,
-            features: peers[session.targetClientId],
           },
           {
             id: `cap-${message.id}`,
@@ -197,6 +198,8 @@ function setup(
     protocol.dispose();
   });
   return {
+    peers,
+    waitForCapabilities,
     service,
     transport,
     state,
@@ -214,6 +217,30 @@ function setup(
 }
 
 describe("room file offers", () => {
+  it("waits for a delayed capability snapshot when an offer arrives first on an unordered channel", async () => {
+    const f = setup({ peer: undefined });
+    await f.sync();
+    expect(f.service.fileCapabilities.peer).toBe(
+      "checking",
+    );
+    const discovery = deferred<void>();
+    f.waitForCapabilities.mockReturnValue(
+      discovery.promise,
+    );
+    const receiving = f.transport.emit(
+      f.sessions.get("peer")!,
+      f.incoming(),
+    );
+    await flushRtc();
+    expect(f.messages.size).toBe(0);
+    f.peers.peer = true;
+    f.service.refreshCapabilities();
+    discovery.resolve();
+    await receiving;
+    expect(f.messages.get("incoming")?.status).toBe(
+      "received",
+    );
+  });
   it("rejects a file prepared before leaving and rejoining the same room", async () => {
     const fixture = setup();
     await fixture.sync();
@@ -259,10 +286,6 @@ describe("room file offers", () => {
               change === "rotated-token"
                 ? "replacement-token"
                 : "peer-token",
-            features:
-              change === "withdrawn-feature"
-                ? []
-                : [ROOM_FILE_FEATURE],
           },
           {
             createdAt:
@@ -270,6 +293,10 @@ describe("room file offers", () => {
           },
         ),
       );
+      if (change === "withdrawn-feature") {
+        fixture.peers.peer = false;
+        fixture.service.refreshCapabilities();
+      }
       expect(binding.signal.aborted).toBe(true);
       expect(() => binding.assertCurrent()).toThrow();
       if (change === "withdrawn-feature")
@@ -278,11 +305,11 @@ describe("room file offers", () => {
         );
     },
   );
-  it("keeps text compatible with room v1 peers and sends metadata only to file-capable peers", async () => {
+  it("sends file metadata only to peers advertising room file support", async () => {
     const fixture = setup({
-      modern: [ROOM_FILE_FEATURE],
-      old: undefined,
-      future: ["another-feature"],
+      modern: true,
+      old: false,
+      future: false,
     });
     await fixture.sync();
     expect(fixture.service.capabilities).toEqual({
@@ -295,9 +322,9 @@ describe("room file offers", () => {
       old: "unsupported",
       future: "unsupported",
     });
-    expect(fixture.offers.get("modern")!.features).toEqual([
-      ROOM_FILE_FEATURE,
-    ]);
+    expect(fixture.offers.get("modern")).not.toHaveProperty(
+      "features",
+    );
     await fixture.service.sendFile(
       info,
       fixture.service.currentScopeKey!,
@@ -342,9 +369,9 @@ describe("room file offers", () => {
   it("does not advertise or accept file offers when local support is disabled", async () => {
     const fixture = setup(undefined, true, false);
     await fixture.sync();
-    expect(
-      fixture.offers.get("peer")!.features ?? [],
-    ).not.toContain(ROOM_FILE_FEATURE);
+    expect(fixture.service.fileCapabilities.peer).toBe(
+      "unsupported",
+    );
     const message = fixture.incoming();
     await fixture.transport.emit(
       fixture.sessions.get("peer")!,
@@ -493,9 +520,9 @@ describe("room file offers", () => {
 
   it("retries only failed original file recipients, leaving successful and later peers untouched", async () => {
     const peers = {
-      a: [ROOM_FILE_FEATURE],
-      b: [ROOM_FILE_FEATURE],
-    } as Record<string, string[]>;
+      a: true,
+      b: true,
+    } as Record<string, boolean>;
     const fixture = setup(peers);
     await fixture.sync();
     fixture.failed.add("b");
@@ -508,7 +535,7 @@ describe("room file offers", () => {
       fixture.messages.get("outgoing")!.deliveries,
     ).toEqual({ a: "delivered", b: "failed" });
     fixture.failed.clear();
-    peers.c = [ROOM_FILE_FEATURE];
+    peers.c = true;
     fixture.addPeer("c");
     await fixture.sync();
     const before = fixture.transport.sendCalls.length;

@@ -294,3 +294,17 @@ it.each([null, [], "broken", 42])(
     });
   },
 );
+
+it.each([true, false, "true", null])(
+  "persists a boolean control visibility preference and rejects malformed values (%j)",
+  async (value) => {
+    store({ remoteControlWhitelistOnly: value });
+    const { appState } = await boot();
+    expect(
+      appState.options.remoteControlWhitelistOnly,
+    ).toBe(value === true);
+    expect(saved().remoteControlWhitelistOnly).toBe(
+      value === true,
+    );
+  },
+);
