@@ -147,3 +147,10 @@ Windows 画面是微软公开的演示素材，通过浏览器标签页共享：
 
 托管服务若从仓库根目录执行构建，可使用 `bun run build:www`，
 输出目录设置为 `apps/www/dist`。本项目独立于现有 Web 应用的部署流程。
+
+正式站点为 https://www.webl.ink，对应独立的 Cloudflare Pages 项目
+`weblink-www`（生产分支 `public`）。稳定版本标签 `vX.Y.Z` 的 CI 检查通过后，
+`www-production.yml` 部署宣传站，并通过域名上的 `version.json` 核对提交。
+应用入口 https://webl.ink 继续使用原有的 `weblink` 项目。
+`www.webl.ink` 在该项目中绑定为自定义域名，DNS 使用开启代理的 CNAME
+指向 `weblink-www.pages.dev`。常规发布只更新站点文件，不修改 DNS。

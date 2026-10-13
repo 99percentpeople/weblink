@@ -280,6 +280,13 @@ packages. Mark the stable release as Latest so the marketing site's download
 button opens it. The workflow prepares these files but does not publish the
 GitHub Release itself.
 
+The same stable tag also calls `www-production.yml` to deploy `apps/www/dist`
+to the separate `weblink-www` Pages project (production branch `public`). Its
+custom domain is `www.webl.ink`, with a proxied CNAME to `weblink-www.pages.dev`.
+The job verifies the deployed commit through the domain's uncached `version.json`.
+The application remains on `webl.ink` in the existing `weblink` project. Custom
+domain binding and DNS are configured once in Cloudflare, not changed by CI.
+
 ### Continuous development channel
 
 `https://dev.webl.ink` follows the latest successful push to `public`. The

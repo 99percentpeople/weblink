@@ -2,9 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - Unreleased
-
-### 中文
+## [1.1.0] - 2026-10-13
 
 Weblink 1.1.0 为 Windows 桌面端加入原生屏幕共享与远程控制。你可以从另一台电脑或手机查看和操作 Windows 桌面，并在同一会话中聊天、开会和交换文件。本次更新也完善了桌面窗口、通知、更新检查和多语言体验。
 
@@ -34,6 +32,8 @@ Weblink 1.1.0 为 Windows 桌面端加入原生屏幕共享与远程控制。你
 #### 稳定性与修复
 
 - 修复多位接收端加入、自动编码格式切换时旧编码器未释放导致新画面无法加载的问题。
+- 修复远程文件拖放的悬停、权限及意外中断问题；拖动期间只处理最新待更新位置，开始拖动和最终放下保留确认，避免过期坐标影响落点。
+- 修复网页端复制远端图片文件后未接收的问题；受限剪贴板文件模式仅支持 PNG/JPG，并与文件缓存模式保持独立。
 - 修复桌面恢复窗口时的死锁、过期的开机启动路径及原生共享恢复问题；改善短暂拥塞、断线、全屏切换及焦点变化后的输入恢复，释放残留按键和触点。
 - 修复桌面聊天附件和文件库点击下载无反应、文件重试卡住、远程文件拖放过早报告完成，以及浏览器剪贴板能力受限时可用操作被隐藏的问题。
 - 修复头像缩写受到“自己”等显示标签影响的问题，统一画面名称、控制状态和权限开关的展示；完善画中画恢复、全屏浮层及弹窗内的请求审批。
@@ -47,8 +47,6 @@ Weblink 1.1.0 为 Windows 桌面端加入原生屏幕共享与远程控制。你
 - HEVC 需要可用的硬件编码器及支持 WebRTC H.265 的接收端。当前原生传输为 **8 位 SDR YUV 4:2:0**，不提供 HDR 或 RGB／4:4:4 模式；分辨率和帧率设置是上限，实际表现取决于设备与网络。
 - **请将参与同一会话的客户端一并升级**：本版改用带版本的功能能力协商，不保留旧的无版本协议回退。旧客户端可能仍显示在线，但无法使用未协商成功的聊天、文件或控制功能。自部署信令服务还需支持 v2 入房确认。
 - 应用内更新面向正式 Windows 版本；开发测试包不检查或安装正式更新。安装更新会结束当前会话并重启应用，免安装版继续采用手动替换。Web 与桌面端统一使用应用版本号，正式发布说明附带该版本的安装包和 ZIP 下载链接。
-
-### English
 
 Weblink 1.1.0 brings native Windows screen sharing and remote control. View and operate a Windows desktop from another computer or phone while chatting, meeting and exchanging files in the same session. This release also improves desktop window behavior, notifications, update checks and localization.
 
@@ -78,6 +76,8 @@ Weblink 1.1.0 brings native Windows screen sharing and remote control. View and 
 #### Stability and fixes
 
 - Release retired encoders before replacing streams so additional receivers and automatic codec changes do not leave new screens unable to load.
+- Fix remote file hover, permission failures and unexpected drag interruptions. Keep only the latest pending position during movement, acknowledge startup and final drop, and prevent stale positions from changing the destination.
+- Fix receiving copied remote image files in browsers. Limited clipboard file mode supports PNG/JPG and remains separate from file-cache mode.
 - Fix desktop resume deadlocks, stale autostart paths and native sharing recovery; improve input recovery after congestion, disconnection, fullscreen and focus changes, releasing stale held keys and contacts.
 - Fix desktop attachment/library downloads that did nothing, stalled file retries, premature remote-drop completion and hidden clipboard actions on browsers with limited capabilities.
 - Derive avatar initials from original names, unify video labels and control/permission states, and repair picture-in-picture restoration, fullscreen overlays and request actions while dialogs are open.

@@ -122,3 +122,14 @@ jobs:
       github.event.deleted != true
     uses: ./.github/workflows/desktop-production.yml
     secrets: inherit
+
+  deploy-www:
+    name: Deploy marketing website
+    needs: checks
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.event_name == 'push' &&
+      github.ref_type == 'tag' &&
+      github.event.deleted != true
+    uses: ./.github/workflows/www-production.yml
+    secrets: inherit
