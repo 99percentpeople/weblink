@@ -2,47 +2,95 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 2026-10-06
+## [1.1.0] - Unreleased
 
-Weblink 1.1 adds native Windows screen sharing and remote control, with mobile
-input, clipboard and file exchange, and improved desktop and room management.
-Weblink 1.1 新增 Windows 原生屏幕共享与远程控制，支持移动端输入、剪贴板和文件交换，并完善桌面端体验与房间管理。
+### 中文
 
-### Major Changes
+Weblink 1.1.0 为 Windows 桌面端加入原生屏幕共享与远程控制。你可以从另一台电脑或手机查看和操作 Windows 桌面，并在同一会话中聊天、开会和交换文件。本次更新也完善了桌面窗口、通知、更新检查和多语言体验。
 
-- Add native Windows display and window sharing with source previews, DXGI/WGC capture, system audio on supported systems, and available software encoders or H.264/HEVC hardware encoding 新增 Windows 原生显示器与窗口共享，支持来源预览、DXGI/WGC 采集、受支持系统上的系统音频，以及可用的软件编码器或 H.264/HEVC 硬件编码
-- Add remote mouse and keyboard control of Windows display shares from browser and desktop clients, with local approval, remembered allow/deny rules, screen requests, synchronized cursor appearance, and customizable input-release and emergency-revocation shortcuts 新增浏览器与桌面客户端对 Windows 显示器共享的远程鼠标和键盘控制，支持本机授权、记住允许或拒绝规则、请求共享屏幕、同步光标外观，以及自定义输入释放和紧急撤销快捷键
-- Add mobile trackpad and direct-touch control, configurable gestures and sampling, soft-keyboard and IME input, and optional keyboard visibility following the remote text field 新增移动端触控板与直接触摸控制，支持可配置手势和采样率、软键盘与输入法输入，以及按远端文本框焦点自动显示或隐藏键盘
-- Add opt-in remote clipboard synchronization for text, rich text, images and files, with browser capability checks, file copies to the clipboard or local library, ZIP conversion for folders, and cancellable file-transfer progress 新增可选的远程剪贴板同步，支持文本、富文本、图片与文件，按浏览器能力启用，将复制的文件写入剪贴板或本机文件库，将文件夹转换为 ZIP，并显示可取消的文件传输进度
-- Add opt-in file drag-and-drop onto controlled Windows screens, copying local files into compatible remote applications; share a configurable per-operation file limit with clipboard transfers, defaulting to 64 MiB and supporting up to 512 MiB 新增可选的远程文件拖放，将本地文件拖入受控 Windows 画面中的兼容应用；与剪贴板文件传输共用单次大小限制，默认 64 MiB，最高可设为 512 MiB
+#### 屏幕共享与远程控制
 
-### Improvements
+- **Windows 原生共享**：支持选择显示器或窗口并预览来源，提供 DXGI / Windows Graphics Capture 采集和受支持系统上的系统音频。根据设备能力使用软件编码或 H.264 / HEVC 硬件编码。
+- **跨设备操作**：浏览器和桌面客户端可请求查看或控制 Windows 显示器共享，支持鼠标、键盘、光标外观同步及指针捕获。手机支持触控板、直接触摸、手势、软键盘和输入法，可选跟随远端文本框焦点显示键盘。
+- **明确的授权与占用状态**：支持逐次批准、记住允许或拒绝规则，以及控制能力的可见性设置。多方可同时发起请求，同一时刻只授予一个控制方，并向其他成员显示占用状态。可自定义释放输入和紧急撤销控制的快捷键。
+- **可选手柄转发**：支持标准映射手柄、摇杆死区、基本双马达振动及振动强度设置。被控 Windows 需要可用的 ViGEmBus 驱动；手柄不可用时仍可使用键盘和鼠标。
+- **媒体参数与兼容性**：支持实时调整分辨率、帧率和码率，提供显示器高刷新率选项、音频编码／采样率／声道、SDR 色彩设置及流统计。自动编码模式按所有已连接接收端的共同能力选择格式，成员变化时重新协商。
 
-- Use the frontend application version for Web and desktop About, copied version information, build metadata and desktop installers Web 与桌面端的“关于”、复制版本信息、构建元数据及桌面安装包统一使用前端应用版本
-- Expand desktop window behavior with tray controls, configurable close actions, launch-at-login preferences, optional hiding after control approval, and a resizable always-on-top native picture-in-picture mode that preserves the meeting and control session 完善桌面端窗口行为，新增托盘操作、可配置关闭行为、开机启动设置、批准远程控制后自动隐藏选项，以及保留会议和控制会话的可缩放置顶原生画中画模式
-- Unify browser and Windows notifications for messages, control requests, speed-test requests and completed transfers, with configurable previews and sound; Windows notifications support inline replies and request approval 统一浏览器与 Windows 的消息、远程控制请求、测速请求及传输完成通知，支持配置内容预览和声音；Windows 通知支持直接回复与批准请求
-- Add recent-room selection with saved connection details, unify client and room permission management, and order conversations and permission records by persisted activity; move automatic-download size limits into shared transfer settings while preserving per-room switches 新增保存连接信息的最近房间选择，统一客户端与房间权限管理，按持久化活动时间排列会话和权限记录；将自动下载大小限制移至统一传输设置，并保留各房间的独立开关
-- Expand media settings with live resolution, frame-rate and bitrate changes, display-derived high-refresh options, audio codec/sample-rate/channel controls, SDR color settings, and per-stream diagnostics 完善媒体设置，支持实时调整分辨率、帧率与码率，按显示器刷新率提供高帧率选项，并新增音频编码、采样率、声道、SDR 色彩设置及各路媒体诊断信息
-- Reduce background work by generating source previews on demand, pausing hidden previews and diagnostics, and waking native workers on events while preserving active sharing and control; reduce desktop package size 减少后台资源占用，按需生成来源预览、暂停隐藏画面的预览和诊断，并按事件唤醒原生工作线程，同时保持共享和控制会话；缩减桌面程序体积
-- Unify settings controls and dialog layouts, improve keyboard focus behavior, and refine meeting-tile actions for mouse hover, touch and fullscreen use 统一设置控件与弹窗布局，改善键盘焦点行为，并优化画面操作按钮在鼠标悬停、触摸及全屏场景下的使用体验
+#### 剪贴板与文件交换
 
-### Fixes
+- **按需启用剪贴板同步**：支持文本、富文本、图片及文件，按浏览器实际读写能力开放可用操作。文件可写入系统剪贴板或本地文件库，文件夹转换为 ZIP；传输显示进度并支持取消。
+- **拖入远端应用**：可将本地文件拖到受控 Windows 画面中的兼容应用，等待远端接收结果后反馈。与剪贴板文件传输共用单次大小限制，默认 64 MiB，最高可设为 512 MiB。
+- **桌面文件保存**：聊天附件、文件库、媒体预览和二维码使用系统“另存为”对话框，默认打开系统下载目录并填写原文件名。启用自动下载后，已接收文件保存到下载目录，重名文件自动编号。
+- **保留图片文件名**：聊天图片拖出保存时携带实际文件名和扩展名，避免使用临时 blob 地址中的 ID 命名。
 
-- Restore password-protected room interoperability over LAN HTTP with a shared PBKDF2/AES-GCM implementation when Web Crypto is unavailable, and reject joining if password preparation fails 修复局域网 HTTP 下密码房间的互通问题，在 Web Crypto 不可用时使用一致的 PBKDF2/AES-GCM 实现，并在密码准备失败时中止加入房间
-- Fix desktop resume deadlocks, stale startup paths and native sharing recovery; improve remote-control recovery after transient congestion or connection interruptions and release stale held input 修复桌面端恢复窗口时的死锁、失效的启动路径及原生共享恢复问题；改进短暂拥塞或连接中断后的远程控制恢复，并释放残留按键与触点
-- Fix stalled file retries by deduplicating retransmitted blocks, clearing failed decoding state and ignoring late results after a transfer is paused 修复文件重试卡住的问题，对重传区块去重、清理失败的解码状态，并忽略传输暂停后迟到的处理结果
-- Correct native stream color metadata, duplicate encoder choices, picture-in-picture restoration and fullscreen overlays; keep request approval actions usable while dialogs are open 修正原生媒体流的色彩元数据、重复编码器选项、画中画恢复及全屏浮层问题，并保证弹窗打开时仍可操作请求审批按钮
+#### 桌面体验、房间与界面
 
-### Compatibility Notes
+- **桌面窗口与通知**：加入托盘、关闭行为、开机启动和批准控制后自动隐藏设置；原生画中画可缩放、置顶并保留会话。统一消息、请求和传输通知，支持内容预览与声音设置，Windows 通知可直接回复或处理请求。
+- **正式版更新检查**：“设置 → 关于”提供手动检查和默认开启的启动检查开关。发现更新时显示 toast，并按通知设置发送系统通知；检查不会自动下载安装。安装版经用户确认后校验更新包签名、安装并重启；免安装版提供对应版本的 ZIP 下载入口，下载后手动替换。
+- **房间与权限管理**：新增保存连接信息的最近房间列表，统一客户端和房间权限，按最近活动排列会话与权限记录。自动下载大小限制集中到传输设置，保留各房间的独立开关。
+- **八种界面语言**：支持简体中文、繁体中文、英语、日语、韩语、西班牙语、法语和德语，支持跟随系统语言与主题。改善设置弹窗、移动端布局、键盘焦点及全屏／触摸下的画面操作栏。
+- **宣传页**：新增独立宣传站点，使用桌面和手机内的英文软件截图演示远程桌面、视频会议、聊天和共享文件，支持八种语言、明暗主题与自动轮播，桌面下载入口指向最新 GitHub Release。
 
-- Native hosting features target Windows; browser clients can control supported Windows display shares, while window shares remain view-only. Remote input requires host approval or an existing allow rule 原生被控功能面向 Windows；浏览器客户端可控制受支持的 Windows 显示器共享，窗口共享仅支持观看。远程输入需要被控端批准或已有允许规则
-- HEVC requires a compatible host hardware encoder and a receiver exposing H.265 support in WebRTC. Native screen streaming remains 8-bit SDR YUV 4:2:0 HEVC 需要兼容的被控端硬件编码器，以及在 WebRTC 中提供 H.265 支持的接收端。原生屏幕传输仍采用 8 位 SDR YUV 4:2:0
-- Self-hosted signaling servers must return the version 2 join acknowledgment; a missing acknowledgment now fails joining after ten seconds instead of treating an open socket as successful room membership 自部署信令服务必须返回 v2 入房确认；未收到确认时将在十秒后判定加入失败，不再将 WebSocket 已连接视为成功入房
+#### 稳定性与修复
 
-### Infrastructure
+- 修复多位接收端加入、自动编码格式切换时旧编码器未释放导致新画面无法加载的问题。
+- 修复桌面恢复窗口时的死锁、过期的开机启动路径及原生共享恢复问题；改善短暂拥塞、断线、全屏切换及焦点变化后的输入恢复，释放残留按键和触点。
+- 修复桌面聊天附件和文件库点击下载无反应、文件重试卡住、远程文件拖放过早报告完成，以及浏览器剪贴板能力受限时可用操作被隐藏的问题。
+- 修复头像缩写受到“自己”等显示标签影响的问题，统一画面名称、控制状态和权限开关的展示；完善画中画恢复、全屏浮层及弹窗内的请求审批。
+- 修正原生流色彩元数据与重复编码器选项。按需生成来源预览、暂停隐藏预览与诊断，并以事件唤醒原生工作线程，减少空闲后台工作和桌面程序体积。
+- 修复局域网 HTTP 环境下密码房间互通，改进连接、文件解码失败后的清理和重试，避免迟到结果干扰已暂停或替换的任务。
 
-- Separate web and desktop development/production workflows behind shared checks, reuse desktop build outputs, and produce Windows NSIS installer artifacts for stable release tags 将 Web 与桌面端的开发及正式构建拆分为依赖统一检查的工作流，复用桌面构建产物，并为正式版本 tag 生成 Windows NSIS 安装包产物
-- Read public WebSocket/STUN build settings from GitHub Environment variables for both web and desktop builds; replace the former `PAGES_BUILD_ENV` secret with `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` variables Web 与桌面构建统一从 GitHub Environment variables 读取公开的 WebSocket/STUN 配置，以 `VITE_WEBSOCKET_URL` 和 `WEBLINK_STUN_SERVERS` 变量替代原有 `PAGES_BUILD_ENV` secret
+#### 安装、升级与兼容性
+
+- Windows 桌面端面向 **Windows 10 22H2 / Windows 11，x64**。正式发布提供安装包和免安装 ZIP：安装包按需安装 WebView2；免安装版需预先安装 WebView2 120 或更新版本，并将 `weblink-portable` 标记文件与程序保存在一起。
+- 原生被控端目前仅支持 Windows。显示器共享可远程控制，窗口共享仅支持观看；远程输入需要被控端批准或已有允许规则。手柄还受控制器映射、浏览器能力和被控端驱动限制，Weblink 不会自动安装驱动。
+- HEVC 需要可用的硬件编码器及支持 WebRTC H.265 的接收端。当前原生传输为 **8 位 SDR YUV 4:2:0**，不提供 HDR 或 RGB／4:4:4 模式；分辨率和帧率设置是上限，实际表现取决于设备与网络。
+- **请将参与同一会话的客户端一并升级**：本版改用带版本的功能能力协商，不保留旧的无版本协议回退。旧客户端可能仍显示在线，但无法使用未协商成功的聊天、文件或控制功能。自部署信令服务还需支持 v2 入房确认。
+- 应用内更新面向正式 Windows 版本；开发测试包不检查或安装正式更新。安装更新会结束当前会话并重启应用，免安装版继续采用手动替换。Web 与桌面端统一使用应用版本号，正式发布说明附带该版本的安装包和 ZIP 下载链接。
+
+### English
+
+Weblink 1.1.0 brings native Windows screen sharing and remote control. View and operate a Windows desktop from another computer or phone while chatting, meeting and exchanging files in the same session. This release also improves desktop window behavior, notifications, update checks and localization.
+
+#### Screen sharing and remote control
+
+- **Native Windows sharing:** choose and preview a display or window, use DXGI / Windows Graphics Capture and system audio on supported systems, and select available software or H.264 / HEVC hardware encoders.
+- **Cross-device input:** browser and desktop clients can request Windows display viewing or control, with mouse, keyboard, cursor appearance synchronization and pointer capture. Mobile clients support trackpad and direct-touch modes, gestures, software keyboards and IME input, with optional keyboard visibility following remote text focus.
+- **Consent and occupancy:** approve requests individually, remember allow/deny rules and configure control discovery. Multiple users may request access, but only one controller is granted access at a time; other peers see the occupied state. Input-release and emergency-revocation shortcuts are customizable.
+- **Optional gamepad forwarding:** standard-mapped controllers, stick dead zones, basic dual-motor vibration and strength controls are supported when the Windows host has an available ViGEmBus driver. Keyboard and mouse remain available if gamepad forwarding fails.
+- **Media controls:** change resolution, frame rate and bitrate while sharing; configure high-refresh options, audio formats, SDR color and stream statistics. Automatic encoding selects a common format across connected receivers and renegotiates when membership changes.
+
+#### Clipboard and file exchange
+
+- **Opt-in clipboard synchronization:** transfer text, rich text, images and files according to the browser's actual read/write capabilities. Copy received files to the clipboard or local library, convert folders to ZIP and track or cancel transfers.
+- **Remote file drops:** drag local files into compatible applications on the controlled Windows screen and wait for remote acceptance. File drops and clipboard file transfers share a per-operation limit of 64 MiB by default, configurable up to 512 MiB.
+- **Native desktop saving:** attachments, library files, media previews and QR codes use Save As, initially opening the system Downloads directory with the original filename. Automatic downloads save received files there and number filename collisions.
+- **Image filenames:** dragging a chat image out to save it carries its real filename and extension instead of the temporary blob URL's ID.
+
+#### Desktop, rooms and interface
+
+- **Windows and notifications:** tray controls, close actions, launch-at-login settings, optional hiding after control approval and resizable, always-on-top native picture-in-picture. Unified message, request and transfer notifications include preview/sound settings and Windows inline replies or request actions.
+- **Stable-release update checks:** Settings → About offers manual checks and an enabled-by-default startup-check switch. Available updates produce a toast and follow system notification preferences; checking never downloads or installs automatically. Installed builds verify the update signature before a user-confirmed installation and restart. Portable builds link to the matching release ZIP for manual replacement.
+- **Room management:** saved recent rooms, unified client/room permissions and activity-based ordering. Automatic-download size limits move into shared transfer settings while retaining per-room switches.
+- **Eight languages:** English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, French and German, with system language/theme preferences. Improved responsive settings, keyboard focus and fullscreen/touch meeting controls.
+- **Marketing website:** a separate site with English app screenshots in desktop and phone frames demonstrating remote desktops, meetings, chat and shared files; eight languages, light/dark themes, an automatic carousel and a latest-release desktop download entry.
+
+#### Stability and fixes
+
+- Release retired encoders before replacing streams so additional receivers and automatic codec changes do not leave new screens unable to load.
+- Fix desktop resume deadlocks, stale autostart paths and native sharing recovery; improve input recovery after congestion, disconnection, fullscreen and focus changes, releasing stale held keys and contacts.
+- Fix desktop attachment/library downloads that did nothing, stalled file retries, premature remote-drop completion and hidden clipboard actions on browsers with limited capabilities.
+- Derive avatar initials from original names, unify video labels and control/permission states, and repair picture-in-picture restoration, fullscreen overlays and request actions while dialogs are open.
+- Correct stream color metadata and duplicate encoders. Generate previews on demand, pause hidden previews/diagnostics, wake native workers on events and reduce desktop package size.
+- Restore password-protected rooms over LAN HTTP and improve cleanup and retries after connection or file-decoding failures so late results cannot affect paused or replaced work.
+
+#### Installation, upgrades and compatibility
+
+- Windows desktop targets **Windows 10 22H2 / Windows 11, x64**. Stable releases provide an installer and portable ZIP. The installer provisions WebView2 when needed; portable builds require WebView2 120+ and must retain the `weblink-portable` marker beside the executable.
+- Native hosting currently requires Windows. Display shares support remote control; window shares remain view-only. Input requires host consent or a saved allow rule. Gamepads also depend on controller mapping, browser support and host drivers; Weblink does not install drivers automatically.
+- HEVC requires a compatible hardware encoder and a WebRTC H.265-capable receiver. Native streaming remains **8-bit SDR YUV 4:2:0**, without HDR or RGB/4:4:4 modes. Resolution and frame-rate settings are limits, not throughput guarantees.
+- **Upgrade clients participating in a session together.** Versioned feature negotiation replaces the unversioned protocol without a legacy fallback. Older clients may appear online while chat, file or control features remain unavailable. Self-hosted signaling servers must also support version 2 join acknowledgments.
+- In-app updates apply to stable Windows builds; development builds do not check for or install stable updates. Installation ends active sessions and restarts the application; portable builds remain manually replaceable. Web and desktop share the application version, and release notes include version-specific installer and ZIP links.
 
 ## [1.0.7] - 2026-09-29
 

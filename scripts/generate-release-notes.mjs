@@ -57,8 +57,8 @@ Windows 10 22H2 / Windows 11 · x64
 
 | Package / 版本 | Download / 下载 | Usage / 使用方式 |
 | --- | --- | --- |
-| Installer / 安装版 | [Weblink-windows-x64-setup.exe](${download}/Weblink-windows-x64-setup.exe) | Run the installer; WebView2 is installed when needed. / 运行安装包，按需安装 WebView2。 |
-| Portable / 免安装版 | [Weblink-windows-x64-portable.zip](${download}/Weblink-windows-x64-portable.zip) | Extract and run weblink-desktop.exe; requires WebView2 120+ already installed. / 解压后运行 weblink-desktop.exe，需预先安装 WebView2 120 或更新版本。 |
+| Installer / 安装版 | [Weblink-windows-x64-setup.exe](${download}/Weblink-windows-x64-setup.exe) | Installs WebView2 when needed; supports signed, user-confirmed in-app updates. / 按需安装 WebView2，支持确认后在应用内安装签名更新。 |
+| Portable / 免安装版 | [Weblink-windows-x64-portable.zip](${download}/Weblink-windows-x64-portable.zip) | Extract both weblink-desktop.exe and weblink-portable; requires WebView2 120+. Replace manually to update. / 解压并保留程序及 weblink-portable 标记，需 WebView2 120 或更新版本；更新时手动替换。 |
 
 ## Changes / 更新内容
 
