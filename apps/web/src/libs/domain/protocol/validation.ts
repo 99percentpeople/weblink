@@ -1,6 +1,9 @@
 import { isFileFingerprint } from "./file-fingerprint";
 import { validClipboardRequest } from "./clipboard";
-import { validFileDropRequest } from "./file-drop";
+import {
+  validFileDropRequest,
+  validFileDropPosition,
+} from "./file-drop";
 import { validCapabilityUpdate } from "./capabilities";
 import { CAPABILITY_SYNC_VERSION } from "./protocol-versions";
 import type {
@@ -303,6 +306,9 @@ export function validateSessionMessage(
       break;
     case "remote-file-drop":
       valid = validFileDropRequest(value);
+      break;
+    case "remote-file-drop-position":
+      valid = validFileDropPosition(value);
       break;
     case "request-room-file":
       valid =

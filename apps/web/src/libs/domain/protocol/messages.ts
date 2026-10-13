@@ -1,6 +1,9 @@
 import type { FileFingerprint } from "./file-fingerprint";
 import type { ClipboardRequest } from "./clipboard";
-import type { FileDropRequest } from "./file-drop";
+import type {
+  FileDropRequest,
+  FileDropPosition,
+} from "./file-drop";
 import { CAPABILITY_SYNC_VERSION } from "./protocol-versions";
 export type MessageID = string;
 export type ProtocolPeerID = string;
@@ -262,6 +265,10 @@ export type SessionMessage =
   | (BaseExchangeMessage &
       FileDropRequest & { type: "remote-file-drop" })
   | (BaseExchangeMessage &
+      FileDropPosition & {
+        type: "remote-file-drop-position";
+      })
+  | (BaseExchangeMessage &
       ClipboardRequest & { type: "remote-clipboard" })
   | RequestSharedFileMessage
   | FileOfferResultMessage
@@ -335,6 +342,7 @@ export const requestSpec = {
 
 export type RequestType = keyof typeof requestSpec;
 export type NotificationType =
+  | "remote-file-drop-position"
   | "peer-capabilities"
   | "client-profile"
   | "stream-state"

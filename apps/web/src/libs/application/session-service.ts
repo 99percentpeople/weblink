@@ -62,7 +62,7 @@ export class SessionService {
     (session) => ({
       messaging: {},
       fileDrop: platform.fileDrop?.hover
-        ? { hover: true }
+        ? { hover: true, hoverUpdates: true }
         : {},
       files: { content: true, shared: true },
       room: { chat: true, files: true },

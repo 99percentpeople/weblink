@@ -84,6 +84,7 @@ it("forwards file hover positions without reading protected file bytes", () => {
     expect.anything(),
     { x: 0.2, y: 0.3 },
     ["image/png"],
+    expect.any(Function),
   );
   expect(s.read).not.toHaveBeenCalled();
   expect(s.service.drop).not.toHaveBeenCalled();
@@ -109,6 +110,20 @@ it("shows a native hover failure once during a drag before any drop", async () =
     },
   );
   expect(s.service.drop).not.toHaveBeenCalled();
+});
+it("reports an asynchronous host failure after a position notification was already sent", async () => {
+  const s = setup();
+  s.service.hover.mockResolvedValue(undefined);
+  s.drag("dragenter");
+  await Promise.resolve();
+  const report = s.service.hover.mock.calls[0][4]!;
+  report(new Error("Native hover stopped"));
+  expect(toast.error).toHaveBeenCalledWith(
+    "remote_control.file_drop.failed",
+    {
+      description: "Native hover stopped",
+    },
+  );
 });
 it("hands a real drop to the transfer without treating the subsequent dragend as cancellation", async () => {
   const s = setup();

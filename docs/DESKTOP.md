@@ -1477,8 +1477,21 @@ out of a remote window into the controller's OS.
 Peers advertising `fileDrop.hover` also exchange `hover` requests during dragenter and
 dragover; leaving the video, cancellation or revocation cancels the native hover. The
 controller shows the target application's drag feedback through the video, without a
-local drop mask. Hover updates are coalesced, and ordered before prepare at the final
-drop position. Peers without the optional capability retain prepare/offer/cancel.
+local drop mask. Peers also advertising `fileDrop.hoverUpdates` acknowledge the initial
+hover, then send `remote-file-drop-position` notifications without per-position replies.
+Positions carry the operation ID, grant ID and an increasing sequence. The sender replaces
+positions waiting for transport submission; the host keeps only the latest pending position while
+native work runs and ignores duplicate/out-of-order updates. Notifications cannot start a
+drag. Prepare freezes the final drop position, discards pending position updates and follows
+any native update already in progress. Late notifications cannot move a prepared, cancelled
+or completed operation. Startup, prepare and final application remain acknowledged requests;
+native failures also propagate through cancellation. Peers advertising only `fileDrop.hover`
+retain acknowledged hover updates; peers without hover retain prepare/offer/cancel.
+Position streaming preserves the coordinates supplied by the browser; it does not increase
+the browser's drag event frequency or coordinate precision. Chromium exposes integer CSS
+pixel coordinates for file drag events, unlike fractional pointer-move coordinates. A scaled
+down remote video therefore makes fine drag positioning coarser. Enlarging the video reduces
+this effect; interpolating missing positions cannot recover the original pointer coordinates.
 
 The `remote-file-drop` exchange uses the same remote-content bundle,
 file channels, sender/receiver, temporary cache, backpressure and task feedback as remote

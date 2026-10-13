@@ -85,6 +85,7 @@ export class P2PProtocol<
   ): Promise<void> {
     if (
       ![
+        "remote-file-drop-position",
         "peer-capabilities",
         "client-profile",
         "stream-state",

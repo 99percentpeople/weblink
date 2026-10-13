@@ -9,6 +9,39 @@ import {
   validRemoteFileLimit,
 } from "./remote-file-limits";
 
+/** Unacknowledged positions are valid only inside an acknowledged hover operation. */
+export interface FileDropPosition {
+  operationId: string;
+  grantId: string;
+  sequence: number;
+  point: { x: number; y: number };
+}
+const operationId = (v: unknown): v is string =>
+  typeof v === "string" && /^[a-zA-Z0-9-]{1,128}$/.test(v);
+function validPoint(v: unknown): boolean {
+  if (!v || typeof v !== "object" || Array.isArray(v))
+    return false;
+  const point = v as Record<string, unknown>;
+  return [point.x, point.y].every(
+    (n) =>
+      typeof n === "number" &&
+      Number.isFinite(n) &&
+      n >= 0 &&
+      n <= 1,
+  );
+}
+export function validFileDropPosition(
+  v: Record<string, unknown>,
+): boolean {
+  return (
+    controlId(v.grantId) &&
+    operationId(v.operationId) &&
+    Number.isSafeInteger(v.sequence) &&
+    (v.sequence as number) > 0 &&
+    validPoint(v.point)
+  );
+}
+
 /** File payloads use the shared remote-content bundle and normal file channels. */
 export type FileDropRequest = {
   operationId: string;
@@ -35,11 +68,7 @@ export function validFileDropRequest(
 ): boolean {
   if (v.action !== "hover" && v.types !== undefined)
     return false;
-  if (
-    !controlId(v.grantId) ||
-    typeof v.operationId !== "string" ||
-    !/^[a-zA-Z0-9-]{1,128}$/.test(v.operationId)
-  )
+  if (!controlId(v.grantId) || !operationId(v.operationId))
     return false;
   if (
     v.maxFileBytes !== undefined &&
@@ -83,16 +112,8 @@ export function validFileDropRequest(
     (v.action !== "prepare" && v.action !== "hover") ||
     !controlTarget(v.destination) ||
     v.size !== undefined ||
-    !v.point ||
-    typeof v.point !== "object"
+    !validPoint(v.point)
   )
     return false;
-  const point = v.point as Record<string, unknown>;
-  return [point.x, point.y].every(
-    (n) =>
-      typeof n === "number" &&
-      Number.isFinite(n) &&
-      n >= 0 &&
-      n <= 1,
-  );
+  return true;
 }

@@ -310,6 +310,9 @@ export function createAppState(
   });
   onCleanup(() => remoteClipboard.dispose());
   const remoteFileDrop = new RemoteFileDrop({
+    supportsHoverUpdates: (session) =>
+      sessionService.capabilities.get(session)?.fileDrop
+        ?.hoverUpdates === true,
     supportsHover: (session) =>
       sessionService.capabilities.get(session)?.fileDrop
         ?.hover === true,

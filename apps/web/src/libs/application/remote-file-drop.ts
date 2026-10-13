@@ -13,7 +13,11 @@ import {
   sameControlTarget,
   type ControlTarget,
 } from "../domain/protocol/remote-control";
-import type { FileDropRequest } from "../domain/protocol/file-drop";
+import type {
+  FileDropRequest,
+  FileDropPosition,
+} from "../domain/protocol/file-drop";
+import { FileDropPositions } from "./remote-file-drop-positions";
 import type { RequestContext } from "../domain/protocol/request-manager";
 import type { RemoteControlHost } from "./remote-control-host";
 import type { WebRtcProtocol } from "./rtc/rtc-protocol";
@@ -39,13 +43,17 @@ import {
 interface Options {
   platform: PlatformRuntime;
   host: Pick<RemoteControlHost, "clipboardScope">;
-  protocol: Pick<WebRtcProtocol, "call" | "handle">;
+  protocol: Pick<
+    WebRtcProtocol,
+    "call" | "handle" | "notify" | "on"
+  >;
   rtc: Pick<RtcService, "onSessionClosed">;
   registry: TransferRegistry;
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
   supported?(session: PeerSession): boolean;
   supportsHover?(session: PeerSession): boolean;
+  supportsHoverUpdates?(session: PeerSession): boolean;
   maxFileBytes?(): number;
   getSession(id: string): PeerSession | undefined;
 }
@@ -60,6 +68,9 @@ interface Job extends RemoteContentTransferJob {
   hoverPoint?: PointerPosition;
   hoverTypes?: string[];
   hovering?: Promise<void>;
+  positions?: FileDropPositions;
+  positionSequence: number;
+  onHoverError?: (error: unknown) => void;
 }
 type Payload = FileDropRequest extends infer T
   ? T extends FileDropRequest
@@ -90,6 +101,11 @@ export class RemoteFileDrop {
     this.stops = [
       options.protocol.handle("remote-file-drop", (ctx) =>
         this.receive(ctx),
+      ),
+      options.protocol.on(
+        "remote-file-drop-position",
+        ({ session, message }) =>
+          this.receivePosition(session, message),
       ),
       options.rtc.onSessionClosed((session) => {
         const job = this.jobs.get(session);
@@ -176,6 +192,7 @@ export class RemoteFileDrop {
     if (job.lifetime.signal.aborted) return;
     if (this.jobs.get(job.session) === job)
       this.jobs.delete(job.session);
+    job.positions?.stop();
     job.lifetime.abort(
       error ??
         new DOMException(
@@ -183,6 +200,8 @@ export class RemoteFileDrop {
           "AbortError",
         ),
     );
+    if (error && job.control && job.phase === "hover")
+      job.onHoverError?.(error);
     if (job.run) this.options.registry.destroy(job.run);
     this.cancelNative(job);
     if (
@@ -249,6 +268,7 @@ export class RemoteFileDrop {
       offered: false,
       maxFileBytes: resolveRemoteFileLimit(maxFileBytes),
       phase: "hover",
+      positionSequence: 0,
     };
     this.jobs.set(session, job);
     const timer = setTimeout(
@@ -306,12 +326,47 @@ export class RemoteFileDrop {
       file,
     );
   }
-  /** Coalesce hover positions while an acknowledged update is in flight. */
+  private updatePosition(job: Job, point: PointerPosition) {
+    return job.positions!.update(point).catch((error) => {
+      if (job.lifetime.signal.aborted)
+        error = job.lifetime.signal.reason;
+      this.stop(job, error);
+      throw error;
+    });
+  }
+  private receivePosition(
+    session: PeerSession,
+    message: FileDropPosition,
+  ) {
+    const job = this.jobs.get(session);
+    // Notifications cannot create/revive operations or overwrite the final drop point.
+    if (
+      !job ||
+      job.control ||
+      job.phase !== "hover" ||
+      !job.positions ||
+      job.id !== message.operationId ||
+      job.grantId !== message.grantId ||
+      message.sequence <= job.positionSequence
+    )
+      return;
+    try {
+      this.check(job);
+      job.positionSequence = message.sequence;
+      void this.updatePosition(job, message.point).catch(
+        () => {},
+      );
+    } catch (error) {
+      this.stop(job, error);
+    }
+  }
+  /** Confirm startup once; capable peers then stream positions without round-trip waits. */
   hover(
     peerId: string,
     control: RemotePointer,
     point: PointerPosition,
     types: string[],
+    onError?: (error: unknown) => void,
   ) {
     const session = this.options.getSession(peerId);
     const target = control.fileDropTarget();
@@ -340,6 +395,9 @@ export class RemoteFileDrop {
       target.target,
       control,
     );
+    job.onHoverError = onError;
+    if (job.positions)
+      return this.updatePosition(job, point);
     job.hoverPoint = point;
     job.hoverTypes = types.slice(0, 16);
     if (job.hovering) return job.hovering;
@@ -357,6 +415,38 @@ export class RemoteFileDrop {
           point,
           types: current.hoverTypes!,
         });
+        if (
+          this.options.supportsHoverUpdates?.(session) &&
+          current.phase === "hover"
+        ) {
+          this.check(current);
+          current.positions = new FileDropPositions(
+            async (point, signal) => {
+              this.check(current);
+              if (current.phase !== "hover") return;
+              await this.options.protocol.notify(
+                session,
+                "remote-file-drop-position",
+                {
+                  operationId: current.id,
+                  grantId: current.grantId,
+                  sequence: ++current.positionSequence,
+                  point,
+                },
+                { signal },
+              );
+            },
+            { abortSuperseded: true },
+          );
+          if (current.hoverPoint) {
+            const latest = current.hoverPoint;
+            current.hoverPoint = undefined;
+            void this.updatePosition(current, latest).catch(
+              () => {},
+            );
+          }
+          break;
+        }
       }
     })()
       .catch((error) => {
@@ -414,6 +504,7 @@ export class RemoteFileDrop {
             control,
           );
     job.phase = "preparing";
+    job.positions?.stop();
     job.hoverPoint = undefined;
     const abort = () => this.stop(job);
     signal?.addEventListener("abort", abort, {
@@ -518,6 +609,7 @@ export class RemoteFileDrop {
       job.scope = scope;
       if (message.action === "prepare") {
         job.phase = "preparing";
+        job.positions?.stop();
         job.maxFileBytes = resolveRemoteFileLimit(
           message.maxFileBytes,
         );
@@ -550,6 +642,25 @@ export class RemoteFileDrop {
           );
         });
         this.check(job);
+        job.positions ??= new FileDropPositions(
+          (point, signal) =>
+            this.queueNative(async () => {
+              if (
+                signal.aborted ||
+                current.phase !== "hover"
+              )
+                return;
+              this.check(current);
+              await native.hover!(
+                current.scope!,
+                current.id,
+                current.target,
+                point,
+                message.types,
+              );
+              this.check(current);
+            }),
+        );
         return;
       }
       if (message.action === "prepare") {

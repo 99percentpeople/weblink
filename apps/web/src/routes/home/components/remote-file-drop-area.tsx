@@ -48,6 +48,23 @@ export function RemoteFileDropArea(
   createEffect(() => {
     if (!allowed()) leave();
   });
+  const reportHoverError = (error: unknown) => {
+    if (
+      !hoverErrorShown &&
+      !(
+        error instanceof Error &&
+        error.name === "AbortError"
+      )
+    ) {
+      hoverErrorShown = true;
+      toast.error(t("remote_control.file_drop.failed"), {
+        description:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  };
   const hover = (event: DragEvent) => {
     const point = props.point(event);
     if (!allowed() || busy() || !point) {
@@ -68,24 +85,9 @@ export function RemoteFileDropArea(
             .map((item) => item.type),
         ),
       ].slice(0, 16),
+      reportHoverError,
     );
-    void hovering?.catch((error: unknown) => {
-      if (
-        !hoverErrorShown &&
-        !(
-          error instanceof Error &&
-          error.name === "AbortError"
-        )
-      ) {
-        hoverErrorShown = true;
-        toast.error(t("remote_control.file_drop.failed"), {
-          description:
-            error instanceof Error
-              ? error.message
-              : String(error),
-        });
-      }
-    });
+    void hovering?.catch(reportHoverError);
   };
   const drop = async (event: DragEvent) => {
     const data = event.dataTransfer;

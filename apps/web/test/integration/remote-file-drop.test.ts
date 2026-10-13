@@ -19,6 +19,7 @@ import type {
 import {
   FakeRtcTransport,
   deferred,
+  flushRtc,
 } from "../support/rtc-transport";
 import {
   fakeCache,
@@ -36,7 +37,7 @@ const target = {
   mediaId: "media",
   geometryRevision: "geometry",
 };
-function setup() {
+function setup(updates = false) {
   let supportsHover = true;
   let maxFileBytes = 64 * 1024 * 1024;
   let enabled = true,
@@ -100,6 +101,7 @@ function setup() {
       },
       enabled: () => i === 0 && enabled,
       supportsHover: () => supportsHover,
+      supportsHoverUpdates: () => updates,
       maxFileBytes: () => (i === 0 ? maxFileBytes : 1),
       getSession: (id) =>
         id === session.targetClientId ? session : undefined,
@@ -187,6 +189,337 @@ const files = () =>
       "test.bin",
     ),
   ]);
+describe("streamed file hover positions", () => {
+  it("replaces a backpressured send with the newest position instead of replaying its backlog", async () => {
+    const s = setup(true);
+    await s.a.service.hover("peer1", s.control, point, []);
+    s.a.transport.sendImpl = (
+      _session,
+      message,
+      options,
+    ) => {
+      if (
+        message.type === "remote-file-drop-position" &&
+        message.sequence === 1
+      ) {
+        return new Promise<void>((_resolve, reject) => {
+          options!.signal!.addEventListener(
+            "abort",
+            () =>
+              reject(
+                new DOMException("Aborted", "AbortError"),
+              ),
+            { once: true },
+          );
+        });
+      }
+      void s.b.transport.emit(s.b.session, message);
+    };
+    const first = s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.1, y: 0.5 },
+      [],
+    );
+    await flushRtc();
+    for (let n = 2; n <= 100; n++)
+      s.a.service.hover(
+        "peer1",
+        s.control,
+        { x: n / 100, y: 0.5 },
+        [],
+      );
+    await first;
+    await flushRtc();
+    const updates = s.a.transport.sendCalls.filter(
+      (c) => c.message.type === "remote-file-drop-position",
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates[0].options?.signal?.aborted).toBe(true);
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    expect(s.native.hover.mock.calls[1][3]).toEqual({
+      x: 1,
+      y: 0.5,
+    });
+  });
+  it("keeps startup acknowledged, then sends positions without waiting for native work or replies", async () => {
+    const s = setup(true),
+      started = deferred<void>(),
+      moved = deferred<void>();
+    s.native.hover.mockImplementationOnce(
+      () => started.promise,
+    );
+    const begin = s.a.service.hover(
+      "peer1",
+      s.control,
+      point,
+      ["image/png"],
+    );
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledOnce(),
+    );
+    s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.3, y: 0.5 },
+      [],
+    );
+    s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.4, y: 0.5 },
+      [],
+    );
+    expect(
+      s.a.transport.sendCalls.filter(
+        (c) =>
+          c.message.type === "remote-file-drop-position",
+      ),
+    ).toHaveLength(0);
+    s.native.hover.mockImplementationOnce(
+      () => moved.promise,
+    );
+    started.resolve();
+    await begin;
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    const replies = s.b.transport.sendCalls.length;
+    for (const x of [0.5, 0.6, 0.7, 0.8123456789]) {
+      await s.a.service.hover(
+        "peer1",
+        s.control,
+        { x, y: 0.5 },
+        [],
+      );
+    }
+    expect(
+      s.a.transport.sendCalls.filter(
+        (c) =>
+          c.message.type === "remote-file-drop-position",
+      ),
+    ).toHaveLength(5);
+    expect(s.b.transport.sendCalls).toHaveLength(replies);
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    moved.resolve();
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(3),
+    );
+    expect(s.native.hover).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.any(String),
+      target,
+      { x: 0.8123456789, y: 0.5 },
+      ["image/png"],
+    );
+    expect(
+      s.a.transport.sendCalls.filter(
+        (c) => c.message.type === "remote-file-drop",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("discards reordered, duplicate, wrong-scope and post-drop positions", async () => {
+    const s = setup(true);
+    await s.a.service.hover("peer1", s.control, point, []);
+    const operationId = s.native.hover.mock.calls[0][1];
+    const update = (sequence: number, extra = {}) =>
+      s.a.protocol.notify(
+        s.a.session,
+        "remote-file-drop-position",
+        {
+          operationId,
+          grantId: "grant",
+          sequence,
+          point: { x: 0.9, y: 0.1 },
+          ...extra,
+        },
+      );
+    await update(3);
+    await flushRtc();
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    await update(2);
+    await update(3);
+    await update(4, { grantId: "stale" });
+    await update(5, { operationId: "other" });
+    await flushRtc();
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    const read = deferred<File[]>();
+    const done = s.a.service.drop(
+      "peer1",
+      s.control,
+      point,
+      () => read.promise,
+    );
+    await vi.waitFor(() =>
+      expect(s.native.prepare).toHaveBeenCalledOnce(),
+    );
+    await update(6);
+    await flushRtc();
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    expect(s.native.prepare.mock.calls[0][3]).toEqual(
+      point,
+    );
+    read.resolve(await files());
+    await done;
+    await update(7);
+    await flushRtc();
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels queued positions and waits for the active native update before fixing the final drop point", async () => {
+    const s = setup(true),
+      moving = deferred<void>();
+    await s.a.service.hover("peer1", s.control, point, []);
+    s.native.hover.mockImplementationOnce(
+      () => moving.promise,
+    );
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.4, y: 0.5 },
+      [],
+    );
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.8, y: 0.5 },
+      [],
+    );
+    const done = s.a.service.drop(
+      "peer1",
+      s.control,
+      point,
+      files,
+    );
+    await flushRtc();
+    expect(s.native.prepare).not.toHaveBeenCalled();
+    moving.resolve();
+    await done;
+    expect(s.native.hover).toHaveBeenCalledTimes(2);
+    expect(s.native.prepare.mock.calls[0][3]).toEqual(
+      point,
+    );
+    expect(s.native.apply).toHaveBeenCalledOnce();
+  });
+
+  it("reports asynchronous native movement failure even after the position send has completed", async () => {
+    const s = setup(true),
+      failed = deferred<void>(),
+      onError = vi.fn();
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      point,
+      [],
+      onError,
+    );
+    s.native.hover.mockImplementationOnce(
+      () => failed.promise,
+    );
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.8, y: 0.5 },
+      [],
+      onError,
+    );
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    failed.reject("Native hover stopped");
+    await vi.waitFor(() =>
+      expect(onError).toHaveBeenCalledOnce(),
+    );
+    expect(onError.mock.calls[0][0].message).toBe(
+      "Native hover stopped",
+    );
+    expect(s.native.apply).not.toHaveBeenCalled();
+  });
+
+  it("does not let backpressured positions delay a reliable drop", async () => {
+    const s = setup(true);
+    await s.a.service.hover("peer1", s.control, point, []);
+    s.a.transport.sendImpl = (
+      _session,
+      message,
+      options,
+    ) => {
+      if (message.type === "remote-file-drop-position")
+        return new Promise<void>((_resolve, reject) => {
+          options!.signal!.addEventListener(
+            "abort",
+            () =>
+              reject(
+                new DOMException("Aborted", "AbortError"),
+              ),
+            { once: true },
+          );
+        });
+      void s.b.transport.emit(s.b.session, message);
+    };
+    const moving = s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.8, y: 0.5 },
+      [],
+    );
+    await flushRtc();
+    await s.a.service.drop(
+      "peer1",
+      s.control,
+      point,
+      files,
+    );
+    await moving;
+    expect(s.native.hover).toHaveBeenCalledOnce();
+    expect(s.native.prepare.mock.calls[0][3]).toEqual(
+      point,
+    );
+    expect(s.native.apply).toHaveBeenCalledOnce();
+  });
+
+  it("retires pending native positions on leave before starting the next drag", async () => {
+    const s = setup(true),
+      moving = deferred<void>();
+    await s.a.service.hover("peer1", s.control, point, []);
+    s.native.hover.mockImplementationOnce(
+      () => moving.promise,
+    );
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.4, y: 0.5 },
+      [],
+    );
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    await s.a.service.hover(
+      "peer1",
+      s.control,
+      { x: 0.8, y: 0.5 },
+      [],
+    );
+    s.a.service.leave("peer1", s.control);
+    const next = s.a.service.hover(
+      "peer1",
+      s.control,
+      point,
+      [],
+    );
+    moving.resolve();
+    await next;
+    expect(s.native.hover).toHaveBeenCalledTimes(3);
+    expect(s.native.hover.mock.calls[2][3]).toEqual(point);
+    expect(s.native.hover.mock.calls[2][1]).not.toBe(
+      s.native.hover.mock.calls[0][1],
+    );
+  });
+});
 describe("native remote file drop", () => {
   it("reports hover startup failures before the controller releases the files", async () => {
     const s = setup();
