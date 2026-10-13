@@ -276,6 +276,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn file_drop_commands_require_the_local_main_window() {
+        let mut context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        let authority = context.runtime_authority_mut();
+        for command in [
+            "file_drop_hover",
+            "file_drop_prepare",
+            "file_drop_apply",
+            "file_drop_cancel",
+        ] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &tauri::ipc::Origin::Local)
+                    .is_some(),
+                "The local main window must be allowed to invoke {command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "preview", "preview", &tauri::ipc::Origin::Local)
+                    .is_none(),
+                "Other windows must not be allowed to invoke {command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(
+                        command,
+                        "main",
+                        "main",
+                        &tauri::ipc::Origin::Remote {
+                            url: Url::parse("https://webl.ink").unwrap(),
+                        },
+                    )
+                    .is_none(),
+                "Remote web content must not be allowed to invoke {command}"
+            );
+        }
+    }
+
+    #[test]
     fn application_version_comes_from_frontend_manifest() {
         let manifest: serde_json::Value =
             serde_json::from_str(include_str!("../../../web/package.json")).unwrap();

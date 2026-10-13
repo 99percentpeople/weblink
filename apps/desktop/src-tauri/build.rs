@@ -49,6 +49,7 @@ fn main() {
             "clipboard_unwatch",
             "clipboard_read",
             "clipboard_write",
+            "file_drop_hover",
             "file_drop_prepare",
             "file_drop_apply",
             "file_drop_cancel",

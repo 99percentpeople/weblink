@@ -40,6 +40,7 @@
     "allow-clipboard-unwatch",
     "allow-clipboard-read",
     "allow-clipboard-write",
+    "allow-file-drop-hover",
     "allow-file-drop-prepare",
     "allow-file-drop-apply",
     "allow-file-drop-cancel",
