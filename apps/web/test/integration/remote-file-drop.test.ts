@@ -188,6 +188,31 @@ const files = () =>
     ),
   ]);
 describe("native remote file drop", () => {
+  it("reports hover startup failures before the controller releases the files", async () => {
+    const s = setup();
+    s.native.hover.mockRejectedValue(
+      "Could not start native file drag",
+    );
+    await expect(
+      s.a.service.hover("peer1", s.control, point, []),
+    ).rejects.toThrow("Could not start native file drag");
+    expect(s.native.prepare).not.toHaveBeenCalled();
+    expect(s.native.apply).not.toHaveBeenCalled();
+  });
+  it.each(["prepare", "apply"] as const)(
+    "preserves the native %s error when cancellation arrives before the reply",
+    async (phase) => {
+      const s = setup();
+      s.native[phase].mockRejectedValue(
+        "Native file drag ended: cursor moved",
+      );
+      await expect(
+        s.a.service.drop("peer1", s.control, point, files),
+      ).rejects.toThrow(
+        "Native file drag ended: cursor moved",
+      );
+    },
+  );
   it("forwards hover before transferring files and only applies after a real drop", async () => {
     const s = setup();
     s.a.service.hover("peer1", s.control, point, [

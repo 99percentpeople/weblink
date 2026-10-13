@@ -29,9 +29,11 @@ export function RemoteFileDropArea(
   const [busy, setBusy] = createSignal(false);
   let operation: AbortController | undefined;
   let cancelHover: (() => void) | undefined;
+  let hoverErrorShown = false;
   const leave = () => {
     cancelHover?.();
     cancelHover = undefined;
+    hoverErrorShown = false;
   };
   onCleanup(() => {
     leave();
@@ -55,7 +57,7 @@ export function RemoteFileDropArea(
     const { clientId, control, service } = props;
     cancelHover = () =>
       service?.leave?.(clientId!, control!);
-    service?.hover?.(
+    const hovering = service?.hover?.(
       clientId!,
       control!,
       point,
@@ -67,6 +69,23 @@ export function RemoteFileDropArea(
         ),
       ].slice(0, 16),
     );
+    void hovering?.catch((error: unknown) => {
+      if (
+        !hoverErrorShown &&
+        !(
+          error instanceof Error &&
+          error.name === "AbortError"
+        )
+      ) {
+        hoverErrorShown = true;
+        toast.error(t("remote_control.file_drop.failed"), {
+          description:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        });
+      }
+    });
   };
   const drop = async (event: DragEvent) => {
     const data = event.dataTransfer;
@@ -132,6 +151,7 @@ export function RemoteFileDropArea(
     } finally {
       toast.dismiss(id);
       if (operation === life) operation = undefined;
+      hoverErrorShown = false;
       setBusy(false);
     }
   };

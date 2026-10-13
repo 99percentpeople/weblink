@@ -1,6 +1,7 @@
 //! Native hover and accepted OLE drops, without clipboard or physical button injection.
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
+    rc::Rc,
     time::{Duration, Instant},
 };
 use windows::{
@@ -104,7 +105,9 @@ impl Destination {
 }
 #[implement(IDropSource)]
 struct Source {
-    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    position: Box<dyn Fn() -> Result<Option<(i32, i32)>, String> + Send>,
+    ready: RefCell<Option<Box<dyn FnOnce() + Send>>>,
+    failure: Rc<RefCell<Option<String>>>,
     last_point: Cell<(i32, i32)>,
     release: bool,
     timeout: Duration,
@@ -112,24 +115,43 @@ struct Source {
     accepted: Cell<bool>,
     started: Instant,
 }
+impl Source {
+    fn cancel(&self, reason: impl Into<String>) -> HRESULT {
+        *self.failure.borrow_mut() = Some(reason.into());
+        DRAGDROP_S_CANCEL
+    }
+}
 impl IDropSource_Impl for Source_Impl {
     fn QueryContinueDrag(&self, escape: BOOL, _: MODIFIERKEYS_FLAGS) -> HRESULT {
-        let Some(point) = (self.position)() else {
-            return DRAGDROP_S_CANCEL;
+        let point = match (self.position)() {
+            Ok(Some(point)) => point,
+            Ok(None) => return DRAGDROP_S_CANCEL,
+            Err(error) => return self.cancel(error),
         };
+        if escape.as_bool() {
+            return self.cancel("File drag cancelled by Escape");
+        }
+        if self.started.elapsed() > self.timeout {
+            return self.cancel("File drag timed out waiting for the target application");
+        }
+        if i16::try_from(point.0).is_err() || i16::try_from(point.1).is_err() {
+            return self.cancel("Drop position exceeds Windows coordinate range");
+        }
         let mut cursor = POINT::default();
-        if escape.as_bool()
-            || self.started.elapsed() > self.timeout
-            || i16::try_from(point.0).is_err()
-            || i16::try_from(point.1).is_err()
-            || unsafe { GetCursorPos(&mut cursor).is_err() }
-            || (cursor.x, cursor.y) != self.last_point.get()
-        {
-            return DRAGDROP_S_CANCEL;
+        if let Err(error) = unsafe { GetCursorPos(&mut cursor) } {
+            return self.cancel(format!("Could not read file drag cursor: {error}"));
+        }
+        if (cursor.x, cursor.y) != self.last_point.get() {
+            return self.cancel(format!(
+                "File drag interrupted: cursor moved from {:?} to ({}, {})",
+                self.last_point.get(),
+                cursor.x,
+                cursor.y
+            ));
         }
         if point != self.last_point.get() {
-            if unsafe { SetCursorPos(point.0, point.1).is_err() } {
-                return DRAGDROP_S_CANCEL;
+            if let Err(error) = unsafe { SetCursorPos(point.0, point.1) } {
+                return self.cancel(format!("Could not move file drag cursor: {error}"));
             }
             self.last_point.set(point);
         }
@@ -140,6 +162,9 @@ impl IDropSource_Impl for Source_Impl {
         }
     }
     fn GiveFeedback(&self, effect: DROPEFFECT) -> HRESULT {
+        if let Some(ready) = self.ready.borrow_mut().take() {
+            ready();
+        }
         // DragEnter alone does not establish acceptance: embedded/web editors may
         // decide asynchronously after DragOver. Never release on DROPEFFECT_NONE.
         let over = self.feedback_seen.replace(true);
@@ -212,20 +237,29 @@ pub fn perform(
     let destination = destination.clone();
     drag(
         paths,
-        Box::new(move || (valid() && destination.current()).then_some(destination.point)),
+        Box::new(move || {
+            if valid() && destination.current() {
+                Ok(Some(destination.point))
+            } else {
+                Err("File drop target changed or control ended".into())
+            }
+        }),
         true,
+        None,
     )
 }
 pub fn preview(
     paths: &[String],
-    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    position: Box<dyn Fn() -> Result<Option<(i32, i32)>, String> + Send>,
+    ready: Box<dyn FnOnce() + Send>,
 ) -> Result<(), String> {
-    drag(paths, position, false)
+    drag(paths, position, false, Some(ready))
 }
 fn drag(
     paths: &[String],
-    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    position: Box<dyn Fn() -> Result<Option<(i32, i32)>, String> + Send>,
     release: bool,
+    ready: Option<Box<dyn FnOnce() + Send>>,
 ) -> Result<(), String> {
     let _dpi = Dpi::enter()?;
     unsafe {
@@ -249,7 +283,7 @@ fn drag(
             ILFree(Some(p));
         }
         let object = object.map_err(|e| e.to_string())?;
-        let point = position().ok_or("File drop target changed or control ended")?;
+        let point = position()?.ok_or("File drag cancelled before startup")?;
         // WM_MOUSE coordinates are signed 16-bit; reject instead of wrapping to another target.
         let x =
             i16::try_from(point.0).map_err(|_| "Drop position exceeds Windows coordinate range")?;
@@ -257,8 +291,11 @@ fn drag(
             i16::try_from(point.1).map_err(|_| "Drop position exceeds Windows coordinate range")?;
         let initial = LPARAM(((x as u16 as u32) | ((y as u16 as u32) << 16)) as isize);
         SetCursorPos(point.0, point.1).map_err(|e| e.to_string())?;
+        let failure = Rc::new(RefCell::new(None));
         let source: IDropSource = Source {
             position,
+            ready: RefCell::new(ready),
+            failure: failure.clone(),
             last_point: Cell::new(point),
             release,
             timeout: if release {
@@ -283,6 +320,9 @@ fn drag(
         .map_err(|e| e.to_string())?;
         let _wakeup = DragWakeup::start()?;
         let result = DoDragDrop(&object, &source, DROPEFFECT_COPY, &mut effect);
+        if let Some(error) = failure.borrow_mut().take() {
+            return Err(error);
+        }
         if !release && result == DRAGDROP_S_CANCEL {
             Ok(())
         } else if release
@@ -303,6 +343,7 @@ fn drag(
 
 #[cfg(test)]
 mod tests {
+    mod cross_process;
     use super::*;
     use std::sync::{Arc, Mutex};
     use windows::{
@@ -527,14 +568,15 @@ mod tests {
                     Box::new(move || {
                         let events = hover_events.lock().unwrap();
                         let over = events.iter().filter(|e| *e == "over").count();
-                        if over >= 2 {
+                        Ok(if over >= 2 {
                             None
                         } else if over == 1 {
                             Some((190, 170))
                         } else {
                             Some((180, 160))
-                        }
+                        })
                     }),
+                    Box::new(|| {}),
                 )
             });
             pump_worker(preview).unwrap();
@@ -592,6 +634,7 @@ mod tests {
             assert!(drop_in_worker(&destination, &path, Box::new(|| true)).is_err());
             assert!(!events.lock().unwrap().iter().any(|e| e == "drop"));
             assert_eq!(GetClipboardSequenceNumber(), clipboard);
+            cross_process::verify();
         }
     }
 }

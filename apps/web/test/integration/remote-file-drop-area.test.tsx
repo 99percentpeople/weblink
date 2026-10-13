@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RemoteFileDropArea } from "@/routes/home/components/remote-file-drop-area";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
 import type { RemoteFileDrop } from "@/libs/application/remote-file-drop";
+import { toast } from "solid-sonner";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
   toast: {
@@ -16,13 +17,16 @@ vi.mock("solid-sonner", () => ({
 vi.mock("@/libs/utils/process-file", () => ({
   handleDropItems: vi.fn(async () => []),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 function setup() {
   const control = {
     fileDropTarget: () => ({ grantId: "grant" }),
   } as RemotePointer;
   const service = {
-    hover: vi.fn(),
+    hover: vi.fn<RemoteFileDrop["hover"]>(),
     leave: vi.fn(),
     drop: vi.fn<RemoteFileDrop["drop"]>(async () => {}),
   };
@@ -87,6 +91,24 @@ it("forwards file hover positions without reading protected file bytes", () => {
   expect(s.service.leave).not.toHaveBeenCalled();
   s.drag("dragleave", s.root, 10, document.body);
   expect(s.service.leave).toHaveBeenCalledOnce();
+});
+it("shows a native hover failure once during a drag before any drop", async () => {
+  const s = setup();
+  s.service.hover.mockRejectedValue(
+    new Error("Could not initialize OLE"),
+  );
+  s.drag("dragenter");
+  await Promise.resolve();
+  s.drag("dragover");
+  await Promise.resolve();
+  expect(toast.error).toHaveBeenCalledOnce();
+  expect(toast.error).toHaveBeenCalledWith(
+    "remote_control.file_drop.failed",
+    {
+      description: "Could not initialize OLE",
+    },
+  );
+  expect(s.service.drop).not.toHaveBeenCalled();
 });
 it("hands a real drop to the transfer without treating the subsequent dragend as cancellation", async () => {
   const s = setup();

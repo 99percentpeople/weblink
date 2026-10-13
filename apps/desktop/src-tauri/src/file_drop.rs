@@ -38,7 +38,8 @@ mod windows {
     }
     pub fn preview(
         _: &[String],
-        _: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+        _: Box<dyn Fn() -> Result<Option<(i32, i32)>, String> + Send>,
+        _: Box<dyn FnOnce() + Send>,
     ) -> Result<(), String> {
         Err("Native file hover unavailable".into())
     }

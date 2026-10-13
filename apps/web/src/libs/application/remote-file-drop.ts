@@ -342,7 +342,7 @@ export class RemoteFileDrop {
     );
     job.hoverPoint = point;
     job.hoverTypes = types.slice(0, 16);
-    if (job.hovering) return;
+    if (job.hovering) return job.hovering;
     const current = job;
     current.hovering = (async () => {
       while (
@@ -359,10 +359,18 @@ export class RemoteFileDrop {
         });
       }
     })()
-      .catch((error) => this.stop(current, error))
+      .catch((error) => {
+        if (current.lifetime.signal.aborted)
+          error = current.lifetime.signal.reason;
+        this.stop(current, error);
+        throw error;
+      })
       .finally(() => {
         current.hovering = undefined;
       });
+    // Fire-and-forget callers may ignore hover, while the UI can surface failures.
+    void current.hovering.catch(() => {});
+    return current.hovering;
   }
   leave(peerId: string, control: RemotePointer) {
     const session = this.options.getSession(peerId);
@@ -446,6 +454,10 @@ export class RemoteFileDrop {
       this.update(job, { status: "completed" });
       this.stop(job, undefined, false);
     } catch (error) {
+      // A host failure also cancels the operation. That cancel can arrive before
+      // the failing RPC reply, whose generic "aborted" error loses the cause.
+      if (job.lifetime.signal.aborted)
+        error = job.lifetime.signal.reason;
       this.stop(job, error);
       throw error;
     } finally {
@@ -582,6 +594,9 @@ export class RemoteFileDrop {
       this.update(job, { status: "completed" });
       this.stop(job, undefined, false);
     } catch (error) {
+      // Tauri rejects command failures as strings; keep them in replies and tasks.
+      if (!(error instanceof Error))
+        error = new Error(String(error));
       this.stop(job, error);
       // prepare may finish after cancellation reached the native queue.
       this.cancelNative(job);

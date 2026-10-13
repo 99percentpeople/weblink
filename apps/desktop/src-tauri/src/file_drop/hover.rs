@@ -30,14 +30,13 @@ impl Preview {
         {
             return Err("Stale file drag".into());
         }
-        if self
-            .worker
-            .lock()
-            .map_err(|e| e.to_string())?
-            .as_ref()
-            .is_none_or(|worker| worker.is_finished())
-        {
-            return Err("Native file drag ended".into());
+        let mut worker = self.worker.lock().map_err(|e| e.to_string())?;
+        if worker.as_ref().is_none_or(|worker| worker.is_finished()) {
+            return Err(worker
+                .take()
+                .and_then(|worker| worker.join().ok())
+                .and_then(Result::err)
+                .unwrap_or_else(|| "Native file drag ended".into()));
         }
         *self.state.point.lock().map_err(|e| e.to_string())? = point;
         Ok(())
@@ -70,6 +69,9 @@ pub(super) fn update(
         return Err("Invalid file drag types".into());
     }
     let mut active = ACTIVE.lock().map_err(|e| e.to_string())?;
+    if let Some(preview) = active.get(&id) {
+        return preview.move_to(&scope, &target, point);
+    }
     active.retain(|_, preview| {
         !preview
             .worker
@@ -78,9 +80,6 @@ pub(super) fn update(
             .as_ref()
             .is_none_or(|w| w.is_finished())
     });
-    if let Some(preview) = active.get(&id) {
-        return preview.move_to(&scope, &target, point);
-    }
     if active.len() >= 16 {
         return Err("Too many file drags".into());
     }
@@ -110,22 +109,35 @@ pub(super) fn update(
                 let _ = ready.send(Err("Another file drop is running".to_string()));
                 return Err("Another file drop is running".into());
             };
-            let _ = ready.send(Ok(()));
-            windows::preview(
+            let feedback = ready.clone();
+            let result = windows::preview(
                 &staged.paths,
                 Box::new(move || {
                     if lifetime.cancelled.load(Ordering::Acquire)
                         || lifetime.created.elapsed() >= LIFETIME
                     {
-                        return None;
+                        return Ok(None);
                     }
-                    let point = lifetime.point.lock().ok()?;
-                    position(&service, &lifetime.scope, &lifetime.target, &point).ok()
+                    let point = lifetime.point.lock().map_err(|e| e.to_string())?;
+                    position(&service, &lifetime.scope, &lifetime.target, &point).map(Some)
                 }),
-            )
+                Box::new(move || {
+                    let _ = feedback.send(Ok(()));
+                }),
+            );
+            // Only OLE feedback acknowledges startup. Preserve initialization failures
+            // instead of acknowledging a worker that has not entered DoDragDrop yet.
+            let _ = ready.try_send(Err(result
+                .clone()
+                .err()
+                .unwrap_or_else(|| "Native file drag ended".into())));
+            result
         })
         .map_err(|e| e.to_string())?;
-    started.recv().map_err(|e| e.to_string())??;
+    if let Err(error) = started.recv().map_err(|e| e.to_string()).and_then(|r| r) {
+        let _ = worker.join();
+        return Err(error);
+    }
     active.insert(
         id,
         Preview {
@@ -178,6 +190,38 @@ fn preview_names(types: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reports_the_worker_failure_when_preparing_an_ended_hover() {
+        let scope = Scope {
+            owner_id: "owner".into(),
+            client_id: "client".into(),
+            grant_id: "grant".into(),
+        };
+        let target = Target {
+            source_id: "screen".into(),
+            media_id: "media".into(),
+            geometry_revision: "geometry".into(),
+        };
+        let point = Position { x: 0.5, y: 0.5 };
+        let worker = std::thread::spawn(|| Err("Could not initialize OLE".to_string()));
+        while !worker.is_finished() {
+            std::thread::yield_now();
+        }
+        let preview = Preview {
+            state: Arc::new(State {
+                scope: scope.clone(),
+                target: target.clone(),
+                point: Mutex::new(point.clone()),
+                cancelled: AtomicBool::new(false),
+                created: Instant::now(),
+            }),
+            worker: Arc::new(Mutex::new(Some(worker))),
+        };
+        assert_eq!(
+            preview.move_to(&scope, &target, point).unwrap_err(),
+            "Could not initialize OLE"
+        );
+    }
     #[test]
     fn preview_names_never_contain_remote_paths() {
         assert_eq!(preview_names(&[]), ["drag-preview-1.bin"]);
