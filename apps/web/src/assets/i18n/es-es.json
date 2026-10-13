@@ -850,7 +850,8 @@
       "clear_cache_success": "Caché de la aplicación borrado",
       "clear_cache_failed": "No se pudo borrar el caché de la aplicación: {{error}}",
       "copy_failed": "No se puede copiar. Verifique los permisos del portapapeles e inténtelo nuevamente.",
-      "room_unprotected": "Esta sala no requiere contraseña."
+      "room_unprotected": "Esta sala no requiere contraseña.",
+      "file_save_failed": "No se pudo guardar el archivo. Comprueba el destino y el espacio libre en disco e inténtalo de nuevo."
     },
     "forward_dialog": {
       "title": "Artículos reenviados",

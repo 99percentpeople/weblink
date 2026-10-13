@@ -904,7 +904,8 @@
       "clear_cache_success": "應用程式快取已清除",
       "clear_cache_failed": "清除應用程式快取失敗：{{error}}",
       "copy_failed": "複製失敗，請檢查剪貼簿權限後重試。",
-      "room_unprotected": "此房間未設定密碼。"
+      "room_unprotected": "此房間未設定密碼。",
+      "file_save_failed": "儲存檔案失敗，請檢查儲存位置和磁碟剩餘空間後重試。"
     },
     "nav": {
       "settings": "設定",

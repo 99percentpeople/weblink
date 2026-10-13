@@ -10,6 +10,7 @@ import PhotoSwipeLightbox from "photoswipe/lightbox";
 import PhotoSwipeVideoPlugin from "photoswipe-video-plugin";
 import "photoswipe/style.css";
 import { t } from "@/i18n";
+import { downloadUrl } from "@/libs/utils/download-file";
 import {
   closeMediaRoute,
   createMediaHashRoute,
@@ -73,6 +74,13 @@ export function createMessageGallery(
         isButton: true,
         tagName: "a",
         title: t("common.action.download"),
+        onClick: (event, element) => {
+          event.preventDefault();
+          const link = element as HTMLAnchorElement;
+          if (link.getAttribute("href")) {
+            downloadUrl(link.href, link.download);
+          }
+        },
         html: {
           isCustomSVG: true,
           inner:
@@ -81,8 +89,6 @@ export function createMessageGallery(
         },
         onInit: (element, pswp) => {
           const link = element as HTMLAnchorElement;
-          link.target = "_blank";
-          link.rel = "noopener";
           pswp.on("change", () => {
             const data = pswp.currSlide?.data;
             link.download =

@@ -850,7 +850,8 @@
       "clear_cache_success": "App-Cache geleert",
       "clear_cache_failed": "App-Cache konnte nicht geleert werden: {{error}}",
       "copy_failed": "Kopieren nicht möglich. Überprüfen Sie die Berechtigungen für die Zwischenablage und versuchen Sie es erneut.",
-      "room_unprotected": "Für diesen Raum ist kein Passwort erforderlich."
+      "room_unprotected": "Für diesen Raum ist kein Passwort erforderlich.",
+      "file_save_failed": "Die Datei konnte nicht gespeichert werden. Prüfe den Speicherort und den freien Speicherplatz und versuche es erneut."
     },
     "forward_dialog": {
       "title": "Artikel weiterleiten",

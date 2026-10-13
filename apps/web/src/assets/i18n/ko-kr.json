@@ -850,7 +850,8 @@
       "clear_cache_success": "앱 캐시가 삭제되었습니다.",
       "clear_cache_failed": "앱 캐시를 지울 수 없습니다: {{error}}",
       "copy_failed": "복사할 수 없습니다. 클립보드 권한을 확인하고 다시 시도하세요.",
-      "room_unprotected": "이 방에는 비밀번호가 필요하지 않습니다."
+      "room_unprotected": "이 방에는 비밀번호가 필요하지 않습니다.",
+      "file_save_failed": "파일을 저장할 수 없습니다. 저장 위치와 디스크 여유 공간을 확인한 후 다시 시도하세요."
     },
     "forward_dialog": {
       "title": "항목 전달",

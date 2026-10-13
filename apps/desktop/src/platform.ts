@@ -5,6 +5,7 @@ import { createRawPreview } from "./preview";
 import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
 import { nativeUpdates } from "./updates";
+import { saveNativeFile } from "./save-file";
 import { nativePictureInPicture } from "./picture-in-picture";
 import { keepDesktopActive } from "./background";
 import { watchStatus } from "./status-watch";
@@ -21,6 +22,7 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  saveFile: saveNativeFile,
   fileDrop: {
     prepare: (
       scope,

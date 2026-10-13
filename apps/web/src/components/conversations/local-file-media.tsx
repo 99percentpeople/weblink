@@ -34,6 +34,7 @@ export function LocalFileMedia(props: {
               <MediaThumbnail
                 src={url}
                 name={props.file.name}
+                mimeType={type()}
                 kind={video() ? "video" : "image"}
                 route={props.route}
               />

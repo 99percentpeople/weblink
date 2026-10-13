@@ -8,6 +8,7 @@ mod capabilities;
 mod capture;
 mod clipboard;
 mod file_drop;
+mod file_save;
 mod keyboard;
 mod media_permissions;
 mod notifications;
@@ -18,6 +19,7 @@ mod staged_files;
 mod updates;
 
 fn shutdown(app: &tauri::AppHandle) {
+    app.state::<file_save::Service>().clear();
     clipboard::shutdown();
     file_drop::shutdown();
     app.state::<application::Service>().shutdown();
@@ -62,6 +64,8 @@ fn media_permission(
 pub fn run() {
     tauri::Builder::default()
         .plugin(application::single_instance::init())
+        .plugin(tauri_plugin_dialog::init())
+        .manage(file_save::Service::default())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Service::default())
         .manage(notifications::Service::default())
@@ -81,6 +85,10 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             capabilities::runtime_capabilities,
+            file_save::file_save_begin,
+            file_save::file_save_write,
+            file_save::file_save_finish,
+            file_save::file_save_abort,
             updates::updates_check,
             updates::updates_install,
             notifications::notifications_capabilities,
@@ -203,6 +211,7 @@ pub fn run() {
                 })
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                        webview.state::<file_save::Service>().clear();
                         preview::clear(&webview);
                         webview.state::<capture::Service>().clear_watches();
                         webview.state::<notifications::Service>().clear();

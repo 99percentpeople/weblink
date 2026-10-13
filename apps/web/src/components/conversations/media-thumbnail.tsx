@@ -15,6 +15,7 @@ import {
 export function MediaThumbnail(props: {
   src: string;
   name: string;
+  mimeType?: string;
   kind: "image" | "video";
   route: MediaHashRoute;
 }) {
@@ -103,6 +104,19 @@ export function MediaThumbnail(props: {
               props.kind === "video" ? src : undefined
             }
             data-download={props.name}
+            onDragStart={(event) => {
+              const transfer = event.dataTransfer;
+              if (!transfer) return;
+              // Chromium's file drag format carries the name separately from
+              // the blob URL. Colons delimit its fields, so escape those in names.
+              const name = props.name.replaceAll(":", "_");
+              transfer.effectAllowed = "copy";
+              transfer.setData(
+                "DownloadURL",
+                `${props.mimeType || "application/octet-stream"}:${name}:${src}`,
+              );
+              transfer.setData("text/uri-list", src);
+            }}
             aria-label={`${t("common.action.preview")}: ${props.name}`}
             class="bg-foreground/5 focus-visible:ring-ring relative flex
               aspect-video w-full min-w-0 items-center justify-center

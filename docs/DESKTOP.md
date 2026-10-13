@@ -108,6 +108,22 @@ when self-hosting, so invitations never use the desktop window's internal origin
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.
 
+## Saving received files
+
+Desktop attachment, file-library, preview, gallery and QR-code downloads use the
+platform file saver instead of WebView blob-link navigation. Manual downloads open
+a native Save As dialog starting in the system Downloads directory. The existing
+automatic-download preference saves completed
+receives to the system Downloads directory, choosing a numbered filename when a
+file already exists.
+
+The frontend sends bounded binary chunks through an opaque save ID; it never passes
+an arbitrary destination path to a write command. Native code stages the file beside
+the selected destination and commits it only after the declared byte count is
+complete. Cancelled or failed saves remove their temporary file, and page reload or
+application shutdown clears pending saves. Cancelling the picker is silent; write
+failures produce a localized error. Browser builds retain ordinary download links.
+
 ## Desktop updates
 
 Settings → About provides a manual update check and a persisted “Automatically

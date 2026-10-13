@@ -904,7 +904,8 @@
       "clear_cache_success": "应用缓存已清除",
       "clear_cache_failed": "清除应用缓存失败：{{error}}",
       "copy_failed": "复制失败，请检查剪贴板权限后重试。",
-      "room_unprotected": "此房间未设置密码。"
+      "room_unprotected": "此房间未设置密码。",
+      "file_save_failed": "保存文件失败，请检查保存位置和磁盘剩余空间后重试。"
     },
     "nav": {
       "settings": "设置",

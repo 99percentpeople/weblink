@@ -5,6 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-file-save-begin",
+    "allow-file-save-write",
+    "allow-file-save-finish",
+    "allow-file-save-abort",
     "allow-updates-check",
     "allow-updates-install",
     "allow-application-device-name",

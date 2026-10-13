@@ -19,7 +19,18 @@ export interface RuntimeCapabilities {
   systemTray?: boolean;
 }
 
+export interface FileSaveOptions {
+  /** Save to Downloads using the existing automatic-download preference. */
+  automatic?: boolean;
+}
+
 export interface PlatformRuntime {
+  /** Save local content through the native picker; false means the user cancelled. */
+  saveFile?(
+    file: Blob,
+    name: string,
+    options?: FileSaveOptions,
+  ): Promise<boolean>;
   readonly updates?: NativeUpdates;
   readonly fileDrop?: NativeFileDrop;
   clipboard?: NativeClipboard;

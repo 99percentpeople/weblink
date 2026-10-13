@@ -850,7 +850,8 @@
       "clear_cache_success": "Cache de l'application vidé",
       "clear_cache_failed": "Impossible de vider le cache de l'application : {{error}}",
       "copy_failed": "Impossible de copier. Vérifiez les autorisations du presse-papiers et réessayez.",
-      "room_unprotected": "Cette salle ne nécessite pas de mot de passe."
+      "room_unprotected": "Cette salle ne nécessite pas de mot de passe.",
+      "file_save_failed": "Impossible d’enregistrer le fichier. Vérifiez la destination et l’espace disque disponible, puis réessayez."
     },
     "forward_dialog": {
       "title": "Transférer des éléments",

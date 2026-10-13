@@ -850,7 +850,8 @@
       "clear_cache_success": "アプリのキャッシュがクリアされました",
       "clear_cache_failed": "アプリのキャッシュをクリアできませんでした: {{error}}",
       "copy_failed": "コピーできません。クリップボードのアクセス許可を確認して、再試行してください。",
-      "room_unprotected": "このルームにはパスワードは必要ありません。"
+      "room_unprotected": "このルームにはパスワードは必要ありません。",
+      "file_save_failed": "ファイルを保存できませんでした。保存先とディスクの空き容量を確認して、もう一度お試しください。"
     },
     "forward_dialog": {
       "title": "転送アイテム",

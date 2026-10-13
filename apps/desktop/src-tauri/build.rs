@@ -8,6 +8,10 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "file_save_begin",
+            "file_save_write",
+            "file_save_finish",
+            "file_save_abort",
             "updates_check",
             "updates_install",
             "notifications_capabilities",

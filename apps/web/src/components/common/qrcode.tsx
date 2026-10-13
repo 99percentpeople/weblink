@@ -1,5 +1,6 @@
 import { ComponentProps, onMount } from "solid-js";
 import QRCodeJS from "qrcode";
+import { saveFile } from "@/libs/utils/download-file";
 
 const QR_CODE_MARGIN = 2;
 
@@ -78,16 +79,5 @@ export async function downloadQRCode(
     type: "image/svg+xml",
   });
 
-  const dataurl = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = dataurl;
-  a.download = name;
-  a.hidden = true;
-  document.body.append(a);
-  try {
-    a.click();
-  } finally {
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(dataurl), 1000);
-  }
+  await saveFile(blob, name);
 }

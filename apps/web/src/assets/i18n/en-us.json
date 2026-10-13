@@ -850,7 +850,8 @@
       "clear_cache_success": "App cache cleared",
       "clear_cache_failed": "Could not clear app cache: {{error}}",
       "copy_failed": "Unable to copy. Check clipboard permissions and try again.",
-      "room_unprotected": "This room does not require a password."
+      "room_unprotected": "This room does not require a password.",
+      "file_save_failed": "Could not save the file. Check the destination and available disk space, then try again."
     },
     "forward_dialog": {
       "title": "Forward items",

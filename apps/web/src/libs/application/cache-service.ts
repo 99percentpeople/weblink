@@ -239,7 +239,7 @@ export class FileCacheFactory {
           !signal?.aborted &&
           appState.options.automaticDownload
         )
-          downloadFile(file);
+          downloadFile(file, { automatic: true });
         return file;
       })().catch((error) => {
         verified = undefined;
