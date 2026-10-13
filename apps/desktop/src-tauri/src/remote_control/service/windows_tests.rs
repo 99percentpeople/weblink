@@ -181,7 +181,7 @@ fn browser_pointer_attended() {
             service.status(&owner).unwrap()
         };
         assert!(!state.closed, "UI polling stopped the native owner");
-        if let Some(p) = state.pending.filter(|_| !approved) {
+        if let Some(p) = state.pending.first().filter(|_| !approved) {
             unsafe {
                 ::windows::Win32::UI::WindowsAndMessaging::SetWindowTextW(
                     ::windows::Win32::Foundation::HWND(window.handle() as *mut _),
