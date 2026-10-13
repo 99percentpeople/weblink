@@ -1495,6 +1495,10 @@ to accept the files, including asynchronous decisions by embedded web editors. I
 releases only after hover feedback allows copying, with a five-second deadline;
 initial DROPEFFECT_NONE feedback does not immediately end the drop. These events
 go only to the drop thread's OLE capture window, not the system mouse input queue.
+The authorized hover/drop position controls the cursor during OLE. Independent pointer
+traffic may arrive between hover updates; the drag corrects the cursor instead of
+cancelling on a position mismatch. Any position change or correction clears previous
+acceptance and requires fresh hover feedback before releasing files at the bound point.
 Acknowledgement and task completion require acceptance by the target application; this
 does not mean a target's later asynchronous import or copy has finished. Applications
 that do not accept OLE file drops fail without falling back to clipboard paste.

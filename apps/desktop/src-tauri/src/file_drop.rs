@@ -13,6 +13,8 @@ use std::{
     time::{Duration, Instant},
 };
 use weblink_desktop_input::protocol::Target;
+#[cfg(any(windows, test))]
+mod drag_state;
 mod hover;
 
 #[cfg(windows)]

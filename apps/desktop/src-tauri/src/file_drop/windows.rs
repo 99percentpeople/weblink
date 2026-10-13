@@ -1,6 +1,7 @@
 //! Native hover and accepted OLE drops, without clipboard or physical button injection.
+use super::drag_state::DragState;
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -108,11 +109,8 @@ struct Source {
     position: Box<dyn Fn() -> Result<Option<(i32, i32)>, String> + Send>,
     ready: RefCell<Option<Box<dyn FnOnce() + Send>>>,
     failure: Rc<RefCell<Option<String>>>,
-    last_point: Cell<(i32, i32)>,
-    release: bool,
+    drag: RefCell<DragState>,
     timeout: Duration,
-    feedback_seen: Cell<bool>,
-    accepted: Cell<bool>,
     started: Instant,
 }
 impl Source {
@@ -141,21 +139,12 @@ impl IDropSource_Impl for Source_Impl {
         if let Err(error) = unsafe { GetCursorPos(&mut cursor) } {
             return self.cancel(format!("Could not read file drag cursor: {error}"));
         }
-        if (cursor.x, cursor.y) != self.last_point.get() {
-            return self.cancel(format!(
-                "File drag interrupted: cursor moved from {:?} to ({}, {})",
-                self.last_point.get(),
-                cursor.x,
-                cursor.y
-            ));
-        }
-        if point != self.last_point.get() {
+        if self.drag.borrow_mut().position(point, (cursor.x, cursor.y)) {
             if let Err(error) = unsafe { SetCursorPos(point.0, point.1) } {
                 return self.cancel(format!("Could not move file drag cursor: {error}"));
             }
-            self.last_point.set(point);
         }
-        if self.release && self.accepted.get() {
+        if self.drag.borrow().can_drop() {
             DRAGDROP_S_DROP
         } else {
             S_OK
@@ -165,12 +154,10 @@ impl IDropSource_Impl for Source_Impl {
         if let Some(ready) = self.ready.borrow_mut().take() {
             ready();
         }
-        // DragEnter alone does not establish acceptance: embedded/web editors may
-        // decide asynchronously after DragOver. Never release on DROPEFFECT_NONE.
-        let over = self.feedback_seen.replace(true);
-        self.accepted
-            .set(over && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE);
-        if self.release && self.accepted.get() {
+        self.drag
+            .borrow_mut()
+            .feedback((effect & DROPEFFECT_COPY) != DROPEFFECT_NONE);
+        if self.drag.borrow().can_drop() {
             if let Err(error) = post_drag_message(WM_LBUTTONUP, WPARAM(0)) {
                 return error.code();
             }
@@ -296,15 +283,12 @@ fn drag(
             position,
             ready: RefCell::new(ready),
             failure: failure.clone(),
-            last_point: Cell::new(point),
-            release,
+            drag: RefCell::new(DragState::new(point, release)),
             timeout: if release {
                 Duration::from_secs(5)
             } else {
                 super::LIFETIME
             },
-            feedback_seen: Cell::new(false),
-            accepted: Cell::new(false),
             started: Instant::now(),
         }
         .into();
@@ -345,6 +329,7 @@ fn drag(
 mod tests {
     mod cross_process;
     use super::*;
+    use std::cell::Cell;
     use std::sync::{Arc, Mutex};
     use windows::{
         core::{w, Ref},
@@ -423,9 +408,14 @@ mod tests {
             &self,
             object: Ref<IDataObject>,
             _: MODIFIERKEYS_FLAGS,
-            _: &POINTL,
+            point: &POINTL,
             effect: *mut DROPEFFECT,
         ) -> windows::core::Result<()> {
+            assert_eq!(
+                (point.x, point.y),
+                (180, 160),
+                "drop moved away from its authorized position"
+            );
             unsafe {
                 let format = FORMATETC {
                     cfFormat: 15,
@@ -566,11 +556,18 @@ mod tests {
                 preview(
                     &[hover_path],
                     Box::new(move || {
-                        let events = hover_events.lock().unwrap();
-                        let over = events.iter().filter(|e| *e == "over").count();
+                        let over = hover_events
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .filter(|e| *e == "over")
+                            .count();
                         Ok(if over >= 2 {
                             None
                         } else if over == 1 {
+                            // Simulate another input packet moving the cursor between
+                            // browser hover updates. The preview must keep running.
+                            SetCursorPos(220, 150).unwrap();
                             Some((190, 170))
                         } else {
                             Some((180, 160))
@@ -590,6 +587,23 @@ mod tests {
             events.lock().unwrap().clear();
             drop_in_worker(&destination, &path, Box::new(|| true)).unwrap();
             assert_eq!(events.lock().unwrap().first().unwrap(), "enter");
+            assert_eq!(events.lock().unwrap().last().unwrap(), "drop");
+            assert_eq!(GetClipboardSequenceNumber(), clipboard);
+            events.lock().unwrap().clear();
+            let raced_events = events.clone();
+            let moved = Cell::new(false);
+            drop_in_worker(
+                &destination,
+                &path,
+                Box::new(move || {
+                    if !moved.get() && raced_events.lock().unwrap().iter().any(|e| e == "over") {
+                        moved.set(true);
+                        SetCursorPos(240, 210).unwrap();
+                    }
+                    true
+                }),
+            )
+            .unwrap();
             assert_eq!(events.lock().unwrap().last().unwrap(), "drop");
             assert_eq!(GetClipboardSequenceNumber(), clipboard);
             RevokeDragDrop(hwnd).unwrap();
