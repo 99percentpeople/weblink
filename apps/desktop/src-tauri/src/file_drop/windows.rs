@@ -1,4 +1,4 @@
-//! One-shot OLE drop. No clipboard mutation, synthetic paste, or system mouse button injection.
+//! Native hover and accepted OLE drops, without clipboard or physical button injection.
 use std::{
     cell::Cell,
     time::{Duration, Instant},
@@ -81,7 +81,7 @@ impl Destination {
             let mut rect = RECT::default();
             GetWindowRect(root, &mut rect).map_err(|e| e.to_string())?;
             let mut process = 0;
-            let thread = GetWindowThreadProcessId(hwnd, Some(&mut process));
+            let thread = GetWindowThreadProcessId(root, Some(&mut process));
             Ok(Self {
                 point,
                 window: hwnd.0 as usize,
@@ -94,35 +94,46 @@ impl Destination {
     }
     pub fn current(&self) -> bool {
         Self::capture(self.point).is_ok_and(|now| {
-            now.window == self.window
-                && now.root == self.root
+            // Applications may create a child drop overlay after DragEnter.
+            now.root == self.root
                 && now.process == self.process
                 && now.thread == self.thread
                 && now.rect == self.rect
         })
     }
-    fn cursor_current(&self) -> bool {
-        let mut point = POINT::default();
-        unsafe { GetCursorPos(&mut point).is_ok() && (point.x, point.y) == self.point }
-    }
 }
 #[implement(IDropSource)]
 struct Source {
-    destination: Destination,
-    valid: Box<dyn Fn() -> bool + Send>,
+    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    last_point: Cell<(i32, i32)>,
+    release: bool,
+    timeout: Duration,
     feedback_seen: Cell<bool>,
     accepted: Cell<bool>,
     started: Instant,
 }
 impl IDropSource_Impl for Source_Impl {
     fn QueryContinueDrag(&self, escape: BOOL, _: MODIFIERKEYS_FLAGS) -> HRESULT {
+        let Some(point) = (self.position)() else {
+            return DRAGDROP_S_CANCEL;
+        };
+        let mut cursor = POINT::default();
         if escape.as_bool()
-            || self.started.elapsed() > Duration::from_secs(5)
-            || !(self.valid)()
-            || !self.destination.cursor_current()
+            || self.started.elapsed() > self.timeout
+            || i16::try_from(point.0).is_err()
+            || i16::try_from(point.1).is_err()
+            || unsafe { GetCursorPos(&mut cursor).is_err() }
+            || (cursor.x, cursor.y) != self.last_point.get()
         {
-            DRAGDROP_S_CANCEL
-        } else if self.accepted.get() {
+            return DRAGDROP_S_CANCEL;
+        }
+        if point != self.last_point.get() {
+            if unsafe { SetCursorPos(point.0, point.1).is_err() } {
+                return DRAGDROP_S_CANCEL;
+            }
+            self.last_point.set(point);
+        }
+        if self.release && self.accepted.get() {
             DRAGDROP_S_DROP
         } else {
             S_OK
@@ -134,7 +145,7 @@ impl IDropSource_Impl for Source_Impl {
         let over = self.feedback_seen.replace(true);
         self.accepted
             .set(over && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE);
-        if self.accepted.get() {
+        if self.release && self.accepted.get() {
             if let Err(error) = post_drag_message(WM_LBUTTONUP, WPARAM(0)) {
                 return error.code();
             }
@@ -198,6 +209,24 @@ pub fn perform(
     paths: &[String],
     valid: Box<dyn Fn() -> bool + Send>,
 ) -> Result<(), String> {
+    let destination = destination.clone();
+    drag(
+        paths,
+        Box::new(move || (valid() && destination.current()).then_some(destination.point)),
+        true,
+    )
+}
+pub fn preview(
+    paths: &[String],
+    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+) -> Result<(), String> {
+    drag(paths, position, false)
+}
+fn drag(
+    paths: &[String],
+    position: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    release: bool,
+) -> Result<(), String> {
     let _dpi = Dpi::enter()?;
     unsafe {
         OleInitialize(None).map_err(|e| e.to_string())?;
@@ -220,19 +249,23 @@ pub fn perform(
             ILFree(Some(p));
         }
         let object = object.map_err(|e| e.to_string())?;
-        if !valid() || !destination.current() {
-            return Err("File drop target changed or control ended".into());
-        }
+        let point = position().ok_or("File drop target changed or control ended")?;
         // WM_MOUSE coordinates are signed 16-bit; reject instead of wrapping to another target.
-        let x = i16::try_from(destination.point.0)
-            .map_err(|_| "Drop position exceeds Windows coordinate range")?;
-        let y = i16::try_from(destination.point.1)
-            .map_err(|_| "Drop position exceeds Windows coordinate range")?;
+        let x =
+            i16::try_from(point.0).map_err(|_| "Drop position exceeds Windows coordinate range")?;
+        let y =
+            i16::try_from(point.1).map_err(|_| "Drop position exceeds Windows coordinate range")?;
         let initial = LPARAM(((x as u16 as u32) | ((y as u16 as u32) << 16)) as isize);
-        SetCursorPos(destination.point.0, destination.point.1).map_err(|e| e.to_string())?;
+        SetCursorPos(point.0, point.1).map_err(|e| e.to_string())?;
         let source: IDropSource = Source {
-            destination: destination.clone(),
-            valid,
+            position,
+            last_point: Cell::new(point),
+            release,
+            timeout: if release {
+                Duration::from_secs(5)
+            } else {
+                super::LIFETIME
+            },
             feedback_seen: Cell::new(false),
             accepted: Cell::new(false),
             started: Instant::now(),
@@ -250,7 +283,12 @@ pub fn perform(
         .map_err(|e| e.to_string())?;
         let _wakeup = DragWakeup::start()?;
         let result = DoDragDrop(&object, &source, DROPEFFECT_COPY, &mut effect);
-        if result == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE {
+        if !release && result == DRAGDROP_S_CANCEL {
+            Ok(())
+        } else if release
+            && result == DRAGDROP_S_DROP
+            && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE
+        {
             Ok(())
         } else if result == DRAGDROP_S_CANCEL {
             Err("File drop cancelled or target changed".into())
@@ -283,8 +321,8 @@ mod tests {
                 Shell::{DragQueryFileW, HDROP},
                 WindowsAndMessaging::{
                     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, PeekMessageW,
-                    RegisterClassW, TranslateMessage, MSG, PM_REMOVE, WNDCLASSW, WS_EX_TOOLWINDOW,
-                    WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+                    RegisterClassW, TranslateMessage, MSG, PM_REMOVE, WNDCLASSW, WS_CHILD,
+                    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
                 },
             },
         },
@@ -337,6 +375,7 @@ mod tests {
             Ok(())
         }
         fn DragLeave(&self) -> windows::core::Result<()> {
+            self.events.lock().unwrap().push("leave".into());
             Ok(())
         }
         fn Drop(
@@ -384,6 +423,9 @@ mod tests {
         let destination = destination.clone();
         let path = path.to_string_lossy().into_owned();
         let worker = std::thread::spawn(move || perform(&destination, &[path], valid));
+        pump_worker(worker)
+    }
+    fn pump_worker(worker: std::thread::JoinHandle<Result<(), String>>) -> Result<(), String> {
         let deadline = Instant::now() + Duration::from_secs(8);
         while !worker.is_finished() {
             unsafe {
@@ -453,6 +495,57 @@ mod tests {
             let destination = Destination::capture((180, 160)).unwrap();
             assert_eq!(destination.window, hwnd.0 as usize);
             let clipboard = GetClipboardSequenceNumber();
+            let child = CreateWindowExW(
+                Default::default(),
+                w!("WeblinkOleDropTest"),
+                w!("Drop overlay"),
+                WS_CHILD | WS_VISIBLE,
+                40,
+                40,
+                100,
+                70,
+                Some(hwnd),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            assert_ne!(
+                Destination::capture((180, 160)).unwrap().window,
+                destination.window
+            );
+            assert!(
+                destination.current(),
+                "A child drop overlay must not change the pinned application window"
+            );
+            DestroyWindow(child).unwrap();
+            let hover_events = events.clone();
+            let hover_path = path.to_string_lossy().into_owned();
+            let preview = std::thread::spawn(move || {
+                preview(
+                    &[hover_path],
+                    Box::new(move || {
+                        let events = hover_events.lock().unwrap();
+                        let over = events.iter().filter(|e| *e == "over").count();
+                        if over >= 2 {
+                            None
+                        } else if over == 1 {
+                            Some((190, 170))
+                        } else {
+                            Some((180, 160))
+                        }
+                    }),
+                )
+            });
+            pump_worker(preview).unwrap();
+            assert_eq!(events.lock().unwrap().first().unwrap(), "enter");
+            assert_eq!(events.lock().unwrap().last().unwrap(), "leave");
+            assert!(
+                !events.lock().unwrap().iter().any(|event| event == "drop"),
+                "A preview must never drop its placeholder files"
+            );
+            assert_eq!(GetClipboardSequenceNumber(), clipboard);
+            events.lock().unwrap().clear();
             drop_in_worker(&destination, &path, Box::new(|| true)).unwrap();
             assert_eq!(events.lock().unwrap().first().unwrap(), "enter");
             assert_eq!(events.lock().unwrap().last().unwrap(), "drop");

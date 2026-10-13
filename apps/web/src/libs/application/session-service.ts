@@ -61,7 +61,9 @@ export class SessionService {
   readonly capabilities = new PeerCapabilitiesService(
     (session) => ({
       messaging: {},
-      fileDrop: {},
+      fileDrop: platform.fileDrop?.hover
+        ? { hover: true }
+        : {},
       files: { content: true, shared: true },
       room: { chat: true, files: true },
       screen: {

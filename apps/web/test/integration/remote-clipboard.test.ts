@@ -366,6 +366,74 @@ describe("authorized remote clipboard", () => {
       data: btoa("x".repeat(CLIPBOARD_CHUNK_SIZE + 1)),
     },
   ];
+  it("never caches a PDF when the clipboard destination rejects its format", async () => {
+    const s = setup();
+    const bytes = new Uint8Array(
+      CLIPBOARD_CHUNK_SIZE + 20,
+    ).fill(42);
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        {
+          type: "file",
+          name: "document.pdf",
+          data: Buffer.from(bytes).toString("base64"),
+        },
+      ],
+    });
+    const done = s.a.service.copy(
+      "peer1",
+      s.control,
+      false,
+      {
+        files: true,
+        formats: ["text/plain", "image/png"],
+        receive: async (content) => {
+          expect(content[0].name).toBe("document.pdf");
+          expect(
+            new Uint8Array(
+              await content[0].blob.arrayBuffer(),
+            ),
+          ).toEqual(bytes);
+          throw new Error("PDF clipboard unsupported");
+        },
+      },
+    );
+    await expect(done).rejects.toThrow(
+      "PDF clipboard unsupported",
+    );
+    expect(s.cacheFile).not.toHaveBeenCalled();
+    expect(s.a.service.tasks()[0].status).toBe("failed");
+  });
+  it.each(["png", "jpg"])(
+    "keeps a single %s file for browser image conversion instead of caching it",
+    async (extension) => {
+      const s = setup();
+      s.native.read.mockResolvedValue({
+        sequence: 8,
+        entries: [
+          {
+            type: "file",
+            name: `image.${extension}`,
+            data: btoa("image bytes"),
+          },
+        ],
+      });
+      const content = await s.a.service.copy(
+        "peer1",
+        s.control,
+        false,
+        { files: true, formats: ["image/png"] },
+      );
+      expect(content).toMatchObject([
+        { type: "file", name: `image.${extension}` },
+      ]);
+      expect(await content[0].blob.text()).toBe(
+        "image bytes",
+      );
+      expect(s.cacheFile).not.toHaveBeenCalled();
+    },
+  );
   it("imports copied files into file cache and keeps the task active until storage completes", async () => {
     const s = setup();
     s.destination("cache");

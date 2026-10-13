@@ -198,7 +198,7 @@
         "loading": "正在偵測剪貼簿能力…",
         "unavailable": "目前無法寫入剪貼簿，請檢查瀏覽器支援與權限，或選擇檔案快取。",
         "clipboard_limited": "剪貼簿（受限）",
-        "limited": "支援文字及瀏覽器允許的圖片格式。一般檔案請使用檔案快取。",
+        "limited": "目前僅支援 PNG/JPG，其他類型均不支援。",
         "title": "複製檔案時",
         "clipboard": "剪貼簿",
         "cache": "檔案快取",
@@ -1378,6 +1378,10 @@
     "gamepad_enable": "啟用手把轉發",
     "gamepad_disable": "停用手把轉發",
     "gamepad_unavailable": "被控端暫不支援手把轉發，請檢查被控端的遠端控制設定。",
-    "gamepad_failed": "遠端控制器掛載失敗或已停止回應。請檢查被控端驅動程式，再重新連接控制器。"
+    "gamepad_failed": "遠端控制器掛載失敗或已停止回應。請檢查被控端驅動程式，再重新連接控制器。",
+    "clipboard_ready": "已收到遠端剪貼簿內容，點擊即可複製到本機。",
+    "clipboard_write": "複製到本機剪貼簿",
+    "clipboard_write_failed": "無法寫入剪貼簿",
+    "clipboard_file_unsupported": "目前僅支援單個 PNG/JPG 圖片檔案，其他類型均不支援。"
   }
 }

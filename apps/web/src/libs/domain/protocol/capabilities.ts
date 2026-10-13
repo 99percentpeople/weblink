@@ -29,7 +29,7 @@ export interface ControlCapability {
 export interface PeerCapabilities {
   [service: string]: unknown;
   messaging?: Record<string, never>;
-  fileDrop?: Record<string, never>;
+  fileDrop?: { hover?: boolean };
   files?: { content: boolean; shared: boolean };
   room?: { chat: boolean; files: boolean };
   screen?: {
@@ -89,7 +89,9 @@ const validators: Record<
   (value: unknown) => boolean
 > = {
   messaging: (v) => record(v),
-  fileDrop: (v) => record(v),
+  fileDrop: (v) =>
+    record(v) &&
+    (v.hover === undefined || typeof v.hover === "boolean"),
   files: (v) => flags(v, ["content", "shared"]),
   room: (v) => flags(v, ["chat", "files"]),
   screen: (v) =>

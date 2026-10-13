@@ -24,6 +24,14 @@ import {
 export const platform: PlatformRuntime = {
   saveFile: saveNativeFile,
   fileDrop: {
+    hover: (scope, operationId, target, point, types) =>
+      invoke("file_drop_hover", {
+        scope,
+        operationId,
+        target,
+        point,
+        types,
+      }),
     prepare: (
       scope,
       operationId,

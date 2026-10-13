@@ -10,6 +10,7 @@ import {
   MAX_REMOTE_FILE_BYTES,
 } from "@/libs/domain/protocol/remote-file-limits";
 import { platform } from "@/libs/platform/runtime";
+import { browserClipboardContent } from "@/libs/application/browser-clipboard-files";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
@@ -48,8 +49,10 @@ export function createRemoteClipboard(props: {
       );
   };
   let disposed = false;
+  let pendingCancel: (() => void) | undefined;
   onCleanup(() => {
     disposed = true;
+    pendingCancel?.();
   });
   const authorized = () =>
     !disposed &&
@@ -71,6 +74,7 @@ export function createRemoteClipboard(props: {
     access.ready &&
     (access.write || destination() === "cache");
   const [busy, setBusy] = createSignal(false);
+  let pendingCopy: (() => void) | undefined;
   const current = (grant: string) =>
     authorized() &&
     props.control.clipboardGrant() === grant;
@@ -92,6 +96,10 @@ export function createRemoteClipboard(props: {
   };
   const copy = (selection = true): boolean => {
     if (!canCopy()) return false;
+    if (pendingCopy && selection) {
+      pendingCopy();
+      return true;
+    }
     if (busy()) return true;
     const grant = props.control.clipboardGrant()!;
     const control = props.control;
@@ -123,8 +131,7 @@ export function createRemoteClipboard(props: {
         {
           files:
             fileDestination === "cache" ||
-            (fileDestination === "clipboard" &&
-              access.writeFiles),
+            fileDestination === "clipboard",
           formats: access.native
             ? undefined
             : access.write
@@ -143,18 +150,21 @@ export function createRemoteClipboard(props: {
               await reserved?.catch(() => {});
               return;
             }
+            if (!access.native)
+              content = await browserClipboardContent(
+                content,
+                signal,
+              );
+            signal.throwIfAborted();
+            if (!valid()) throw new Error("Control ended");
             resolve(content);
             let written = false;
             if (reserved) {
               try {
                 await reserved;
                 written = true;
-              } catch (error) {
-                if (
-                  error instanceof DOMException &&
-                  error.name === "NotAllowedError"
-                )
-                  throw error;
+              } catch {
+                /* The gesture may only have reserved text. Try the actual formats next. */
               }
             }
             signal.throwIfAborted();
@@ -165,16 +175,107 @@ export function createRemoteClipboard(props: {
             if (
               !written ||
               content.some(
-                (entry) =>
-                  entry.type !== "text/plain" &&
-                  entry.type !== "file",
+                (entry) => entry.type !== "text/plain",
               )
             ) {
               // Keep the successfully reserved text if a richer format is rejected.
               try {
                 await write(content, grant);
               } catch (error) {
-                if (!written) throw error;
+                if (
+                  written &&
+                  !content.some(
+                    (entry) =>
+                      entry.type === "image/png" ||
+                      entry.type === "file",
+                  )
+                )
+                  return;
+                if (
+                  !(error instanceof DOMException) ||
+                  error.name !== "NotAllowedError"
+                )
+                  throw error;
+                // Keep the received bytes until a trusted click can write them; no second transfer.
+                await new Promise<void>(
+                  (resolve, reject) => {
+                    let writing = false;
+                    let settled = false;
+                    const finish = (error?: unknown) => {
+                      if (settled) return;
+                      settled = true;
+                      signal.removeEventListener(
+                        "abort",
+                        aborted,
+                      );
+                      toast.dismiss(id);
+                      if (pendingCopy === retry)
+                        pendingCopy = undefined;
+                      if (pendingCancel === cancel)
+                        pendingCancel = undefined;
+                      error ? reject(error) : resolve();
+                    };
+                    const aborted = () =>
+                      finish(signal.reason);
+                    const cancel = () =>
+                      finish(
+                        new DOMException(
+                          "Cancelled",
+                          "AbortError",
+                        ),
+                      );
+                    const retry = (event?: MouseEvent) => {
+                      event?.preventDefault();
+                      if (
+                        settled ||
+                        writing ||
+                        signal.aborted ||
+                        !valid()
+                      )
+                        return;
+                      writing = true;
+                      void write(content, grant).then(
+                        () => finish(),
+                        (error) => {
+                          writing = false;
+                          if (!settled && !signal.aborted)
+                            toast.error(
+                              t(
+                                "remote_control.clipboard_write_failed",
+                              ),
+                              {
+                                description: String(error),
+                              },
+                            );
+                        },
+                      );
+                    };
+                    const id = toast.info(
+                      t("remote_control.clipboard_ready"),
+                      {
+                        duration: Infinity,
+                        action: {
+                          label: t(
+                            "remote_control.clipboard_write",
+                          ),
+                          onClick: retry,
+                        },
+                        cancel: {
+                          label: t("common.action.cancel"),
+                          onClick: cancel,
+                        },
+                      },
+                    );
+                    pendingCopy = retry;
+                    pendingCancel = cancel;
+                    signal.addEventListener(
+                      "abort",
+                      aborted,
+                      { once: true },
+                    );
+                    if (signal.aborted) aborted();
+                  },
+                );
               }
             }
           },
@@ -182,7 +283,22 @@ export function createRemoteClipboard(props: {
       )
       .catch((error) => {
         reject(error);
-        reportFileLimit(error);
+        if (
+          error instanceof Error &&
+          error.name !== "AbortError"
+        )
+          toast.error(
+            t("remote_control.clipboard_write_failed"),
+            {
+              description:
+                error.message ===
+                "clipboard-file-unsupported"
+                  ? t(
+                      "remote_control.clipboard_file_unsupported",
+                    )
+                  : error.message,
+            },
+          );
       })
       .finally(() => setBusy(false));
     return true;
@@ -246,7 +362,10 @@ export function createRemoteClipboard(props: {
     return true;
   };
   createEffect(() => {
-    if (!canCopy()) return;
+    if (!canCopy()) {
+      pendingCancel?.();
+      return;
+    }
     destination();
     const control = props.control;
     const grant = control.clipboardGrant()!;

@@ -45,6 +45,7 @@ interface Options {
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
   supported?(session: PeerSession): boolean;
+  supportsHover?(session: PeerSession): boolean;
   maxFileBytes?(): number;
   getSession(id: string): PeerSession | undefined;
 }
@@ -55,6 +56,10 @@ interface Job extends RemoteContentTransferJob {
   scope?: ClipboardScope;
   offered: boolean;
   maxFileBytes: number;
+  phase: "hover" | "preparing" | "prepared";
+  hoverPoint?: PointerPosition;
+  hoverTypes?: string[];
+  hovering?: Promise<void>;
 }
 type Payload = FileDropRequest extends infer T
   ? T extends FileDropRequest
@@ -75,6 +80,12 @@ export class RemoteFileDrop {
   readonly tasks = this.state[0];
   private readonly stops: (() => void)[];
   private disposed = false;
+  private nativeSetup: Promise<void> = Promise.resolve();
+  private queueNative(action: () => Promise<void>) {
+    const result = this.nativeSetup.then(action);
+    this.nativeSetup = result.catch(() => {});
+    return result;
+  }
   constructor(private readonly options: Options) {
     this.stops = [
       options.protocol.handle("remote-file-drop", (ctx) =>
@@ -147,14 +158,24 @@ export class RemoteFileDrop {
     }
   }
   private cancelNative(job: Job) {
-    if (job.scope)
-      void this.options.platform.fileDrop
+    if (job.scope) {
+      // Cancel active OLE immediately, then retire any setup that was still in flight.
+      const early = this.options.platform.fileDrop
         ?.cancel(job.scope, job.id)
         .catch(() => {});
+      void this.queueNative(async () => {
+        await early;
+        await this.options.platform.fileDrop?.cancel(
+          job.scope!,
+          job.id,
+        );
+      }).catch(() => {});
+    }
   }
   private stop(job: Job, error?: unknown, notify = true) {
     if (job.lifetime.signal.aborted) return;
-    this.jobs.delete(job.session);
+    if (this.jobs.get(job.session) === job)
+      this.jobs.delete(job.session);
     job.lifetime.abort(
       error ??
         new DOMException(
@@ -227,6 +248,7 @@ export class RemoteFileDrop {
       lifetime: new AbortController(),
       offered: false,
       maxFileBytes: resolveRemoteFileLimit(maxFileBytes),
+      phase: "hover",
     };
     this.jobs.set(session, job);
     const timer = setTimeout(
@@ -284,6 +306,70 @@ export class RemoteFileDrop {
       file,
     );
   }
+  /** Coalesce hover positions while an acknowledged update is in flight. */
+  hover(
+    peerId: string,
+    control: RemotePointer,
+    point: PointerPosition,
+    types: string[],
+  ) {
+    const session = this.options.getSession(peerId);
+    const target = control.fileDropTarget();
+    if (
+      !session ||
+      !target ||
+      !this.options.enabled() ||
+      !this.options.supportsHover?.(session)
+    )
+      return;
+    let job = this.jobs.get(session);
+    if (job && job.phase !== "hover") return;
+    if (
+      job &&
+      (job.control !== control ||
+        job.grantId !== target.grantId ||
+        !sameControlTarget(job.target, target.target))
+    ) {
+      this.stop(job);
+      job = undefined;
+    }
+    job ??= this.start(
+      session,
+      createUuid(),
+      target.grantId,
+      target.target,
+      control,
+    );
+    job.hoverPoint = point;
+    job.hoverTypes = types.slice(0, 16);
+    if (job.hovering) return;
+    const current = job;
+    current.hovering = (async () => {
+      while (
+        current.hoverPoint &&
+        current.phase === "hover"
+      ) {
+        const point = current.hoverPoint;
+        current.hoverPoint = undefined;
+        await this.call(current, {
+          action: "hover",
+          destination: current.target,
+          point,
+          types: current.hoverTypes!,
+        });
+      }
+    })()
+      .catch((error) => this.stop(current, error))
+      .finally(() => {
+        current.hovering = undefined;
+      });
+  }
+  leave(peerId: string, control: RemotePointer) {
+    const session = this.options.getSession(peerId);
+    const job = session && this.jobs.get(session);
+    if (job?.control === control && job.phase === "hover")
+      this.stop(job);
+  }
   async drop(
     peerId: string,
     control: RemotePointer,
@@ -305,13 +391,22 @@ export class RemoteFileDrop {
     )
       throw new Error("Remote file drop unavailable");
     signal?.throwIfAborted();
-    const job = this.start(
-      session,
-      createUuid(),
-      target.grantId,
-      target.target,
-      control,
-    );
+    const hovering = this.jobs.get(session);
+    const job =
+      hovering?.phase === "hover" &&
+      hovering.control === control &&
+      hovering.grantId === target.grantId &&
+      sameControlTarget(hovering.target, target.target)
+        ? hovering
+        : this.start(
+            session,
+            createUuid(),
+            target.grantId,
+            target.target,
+            control,
+          );
+    job.phase = "preparing";
+    job.hoverPoint = undefined;
     const abort = () => this.stop(job);
     signal?.addEventListener("abort", abort, {
       once: true,
@@ -324,6 +419,7 @@ export class RemoteFileDrop {
         job.maxFileBytes,
       );
       void files.catch(() => {});
+      await job.hovering;
       await this.call(job, {
         action: "prepare",
         destination: job.target,
@@ -379,20 +475,41 @@ export class RemoteFileDrop {
     const native = this.options.platform.fileDrop;
     if (!native)
       throw new Error("Host file drop unavailable");
-    if (message.action === "prepare") {
+    if (
+      message.action === "prepare" ||
+      message.action === "hover"
+    ) {
       const scope = this.options.host.clipboardScope(
         session.targetClientId,
         message.grantId,
       );
-      job = this.start(
-        session,
-        message.operationId,
-        message.grantId,
-        message.destination,
-        undefined,
-        resolveRemoteFileLimit(message.maxFileBytes),
-      );
+      const reuse =
+        job?.phase === "hover" &&
+        !job.control &&
+        job.id === message.operationId &&
+        job.grantId === message.grantId &&
+        sameControlTarget(job.target, message.destination);
+      job = reuse
+        ? job!
+        : this.start(
+            session,
+            message.operationId,
+            message.grantId,
+            message.destination,
+            undefined,
+            resolveRemoteFileLimit(
+              message.action === "prepare"
+                ? message.maxFileBytes
+                : undefined,
+            ),
+          );
       job.scope = scope;
+      if (message.action === "prepare") {
+        job.phase = "preparing";
+        job.maxFileBytes = resolveRemoteFileLimit(
+          message.maxFileBytes,
+        );
+      }
     }
     if (
       !job ||
@@ -407,17 +524,39 @@ export class RemoteFileDrop {
     try {
       signal.throwIfAborted();
       this.check(job);
-      if (message.action === "prepare") {
-        await native.prepare(
-          job.scope!,
-          job.id,
-          job.target,
-          message.point,
-          job.maxFileBytes,
-        );
+      if (message.action === "hover") {
+        if (!native.hover)
+          throw new Error("Host hover unavailable");
+        await this.queueNative(async () => {
+          this.check(job!);
+          await native.hover!(
+            job!.scope!,
+            job!.id,
+            job!.target,
+            message.point,
+            message.types,
+          );
+        });
         this.check(job);
         return;
       }
+      if (message.action === "prepare") {
+        await this.queueNative(async () => {
+          this.check(job!);
+          await native.prepare(
+            job!.scope!,
+            job!.id,
+            job!.target,
+            message.point,
+            job!.maxFileBytes,
+          );
+        });
+        this.check(job);
+        job.phase = "prepared";
+        return;
+      }
+      if (job.phase !== "prepared")
+        throw new Error("File drop was not prepared");
       if (job.offered)
         throw new Error("File drop already consumed");
       job.offered = true;

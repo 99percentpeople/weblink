@@ -1366,15 +1366,19 @@ semantics are not transported. Each operation uses the shared remote file limit 
 initial capability and permission discovery completes: choose Clipboard if file
 writing is available, otherwise File cache, then persist that choice. Saved choices
 are never replaced by later permission changes. The selector requires completed
-discovery and clipboard synchronization to be enabled. Clipboard is selectable only
-with native clipboard capability. Browser custom formats do not provide native
-file-manager paste, even over HTTPS, so Web controllers never advertise file clipboard
-writing. File cache remains available without clipboard APIs;
+discovery and clipboard synchronization to be enabled. Web controllers label this choice
+Clipboard (limited): text and image contents use standard browser formats. A single
+copied PNG/JPEG file is decoded and written as PNG image content, not
+as an OS file list. PDFs, multiple files and other unsupported files produce a
+clipboard error. Clipboard and File cache remain separate destinations and never
+redirect into each other. Browser custom formats do not provide native file-manager
+paste, even over HTTPS, so this flow does not write file data into custom formats.
+Windows desktop controllers can write the original file list, including PDFs, to
+their native clipboard.
+File cache remains available without clipboard APIs;
 it uses the existing file-library import, deduplication and pinning flow. Off excludes
 files and directories before the native adapter reads their bytes. It does not affect
-text, images or files pasted into the host. Unavailable persisted clipboard choices
-also exclude files, without silently changing the user's chosen destination or
-importing files into the cache.
+text, images or files pasted into the host. Persisted preferences are not rewritten.
 Browser read requests include an optional `formats` list of writable non-file MIME
 types. Hosts filter alternatives before packing or transferring them; `files: false`
 also excludes files and directories before native file access. An empty `formats`
@@ -1425,7 +1429,11 @@ files and subscribe to changes. Otherwise the change subscription is disabled an
 ordinary remote Ctrl+C still works.
 Without programmatic read capability, Ctrl+V/system paste events remain supported
 through the focused remote input surface or soft-keyboard editor. Text and single-chunk
-copy/paste operations emit no toasts. Clipboard file tasks show a cancellable progress
+copy/paste operations need no progress toast. A browser that refuses an automatic
+clipboard write keeps the received content pending and offers a Copy to clipboard
+button; clicking writes the existing bytes without another transfer. Cancellation,
+revocation, unmounting the control surface and the operation deadline dismiss this
+pending action. Clipboard file tasks show a cancellable progress
 toast in the foreground and use the existing transfer notification preference in the
 background, including completion or failure. Progress updates reuse the same toast;
 background notifications are not repeated for each chunk. Cancellation stops the existing
@@ -1466,12 +1474,22 @@ onto the remote video position, excluding letterbox margins. Directories use the
 ZIP worker. This feature supports copying into the remote computer, not dragging files
 out of a remote window into the controller's OS.
 
-The `remote-file-drop` prepare/offer/cancel exchange uses the same remote-content bundle,
+Peers advertising `fileDrop.hover` also exchange `hover` requests during dragenter and
+dragover; leaving the video, cancellation or revocation cancels the native hover. The
+controller shows the target application's drag feedback through the video, without a
+local drop mask. Hover updates are coalesced, and ordered before prepare at the final
+drop position. Peers without the optional capability retain prepare/offer/cancel.
+
+The `remote-file-drop` exchange uses the same remote-content bundle,
 file channels, sender/receiver, temporary cache, backpressure and task feedback as remote
 clipboard files. The shared remote file size setting applies to both drop and clipboard files (default 64 MiB, configurable from 1 to 512 MiB per operation). The controller snapshots the limit at operation start and sends it to the host; both ends enforce total file bytes, including before and after folder compression. Bundle metadata has a separate 1 MiB budget; text/image alternatives retain their 64 MiB budget. There are at most 4096 entries; only multi-chunk transfers create
 tasks. Preparing directories shows a cancellable loading notice. No clipboard API access
 or Ctrl+V injection is used. The host stages real files and uses a shell IDataObject,
-IDropSource and OLE DoDragDrop on a dedicated STA. Only DROPEFFECT_COPY is allowed.
+IDropSource and OLE DoDragDrop on a dedicated STA. Browser file contents and names are
+protected until drop, so live hover uses bounded temporary MIME-based file hints. This
+preview can only produce DragEnter/DragOver/DragLeave, never Drop. It stays alive during
+transfer, then is cancelled and joined before real staged files start the final OLE
+operation. Only DROPEFFECT_COPY is allowed.
 The OLE loop continues sending local hover events while the target decides whether
 to accept the files, including asynchronous decisions by embedded web editors. It
 releases only after hover feedback allows copying, with a five-second deadline;
@@ -1482,7 +1500,8 @@ does not mean a target's later asynchronous import or copy has finished. Applica
 that do not accept OLE file drops fail without falling back to clipboard paste.
 
 Preparation binds the grant, capture source, media ID, geometry revision, physical point,
-window identity and window bounds. Before native application and during drag continuation,
+application root-window identity and bounds. Child drop overlays may appear without
+invalidating the target. Before native application and during drag continuation,
 the host rechecks authorization and the target. A different window or changed bounds,
 revoked control, disconnected session, disabled controller setting or cancellation stops
 pending work. Input focus/epoch resets alone do not invalidate an approved drop. A target

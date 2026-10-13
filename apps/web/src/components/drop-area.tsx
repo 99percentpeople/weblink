@@ -20,6 +20,8 @@ interface DropAreaProps<
 > extends ParentProps {
   overlay?: (state: DropAreaState) => JSX.Element;
   onDrop?: (event: DragEvent) => void;
+  onDragOver?: (event: DragEvent) => void;
+  onDragCancel?: () => void;
   disabled?: boolean;
   ref?: (element: HTMLElement) => void;
   as?: T;
@@ -35,6 +37,8 @@ export default function DropArea<T extends ValidComponent>(
     "children",
     "overlay",
     "onDrop",
+    "onDragOver",
+    "onDragCancel",
     "disabled",
     "ref",
     "as",
@@ -52,9 +56,11 @@ export default function DropArea<T extends ValidComponent>(
       return active() && !local.disabled;
     },
   };
-  const reset = () => {
+  const reset = (cancel = true) => {
+    const wasActive = active();
     dragTarget = null;
     setActive(false);
+    if (cancel && wasActive) local.onDragCancel?.();
   };
   const hasFiles = (event: DragEvent) =>
     Array.from(event.dataTransfer?.types ?? []).includes(
@@ -80,12 +86,14 @@ export default function DropArea<T extends ValidComponent>(
     if (!accept(event)) return;
     dragTarget = event.target;
     setActive(true);
+    if (!local.disabled) local.onDragOver?.(event);
   };
   const handleDragOver = (event: DragEvent) => {
     if (!accept(event)) return;
     // Do not publish each DragEvent: that remounts overlays on every dragover.
     dragTarget = event.target;
     setActive(true);
+    if (!local.disabled) local.onDragOver?.(event);
   };
   const handleDragLeave = (event: DragEvent) => {
     if (!active()) return;
@@ -101,7 +109,7 @@ export default function DropArea<T extends ValidComponent>(
   const handleDrop = (event: DragEvent) => {
     if (!hasFiles(event)) return;
     accept(event);
-    reset();
+    reset(false);
     if (!local.disabled) local.onDrop?.(event);
   };
 
@@ -124,9 +132,18 @@ export default function DropArea<T extends ValidComponent>(
       setDropEffect,
       options,
     );
-    window.addEventListener("drop", reset, options);
-    window.addEventListener("dragend", reset, options);
-    window.addEventListener("blur", reset, options);
+    window.addEventListener(
+      "drop",
+      (event) =>
+        reset(!contains(event.target) || local.disabled),
+      options,
+    );
+    window.addEventListener(
+      "dragend",
+      () => reset(),
+      options,
+    );
+    window.addEventListener("blur", () => reset(), options);
     window.addEventListener(
       "keydown",
       (event) => {

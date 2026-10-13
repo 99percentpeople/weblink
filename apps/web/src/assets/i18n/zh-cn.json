@@ -198,7 +198,7 @@
         "loading": "正在检测剪贴板能力…",
         "unavailable": "当前无法写入剪贴板，请检查浏览器支持与权限，或选择文件缓存。",
         "clipboard_limited": "剪贴板（受限）",
-        "limited": "支持文本及浏览器允许的图片格式。普通文件请使用文件缓存。",
+        "limited": "目前仅支持 PNG/JPG，其他类型均不支持。",
         "title": "复制文件时",
         "clipboard": "剪贴板",
         "cache": "文件缓存",
@@ -1378,6 +1378,10 @@
     "gamepad_enable": "启用手柄转发",
     "gamepad_disable": "停用手柄转发",
     "gamepad_unavailable": "被控端暂不支持手柄转发，请检查被控端的远程控制设置。",
-    "gamepad_failed": "远端手柄挂载失败或已停止响应。请检查被控端驱动，然后重新连接手柄。"
+    "gamepad_failed": "远端手柄挂载失败或已停止响应。请检查被控端驱动，然后重新连接手柄。",
+    "clipboard_ready": "已收到远端剪贴板内容，点击即可复制到本机。",
+    "clipboard_write": "复制到本机剪贴板",
+    "clipboard_write_failed": "无法写入剪贴板",
+    "clipboard_file_unsupported": "目前仅支持单个 PNG/JPG 图片文件，其他类型均不支持。"
   }
 }

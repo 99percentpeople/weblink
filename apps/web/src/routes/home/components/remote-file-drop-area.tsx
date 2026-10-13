@@ -1,11 +1,11 @@
 import {
   createSignal,
+  createEffect,
   onCleanup,
   type ParentProps,
 } from "solid-js";
 import { toast } from "solid-sonner";
 import DropArea from "@/components/drop-area";
-import { FileDropOverlay } from "@/components/file-drop-overlay";
 import { t } from "@/i18n";
 import { handleDropItems } from "@/libs/utils/process-file";
 import { CLIPBOARD_MAX_ENTRIES } from "@/libs/domain/protocol/clipboard";
@@ -21,23 +21,60 @@ export function RemoteFileDropArea(
     enabled: boolean;
     clientId?: string;
     control?: RemotePointer;
-    service?: Pick<RemoteFileDrop, "drop">;
+    service?: Pick<RemoteFileDrop, "drop"> &
+      Partial<Pick<RemoteFileDrop, "hover" | "leave">>;
     point(event: DragEvent): PointerPosition | undefined;
   }>,
 ) {
   const [busy, setBusy] = createSignal(false);
   let operation: AbortController | undefined;
-  onCleanup(() => operation?.abort());
+  let cancelHover: (() => void) | undefined;
+  const leave = () => {
+    cancelHover?.();
+    cancelHover = undefined;
+  };
+  onCleanup(() => {
+    leave();
+    operation?.abort();
+  });
   const allowed = () =>
     props.active &&
     props.enabled &&
     !!props.service &&
     !!props.clientId &&
     !!props.control?.fileDropTarget();
+  createEffect(() => {
+    if (!allowed()) leave();
+  });
+  const hover = (event: DragEvent) => {
+    const point = props.point(event);
+    if (!allowed() || busy() || !point) {
+      leave();
+      return;
+    }
+    const { clientId, control, service } = props;
+    cancelHover = () =>
+      service?.leave?.(clientId!, control!);
+    service?.hover?.(
+      clientId!,
+      control!,
+      point,
+      [
+        ...new Set(
+          Array.from(event.dataTransfer?.items ?? [])
+            .filter((item) => item.kind === "file")
+            .map((item) => item.type),
+        ),
+      ].slice(0, 16),
+    );
+  };
   const drop = async (event: DragEvent) => {
     const data = event.dataTransfer;
     const point = props.point(event);
-    if (!allowed() || busy() || !data || !point) return;
+    if (!allowed() || busy() || !data || !point) {
+      leave();
+      return;
+    }
     const life = new AbortController();
     operation = life;
     setBusy(true);
@@ -105,16 +142,9 @@ export function RemoteFileDropArea(
         "pointer-events": props.active ? "auto" : "none",
       }}
       disabled={!allowed() || busy()}
+      onDragOver={hover}
+      onDragCancel={leave}
       onDrop={(event) => void drop(event)}
-      overlay={(state) => (
-        <FileDropOverlay
-          state={state}
-          title={t("remote_control.file_drop.hint")}
-          unavailableTitle={t(
-            "remote_control.file_drop.unavailable",
-          )}
-        />
-      )}
     >
       {props.children}
     </DropArea>

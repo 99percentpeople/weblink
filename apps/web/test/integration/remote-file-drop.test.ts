@@ -12,7 +12,10 @@ import { P2PProtocol } from "@/libs/domain/protocol/protocol";
 import { TransferRegistry } from "@/libs/application/transfer/transfer-registry";
 import type { PeerSession } from "@/libs/domain/session";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
-import type { PlatformRuntime } from "@weblink/platform";
+import type {
+  PlatformRuntime,
+  NativeFileDrop,
+} from "@weblink/platform";
 import {
   FakeRtcTransport,
   deferred,
@@ -34,13 +37,19 @@ const target = {
   geometryRevision: "geometry",
 };
 function setup() {
+  let supportsHover = true;
   let maxFileBytes = 64 * 1024 * 1024;
   let enabled = true,
     grant = "grant";
   const native = {
-    prepare: vi.fn(async () => {}),
-    apply: vi.fn(async () => {}),
-    cancel: vi.fn(async () => {}),
+    hover: vi.fn<NonNullable<NativeFileDrop["hover"]>>(
+      async () => {},
+    ),
+    prepare: vi.fn<NativeFileDrop["prepare"]>(
+      async () => {},
+    ),
+    apply: vi.fn<NativeFileDrop["apply"]>(async () => {}),
+    cancel: vi.fn<NativeFileDrop["cancel"]>(async () => {}),
   };
   const clipboard = { write: vi.fn() };
   const control = Object.assign(new EventTarget(), {
@@ -90,6 +99,7 @@ function setup() {
         },
       },
       enabled: () => i === 0 && enabled,
+      supportsHover: () => supportsHover,
       maxFileBytes: () => (i === 0 ? maxFileBytes : 1),
       getSession: (id) =>
         id === session.targetClientId ? session : undefined,
@@ -152,6 +162,9 @@ function setup() {
     native,
     clipboard,
     control,
+    legacy: () => {
+      supportsHover = false;
+    },
     limit: (bytes: number) => {
       maxFileBytes = bytes;
     },
@@ -175,6 +188,120 @@ const files = () =>
     ),
   ]);
 describe("native remote file drop", () => {
+  it("forwards hover before transferring files and only applies after a real drop", async () => {
+    const s = setup();
+    s.a.service.hover("peer1", s.control, point, [
+      "image/png",
+    ]);
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledOnce(),
+    );
+    expect(s.native.prepare).not.toHaveBeenCalled();
+    expect(s.native.apply).not.toHaveBeenCalled();
+    expect(s.a.caches.size).toBe(0);
+    const moved = { x: 0.4, y: 0.6 };
+    s.a.service.hover("peer1", s.control, moved, [
+      "image/png",
+    ]);
+    const read = vi.fn(files);
+    const done = s.a.service.drop(
+      "peer1",
+      s.control,
+      moved,
+      read,
+    );
+    expect(read).toHaveBeenCalledOnce();
+    // The browser's dragend after a drop must not cancel the transfer.
+    s.a.service.leave("peer1", s.control);
+    await done;
+    expect(s.native.prepare.mock.calls[0][1]).toBe(
+      s.native.hover.mock.calls[0][1],
+    );
+    expect(s.native.prepare).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      target,
+      moved,
+      64 * 1024 * 1024,
+    );
+    expect(s.native.apply).toHaveBeenCalledOnce();
+  });
+  it("coalesces hover updates and cancels on leave without importing preview files", async () => {
+    const s = setup(),
+      ready = deferred<void>();
+    s.native.hover.mockImplementationOnce(
+      () => ready.promise,
+    );
+    s.a.service.hover("peer1", s.control, point, [
+      "image/png",
+    ]);
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledOnce(),
+    );
+    for (let i = 1; i <= 10; i++)
+      s.a.service.hover(
+        "peer1",
+        s.control,
+        { x: i / 10, y: 0.5 },
+        ["image/png"],
+      );
+    expect(s.native.hover).toHaveBeenCalledOnce();
+    ready.resolve();
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    expect(s.native.hover).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.any(String),
+      target,
+      { x: 1, y: 0.5 },
+      ["image/png"],
+    );
+    s.a.service.leave("peer1", s.control);
+    await vi.waitFor(() =>
+      expect(s.native.cancel).toHaveBeenCalled(),
+    );
+    expect(s.native.apply).not.toHaveBeenCalled();
+    expect(s.a.service.tasks()).toEqual([]);
+  });
+  it("retires delayed hover initialization before a replacement native drag starts", async () => {
+    const s = setup(),
+      ready = deferred<void>();
+    s.native.hover.mockImplementationOnce(
+      () => ready.promise,
+    );
+    s.a.service.hover("peer1", s.control, point, []);
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledOnce(),
+    );
+    s.a.service.leave("peer1", s.control);
+    s.a.service.hover("peer1", s.control, point, []);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.native.hover).toHaveBeenCalledOnce();
+    ready.resolve();
+    await vi.waitFor(() =>
+      expect(s.native.hover).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      s.native.cancel.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      s.native.hover.mock.invocationCallOrder[1],
+    );
+    expect(s.native.apply).not.toHaveBeenCalled();
+  });
+  it("uses the existing drop flow for peers that do not advertise hover", async () => {
+    const s = setup();
+    s.legacy();
+    s.a.service.hover("peer1", s.control, point, []);
+    await s.a.service.drop(
+      "peer1",
+      s.control,
+      point,
+      files,
+    );
+    expect(s.native.hover).not.toHaveBeenCalled();
+    expect(s.native.apply).toHaveBeenCalledOnce();
+  });
   it("rejects total file bytes over the configured limit before opening a transfer", async () => {
     const s = setup();
     s.limit(5);

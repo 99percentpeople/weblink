@@ -57,6 +57,17 @@ export interface PlatformRuntime {
 }
 
 export interface NativeFileDrop {
+  hover?(
+    scope: ClipboardScope,
+    operationId: string,
+    target: {
+      sourceId: string;
+      mediaId: string;
+      geometryRevision: string;
+    },
+    point: { x: number; y: number },
+    types: string[],
+  ): Promise<void>;
   prepare(
     scope: ClipboardScope,
     operationId: string,

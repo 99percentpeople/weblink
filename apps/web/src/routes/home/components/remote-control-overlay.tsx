@@ -40,7 +40,8 @@ import { RemoteFileDropArea } from "./remote-file-drop-area";
 import type { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 export function RemoteControlOverlay(props: {
   clientId?: string;
-  fileDrop?: Pick<RemoteFileDrop, "drop">;
+  fileDrop?: Pick<RemoteFileDrop, "drop"> &
+    Partial<Pick<RemoteFileDrop, "hover" | "leave">>;
   enabled: boolean;
   keyboard?: () => RemoteKeyboardInputHandle | undefined;
 }) {

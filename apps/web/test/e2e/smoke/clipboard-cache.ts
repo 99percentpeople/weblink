@@ -2,6 +2,11 @@ import { RemoteFileDrop } from "@/libs/application/remote-file-drop";
 import { RemoteClipboard } from "@/libs/application/remote-clipboard";
 import { FileCacheFactory } from "@/libs/application/cache-service";
 import { toNativeClipboard } from "@/libs/application/clipboard-content";
+import {
+  writeBrowserClipboard,
+  readBrowserClipboard,
+} from "@/libs/application/clipboard-content";
+import { browserClipboardContent } from "@/libs/application/browser-clipboard-files";
 import { TransferRegistry } from "@/libs/application/transfer/transfer-registry";
 import { P2PProtocol } from "@/libs/domain/protocol/protocol";
 import { FILE_TRANSFER_CHANNEL_PROTOCOL } from "@/libs/domain/transfer/protocol";
@@ -28,7 +33,7 @@ const until = async (check: () => boolean) => {
 async function main() {
   const bytes = new Uint8Array(12 * 1024 * 1024 + 13);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
-  const entries = await toNativeClipboard([
+  let entries = await toNativeClipboard([
     {
       type: "file",
       name: "copied.bin",
@@ -38,6 +43,7 @@ async function main() {
   const factory = new FileCacheFactory();
   await factory.initialize();
   let imported = 0;
+  let fileDestination: "cache" | "clipboard" = "cache";
   let dropped = 0;
   const dropTarget = {
     sourceId: "screen",
@@ -165,7 +171,7 @@ async function main() {
       registry,
       caches,
       enabled: () => true,
-      fileDestination: () => "cache",
+      fileDestination: () => fileDestination,
       cacheFile: async (file, signal) => {
         const result = await factory.library.importFile(
           file,
@@ -308,6 +314,124 @@ async function main() {
       throw new Error(
         "Drop did not complete on both peers",
       );
+    fileDestination = "clipboard";
+    const imageFiles: string[] = [];
+    for (const [extension, mime] of [
+      ["png", "image/png"],
+      ["jpg", "image/jpeg"],
+    ]) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const context = canvas.getContext("2d")!;
+      const pixels = context.createImageData(256, 256);
+      let seed = 42;
+      for (let i = 0; i < pixels.data.length; i++) {
+        seed =
+          (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        pixels.data[i] = i % 4 === 3 ? 255 : seed >>> 24;
+      }
+      context.putImageData(pixels, 0, 0);
+      const blob = await new Promise<Blob>((resolve) =>
+        canvas.toBlob((b) => resolve(b!), mime),
+      );
+      entries = await toNativeClipboard([
+        { type: "file", name: `copied.${extension}`, blob },
+      ]);
+      await a.service.copy("peer1", control, false, {
+        files: true,
+        formats: ["image/png"],
+        receive: async (content, signal) => {
+          if (content[0]?.type !== "file")
+            throw new Error(
+              "Image file was filtered before transfer",
+            );
+          await writeBrowserClipboard(
+            await browserClipboardContent(content, signal),
+          );
+        },
+      });
+      const restored = await readBrowserClipboard();
+      const png = restored.find(
+        (entry) => entry.type === "image/png",
+      );
+      if (!png)
+        throw new Error(
+          "Image did not reach the browser clipboard",
+        );
+      const expected = await createImageBitmap(blob);
+      const actual = await createImageBitmap(png.blob);
+      context.drawImage(expected, 0, 0);
+      const before = context.getImageData(
+        0,
+        0,
+        256,
+        256,
+      ).data;
+      context.drawImage(actual, 0, 0);
+      const after = context.getImageData(
+        0,
+        0,
+        256,
+        256,
+      ).data;
+      expected.close();
+      actual.close();
+      if (
+        !before.every(
+          (value, i) => Math.abs(value - after[i]) <= 1,
+        )
+      )
+        throw new Error("Copied image pixels changed");
+      imageFiles.push(extension);
+    }
+    const pdf = new Blob(
+      [
+        "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n",
+      ],
+      { type: "application/pdf" },
+    );
+    entries = await toNativeClipboard([
+      { type: "file", name: "document.pdf", blob: pdf },
+    ]);
+    await writeBrowserClipboard([
+      {
+        type: "text/plain",
+        blob: new Blob(["Existing clipboard"], {
+          type: "text/plain",
+        }),
+      },
+    ]);
+    let pdfRejected = false;
+    try {
+      await a.service.copy("peer1", control, false, {
+        files: true,
+        formats: [],
+        receive: async (content, signal) =>
+          writeBrowserClipboard(
+            await browserClipboardContent(content, signal),
+          ),
+      });
+    } catch (error) {
+      if (
+        !String(error).includes(
+          "clipboard-file-unsupported",
+        )
+      )
+        throw error;
+      pdfRejected = true;
+    }
+    const unchanged = await readBrowserClipboard();
+    if (
+      !pdfRejected ||
+      imported !== 1 ||
+      unchanged.length !== 1 ||
+      unchanged[0].type !== "text/plain" ||
+      (await unchanged[0].blob.text()) !==
+        "Existing clipboard"
+    )
+      throw new Error(
+        "Unsupported PDF changed the clipboard or was saved to cache",
+      );
     report.__SPEED_TEST_REPORT__ = {
       ok: true,
       imported,
@@ -316,6 +440,9 @@ async function main() {
       nativeChannels: true,
       workersAndIndexedDB: true,
       focusChanged,
+      imageFiles,
+      browserClipboardImages: true,
+      pdfRejectedWithoutCache: true,
     };
   } catch (error) {
     throw new Error(

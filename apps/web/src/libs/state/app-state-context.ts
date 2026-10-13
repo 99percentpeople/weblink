@@ -36,7 +36,8 @@ export interface AppStateContextProps {
   peerCapabilities(
     target: ClientID,
   ): PeerCapabilities | undefined;
-  remoteFileDrop: Pick<RemoteFileDrop, "drop">;
+  remoteFileDrop: Pick<RemoteFileDrop, "drop"> &
+    Partial<Pick<RemoteFileDrop, "hover" | "leave">>;
   remoteClipboard: Pick<
     RemoteClipboard,
     "copy" | "paste" | "watch"

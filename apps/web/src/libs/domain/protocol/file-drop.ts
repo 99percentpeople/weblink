@@ -20,12 +20,21 @@ export type FileDropRequest = {
       destination: ControlTarget;
       point: { x: number; y: number };
     }
+  | {
+      action: "hover";
+      destination: ControlTarget;
+      point: { x: number; y: number };
+      /** MIME hints are available during dragging; file bytes are not. */
+      types: string[];
+    }
   | { action: "offer"; size: number }
   | { action: "cancel"; error?: string }
 );
 export function validFileDropRequest(
   v: Record<string, unknown>,
 ): boolean {
+  if (v.action !== "hover" && v.types !== undefined)
+    return false;
   if (
     !controlId(v.grantId) ||
     typeof v.operationId !== "string" ||
@@ -48,6 +57,19 @@ export function validFileDropRequest(
       v.size === undefined
     );
   if (v.error !== undefined) return false;
+  if (v.action === "hover") {
+    if (
+      !Array.isArray(v.types) ||
+      v.types.length > 16 ||
+      !v.types.every(
+        (type) =>
+          typeof type === "string" &&
+          type.length <= 128 &&
+          /^[a-zA-Z0-9!#$&^_.+\/-]*$/.test(type),
+      )
+    )
+      return false;
+  }
   if (v.action === "offer")
     return (
       v.destination === undefined &&
@@ -58,7 +80,7 @@ export function validFileDropRequest(
         remoteBundleLimit(MAX_REMOTE_FILE_BYTES, false)
     );
   if (
-    v.action !== "prepare" ||
+    (v.action !== "prepare" && v.action !== "hover") ||
     !controlTarget(v.destination) ||
     v.size !== undefined ||
     !v.point ||

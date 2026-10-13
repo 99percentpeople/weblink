@@ -203,7 +203,7 @@
         "loading": "Verfügbarkeit der Zwischenablage prüfen…",
         "unavailable": "Die Zwischenablage kann derzeit nicht beschrieben werden. Prüfe Browserunterstützung und Berechtigungen oder wähle den Datei-Cache.",
         "clipboard_limited": "Zwischenablage (eingeschränkt)",
-        "limited": "Unterstützt Text und vom Browser erlaubte Bildformate. Verwende für andere Dateien den Datei-Cache.",
+        "limited": "Derzeit werden nur PNG/JPG unterstützt. Alle anderen Dateitypen werden nicht unterstützt.",
         "title": "Beim Kopieren von Dateien",
         "clipboard": "Zwischenablage",
         "cache": "Dateicache",
@@ -1378,6 +1378,10 @@
     "gamepad_enable": "Gamepad-Weiterleitung aktivieren",
     "gamepad_disable": "Gamepad-Weiterleitung deaktivieren",
     "gamepad_unavailable": "Gamepad-Weiterleitung ist auf dem Host nicht verfügbar. Prüfe dort die Fernsteuerungseinstellungen.",
-    "gamepad_failed": "Das entfernte Gamepad konnte nicht verbunden werden oder reagiert nicht mehr. Treiber auf dem Host prüfen und Gamepad erneut verbinden."
+    "gamepad_failed": "Das entfernte Gamepad konnte nicht verbunden werden oder reagiert nicht mehr. Treiber auf dem Host prüfen und Gamepad erneut verbinden.",
+    "clipboard_ready": "Remote-Zwischenablage empfangen. Zum Kopieren auf dieses Gerät klicken.",
+    "clipboard_write": "In Zwischenablage kopieren",
+    "clipboard_write_failed": "Zwischenablage konnte nicht geschrieben werden",
+    "clipboard_file_unsupported": "Es wird nur eine einzelne PNG/JPG-Bilddatei unterstützt. Alle anderen Dateitypen werden nicht unterstützt."
   }
 }

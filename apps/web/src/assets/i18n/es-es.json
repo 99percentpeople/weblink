@@ -203,7 +203,7 @@
         "loading": "Comprobando disponibilidad del portapapeles…",
         "unavailable": "No se puede escribir en el portapapeles en este momento. Comprueba la compatibilidad y los permisos del navegador o elige la caché de archivos.",
         "clipboard_limited": "Portapapeles (limitado)",
-        "limited": "Admite texto y los formatos de imagen permitidos por el navegador. Usa la caché de archivos para otros archivos.",
+        "limited": "Actualmente solo admite PNG/JPG. No se admiten otros tipos.",
         "title": "Al copiar archivos",
         "clipboard": "Portapapeles",
         "cache": "Caché de archivos",
@@ -1378,6 +1378,10 @@
     "gamepad_enable": "Activar el reenvío del mando",
     "gamepad_disable": "Desactivar el reenvío del mando",
     "gamepad_unavailable": "El reenvío del mando no está disponible en el equipo remoto. Revisa sus ajustes de control remoto.",
-    "gamepad_failed": "El mando remoto no se pudo conectar o dejó de responder. Comprueba el controlador del equipo remoto y vuelve a conectar el mando."
+    "gamepad_failed": "El mando remoto no se pudo conectar o dejó de responder. Comprueba el controlador del equipo remoto y vuelve a conectar el mando.",
+    "clipboard_ready": "Portapapeles remoto recibido. Haz clic para copiarlo en este dispositivo.",
+    "clipboard_write": "Copiar al portapapeles",
+    "clipboard_write_failed": "No se pudo escribir en el portapapeles",
+    "clipboard_file_unsupported": "Solo se admite una imagen PNG/JPG. No se admiten otros tipos."
   }
 }

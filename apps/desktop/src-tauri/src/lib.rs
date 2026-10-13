@@ -128,6 +128,7 @@ pub fn run() {
             clipboard::clipboard_read,
             clipboard::clipboard_write,
             file_drop::file_drop_prepare,
+            file_drop::file_drop_hover,
             file_drop::file_drop_apply,
             file_drop::file_drop_cancel,
             remote_control::remote_control_status,

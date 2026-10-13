@@ -85,6 +85,23 @@ describe("desktop platform boundary", () => {
       "clipboard_write",
       { scope, entries, maxFileBytes },
     );
+    await platform.fileDrop!.hover!(
+      scope,
+      "operation",
+      target,
+      point,
+      ["image/png"],
+    );
+    expect(ipc).toHaveBeenLastCalledWith(
+      "file_drop_hover",
+      {
+        scope,
+        operationId: "operation",
+        target,
+        point,
+        types: ["image/png"],
+      },
+    );
     await platform.fileDrop!.prepare(
       scope,
       "operation",

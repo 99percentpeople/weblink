@@ -267,8 +267,10 @@ async function main() {
         origin: new URL(url).origin,
         permissions: ["notifications"],
       });
-    await cdp.call("Page.navigate", { url });
-    if (clipboardTest) {
+    if (clipboardTest || clipboardCacheTest) {
+      await cdp.call("Emulation.setFocusEmulationEnabled", {
+        enabled: true,
+      });
       await cdp.call("Browser.grantPermissions", {
         origin: new URL(url).origin,
         permissions: [
@@ -276,6 +278,9 @@ async function main() {
           "clipboardSanitizedWrite",
         ],
       });
+    }
+    await cdp.call("Page.navigate", { url });
+    if (clipboardTest) {
       const waitFor = async (name) => {
         const until = Date.now() + 20000;
         while (Date.now() < until) {

@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 use weblink_desktop_input::protocol::Target;
+mod hover;
 
 #[cfg(windows)]
 mod windows;
@@ -34,6 +35,12 @@ mod windows {
         _: Box<dyn Fn() -> bool + Send>,
     ) -> Result<(), String> {
         Err("Native file drop unavailable".into())
+    }
+    pub fn preview(
+        _: &[String],
+        _: Box<dyn Fn() -> Option<(i32, i32)> + Send>,
+    ) -> Result<(), String> {
+        Err("Native file hover unavailable".into())
     }
 }
 #[derive(Clone, Deserialize, PartialEq, Eq)]
@@ -60,6 +67,7 @@ struct Pending {
     cancelled: Arc<AtomicBool>,
     applying: bool,
     max_file_bytes: usize,
+    preview: Option<hover::Preview>,
 }
 static PENDING: LazyLock<Mutex<HashMap<String, Pending>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -67,10 +75,32 @@ static FILES: Mutex<Vec<(Instant, StagedFiles)>> = Mutex::new(Vec::new());
 static DROPPING: Mutex<()> = Mutex::new(());
 const LIFETIME: Duration = Duration::from_secs(120);
 pub fn shutdown() {
+    hover::shutdown();
     for (_, pending) in PENDING.lock().unwrap_or_else(|e| e.into_inner()).drain() {
         pending.cancelled.store(true, Ordering::Release);
+        if let Some(preview) = pending.preview {
+            preview.stop();
+        }
     }
     FILES.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+#[tauri::command]
+pub async fn file_drop_hover(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Shared>,
+    scope: Scope,
+    operation_id: String,
+    target: Target,
+    point: Position,
+    types: Vec<String>,
+) -> Result<(), String> {
+    local(&window)?;
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        hover::update(service, scope, operation_id, target, point, types)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 fn local(window: &tauri::WebviewWindow) -> Result<(), String> {
     if window.label() == "main" {
@@ -118,6 +148,13 @@ pub async fn file_drop_prepare(
     tauri::async_runtime::spawn_blocking(move || {
         let pixels = position(&service, &scope, &target, &point)?;
         let destination = windows::Destination::capture(pixels)?;
+        let preview = hover::take(&scope, &operation_id)?;
+        if let Some(preview) = &preview {
+            if let Err(error) = preview.move_to(&scope, &target, point.clone()) {
+                preview.stop();
+                return Err(error);
+            }
+        }
         let mut pending = PENDING.lock().map_err(|e| e.to_string())?;
         pending.retain(|_, p| p.applying || p.created.elapsed() < LIFETIME);
         if pending.contains_key(&operation_id) || pending.len() >= 16 {
@@ -135,6 +172,7 @@ pub async fn file_drop_prepare(
                 cancelled: Arc::new(AtomicBool::new(false)),
                 applying: false,
                 max_file_bytes,
+                preview,
             },
         );
         Ok(())
@@ -143,19 +181,29 @@ pub async fn file_drop_prepare(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub fn file_drop_cancel(
+pub async fn file_drop_cancel(
     window: tauri::WebviewWindow,
     scope: Scope,
     operation_id: String,
 ) -> Result<(), String> {
     local(&window)?;
-    let mut pending = PENDING.lock().map_err(|e| e.to_string())?;
-    if pending.get(&operation_id).is_some_and(|p| p.scope == scope) {
-        if let Some(p) = pending.remove(&operation_id) {
-            p.cancelled.store(true, Ordering::Release);
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(preview) = hover::take(&scope, &operation_id)? {
+            preview.stop();
         }
-    }
-    Ok(())
+        let mut pending = PENDING.lock().map_err(|e| e.to_string())?;
+        if pending.get(&operation_id).is_some_and(|p| p.scope == scope) {
+            if let Some(p) = pending.remove(&operation_id) {
+                p.cancelled.store(true, Ordering::Release);
+                if let Some(preview) = p.preview {
+                    preview.stop();
+                }
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub async fn file_drop_apply(
@@ -178,6 +226,10 @@ pub async fn file_drop_apply(
             p.clone()
         };
         let result = (|| {
+            // End the metadata-only drag before exposing the real paths. Never drop preview files.
+            if let Some(preview) = &p.preview {
+                preview.stop();
+            }
             let _dropping = DROPPING
                 .try_lock()
                 .map_err(|_| "Another file drop is running")?;

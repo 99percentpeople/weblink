@@ -10,6 +10,8 @@ import { toast } from "solid-sonner";
 import { platform } from "@/libs/platform/runtime";
 import { reconcile } from "solid-js/store";
 import { createRemoteClipboard } from "@/libs/hooks/create-remote-clipboard";
+import type { ClipboardContent } from "@/libs/application/clipboard-content";
+import { browserClipboardContent } from "@/libs/application/browser-clipboard-files";
 import {
   appState,
   createInitialAppState,
@@ -22,8 +24,20 @@ import type { RuntimeCapabilities } from "@weblink/platform";
 import { createAppClipboardAccess } from "@/libs/state/create-app-clipboard-access";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn() },
+  toast: {
+    error: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
+vi.mock(
+  "@/libs/application/browser-clipboard-files",
+  () => ({
+    browserClipboardContent: vi.fn(
+      async (content: ClipboardContent) => content,
+    ),
+  }),
+);
 let dispose: (() => void) | undefined;
 function mountAccess() {
   let capabilities: RuntimeCapabilities | undefined;
@@ -130,7 +144,11 @@ it("successive copy gestures fetch new selections and automatically write rich f
   );
 });
 
-async function mountClipboard() {
+async function mountClipboard(
+  content: ClipboardContent = [
+    { type: "text/plain", blob: new Blob(["remote"]) },
+  ],
+) {
   setAppState(
     "options",
     "remoteKeyboard",
@@ -144,12 +162,6 @@ async function mountClipboard() {
       _selection: boolean,
       options?: ClipboardCopyOptions,
     ) => {
-      const content = [
-        {
-          type: "text/plain" as const,
-          blob: new Blob(["remote"]),
-        },
-      ];
       await options?.receive?.(
         content,
         new AbortController().signal,
@@ -266,7 +278,7 @@ it("allows copy and paste gestures while browser permissions are still prompt", 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(copy).toHaveBeenCalledOnce();
   expect(copy.mock.calls[0][3]).toMatchObject({
-    files: false,
+    files: true,
     formats: expect.arrayContaining([
       "text/plain",
       "image/png",
@@ -367,7 +379,7 @@ it("retries on the next real copy and emits no toast for failed operations", asy
   await new Promise((resolve) => setTimeout(resolve, 0));
   actions.copy();
   await vi.waitFor(() =>
-    expect(write).toHaveBeenCalledTimes(2),
+    expect(write).toHaveBeenCalledTimes(3),
   );
   expect(copy).toHaveBeenCalledTimes(2);
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -479,7 +491,7 @@ it("allows file-cache copying and context-menu watching without browser clipboar
   expect(actions.canCopy()).toBe(false);
 });
 it.each([true, false])(
-  "excludes files from a saved browser clipboard choice even with custom format support (selection=%s)",
+  "requests copied files without changing the clipboard destination (selection=%s)",
   async (selection) => {
     browser(true);
     vi.stubGlobal(
@@ -504,7 +516,7 @@ it.each([true, false])(
         expect.anything(),
         selection,
         expect.objectContaining({
-          files: false,
+          files: true,
           formats: ["text/plain"],
         }),
       ),
@@ -527,4 +539,150 @@ it("requests cache files without text or images when browser writing is unavaila
     true,
     expect.objectContaining({ files: true, formats: [] }),
   );
+});
+it.each(["png", "jpg"])(
+  "receives a copied %s file in limited clipboard mode and writes the converted image",
+  async (extension) => {
+    const { write } = browser(true);
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "clipboardFiles",
+      "clipboard",
+    );
+    const files: ClipboardContent = [
+      {
+        type: "file",
+        name: `photo.${extension}`,
+        blob: new Blob(["file bytes"]),
+      },
+    ];
+    const image: ClipboardContent = [
+      {
+        type: "image/png",
+        blob: new Blob(["converted image"], {
+          type: "image/png",
+        }),
+      },
+    ];
+    vi.mocked(
+      browserClipboardContent,
+    ).mockResolvedValueOnce(image);
+    const { changed, copy } = await mountClipboard(files);
+    changed();
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenCalledOnce(),
+    );
+    expect(copy).toHaveBeenCalledWith(
+      "peer",
+      expect.anything(),
+      false,
+      expect.objectContaining({ files: true }),
+    );
+    expect(browserClipboardContent).toHaveBeenCalledWith(
+      files,
+      expect.any(AbortSignal),
+    );
+    const data = (write.mock.calls[0] as any)[0][0].data;
+    expect(Object.keys(data)).toEqual(["image/png"]);
+    expect(data["image/png"]).toBe(image[0].blob);
+  },
+);
+it("retains an image when automatic writing is denied and retries from a click without retransmission", async () => {
+  const { write } = browser(true);
+  write.mockRejectedValueOnce(
+    new DOMException(
+      "User activation required",
+      "NotAllowedError",
+    ),
+  );
+  const image: ClipboardContent = [
+    {
+      type: "image/png",
+      blob: new Blob(["image bytes"], {
+        type: "image/png",
+      }),
+    },
+  ];
+  const { changed, copy } = await mountClipboard(image);
+  changed();
+  await vi.waitFor(() =>
+    expect(toast.info).toHaveBeenCalledOnce(),
+  );
+  const options = vi.mocked(toast.info).mock.calls[0][1]!;
+  (
+    options.action as {
+      onClick: (event: MouseEvent) => void;
+    }
+  ).onClick(new MouseEvent("click"));
+  await vi.waitFor(() =>
+    expect(toast.dismiss).toHaveBeenCalled(),
+  );
+  expect(copy).toHaveBeenCalledOnce();
+  expect(write).toHaveBeenCalledTimes(2);
+  expect(
+    (write.mock.calls[1] as any)[0][0].data["image/png"],
+  ).toBe(image[0].blob);
+});
+it("reports unsupported PDF copying without changing the clipboard or file destination", async () => {
+  const { write } = browser(true);
+  vi.mocked(browserClipboardContent).mockRejectedValueOnce(
+    new Error("clipboard-file-unsupported"),
+  );
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "clipboard",
+  );
+  const { changed, copy } = await mountClipboard([
+    {
+      type: "file",
+      name: "test.pdf",
+      blob: new Blob(["%PDF-1.4"]),
+    },
+  ]);
+  changed();
+  await vi.waitFor(() =>
+    expect(toast.error).toHaveBeenCalledWith(
+      "remote_control.clipboard_write_failed",
+      {
+        description:
+          "remote_control.clipboard_file_unsupported",
+      },
+    ),
+  );
+  expect(copy).toHaveBeenCalledWith(
+    "peer",
+    expect.anything(),
+    false,
+    expect.objectContaining({ files: true }),
+  );
+  expect(write).not.toHaveBeenCalled();
+  expect(toast.info).not.toHaveBeenCalled();
+  expect(
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBe("clipboard");
+});
+it("dismisses the pending image write when the controller surface is unmounted", async () => {
+  const { write } = browser(true);
+  write.mockRejectedValue(
+    new DOMException("Denied", "NotAllowedError"),
+  );
+  const { changed } = await mountClipboard([
+    { type: "image/png", blob: new Blob(["image"]) },
+  ]);
+  changed();
+  await vi.waitFor(() =>
+    expect(toast.info).toHaveBeenCalledOnce(),
+  );
+  const options = vi.mocked(toast.info).mock.calls[0][1]!;
+  cleanup();
+  expect(toast.dismiss).toHaveBeenCalled();
+  (
+    options.action as {
+      onClick: (event: MouseEvent) => void;
+    }
+  ).onClick(new MouseEvent("click"));
+  expect(write).toHaveBeenCalledOnce();
 });

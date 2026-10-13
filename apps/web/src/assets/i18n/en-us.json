@@ -198,7 +198,7 @@
         "loading": "Checking clipboard availability…",
         "unavailable": "Clipboard writing is currently unavailable. Check browser support and permissions, or choose File cache.",
         "clipboard_limited": "Clipboard (limited)",
-        "limited": "Supports text and image formats allowed by the browser. Use File cache for other files.",
+        "limited": "Currently supports PNG/JPG only. All other types are unsupported.",
         "title": "When copying files",
         "clipboard": "Clipboard",
         "cache": "File cache",
@@ -1378,6 +1378,10 @@
     "gamepad_enable": "Enable gamepad forwarding",
     "gamepad_disable": "Disable gamepad forwarding",
     "gamepad_unavailable": "Gamepad forwarding is unavailable on the host. Check Remote control settings on the host.",
-    "gamepad_failed": "The remote gamepad could not be mounted or stopped responding. Check the driver on the host, then reconnect the gamepad."
+    "gamepad_failed": "The remote gamepad could not be mounted or stopped responding. Check the driver on the host, then reconnect the gamepad.",
+    "clipboard_ready": "Remote clipboard received. Click to copy it to this device.",
+    "clipboard_write": "Copy to clipboard",
+    "clipboard_write_failed": "Could not write the clipboard",
+    "clipboard_file_unsupported": "Only a single PNG/JPG image file is supported. All other types are unsupported."
   }
 }
