@@ -7,7 +7,7 @@ use windows::{
     core::{implement, BOOL, HRESULT, PCWSTR},
     Win32::{
         Foundation::{
-            DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, E_FAIL, LPARAM,
+            DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, E_FAIL, HWND, LPARAM,
             POINT, RECT, S_OK, WPARAM,
         },
         Graphics::Gdi::ScreenToClient,
@@ -17,7 +17,7 @@ use windows::{
                 DoDragDrop, IDropSource, IDropSource_Impl, OleInitialize, OleUninitialize,
                 DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE,
             },
-            SystemServices::MODIFIERKEYS_FLAGS,
+            SystemServices::{MK_LBUTTON, MODIFIERKEYS_FLAGS},
             Threading::GetCurrentThreadId,
         },
         UI::{
@@ -30,9 +30,9 @@ use windows::{
                 BHID_DataObject, ILCreateFromPathW, ILFree, SHCreateShellItemArrayFromIDLists,
             },
             WindowsAndMessaging::{
-                GetAncestor, GetCursorPos, GetWindowRect, GetWindowThreadProcessId, PostMessageW,
-                PostThreadMessageW, SetCursorPos, WindowFromPoint, GA_ROOT, WM_LBUTTONUP,
-                WM_MOUSEMOVE,
+                GetAncestor, GetCursorPos, GetWindowRect, GetWindowThreadProcessId, KillTimer,
+                PostMessageW, PostThreadMessageW, SetCursorPos, SetTimer, WindowFromPoint, GA_ROOT,
+                WM_LBUTTONUP, WM_MOUSEMOVE,
             },
         },
     },
@@ -110,7 +110,8 @@ impl Destination {
 struct Source {
     destination: Destination,
     valid: Box<dyn Fn() -> bool + Send>,
-    feedback: Cell<bool>,
+    feedback_seen: Cell<bool>,
+    accepted: Cell<bool>,
     started: Instant,
 }
 impl IDropSource_Impl for Source_Impl {
@@ -121,41 +122,67 @@ impl IDropSource_Impl for Source_Impl {
             || !self.destination.cursor_current()
         {
             DRAGDROP_S_CANCEL
-        } else if self.feedback.get() {
+        } else if self.accepted.get() {
             DRAGDROP_S_DROP
         } else {
             S_OK
         }
     }
-    fn GiveFeedback(&self, _: DROPEFFECT) -> HRESULT {
-        self.feedback.set(true);
-        // Deliver release only to this thread's OLE capture window, never as OS mouse input.
-        unsafe {
-            let capture = GetCapture();
-            if capture.is_invalid() {
-                return E_FAIL;
-            }
-            let mut point = POINT {
-                x: self.destination.point.0,
-                y: self.destination.point.1,
-            };
-            if !ScreenToClient(capture, &mut point).as_bool()
-                || i16::try_from(point.x).is_err()
-                || i16::try_from(point.y).is_err()
-            {
-                return E_FAIL;
-            }
-            let packed = (point.x as u16 as u32) | ((point.y as u16 as u32) << 16);
-            if let Err(error) = PostMessageW(
-                Some(capture),
-                WM_LBUTTONUP,
-                WPARAM(0),
-                LPARAM(packed as isize),
-            ) {
+    fn GiveFeedback(&self, effect: DROPEFFECT) -> HRESULT {
+        // DragEnter alone does not establish acceptance: embedded/web editors may
+        // decide asynchronously after DragOver. Never release on DROPEFFECT_NONE.
+        let over = self.feedback_seen.replace(true);
+        self.accepted
+            .set(over && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE);
+        if self.accepted.get() {
+            if let Err(error) = post_drag_message(WM_LBUTTONUP, WPARAM(0)) {
                 return error.code();
             }
         }
         DRAGDROP_S_USEDEFAULTCURSORS
+    }
+}
+
+/// Wake only this STA's OLE capture window; never inject a physical mouse button.
+fn post_drag_message(message: u32, keys: WPARAM) -> windows::core::Result<()> {
+    unsafe {
+        let capture = GetCapture();
+        if capture.is_invalid() {
+            return Err(E_FAIL.into());
+        }
+        let mut point = POINT::default();
+        GetCursorPos(&mut point)?;
+        if !ScreenToClient(capture, &mut point).as_bool()
+            || i16::try_from(point.x).is_err()
+            || i16::try_from(point.y).is_err()
+        {
+            return Err(E_FAIL.into());
+        }
+        let packed = (point.x as u16 as u32) | ((point.y as u16 as u32) << 16);
+        PostMessageW(Some(capture), message, keys, LPARAM(packed as isize))
+    }
+}
+
+struct DragWakeup(usize);
+impl DragWakeup {
+    fn start() -> Result<Self, String> {
+        unsafe extern "system" fn tick(_: HWND, _: u32, _: usize, _: u32) {
+            let _ = post_drag_message(WM_MOUSEMOVE, WPARAM(MK_LBUTTON.0 as usize));
+        }
+        // No busy loop or repeated OS pointer movement while the target processes its data.
+        let id = unsafe { SetTimer(None, 0, 16, Some(tick)) };
+        if id == 0 {
+            Err("Could not start file drop feedback timer".into())
+        } else {
+            Ok(Self(id))
+        }
+    }
+}
+impl Drop for DragWakeup {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = KillTimer(None, self.0);
+        }
     }
 }
 struct Ole;
@@ -206,17 +233,24 @@ pub fn perform(
         let source: IDropSource = Source {
             destination: destination.clone(),
             valid,
-            feedback: Cell::new(false),
+            feedback_seen: Cell::new(false),
+            accepted: Cell::new(false),
             started: Instant::now(),
         }
         .into();
         let mut effect = DROPEFFECT_NONE;
         // A fresh STA has no physical input queued. Seed the OLE loop locally at the real
         // destination so it cannot wait for the host user to move the mouse.
-        PostThreadMessageW(GetCurrentThreadId(), WM_MOUSEMOVE, WPARAM(0), initial)
-            .map_err(|e| e.to_string())?;
+        PostThreadMessageW(
+            GetCurrentThreadId(),
+            WM_MOUSEMOVE,
+            WPARAM(MK_LBUTTON.0 as usize),
+            initial,
+        )
+        .map_err(|e| e.to_string())?;
+        let _wakeup = DragWakeup::start()?;
         let result = DoDragDrop(&object, &source, DROPEFFECT_COPY, &mut effect);
-        if result == DRAGDROP_S_DROP && effect == DROPEFFECT_COPY {
+        if result == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != DROPEFFECT_NONE {
             Ok(())
         } else if result == DRAGDROP_S_CANCEL {
             Err("File drop cancelled or target changed".into())
@@ -259,6 +293,8 @@ mod tests {
     struct Target {
         events: Arc<Mutex<Vec<String>>>,
         accept: bool,
+        accept_delay: Duration,
+        entered: Cell<Option<Instant>>,
     }
     impl IDropTarget_Impl for Target_Impl {
         fn DragEnter(
@@ -269,8 +305,9 @@ mod tests {
             effect: *mut DROPEFFECT,
         ) -> windows::core::Result<()> {
             self.events.lock().unwrap().push("enter".into());
+            self.entered.set(Some(Instant::now()));
             unsafe {
-                *effect = if self.accept {
+                *effect = if self.accept && self.accept_delay.is_zero() {
                     DROPEFFECT_COPY
                 } else {
                     DROPEFFECT_NONE
@@ -284,8 +321,14 @@ mod tests {
             _: &POINTL,
             effect: *mut DROPEFFECT,
         ) -> windows::core::Result<()> {
+            self.events.lock().unwrap().push("over".into());
             unsafe {
-                *effect = if self.accept {
+                *effect = if self.accept
+                    && self
+                        .entered
+                        .get()
+                        .is_some_and(|at| at.elapsed() >= self.accept_delay)
+                {
                     DROPEFFECT_COPY
                 } else {
                     DROPEFFECT_NONE
@@ -331,6 +374,29 @@ mod tests {
         l: LPARAM,
     ) -> windows::Win32::Foundation::LRESULT {
         unsafe { DefWindowProcW(hwnd, message, w, l) }
+    }
+    fn drop_in_worker(
+        destination: &Destination,
+        path: &std::path::Path,
+        valid: Box<dyn Fn() -> bool + Send>,
+    ) -> Result<(), String> {
+        // Production uses a fresh STA; marshal into a different target thread.
+        let destination = destination.clone();
+        let path = path.to_string_lossy().into_owned();
+        let worker = std::thread::spawn(move || perform(&destination, &[path], valid));
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while !worker.is_finished() {
+            unsafe {
+                let mut message = MSG::default();
+                while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+            }
+            assert!(Instant::now() < deadline, "OLE worker did not finish");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        worker.join().unwrap()
     }
     #[test]
     #[ignore = "opens a temporary native OLE target and moves the cursor"]
@@ -379,44 +445,60 @@ mod tests {
             let target: IDropTarget = Target {
                 events: events.clone(),
                 accept: true,
+                accept_delay: Duration::ZERO,
+                entered: Cell::new(None),
             }
             .into();
             RegisterDragDrop(hwnd, &target).unwrap();
             let destination = Destination::capture((180, 160)).unwrap();
             assert_eq!(destination.window, hwnd.0 as usize);
             let clipboard = GetClipboardSequenceNumber();
-            // Production uses a fresh STA; marshal the data object into a different target thread.
-            let destination_thread = destination.clone();
-            let file = path.to_string_lossy().into_owned();
-            let worker = std::thread::spawn(move || {
-                perform(&destination_thread, &[file], Box::new(|| true))
-            });
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while !worker.is_finished() {
-                let mut message = MSG::default();
-                while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
-                    let _ = TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-                assert!(Instant::now() < deadline, "OLE worker did not finish");
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            worker.join().unwrap().unwrap();
-            assert_eq!(*events.lock().unwrap(), ["enter", "drop"]);
+            drop_in_worker(&destination, &path, Box::new(|| true)).unwrap();
+            assert_eq!(events.lock().unwrap().first().unwrap(), "enter");
+            assert_eq!(events.lock().unwrap().last().unwrap(), "drop");
             assert_eq!(GetClipboardSequenceNumber(), clipboard);
             RevokeDragDrop(hwnd).unwrap();
+            events.lock().unwrap().clear();
             let target: IDropTarget = Target {
-                events,
-                accept: false,
+                events: events.clone(),
+                accept: true,
+                accept_delay: Duration::from_millis(120),
+                entered: Cell::new(None),
             }
             .into();
             RegisterDragDrop(hwnd, &target).unwrap();
-            assert!(perform(
+            let outcome = drop_in_worker(&destination, &path, Box::new(|| true));
+            assert!(
+                outcome.is_ok(),
+                "target awaiting asynchronous acceptance: {outcome:?}; events: {:?}",
+                events.lock().unwrap()
+            );
+            assert!(events.lock().unwrap().contains(&"over".to_string()));
+            assert_eq!(events.lock().unwrap().last().unwrap(), "drop");
+            assert_eq!(GetClipboardSequenceNumber(), clipboard);
+            RevokeDragDrop(hwnd).unwrap();
+            events.lock().unwrap().clear();
+            let target: IDropTarget = Target {
+                events: events.clone(),
+                accept: false,
+                accept_delay: Duration::ZERO,
+                entered: Cell::new(None),
+            }
+            .into();
+            RegisterDragDrop(hwnd, &target).unwrap();
+            let pending_events = events.clone();
+            assert!(drop_in_worker(
                 &destination,
-                &[path.to_string_lossy().into_owned()],
-                Box::new(|| true)
+                &path,
+                Box::new(move || !pending_events.lock().unwrap().iter().any(|e| e == "over")),
             )
             .is_err());
+            assert!(events.lock().unwrap().iter().any(|e| e == "over"));
+            assert!(!events.lock().unwrap().iter().any(|e| e == "drop"));
+            events.lock().unwrap().clear();
+            assert!(drop_in_worker(&destination, &path, Box::new(|| true)).is_err());
+            assert!(!events.lock().unwrap().iter().any(|e| e == "drop"));
+            assert_eq!(GetClipboardSequenceNumber(), clipboard);
         }
     }
 }

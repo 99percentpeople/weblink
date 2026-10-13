@@ -1333,7 +1333,7 @@
     "keyboard_input": "Tapez sur l'ordinateur distant",
     "text_too_long": "Le texte est trop long. Envoyez-le en petites parties.",
     "text_failed": "L'entrée n'a pas pu être entièrement envoyée. Vérifiez le texte distant avant de réessayer.",
-    "system_keyboard_stopped": "La transmission du clavier système s’est arrêtée. Réactivez l’interrupteur du clavier ou désactivez les raccourcis système dans les paramètres de contrôle à distance.",
+    "system_keyboard_stopped": "Les raccourcis système ne sont pas disponibles. Les touches ordinaires sont toujours transmises. Désactivez puis réactivez le clavier pour réessayer.",
     "capture_failed": "Impossible de capturer le pointeur. Cliquez sur l'écran distant pour réessayer ou choisissez Curseur local dans les paramètres du contrôle à distance.",
     "capture_unavailable": "Cet hôte ne prend pas en charge la capture de pointeur. Choisissez Curseur local dans Paramètres du contrôle à distance.",
     "capture_hint": "Cliquez pour capturer le pointeur. Appuyez sur {{shortcut}} pour libérer le pointeur et le clavier.",

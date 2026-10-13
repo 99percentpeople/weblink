@@ -1333,7 +1333,7 @@
     "keyboard_input": "Type on the remote computer",
     "text_too_long": "Text is too long. Send it in smaller parts.",
     "text_failed": "Input could not be fully sent. Check the remote text before trying again.",
-    "system_keyboard_stopped": "System keyboard forwarding stopped. Turn the keyboard switch back on to retry, or turn off system shortcuts in Remote control settings.",
+    "system_keyboard_stopped": "System shortcuts are unavailable. Ordinary keyboard forwarding is still active. Toggle the keyboard switch to retry.",
     "capture_failed": "Could not capture the pointer. Click the remote screen to retry, or choose Local cursor in Remote control settings.",
     "capture_unavailable": "This host does not support pointer capture. Choose Local cursor in Remote control settings.",
     "capture_hint": "Click to capture the pointer. Press {{shortcut}} to release the pointer and keyboard.",

@@ -1456,6 +1456,112 @@ it("releases native keyboard capture for local editors and ignores late events f
   expect(fixture.control.input).toHaveBeenCalledOnce();
 });
 
+it.each([
+  "startup",
+  "focus",
+  "closed",
+  "expired",
+  "overflow",
+])(
+  "keeps ordinary keyboard forwarding after native capture %s",
+  async (reason) => {
+    let receive!: (event: NativeKeyboardEvent) => void;
+    const close = vi.fn(async () => {});
+    const start = vi.fn(async (_shortcut, listener) => {
+      receive = listener;
+      if (reason === "startup")
+        throw new Error(
+          "Control window is not in the foreground",
+        );
+      return { close, renew: vi.fn(async () => {}) };
+    });
+    Object.assign(platform, {
+      keyboard: { supported: async () => true, start },
+    });
+    setAppState("capabilities", "runtime", {
+      runtime: "desktop",
+      os: "windows",
+      version: null,
+      nativeScreenCapture: false,
+      displayRefreshRates: [],
+      remoteInput: true,
+      systemKeyboard: true,
+    });
+    render(() => <RemoteControlOverlay enabled />);
+    await waitFor(() =>
+      expect(start).toHaveBeenCalledOnce(),
+    );
+    if (reason !== "startup") {
+      key();
+      expect(fixture.control.input).not.toHaveBeenCalled();
+      receive({
+        type: "key",
+        sequence: 1,
+        timestamp: Date.now(),
+        scanCode: 0x1d,
+        extended: false,
+        down: true,
+      });
+      receive({
+        type: "stopped",
+        reason: reason as
+          | "focus"
+          | "closed"
+          | "expired"
+          | "overflow",
+      });
+      expect(close).toHaveBeenCalledOnce();
+      expect(
+        fixture.control.input,
+      ).toHaveBeenLastCalledWith({
+        type: "key",
+        scanCode: 0x1d,
+        extended: false,
+        down: false,
+      });
+    }
+    expect(appState.options.remoteKeyboard.enabled).toBe(
+      true,
+    );
+    fixture.control.input.mockClear();
+    key();
+    expect(fixture.control.input).toHaveBeenCalledWith({
+      type: "key",
+      scanCode: 0x1e,
+      extended: false,
+      down: true,
+    });
+    fireEvent.keyUp(window, { code: "KeyA" });
+    expect(fixture.control.input).toHaveBeenLastCalledWith({
+      type: "key",
+      scanCode: 0x1e,
+      extended: false,
+      down: false,
+    });
+    expect(fixture.control.cancel).not.toHaveBeenCalled();
+    // A new focus interval can start native capture again.
+    if (reason !== "startup") {
+      fireEvent(window, new Event("blur"));
+      fireEvent(window, new Event("focus"));
+      await waitFor(() =>
+        expect(start).toHaveBeenCalledTimes(2),
+      );
+      fixture.control.input.mockClear();
+      key();
+      expect(fixture.control.input).not.toHaveBeenCalled();
+      receive({
+        type: "key",
+        sequence: 1,
+        timestamp: Date.now(),
+        scanCode: 0x1e,
+        extended: false,
+        down: true,
+      });
+      expect(fixture.control.input).toHaveBeenCalledOnce();
+    }
+  },
+);
+
 it.each([false, true])(
   "allows the limited browser clipboard independently of custom file format support (%s)",
   async (supported) => {

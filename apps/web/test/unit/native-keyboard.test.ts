@@ -22,6 +22,7 @@ function setup(pending?: Promise<NativeKeyboardSession>) {
     close: vi.fn(async () => {}),
   };
   const port = {
+    capturing: vi.fn(),
     current: vi.fn(() => true),
     input: vi.fn(() => true),
     reset: vi.fn(),
@@ -97,6 +98,7 @@ describe("native keyboard focus and transport ownership", () => {
   it("forwards ordered native keys, acknowledges consumption and releases only owned keys", async () => {
     const s = setup();
     await Promise.resolve();
+    expect(s.port.capturing).toHaveBeenCalledWith(true);
     s.key(1, true, 0x1d);
     s.key(2);
     s.key(3);
@@ -117,6 +119,9 @@ describe("native keyboard focus and transport ownership", () => {
       [0x1d, false],
     ]);
     expect(s.session.close).toHaveBeenCalledOnce();
+    expect(s.port.capturing).toHaveBeenLastCalledWith(
+      false,
+    );
     s.key(5);
     await vi.advanceTimersByTimeAsync(1000);
     expect(s.port.input).toHaveBeenCalledTimes(5);
@@ -160,6 +165,7 @@ describe("native keyboard focus and transport ownership", () => {
     expect(s.port.input).not.toHaveBeenCalled();
     expect(s.session.close).toHaveBeenCalledOnce();
     expect(s.session.renew).not.toHaveBeenCalled();
+    expect(s.port.capturing).not.toHaveBeenCalledWith(true);
   });
   it("rejects queued input after focus, grant or source changes", async () => {
     const s = setup();
@@ -177,6 +183,9 @@ describe("native keyboard focus and transport ownership", () => {
     ]);
     expect(s.port.input).toHaveBeenCalledTimes(2);
     expect(s.port.cancel).not.toHaveBeenCalled();
+    expect(s.port.capturing).toHaveBeenLastCalledWith(
+      false,
+    );
   });
   it.each(["exit", "emergency"] as const)(
     "ends control for the native %s shortcut",
@@ -214,6 +223,7 @@ describe("native keyboard focus and transport ownership", () => {
     );
     await vi.advanceTimersByTimeAsync(1);
     expect(s.port.stopped).toHaveBeenCalledWith(true);
+    expect(s.port.capturing).not.toHaveBeenCalledWith(true);
     s.key(1);
     expect(s.port.input).not.toHaveBeenCalled();
   });

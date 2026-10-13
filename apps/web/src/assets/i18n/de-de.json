@@ -1333,7 +1333,7 @@
     "keyboard_input": "Geben Sie auf dem Remote-Computer ein",
     "text_too_long": "Der Text ist zu lang. Versenden Sie es in kleineren Teilen.",
     "text_failed": "Die Eingabe konnte nicht vollständig gesendet werden. Überprüfen Sie den Remote-Text, bevor Sie es erneut versuchen.",
-    "system_keyboard_stopped": "Die Systemtastaturweiterleitung wurde beendet. Schalte die Tastatur erneut ein oder deaktiviere Systemtastenkürzel in den Fernsteuerungseinstellungen.",
+    "system_keyboard_stopped": "Systemtastenkürzel sind nicht verfügbar. Normale Tastatureingaben werden weiterhin übertragen. Schalte die Tastatur aus und wieder ein, um es erneut zu versuchen.",
     "capture_failed": "Der Zeiger konnte nicht erfasst werden. Klicken Sie auf den Remote-Bildschirm, um es erneut zu versuchen, oder wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
     "capture_unavailable": "Dieser Host unterstützt keine Zeigererfassung. Wählen Sie „Lokaler Cursor“ in den Fernsteuerungseinstellungen.",
     "capture_hint": "Klicken Sie, um den Zeiger zu erfassen. Drücken Sie {{shortcut}}, um den Zeiger und die Tastatur freizugeben.",

@@ -1333,7 +1333,7 @@
     "keyboard_input": "Escriba en la computadora remota",
     "text_too_long": "El texto es demasiado largo. Envíalo en partes más pequeñas.",
     "text_failed": "La entrada no se pudo enviar completamente. Verifique el texto remoto antes de volver a intentarlo.",
-    "system_keyboard_stopped": "El reenvío del teclado del sistema se ha detenido. Vuelve a activar el interruptor del teclado o desactiva los atajos del sistema en los ajustes de control remoto.",
+    "system_keyboard_stopped": "Los atajos del sistema no están disponibles. Las teclas normales se siguen enviando. Desactiva y activa el teclado para reintentar.",
     "capture_failed": "No se pudo capturar el puntero. Haga clic en la pantalla remota para volver a intentarlo o elija Cursor local en la configuración de control remoto.",
     "capture_unavailable": "Este host no admite la captura de puntero. Elija Cursor local en Configuración de control remoto.",
     "capture_hint": "Haga clic para capturar el puntero. Presione {{shortcut}} para soltar el puntero y el teclado.",

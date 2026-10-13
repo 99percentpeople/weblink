@@ -7,6 +7,7 @@ import type { RemoteKeyEvent } from "../domain/remote-control/keyboard";
 import type { ExitControlShortcut } from "../domain/remote-control/keyboard-options";
 
 export interface NativeKeyboardPort {
+  capturing?(active: boolean): void;
   clipboard?(action: "copy" | "paste"): boolean;
   current(): boolean;
   input(event: RemoteKeyEvent): boolean;
@@ -37,6 +38,12 @@ export class NativeKeyboardForwarder {
           return;
         }
         this.session = session;
+        console.debug("Native keyboard capture started");
+        port.capturing?.(true);
+        if (this.closed || !port.current()) {
+          this.stop();
+          return;
+        }
         this.timer = setInterval(() => {
           if (!port.current()) {
             this.stop();
@@ -46,13 +53,27 @@ export class NativeKeyboardForwarder {
           this.renewing = true;
           void session
             .renew(this.sequence)
-            .catch(() => this.fail(true))
+            .catch((error: unknown) => {
+              if (!this.closed)
+                console.warn(
+                  "Native keyboard capture renewal failed",
+                  error,
+                );
+              this.fail(true);
+            })
             .finally(() => {
               this.renewing = false;
             });
         }, 200);
       })
-      .catch(() => this.fail(true));
+      .catch((error: unknown) => {
+        if (!this.closed)
+          console.warn(
+            "Native keyboard capture failed",
+            error,
+          );
+        this.fail(true);
+      });
   }
   private receive(event: NativeKeyboardEvent): void {
     if (this.closed) return;
@@ -61,6 +82,10 @@ export class NativeKeyboardForwarder {
       return;
     }
     if (event.type === "stopped") {
+      console.debug(
+        "Native keyboard capture stopped",
+        event.reason,
+      );
       const exit =
         event.reason === "exit" ||
         event.reason === "emergency";
@@ -77,6 +102,14 @@ export class NativeKeyboardForwarder {
       !Number.isFinite(event.timestamp) ||
       Math.abs(Date.now() - event.timestamp) > 100
     ) {
+      console.warn(
+        "Native keyboard capture sequence or timing invalid",
+        {
+          expected: this.sequence + 1,
+          sequence: event.sequence,
+          ageMs: Date.now() - event.timestamp,
+        },
+      );
       this.fail(true);
       return;
     }
@@ -113,7 +146,12 @@ export class NativeKeyboardForwarder {
     }
     if (down) this.held.set(id, key);
     else this.held.delete(id);
-    if (!this.port.input(key)) this.fail(true);
+    if (!this.port.input(key)) {
+      console.warn(
+        "Native keyboard capture transport unavailable",
+      );
+      this.fail(true);
+    }
   }
   private fail(failed: boolean): void {
     if (this.closed) return;
@@ -124,6 +162,7 @@ export class NativeKeyboardForwarder {
   stop(): void {
     if (this.closed) return;
     this.closed = true;
+    this.port.capturing?.(false);
     clearInterval(this.timer);
     // The peer transport enforces the original grant/epoch, even after focus changes.
     for (const event of [...this.held.values()].reverse()) {

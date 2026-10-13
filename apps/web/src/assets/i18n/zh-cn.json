@@ -1333,7 +1333,7 @@
     "keyboard_input": "向远端输入文字",
     "text_too_long": "输入过长，请分段发送。",
     "text_failed": "输入未能完整发送，请检查远端内容后重试。",
-    "system_keyboard_stopped": "系统键盘转发已停止。请重新打开键盘开关重试，或在远程控制设置中关闭系统快捷键。",
+    "system_keyboard_stopped": "系统快捷键暂不可用，已恢复普通键盘转发。重新开关键盘可重试。",
     "capture_failed": "无法捕获指针。请重新点击远程画面，或在“远程控制”设置中选择“本地光标”。",
     "capture_unavailable": "对端不支持指针捕获，请在“远程控制”设置中选择“本地光标”。",
     "capture_hint": "点击捕获指针，按 {{shortcut}} 释放光标和键盘。",

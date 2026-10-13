@@ -1171,8 +1171,9 @@ enabled by default. It uses a controller-side native keyboard hook only while th
 selected remote surface has active control, no local editor owns input, and the
 shared keyboard toggle is on. The
 foreground native window must also match. In that interval, supported scan codes,
-including Alt/Win combinations, come from the native channel; DOM handlers do not
-send a second copy. Local editors, dialogs and the soft-keyboard editor use their
+including Alt/Win combinations, come from the native channel; DOM handlers stop
+forwarding only after native startup succeeds, so they do not send a second copy.
+Local editors, dialogs and the soft-keyboard editor use their
 usual paths. Turning off system shortcuts restores browser key handling.
 
 The [low-level hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
@@ -1184,8 +1185,10 @@ events older than 100 ms or a sequence gap stop forwarding and reset the input e
 Late startup or delivery cannot attach to a different focused screen. Focus loss,
 window teardown and page navigation stop capture independently of the renderer.
 After stopping, the hook can drain only previously captured key releases for up
-to two seconds; it never captures new background presses. A failed capture turns off
-keyboard forwarding; its header switch retries without revoking pointer control.
+to two seconds; it never captures new background presses. If capture fails or stops,
+ordinary DOM keyboard forwarding resumes without changing the shared keyboard toggle.
+A new focus interval or toggling the keyboard switch retries native capture without
+revoking pointer control. The explicit exit shortcut still disables keyboard forwarding.
 
 The chosen exit chord is recognized natively, releases pointer lock and keyboard
 capture together, and its final key is not forwarded.
@@ -1369,6 +1372,11 @@ clipboard files. The shared remote file size setting applies to both drop and cl
 tasks. Preparing directories shows a cancellable loading notice. No clipboard API access
 or Ctrl+V injection is used. The host stages real files and uses a shell IDataObject,
 IDropSource and OLE DoDragDrop on a dedicated STA. Only DROPEFFECT_COPY is allowed.
+The OLE loop continues sending local hover events while the target decides whether
+to accept the files, including asynchronous decisions by embedded web editors. It
+releases only after hover feedback allows copying, with a five-second deadline;
+initial DROPEFFECT_NONE feedback does not immediately end the drop. These events
+go only to the drop thread's OLE capture window, not the system mouse input queue.
 Acknowledgement and task completion require acceptance by the target application; this
 does not mean a target's later asynchronous import or copy has finished. Applications
 that do not accept OLE file drops fail without falling back to clipboard paste.

@@ -1333,7 +1333,7 @@
     "keyboard_input": "向遠端輸入文字",
     "text_too_long": "輸入過長，請分段傳送。",
     "text_failed": "輸入未能完整傳送，請檢查遠端內容後重試。",
-    "system_keyboard_stopped": "系統鍵盤轉發已停止。請重新開啟鍵盤開關重試，或在遠端控制設定中關閉系統快捷鍵。",
+    "system_keyboard_stopped": "系統快捷鍵暫時無法使用，已恢復一般鍵盤轉發。重新切換鍵盤開關可重試。",
     "capture_failed": "無法擷取指標。請重新點擊遠端畫面，或在「遠端控制」設定中選擇「本機游標」。",
     "capture_unavailable": "對端不支援指標擷取，請在「遠端控制」設定中選擇「本機游標」。",
     "capture_hint": "點擊擷取指標，按 {{shortcut}} 釋放游標和鍵盤。",

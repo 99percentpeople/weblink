@@ -115,6 +115,8 @@ export function RemoteControlOverlay(props: {
     keyboardOptions().enabled &&
     keyboardOptions().systemKeys &&
     control()?.supportsKeyboard();
+  const [nativeCapturing, setNativeCapturing] =
+    createSignal(false);
   const clearTouches = () => {
     keyboardTap = undefined;
     threeFingerTap.cancel();
@@ -309,6 +311,10 @@ export function RemoteControlOverlay(props: {
       platform.keyboard,
       options.exitShortcut,
       {
+        capturing: (active) => {
+          if (active) keyboard?.release();
+          setNativeCapturing(active);
+        },
         current: () =>
           keyboardActive() &&
           c === control() &&
@@ -332,11 +338,6 @@ export function RemoteControlOverlay(props: {
           if (focused() || capture.active())
             releaseControls();
           if (failed) {
-            setAppOptions(
-              "remoteKeyboard",
-              "enabled",
-              false,
-            );
             toast.error(
               t("remote_control.system_keyboard_stopped"),
             );
@@ -376,7 +377,7 @@ export function RemoteControlOverlay(props: {
       "keydown",
       (e) => {
         if (!accepts(e)) return;
-        const native = nativeKeys();
+        const native = nativeCapturing();
         if (
           !native &&
           props
@@ -409,7 +410,7 @@ export function RemoteControlOverlay(props: {
       (e) => {
         if (
           accepts(e) &&
-          (nativeKeys() || keyboard?.up(e))
+          (nativeCapturing() || keyboard?.up(e))
         ) {
           e.preventDefault();
           e.stopPropagation();
