@@ -537,7 +537,8 @@
       "loading": "알림 사용 가능 여부 확인 중…",
       "load_failed": "시스템 알림 상태를 읽을 수 없습니다. Weblink로 돌아가면 자동으로 다시 확인됩니다.",
       "error_details": "오류 세부정보",
-      "permission_unknown": "시스템이 아직 알림 상태를 제공하지 않았습니다. 알림은 시스템 설정을 따릅니다."
+      "permission_unknown": "시스템이 아직 알림 상태를 제공하지 않았습니다. 알림은 시스템 설정을 따릅니다.",
+      "updates": "앱 업데이트"
     },
     "shortcut_input": {
       "recording": "단축키를 누르세요…",
@@ -547,6 +548,32 @@
       "duplicate": "입력 해제 및 원격 제어 중지를 위한 다른 단축키를 선택하세요.",
       "edit": "단축키 지정",
       "saving": "저장 중…"
+    },
+    "updates": {
+      "title": "데스크톱 업데이트",
+      "description": "GitHub Releases에서 새 안정 버전을 확인합니다.",
+      "check": "업데이트 확인",
+      "releases": "릴리스 페이지",
+      "checking": "업데이트 확인 중…",
+      "current": "최신 버전을 사용 중입니다.",
+      "development": "개발 버전에는 안정 버전 업데이트가 적용되지 않습니다. 릴리스 페이지에서 안정 버전을 다운로드하세요.",
+      "unsupported": "앱 내 업데이트는 현재 Windows x64만 지원합니다.",
+      "available": "버전 {{version}}을 사용할 수 있습니다.",
+      "downloading": "업데이트 다운로드 중…",
+      "installing": "업데이트 설치 중입니다. Weblink가 다시 시작됩니다…",
+      "check_failed": "업데이트를 확인할 수 없습니다. 연결을 확인하거나 릴리스 페이지를 방문하세요.",
+      "install_failed": "업데이트에 실패했습니다. 다시 시도하거나 릴리스 페이지에서 설치 파일을 다운로드하세요.",
+      "notes": "릴리스 노트",
+      "install_hint": "설치 시 Weblink와 진행 중인 세션이 종료되며, 완료 후 앱이 다시 시작됩니다.",
+      "portable_hint": "새 ZIP의 압축을 풀고 Weblink를 종료한 다음 포터블 실행 파일을 교체하세요.",
+      "manual_hint": "이 빌드는 수동 업데이트를 지원합니다. 새 설치 파일을 다운로드하고 실행하세요.",
+      "download_portable": "포터블 ZIP 다운로드",
+      "download_installer": "설치 파일 다운로드",
+      "install": "다운로드 후 다시 시작",
+      "automatic": "자동으로 업데이트 확인",
+      "automatic_description": "시작 시 한 번 확인하고 새 안정 버전이 있으면 알립니다.",
+      "view": "업데이트 보기",
+      "notification_body": "Weblink를 열어 업데이트를 확인하고 다운로드하세요."
     }
   },
   "cache": {

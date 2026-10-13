@@ -101,6 +101,7 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  autoCheckUpdates: boolean;
   notifications: NotificationOptions;
   application: ApplicationOptions;
   remotePointer: RemotePointerOptions;
@@ -266,6 +267,7 @@ export const getDefaultAppOptions = (): AppOption => {
     remoteFileMaxSize: DEFAULT_REMOTE_FILE_BYTES,
     application: { ...defaultApplicationOptions },
     notifications: { ...defaultNotificationOptions },
+    autoCheckUpdates: true,
     // todo: add dialog to prompt user the file size
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",

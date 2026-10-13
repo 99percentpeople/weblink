@@ -3,6 +3,7 @@ import type { PlatformRuntime } from "@weblink/platform";
 import type { AppPermissions } from "./create-app-permissions";
 import { createAppMediaCapabilities } from "./create-app-media-capabilities";
 import { createAppStartup } from "./create-app-startup";
+import { createAppUpdates } from "./create-app-updates";
 import { createAppCaptureSources } from "./create-app-capture-sources";
 import { createAppClipboardAccess } from "./create-app-clipboard-access";
 import { createAppInputDevices } from "./create-app-input-devices";
@@ -26,6 +27,9 @@ export function createAppSettings(options: {
     runtimeReady: mediaCapabilities.ready,
   });
   return {
+    updates: options.platform.updates
+      ? createAppUpdates(options.platform.updates)
+      : undefined,
     inputDevices: createAppInputDevices(
       options.platform.remoteControl,
     ),

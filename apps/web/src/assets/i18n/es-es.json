@@ -537,7 +537,8 @@
       "loading": "Comprobando disponibilidad de notificaciones…",
       "load_failed": "No se pudo leer el estado de las notificaciones. Se comprobará de nuevo automáticamente al volver a Weblink.",
       "error_details": "Detalles del error",
-      "permission_unknown": "El sistema aún no ha indicado el estado de las notificaciones. Estas seguirán los ajustes del sistema."
+      "permission_unknown": "El sistema aún no ha indicado el estado de las notificaciones. Estas seguirán los ajustes del sistema.",
+      "updates": "Actualizaciones de la aplicación"
     },
     "shortcut_input": {
       "recording": "Pulsa un atajo…",
@@ -547,6 +548,32 @@
       "duplicate": "Elige atajos distintos para liberar la entrada y detener el control remoto.",
       "edit": "Registrar atajo",
       "saving": "Guardando…"
+    },
+    "updates": {
+      "title": "Actualizaciones de escritorio",
+      "description": "Buscar una nueva versión estable en GitHub Releases.",
+      "check": "Buscar actualizaciones",
+      "releases": "Página de versiones",
+      "checking": "Buscando actualizaciones…",
+      "current": "Estás usando la última versión.",
+      "development": "Las versiones de desarrollo no reciben actualizaciones estables. Descarga una versión estable desde la página de versiones.",
+      "unsupported": "Las actualizaciones desde la aplicación solo están disponibles para Windows x64.",
+      "available": "La versión {{version}} está disponible.",
+      "downloading": "Descargando actualización…",
+      "installing": "Instalando actualización. Weblink se reiniciará…",
+      "check_failed": "No se pudieron buscar actualizaciones. Comprueba la conexión o visita la página de versiones.",
+      "install_failed": "La actualización falló. Reintenta o descarga el instalador desde la página de versiones.",
+      "notes": "Notas de la versión",
+      "install_hint": "La instalación cerrará Weblink y finalizará las sesiones activas. La aplicación se reiniciará al terminar.",
+      "portable_hint": "Extrae el nuevo ZIP, cierra Weblink y reemplaza el ejecutable portátil.",
+      "manual_hint": "Esta compilación admite actualizaciones manuales. Descarga y ejecuta el nuevo instalador.",
+      "download_portable": "Descargar ZIP portátil",
+      "download_installer": "Descargar instalador",
+      "install": "Descargar y reiniciar",
+      "automatic": "Buscar actualizaciones automáticamente",
+      "automatic_description": "Comprobar una vez al iniciar y avisar si hay una nueva versión estable.",
+      "view": "Ver actualización",
+      "notification_body": "Abre Weblink para revisar y descargar la actualización."
     }
   },
   "cache": {

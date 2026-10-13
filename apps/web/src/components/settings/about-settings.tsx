@@ -21,6 +21,7 @@ import {
 } from "@/options";
 import { t } from "@/i18n";
 import { platform } from "@/libs/platform/runtime";
+import { DesktopUpdateSettings } from "./desktop-updates";
 
 export default function AboutSettings() {
   const resetDialog = createResetOptionsDialog();
@@ -88,6 +89,11 @@ export default function AboutSettings() {
       <SettingBlock>
         <AboutContent />
       </SettingBlock>
+      <Show when={platform.updates}>
+        <SettingBlock separated>
+          <DesktopUpdateSettings />
+        </SettingBlock>
+      </Show>
       <SettingBlock separated>
         <SettingHeading>
           {t("setting.about.maintenance")}

@@ -12,6 +12,7 @@ export interface NotificationIntent {
     | "messages"
     | "controlRequests"
     | "speedTestRequests"
+    | "updates"
     | "transfers";
   current(): boolean;
   /** Defer image work until display is allowed; cancellation is checked again afterwards. */

@@ -532,7 +532,8 @@
       "loading": "Checking notification availability…",
       "load_failed": "Could not read system notification status. Returning to Weblink checks it again automatically.",
       "error_details": "Error details",
-      "permission_unknown": "The system has not provided a notification status yet. Notifications will follow system settings."
+      "permission_unknown": "The system has not provided a notification status yet. Notifications will follow system settings.",
+      "updates": "Application updates"
     },
     "shortcut_input": {
       "recording": "Press a shortcut…",
@@ -542,6 +543,32 @@
       "duplicate": "Choose a different shortcut for releasing input and stopping remote control.",
       "edit": "Record shortcut",
       "saving": "Saving…"
+    },
+    "updates": {
+      "title": "Desktop updates",
+      "description": "Check GitHub Releases for a new stable version.",
+      "check": "Check for updates",
+      "releases": "Release page",
+      "checking": "Checking for updates…",
+      "current": "You are using the latest version.",
+      "development": "Development builds do not use stable updates. Download a stable version from the release page.",
+      "unsupported": "In-app updates currently support Windows x64 only.",
+      "available": "Version {{version}} is available.",
+      "downloading": "Downloading update…",
+      "installing": "Installing update. Weblink will restart…",
+      "check_failed": "Could not check for updates. Check your connection or visit the release page.",
+      "install_failed": "Update failed. Retry, or download the installer from the release page.",
+      "notes": "Release notes",
+      "install_hint": "Installing will close Weblink and end active sessions. The installer will restart the app when finished.",
+      "portable_hint": "Extract the new ZIP, close Weblink, then replace your portable executable.",
+      "manual_hint": "This build supports manual updates. Download and run the new installer.",
+      "download_portable": "Download portable ZIP",
+      "download_installer": "Download installer",
+      "install": "Download and restart",
+      "automatic": "Automatically check for updates",
+      "automatic_description": "Check once at startup and notify when a stable update is available.",
+      "view": "View update",
+      "notification_body": "Open Weblink to review and download the update."
     }
   },
   "cache": {

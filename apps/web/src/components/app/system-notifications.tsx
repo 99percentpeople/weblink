@@ -8,7 +8,7 @@ import {
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { toast } from "solid-sonner";
-import { t } from "@/i18n";
+import { t, isDictLoaded } from "@/i18n";
 import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -22,6 +22,7 @@ import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
 import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 import { isRemoteContentTransferTask } from "@/libs/application/task-service";
+import { createUpdateFeedback } from "@/libs/hooks/create-update-feedback";
 
 export function SystemNotificationBridge() {
   const state = useAppState();
@@ -67,6 +68,25 @@ export function SystemNotificationBridge() {
         );
     },
   });
+  if (state.updates) {
+    createUpdateFeedback({
+      updates: state.updates,
+      enabled: () => appState.options.autoCheckUpdates,
+      ready: isDictLoaded,
+      notifications: service,
+      openUpdates: () => {
+        void dialogs.openSettings("about");
+        void platform.application
+          ?.show()
+          .catch((error) =>
+            console.warn(
+              "Could not show application",
+              error,
+            ),
+          );
+      },
+    });
+  }
   if (!service) return null;
   const unsubscribe = messageStores.onMessageStored(
     (message) => {

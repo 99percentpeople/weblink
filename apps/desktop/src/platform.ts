@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { createRawPreview } from "./preview";
 import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
+import { nativeUpdates } from "./updates";
 import { nativePictureInPicture } from "./picture-in-picture";
 import { keepDesktopActive } from "./background";
 import { watchStatus } from "./status-watch";
@@ -67,6 +68,7 @@ export const platform: PlatformRuntime = {
   pictureInPicture: nativePictureInPicture,
   notifications: nativeNotifications,
   application: nativeApplication,
+  updates: nativeUpdates,
   keyboard: nativeKeyboard,
   kind: "desktop",
   mediaPermissionPolicy: "automatic",

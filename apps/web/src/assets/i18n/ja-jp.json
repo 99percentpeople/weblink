@@ -537,7 +537,8 @@
       "loading": "通知の利用可否を確認中…",
       "load_failed": "システム通知の状態を取得できませんでした。Weblinkに戻ると自動的に再確認します。",
       "error_details": "エラーの詳細",
-      "permission_unknown": "システムから通知の状態がまだ返されていません。通知はシステム設定に従います。"
+      "permission_unknown": "システムから通知の状態がまだ返されていません。通知はシステム設定に従います。",
+      "updates": "アプリの更新"
     },
     "shortcut_input": {
       "recording": "ショートカットを押してください…",
@@ -547,6 +548,32 @@
       "duplicate": "入力の解放とリモート操作の停止には異なるショートカットを指定してください。",
       "edit": "ショートカットを記録",
       "saving": "保存中…"
+    },
+    "updates": {
+      "title": "デスクトップ版の更新",
+      "description": "GitHub Releases で最新の安定版を確認します。",
+      "check": "更新を確認",
+      "releases": "リリースページ",
+      "checking": "更新を確認しています…",
+      "current": "最新バージョンを使用しています。",
+      "development": "開発版には安定版の更新を適用しません。リリースページから安定版をダウンロードしてください。",
+      "unsupported": "アプリ内更新は現在 Windows x64 のみ対応しています。",
+      "available": "バージョン {{version}} が利用可能です。",
+      "downloading": "更新をダウンロードしています…",
+      "installing": "更新をインストールしています。Weblink を再起動します…",
+      "check_failed": "更新を確認できませんでした。接続を確認するか、リリースページをご覧ください。",
+      "install_failed": "更新に失敗しました。再試行するか、リリースページからインストーラーをダウンロードしてください。",
+      "notes": "リリースノート",
+      "install_hint": "インストール時に Weblink と現在のセッションを終了し、完了後に再起動します。",
+      "portable_hint": "新しい ZIP を展開し、Weblink を終了してからポータブル版の実行ファイルを置き換えてください。",
+      "manual_hint": "このビルドは手動更新に対応しています。新しいインストーラーをダウンロードして実行してください。",
+      "download_portable": "ポータブル ZIP をダウンロード",
+      "download_installer": "インストーラーをダウンロード",
+      "install": "ダウンロードして再起動",
+      "automatic": "更新を自動的に確認",
+      "automatic_description": "起動時に一度確認し、新しい安定版がある場合に通知します。",
+      "view": "更新を表示",
+      "notification_body": "Weblink を開いて更新を確認し、ダウンロードしてください。"
     }
   },
   "cache": {

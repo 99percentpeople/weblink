@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "allow-runtime-capabilities",
+    "allow-updates-check",
+    "allow-updates-install",
     "allow-application-device-name",
     "allow-application-configure",
     "allow-application-visibility-watch",

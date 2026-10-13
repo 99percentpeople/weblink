@@ -72,10 +72,10 @@ with the matching version's CHANGELOG content. Download links use that release's
 tag, so historical release notes remain tied to their own binaries.
 
 To publish, extract the outer Actions artifact archives and attach the installer
-`.exe` and portable `.zip` with their names unchanged to the matching tag's GitHub
-Release. Use the generated `release-notes.md` as the release description and mark
-the stable release as Latest. The portable ZIP contains the application executable
-and requires WebView2 120+ to be installed already. These workflows save artifacts
+`.exe`, its `.exe.sig`, the portable `.zip`, and `latest.json` with their names
+unchanged to the matching tag's GitHub Release. Use the generated `release-notes.md` as the release description and mark
+the stable release as Latest. The portable ZIP contains the application executable and a `weblink-portable`
+marker (keep both files together), and requires WebView2 120+ to be installed already. These workflows save artifacts
 without publishing a GitHub Release.
 
 To prepare the same release description locally, replace the example tag with
@@ -107,6 +107,64 @@ Local desktop builds default to `https://dev.webl.ink` for the dev channel and
 when self-hosting, so invitations never use the desktop window's internal origin.
 Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
 do not become the packaged signaling endpoint.
+
+## Desktop updates
+
+Settings → About provides a manual update check and a persisted “Automatically
+check for updates” switch, enabled by default. The desktop checks once per app
+startup. Finding a new stable version shows an in-app toast and sends an update
+intent through the existing notification service. The “Application updates”
+notification category, OS permission, background-only and sound settings apply
+to system notifications. Clicking either notification opens Settings → About;
+checks never download or install automatically. Background failures and current
+versions do not produce notifications. Disabling the startup switch leaves manual
+checks available and takes effect for pending reminders and the next startup.
+
+Only stable Windows x64 builds use the GitHub endpoint
+`https://github.com/99percentpeople/weblink/releases/latest/download/latest.json`.
+Development builds and unsupported platforms report that in-app updates are
+unavailable. The shared application controller serializes startup/manual checks
+and installs and retains progress when settings are closed. The Rust service
+accepts installation only for the version it most recently checked. Installer
+updates use Tauri's updater plugin to verify the package signature before running
+NSIS. Installing closes active sessions and restarts Weblink. Native capture,
+remote input and keyboard resources are released before the Windows updater exits.
+
+An NSIS installation is recognized by the adjacent `uninstall.exe`. The portable
+ZIP includes a `weblink-portable` marker that overrides this detection. Raw
+executables without an uninstaller are also treated as portable. Portable updates
+link to the matching release's ZIP for manual extraction and replacement; they do
+not run an installer. Builds without a public key offer manual downloads only.
+
+Before the first stable desktop release, generate a persistent signing key with
+the [Tauri signer](https://v2.tauri.app/plugin/updater/#signing-updates):
+
+```sh
+bun run --cwd apps/desktop tauri signer generate -w "$HOME/.config/weblink/updater.key"
+```
+
+Configure the GitHub `production` Environment (or repository settings):
+
+| Name                                 | Kind     | Value                                                  |
+| ------------------------------------ | -------- | ------------------------------------------------------ |
+| `WEBLINK_UPDATER_PUBLIC_KEY`         | Variable | Contents of `updater.key.pub`, not its path            |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | Contents of the private key file                       |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret   | The signing key password; empty for an unencrypted key |
+
+Keep the private key outside the repository and retain a secure backup. Future
+releases must be signed by the same key trusted by installed clients. The signing
+key is separate from Windows Authenticode code signing.
+
+`desktop-production.yml` validates the key configuration before building, generates
+a temporary Tauri configuration containing only the public key, enables
+`createUpdaterArtifacts`, and keeps the installer signature when renaming assets.
+`weblink-windows-x64-installer` includes both the installer and its signature;
+`weblink-updater-manifest` contains `latest.json`. The manifest embeds the signature
+contents and a download URL pinned to the release tag. Publish all four assets
+listed above together, using the generated release notes, and mark the stable
+GitHub Release as Latest. The workflow creates Actions artifacts but does not
+publish the Release. The first release introduces update checking; an actual
+upgrade needs a later, higher-version signed release for Windows verification.
 
 ## Runtime boundaries
 

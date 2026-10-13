@@ -1,8 +1,15 @@
 fn main() {
     println!("cargo:rerun-if-changed=../../web/package.json");
+    println!("cargo:rerun-if-env-changed=WEBLINK_BUILD_CHANNEL");
+    println!(
+        "cargo:rustc-env=WEBLINK_BUILD_CHANNEL={}",
+        std::env::var("WEBLINK_BUILD_CHANNEL").unwrap_or_else(|_| "stable".into())
+    );
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "updates_check",
+            "updates_install",
             "notifications_capabilities",
             "notifications_request_permission",
             "notifications_watch",

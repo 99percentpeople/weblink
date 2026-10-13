@@ -537,7 +537,8 @@
       "loading": "Benachrichtigungsverfügbarkeit prüfen…",
       "load_failed": "Der Systembenachrichtigungsstatus konnte nicht gelesen werden. Wenn Sie zu Weblink zurückkehren, wird es erneut automatisch überprüft.",
       "error_details": "Fehlerdetails",
-      "permission_unknown": "Das System hat noch keinen Benachrichtigungsstatus bereitgestellt. Benachrichtigungen folgen den Systemeinstellungen."
+      "permission_unknown": "Das System hat noch keinen Benachrichtigungsstatus bereitgestellt. Benachrichtigungen folgen den Systemeinstellungen.",
+      "updates": "App-Updates"
     },
     "shortcut_input": {
       "recording": "Tastenkombination drücken…",
@@ -547,6 +548,32 @@
       "duplicate": "Wählen Sie eine andere Tastenkombination zum Freigeben der Eingabe und zum Stoppen der Fernsteuerung.",
       "edit": "Tastenkombination festlegen",
       "saving": "Wird gespeichert…"
+    },
+    "updates": {
+      "title": "Desktop-Updates",
+      "description": "Auf GitHub Releases nach einer neuen stabilen Version suchen.",
+      "check": "Nach Updates suchen",
+      "releases": "Release-Seite",
+      "checking": "Suche nach Updates…",
+      "current": "Du verwendest die neueste Version.",
+      "development": "Entwicklungsversionen erhalten keine stabilen Updates. Lade eine stabile Version von der Release-Seite herunter.",
+      "unsupported": "Updates in der App werden derzeit nur für Windows x64 unterstützt.",
+      "available": "Version {{version}} ist verfügbar.",
+      "downloading": "Update wird heruntergeladen…",
+      "installing": "Update wird installiert. Weblink wird neu gestartet…",
+      "check_failed": "Updates konnten nicht geprüft werden. Prüfe die Verbindung oder öffne die Release-Seite.",
+      "install_failed": "Update fehlgeschlagen. Versuche es erneut oder lade das Installationsprogramm von der Release-Seite herunter.",
+      "notes": "Versionshinweise",
+      "install_hint": "Die Installation schließt Weblink und beendet aktive Sitzungen. Anschließend wird die App neu gestartet.",
+      "portable_hint": "Entpacke die neue ZIP-Datei, schließe Weblink und ersetze dann die portable Programmdatei.",
+      "manual_hint": "Diese Version unterstützt manuelle Updates. Lade das neue Installationsprogramm herunter und führe es aus.",
+      "download_portable": "Portable ZIP herunterladen",
+      "download_installer": "Installationsprogramm herunterladen",
+      "install": "Herunterladen und neu starten",
+      "automatic": "Automatisch nach Updates suchen",
+      "automatic_description": "Beim Start einmal prüfen und über neue stabile Versionen informieren.",
+      "view": "Update ansehen",
+      "notification_body": "Öffne Weblink, um das Update anzusehen und herunterzuladen."
     }
   },
   "cache": {

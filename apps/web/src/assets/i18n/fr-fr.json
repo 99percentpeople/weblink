@@ -537,7 +537,8 @@
       "loading": "Vérification de la disponibilité des notifications…",
       "load_failed": "Impossible de lire l'état de notification du système. Le retour à Weblink le vérifie à nouveau automatiquement.",
       "error_details": "Détails de l'erreur",
-      "permission_unknown": "Le système n'a pas encore fourni de statut de notification. Les notifications suivront les paramètres du système."
+      "permission_unknown": "Le système n'a pas encore fourni de statut de notification. Les notifications suivront les paramètres du système.",
+      "updates": "Mises à jour de l’application"
     },
     "shortcut_input": {
       "recording": "Appuyez sur une combinaison de touches…",
@@ -547,6 +548,32 @@
       "duplicate": "Choisissez un raccourci différent pour libérer la saisie et arrêter le contrôle à distance.",
       "edit": "Définir le raccourci",
       "saving": "Enregistrement…"
+    },
+    "updates": {
+      "title": "Mises à jour du bureau",
+      "description": "Rechercher une nouvelle version stable sur GitHub Releases.",
+      "check": "Rechercher des mises à jour",
+      "releases": "Page des versions",
+      "checking": "Recherche de mises à jour…",
+      "current": "Vous utilisez la dernière version.",
+      "development": "Les versions de développement ne reçoivent pas les mises à jour stables. Téléchargez une version stable depuis la page des versions.",
+      "unsupported": "Les mises à jour dans l’application sont actuellement limitées à Windows x64.",
+      "available": "La version {{version}} est disponible.",
+      "downloading": "Téléchargement de la mise à jour…",
+      "installing": "Installation de la mise à jour. Weblink va redémarrer…",
+      "check_failed": "Impossible de vérifier les mises à jour. Vérifiez la connexion ou consultez la page des versions.",
+      "install_failed": "Échec de la mise à jour. Réessayez ou téléchargez le programme d’installation depuis la page des versions.",
+      "notes": "Notes de version",
+      "install_hint": "L’installation ferme Weblink et termine les sessions actives. L’application redémarrera ensuite.",
+      "portable_hint": "Extrayez le nouveau ZIP, fermez Weblink, puis remplacez l’exécutable portable.",
+      "manual_hint": "Cette version permet les mises à jour manuelles. Téléchargez et exécutez le nouveau programme d’installation.",
+      "download_portable": "Télécharger le ZIP portable",
+      "download_installer": "Télécharger le programme d’installation",
+      "install": "Télécharger et redémarrer",
+      "automatic": "Rechercher automatiquement les mises à jour",
+      "automatic_description": "Vérifier une fois au démarrage et signaler toute nouvelle version stable.",
+      "view": "Voir la mise à jour",
+      "notification_body": "Ouvrez Weblink pour consulter et télécharger la mise à jour."
     }
   },
   "cache": {

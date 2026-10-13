@@ -15,6 +15,17 @@ mod picture_in_picture;
 mod preview;
 mod remote_control;
 mod staged_files;
+mod updates;
+
+fn shutdown(app: &tauri::AppHandle) {
+    clipboard::shutdown();
+    file_drop::shutdown();
+    app.state::<application::Service>().shutdown();
+    app.state::<notifications::Service>().clear();
+    app.state::<keyboard::Shared>().close();
+    app.state::<remote_control::Shared>().close();
+    app.state::<capture::Service>().shutdown();
+}
 
 fn same_origin(left: &Url, right: &Url) -> bool {
     left.scheme() == right.scheme()
@@ -51,6 +62,8 @@ fn media_permission(
 pub fn run() {
     tauri::Builder::default()
         .plugin(application::single_instance::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Service::default())
         .manage(notifications::Service::default())
         .manage(std::sync::Arc::new(
             weblink_desktop_capture::CaptureService::new()
@@ -68,6 +81,8 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             capabilities::runtime_capabilities,
+            updates::updates_check,
+            updates::updates_install,
             notifications::notifications_capabilities,
             notifications::notifications_request_permission,
             notifications::notifications_watch,
@@ -241,13 +256,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::RunEvent::Exit) {
-                clipboard::shutdown();
-                file_drop::shutdown();
-                app.state::<application::Service>().shutdown();
-                app.state::<notifications::Service>().clear();
-                app.state::<keyboard::Shared>().close();
-                app.state::<remote_control::Shared>().close();
-                app.state::<capture::Service>().shutdown();
+                shutdown(app);
             }
         });
 }

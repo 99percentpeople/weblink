@@ -28,9 +28,11 @@ import type { RoomStatus } from "./app-state";
 import type { AppPermissions } from "./create-app-permissions";
 import type { AppMediaCapabilities } from "./create-app-media-capabilities";
 import type { AppStartup } from "./create-app-startup";
+import type { AppUpdates } from "./create-app-updates";
 import type { AppCaptureSources } from "./create-app-capture-sources";
 import type { AppInputDevices } from "./create-app-input-devices";
 export interface AppStateContextProps {
+  updates?: AppUpdates;
   peerCapabilities(
     target: ClientID,
   ): PeerCapabilities | undefined;

@@ -1,4 +1,6 @@
 import type { InputDeviceSnapshot } from "./input";
+import type { NativeUpdates } from "./updates";
+export type * from "./updates";
 export type * from "./input";
 import type { SystemNotifications } from "./notifications";
 export type * from "./notifications";
@@ -18,6 +20,7 @@ export interface RuntimeCapabilities {
 }
 
 export interface PlatformRuntime {
+  readonly updates?: NativeUpdates;
   readonly fileDrop?: NativeFileDrop;
   clipboard?: NativeClipboard;
   readonly notifications?: SystemNotifications;

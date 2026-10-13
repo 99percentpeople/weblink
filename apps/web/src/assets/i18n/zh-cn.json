@@ -532,7 +532,8 @@
       "loading": "正在读取系统通知状态…",
       "load_failed": "读取系统通知状态失败，返回 Weblink 后会自动重新检查。",
       "error_details": "查看错误详情",
-      "permission_unknown": "系统尚未提供此应用的通知状态，通知将按系统设置处理。"
+      "permission_unknown": "系统尚未提供此应用的通知状态，通知将按系统设置处理。",
+      "updates": "应用更新"
     },
     "shortcut_input": {
       "recording": "请按下组合键…",
@@ -542,6 +543,32 @@
       "duplicate": "释放输入与紧急停止远控不能使用相同的快捷键。",
       "edit": "点击录制",
       "saving": "保存中…"
+    },
+    "updates": {
+      "title": "桌面端更新",
+      "description": "从 GitHub Releases 检查新的正式版本。",
+      "check": "检查更新",
+      "releases": "发布页面",
+      "checking": "正在检查更新…",
+      "current": "当前已是最新版本。",
+      "development": "开发版不使用正式版更新，请前往发布页面下载正式版。",
+      "unsupported": "应用内更新目前仅支持 Windows x64。",
+      "available": "发现新版本 {{version}}。",
+      "downloading": "正在下载更新…",
+      "installing": "正在安装更新，Weblink 即将重启…",
+      "check_failed": "检查更新失败，请检查网络或前往发布页面。",
+      "install_failed": "更新失败，请重试或前往发布页面下载安装包。",
+      "notes": "更新说明",
+      "install_hint": "安装将关闭 Weblink 并结束当前会话，完成后会重新启动。",
+      "portable_hint": "解压新版 ZIP，关闭 Weblink 后替换免安装版程序。",
+      "manual_hint": "此构建支持手动更新，请下载并运行新版安装包。",
+      "download_portable": "下载免安装 ZIP",
+      "download_installer": "下载安装包",
+      "install": "下载并重启",
+      "automatic": "自动检查更新",
+      "automatic_description": "应用启动时检查一次，有新的正式版本时通知。",
+      "view": "查看更新",
+      "notification_body": "打开 Weblink 查看并下载更新。"
     }
   },
   "cache": {
