@@ -84,6 +84,8 @@ export function MeetingTile(props: {
   onKeyboardVisibleChange?: (visible: boolean) => void;
 }) {
   const app = useAppState();
+  const participantName = () =>
+    props.participantName ?? props.name;
   const controllerName = createMemo(() => {
     if (
       props.sourceKind !== "screen" ||
@@ -214,9 +216,11 @@ export function MeetingTile(props: {
           onDecodeError={(track) =>
             sessionService.reportNativeDecodeFailure(track)
           }
-          name={props.name}
+          name={participantName()}
           label={{
-            name: props.participantName ?? props.name,
+            name: props.local
+              ? `${participantName()} (${t("meeting.you")})`
+              : participantName(),
             source: props.sourceLabel,
             controller: controllerName(),
           }}

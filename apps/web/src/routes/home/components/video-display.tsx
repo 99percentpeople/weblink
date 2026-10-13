@@ -31,6 +31,7 @@ export const VideoDisplay = (
     stream: MediaStream | null | undefined;
     mediaError?: "codec" | "connection";
     onDecodeError?: (track: MediaStreamTrack) => void;
+    /** Raw avatar name; presentation-only text belongs in label. */
     name: string;
     label?: Omit<VideoLabelProps, "speaking">;
     muted?: boolean;

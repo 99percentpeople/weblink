@@ -52,6 +52,39 @@ beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("meeting source presentation", () => {
+  it("keeps the raw profile name separate from local and source labels", () => {
+    createRoot((dispose) => {
+      const [name, setName] = createSignal("spinka");
+      const sources = createMeetingSources(() => [
+        {
+          id: "self",
+          name: name(),
+          local: true,
+          stream: stream(
+            track("shared-screen", "video", true),
+          ),
+        },
+      ]);
+      expect(
+        sources().map((source) => source.name),
+      ).toEqual([
+        "spinka (meeting.you)",
+        "spinka (meeting.you) · meeting.screen_source 1",
+      ]);
+      expect(
+        sources().map((source) => source.participantName),
+      ).toEqual(["spinka", "spinka"]);
+      setName("Alice (Work)");
+      expect(
+        sources().map((source) => source.participantName),
+      ).toEqual(["Alice (Work)", "Alice (Work)"]);
+      expect(sources()[0].name).toBe(
+        "Alice (Work) (meeting.you)",
+      );
+      dispose();
+    });
+  });
+
   it("keeps one native card id while negotiating, decoding, failing and reconnecting", () => {
     createRoot((dispose) => {
       const [views, setViews] = createSignal<

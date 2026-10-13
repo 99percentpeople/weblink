@@ -32,6 +32,7 @@ export interface MeetingSource {
   name: string;
   avatar?: string;
   stream: MediaStream | null;
+  /** Raw profile name, without local identity or media-source labels. */
   participantName?: string;
   sourceLabel?: string;
   controlSourceId?: string;
@@ -84,6 +85,9 @@ export function createMeetingSources(
     const nextCache = new Map<string, MediaStream>();
     const sources = participants().flatMap(
       (participant) => {
+        const displayName = participant.local
+          ? `${participant.name} (${t("meeting.you")})`
+          : participant.name;
         const tracks =
           participant.stream
             ?.getTracks()
@@ -226,8 +230,8 @@ export function createMeetingSources(
                 : undefined,
             ),
             name: label
-              ? `${participant.name} · ${label}`
-              : participant.name,
+              ? `${displayName} · ${label}`
+              : displayName,
             participantName: participant.name,
             sourceLabel: label || undefined,
             controlSourceId:

@@ -21,6 +21,7 @@ import {
 } from "vitest";
 import { MeetingTile } from "@/routes/home/components/meeting-tile";
 import { setAppState } from "@/libs/state/app-state";
+import { getAvatarFallbackImage } from "@/libs/utils/avatar";
 import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 import type { NativeControlStatus } from "@weblink/platform";
 
@@ -65,7 +66,9 @@ vi.mock("@/i18n", () => ({
   t: (key: string, values?: { name?: string }) =>
     key === "remote_control.controlled_by"
       ? `Controlled by ${values?.name}`
-      : key,
+      : key === "meeting.you"
+        ? "You"
+        : key,
 }));
 // Test tile media/control lifetimes with actions exposed, independently of
 // the mobile menu presentation. Keep the real action registration and cleanup.
@@ -93,9 +96,6 @@ vi.mock(
 );
 vi.mock("@/components/icons", () => ({
   IconVolumeUpFilled: () => null,
-}));
-vi.mock("@/components/common/client-avatar", () => ({
-  ClientAvatar: () => <span>Avatar</span>,
 }));
 vi.mock("@/components/common/spinner", () => ({
   Spinner: () => null,
@@ -241,6 +241,66 @@ const cover = () =>
   screen.queryByRole("button", {
     name: "meeting.show_screen_preview",
   });
+
+it.each([
+  { local: true, sourceLabel: "", audioOnly: false },
+  { local: true, sourceLabel: "Screen 1", audioOnly: true },
+  { local: false, sourceLabel: "Camera", audioOnly: true },
+])(
+  "uses the participant name for avatars with local=$local and source=$sourceLabel",
+  async ({ local, sourceLabel, audioOnly }) => {
+    const [name, setName] = createSignal("spinka");
+    const displayName = () =>
+      local ? `${name()} (You)` : name();
+    const audio = new Track("microphone");
+    audio.kind = "audio";
+    const view = render(() => (
+      <MeetingTile
+        name={
+          sourceLabel
+            ? `${displayName()} · ${sourceLabel}`
+            : displayName()
+        }
+        participantName={name()}
+        sourceLabel={sourceLabel || undefined}
+        local={local}
+        stream={
+          audioOnly
+            ? (new Stream([
+                audio as unknown as MediaStreamTrack,
+              ]) as unknown as MediaStream)
+            : null
+        }
+        compact
+        pinned={false}
+      />
+    ));
+    const avatar = () =>
+      view.container.querySelector<HTMLImageElement>(
+        'img[src^="data:image/svg+xml,"]',
+      );
+    await waitFor(() =>
+      expect(avatar()?.getAttribute("src")).toBe(
+        getAvatarFallbackImage("spinka"),
+      ),
+    );
+    const svg = new DOMParser().parseFromString(
+      decodeURIComponent(avatar()!.src.split(",")[1]),
+      "image/svg+xml",
+    );
+    expect(svg.querySelector("text")?.textContent).toBe(
+      "SP",
+    );
+    expect(screen.getByText(displayName())).toBeTruthy();
+    setName("Alice Smith");
+    await waitFor(() =>
+      expect(avatar()?.getAttribute("src")).toBe(
+        getAvatarFallbackImage("Alice Smith"),
+      ),
+    );
+    expect(screen.getByText(displayName())).toBeTruthy();
+  },
+);
 
 it("keeps source details in icon hints and tracks the controller of this screen", () => {
   const [capabilities, setCapabilities] =

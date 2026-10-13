@@ -78,7 +78,7 @@ export function createMeetingSession({
   const sources = createMeetingSources(() => [
     {
       id: appState.profile.clientId,
-      name: `${appState.profile.name} (${t("meeting.you")})`,
+      name: appState.profile.name,
       avatar: appState.profile.avatar ?? undefined,
       stream: state.localStream(),
       local: true,

@@ -498,9 +498,12 @@ export const createMediaSelectionDialog = () => {
               <VideoDisplay
                 class="bg-muted aspect-video w-full rounded-lg"
                 stream={localStream()}
-                name={t(
-                  "common.media_selection_dialog.current",
-                )}
+                name={appState.profile.name}
+                label={{
+                  name: t(
+                    "common.media_selection_dialog.current",
+                  ),
+                }}
                 avatar={
                   appState.profile.avatar ?? undefined
                 }
@@ -511,9 +514,12 @@ export const createMediaSelectionDialog = () => {
               class="bg-muted aspect-video w-full rounded-lg"
               stream={stream()}
               muted={true}
-              name={t(
-                "common.media_selection_dialog.preview",
-              )}
+              name={appState.profile.name}
+              label={{
+                name: t(
+                  "common.media_selection_dialog.preview",
+                ),
+              }}
               avatar={appState.profile.avatar ?? undefined}
             />
           </Show>
