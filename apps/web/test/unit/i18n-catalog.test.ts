@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import en from "@/assets/i18n/en-us.json";
-import languages from "@/assets/i18n/languages.json";
+import { localeOptionsMap as languages } from "@weblink/locale";
 
 function flatten(
   value: object,
@@ -42,11 +42,7 @@ describe("translation catalogs", () => {
   it("registers every language catalog", () => {
     expect(
       readdirSync(resolve("src/assets/i18n"))
-        .filter(
-          (name) =>
-            name.endsWith(".json") &&
-            name !== "languages.json",
-        )
+        .filter((name) => name.endsWith(".json"))
         .map((name) => name.slice(0, -5))
         .sort(),
     ).toEqual(Object.keys(languages).sort());

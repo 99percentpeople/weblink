@@ -6,9 +6,12 @@ for (const path of [
   "apps/web/node_modules/",
   "apps/web/dist/",
   "apps/web/dev-dist/",
+  "apps/www/node_modules/",
+  "apps/www/dist/",
   "apps/desktop/node_modules/",
   "apps/desktop/dist/",
   "packages/platform/node_modules/",
+  "packages/theme/node_modules/",
   "servers/weblink-ws-server/node_modules/",
   "servers/weblink-ws-worker/node_modules/",
 ]) {

@@ -194,7 +194,8 @@ tests and integration tests. Only after `Checks` succeeds does the
 `deploy-production` job call [web-production.yml](../.github/workflows/web-production.yml)
 to build the production bundle and upload `apps/web/dist/`. The parallel
 [desktop production workflow](../.github/workflows/desktop-production.yml)
-builds a Windows NSIS installer artifact.
+builds both a Windows NSIS installer and a portable EXE ZIP as separate artifacts.
+See [desktop downloads](DESKTOP.md#run-and-build) for publishing these files to GitHub Releases.
 Prerelease tags such as `v1.1.0-beta.1` do not match the workflow trigger and
 therefore do not publish to production.
 
@@ -269,6 +270,15 @@ treating the release as deployed. A failed `Checks` job prevents the production
 build and upload. A failed deployment can be retried through the existing Actions
 run; do not move a published tag to another commit. To roll back, select a
 previous successful production deployment in the Pages dashboard.
+
+For desktop downloads, create a GitHub Release for the same tag after the
+desktop production job succeeds. Extract its Actions artifacts, attach
+`Weblink-windows-x64-setup.exe` and `Weblink-windows-x64-portable.zip`, and use
+`release-notes.md` from the `weblink-release-notes` artifact as the description.
+It includes the tag's changelog and version-specific download links for both
+packages. Mark the stable release as Latest so the marketing site's download
+button opens it. The workflow prepares these files but does not publish the
+GitHub Release itself.
 
 ### Continuous development channel
 

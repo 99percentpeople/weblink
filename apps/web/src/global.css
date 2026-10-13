@@ -6,87 +6,9 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/roboto-mono";
 @import "./styles/pswp.css";
+@import "@weblink/theme/tokens.css";
 
 @custom-variant dark (&:where(.dark *, [data-kb-theme="dark"] *));
-
-:root {
-  /* Shared radius scale: change this value to tune all non-circular corners. */
-  --radius: 1rem;
-  --background: #f3f5f9;
-  --foreground: #182233;
-  --card: #ffffff;
-  --card-foreground: #182233;
-  --popover: #ffffff;
-  --popover-foreground: #182233;
-  --primary: #315fa8;
-  --primary-foreground: #ffffff;
-  --secondary: #e8edf5;
-  --secondary-foreground: #293b54;
-  --muted: #e8edf5;
-  --muted-foreground: #607086;
-  --accent: #dce7f7;
-  --accent-foreground: #244b80;
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #dce2eb;
-  --input: #dce2eb;
-  --ring: #315fa8;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-
-  --font-sans: "Inter Variable", sans-serif;
-  --font-mono: "Roboto Mono Variable", monospace;
-}
-
-.dark,
-[data-kb-theme="dark"] {
-  --background: #11151c;
-  --foreground: #e9edf5;
-  --card: #20252e;
-  --card-foreground: #e9edf5;
-  --popover: #20252e;
-  --popover-foreground: #e9edf5;
-  --primary: #96b9ff;
-  --primary-foreground: #11151c;
-  --secondary: #2a303a;
-  --secondary-foreground: #e9edf5;
-  --muted: #2a303a;
-  --muted-foreground: #a1aabb;
-  --accent: #394557;
-  --accent-foreground: #d5e4ff;
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #ffffff14;
-  --input: #ffffff20;
-  --ring: #96b9ff;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-}
-
-:root {
-  --success: hsl(145, 93%, 54%);
-  --success-foreground: hsl(145, 93%, 14%);
-  --warning: hsl(48 93% 54%);
-  --warning-foreground: hsl(48 93% 14%);
-  --info: hsl(239 93% 54%);
-  --info-foreground: hsl(239 93% 94%);
-}
-
-.dark,
-[data-kb-theme="dark"] {
-  --success: hsl(152 93% 18%);
-  --success-foreground: hsl(152 93% 58%);
-  --warning: hsl(33 93% 18%);
-  --warning-foreground: hsl(33 93% 78%);
-  --info: hsl(217 93% 18%);
-  --info-foreground: hsl(217 93% 78%);
-}
 
 @theme inline {
   --color-background: var(--background);

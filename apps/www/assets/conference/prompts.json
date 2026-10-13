@@ -1,0 +1,26 @@
+{
+  "generator": "Built-in image_gen tool",
+  "purpose": "Fictional video meeting participants; source portraits for actual Weblink UI screenshots.",
+  "prompts": [
+    {
+      "id": "alex",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: fictional participant webcam feed for a real video-conferencing app screenshot.\nPrimary request: generate one realistic, friendly adult participant on a work video call, looking toward their laptop webcam.\nComposition: landscape 16:9 single photo, medium chest-up framing, full head with generous headroom, centered subject. Natural laptop-webcam perspective, realistic skin texture, soft daylight, polished but candid rather than studio headshot. Quiet softly focused home office background. Keep the person's face and shoulders inside the middle half so the image works in a small conference tile.\nConstraints: exactly one fictional adult, no resemblance to a celebrity, no text, names, logos, watermarks, meeting controls, frames, collage, other people, visible monitor or hands. Opaque background.\nSubject and setting: A fictional East Asian man in his early 30s, short black hair, a navy overshirt over a light gray T-shirt, relaxed subtle smile. Warm neutral home office with a blurred plant and bookcase.",
+      "file": "alex.png"
+    },
+    {
+      "id": "maya",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: fictional participant webcam feed for a real video-conferencing app screenshot.\nPrimary request: generate one realistic, friendly adult participant on a work video call, looking toward their laptop webcam.\nComposition: landscape 16:9 single photo, medium chest-up framing, full head with generous headroom, centered subject. Natural laptop-webcam perspective, realistic skin texture, soft daylight, polished but candid rather than studio headshot. Quiet softly focused home office background. Keep the person's face and shoulders inside the middle half so the image works in a small conference tile.\nConstraints: exactly one fictional adult, no resemblance to a celebrity, no text, names, logos, watermarks, meeting controls, frames, collage, other people, visible monitor or hands. Opaque background.\nSubject and setting: A fictional South Asian woman in her early 30s, shoulder-length dark wavy hair, a muted sage-green sweater, attentive friendly smile. Bright cream home office with a blurred leafy plant.",
+      "file": "maya.png"
+    },
+    {
+      "id": "sofia",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: fictional participant webcam feed for a real video-conferencing app screenshot.\nPrimary request: generate one realistic, friendly adult participant on a work video call, looking toward their laptop webcam.\nComposition: landscape 16:9 single photo, medium chest-up framing, full head with generous headroom, centered subject. Natural laptop-webcam perspective, realistic skin texture, soft daylight, polished but candid rather than studio headshot. Quiet softly focused home office background. Keep the person's face and shoulders inside the middle half so the image works in a small conference tile.\nConstraints: exactly one fictional adult, no resemblance to a celebrity, no text, names, logos, watermarks, meeting controls, frames, collage, other people, visible monitor or hands. Opaque background.\nSubject and setting: A fictional Latina woman in her mid 30s, dark shoulder-length hair tucked behind one ear, a soft terracotta blouse, warm natural smile. Calm neutral home office, diffuse daylight and a softly blurred shelf.",
+      "file": "sofia.png"
+    },
+    {
+      "id": "noah",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: fictional participant webcam feed for a real video-conferencing app screenshot.\nPrimary request: generate one realistic, friendly adult participant on a work video call, looking toward their laptop webcam.\nComposition: landscape 16:9 single photo, medium chest-up framing, full head with generous headroom, centered subject. Natural laptop-webcam perspective, realistic skin texture, soft daylight, polished but candid rather than studio headshot. Quiet softly focused home office background. Keep the person's face and shoulders inside the middle half so the image works in a small conference tile.\nConstraints: exactly one fictional adult, no resemblance to a celebrity, no text, names, logos, watermarks, meeting controls, frames, collage, other people, visible monitor or hands. Opaque background.\nSubject and setting: A fictional Black man in his mid 30s, closely cropped hair and a neatly trimmed short beard, a light blue casual shirt, pleasant engaged expression. Quiet home office with a blurred warm wooden bookcase and a plant.",
+      "file": "noah.png"
+    }
+  ]
+}

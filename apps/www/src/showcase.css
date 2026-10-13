@@ -1,0 +1,373 @@
+/* Only device outlines are drawn; the app UI is captured. */
+.showcase {
+  margin-top: 36px;
+}
+.demo-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.demo-tabs {
+  max-width: 100%;
+  position: relative;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--secondary);
+}
+.demo-tab-highlight {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.75);
+  background: var(--card);
+  box-shadow: 0 1px 3px #18223308;
+  pointer-events: none;
+  transition:
+    transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.demo-tabs button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) * 0.75);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  transition: color 150ms ease;
+}
+.demo-tabs button:hover {
+  color: var(--foreground);
+}
+.demo-tabs button[aria-selected="true"] {
+  color: var(--primary);
+}
+/* The moving bubble owns the background once JS is ready. */
+.demo-tabs:not([data-animated])
+  button[aria-selected="true"] {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: 0 1px 3px #18223308;
+}
+.demo-tabs .icon {
+  width: 17px;
+  height: 17px;
+}
+.demo-viewport {
+  overflow: hidden;
+}
+.demo-track {
+  display: flex;
+  transform: translateX(calc(var(--demo-index, 0) * -100%));
+  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.demo-panel {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+.demo-panel figure {
+  margin: 0;
+}
+.device-pair {
+  --device-gap: 28px;
+  --bezel: 6px;
+  --frame-inset: calc(var(--bezel) * 2 + 2px);
+  --frame-top: 14px;
+  --frame-bottom: 10px;
+  --base-height: 12px;
+  --phone-screen-extension: calc(
+    var(--frame-bottom) + var(--base-height) - var(--bezel)
+  );
+  display: grid;
+  /* Equal device heights, with the phone screen extending to its slim chin. */
+  /* Screen width ratio: 1 + (1440 / 900) / (390 / 844) = 4.4625641. */
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(
+      0,
+      calc(
+        (
+            100% - var(--device-gap) - var(--frame-inset) *
+              2 + var(--phone-screen-extension) * 1.6
+          ) /
+          4.4625641 + var(--frame-inset)
+      )
+    );
+  align-items: start;
+  gap: var(--device-gap);
+  padding: 8px 12px 16px;
+}
+.device-laptop {
+  min-width: 0;
+}
+.screenshot-link {
+  display: block;
+  position: relative;
+}
+.screenshot-link img {
+  width: 100%;
+  height: auto;
+  background: var(--background);
+}
+.laptop-display {
+  padding: var(--frame-top) var(--bezel) var(--frame-bottom);
+  border: 1px solid #8793a2;
+  border-radius: 16px 16px 5px 5px;
+  background: linear-gradient(145deg, #303b49, #18212d);
+  box-shadow:
+    inset 0 0 0 1px #b6c0cc70,
+    inset 0 0 0 3px #111a2760,
+    0 2px 3px #18223312,
+    0 18px 38px -18px #18223330;
+}
+.laptop-display::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #111b2b;
+  box-shadow:
+    0 0 0 1px #5f6b7b,
+    inset 1px 1px 1px #7f9db855;
+}
+.laptop-display img {
+  border-radius: 3px;
+}
+.laptop-base {
+  position: relative;
+  width: calc(100% + 24px);
+  height: var(--base-height);
+  margin-left: -12px;
+  border: 1px solid #99a5b4;
+  border-top-color: #d8dfe8;
+  border-radius: 2px 2px 14px 14px;
+  background: linear-gradient(
+    #e5eaf0 0%,
+    #c1cbd7 35%,
+    #b3bfcd 70%,
+    #8c99a9 100%
+  );
+  box-shadow:
+    inset 0 1px #ffffffb0,
+    0 8px 14px -6px #18223338;
+}
+.laptop-base::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 44%;
+  width: 12%;
+  height: 4px;
+  border-radius: 0 0 7px 7px;
+  background: #99a6b6;
+  box-shadow: inset 0 1px 2px #596b8150;
+}
+.laptop-base::after {
+  content: "";
+  position: absolute;
+  bottom: 1px;
+  left: 3%;
+  right: 3%;
+  height: 1px;
+  background: #73819345;
+}
+.device-phone {
+  --phone-edge: 4px;
+  --phone-radius: 27px;
+  --phone-gesture-gap: 4px;
+  --edge-offset: calc(var(--phone-edge) - 1px);
+  min-width: 0;
+  /* Leave room for the camera; use the same narrow inset at the sides and bottom. */
+  padding: calc(var(--frame-top) - var(--edge-offset))
+    calc(var(--bezel) - var(--edge-offset))
+    calc(var(--bezel) - var(--edge-offset));
+  border: var(--phone-edge) solid #26313f;
+  border-radius: var(--phone-radius);
+  background: var(--background);
+  box-shadow:
+    0 0 0 1px #8793a2,
+    inset 0 0 0 1px #c4ccd755,
+    0 2px 3px #18223312,
+    0 18px 38px -18px #18223338;
+}
+.device-phone::before,
+.device-phone::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.device-phone::before {
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #111b2b;
+  box-shadow:
+    0 0 0 1px #ccd5e1,
+    inset 1px 1px 1px #7e8b9d70;
+}
+.device-phone::after {
+  bottom: 3px;
+  width: 28%;
+  height: 2px;
+  background: var(--foreground);
+  opacity: 0.6;
+}
+.device-phone img {
+  /* Clear the gesture bar inside the screen without enlarging the frame. */
+  transform: translateY(
+    calc(-1 * var(--phone-gesture-gap))
+  );
+  border-radius: 16px 16px
+    calc(var(--phone-radius) - var(--bezel) - 1px)
+    calc(var(--phone-radius) - var(--bezel) - 1px);
+}
+.phone-buttons {
+  position: absolute;
+  inset: calc(1px - var(--phone-edge));
+  pointer-events: none;
+}
+.phone-buttons::before,
+.phone-buttons::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: #7d8a9b;
+}
+.phone-buttons::before {
+  top: 17%;
+  left: -3px;
+  height: 14%;
+  background: linear-gradient(
+    #7d8a9b 0% 44%,
+    transparent 44% 54%,
+    #7d8a9b 54% 100%
+  );
+}
+.phone-buttons::after {
+  top: 22%;
+  right: -3px;
+  height: 9%;
+}
+.screenshot-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-top: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted-foreground);
+}
+.screenshot-caption a {
+  flex-shrink: 0;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.demo-caption {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+@media (max-width: 640px) {
+  .showcase {
+    margin-top: 28px;
+  }
+  .demo-navigation {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .demo-tabs {
+    width: 100%;
+    gap: 0;
+    padding: 3px;
+  }
+  .demo-tabs button {
+    min-width: 0;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+  .demo-tabs button span {
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+  .demo-tabs .icon {
+    width: 15px;
+    height: 15px;
+  }
+  .device-pair {
+    --device-gap: 12px;
+    --bezel: 3px;
+    --frame-top: 8px;
+    --frame-bottom: 5px;
+    --base-height: 7px;
+    padding: 6px 6px 10px;
+  }
+  .laptop-display {
+    border-radius: 7px 7px 2px 2px;
+  }
+  .laptop-display::before {
+    top: 3px;
+    width: 2px;
+    height: 2px;
+  }
+  .laptop-display img {
+    border-radius: 2px;
+  }
+  .laptop-base {
+    width: calc(100% + 12px);
+    margin-left: -6px;
+  }
+  .laptop-base::before {
+    height: 3px;
+  }
+  .device-phone {
+    --phone-edge: 2px;
+    --phone-radius: 12px;
+    --phone-gesture-gap: 2px;
+  }
+  .device-phone img {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+  .device-phone::before {
+    top: 2px;
+    width: 2px;
+    height: 2px;
+  }
+  .device-phone::after {
+    bottom: 2px;
+    height: 1px;
+  }
+  .screenshot-caption {
+    margin-top: 12px;
+    gap: 12px;
+    font-size: 11px;
+  }
+  .demo-caption {
+    font-size: 10px;
+  }
+}

@@ -1,0 +1,131 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.7"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <symbol id="arrow-up-right" viewBox="0 0 24 24">
+    <path d="M7 17 17 7M7 7h10v10" />
+  </symbol>
+  <symbol id="arrow-right" viewBox="0 0 24 24">
+    <path d="M4 12h16m-6-6 6 6-6 6" />
+  </symbol>
+  <symbol id="download" viewBox="0 0 24 24">
+    <path
+      d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"
+    />
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24">
+    <path d="m5 12 4 4L19 6" />
+  </symbol>
+  <symbol id="plus" viewBox="0 0 24 24">
+    <path d="M12 5v14M5 12h14" />
+  </symbol>
+  <symbol id="menu" viewBox="0 0 24 24">
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </symbol>
+  <symbol id="sun" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4" />
+    <path
+      d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"
+    />
+  </symbol>
+  <symbol id="moon" viewBox="0 0 24 24">
+    <path
+      d="M20.9 13.3A9 9 0 0 1 10.7 3.1a9 9 0 1 0 10.2 10.2Z"
+    />
+  </symbol>
+  <symbol id="link" viewBox="0 0 24 24">
+    <path
+      d="m10 13 4-4m-6 6-2 2a4 4 0 0 0 6 6l3-3a4 4 0 0 0 0-6M9 9a4 4 0 0 1 0-6l3-3a4 4 0 0 1 6 6l-2 2"
+      transform="translate(1 1) scale(.9)"
+    />
+  </symbol>
+  <symbol id="globe" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" />
+    <ellipse cx="12" cy="12" rx="4" ry="9" />
+    <path d="M3 12h18" />
+  </symbol>
+  <symbol id="folder" viewBox="0 0 24 24">
+    <path
+      d="M3 7V5a1 1 0 0 1 1-1h5l3 3h8a1 1 0 0 1 1 1v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 3h18"
+    />
+  </symbol>
+  <symbol id="monitor" viewBox="0 0 24 24">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <path d="M8 21h8m-4-4v4" />
+  </symbol>
+  <symbol id="smartphone" viewBox="0 0 24 24">
+    <rect x="6" y="2" width="12" height="20" rx="2" />
+    <path d="M10 5h4m-3 14h2" />
+  </symbol>
+  <symbol id="message" viewBox="0 0 24 24">
+    <path
+      d="M21 14a4 4 0 0 1-4 4H9l-6 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v7Z"
+    />
+    <path d="M7 8h10M7 12h6" />
+  </symbol>
+  <symbol id="settings" viewBox="0 0 24 24">
+    <path d="M4 6h16M4 12h16M4 18h16" />
+    <path d="M8 3v6m8 0v6m-6 0v6" />
+  </symbol>
+  <symbol id="mic" viewBox="0 0 24 24">
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+  </symbol>
+  <symbol id="video" viewBox="0 0 24 24">
+    <rect x="2" y="5" width="13" height="14" rx="2" />
+    <path d="m15 9 7-4v14l-7-4" />
+  </symbol>
+  <symbol id="shield" viewBox="0 0 24 24">
+    <path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4Z" />
+    <path d="m8 12 3 3 5-6" />
+  </symbol>
+  <symbol id="cursor" viewBox="0 0 24 24">
+    <path d="m4 2 16 11-8 1-4 7-4-19Z" />
+  </symbol>
+  <symbol id="code" viewBox="0 0 24 24">
+    <path d="m7 6-6 6 6 6m10-12 6 6-6 6M14 3l-4 18" />
+  </symbol>
+  <symbol id="users" viewBox="0 0 24 24">
+    <path
+      d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+    />
+    <circle cx="9" cy="7" r="4" />
+  </symbol>
+  <symbol id="info" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4m0-4h.01" />
+  </symbol>
+  <symbol id="search" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" />
+  </symbol>
+  <symbol id="mic-off" viewBox="0 0 24 24">
+    <path
+      d="m2 2 20 20M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6M5 10v2a7 7 0 0 0 12 4.9M19 10v2c0 .6-.08 1.17-.22 1.72M12 19v3m-4 0h8"
+    />
+  </symbol>
+  <symbol id="video-off" viewBox="0 0 24 24">
+    <path
+      d="m2 2 20 20M10 5h3a2 2 0 0 1 2 2v2l7-4v14l-7-4M6 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-2"
+    />
+  </symbol>
+  <symbol id="pip" viewBox="0 0 24 24">
+    <path
+      d="M21 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"
+    />
+    <rect x="12" y="12" width="10" height="8" rx="2" />
+  </symbol>
+  <symbol id="panel" viewBox="0 0 24 24">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M15 3v18m-7-12 3 3-3 3" />
+  </symbol>
+  <symbol id="phone-off" viewBox="0 0 24 24">
+    <path
+      d="m3 3 18 18M10.7 13.3a14 14 0 0 0 2.6 1.7l1.2-1.2M8.6 8.6 8 10a14 14 0 0 0 2.7 3.3M18 14h2a2 2 0 0 1 2 2v4a2 2 0 0 1-2.2 2 20 20 0 0 1-17.6-17.6A2 2 0 0 1 4.2 2H8v3"
+    />
+  </symbol>
+</svg>

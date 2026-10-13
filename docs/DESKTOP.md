@@ -55,9 +55,35 @@ Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
 machine needs WebView2 installed. Only `public` builds save this dependency cache.
 
 Stable `vX.Y.Z` web release tags instead call `desktop-production.yml`, using the
-workspace's full release optimizations and producing the
-`weblink-windows-x64-installer` NSIS artifact. Desktop uses the same application
-version as the Web frontend. These workflows upload artifacts without publishing a GitHub Release.
+workspace's full release optimizations. A single Tauri build produces both the
+executable and the NSIS installer, with the same application version as the Web
+frontend. The workflow also compresses that executable into a portable ZIP:
+
+| Actions artifact                | Release asset                      | Contents                                                                    |
+| ------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `weblink-windows-x64-installer` | `Weblink-windows-x64-setup.exe`    | NSIS installer, including WebView2 setup when needed                        |
+| `weblink-windows-x64-portable`  | `Weblink-windows-x64-portable.zip` | `weblink-desktop.exe`; extract and run with WebView2 120+ already installed |
+
+The marketing site's single desktop download entry opens
+`https://github.com/99percentpeople/weblink/releases/latest`. The production
+workflow also runs `scripts/generate-release-notes.mjs`, saving `release-notes.md`
+in the `weblink-release-notes` artifact. It combines a bilingual download table
+with the matching version's CHANGELOG content. Download links use that release's
+tag, so historical release notes remain tied to their own binaries.
+
+To publish, extract the outer Actions artifact archives and attach the installer
+`.exe` and portable `.zip` with their names unchanged to the matching tag's GitHub
+Release. Use the generated `release-notes.md` as the release description and mark
+the stable release as Latest. The portable ZIP contains the application executable
+and requires WebView2 120+ to be installed already. These workflows save artifacts
+without publishing a GitHub Release.
+
+To prepare the same release description locally, replace the example tag with
+the version in `apps/web/package.json`:
+
+```sh
+bun scripts/generate-release-notes.mjs v1.1.0 .tmp/release-notes.md
+```
 
 Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
 The platform mode is separate from the release channel: `desktop-dev.yml` sets

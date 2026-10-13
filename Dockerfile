@@ -6,7 +6,10 @@ FROM base AS install
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/desktop/package.json apps/desktop/package.json
+COPY apps/www/package.json apps/www/package.json
+COPY packages/locale/package.json packages/locale/package.json
 COPY packages/platform/package.json packages/platform/package.json
+COPY packages/theme/package.json packages/theme/package.json
 COPY servers/weblink-ws-server/package.json servers/weblink-ws-server/package.json
 COPY servers/weblink-ws-worker/package.json servers/weblink-ws-worker/package.json
 RUN HUSKY=0 bun install --frozen-lockfile --filter weblink-workspace --filter @weblink/web

@@ -40,10 +40,37 @@ jobs:
       - name: Build desktop frontend
         run: bun run --cwd apps/web build:desktop
       - run: cargo test --workspace --locked --release --features tauri/custom-protocol
-      - name: Build Windows installer
+      - name: Build Windows executable and installer
         run: bun run build:desktop --bundles nsis --config src-tauri/tauri.ci.conf.json
+      - name: Prepare installer release asset
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -Path target/release/bundle/nsis -Filter *.exe -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows NSIS installer."
+          }
+          Rename-Item -LiteralPath $installers[0].FullName -NewName Weblink-windows-x64-setup.exe
+      - name: Package portable Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path target/release/bundle/portable -Force | Out-Null
+          Compress-Archive -LiteralPath target/release/weblink-desktop.exe -DestinationPath target/release/bundle/portable/Weblink-windows-x64-portable.zip -Force
+      - name: Generate release notes with download links
+        shell: pwsh
+        run: bun scripts/generate-release-notes.mjs "$env:GITHUB_REF_NAME" target/release/release-notes.md
       - uses: actions/upload-artifact@v7
         with:
           name: weblink-windows-x64-installer
-          path: target/release/bundle/nsis/*.exe
+          path: target/release/bundle/nsis/Weblink-windows-x64-setup.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weblink-windows-x64-portable
+          path: target/release/bundle/portable/Weblink-windows-x64-portable.zip
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weblink-release-notes
+          path: target/release/release-notes.md
           if-no-files-found: error

@@ -25,11 +25,7 @@ import en from "@/assets/i18n/en-us.json";
 
 const dictionaryLoaders = import.meta.glob<{
   default: typeof en;
-}>([
-  "./assets/i18n/*.json",
-  "!./assets/i18n/en-us.json",
-  "!./assets/i18n/languages.json",
-]);
+}>(["./assets/i18n/*.json", "!./assets/i18n/en-us.json"]);
 const englishDictionary = flatten(en);
 
 async function importDictionary(locale: SupportedLocale) {

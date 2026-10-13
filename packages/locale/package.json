@@ -1,0 +1,8 @@
+{
+  "name": "@weblink/locale",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

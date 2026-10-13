@@ -47,7 +47,9 @@
         "@solidjs/meta": "^0.29.4",
         "@solidjs/router": "^0.15.3",
         "@tanstack/solid-table": "^8.21.3",
+        "@weblink/locale": "workspace:*",
         "@weblink/platform": "workspace:*",
+        "@weblink/theme": "workspace:*",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk-solid": "^1.1.2",
@@ -91,9 +93,30 @@
         "vitest": "^2.1.9",
       },
     },
+    "apps/www": {
+      "name": "@weblink/www",
+      "dependencies": {
+        "@fontsource-variable/inter": "^5.2.6",
+        "@kobalte/core": "^0.13.11",
+        "@weblink/locale": "workspace:*",
+        "@weblink/theme": "workspace:*",
+        "solid-js": "^1.9.9",
+      },
+      "devDependencies": {
+        "typescript": "^5.6.3",
+        "vite": "^6.4.3",
+        "vite-plugin-solid": "^2.11.8",
+      },
+    },
+    "packages/locale": {
+      "name": "@weblink/locale",
+    },
     "packages/platform": {
       "name": "@weblink/platform",
       "version": "0.1.0",
+    },
+    "packages/theme": {
+      "name": "@weblink/theme",
     },
     "servers/weblink-ws-server": {
       "name": "weblink-ws-server",
@@ -850,9 +873,15 @@
 
     "@weblink/desktop": ["@weblink/desktop@workspace:apps/desktop"],
 
+    "@weblink/locale": ["@weblink/locale@workspace:packages/locale"],
+
     "@weblink/platform": ["@weblink/platform@workspace:packages/platform"],
 
+    "@weblink/theme": ["@weblink/theme@workspace:packages/theme"],
+
     "@weblink/web": ["@weblink/web@workspace:apps/web"],
+
+    "@weblink/www": ["@weblink/www@workspace:apps/www"],
 
     "abort-controller": ["abort-controller@3.0.0", "", { "dependencies": { "event-target-shim": "^5.0.0" } }, "sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg=="],
 

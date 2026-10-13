@@ -3,6 +3,7 @@
 Weblink's original Git repository owns the applications, shared documentation
 and root tooling. The two signaling servers are Git submodules. The current
 web application is `apps/web`; the Tauri shell in `apps/desktop` reuses its frontend.
+The standalone marketing website lives in `apps/www` and builds independently.
 
 ## Checkout and dependencies
 
@@ -91,6 +92,26 @@ development settings described above. Keep frontend build-time `VITE_*` / `WEBLI
 in the application env files. Production and dev artifacts are written to `apps/web/dist`.
 Root `bun run clean` removes workspace dependencies, including the server
 dependencies, and frontend output. It does not remove env files.
+
+## Marketing website
+
+`apps/www` is a static HTML and TypeScript site with its own Vite configuration.
+It needs no application runtime, local signaling server, or env file.
+It shares the application's color, typography and radius tokens through
+`@weblink/theme` in `packages/theme/tokens.css`.
+The supported language list and browser-language matching rules are shared through
+`@weblink/locale` in `packages/locale`. Marketing copy lives in `apps/www/src/locales`.
+
+```sh
+bun run dev:www
+bun run lint:www
+bun run build:www
+bun run preview:www
+```
+
+Development uses port 5174; the production preview uses port 4174. The static
+build is written to `apps/www/dist` and can be hosted separately from `apps/web`.
+See [the site README](../apps/www/README.md) for content and deployment details.
 
 ## Desktop
 

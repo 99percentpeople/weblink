@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <meta name="theme-color" content="#f3f5f9" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Apply the saved appearance before the page is painted.
+      (() => {
+        let theme;
+        try {
+          theme = localStorage.getItem("www-theme");
+        } catch {}
+        document.documentElement.classList.toggle(
+          "dark",
+          theme === "dark" ||
+            (theme !== "light" &&
+              matchMedia("(prefers-color-scheme: dark)")
+                .matches),
+        );
+      })();
+    </script>
+    <meta
+      name="description"
+      content="Weblink 让设备之间的分享更简单。在浏览器中传输文件、聊天、语音视频通话和共享屏幕，也能经授权远程控制 Windows 电脑。开源，可自部署。"
+      data-i18n-content="meta.description"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="Weblink" />
+    <meta
+      property="og:title"
+      content="Weblink — 远程协作，打开即连。"
+      data-i18n-content="meta.title"
+    />
+    <meta
+      property="og:description"
+      content="在浏览器中共享屏幕、传输文件和聊天，经授权远程控制 Windows 电脑。"
+      data-i18n-content="meta.socialDescription"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="./favicon.svg"
+    />
+    <title data-i18n="meta.title">
+      Weblink — 远程协作，打开即连。
+    </title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main"
+      ><span data-i18n="nav.skip">跳到主要内容</span></a
+    >
+    <header class="site-header">
+      <div class="header-inner container">
+        <a
+          class="brand"
+          href="#"
+          aria-label="Weblink 首页"
+          data-i18n-aria-label="nav.home"
+        >
+          <img
+            src="./logo.svg"
+            data-theme-light="./logo.svg"
+            data-theme-dark="./logo-dark.svg"
+            alt="Weblink"
+            width="144"
+            height="30"
+          />
+        </a>
+        <nav
+          class="desktop-nav"
+          aria-label="主导航"
+          data-i18n-aria-label="nav.main"
+        >
+          <a href="#features"
+            ><span data-i18n="nav.features"
+              >探索功能</span
+            ></a
+          >
+          <a href="#platforms"
+            ><span data-i18n="nav.platforms"
+              >选择版本</span
+            ></a
+          >
+          <a href="#how-it-works"
+            ><span data-i18n="nav.start">开始使用</span></a
+          >
+          <a
+            href="https://github.com/99percentpeople/weblink"
+            >GitHub
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
+        </nav>
+        <div class="header-actions">
+          <div
+            class="header-menu"
+            data-locale-menu
+            hidden
+          ></div>
+          <div
+            class="header-menu"
+            data-theme-menu
+            hidden
+          ></div>
+          <a
+            class="button button-small button-primary header-cta"
+            href="https://webl.ink"
+            ><span data-i18n="common.open"
+              >打开 Weblink</span
+            >
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
+          <details class="mobile-menu">
+            <summary
+              aria-label="导航菜单"
+              data-i18n-aria-label="nav.menu"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#menu" />
+              </svg>
+            </summary>
+            <nav
+              aria-label="移动端导航"
+              data-i18n-aria-label="nav.mobile"
+            >
+              <a href="#features"
+                ><span data-i18n="nav.features"
+                  >探索功能</span
+                ></a
+              >
+              <a href="#platforms"
+                ><span data-i18n="nav.platforms"
+                  >选择版本</span
+                ></a
+              >
+              <a href="#how-it-works"
+                ><span data-i18n="nav.start"
+                  >开始使用</span
+                ></a
+              >
+              <a href="#faq"
+                ><span data-i18n="nav.faq"
+                  >常见问题</span
+                ></a
+              >
+              <a
+                href="https://github.com/99percentpeople/weblink"
+                >GitHub ↗</a
+              >
+              <a
+                class="button button-primary"
+                href="https://webl.ink"
+              >
+                <span data-i18n="common.open"
+                  >打开 Weblink</span
+                >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#arrow-up-right" />
+                </svg>
+              </a>
+            </nav>
+          </details>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="hero container"
+        aria-labelledby="hero-title"
+      >
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="status-dot"></span>
+            <span data-i18n="hero.eyebrow"
+              >开源的设备连接与远程协作工具</span
+            >
+          </div>
+          <h1 id="hero-title">
+            <span data-i18n="hero.title">远程协作，</span
+            ><br /><span class="hero-title-accent"
+              ><span data-i18n="hero.accent"
+                >打开即连。</span
+              ></span
+            >
+          </h1>
+          <p class="hero-description">
+            <span data-i18n="hero.description"
+              >在浏览器里共享屏幕、传文件、一起讨论。</span
+            ><br class="desktop-break" />
+            <span data-i18n="hero.remote"
+              >连接 Windows
+              桌面端，经对方授权，就能远程上手帮忙。</span
+            >
+          </p>
+          <div class="hero-actions">
+            <a
+              class="button button-primary"
+              href="https://webl.ink"
+              ><span data-i18n="common.start"
+                >在浏览器中开始</span
+              >
+              <svg class="icon" aria-hidden="true">
+                <use
+                  href="./icons.svg#arrow-up-right"
+                /></svg
+            ></a>
+            <a
+              class="button button-outline"
+              href="https://github.com/99percentpeople/weblink/releases/latest"
+              ><span data-i18n="common.desktop"
+                >下载 Windows 版</span
+              >
+              <svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#download" /></svg
+            ></a>
+          </div>
+          <div class="hero-notes">
+            <span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#check" /></svg
+              ><span data-i18n="hero.noAccount"
+                >无需注册账号</span
+              ></span
+            ><span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#check" /></svg
+              ><span data-i18n="hero.browser"
+                >浏览器即开即用</span
+              ></span
+            >
+          </div>
+        </div>
+
+        <div
+          class="showcase"
+          role="region"
+          aria-roledescription="轮播图"
+          aria-label="Weblink 功能演示"
+          data-i18n-aria-label="demo.label"
+          data-i18n-aria-roledescription="demo.role"
+        >
+          <div class="demo-navigation">
+            <div
+              class="demo-tabs"
+              role="tablist"
+              aria-label="查看 Weblink 实际界面"
+              data-i18n-aria-label="demo.tabs"
+            >
+              <span
+                class="demo-tab-highlight"
+                aria-hidden="true"
+                hidden
+              ></span>
+              <button
+                id="tab-screen"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="demo-screen"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#monitor" /></svg
+                ><span data-i18n="demo.remote"
+                  >远程桌面</span
+                >
+              </button>
+              <button
+                id="tab-meeting"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="demo-meeting"
+                tabindex="-1"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#video" /></svg
+                ><span data-i18n="demo.meeting"
+                  >视频会议</span
+                >
+              </button>
+              <button
+                id="tab-chat"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="demo-chat"
+                tabindex="-1"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#message" /></svg
+                ><span data-i18n="demo.chat">聊天</span>
+              </button>
+              <button
+                id="tab-files"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="demo-files"
+                tabindex="-1"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#folder" /></svg
+                ><span data-i18n="demo.files"
+                  >共享文件</span
+                >
+              </button>
+            </div>
+          </div>
+          <div class="demo-viewport">
+            <div class="demo-track">
+              <div
+                id="demo-screen"
+                class="demo-panel"
+                role="tabpanel"
+                aria-labelledby="tab-screen"
+                tabindex="0"
+              >
+                <figure>
+                  <div class="device-pair">
+                    <div class="device-laptop">
+                      <a
+                        class="screenshot-link laptop-display"
+                        href="./screenshots/remote-desktop.webp"
+                        data-theme-light="./screenshots/remote-desktop.webp"
+                        data-theme-dark="./screenshots/dark/remote-desktop.webp"
+                        target="_blank"
+                        rel="noopener"
+                        aria-label="查看电脑端远程桌面截图原图（新标签页）"
+                        data-i18n-aria-label="demo.remoteDesktopLink"
+                      >
+                        <img
+                          src="./screenshots/remote-desktop.webp"
+                          data-theme-light="./screenshots/remote-desktop.webp"
+                          data-theme-dark="./screenshots/dark/remote-desktop.webp"
+                          width="2160"
+                          height="1350"
+                          fetchpriority="high"
+                          alt="Weblink 电脑端远程控制演示：Windows 桌面、正在控制状态与展开的画面操作栏。"
+                          data-i18n-alt="demo.remoteDesktopAlt"
+                        />
+                      </a>
+                      <div
+                        class="laptop-base"
+                        aria-hidden="true"
+                      ></div>
+                    </div>
+                    <a
+                      class="screenshot-link device-phone"
+                      href="./screenshots/mobile-remote.webp"
+                      data-theme-light="./screenshots/mobile-remote.webp"
+                      data-theme-dark="./screenshots/dark/mobile-remote.webp"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="查看手机端远程桌面截图原图（新标签页）"
+                      data-i18n-aria-label="demo.remoteMobileLink"
+                    >
+                      <span
+                        class="phone-buttons"
+                        aria-hidden="true"
+                      ></span>
+                      <img
+                        src="./screenshots/mobile-remote.webp"
+                        data-theme-light="./screenshots/mobile-remote.webp"
+                        data-theme-dark="./screenshots/dark/mobile-remote.webp"
+                        width="585"
+                        height="1266"
+                        alt="Weblink 手机视口远程控制演示：查看 Windows 桌面，顶部显示控制中。"
+                        data-i18n-alt="demo.remoteMobileAlt"
+                      />
+                    </a>
+                  </div>
+                  <figcaption class="screenshot-caption">
+                    <span
+                      ><span data-i18n="demo.remoteCaption"
+                        >电脑前，或手机上，随时连接你的
+                        Windows 桌面。</span
+                      ></span
+                    >
+                    <a
+                      href="./screenshots/remote-desktop.webp"
+                      data-theme-light="./screenshots/remote-desktop.webp"
+                      data-theme-dark="./screenshots/dark/remote-desktop.webp"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      <span data-i18n="demo.original"
+                        >查看原图</span
+                      >
+                      <span aria-hidden="true">↗</span
+                      ><span class="sr-only"
+                        ><span data-i18n="common.newTab"
+                          >（新标签页）</span
+                        ></span
+                      >
+                    </a>
+                  </figcaption>
+                </figure>
+              </div>
+              <div
+                id="demo-meeting"
+                class="demo-panel"
+                role="tabpanel"
+                aria-labelledby="tab-meeting"
+                tabindex="0"
+                hidden
+              >
+                <figure>
+                  <div class="device-pair">
+                    <div class="device-laptop">
+                      <a
+                        class="screenshot-link laptop-display"
+                        href="./screenshots/video-meeting.webp"
+                        data-theme-light="./screenshots/video-meeting.webp"
+                        data-theme-dark="./screenshots/dark/video-meeting.webp"
+                        target="_blank"
+                        rel="noopener"
+                        aria-label="查看电脑端视频会议截图原图（新标签页）"
+                        data-i18n-aria-label="demo.meetingDesktopLink"
+                      >
+                        <img
+                          src="./screenshots/video-meeting.webp"
+                          data-theme-light="./screenshots/video-meeting.webp"
+                          data-theme-dark="./screenshots/dark/video-meeting.webp"
+                          width="2160"
+                          height="1350"
+                          loading="lazy"
+                          alt="Weblink 电脑端实际会议界面：四位 AI 生成人物在同一房间中视频交流。"
+                          data-i18n-alt="demo.meetingDesktopAlt"
+                        />
+                      </a>
+                      <div
+                        class="laptop-base"
+                        aria-hidden="true"
+                      ></div>
+                    </div>
+                    <a
+                      class="screenshot-link device-phone"
+                      href="./screenshots/mobile-meeting.webp"
+                      data-theme-light="./screenshots/mobile-meeting.webp"
+                      data-theme-dark="./screenshots/dark/mobile-meeting.webp"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="查看手机端视频会议截图原图（新标签页）"
+                      data-i18n-aria-label="demo.meetingMobileLink"
+                    >
+                      <span
+                        class="phone-buttons"
+                        aria-hidden="true"
+                      ></span>
+                      <img
+                        src="./screenshots/mobile-meeting.webp"
+                        data-theme-light="./screenshots/mobile-meeting.webp"
+                        data-theme-dark="./screenshots/dark/mobile-meeting.webp"
+                        width="585"
+                        height="1266"
+                        loading="lazy"
+                        alt="Weblink 手机视口实际会议界面：在同一房间中查看四位 AI 生成的参会者。"
+                        data-i18n-alt="demo.meetingMobileAlt"
+                      />
+                    </a>
+                  </div>
+                  <figcaption class="screenshot-caption">
+                    <span
+                      ><span data-i18n="demo.meetingCaption"
+                        >从电脑到手机，加入同一场面对面交流。</span
+                      ></span
+                    ><a
+                      href="./screenshots/video-meeting.webp"
+                      data-theme-light="./screenshots/video-meeting.webp"
+                      data-theme-dark="./screenshots/dark/video-meeting.webp"
+                      target="_blank"
+                      rel="noopener"
+                      ><span data-i18n="demo.original"
+                        >查看原图</span
+                      >
+                      <span aria-hidden="true">↗</span
+                      ><span class="sr-only"
+                        ><span data-i18n="common.newTab"
+                          >（新标签页）</span
+                        ></span
+                      ></a
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div
+                id="demo-chat"
+                class="demo-panel"
+                role="tabpanel"
+                aria-labelledby="tab-chat"
+                tabindex="0"
+                hidden
+              >
+                <figure>
+                  <div class="device-pair">
+                    <div class="device-laptop">
+                      <a
+                        class="screenshot-link laptop-display"
+                        href="./screenshots/screen-chat.webp"
+                        data-theme-light="./screenshots/screen-chat.webp"
+                        data-theme-dark="./screenshots/dark/screen-chat.webp"
+                        target="_blank"
+                        rel="noopener"
+                        aria-label="查看电脑端截图原图（新标签页）"
+                        data-i18n-aria-label="demo.chatDesktopLink"
+                      >
+                        <img
+                          src="./screenshots/screen-chat.webp"
+                          data-theme-light="./screenshots/screen-chat.webp"
+                          data-theme-dark="./screenshots/dark/screen-chat.webp"
+                          width="2160"
+                          height="1350"
+                          loading="lazy"
+                          alt="Weblink 电脑端实际界面：查看 Windows 演示桌面，展开画面操作栏，并在右侧聊天。"
+                          data-i18n-alt="demo.chatDesktopAlt"
+                        />
+                      </a>
+                      <div
+                        class="laptop-base"
+                        aria-hidden="true"
+                      ></div>
+                    </div>
+                    <a
+                      class="screenshot-link device-phone"
+                      href="./screenshots/mobile-screen.webp"
+                      data-theme-light="./screenshots/mobile-screen.webp"
+                      data-theme-dark="./screenshots/dark/mobile-screen.webp"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="查看手机端截图原图（新标签页）"
+                      data-i18n-aria-label="demo.chatMobileLink"
+                    >
+                      <span
+                        class="phone-buttons"
+                        aria-hidden="true"
+                      ></span>
+                      <img
+                        src="./screenshots/mobile-screen.webp"
+                        data-theme-light="./screenshots/mobile-screen.webp"
+                        data-theme-dark="./screenshots/dark/mobile-screen.webp"
+                        width="585"
+                        height="1266"
+                        loading="lazy"
+                        alt="Weblink 手机视口实际界面：在同一房间中聊天，交流共享画面与协作资料。"
+                        data-i18n-alt="demo.chatMobileAlt"
+                      />
+                    </a>
+                  </div>
+                  <figcaption class="screenshot-caption">
+                    <span
+                      ><span data-i18n="demo.chatCaption"
+                        >从笔记本到手机，同一块屏幕，随时接着聊。</span
+                      ></span
+                    ><a
+                      href="./screenshots/screen-chat.webp"
+                      data-theme-light="./screenshots/screen-chat.webp"
+                      data-theme-dark="./screenshots/dark/screen-chat.webp"
+                      target="_blank"
+                      rel="noopener"
+                      ><span data-i18n="demo.original"
+                        >查看原图</span
+                      >
+                      <span aria-hidden="true">↗</span
+                      ><span class="sr-only"
+                        ><span data-i18n="common.newTab"
+                          >（新标签页）</span
+                        ></span
+                      ></a
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div
+                id="demo-files"
+                class="demo-panel"
+                role="tabpanel"
+                aria-labelledby="tab-files"
+                tabindex="0"
+                hidden
+              >
+                <figure>
+                  <div class="device-pair">
+                    <div class="device-laptop">
+                      <a
+                        class="screenshot-link laptop-display"
+                        href="./screenshots/shared-files.webp"
+                        data-theme-light="./screenshots/shared-files.webp"
+                        data-theme-dark="./screenshots/dark/shared-files.webp"
+                        target="_blank"
+                        rel="noopener"
+                        aria-label="查看电脑端共享文件截图原图（新标签页）"
+                        data-i18n-aria-label="demo.filesDesktopLink"
+                      >
+                        <img
+                          src="./screenshots/shared-files.webp"
+                          data-theme-light="./screenshots/shared-files.webp"
+                          data-theme-dark="./screenshots/dark/shared-files.webp"
+                          width="2160"
+                          height="1350"
+                          loading="lazy"
+                          alt="Weblink 电脑端实际界面：Windows 演示桌面旁展开共享文件面板。"
+                          data-i18n-alt="demo.filesDesktopAlt"
+                        />
+                      </a>
+                      <div
+                        class="laptop-base"
+                        aria-hidden="true"
+                      ></div>
+                    </div>
+                    <a
+                      class="screenshot-link device-phone"
+                      href="./screenshots/mobile-files.webp"
+                      data-theme-light="./screenshots/mobile-files.webp"
+                      data-theme-dark="./screenshots/dark/mobile-files.webp"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="查看手机端共享文件截图原图（新标签页）"
+                      data-i18n-aria-label="demo.filesMobileLink"
+                    >
+                      <span
+                        class="phone-buttons"
+                        aria-hidden="true"
+                      ></span>
+                      <img
+                        src="./screenshots/mobile-files.webp"
+                        data-theme-light="./screenshots/mobile-files.webp"
+                        data-theme-dark="./screenshots/dark/mobile-files.webp"
+                        width="585"
+                        height="1266"
+                        loading="lazy"
+                        alt="Weblink 手机视口实际界面：打开同一房间的共享文件列表。"
+                        data-i18n-alt="demo.filesMobileAlt"
+                      />
+                    </a>
+                  </div>
+                  <figcaption class="screenshot-caption">
+                    <span
+                      ><span data-i18n="demo.filesCaption"
+                        >讨论需要的文件，也在同一个房间。</span
+                      ></span
+                    ><a
+                      href="./screenshots/shared-files.webp"
+                      data-theme-light="./screenshots/shared-files.webp"
+                      data-theme-dark="./screenshots/dark/shared-files.webp"
+                      target="_blank"
+                      rel="noopener"
+                      ><span data-i18n="demo.original"
+                        >查看原图</span
+                      >
+                      <span aria-hidden="true">↗</span
+                      ><span class="sr-only"
+                        ><span data-i18n="common.newTab"
+                          >（新标签页）</span
+                        ></span
+                      ></a
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+            </div>
+          </div>
+          <p class="demo-caption">
+            <span data-i18n="demo.note"
+              >实际 Weblink 界面 ·
+              桌面与控制会话为演示，会议人物由 AI 生成</span
+            >
+          </p>
+        </div>
+      </section>
+
+      <div
+        class="principles container"
+        aria-label="产品特点"
+        data-i18n-aria-label="principles.label"
+      >
+        <p>
+          <span data-i18n="principles.prefix"
+            >连接这件事，</span
+          ><strong
+            ><span data-i18n="principles.emphasis"
+              >本来可以很简单。</span
+            ></strong
+          >
+        </p>
+        <span
+          ><svg class="icon" aria-hidden="true">
+            <use href="./icons.svg#globe" /></svg
+          ><span data-i18n="principles.devices"
+            >跨设备连接</span
+          ></span
+        ><span
+          ><svg class="icon" aria-hidden="true">
+            <use href="./icons.svg#link" /></svg
+          ><span data-i18n="principles.transport"
+            >WebRTC 传输</span
+          ></span
+        ><span
+          ><svg class="icon" aria-hidden="true">
+            <use href="./icons.svg#code" /></svg
+          ><span data-i18n="principles.open"
+            >开源 · 可自部署</span
+          ></span
+        >
+      </div>
+
+      <section
+        id="features"
+        class="section container"
+        aria-labelledby="features-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">
+              <span data-i18n="features.eyebrow"
+                >LESS FRICTION, MORE CONNECTION.</span
+              >
+            </p>
+            <h2 id="features-title">
+              <span data-i18n="features.title"
+                >从一个文件，</span
+              ><br /><span data-i18n="features.subtitle"
+                >到一起完成一件事。</span
+              >
+            </h2>
+          </div>
+          <p>
+            <span data-i18n="features.intro"
+              >少一点来回切换，多一点自然协作。</span
+            ><br /><span data-i18n="features.description"
+              >让分享、沟通和远程协助，发生在同一个房间。</span
+            >
+          </p>
+        </div>
+        <div class="features-grid">
+          <article class="feature">
+            <svg
+              class="feature-icon icon"
+              aria-hidden="true"
+            >
+              <use href="./icons.svg#monitor" />
+            </svg>
+            <span class="feature-number"
+              ><span data-i18n="features.screen.label"
+                >01 / 一起看</span
+              ></span
+            >
+            <h3>
+              <span data-i18n="features.screen.title"
+                >看着同一块屏幕，把事情说清楚。</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="features.screen.body"
+                >打开屏幕共享，边展示边交流。文字、语音和视频都在同一个房间，固定主画面或全屏查看，跟上彼此的思路。</span
+              >
+            </p>
+            <span class="feature-detail"
+              ><span data-i18n="features.screen.detail"
+                >屏幕共享 · 房间群聊 · 语音视频</span
+              ></span
+            >
+          </article>
+          <article class="feature">
+            <svg
+              class="feature-icon icon"
+              aria-hidden="true"
+            >
+              <use href="./icons.svg#folder" />
+            </svg>
+            <span class="feature-number"
+              ><span data-i18n="features.files.label"
+                >02 / 一起分享</span
+              ></span
+            >
+            <h3>
+              <span data-i18n="features.files.title"
+                >把文件交给对方，接着往下做。</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="features.files.body"
+                >拖入文件或文件夹，直接发送给房间成员。也可以从本机文件库选择共享内容，让对方按需获取。</span
+              >
+            </p>
+            <span class="feature-detail"
+              ><span data-i18n="features.files.detail"
+                >文件夹打包 · 按需下载 · 暂停与继续</span
+              ></span
+            >
+          </article>
+          <article class="feature">
+            <svg
+              class="feature-icon icon"
+              aria-hidden="true"
+            >
+              <use href="./icons.svg#cursor" />
+            </svg>
+            <span class="feature-number"
+              ><span data-i18n="features.control.label"
+                >03 / 上手帮忙</span
+              ></span
+            >
+            <h3>
+              <span data-i18n="features.control.title"
+                >人不在旁边，也能一起解决问题。</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="features.control.body"
+                >从浏览器连接 Windows
+                桌面端，经对方授权后操作鼠标和键盘。手机也能用触控手势与软键盘参与远程协助。</span
+              >
+            </p>
+            <span class="feature-detail"
+              ><span data-i18n="features.control.detail"
+                >Windows 受控端 · 明确授权 · 随时撤销</span
+              ></span
+            >
+          </article>
+        </div>
+      </section>
+
+      <section
+        id="platforms"
+        class="platform-section"
+        aria-labelledby="platform-title"
+      >
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">
+                <span data-i18n="platforms.eyebrow"
+                  >YOUR DEVICES. YOUR WAY.</span
+                >
+              </p>
+              <h2 id="platform-title">
+                <span data-i18n="platforms.title"
+                  >浏览器里，即刻相连。</span
+                ><br /><span class="heading-muted"
+                  ><span data-i18n="platforms.subtitle"
+                    >桌面之上，再进一步。</span
+                  ></span
+                >
+              </h2>
+            </div>
+            <p>
+              <span data-i18n="platforms.intro"
+                >从你手边的设备开始。</span
+              ><br /><span data-i18n="platforms.description"
+                >需要更深入的系统能力时，再打开桌面端。</span
+              >
+            </p>
+          </div>
+          <div class="platform-grid">
+            <article class="platform-card">
+              <div class="platform-card-top">
+                <svg
+                  class="platform-icon icon"
+                  aria-hidden="true"
+                >
+                  <use href="./icons.svg#globe" /></svg
+                ><span class="platform-label"
+                  ><span data-i18n="platforms.web.label"
+                    >随手打开</span
+                  ></span
+                >
+              </div>
+              <h3>Weblink Web</h3>
+              <p>
+                <span data-i18n="platforms.web.body"
+                  >一个链接，就能加入彼此的房间。</span
+                >
+              </p>
+              <ul class="check-list">
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span data-i18n="platforms.web.files"
+                    >聊天、文件库与文件传输</span
+                  >
+                </li>
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span data-i18n="platforms.web.media"
+                    >语音视频与浏览器屏幕共享</span
+                  >
+                </li>
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span data-i18n="platforms.web.control"
+                    >连接并控制兼容的桌面客户端</span
+                  >
+                </li>
+              </ul>
+              <a
+                class="button button-primary"
+                href="https://webl.ink"
+                ><span data-i18n="platforms.web.open"
+                  >在浏览器中打开</span
+                >
+                <svg class="icon" aria-hidden="true">
+                  <use
+                    href="./icons.svg#arrow-up-right"
+                  /></svg></a
+              ><small
+                ><span data-i18n="platforms.web.note"
+                  >媒体采集能力取决于浏览器及授权。</span
+                ></small
+              >
+            </article>
+            <article class="platform-card desktop-card">
+              <div class="platform-card-top">
+                <svg
+                  class="platform-icon icon"
+                  aria-hidden="true"
+                >
+                  <use href="./icons.svg#monitor" /></svg
+                ><span class="platform-label">WINDOWS</span>
+              </div>
+              <h3>Weblink Desktop</h3>
+              <p>
+                <span data-i18n="platforms.desktop.body"
+                  >同样的工作空间，更完整的桌面连接。</span
+                >
+              </p>
+              <ul class="check-list">
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span
+                    data-i18n="platforms.desktop.capture"
+                    >原生显示器、窗口采集与可用的硬件编码</span
+                  >
+                </li>
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span
+                    data-i18n="platforms.desktop.control"
+                    >经授权允许本机被远程控制</span
+                  >
+                </li>
+                <li>
+                  <svg class="icon" aria-hidden="true">
+                    <use href="./icons.svg#check" /></svg
+                  ><span
+                    data-i18n="platforms.desktop.integration"
+                    >可选剪贴板同步、托盘与原生通知</span
+                  >
+                </li>
+              </ul>
+              <a
+                class="button button-outline"
+                href="https://github.com/99percentpeople/weblink/releases/latest"
+                ><span data-i18n="platforms.desktop.open"
+                  >下载 Windows 版</span
+                >
+                <svg class="icon" aria-hidden="true">
+                  <use href="./icons.svg#download" /></svg
+              ></a>
+              <small
+                >Windows 10 22H2 / 11 x64 · WebView2
+                120+</small
+              >
+            </article>
+          </div>
+          <p class="platform-footnote">
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#link" />
+            </svg>
+            <span data-i18n="platforms.note"
+              >浏览器与桌面端可以加入同一个房间，按各自设备的能力一起工作。</span
+            >
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="how-it-works"
+        class="section container"
+        aria-labelledby="steps-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">
+              <span data-i18n="steps.eyebrow"
+                >A LINK IS ALL IT TAKES.</span
+              >
+            </p>
+            <h2 id="steps-title">
+              <span data-i18n="steps.title"
+                >下一次分享，</span
+              ><br /><span data-i18n="steps.subtitle"
+                >从这三步开始。</span
+              >
+            </h2>
+          </div>
+          <a class="text-link" href="https://webl.ink"
+            ><span data-i18n="common.try">现在就试试</span>
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
+        </div>
+        <ol class="steps">
+          <li>
+            <div class="step-top">
+              <span>01</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#globe" />
+              </svg>
+            </div>
+            <h3>
+              <span data-i18n="common.open"
+                >打开 Weblink</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="steps.open.body"
+                >打开网页或桌面客户端，设置一个显示名称，让对方认出你。</span
+              >
+            </p>
+          </li>
+          <li>
+            <div class="step-top">
+              <span>02</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#link" />
+              </svg>
+            </div>
+            <h3>
+              <span data-i18n="steps.room.title"
+                >在同一个房间碰面</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="steps.room.body"
+                >约定房间
+                ID，也可以分享房间链接或二维码。需要时，为房间加上密码。</span
+              >
+            </p>
+          </li>
+          <li>
+            <div class="step-top">
+              <span>03</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#arrow-up-right" />
+              </svg>
+            </div>
+            <h3>
+              <span data-i18n="steps.share.title"
+                >开始一起做点什么</span
+              >
+            </h3>
+            <p>
+              <span data-i18n="steps.share.body"
+                >发个文件，打个电话，共享一块屏幕。设备彼此在线，分享就能开始。</span
+              >
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <section
+        class="privacy-section container"
+        aria-labelledby="privacy-title"
+      >
+        <div class="privacy-diagram" aria-hidden="true">
+          <span class="peer-node"
+            ><svg class="icon">
+              <use href="./icons.svg#monitor" /></svg
+            ><small
+              ><span data-i18n="privacy.yourDevice"
+                >你的设备</span
+              ></small
+            ></span
+          ><span class="peer-path"
+            ><i></i
+            ><span
+              ><svg class="icon">
+                <use
+                  href="./icons.svg#shield"
+                /></svg></span
+            ><i></i></span
+          ><span class="peer-node"
+            ><svg class="icon">
+              <use href="./icons.svg#smartphone" /></svg
+            ><small
+              ><span data-i18n="privacy.peerDevice"
+                >对方的设备</span
+              ></small
+            ></span
+          >
+        </div>
+        <div class="privacy-copy">
+          <p class="eyebrow">
+            <span data-i18n="privacy.eyebrow"
+              >BUILT FOR A DIRECT CONNECTION.</span
+            >
+          </p>
+          <h2 id="privacy-title">
+            <span data-i18n="privacy.title"
+              >分享由你决定。</span
+            >
+          </h2>
+          <p>
+            <span data-i18n="privacy.body"
+              >消息、文件和音视频通过 WebRTC
+              传输，信令服务不保存聊天记录或文件。聊天历史与缓存留在本机，共享文件和远程控制由你管理。</span
+            >
+          </p>
+          <p class="privacy-note">
+            <span data-i18n="privacy.note"
+              >连接受网络条件影响；无法直连时，可通过 TURN
+              中继加密流量。</span
+            >
+          </p>
+          <a
+            class="text-link"
+            href="https://github.com/99percentpeople/weblink/blob/public/docs/DEPLOYMENT.md"
+            ><span data-i18n="privacy.more"
+              >了解连接与自部署</span
+            >
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
+        </div>
+      </section>
+
+      <section
+        id="faq"
+        class="section faq-section container"
+        aria-labelledby="faq-title"
+      >
+        <div class="faq-heading">
+          <p class="eyebrow">
+            <span data-i18n="faq.eyebrow"
+              >GOOD TO KNOW.</span
+            >
+          </p>
+          <h2 id="faq-title">
+            <span data-i18n="faq.title">连接之前，</span
+            ><br /><span data-i18n="faq.subtitle"
+              >你可能想了解。</span
+            >
+          </h2>
+          <a
+            class="text-link"
+            href="https://github.com/99percentpeople/weblink/blob/public/docs/README.md"
+            ><span data-i18n="common.readDocs"
+              >阅读项目文档</span
+            >
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>
+              <span data-i18n="faq.account.question"
+                >需要注册账号或安装软件吗？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.account.answer"
+                >Web
+                版无需注册账号，也无需安装原生客户端。打开网页、设置显示名称，并和对方加入同一个房间即可开始。若希望自己的
+                Windows
+                电脑被远程控制，需要在被控电脑上运行桌面客户端。</span
+              >
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-i18n="faq.devices.question"
+                >手机和电脑可以一起使用吗？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.devices.answer"
+                >可以。手机浏览器、电脑浏览器和 Windows
+                桌面端可以加入同一房间，聊天和传输文件。摄像头、屏幕采集、剪贴板与通知等功能取决于设备、浏览器的支持情况和你授予的权限。</span
+              >
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-i18n="faq.storage.question"
+                >文件和聊天记录保存在哪里？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.storage.answer"
+                >聊天历史、缓存文件与偏好保存在当前浏览器或桌面端的本机存储中，信令服务器不保存聊天记录或文件。浏览器与桌面端的存储相互独立，不会自动同步；清理网站数据也会清除相应的本机记录，请另行保存重要文件。</span
+              >
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-i18n="faq.offline.question"
+                >对方离线后，还能收到消息或下载文件吗？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.offline.answer"
+                >消息发送和从对方设备下载共享文件，需要双方保持连接。群聊消息只送达当前在线成员，服务器不提供离线消息投递。已完整接收并保存在本机的内容，可以在本机文件库中继续查看。</span
+              >
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-i18n="faq.control.question"
+                >别人可以直接控制我的电脑吗？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.control.answer"
+                >远程控制需要被控端批准请求，或符合你之前保存的允许规则。你可以拒绝请求、管理权限，并随时在本机撤销控制。Windows
+                显示器共享支持控制，窗口共享仅支持观看；剪贴板同步和远程文件拖放默认关闭。</span
+              >
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-i18n="faq.host.question"
+                >可以部署自己的 Weblink 吗？</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="./icons.svg#plus" />
+              </svg>
+            </summary>
+            <p>
+              <span data-i18n="faq.host.answer"
+                >可以。Weblink 基于 MIT 协议开源，可托管 Web
+                静态构建产物并连接自己的信令服务。仓库提供
+                Bun 和 Cloudflare Workers
+                两种信令实现，也可按网络条件配置 STUN /
+                TURN。具体配置请查看</span
+              ><a
+                href="https://github.com/99percentpeople/weblink/blob/public/docs/DEPLOYMENT.md"
+                ><span data-i18n="common.deployDocs"
+                  >部署文档</span
+                ></a
+              ><span data-i18n="faq.host.suffix">。</span>
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <section
+        class="closing container"
+        aria-labelledby="closing-title"
+      >
+        <div>
+          <p class="eyebrow">
+            <span data-i18n="closing.eyebrow"
+              >LESS DISTANCE. MORE POSSIBILITIES.</span
+            >
+          </p>
+          <h2 id="closing-title">
+            <span data-i18n="closing.title">好东西，</span
+            ><br class="mobile-break" /><span
+              data-i18n="closing.accent"
+              >现在就分享。</span
+            >
+          </h2>
+          <p>
+            <span data-i18n="closing.body"
+              >你的下一次连接，只差打开一个链接。</span
+            >
+          </p>
+        </div>
+        <a
+          class="button button-primary"
+          href="https://webl.ink"
+          ><span data-i18n="common.open">打开 Weblink</span>
+          <svg class="icon" aria-hidden="true">
+            <use href="./icons.svg#arrow-up-right" /></svg
+        ></a>
+      </section>
+    </main>
+
+    <footer class="site-footer container">
+      <div>
+        <a
+          class="brand"
+          href="#"
+          aria-label="回到 Weblink 首页"
+          data-i18n-aria-label="nav.backHome"
+          ><img
+            src="./logo.svg"
+            data-theme-light="./logo.svg"
+            data-theme-dark="./logo-dark.svg"
+            alt="Weblink"
+            width="124"
+            height="26"
+            loading="lazy"
+        /></a>
+        <p>
+          <span data-i18n="footer.tagline"
+            >分享更多，安装更少。</span
+          >
+        </p>
+      </div>
+      <nav
+        aria-label="页脚导航"
+        data-i18n-aria-label="nav.footer"
+      >
+        <a href="https://github.com/99percentpeople/weblink"
+          >GitHub ↗</a
+        ><a
+          href="https://github.com/99percentpeople/weblink/blob/public/docs/README.md"
+          ><span data-i18n="common.docs">文档</span></a
+        ><a
+          href="https://github.com/99percentpeople/weblink/issues"
+          ><span data-i18n="common.feedback">反馈</span></a
+        ><a
+          href="https://github.com/99percentpeople/weblink/blob/public/LICENSE"
+          >MIT License</a
+        >
+      </nav>
+      <span class="footer-note"
+        ><span data-i18n="footer.note"
+          >Made for connection.</span
+        ></span
+      >
+    </footer>
+  </body>
+</html>
