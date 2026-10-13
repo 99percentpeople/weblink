@@ -70,10 +70,13 @@ export default function RemoteControlSettings() {
     >
       <SettingSwitch
         checked={
-          appState.options.remoteControlWhitelistOnly
+          !appState.options.remoteControlWhitelistOnly
         }
-        onChange={(value) =>
-          setAppOptions("remoteControlWhitelistOnly", value)
+        onChange={(exposed) =>
+          setAppOptions(
+            "remoteControlWhitelistOnly",
+            !exposed,
+          )
         }
         label={t(`${prefix}whitelist_only.title`)}
         description={t(

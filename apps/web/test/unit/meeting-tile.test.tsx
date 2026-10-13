@@ -21,6 +21,8 @@ import {
 } from "vitest";
 import { MeetingTile } from "@/routes/home/components/meeting-tile";
 import { setAppState } from "@/libs/state/app-state";
+import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
+import type { NativeControlStatus } from "@weblink/platform";
 
 vi.hoisted(() => {
   Object.defineProperty(document, "fullscreenEnabled", {
@@ -33,6 +35,9 @@ const fixture = vi.hoisted(() => ({
   error: vi.fn(),
   control: undefined as any,
   screenControl: undefined as any,
+  peerCapabilities:
+    vi.fn<() => PeerCapabilities | undefined>(),
+  hostStatus: vi.fn<() => NativeControlStatus>(),
   clipboard: {
     watch: vi.fn(() => () => {}),
     copy: vi.fn(),
@@ -42,19 +47,26 @@ const fixture = vi.hoisted(() => ({
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     remoteClipboard: fixture.clipboard,
+    peerCapabilities: fixture.peerCapabilities,
   }),
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     getRemoteControl: () => fixture.control,
     getScreenControl: () => fixture.screenControl,
+    remoteControl: { status: fixture.hostStatus },
   },
 }));
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.error },
 }));
 
-vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/i18n", () => ({
+  t: (key: string, values?: { name?: string }) =>
+    key === "remote_control.controlled_by"
+      ? `Controlled by ${values?.name}`
+      : key,
+}));
 // Test tile media/control lifetimes with actions exposed, independently of
 // the mobile menu presentation. Keep the real action registration and cleanup.
 vi.mock(
@@ -127,6 +139,15 @@ beforeEach(() => {
   fixture.error.mockClear();
   fixture.control = undefined;
   fixture.screenControl = undefined;
+  fixture.peerCapabilities.mockReset();
+  fixture.hostStatus.mockReset();
+  setAppState("profile", { clientId: "", name: "" });
+  setAppState(
+    "session",
+    "clientViewData",
+    "label-controller",
+    undefined!,
+  );
   fixture.clipboard.watch.mockClear();
   setAppState("capabilities", "clipboard", {
     ready: false,
@@ -220,6 +241,144 @@ const cover = () =>
   screen.queryByRole("button", {
     name: "meeting.show_screen_preview",
   });
+
+it("keeps source details in icon hints and tracks the controller of this screen", () => {
+  const [capabilities, setCapabilities] =
+    createSignal<PeerCapabilities>({});
+  fixture.peerCapabilities.mockImplementation(capabilities);
+  const [kind, setKind] = createSignal("screen");
+  render(() => (
+    <MeetingTile
+      name="Alice · Team · Screen 2"
+      participantName="Alice · Team"
+      sourceKind={kind()}
+      sourceLabel="Screen 2"
+      controlSourceId="screen-2"
+      clientId="host"
+      compact
+      pinned={false}
+    />
+  ));
+  expect(screen.getByText("Alice · Team")).toBeTruthy();
+  expect(
+    screen.queryByText("Alice · Team · Screen 2"),
+  ).toBeNull();
+  expect(screen.queryByText("Screen 2")).toBeNull();
+  expect(
+    screen.getByRole("img", { name: "Screen 2" }).title,
+  ).toBe("Screen 2");
+  const control = (
+    sourceId: string,
+    clientId = "unlisted-controller",
+  ) => ({
+    control: {
+      request: true,
+      host: true,
+      occupancy: {
+        state: "controlled" as const,
+        sourceId,
+        clientId,
+      },
+    },
+  });
+  setCapabilities(control("screen-1"));
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+  setCapabilities(control("screen-2"));
+  expect(
+    screen.getByRole("img", {
+      name: "Controlled by unlisted-controller",
+    }).title,
+  ).toBe("Controlled by unlisted-controller");
+  setAppState(
+    "session",
+    "clientViewData",
+    "label-controller",
+    {
+      clientId: "label-controller",
+      name: "Carol",
+      avatar: null,
+      createdAt: 0,
+      onlineStatus: "online",
+      messageChannel: true,
+    },
+  );
+  setCapabilities(control("screen-2", "label-controller"));
+  expect(
+    screen.getByRole("img", {
+      name: "Controlled by Carol",
+    }),
+  ).toBeTruthy();
+  setAppState("profile", {
+    clientId: "self-controller",
+    name: "Bob",
+  });
+  setCapabilities(control("screen-2", "self-controller"));
+  expect(
+    screen.getByRole("img", { name: "Controlled by Bob" }),
+  ).toBeTruthy();
+  setAppState("profile", "name", "Bobby");
+  expect(
+    screen.getByRole("img", {
+      name: "Controlled by Bobby",
+    }),
+  ).toBeTruthy();
+  setKind("camera");
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+  setKind("screen");
+  setCapabilities({
+    control: {
+      request: true,
+      host: true,
+      occupancy: {
+        state: "pending",
+        sourceId: "screen-2",
+        clientId: "self-controller",
+      },
+    },
+  });
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+  setCapabilities(control("screen-2"));
+  setCapabilities({});
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+});
+
+it("shows control on the matching local screen and clears it when control ends", () => {
+  const [status, setStatus] =
+    createSignal<NativeControlStatus>({
+      closed: false,
+      pending: [],
+      clientId: "viewer",
+      sourceId: "local-screen",
+    });
+  fixture.hostStatus.mockImplementation(status);
+  render(() => (
+    <MeetingTile
+      name="My screen"
+      sourceKind="screen"
+      controlSourceId="local-screen"
+      local
+      compact
+      pinned={false}
+    />
+  ));
+  expect(
+    screen.getByRole("img", {
+      name: "Controlled by viewer",
+    }),
+  ).toBeTruthy();
+  setStatus({ closed: false, pending: [], clientId: null });
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+});
 
 it("omits the tile action container when no actions are available", () => {
   const view = render(() => (

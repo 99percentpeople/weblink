@@ -271,6 +271,9 @@ export function MeetingStage(
           trackId={source().track?.id}
           mediaError={source().error}
           name={source().name}
+          participantName={source().participantName}
+          sourceLabel={source().sourceLabel}
+          controlSourceId={source().controlSourceId}
           avatar={source().avatar}
           stream={source().stream}
           local={source().local}

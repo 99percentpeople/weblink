@@ -2229,7 +2229,34 @@ it("keeps ownership handoff while disabling appearance resources", () => {
   ).toHaveBeenLastCalledWith(true);
 });
 
-it("updates the control exposure preference from remote-control settings", async () => {
+it("defaults to public control requests and restricts discovery only when exposure is switched off", async () => {
+  render(() => (
+    <SettingsStateProvider>
+      <RemoteControlSettings />
+    </SettingsStateProvider>
+  ));
+  const option = screen.getByRole("switch", {
+    name: "setting.remote_control.whitelist_only.title",
+  });
+  expect(option).toBeChecked();
+  fireEvent.click(option);
+  expect(appState.options.remoteControlWhitelistOnly).toBe(
+    true,
+  );
+  expect(option).not.toBeChecked();
+  fireEvent.click(option);
+  expect(appState.options.remoteControlWhitelistOnly).toBe(
+    false,
+  );
+  expect(option).toBeChecked();
+});
+
+it("shows stored allowlist-only access as disabled public exposure", () => {
+  setAppState(
+    "options",
+    "remoteControlWhitelistOnly",
+    true,
+  );
   render(() => (
     <SettingsStateProvider>
       <RemoteControlSettings />
@@ -2241,7 +2268,7 @@ it("updates the control exposure preference from remote-control settings", async
   expect(option).not.toBeChecked();
   fireEvent.click(option);
   expect(appState.options.remoteControlWhitelistOnly).toBe(
-    true,
+    false,
   );
   expect(option).toBeChecked();
 });

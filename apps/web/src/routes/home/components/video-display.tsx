@@ -1,8 +1,10 @@
 import { useViewScopes } from "@/libs/state/view-scopes";
 import { Motion } from "@/components/ui/motion";
 import { layoutOverlay } from "@/components/ui/motion-layout";
-import { IconVolumeUpFilled } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
+import {
+  VideoLabel,
+  type VideoLabelProps,
+} from "./video-label";
 import { cn } from "@/libs/cn";
 import { createCheckVolume } from "@/libs/hooks/check-volume";
 import {
@@ -30,6 +32,7 @@ export const VideoDisplay = (
     mediaError?: "codec" | "connection";
     onDecodeError?: (track: MediaStreamTrack) => void;
     name: string;
+    label?: Omit<VideoLabelProps, "speaking">;
     muted?: boolean;
     playbackActive?: boolean;
     avatar?: string;
@@ -416,22 +419,15 @@ export const VideoDisplay = (
         <div class="meeting-video-overlays absolute inset-0">
           <div
             use:layoutOverlay={"name"}
-            class="absolute left-1 right-1 top-1 flex gap-1"
+            class="pointer-events-none absolute left-1 right-1 top-1 z-20 flex
+              gap-1"
           >
-            <Badge
-              variant="secondary"
-              title={props.name}
-              class="min-w-0 max-w-full gap-1 bg-black/50 text-xs text-white
-                hover:bg-black/80"
-            >
-              <span class="truncate">{props.name}</span>
-              <IconVolumeUpFilled
-                class={cn(
-                  "size-4 shrink-0",
-                  anySpeaking() ? "block" : "hidden",
-                )}
-              />
-            </Badge>
+            <VideoLabel
+              name={props.label?.name ?? props.name}
+              source={props.label?.source}
+              controller={props.label?.controller}
+              speaking={anySpeaking()}
+            />
           </div>
           {props.children}
         </div>

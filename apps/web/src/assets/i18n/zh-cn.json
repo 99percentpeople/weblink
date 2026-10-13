@@ -332,7 +332,7 @@
     "remote_control": {
       "whitelist_only": {
         "title": "开放远程控制能力",
-        "description": "开启后，仅向权限设置中标为“自动批准（白名单）”的客户端公开远程控制，忽略其他客户端的控制请求。黑名单始终无法发现或请求控制。"
+        "description": "开启后，白名单外的客户端也可申请远程控制，需经你确认；关闭后仅对白名单开放。黑名单始终无法发现或请求控制。"
       },
       "description": "设置本机触摸手势如何控制远端画面。",
       "mode": {
@@ -1292,6 +1292,7 @@
   },
   "remote_control": {
     "busy": "正在被控制",
+    "controlled_by": "{{name}} 控制中",
     "clipboard_transfer": {
       "sending": "正在发送剪贴板文件",
       "receiving": "正在接收剪贴板文件",

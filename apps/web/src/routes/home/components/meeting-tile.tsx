@@ -1,4 +1,5 @@
 import { useAppState } from "@/libs/state/app-state-context";
+import { appState } from "@/libs/state/app-state";
 import {
   createVideoRemoteControl,
   createControlState,
@@ -65,6 +66,9 @@ export function MeetingTile(props: {
   trackId?: string;
   mediaError?: "codec" | "connection";
   name: string;
+  participantName?: string;
+  sourceLabel?: string;
+  controlSourceId?: string;
   avatar?: string;
   stream?: MediaStream | null;
   placeholder?: boolean;
@@ -80,6 +84,40 @@ export function MeetingTile(props: {
   onKeyboardVisibleChange?: (visible: boolean) => void;
 }) {
   const app = useAppState();
+  const controllerName = createMemo(() => {
+    if (
+      props.sourceKind !== "screen" ||
+      !props.controlSourceId
+    )
+      return;
+    let controllerId: string | null | undefined;
+    if (props.local) {
+      const status = sessionService.remoteControl.status();
+      if (
+        !status.closed &&
+        status.sourceId === props.controlSourceId
+      )
+        controllerId = status.clientId;
+    } else if (props.clientId) {
+      const occupancy = app.peerCapabilities(props.clientId)
+        ?.control?.occupancy;
+      if (
+        occupancy?.state === "controlled" &&
+        occupancy.sourceId === props.controlSourceId
+      )
+        controllerId = occupancy.clientId;
+    }
+    if (!controllerId) return;
+    return (
+      (controllerId === appState.profile.clientId
+        ? appState.profile.name
+        : (appState.session.clientViewData[controllerId]
+            ?.name ??
+          appState.message.clients.find(
+            (client) => client.clientId === controllerId,
+          )?.name)) || controllerId
+    );
+  });
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
   const [keyboardInput, setKeyboardInput] =
@@ -177,6 +215,11 @@ export function MeetingTile(props: {
             sessionService.reportNativeDecodeFailure(track)
           }
           name={props.name}
+          label={{
+            name: props.participantName ?? props.name,
+            source: props.sourceLabel,
+            controller: controllerName(),
+          }}
           avatar={props.avatar}
           isPlaceholderStream={props.placeholder}
           playbackActive={playbackActive()}

@@ -10,6 +10,7 @@ import {
 import type { StreamVideoSource } from "@/libs/domain/protocol/messages";
 import type { RemoteMediaTrackBinding } from "@/libs/domain/session-media";
 import type { NativeScreenView } from "@/libs/domain/native-screen/errors";
+import { getNativeScreenPublication } from "@/libs/application/native-screen-service";
 
 export interface MeetingParticipant extends RemoteAudioSources {
   id: string;
@@ -31,6 +32,9 @@ export interface MeetingSource {
   name: string;
   avatar?: string;
   stream: MediaStream | null;
+  participantName?: string;
+  sourceLabel?: string;
+  controlSourceId?: string;
   local: boolean;
   kind: "camera" | "screen" | "video" | "participant";
   track?: MediaStreamTrack;
@@ -224,6 +228,13 @@ export function createMeetingSources(
             name: label
               ? `${participant.name} · ${label}`
               : participant.name,
+            participantName: participant.name,
+            sourceLabel: label || undefined,
+            controlSourceId:
+              participant.local && track
+                ? getNativeScreenPublication(track)
+                    ?.sourceId
+                : undefined,
             avatar: participant.avatar,
             stream,
             local: participant.local === true,
@@ -277,6 +288,11 @@ export function createMeetingSources(
                   track?.id,
                 ),
                 name: `${participant.name} · ${t("meeting.screen_source", { count: screens.length + index + 1 })}`,
+                participantName: participant.name,
+                sourceLabel: t("meeting.screen_source", {
+                  count: screens.length + index + 1,
+                }),
+                controlSourceId: view.sourceId,
                 stream: view.stream ?? null,
                 kind: "screen",
                 local: false,

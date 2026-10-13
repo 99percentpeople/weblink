@@ -337,7 +337,7 @@
     "remote_control": {
       "whitelist_only": {
         "title": "Fernsteuerungsfunktion freigeben",
-        "description": "Fernsteuerung nur für Clients mit automatischer Genehmigung in den Berechtigungen anzeigen. Andere Steuerungsanfragen werden ignoriert. Gesperrte Clients können die Fernsteuerung weder erkennen noch anfordern."
+        "description": "Wenn aktiviert, können Clients außerhalb der Freigabeliste mit deiner Zustimmung Fernsteuerung anfordern. Wenn deaktiviert, haben nur Clients auf der Freigabeliste Zugriff. Gesperrte Clients können die Fernsteuerung weder erkennen noch anfordern."
       },
       "description": "Wählen Sie aus, wie die Touch-Gesten dieses Geräts einen Remote-Bildschirm steuern.",
       "mode": {
@@ -1292,6 +1292,7 @@
   },
   "remote_control": {
     "busy": "Wird gesteuert",
+    "controlled_by": "Wird von {{name}} gesteuert",
     "clipboard_transfer": {
       "sending": "Zwischenablagedateien senden",
       "receiving": "Zwischenablagedateien werden empfangen",

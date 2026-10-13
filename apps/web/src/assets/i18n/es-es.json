@@ -337,7 +337,7 @@
     "remote_control": {
       "whitelist_only": {
         "title": "Publicar la capacidad de control remoto",
-        "description": "Mostrar el control remoto solo a clientes con aprobación automática en Permisos e ignorar las demás solicitudes. Los clientes bloqueados no pueden descubrir ni solicitar el control."
+        "description": "Al activar esta opción, los clientes fuera de la lista de permitidos pueden solicitar el control remoto con tu aprobación. Al desactivarla, solo tienen acceso los clientes permitidos. Los clientes bloqueados no pueden descubrir ni solicitar el control."
       },
       "description": "Elige cómo los gestos táctiles de este dispositivo controlan la pantalla remota.",
       "mode": {
@@ -1292,6 +1292,7 @@
   },
   "remote_control": {
     "busy": "En uso",
+    "controlled_by": "Controlado por {{name}}",
     "clipboard_transfer": {
       "sending": "Enviar archivos del portapapeles",
       "receiving": "Recibir archivos del portapapeles",

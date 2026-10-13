@@ -332,7 +332,7 @@
     "remote_control": {
       "whitelist_only": {
         "title": "Expose remote control capability",
-        "description": "Only expose remote control to clients set to Auto-approve (allowlist) in Permissions, and ignore other control requests. Blocklisted clients can never discover or request control."
+        "description": "Enable to let clients outside the allowlist request remote control with your approval. Disable to allow only allowlisted clients. Blocklisted clients can never discover or request control."
       },
       "description": "Choose how this device’s touch gestures control a remote screen.",
       "mode": {
@@ -1292,6 +1292,7 @@
   },
   "remote_control": {
     "busy": "In use",
+    "controlled_by": "Controlled by {{name}}",
     "clipboard_transfer": {
       "sending": "Sending clipboard files",
       "receiving": "Receiving clipboard files",

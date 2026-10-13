@@ -107,7 +107,7 @@ export type AppOption = {
   remoteTouch: RemoteTouchOptions;
   remoteKeyboard: RemoteKeyboardOptions;
   remoteGamepad: RemoteGamepadOptions;
-  /** Hide control discovery and ignore requests from clients outside the allow list. */
+  /** Inverse of the public exposure switch; true hides control outside the allow list. */
   remoteControlWhitelistOnly: boolean;
   /** Shared per-operation file byte limit for remote drop and clipboard. */
   remoteFileMaxSize: number;

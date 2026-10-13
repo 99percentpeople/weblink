@@ -67,6 +67,11 @@ describe("meeting source presentation", () => {
       const card = () =>
         sources().find((s) => s.kind === "screen")!;
       const id = card().id;
+      expect(card().participantName).toBe("Peer");
+      expect(card().sourceLabel).toBe(
+        "meeting.screen_source 1",
+      );
+      expect(card().controlSourceId).toBe("screen");
       const first = track("first-decoder", "video");
       setViews([
         { sourceId: "screen", stream: stream(first) },

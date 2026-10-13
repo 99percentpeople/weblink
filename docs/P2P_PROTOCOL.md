@@ -240,10 +240,12 @@ rather than adding discovery handshakes. Versioned service entries are independe
 updated and withdrawn; changing `control/2` never overwrites `control/1`.
 
 Control discovery is evaluated separately for each peer. The remote-control
-exposure setting enables allowlist-only discovery: clients marked `allow` retain
-`control/1`; unknown clients and clients marked `deny` receive no control entry.
-With the setting off, unknown clients may request local consent; denied clients
-remain hidden. The switch and allow/deny records are local, persistent policy.
+exposure setting is enabled by default: unknown clients may discover `control/1`
+and request local consent. Turning it off limits discovery to clients marked
+`allow`, who retain automatic approval; unknown clients receive no control entry.
+Clients marked `deny` remain hidden in both modes. The switch and allow/deny
+records are local, persistent policy; the stored `remoteControlWhitelistOnly`
+flag is the inverse of the public exposure switch.
 List changes use the existing capability publisher: additions replace only
 `control/1`, withdrawals send `control/1: null`, and unchanged peers receive no
 update. Initial discovery always reflects the current policy.

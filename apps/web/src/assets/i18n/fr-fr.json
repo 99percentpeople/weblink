@@ -337,7 +337,7 @@
     "remote_control": {
       "whitelist_only": {
         "title": "Publier la capacité de contrôle à distance",
-        "description": "Afficher le contrôle à distance uniquement aux clients approuvés automatiquement dans les autorisations et ignorer les autres demandes. Les clients bloqués ne peuvent ni découvrir ni demander le contrôle."
+        "description": "Activez cette option pour permettre aux clients hors de la liste autorisée de demander le contrôle à distance avec votre accord. Désactivez-la pour limiter l’accès aux clients autorisés. Les clients bloqués ne peuvent ni découvrir ni demander le contrôle."
       },
       "description": "Choisissez comment les gestes tactiles de cet appareil contrôlent un écran distant.",
       "mode": {
@@ -1292,6 +1292,7 @@
   },
   "remote_control": {
     "busy": "En cours de contrôle",
+    "controlled_by": "Contrôlé par {{name}}",
     "clipboard_transfer": {
       "sending": "Envoi de fichiers du presse-papiers",
       "receiving": "Réception de fichiers du presse-papiers",
