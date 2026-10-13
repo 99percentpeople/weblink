@@ -1457,7 +1457,7 @@ it("releases native keyboard capture for local editors and ignores late events f
 });
 
 it.each([false, true])(
-  "disables browser file clipboard even with custom format support (%s)",
+  "allows the limited browser clipboard independently of custom file format support (%s)",
   async (supported) => {
     const browserNavigator = navigator;
     vi.stubGlobal(
@@ -1499,24 +1499,29 @@ it.each([false, true])(
     await vi.waitFor(() => expect(select).toBeEnabled());
     fireEvent.keyDown(select, { key: "ArrowDown" });
     const clipboard = await screen.findByRole("option", {
-      name: "setting.remote_transfer.clipboard_files.clipboard",
+      name: "setting.remote_transfer.clipboard_files.clipboard_limited",
     });
-    expect(
-      clipboard.getAttribute("aria-disabled") === "true",
-    ).toBe(true);
-    fireEvent.click(
-      screen.getByRole("option", {
-        name: "setting.remote_transfer.clipboard_files.off",
-      }),
+    expect(clipboard).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
     );
+    fireEvent.click(clipboard);
     expect(
       appState.options.remoteKeyboard.clipboardFiles,
-    ).toBe("off");
+    ).toBe("clipboard");
+    expect(appState.capabilities.clipboard.writeFiles).toBe(
+      false,
+    );
+    expect(
+      screen.getByText(
+        "setting.remote_transfer.clipboard_files.limited",
+      ),
+    ).toBeInTheDocument();
   },
 );
-it("keeps browser file clipboard disabled across write permission changes", async () => {
+it("allows the limited clipboard while permission is prompt and responds to denial and grant", async () => {
   const permission = Object.assign(new EventTarget(), {
-    state: "granted",
+    state: "prompt",
   });
   const browserNavigator = navigator;
   vi.stubGlobal(
@@ -1557,12 +1562,32 @@ it("keeps browser file clipboard disabled across write permission changes", asyn
     name: /setting.remote_transfer.clipboard_files.title/,
   });
   await vi.waitFor(() => expect(select).toBeEnabled());
+  fireEvent.keyDown(select, { key: "ArrowDown" });
+  const clipboard = await screen.findByRole("option", {
+    name: "setting.remote_transfer.clipboard_files.clipboard_limited",
+  });
+  expect(clipboard).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  fireEvent.click(clipboard);
+  expect(
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBe("clipboard");
   permission.state = "denied";
   permission.dispatchEvent(new Event("change"));
+  expect(
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBe("clipboard");
+  expect(
+    screen.getByText(
+      "setting.remote_transfer.clipboard_files.unavailable",
+    ),
+  ).toBeInTheDocument();
   fireEvent.keyDown(select, { key: "ArrowDown" });
   expect(
     await screen.findByRole("option", {
-      name: "setting.remote_transfer.clipboard_files.clipboard",
+      name: "setting.remote_transfer.clipboard_files.clipboard_limited",
     }),
   ).toHaveAttribute("aria-disabled", "true");
   fireEvent.click(
@@ -1573,13 +1598,20 @@ it("keeps browser file clipboard disabled across write permission changes", asyn
   permission.state = "granted";
   permission.dispatchEvent(new Event("change"));
   fireEvent.keyDown(select, { key: "ArrowDown" });
+  const granted = await screen.findByRole("option", {
+    name: "setting.remote_transfer.clipboard_files.clipboard_limited",
+  });
+  expect(granted).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  fireEvent.click(granted);
   expect(
-    (
-      await screen.findByRole("option", {
-        name: "setting.remote_transfer.clipboard_files.clipboard",
-      })
-    ).getAttribute("aria-disabled"),
-  ).toBe("true");
+    appState.options.remoteKeyboard.clipboardFiles,
+  ).toBe("clipboard");
+  expect(appState.capabilities.clipboard.writeFiles).toBe(
+    false,
+  );
 });
 it("shares native discovery and permission observers across settings and repeated remote input mounts", async () => {
   const permission = Object.assign(new EventTarget(), {

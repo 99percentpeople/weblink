@@ -201,7 +201,9 @@
       },
       "clipboard_files": {
         "loading": "Vérification de la disponibilité du presse-papiers…",
-        "unavailable": "L’écriture dans le presse-papiers n’est pas disponible ici. Choisissez Cache de fichiers ou Désactivé.",
+        "unavailable": "L’écriture dans le presse-papiers est actuellement indisponible. Vérifiez la compatibilité et les autorisations du navigateur, ou choisissez le cache de fichiers.",
+        "clipboard_limited": "Presse-papiers (limité)",
+        "limited": "Prend en charge le texte et les formats d’image autorisés par le navigateur. Utilisez le cache de fichiers pour les autres fichiers.",
         "title": "Lors de la copie de fichiers",
         "clipboard": "Presse-papiers",
         "cache": "Cache de fichiers",

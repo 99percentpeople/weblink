@@ -211,7 +211,11 @@ async function mountClipboard() {
 function browser(secure: boolean) {
   vi.stubGlobal("isSecureContext", secure);
   const write = vi.fn(async () => {});
-  const read = vi.fn(async () => []);
+  const read = vi.fn(
+    async (): Promise<
+      Pick<ClipboardItem, "types" | "getType">[]
+    > => [],
+  );
   vi.stubGlobal("navigator", {
     clipboard: { write, read },
   });
@@ -224,6 +228,60 @@ function browser(secure: boolean) {
   );
   return { write, read };
 }
+it("allows copy and paste gestures while browser permissions are still prompt", async () => {
+  const { write, read } = browser(true);
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "clipboard",
+  );
+  const permission = Object.assign(new EventTarget(), {
+    state: "prompt",
+  });
+  Object.assign(navigator, {
+    permissions: { query: vi.fn(async () => permission) },
+  });
+  read.mockResolvedValue([
+    {
+      types: ["text/plain"],
+      getType: async () => new Blob(["local"]),
+    },
+  ]);
+  const { actions, copy, paste } = await mountClipboard();
+  expect(appState.capabilities.clipboard).toMatchObject({
+    ready: true,
+    readPermission: "prompt",
+    writePermission: "prompt",
+    read: true,
+    write: true,
+    writeFiles: false,
+  });
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(actions.copy()).toBe(true);
+  await vi.waitFor(() =>
+    expect(write).toHaveBeenCalledOnce(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(copy).toHaveBeenCalledOnce();
+  expect(copy.mock.calls[0][3]).toMatchObject({
+    files: false,
+    formats: expect.arrayContaining([
+      "text/plain",
+      "image/png",
+    ]),
+  });
+  expect(actions.paste()).toBe(true);
+  expect(read).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(paste).toHaveBeenCalledOnce(),
+  );
+  const content = await paste.mock.calls[0][2];
+  expect(
+    content.map((entry) => [entry.type, entry.blob.size]),
+  ).toEqual([["text/plain", 5]]);
+});
 it("accepts a real system paste without clipboard APIs or action buttons", async () => {
   const { write, read } = browser(false);
   vi.stubGlobal("navigator", {});

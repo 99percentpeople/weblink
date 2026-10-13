@@ -196,7 +196,9 @@
       },
       "clipboard_files": {
         "loading": "Checking clipboard availability…",
-        "unavailable": "File clipboard writing is unavailable here. Choose File cache or Off.",
+        "unavailable": "Clipboard writing is currently unavailable. Check browser support and permissions, or choose File cache.",
+        "clipboard_limited": "Clipboard (limited)",
+        "limited": "Supports text and image formats allowed by the browser. Use File cache for other files.",
         "title": "When copying files",
         "clipboard": "Clipboard",
         "cache": "File cache",

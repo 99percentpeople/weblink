@@ -1338,7 +1338,11 @@ exposed by the real paste event, without probing the async read API for custom b
 A denied write does not create a separate save action; a later copy gesture requests fresh
 content. Browser controllers can write only formats supported by their clipboard
 API; they do not read or write Weblink custom clipboard formats. To receive copied
-files on the Web, select File cache and download them. Windows desktop controllers
+files on the Web, select File cache and download them. The Clipboard (limited)
+destination remains selectable for supported text/image formats when browser write
+permission is prompt or unknown; it does not request native file lists. An explicit
+permission denial or missing write API disables that destination without replacing
+the saved preference. Windows desktop controllers
 write all supported formats and file-drop paths directly. Received
 files remain in local temporary directories while referenced by the clipboard;
 replaced snapshots have a 30-minute grace period and are collected on subsequent

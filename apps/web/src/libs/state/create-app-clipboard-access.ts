@@ -42,6 +42,8 @@ export function createAppClipboardAccess(options: {
       (native ||
         (browser.write &&
           access.writePermission !== "denied"));
+    // Native file lists require the desktop backend, independently of browser permissions.
+    // Browser text/image access above remains usable while permission is prompt or unknown.
     const writeFiles = ready && native;
     setAppState("capabilities", "clipboard", {
       ready,

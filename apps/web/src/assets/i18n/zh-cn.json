@@ -196,7 +196,9 @@
       },
       "clipboard_files": {
         "loading": "正在检测剪贴板能力…",
-        "unavailable": "当前环境无法写入文件剪贴板，可选择文件缓存或关闭。",
+        "unavailable": "当前无法写入剪贴板，请检查浏览器支持与权限，或选择文件缓存。",
+        "clipboard_limited": "剪贴板（受限）",
+        "limited": "支持文本及浏览器允许的图片格式。普通文件请使用文件缓存。",
         "title": "复制文件时",
         "clipboard": "剪贴板",
         "cache": "文件缓存",

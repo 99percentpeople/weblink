@@ -201,7 +201,9 @@
       },
       "clipboard_files": {
         "loading": "Comprobando disponibilidad del portapapeles…",
-        "unavailable": "No se pueden escribir archivos en el portapapeles aquí. Elige Caché de archivos o Desactivado.",
+        "unavailable": "No se puede escribir en el portapapeles en este momento. Comprueba la compatibilidad y los permisos del navegador o elige la caché de archivos.",
+        "clipboard_limited": "Portapapeles (limitado)",
+        "limited": "Admite texto y los formatos de imagen permitidos por el navegador. Usa la caché de archivos para otros archivos.",
         "title": "Al copiar archivos",
         "clipboard": "Portapapeles",
         "cache": "Caché de archivos",

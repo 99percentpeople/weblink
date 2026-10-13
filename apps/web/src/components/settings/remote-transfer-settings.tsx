@@ -68,7 +68,7 @@ export default function RemoteTransferSettings() {
         onChange={(value) =>
           value &&
           (value !== "clipboard" ||
-            clipboardAccess.writeFiles) &&
+            clipboardAccess.write) &&
           setAppOptions(
             "remoteKeyboard",
             "clipboardFiles",
@@ -77,8 +77,7 @@ export default function RemoteTransferSettings() {
         }
         options={["clipboard", "cache", "off"]}
         optionDisabled={(value) =>
-          value === "clipboard" &&
-          !clipboardAccess.writeFiles
+          value === "clipboard" && !clipboardAccess.write
         }
         label={t(`${prefix}clipboard_files.title`)}
         description={t(
@@ -94,13 +93,26 @@ export default function RemoteTransferSettings() {
               }
             >
               <p class="muted">
-                {t(`${prefix}clipboard_files.unavailable`)}
+                {t(
+                  `${prefix}clipboard_files.${
+                    clipboardAccess.write
+                      ? "limited"
+                      : "unavailable"
+                  }`,
+                )}
               </p>
             </Show>
           </>
         }
         optionLabel={(option) =>
-          t(`${prefix}clipboard_files.${option}`)
+          t(
+            `${prefix}clipboard_files.${
+              option === "clipboard" &&
+              !clipboardAccess.writeFiles
+                ? "clipboard_limited"
+                : option
+            }`,
+          )
         }
       />
       <SettingSelect<number>
