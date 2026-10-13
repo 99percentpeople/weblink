@@ -221,7 +221,11 @@ export function MeetingTile(props: {
             name: props.local
               ? `${participantName()} (${t("meeting.you")})`
               : participantName(),
-            source: props.sourceLabel,
+            screen:
+              props.sourceKind === "screen"
+                ? props.sourceLabel ||
+                  t("common.media_selection_dialog.screen")
+                : undefined,
             controller: controllerName(),
           }}
           avatar={props.avatar}

@@ -6,13 +6,12 @@ import { t } from "@/i18n";
 
 export interface VideoLabelProps {
   name: string;
-  source?: string;
+  screen?: string;
   controller?: string;
   speaking?: boolean;
 }
 
 export function VideoLabel(props: VideoLabelProps) {
-  const source = () => props.source || props.name;
   const controller = () =>
     t("remote_control.controlled_by", {
       name: props.controller ?? "",
@@ -24,14 +23,18 @@ export function VideoLabel(props: VideoLabelProps) {
       class="pointer-events-auto min-w-0 max-w-full gap-1 bg-black/50
         text-xs text-white hover:bg-black/80"
     >
-      <span
-        role="img"
-        aria-label={source()}
-        title={source()}
-        class="shrink-0"
-      >
-        <Monitor class="size-4" aria-hidden="true" />
-      </span>
+      <Show when={props.screen}>
+        {(screen) => (
+          <span
+            role="img"
+            aria-label={screen()}
+            title={screen()}
+            class="shrink-0"
+          >
+            <Monitor class="size-4" aria-hidden="true" />
+          </span>
+        )}
+      </Show>
       <span class="truncate">{props.name}</span>
       <Show when={props.controller}>
         <span

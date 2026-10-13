@@ -425,7 +425,7 @@ export const VideoDisplay = (
           >
             <VideoLabel
               name={props.label?.name ?? props.name}
-              source={props.label?.source}
+              screen={props.label?.screen}
               controller={props.label?.controller}
               speaking={anySpeaking()}
             />
