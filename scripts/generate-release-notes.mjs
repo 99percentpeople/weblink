@@ -51,16 +51,18 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) {
 }
 // Pin downloads to this release so older notes retain their own binaries.
 const download = `https://github.com/${repository}/releases/download/${tag}`;
-const notes = `## Downloads / 下载
+const notes = `## Downloads
 
 Windows 10 22H2 / Windows 11 · x64
 
-| Package / 版本 | Download / 下载 | Usage / 使用方式 |
+| Package | Download | Usage |
 | --- | --- | --- |
-| Installer / 安装版 | [Weblink-windows-x64-setup.exe](${download}/Weblink-windows-x64-setup.exe) | Installs WebView2 when needed; supports signed, user-confirmed in-app updates. / 按需安装 WebView2，支持确认后在应用内安装签名更新。 |
-| Portable / 免安装版 | [Weblink-windows-x64-portable.zip](${download}/Weblink-windows-x64-portable.zip) | Extract both weblink-desktop.exe and weblink-portable; requires WebView2 120+. Replace manually to update. / 解压并保留程序及 weblink-portable 标记，需 WebView2 120 或更新版本；更新时手动替换。 |
+| Installer | [Weblink-windows-x64-setup.exe](${download}/Weblink-windows-x64-setup.exe) | Installs WebView2 when needed; supports signed, user-confirmed in-app updates. |
+| Portable | [Weblink-windows-x64-portable.zip](${download}/Weblink-windows-x64-portable.zip) | Extract both weblink-desktop.exe and weblink-portable; requires WebView2 120+. Replace manually to update. |
 
-## Changes / 更新内容
+The empty \`weblink-portable\` file identifies the portable edition for update checks. Keep it beside \`weblink-desktop.exe\`.
+
+## Changes
 
 ${changes}
 `;

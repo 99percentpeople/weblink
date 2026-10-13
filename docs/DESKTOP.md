@@ -67,8 +67,9 @@ frontend. The workflow also compresses that executable into a portable ZIP:
 The marketing site's single desktop download entry opens
 `https://github.com/99percentpeople/weblink/releases/latest`. The production
 workflow also runs `scripts/generate-release-notes.mjs`, saving `release-notes.md`
-in the `weblink-release-notes` artifact. It combines a bilingual download table
-with the matching version's CHANGELOG content. Download links use that release's
+in the `weblink-release-notes` artifact. It combines an English download table
+with the matching version's CHANGELOG content. Write new release entries in English.
+Download links use that release's
 tag, so historical release notes remain tied to their own binaries.
 
 To publish, extract the outer Actions artifact archives and attach the installer
