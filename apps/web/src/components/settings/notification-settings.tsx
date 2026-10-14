@@ -22,7 +22,6 @@ export default function NotificationSettings() {
   } = useAppState().permissions.notifications;
   const keys = [
     "enabled",
-    "backgroundOnly",
     "messages",
     "controlRequests",
     "speedTestRequests",

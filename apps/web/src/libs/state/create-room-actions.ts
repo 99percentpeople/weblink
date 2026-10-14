@@ -33,6 +33,10 @@ export function createRoomActions({
     toast.error(
       t("common.join_form.configure_before_join"),
     );
+  const needsConfiguration = () =>
+    appState.profile.initalJoin ||
+    !appState.profile.name.trim() ||
+    !appState.profile.roomId.trim();
   const isCancelledJoin = (error: unknown) =>
     (error instanceof Error &&
       error.message ===
@@ -49,11 +53,16 @@ export function createRoomActions({
   };
   const connect = async (
     mode: "recent" | "configured" | "edit" | "takeover",
+    editorOptions?: { configuredRoom?: boolean },
   ) => {
     if (!available()) return;
     setBusy(true);
     try {
-      if (mode === "recent" || mode === "edit") {
+      if (
+        mode === "recent" ||
+        mode === "edit" ||
+        (mode === "configured" && needsConfiguration())
+      ) {
         await history.initialize();
         if (
           appState.session.clientServiceStatus !==
@@ -61,6 +70,8 @@ export function createRoomActions({
         )
           return;
       }
+      if (mode !== "takeover" && needsConfiguration())
+        mode = "edit";
       if (mode === "recent") {
         const room = getRoomJoinHistory(
           history.conversations,
@@ -81,7 +92,6 @@ export function createRoomActions({
               room.joinPassword !== undefined
                 ? room.joinPassword
                 : appState.profile.password,
-            initalJoin: false,
           });
         } else if (
           history.conversations.some(
@@ -93,21 +103,14 @@ export function createRoomActions({
           return;
         }
       }
-      if (
-        mode !== "edit" &&
-        mode !== "takeover" &&
-        (appState.profile.initalJoin ||
-          !appState.profile.name.trim() ||
-          !appState.profile.roomId.trim())
-      ) {
-        requireConfiguration();
-        return;
-      }
       let retry = false;
       while (true) {
         if (mode === "edit") {
-          const result = retry
-            ? await dialog.open({ retry: true })
+          const options = retry
+            ? { ...editorOptions, retry: true }
+            : editorOptions;
+          const result = options
+            ? await dialog.open(options)
             : await dialog.open();
           if (result.cancel) return;
         }
@@ -149,7 +152,8 @@ export function createRoomActions({
   return {
     join: () => connect("recent"),
     autoJoin: () => connect("configured"),
-    edit: () => connect("edit"),
+    edit: (options?: { configuredRoom?: boolean }) =>
+      connect("edit", options),
     takeover: () => connect("takeover"),
     busy: () =>
       busy() ||

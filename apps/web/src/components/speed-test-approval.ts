@@ -2,6 +2,7 @@ import { toast } from "solid-sonner";
 import { createSignal, type Accessor } from "solid-js";
 import { t } from "@/i18n";
 import { SPEED_TEST_APPROVAL_MS } from "@/libs/domain/speed-test-protocol";
+import type { InAppNotification } from "@/libs/application/notifications/notification-service";
 import {
   createUuid,
   type ClientID,
@@ -19,6 +20,7 @@ export interface SpeedTestApprovalRequest {
   readonly expiresAt: number;
   /** Respond only to this exact request, including when a peer requests again. */
   respond(accepted: boolean): boolean;
+  present(): InAppNotification | undefined;
 }
 
 export interface SpeedTestApprovalController {
@@ -33,8 +35,8 @@ export interface SpeedTestApprovalController {
 }
 
 /**
- * One approval request is surfaced as a clickable toast entry point.
- * Toast, panel and system notification actions settle the same promise.
+ * Toast, panel and system notification actions settle the same request.
+ * The notification service decides when to present its toast.
  */
 export function createSpeedTestApproval(): SpeedTestApprovalController {
   const [pending, setPending] =
@@ -180,38 +182,55 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
       signal.addEventListener("abort", onAbort, {
         once: true,
       });
-      document.addEventListener("click", onToastClick);
-      document.addEventListener("keydown", onToastKeyDown);
-      window.addEventListener(
-        CLIENT_INFO_DIALOG_TAB_VISIBLE_EVENT,
-        onClientInfoTabVisible,
-      );
-
-      requestToast = toast.info(
-        t("speed_test.request", { name }),
-        {
-          duration: SPEED_TEST_APPROVAL_MS,
-          className:
-            "speed-test-request-toast cursor-pointer",
-          action: {
-            label: t("speed_test.accept"),
-            onClick: () => respondFromToast(true),
-          },
-          cancel: {
-            label: t("speed_test.decline"),
-            onClick: () => respondFromToast(false),
-          },
-          onDismiss: () => {
-            if (!ignoreRequestToastDismiss) finish(false);
-          },
-          onAutoClose: () => finish(false),
-        },
-      );
       setPending({
         id,
         peerId,
         name,
         expiresAt,
+        present() {
+          if (
+            settled ||
+            ignoreRequestToastDismiss ||
+            Date.now() >= expiresAt
+          )
+            return;
+          if (requestToast === undefined) {
+            document.addEventListener(
+              "click",
+              onToastClick,
+            );
+            document.addEventListener(
+              "keydown",
+              onToastKeyDown,
+            );
+            window.addEventListener(
+              CLIENT_INFO_DIALOG_TAB_VISIBLE_EVENT,
+              onClientInfoTabVisible,
+            );
+            requestToast = toast.info(
+              t("speed_test.request", { name }),
+              {
+                duration: expiresAt - Date.now(),
+                className:
+                  "speed-test-request-toast cursor-pointer",
+                action: {
+                  label: t("speed_test.accept"),
+                  onClick: () => respondFromToast(true),
+                },
+                cancel: {
+                  label: t("speed_test.decline"),
+                  onClick: () => respondFromToast(false),
+                },
+                onDismiss: () => {
+                  if (!ignoreRequestToastDismiss)
+                    finish(false);
+                },
+                onAutoClose: () => finish(false),
+              },
+            );
+          }
+          return { dismiss: dismissRequestToast };
+        },
         respond(accepted) {
           if (settled || current?.id !== id) return false;
           const live =

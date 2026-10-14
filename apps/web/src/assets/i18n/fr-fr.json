@@ -511,7 +511,6 @@
     },
     "notifications": {
       "enabled": "Activer les notifications système",
-      "backgroundOnly": "Notifier uniquement lorsque la fenêtre n'est pas focalisée",
       "messages": "Nouveaux messages",
       "controlRequests": "Demandes de contrôle à distance",
       "speedTestRequests": "Demandes de tests de vitesse",

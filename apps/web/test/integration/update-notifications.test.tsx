@@ -34,7 +34,7 @@ afterEach(() => {
 
 function setup({
   enabled = true,
-  focused = false,
+  visible = false,
   notifications = true,
   result = available,
   failure = false,
@@ -68,7 +68,7 @@ function setup({
       },
     },
     () => preferences,
-    () => focused,
+    () => visible,
     vi.fn(),
   );
   return createRoot((cleanup) => {
@@ -94,19 +94,28 @@ function setup({
       updates,
       setEnabled,
       setReady,
+      setVisible: (value: boolean) => {
+        visible = value;
+        service.reconcile();
+      },
       action: (event: NotificationAction) => action(event),
     };
   });
 }
 
-it("waits for startup readiness, then sends toast and a system notification with a safe review action", async () => {
+it("waits for startup readiness, then sends one background notification with a safe review action", async () => {
   const test = setup({ ready: false });
   expect(test.native.check).not.toHaveBeenCalled();
   test.setReady(true);
   await waitFor(() =>
     expect(test.show).toHaveBeenCalledTimes(1),
   );
-  expect(toast.info).toHaveBeenCalledTimes(1);
+  expect(toast.info).not.toHaveBeenCalled();
+  test.setVisible(true);
+  test.setVisible(false);
+  test.setVisible(true);
+  expect(toast.info).not.toHaveBeenCalled();
+  expect(test.show).toHaveBeenCalledOnce();
   const notification = test.show.mock.calls[0][0];
   expect(notification.id).toBe("desktop-update:1.2.0");
   test.action({ id: notification.id, action: "open" });
@@ -118,7 +127,10 @@ it("waits for startup readiness, then sends toast and a system notification with
   expect(test.native.check).toHaveBeenCalledTimes(1);
 });
 
-it.each([{ focused: true }, { notifications: false }])(
+it.each([
+  { visible: true },
+  { visible: true, notifications: false },
+])(
   "honors native notification preferences while retaining the app toast: %j",
   async (options) => {
     const test = setup(options);
@@ -126,8 +138,26 @@ it.each([{ focused: true }, { notifications: false }])(
       expect(toast.info).toHaveBeenCalledTimes(1),
     );
     expect(test.show).not.toHaveBeenCalled();
+    test.setVisible(false);
+    test.setVisible(true);
+    expect(test.show).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledOnce();
   },
 );
+
+it("presents a pending update once on return when background notifications are disabled", async () => {
+  const test = setup({ notifications: false });
+  await waitFor(() =>
+    expect(test.updates.startupUpdate()).toBeDefined(),
+  );
+  expect(test.show).not.toHaveBeenCalled();
+  expect(toast.info).not.toHaveBeenCalled();
+  test.setVisible(true);
+  test.setVisible(false);
+  test.setVisible(true);
+  expect(toast.info).toHaveBeenCalledOnce();
+  expect(test.show).not.toHaveBeenCalled();
+});
 
 it("does not check at startup when disabled", async () => {
   const test = setup({ enabled: false });
@@ -161,23 +191,30 @@ it.each([
   },
 );
 
-it("withdraws notifications and makes stale actions harmless after disabling", async () => {
-  const test = setup();
-  await waitFor(() =>
-    expect(test.show).toHaveBeenCalledTimes(1),
-  );
-  const action = vi.mocked(toast.info).mock.calls[0][1]
-    ?.action as { onClick(event: MouseEvent): void };
-  test.setEnabled(false);
-  await waitFor(() =>
-    expect(test.dismiss).toHaveBeenCalledWith(
-      "desktop-update:1.2.0",
-    ),
-  );
-  test.action({
-    id: "desktop-update:1.2.0",
-    action: "open",
-  });
-  action.onClick(new MouseEvent("click"));
-  expect(test.open).not.toHaveBeenCalled();
-});
+it.each([true, false])(
+  "withdraws notifications and makes stale actions harmless after disabling (visible=%s)",
+  async (visible) => {
+    const test = setup({ visible });
+    await waitFor(() =>
+      expect(
+        visible ? toast.info : test.show,
+      ).toHaveBeenCalledOnce(),
+    );
+    const action = vi.mocked(toast.info).mock.calls[0]?.[1]
+      ?.action as
+      | { onClick(event: MouseEvent): void }
+      | undefined;
+    test.setEnabled(false);
+    await waitFor(() =>
+      expect(
+        visible ? toast.dismiss : test.dismiss,
+      ).toHaveBeenCalledWith("desktop-update:1.2.0"),
+    );
+    test.action({
+      id: "desktop-update:1.2.0",
+      action: "open",
+    });
+    action?.onClick(new MouseEvent("click"));
+    expect(test.open).not.toHaveBeenCalled();
+  },
+);

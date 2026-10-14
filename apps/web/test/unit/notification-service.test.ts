@@ -18,9 +18,9 @@ import type {
   NotificationSession,
   SystemNotifications,
 } from "@weblink/platform";
-function setup() {
+function setup(native = true) {
   const options = { ...defaultNotificationOptions };
-  let focused = false;
+  let visible = false;
   let action!: (action: NotificationAction) => void;
   const session = {
     show: vi.fn().mockResolvedValue(undefined),
@@ -41,9 +41,9 @@ function setup() {
   };
   const onError = vi.fn();
   const service = new NotificationService(
-    platform,
+    native ? platform : undefined,
     () => options,
-    () => focused,
+    () => visible,
     onError,
   );
   const intent: NotificationIntent = {
@@ -69,36 +69,61 @@ function setup() {
     intent,
     onError,
     action: (value: NotificationAction) => action(value),
-    focus: () => {
-      focused = true;
+    visibility: (value: boolean) => {
+      visible = value;
+      service.reconcile();
     },
   };
 }
 afterEach(() => vi.useRealTimers());
 describe("system notification ownership and policy", () => {
-  it("defaults to background-only categories and validates persisted values", () => {
-    expect(
-      resolveNotificationOptions({
+  it.each([true, false])(
+    "drops the legacy backgroundOnly=%s preference and validates persisted values",
+    (backgroundOnly) => {
+      expect(
+        resolveNotificationOptions({
+          enabled: false,
+          backgroundOnly,
+          messages: 0,
+          preview: false,
+        }),
+      ).toEqual({
+        ...defaultNotificationOptions,
         enabled: false,
-        backgroundOnly: "false",
-        messages: 0,
         preview: false,
-      }),
-    ).toEqual({
-      ...defaultNotificationOptions,
-      enabled: false,
-      preview: false,
-    });
-    expect(defaultNotificationOptions.backgroundOnly).toBe(
-      true,
-    );
-  });
+      });
+    },
+  );
+  it.each([
+    "messages",
+    "controlRequests",
+    "speedTestRequests",
+    "transfers",
+    "updates",
+  ] as const)(
+    "only displays %s notifications while hidden",
+    async (category) => {
+      const x = setup();
+      x.intent.category = category;
+      x.visibility(true);
+      await x.service.show(x.intent);
+      expect(x.session.show).not.toHaveBeenCalled();
+      expect(
+        x.platform.capabilities,
+      ).not.toHaveBeenCalled();
+      x.visibility(false);
+      await Promise.resolve();
+      expect(x.session.show).not.toHaveBeenCalled();
+      await x.service.show(x.intent);
+      expect(x.session.show).toHaveBeenCalledOnce();
+    },
+  );
   it("does not ask for permission implicitly or queue foreground/muted events", async () => {
     const x = setup();
-    x.focus();
+    x.visibility(true);
     await x.service.show(x.intent);
     expect(x.session.show).not.toHaveBeenCalled();
-    x.options.backgroundOnly = false;
+    x.visibility(false);
     x.options.controlRequests = false;
     await x.service.show(x.intent);
     expect(x.session.show).not.toHaveBeenCalled();
@@ -132,13 +157,19 @@ describe("system notification ownership and policy", () => {
       actions: true,
       reply: true,
     });
-    await x.service.show(x.intent);
+    await x.service.show({
+      ...x.intent,
+      notification: {
+        ...x.intent.notification,
+        id: "blocked:2",
+      },
+    });
     expect(x.session.show).toHaveBeenCalledOnce();
   });
-  it("consumes a live request once even if opening focuses the app", async () => {
+  it("consumes a live request once even if opening makes the app visible", async () => {
     const x = setup();
     await x.service.show(x.intent);
-    x.focus();
+    x.visibility(true);
     x.service.reconcile();
     x.action({ id: "control:1", action: "approve" });
     x.action({ id: "control:1", action: "approve" });
@@ -264,7 +295,7 @@ describe("system notification ownership and policy", () => {
       }),
     );
   });
-  it.each(["clear", "focus", "stale", "close"])(
+  it.each(["clear", "visible", "stale", "close"])(
     "does not display after %s while preparing an avatar",
     async (mode) => {
       const x = setup();
@@ -280,7 +311,7 @@ describe("system notification ownership and policy", () => {
         expect(x.intent.prepareIcon).toHaveBeenCalledOnce(),
       );
       if (mode === "clear") x.service.clear();
-      if (mode === "focus") x.focus();
+      if (mode === "visible") x.visibility(true);
       if (mode === "stale")
         vi.mocked(x.intent.current).mockReturnValue(false);
       if (mode === "close") x.service.close();
@@ -289,4 +320,248 @@ describe("system notification ownership and policy", () => {
       expect(x.session.show).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("shared toast and system delivery", () => {
+  function withToast(native = true) {
+    const x = setup(native);
+    const presentation = {
+      dismiss: vi.fn(),
+      update: vi.fn(),
+    };
+    const present = vi.fn(() => presentation);
+    x.intent.present = present;
+    return { ...x, present, presentation };
+  }
+
+  it("keeps a foreground event on its original channel after visibility and settings changes", async () => {
+    const x = withToast();
+    x.visibility(true);
+    await x.service.show(x.intent);
+    x.visibility(false);
+    x.options.enabled = false;
+    x.service.clear();
+    x.options.enabled = true;
+    await x.service.show(x.intent);
+    x.visibility(true);
+    x.service.update(x.intent.notification.id);
+    expect(x.present).toHaveBeenCalledOnce();
+    expect(x.presentation.update).toHaveBeenCalledOnce();
+    expect(x.presentation.dismiss).not.toHaveBeenCalled();
+    expect(x.session.show).not.toHaveBeenCalled();
+    x.service.dismiss(x.intent.notification.id);
+    x.visibility(false);
+    await x.service.show(x.intent);
+    expect(x.presentation.dismiss).toHaveBeenCalledOnce();
+    expect(x.session.show).not.toHaveBeenCalled();
+    expect(x.present).toHaveBeenCalledOnce();
+  });
+
+  it("never replays a system event as a toast, including after it was consumed", async () => {
+    const x = withToast();
+    await x.service.show(x.intent);
+    x.visibility(true);
+    await x.service.show(x.intent);
+    x.action({
+      id: x.intent.notification.id,
+      action: "open",
+    });
+    x.visibility(false);
+    x.visibility(true);
+    await x.service.show(x.intent);
+    expect(x.intent.respond).toHaveBeenCalledOnce();
+    expect(x.session.show).toHaveBeenCalledOnce();
+    expect(x.present).not.toHaveBeenCalled();
+  });
+
+  it.each(["permission", "icon"])(
+    "cancels %s preparation when a foreground toast wins",
+    async (stage) => {
+      const x = withToast();
+      let finish!: () => void;
+      if (stage === "permission")
+        vi.mocked(
+          x.platform.capabilities,
+        ).mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              finish = () =>
+                resolve({
+                  permission: "granted",
+                  actions: true,
+                  reply: false,
+                });
+            }),
+        );
+      else
+        x.intent.prepareIcon = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              finish = () => resolve("avatar");
+            }),
+        );
+      const showing = x.service.show(x.intent);
+      await vi.waitFor(() =>
+        expect(finish).toBeTypeOf("function"),
+      );
+      x.visibility(true);
+      expect(x.present).toHaveBeenCalledOnce();
+      x.visibility(false);
+      finish();
+      await showing;
+      await x.service.show(x.intent);
+      expect(x.session.show).not.toHaveBeenCalled();
+      expect(x.present).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([true, false])(
+    "waits for a racing native dispatch before deciding a foreground fallback (success=%s)",
+    async (success) => {
+      const x = withToast();
+      let finish!: () => void;
+      x.session.show.mockImplementation(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            finish = () =>
+              success
+                ? resolve()
+                : reject(new Error("unavailable"));
+          }),
+      );
+      const showing = x.service.show(x.intent);
+      await vi.waitFor(() =>
+        expect(x.session.show).toHaveBeenCalledOnce(),
+      );
+      x.visibility(true);
+      await x.service.show(x.intent);
+      expect(x.present).not.toHaveBeenCalled();
+      finish();
+      await showing;
+      expect(x.present).toHaveBeenCalledTimes(
+        success ? 0 : 1,
+      );
+      x.visibility(false);
+      x.visibility(true);
+      await x.service.show(x.intent);
+      expect(x.session.show).toHaveBeenCalledOnce();
+      expect(x.present).toHaveBeenCalledTimes(
+        success ? 0 : 1,
+      );
+    },
+  );
+
+  it("does not replay a delivered event if retracting it fails", async () => {
+    const x = withToast();
+    x.session.show.mockImplementation(async () => {
+      x.visibility(true);
+    });
+    x.session.dismiss.mockRejectedValue(
+      new Error("cannot retract"),
+    );
+    await x.service.show(x.intent);
+    x.service.reconcile();
+    expect(x.onError).toHaveBeenCalledOnce();
+    expect(x.present).not.toHaveBeenCalled();
+  });
+
+  it("retracts a failed native dispatch before showing its foreground fallback", async () => {
+    const x = withToast();
+    let finish!: () => void;
+    x.session.show.mockRejectedValue(
+      new Error("failed dispatch"),
+    );
+    x.session.dismiss.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const showing = x.service.show(x.intent);
+    await vi.waitFor(() =>
+      expect(x.session.dismiss).toHaveBeenCalledWith(
+        x.intent.notification.id,
+      ),
+    );
+    x.visibility(true);
+    x.action({
+      id: x.intent.notification.id,
+      action: "approve",
+    });
+    expect(x.intent.respond).not.toHaveBeenCalled();
+    expect(x.present).not.toHaveBeenCalled();
+    finish();
+    await showing;
+    expect(x.present).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "no-adapter",
+    "disabled",
+    "category",
+    "denied",
+    "failure",
+  ])(
+    "keeps an undelivered request actionable in the foreground when %s",
+    async (mode) => {
+      const x = withToast(mode !== "no-adapter");
+      if (mode === "disabled") x.options.enabled = false;
+      if (mode === "category")
+        x.options.controlRequests = false;
+      if (mode === "denied")
+        vi.mocked(
+          x.platform.capabilities,
+        ).mockResolvedValue({
+          permission: "denied",
+          actions: false,
+          reply: false,
+        });
+      if (mode === "failure")
+        x.session.show.mockRejectedValue(
+          new Error("unavailable"),
+        );
+      await x.service.show(x.intent);
+      expect(x.present).not.toHaveBeenCalled();
+      x.visibility(true);
+      x.service.reconcile();
+      expect(x.present).toHaveBeenCalledOnce();
+      expect(
+        x.platform.requestPermission,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["expired", "stale", "closed"])(
+    "never presents an undelivered request that is %s",
+    async (reason) => {
+      const x = withToast(false);
+      await x.service.show(x.intent);
+      if (reason === "expired")
+        x.intent.notification.expiresAt = Date.now() - 1;
+      if (reason === "stale")
+        vi.mocked(x.intent.current).mockReturnValue(false);
+      if (reason === "closed") x.service.close();
+      x.visibility(true);
+      expect(x.present).not.toHaveBeenCalled();
+    },
+  );
+
+  it("deduplicates by event ID without suppressing a different event with identical text", async () => {
+    const x = withToast();
+    x.visibility(true);
+    await x.service.show(x.intent);
+    await x.service.show({
+      ...x.intent,
+      notification: { ...x.intent.notification },
+    });
+    await x.service.show({
+      ...x.intent,
+      notification: {
+        ...x.intent.notification,
+        id: "control:2",
+      },
+    });
+    expect(x.present).toHaveBeenCalledTimes(2);
+    expect(x.session.show).not.toHaveBeenCalled();
+  });
 });

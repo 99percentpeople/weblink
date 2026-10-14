@@ -506,7 +506,6 @@
     },
     "notifications": {
       "enabled": "启用系统通知",
-      "backgroundOnly": "仅在窗口未聚焦时通知",
       "messages": "新消息",
       "controlRequests": "远程控制请求",
       "speedTestRequests": "测速请求",

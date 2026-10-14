@@ -110,16 +110,28 @@ function begin() {
 function action(id: string, action: string) {
   receive({ id: `speed-test:${id}`, action });
 }
+function visibility(visible: boolean) {
+  vi.spyOn(document, "hidden", "get").mockReturnValue(
+    !visible,
+  );
+  vi.spyOn(
+    document,
+    "visibilityState",
+    "get",
+  ).mockReturnValue(visible ? "visible" : "hidden");
+  document.dispatchEvent(new Event("visibilitychange"));
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
   setAppState(reconcile(createInitialAppState()));
   vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  vi.spyOn(document, "hidden", "get").mockReturnValue(true);
   vi.spyOn(
     document,
     "visibilityState",
     "get",
-  ).mockReturnValue("visible");
+  ).mockReturnValue("hidden");
   mocks.capabilities.mockResolvedValue(granted);
   mocks.show.mockResolvedValue(undefined);
   mocks.dismiss.mockResolvedValue(undefined);
@@ -148,7 +160,7 @@ afterEach(() => {
 });
 
 it.each(["approve", "decline"])(
-  "settles the original request once via %s and retracts both notices",
+  "settles the original request once via %s and retracts its system notice",
   async (choice) => {
     render(() => <SystemNotificationBridge />);
     const { result, request } = begin();
@@ -176,9 +188,8 @@ it.each(["approve", "decline"])(
     );
     await flush();
     expect(controller.pending()).toBeUndefined();
-    expect(mocks.toastDismiss).toHaveBeenCalledWith(
-      "request-toast",
-    );
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.toastDismiss).not.toHaveBeenCalled();
     expect(mocks.dismiss).toHaveBeenCalledWith(
       `speed-test:${request.id}`,
     );
@@ -186,27 +197,37 @@ it.each(["approve", "decline"])(
   },
 );
 
-it("opens the speed-test panel without approving when browser action buttons are unavailable", async () => {
-  mocks.capabilities.mockResolvedValue({
-    ...granted,
-    actions: false,
-  });
-  render(() => <SystemNotificationBridge />);
-  const { result, request } = begin();
-  await flush();
-  expect(
-    mocks.show.mock.calls[0][0].actions,
-  ).toBeUndefined();
-  action(request.id, "open");
-  expect(mocks.openDetails).toHaveBeenCalledWith(
-    "peer",
-    "speed",
-  );
-  expect(mocks.showApp).toHaveBeenCalledOnce();
-  expect(controller.pending()?.id).toBe(request.id);
-  controller.accept("peer");
-  await expect(result).resolves.toBe(true);
-});
+it.each([true, false])(
+  "opens the speed-test panel without a second toast and lets it respond when browser buttons are unavailable (accepted=%s)",
+  async (accepted) => {
+    mocks.capabilities.mockResolvedValue({
+      ...granted,
+      actions: false,
+    });
+    render(() => <SystemNotificationBridge />);
+    const { result, request } = begin();
+    await flush();
+    expect(
+      mocks.show.mock.calls[0][0].actions,
+    ).toBeUndefined();
+    visibility(true);
+    expect(mocks.info).not.toHaveBeenCalled();
+    action(request.id, "open");
+    expect(mocks.openDetails).toHaveBeenCalledWith(
+      "peer",
+      "speed",
+    );
+    expect(mocks.showApp).toHaveBeenCalledOnce();
+    expect(controller.pending()?.id).toBe(request.id);
+    visibility(false);
+    visibility(true);
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.show).toHaveBeenCalledOnce();
+    if (accepted) controller.accept("peer");
+    else controller.decline("peer");
+    await expect(result).resolves.toBe(accepted);
+  },
+);
 
 it.each(["panel", "cancel", "timeout"])(
   "retracts the notification after %s and ignores late approval",
@@ -247,7 +268,8 @@ it("cannot use an older notification to approve a new request from the same peer
 it.each([
   "disabled",
   "category",
-  "focused",
+  "visible",
+  "visible-unfocused",
   "denied",
   "default",
   "unavailable",
@@ -268,9 +290,22 @@ it.each([
         "speedTestRequests",
         false,
       );
-    else if (mode === "focused")
-      vi.mocked(document.hasFocus).mockReturnValue(true);
-    else
+    else if (
+      mode === "visible" ||
+      mode === "visible-unfocused"
+    ) {
+      vi.spyOn(document, "hidden", "get").mockReturnValue(
+        false,
+      );
+      vi.spyOn(
+        document,
+        "visibilityState",
+        "get",
+      ).mockReturnValue("visible");
+      vi.mocked(document.hasFocus).mockReturnValue(
+        mode === "visible",
+      );
+    } else
       mocks.capabilities.mockResolvedValue({
         ...granted,
         permission: mode,
@@ -280,11 +315,33 @@ it.each([
     await flush();
     expect(mocks.show).not.toHaveBeenCalled();
     expect(mocks.requestPermission).not.toHaveBeenCalled();
+    if (
+      mode !== "visible" &&
+      mode !== "visible-unfocused"
+    ) {
+      expect(mocks.info).not.toHaveBeenCalled();
+      visibility(true);
+    }
     expect(mocks.info).toHaveBeenCalledOnce();
     controller.accept("peer");
     await expect(result).resolves.toBe(true);
   },
 );
+
+it("does not send a system notice for a request whose toast was already displayed", async () => {
+  visibility(true);
+  render(() => <SystemNotificationBridge />);
+  const { result } = begin();
+  expect(mocks.info).toHaveBeenCalledOnce();
+  visibility(false);
+  await flush();
+  visibility(true);
+  expect(mocks.show).not.toHaveBeenCalled();
+  expect(mocks.info).toHaveBeenCalledOnce();
+  const options = mocks.info.mock.calls[0][1];
+  options.action.onClick();
+  await expect(result).resolves.toBe(true);
+});
 
 it("uses the independent speed-test category and common privacy/sound settings", async () => {
   setAppState(

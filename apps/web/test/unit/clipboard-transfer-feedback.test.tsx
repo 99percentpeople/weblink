@@ -29,18 +29,8 @@ import type {
 import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
-let focused = true;
 let sequence = 0;
 beforeEach(() => {
-  focused = true;
-  vi.spyOn(document, "hasFocus").mockImplementation(
-    () => focused,
-  );
-  vi.spyOn(
-    document,
-    "visibilityState",
-    "get",
-  ).mockReturnValue("visible");
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -57,6 +47,7 @@ function setup(native = true) {
   const [tasks, setTasks] = createSignal<TaskListItem[]>(
     [],
   );
+  const [visible, setVisible] = createSignal(true);
   const id = `clipboard-${++sequence}`;
   const toastId = `clipboard-transfer:${id}`;
   const activeNotification = `${toastId}:active`;
@@ -79,14 +70,12 @@ function setup(native = true) {
     }),
   };
   const preferences = { ...defaultNotificationOptions };
-  const service = native
-    ? new NotificationService(
-        platform,
-        () => preferences,
-        () => focused,
-        vi.fn(),
-      )
-    : undefined;
+  const service = new NotificationService(
+    native ? platform : undefined,
+    () => preferences,
+    visible,
+    vi.fn(),
+  );
   const openTasks = vi.fn();
   const loading = vi.spyOn(toast, "loading");
   const success = vi.spyOn(toast, "success");
@@ -129,12 +118,6 @@ function setup(native = true) {
     });
     return <Toaster theme="light" />;
   });
-  const focus = (next: boolean) => {
-    focused = next;
-    window.dispatchEvent(
-      new Event(next ? "focus" : "blur"),
-    );
-  };
   return {
     id,
     toastId,
@@ -151,14 +134,17 @@ function setup(native = true) {
     success,
     error,
     dismiss,
-    focus,
+    setVisible: (value: boolean) => {
+      setVisible(value);
+      service.reconcile();
+    },
     respond: (
       action: string,
       notification = activeNotification,
     ) => respond({ id: notification, action }),
     close: () => {
       view.unmount();
-      service?.close();
+      service.close();
     },
   };
 }
@@ -209,36 +195,40 @@ it("shows progress in one cancellable loading toast without native notifications
   expect(s.error).not.toHaveBeenCalled();
   s.close();
 });
-it("keeps finalization visible and replaces loading with one terminal result", async () => {
-  const s = setup();
-  s.setTasks([s.task]);
-  s.update({ status: "finalizing", bytes: s.task.total });
-  expect(s.loading).toHaveBeenLastCalledWith(
-    "remote_control.clipboard_transfer.finalizing",
-    expect.objectContaining({ id: s.toastId }),
-  );
-  s.update({ status: "completed" });
-  expect(s.success).toHaveBeenCalledOnce();
-  expect(s.success).toHaveBeenCalledWith(
-    "remote_control.clipboard_transfer.completed",
-    expect.objectContaining({
-      id: s.toastId,
-      action: undefined,
-      duration: 4000,
-    }),
-  );
-  s.update({ status: "completed" });
-  expect(s.success).toHaveBeenCalledOnce();
-  await waitFor(() =>
-    expect(
-      screen.queryByRole("button", {
-        name: "common.action.cancel",
+it.each([true, false])(
+  "keeps visible transfers in-app and replaces loading with one terminal result (focused=%s)",
+  async (focused) => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(focused);
+    const s = setup();
+    s.setTasks([s.task]);
+    s.update({ status: "finalizing", bytes: s.task.total });
+    expect(s.loading).toHaveBeenLastCalledWith(
+      "remote_control.clipboard_transfer.finalizing",
+      expect.objectContaining({ id: s.toastId }),
+    );
+    s.update({ status: "completed" });
+    expect(s.success).toHaveBeenCalledOnce();
+    expect(s.success).toHaveBeenCalledWith(
+      "remote_control.clipboard_transfer.completed",
+      expect.objectContaining({
+        id: s.toastId,
+        action: undefined,
+        duration: 4000,
       }),
-    ).toBeNull(),
-  );
-  expect(s.session.show).not.toHaveBeenCalled();
-  s.close();
-});
+    );
+    s.update({ status: "completed" });
+    expect(s.success).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "common.action.cancel",
+        }),
+      ).toBeNull(),
+    );
+    expect(s.session.show).not.toHaveBeenCalled();
+    s.close();
+  },
+);
 it("does not replay finished history or handle unrelated file tasks", () => {
   const s = setup();
   s.setTasks([{ ...s.task, status: "completed" }]);
@@ -250,7 +240,7 @@ it("does not replay finished history or handle unrelated file tasks", () => {
 });
 it("shows one background start notification, supports cancellation, and ignores stale callbacks", async () => {
   const s = setup();
-  s.focus(false);
+  s.setVisible(false);
   s.setTasks([s.task]);
   await waitFor(() =>
     expect(s.session.show).toHaveBeenCalledOnce(),
@@ -282,7 +272,7 @@ it.each(["completed", "failed"] as const)(
   "replaces a background loading notification with %s and opens the task list",
   async (status) => {
     const s = setup();
-    s.focus(false);
+    s.setVisible(false);
     s.setTasks([s.task]);
     await waitFor(() =>
       expect(s.session.show).toHaveBeenCalledOnce(),
@@ -307,22 +297,16 @@ it.each(["completed", "failed"] as const)(
     s.close();
   },
 );
-it("switches between foreground and background and cleans up without cancelling the transfer", async () => {
+it("keeps the original progress toast across visibility changes and treats failure as a new event", async () => {
   const s = setup();
   s.setTasks([s.task]);
   expect(s.loading).toHaveBeenCalledOnce();
-  s.focus(false);
-  await waitFor(() =>
-    expect(s.session.show).toHaveBeenCalledOnce(),
-  );
-  expect(s.dismiss).toHaveBeenCalledWith(s.toastId);
-  s.focus(true);
-  expect(s.loading).toHaveBeenCalledTimes(2);
-  await waitFor(() =>
-    expect(s.session.dismiss).toHaveBeenCalledWith(
-      s.activeNotification,
-    ),
-  );
+  s.setVisible(false);
+  await Promise.resolve();
+  expect(s.session.show).not.toHaveBeenCalled();
+  expect(s.dismiss).not.toHaveBeenCalled();
+  s.setVisible(true);
+  expect(s.loading).toHaveBeenCalledOnce();
   s.update({ status: "failed" });
   expect(s.error).toHaveBeenCalledWith(
     "remote_control.clipboard_transfer.failed",
@@ -332,21 +316,42 @@ it("switches between foreground and background and cleans up without cancelling 
   s.respond("cancel");
   expect(s.cancel).not.toHaveBeenCalled();
   const calls = s.loading.mock.calls.length;
-  s.focus(false);
-  s.focus(true);
+  s.setVisible(false);
+  s.setVisible(true);
   expect(s.loading).toHaveBeenCalledTimes(calls);
+});
+it("never recreates a background progress notice as a toast but can show a new completion event", async () => {
+  const s = setup();
+  s.setVisible(false);
+  s.setTasks([s.task]);
+  await waitFor(() =>
+    expect(s.session.show).toHaveBeenCalledOnce(),
+  );
+  s.setVisible(true);
+  s.update({ status: "running", bytes: 524288 });
+  s.setVisible(false);
+  s.setVisible(true);
+  expect(s.loading).not.toHaveBeenCalled();
+  expect(s.session.show).toHaveBeenCalledOnce();
+  s.update({ status: "completed" });
+  expect(s.success).toHaveBeenCalledOnce();
+  s.setVisible(false);
+  s.setVisible(true);
+  expect(s.success).toHaveBeenCalledOnce();
+  expect(s.session.show).toHaveBeenCalledOnce();
+  s.close();
 });
 it("respects transfer notification settings and never prompts for permission", async () => {
   const s = setup();
   s.preferences.transfers = false;
-  s.focus(false);
+  s.setVisible(false);
   s.setTasks([s.task]);
   await Promise.resolve();
   expect(s.session.show).not.toHaveBeenCalled();
   expect(
     s.platform.requestPermission,
   ).not.toHaveBeenCalled();
-  s.focus(true);
+  s.setVisible(true);
   expect(s.loading).toHaveBeenCalledOnce();
   s.close();
 });

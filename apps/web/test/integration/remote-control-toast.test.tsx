@@ -15,12 +15,19 @@ import {
   screen,
   waitFor,
 } from "@solidjs/testing-library";
-import { createSignal, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { toast, Toaster } from "solid-sonner";
 import { RemoteControlStatus } from "@/components/app/remote-control-status";
 import { MeetingSharingStatus } from "@/routes/home/components/meeting-sharing-status";
 import { MeetingControlStatus } from "@/routes/home/components/meeting-control-status";
 import type { NativeControlStatus } from "@weblink/platform";
+import type {
+  NotificationAction,
+  SystemNotification,
+} from "@weblink/platform";
+import { NotificationService } from "@/libs/application/notifications/notification-service";
+import { defaultNotificationOptions } from "@/libs/domain/notification-options";
+import { ModalProvider } from "@/components/dialogs/base";
 
 const fixture = vi.hoisted(() => ({
   status: undefined as any,
@@ -39,6 +46,7 @@ vi.mock("@/libs/application/session-service", () => ({
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
     options: {
+      notifications: { preview: true },
       remoteKeyboard: { emergencyShortcut: "ctrl-alt-f8" },
     },
     session: {
@@ -69,7 +77,14 @@ const request = (
     },
   ],
 });
+let animationStyle: HTMLStyleElement;
 beforeEach(() => {
+  // jsdom has no exit animation events; keep modal lifecycle checks synchronous.
+  animationStyle = document.createElement("style");
+  animationStyle.textContent =
+    "* { animation-name: none !important; }";
+  document.head.append(animationStyle);
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   [fixture.status, setStatus] =
     createSignal<NativeControlStatus>({
       closed: false,
@@ -87,17 +102,67 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  animationStyle.remove();
   toast.dismiss();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-const mount = () =>
-  render(() => (
-    <>
-      <Toaster theme="light" />
-      <RemoteControlStatus />
-    </>
-  ));
+function mount({
+  visible = true,
+  native = false,
+  enabled = true,
+} = {}) {
+  const show = vi.fn(
+    async (_notification: SystemNotification) => {},
+  );
+  const dismiss = vi.fn(async () => {});
+  const showApplication = vi.fn();
+  let receive!: (action: NotificationAction) => void;
+  const service = new NotificationService(
+    native
+      ? {
+          capabilities: async () => ({
+            permission: "granted",
+            actions: false,
+            reply: false,
+          }),
+          requestPermission: vi.fn(),
+          watch: async (listener) => {
+            receive = listener;
+            return { show, dismiss, close: vi.fn() };
+          },
+        }
+      : undefined,
+    () => ({ ...defaultNotificationOptions, enabled }),
+    () => visible,
+    vi.fn(),
+  );
+  const view = render(() => {
+    onCleanup(() => service.close());
+    return (
+      <ModalProvider>
+        <Toaster theme="light" />
+        <RemoteControlStatus
+          notifications={service}
+          showApplication={showApplication}
+        />
+      </ModalProvider>
+    );
+  });
+  return {
+    ...view,
+    show,
+    dismiss,
+    showApplication,
+    setVisible(value: boolean) {
+      visible = value;
+      service.reconcile();
+    },
+    open(id: string) {
+      receive({ id: `control:${id}`, action: "open" });
+    },
+  };
+}
 it("shows a non-modal actionable request once across status polls and expires it without answering", async () => {
   const view = mount();
   setStatus(request("expire-first"));
@@ -364,4 +429,91 @@ it("shows each concurrent request and lets the host choose the second without an
         ),
     ).toHaveLength(0),
   );
+});
+
+it("does not send a background notice after the same request already appeared as a toast", async () => {
+  const view = mount({ native: true });
+  setStatus(request("toast-first"));
+  const allow = await screen.findByRole("button", {
+    name: "remote_control.allow",
+  });
+  view.setVisible(false);
+  setStatus(request("toast-first"));
+  await Promise.resolve();
+  view.setVisible(true);
+  expect(view.show).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", {
+      name: "remote_control.allow",
+    }),
+  ).toBe(allow);
+});
+
+it.each([true, false])(
+  "opens an actionable dialog from a notification without buttons, with no second toast (accepted=%s)",
+  async (accepted) => {
+    const view = mount({ native: true, visible: false });
+    const id = `browser-${accepted}`;
+    setStatus(request(id));
+    await waitFor(() =>
+      expect(view.show).toHaveBeenCalledOnce(),
+    );
+    expect(
+      view.show.mock.calls[0][0].actions,
+    ).toBeUndefined();
+    view.setVisible(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      toast
+        .getToasts()
+        .some((item) => item.id === `remote-control:${id}`),
+    ).toBe(false);
+    view.open(id);
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(view.showApplication).toHaveBeenCalledOnce();
+    expect(fixture.approve).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: accepted
+          ? "remote_control.allow"
+          : "remote_control.decline",
+      }),
+    );
+    expect(fixture.approve).toHaveBeenCalledOnce();
+    expect(fixture.approve).toHaveBeenCalledWith(
+      id,
+      accepted,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    view.setVisible(false);
+    view.setVisible(true);
+    view.open(id);
+    expect(view.show).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      toast
+        .getToasts()
+        .some((item) => item.id === `remote-control:${id}`),
+    ).toBe(false);
+  },
+);
+
+it("closes a notification-opened confirmation when its exact request expires", async () => {
+  const view = mount({ native: true, visible: false });
+  setStatus(request("browser-expired"));
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  view.open("browser-expired");
+  const allow = await screen.findByRole("button", {
+    name: "remote_control.allow",
+  });
+  setStatus({ closed: false, clientId: null, pending: [] });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).toBeNull(),
+  );
+  fireEvent.click(allow);
+  expect(fixture.approve).not.toHaveBeenCalled();
 });

@@ -8,7 +8,6 @@ import {
   vi,
 } from "vitest";
 import { reconcile } from "solid-js/store";
-import type { JSX } from "solid-js";
 import type { NotificationAction } from "@weblink/platform";
 import type { StoreMessage } from "@/libs/domain/message";
 import { SystemNotificationBridge } from "@/components/app/system-notifications";
@@ -123,14 +122,6 @@ function visibility(value: boolean) {
   hidden = !value;
   document.dispatchEvent(new Event("visibilitychange"));
 }
-function toastOptions() {
-  return mocks.info.mock.calls.at(-1)![1] as {
-    description(): JSX.Element;
-    action: { onClick(): void };
-    onAutoClose(): void;
-  };
-}
-
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.systemAvailable = true;
@@ -192,45 +183,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it.each([
-  [true, true],
-  [false, true],
-  [true, false],
-  [false, false],
-])(
-  "uses one in-app toast for visible messages (focused=%s, backgroundOnly=%s)",
-  async (focused, backgroundOnly) => {
+it.each([true, false])(
+  "keeps visible messages silent (focused=%s)",
+  async (focused) => {
     vi.mocked(document.hasFocus).mockReturnValue(focused);
-    setAppState(
-      "options",
-      "notifications",
-      "backgroundOnly",
-      backgroundOnly,
-    );
     render(() => <SystemNotificationBridge />);
     receiveMessage(incoming);
     receiveMessage(incoming);
     await flush();
-    expect(mocks.info).toHaveBeenCalledOnce();
-    expect(mocks.info).toHaveBeenCalledWith(
-      "Alice",
-      expect.objectContaining({ id: "message:message-1" }),
-    );
-    expect(
-      render(toastOptions().description).container
-        .textContent,
-    ).toBe("Hello");
+    expect(mocks.info).not.toHaveBeenCalled();
     expect(mocks.show).not.toHaveBeenCalled();
     expect(mocks.capabilities).not.toHaveBeenCalled();
     expect(mocks.avatar).not.toHaveBeenCalled();
     expect(mocks.requestPermission).not.toHaveBeenCalled();
-    toastOptions().action.onClick();
-    toastOptions().action.onClick();
-    expect(mocks.navigate).toHaveBeenCalledOnce();
-    expect(mocks.navigate).toHaveBeenCalledWith(
-      "/?panel=chat&conversation=private",
-    );
-    expect(mocks.showApp).toHaveBeenCalledOnce();
+    visibility(false);
+    await flush();
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.show).not.toHaveBeenCalled();
   },
 );
 
@@ -262,22 +231,24 @@ it.each(["document", "native"])(
   },
 );
 
-it("shows visible messages even without a system notification adapter", async () => {
-  mocks.systemAvailable = false;
-  const view = render(() => <SystemNotificationBridge />);
-  receiveMessage(incoming);
-  await flush();
-  expect(mocks.info).toHaveBeenCalledOnce();
-  view.unmount();
-  expect(mocks.unsubscribe).toHaveBeenCalledOnce();
-  expect(mocks.toastDismiss).toHaveBeenCalledWith(
-    "message:message-1",
-  );
-  expect(mocks.unwatchVisibility).toHaveBeenCalledOnce();
-});
+it.each([true, false])(
+  "does not fall back to a toast without a system notification adapter (visible=%s)",
+  async (visible) => {
+    mocks.systemAvailable = false;
+    const view = render(() => <SystemNotificationBridge />);
+    visibility(visible);
+    receiveMessage(incoming);
+    await flush();
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.show).not.toHaveBeenCalled();
+    view.unmount();
+    expect(mocks.unsubscribe).toHaveBeenCalledOnce();
+    expect(mocks.unwatchVisibility).toHaveBeenCalledOnce();
+  },
+);
 
 it.each(["enabled", "messages"] as const)(
-  "respects the %s preference for both channels",
+  "respects the %s preference",
   async (key) => {
     setAppState("options", "notifications", key, false);
     render(() => <SystemNotificationBridge />);
@@ -290,7 +261,7 @@ it.each(["enabled", "messages"] as const)(
   },
 );
 
-it("keeps room identities and respects preview privacy in the in-app toast", async () => {
+it("keeps room identities and respects preview privacy in system notifications", async () => {
   setAppState("message", "conversations", [
     {
       id: "room",
@@ -303,6 +274,7 @@ it("keeps room identities and respects preview privacy in the in-app toast", asy
     },
   ]);
   render(() => <SystemNotificationBridge />);
+  visibility(false);
   const message = {
     ...incoming,
     conversationId: "room",
@@ -314,35 +286,42 @@ it("keeps room identities and respects preview privacy in the in-app toast", asy
   };
   receiveMessage(message);
   await flush();
-  expect(mocks.info.mock.calls[0][0]).toBe("Bob · Team");
-  setAppState("options", "notifications", "preview", false);
-  expect(mocks.toastDismiss).toHaveBeenCalledWith(
-    "message:message-1",
+  expect(mocks.show).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: "message:message-1",
+      title: "Bob · Team",
+      body: "Hello",
+    }),
   );
+  setAppState("options", "notifications", "preview", false);
   receiveMessage({ ...message, id: "private-preview" });
   await flush();
-  expect(mocks.info.mock.calls.at(-1)![0]).toBe(
-    "setting.notifications.new_message",
+  expect(mocks.dismiss).toHaveBeenCalledWith(
+    "message:message-1",
   );
-  expect(
-    render(toastOptions().description).container
-      .textContent,
-  ).toBe("setting.notifications.new_message");
+  expect(mocks.show).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      title: "setting.notifications.new_message",
+      body: "setting.notifications.new_message",
+      icon: undefined,
+    }),
+  );
+  expect(mocks.info).not.toHaveBeenCalled();
 });
 
 it.each([
   "preferences",
   "identity",
   "conversation",
-  "background",
   "unmount",
 ])(
-  "dismisses stale in-app messages after %s and ignores their old actions",
+  "ignores stale system notification actions after %s",
   async (reason) => {
     const view = render(() => <SystemNotificationBridge />);
+    visibility(false);
     receiveMessage(incoming);
     await flush();
-    const action = toastOptions().action.onClick;
+    expect(mocks.show).toHaveBeenCalledOnce();
     if (reason === "preferences")
       setAppState(
         "options",
@@ -354,15 +333,20 @@ it.each([
       setAppState("profile", "clientId", "someone-else");
     if (reason === "conversation")
       setAppState("message", "conversations", []);
-    if (reason === "background") visibility(false);
     if (reason === "unmount") view.unmount();
+    receiveAction({
+      id: "message:message-1",
+      action: "open",
+    });
     await flush();
-    expect(mocks.toastDismiss).toHaveBeenCalledWith(
-      "message:message-1",
-    );
-    action();
+    if (reason === "unmount")
+      expect(mocks.close).toHaveBeenCalledOnce();
+    else
+      expect(mocks.dismiss).toHaveBeenCalledWith(
+        "message:message-1",
+      );
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(mocks.show).not.toHaveBeenCalled();
+    expect(mocks.info).not.toHaveBeenCalled();
   },
 );
 
@@ -383,12 +367,6 @@ it.each(["permission", "avatar", "dispatch"])(
       );
     if (stage === "dispatch")
       mocks.show.mockReturnValue(pending);
-    setAppState(
-      "options",
-      "notifications",
-      "backgroundOnly",
-      false,
-    );
     render(() => <SystemNotificationBridge />);
     visibility(false);
     receiveMessage(incoming);

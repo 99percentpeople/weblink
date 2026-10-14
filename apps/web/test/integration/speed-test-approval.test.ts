@@ -114,6 +114,7 @@ describe("speed-test approval", () => {
       "Peer",
       abort.signal,
     );
+    controller.pending()!.present();
 
     expect(mocks.info).toHaveBeenCalledTimes(1);
     expect(mocks.info.mock.calls[0][1]).not.toHaveProperty(
@@ -145,6 +146,7 @@ describe("speed-test approval", () => {
       "Peer",
       abort.signal,
     );
+    controller.pending()!.present();
 
     const toastElement = document.createElement("div");
     toastElement.className = "speed-test-request-toast";
@@ -173,6 +175,7 @@ describe("speed-test approval", () => {
       "Peer",
       abort.signal,
     );
+    controller.pending()!.present();
 
     window.dispatchEvent(
       new CustomEvent(
@@ -201,6 +204,7 @@ describe("speed-test approval", () => {
       "Peer",
       abort.signal,
     );
+    controller.pending()!.present();
 
     const options = mocks.info.mock.calls[0][1];
     options.action.onClick();
@@ -224,6 +228,7 @@ describe("speed-test approval", () => {
       "Peer",
       abort.signal,
     );
+    controller.pending()!.present();
 
     const options = mocks.info.mock.calls[0][1];
     options.cancel.onClick();

@@ -633,9 +633,16 @@ export const createRoomDialog = () => {
     ),
   });
 
-  const open = (options: { retry?: boolean } = {}) => {
+  const open = (
+    options: {
+      retry?: boolean;
+      configuredRoom?: boolean;
+    } = {},
+  ) => {
     setRoomFormVisible(
-      options.retry || appState.profile.initalJoin,
+      options.retry ||
+        options.configuredRoom ||
+        appState.profile.initalJoin,
     );
     setSelectedRoomId(
       rooms().find(
@@ -645,7 +652,8 @@ export const createRoomDialog = () => {
         null,
     );
     setStep(
-      !options.retry && appState.profile.initalJoin
+      !appState.profile.name.trim() ||
+        (!options.retry && appState.profile.initalJoin)
         ? "profile"
         : "room",
     );

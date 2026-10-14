@@ -511,7 +511,6 @@
     },
     "notifications": {
       "enabled": "시스템 알림 활성화",
-      "backgroundOnly": "창에 초점이 맞춰져 있지 않을 때만 알림",
       "messages": "새 메시지",
       "controlRequests": "원격 제어 요청",
       "speedTestRequests": "속도 테스트 요청",

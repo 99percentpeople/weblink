@@ -1,6 +1,5 @@
 import {
   createEffect,
-  createSignal,
   onCleanup,
   untrack,
   type Accessor,
@@ -36,49 +35,26 @@ function transferText(
 
 interface Notice {
   status?: TaskStatus;
-  toast?: string;
-  notification?: string;
+  event?: string;
   cancelling?: boolean;
 }
 
 /** Present existing remote content tasks; text and single-chunk transfers stay quiet. */
 export function createRemoteTransferFeedback(options: {
   tasks: Accessor<TaskListItem[]>;
-  notifications?: Pick<
+  notifications: Pick<
     NotificationService,
-    "show" | "dismiss"
+    "show" | "dismiss" | "update"
   >;
   openTasks(): void;
 }) {
-  const isForeground = () =>
-    document.visibilityState === "visible" &&
-    document.hasFocus();
-  const [foreground, setForeground] =
-    createSignal(isForeground());
-  const life = new AbortController();
-  const update = () => setForeground(isForeground());
-  window.addEventListener("focus", update, {
-    signal: life.signal,
-  });
-  window.addEventListener(
-    "blur",
-    () => setForeground(false),
-    { signal: life.signal },
-  );
-  document.addEventListener("visibilitychange", update, {
-    signal: life.signal,
-  });
   const notices = new Map<string, Notice>();
   const toastId = (id: string) =>
     `clipboard-transfer:${id}`;
-  const dismissToast = (id: string, notice: Notice) => {
-    if (notice.toast) toast.dismiss(toastId(id));
-    notice.toast = undefined;
-  };
-  const dismissNotification = (notice: Notice) => {
-    if (notice.notification)
-      options.notifications?.dismiss(notice.notification);
-    notice.notification = undefined;
+  const dismiss = (notice: Notice) => {
+    if (notice.event)
+      options.notifications.dismiss(notice.event);
+    notice.event = undefined;
   };
   const current = (id: string) =>
     options.tasks().find((task) => task.id === id);
@@ -111,11 +87,16 @@ export function createRemoteTransferFeedback(options: {
     title: string,
     active: boolean,
   ) => {
-    if (!options.notifications) return;
     const id = `${toastId(task.id)}:${active ? "active" : task.status}`;
-    if (notice.notification === id) return;
-    dismissNotification(notice);
-    notice.notification = id;
+    if (notice.event === id) {
+      options.notifications.update(
+        id,
+        Date.now() + 10 * 60_000,
+      );
+      return;
+    }
+    dismiss(notice);
+    notice.event = id;
     void options.notifications.show({
       category: "transfers",
       current: () => {
@@ -126,6 +107,64 @@ export function createRemoteTransferFeedback(options: {
             ? isActiveTask(latest)
             : latest.status === task.status)
         );
+      },
+      present() {
+        let closed = false;
+        let content: string | undefined;
+        const render = () => {
+          if (closed) return;
+          const latest = current(task.id);
+          if (
+            !latest ||
+            !isRemoteContentTransferTask(latest)
+          )
+            return;
+          if (active) {
+            const heading = transferText(
+              latest,
+              latest.status === "finalizing"
+                ? "finalizing"
+                : latest.kind === "file-send"
+                  ? "sending"
+                  : "receiving",
+            );
+            const description = `${formatBtyeSize(latest.bytes)} / ${formatBtyeSize(latest.total)}`;
+            const next = `${heading}\n${description}`;
+            if (content === next) return;
+            content = next;
+            toast.loading(heading, {
+              id: toastId(task.id),
+              description,
+              duration: Infinity,
+              dismissible: false,
+              closeButton: false,
+              action: {
+                label: t("common.action.cancel"),
+                onClick: () => void cancel(task.id),
+              },
+            });
+          } else {
+            const show =
+              task.status === "completed"
+                ? toast.success
+                : toast.error;
+            show(title, {
+              id: toastId(task.id),
+              duration: 4000,
+              dismissible: true,
+              action: undefined,
+              description: undefined,
+            });
+          }
+        };
+        render();
+        return {
+          update: active ? render : undefined,
+          dismiss() {
+            closed = true;
+            toast.dismiss(toastId(task.id));
+          },
+        };
       },
       notification: {
         id,
@@ -153,13 +192,11 @@ export function createRemoteTransferFeedback(options: {
     const tasks = options
       .tasks()
       .filter(isRemoteContentTransferTask);
-    const front = foreground();
     untrack(() => {
       const ids = new Set(tasks.map((task) => task.id));
       for (const [id, notice] of notices) {
         if (ids.has(id)) continue;
-        dismissToast(id, notice);
-        dismissNotification(notice);
+        dismiss(notice);
         notices.delete(id);
       }
       for (const task of tasks) {
@@ -178,34 +215,13 @@ export function createRemoteTransferFeedback(options: {
                 ? "sending"
                 : "receiving",
           );
-          if (front) {
-            dismissNotification(notice);
-            const description = `${formatBtyeSize(task.bytes)} / ${formatBtyeSize(task.total)}`;
-            const content = `${title}\n${description}`;
-            if (notice.toast === content) continue;
-            notice.toast = content;
-            toast.loading(title, {
-              id: toastId(task.id),
-              description,
-              duration: Infinity,
-              dismissible: false,
-              closeButton: false,
-              action: {
-                label: t("common.action.cancel"),
-                onClick: () => void cancel(task.id),
-              },
-            });
-          } else {
-            dismissToast(task.id, notice);
-            notify(task, notice, title, true);
-          }
+          notify(task, notice, title, true);
         } else if (previous !== task.status) {
-          dismissNotification(notice);
+          dismiss(notice);
           if (
             task.status !== "completed" &&
             task.status !== "failed"
           ) {
-            dismissToast(task.id, notice);
             continue;
           }
           const title = transferText(
@@ -214,33 +230,13 @@ export function createRemoteTransferFeedback(options: {
               ? "completed"
               : "failed",
           );
-          if (front) {
-            notice.toast = title;
-            const show =
-              task.status === "completed"
-                ? toast.success
-                : toast.error;
-            show(title, {
-              id: toastId(task.id),
-              duration: 4000,
-              dismissible: true,
-              action: undefined,
-              description: undefined,
-            });
-          } else {
-            dismissToast(task.id, notice);
-            notify(task, notice, title, false);
-          }
+          notify(task, notice, title, false);
         }
       }
     });
   });
   onCleanup(() => {
-    life.abort();
-    for (const [id, notice] of notices) {
-      dismissToast(id, notice);
-      dismissNotification(notice);
-    }
+    for (const notice of notices.values()) dismiss(notice);
     notices.clear();
   });
 }

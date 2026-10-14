@@ -809,21 +809,6 @@ export default function Home() {
                                 "connecting"
                             }
                             onClick={() =>
-                              void roomActions.join()
-                            }
-                          >
-                            {t("meeting.join_room")}
-                          </button>
-                          <button
-                            type="button"
-                            class="text-primary underline underline-offset-[3px]"
-                            disabled={
-                              roomActions.busy() ||
-                              appState.session
-                                .clientServiceStatus ===
-                                "connecting"
-                            }
-                            onClick={() =>
                               void roomActions.edit()
                             }
                           >

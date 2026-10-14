@@ -1,6 +1,5 @@
 export interface NotificationOptions {
   enabled: boolean;
-  backgroundOnly: boolean;
   preview: boolean;
   sound: boolean;
   messages: boolean;
@@ -12,7 +11,6 @@ export interface NotificationOptions {
 export const defaultNotificationOptions: NotificationOptions =
   {
     enabled: true,
-    backgroundOnly: true,
     preview: true,
     sound: true,
     messages: true,

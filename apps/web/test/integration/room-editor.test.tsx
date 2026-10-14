@@ -20,6 +20,7 @@ import {
   joinUrl,
 } from "@/components/dialogs/join-dialog";
 import { createRoomActions } from "@/libs/state/create-room-actions";
+import { parseRoomInvitation } from "@/libs/application/room-invitation";
 import { ModalProvider } from "@/components/dialogs/base";
 import { toast } from "solid-sonner";
 import { reconcile } from "solid-js/store";
@@ -139,6 +140,8 @@ describe("room sharing URL", () => {
 
 function setup(options?: {
   retry?: boolean;
+  configuredRoom?: boolean;
+  action?: "join" | "edit";
   join?: () => Promise<void>;
 }) {
   const completed = vi.fn();
@@ -158,12 +161,18 @@ function setup(options?: {
           onClick={() =>
             void (
               actions
-                ? actions.edit()
+                ? options?.action === "join"
+                  ? actions.join()
+                  : actions.edit(
+                      options?.configuredRoom
+                        ? { configuredRoom: true }
+                        : undefined,
+                    )
                 : dialog.open(options)
             ).then(completed)
           }
         >
-          Edit
+          {options?.action === "join" ? "Join" : "Edit"}
         </button>
         <ModalProvider />
       </>
@@ -171,7 +180,9 @@ function setup(options?: {
   }
   render(() => <Harness />);
   fireEvent.click(
-    screen.getByRole("button", { name: "Edit" }),
+    screen.getByRole("button", {
+      name: options?.action === "join" ? "Join" : "Edit",
+    }),
   );
   return { completed };
 }
@@ -191,6 +202,132 @@ describe("room settings autosave", () => {
     lastJoinedAt,
     joinPassword: "saved-password",
   });
+
+  it("opens first-time setup from Join and connects only after valid profile and room confirmation", async () => {
+    setAppState("profile", {
+      name: "",
+      roomId: "",
+      initalJoin: true,
+    });
+    const join = vi.fn().mockResolvedValue(undefined);
+    setup({ action: "join", join });
+    const name = await screen.findByLabelText(
+      "common.join_form.name",
+    );
+    expect(name).toBeVisible();
+    expect(join).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.continue",
+      }),
+    );
+    expect(name).toBeVisible();
+    fireEvent.input(name, {
+      target: { value: "New Alice" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.continue",
+      }),
+    );
+    const room = screen.getByLabelText(
+      "common.join_form.room_id.title",
+    );
+    expect(room).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    expect(join).not.toHaveBeenCalled();
+    fireEvent.input(room, {
+      target: { value: "new-room" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "client.menu.connect",
+      }),
+    );
+    await waitFor(() =>
+      expect(join).toHaveBeenCalledOnce(),
+    );
+    expect(appState.profile.name).toBe("New Alice");
+    expect(appState.profile.roomId).toBe("new-room");
+    expect(appState.profile.clientId).toBe("uid_saved");
+    expect(appState.profile.initalJoin).toBe(true);
+  });
+
+  it("opens a missing name for editing even after a previous successful join", async () => {
+    setAppState("profile", "name", "   ");
+    const join = vi.fn().mockResolvedValue(undefined);
+    setup({ action: "join", join });
+    expect(
+      await screen.findByLabelText("common.join_form.name"),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.close",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    expect(join).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
+    "confirms the shared room and password without replacing them with history (first=%s)",
+    async (first) => {
+      setRooms([savedRoom("previous", 10)]);
+      setAppState("profile", {
+        ...parseRoomInvitation({
+          id: "shared-room",
+          pwd: "shared-password",
+        }),
+        autoJoin: true,
+        initalJoin: first,
+      });
+      const join = vi.fn().mockResolvedValue(undefined);
+      setup({ join, configuredRoom: true });
+      await screen.findByRole("dialog");
+      if (first) {
+        expect(
+          screen.getByLabelText("common.join_form.name"),
+        ).toBeVisible();
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "common.action.continue",
+          }),
+        );
+      }
+      expect(screen.queryByRole("list")).toBeNull();
+      expect(
+        screen.getByLabelText(
+          "common.join_form.room_id.title",
+        ),
+      ).toHaveValue("shared-room");
+      expect(
+        screen.getByLabelText(
+          "common.join_form.password.title",
+        ),
+      ).toHaveValue("shared-password");
+      expect(join).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "client.menu.connect",
+        }),
+      );
+      await waitFor(() =>
+        expect(join).toHaveBeenCalledOnce(),
+      );
+      expect(appState.profile.roomId).toBe("shared-room");
+      expect(appState.profile.password).toBe(
+        "shared-password",
+      );
+      expect(appState.profile.clientId).toBe("uid_saved");
+      expect(appState.profile.initalJoin).toBe(first);
+    },
+  );
 
   it.each([true, false])(
     "returns failed additions to their form without adding history and saves only after retry succeeds (first=%s)",

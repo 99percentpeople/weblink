@@ -511,7 +511,6 @@
     },
     "notifications": {
       "enabled": "システム通知を有効化",
-      "backgroundOnly": "ウィンドウが非アクティブのときのみ通知",
       "messages": "新着メッセージ",
       "controlRequests": "リモート操作リクエスト",
       "speedTestRequests": "速度テストリクエスト",

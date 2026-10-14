@@ -152,11 +152,16 @@ it("shows unknown native status without an unnecessary permission prompt", async
   expect(api.requestPermission).not.toHaveBeenCalled();
 });
 
-it("provides an independent switch for speed-test requests", async () => {
+it("keeps category switches without a foreground notification override", async () => {
   render(() => <NotificationSettings />);
   await screen.findByText(
     "setting.notifications.permission_granted",
   );
+  expect(
+    screen.queryByRole("switch", {
+      name: "setting.notifications.backgroundOnly",
+    }),
+  ).not.toBeInTheDocument();
   const toggle = screen.getByRole("switch", {
     name: "setting.notifications.speedTestRequests",
   });

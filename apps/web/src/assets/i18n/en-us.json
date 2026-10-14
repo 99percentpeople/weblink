@@ -506,7 +506,6 @@
     },
     "notifications": {
       "enabled": "Enable system notifications",
-      "backgroundOnly": "Only notify when the window is not focused",
       "messages": "New messages",
       "controlRequests": "Remote control requests",
       "speedTestRequests": "Speed test requests",

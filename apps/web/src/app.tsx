@@ -29,7 +29,10 @@ import { useRoomActions } from "@/libs/state/room-actions-context";
 import { isHomePath } from "@/libs/application/home-navigation";
 import { resolveWallpaper } from "@/libs/wallpapers";
 import { setClientProfile } from "./libs/state/profile-store";
-import { optional } from "./libs/domain/utils/optional";
+import {
+  parseRoomInvitation,
+  type RoomInvitation,
+} from "@/libs/application/room-invitation";
 import { useAppState } from "@/libs/state/app-state-context";
 
 import { toast } from "solid-sonner";
@@ -86,27 +89,11 @@ const InnerApp = (props: ParentProps) => {
     ),
   );
 
-  const parseSearchParams = async () => {
-    const hasRoomIdParam = search.id !== undefined;
-    const hasPasswordParam = search.pwd !== undefined;
-
-    if (
-      hasRoomIdParam &&
-      search.id !== appState.profile.roomId
-    ) {
-      setClientProfile("roomId", search.id as string);
-    }
-    if (
-      hasPasswordParam &&
-      search.pwd !== appState.profile.password
-    ) {
-      setClientProfile(
-        "password",
-        optional(search.pwd as string),
-      );
-    }
-
-    if (hasRoomIdParam || hasPasswordParam) {
+  const parseSearchParams = async (
+    invitation: RoomInvitation | null,
+  ) => {
+    if (invitation) {
+      setClientProfile(invitation);
       setSearch(
         {
           id: null,
@@ -159,18 +146,21 @@ const InnerApp = (props: ParentProps) => {
     }
     if (
       appState.session.clientServiceStatus ===
-        "disconnected" &&
-      appState.profile.autoJoin
+      "disconnected"
     ) {
-      await roomActions.autoJoin();
+      if (invitation)
+        await roomActions.edit({ configuredRoom: true });
+      else if (appState.profile.autoJoin)
+        await roomActions.autoJoin();
     }
   };
 
-  onMount(async () => {
-    parseSearchParams();
+  onMount(() => {
+    const invitation = parseRoomInvitation(search);
+    void parseSearchParams(invitation);
     if (!appInitialized()) {
       setAppInitialized(true);
-      openAboutDialog();
+      if (!invitation) openAboutDialog();
     }
   });
 

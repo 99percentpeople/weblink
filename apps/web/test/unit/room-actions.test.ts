@@ -242,24 +242,87 @@ describe("shared room actions", () => {
     { name: "  " },
     { roomId: "  " },
   ])(
-    "requires an explicit edit for incomplete setup %s",
+    "opens the editor for incomplete setup and stays disconnected when cancelled %s",
     async (profile) => {
       const actions = setup();
       setAppState("profile", profile);
+      fixture.open.mockResolvedValue({ cancel: true });
       await actions.join();
       await actions.autoJoin();
-      expect(fixture.open).not.toHaveBeenCalled();
+      expect(fixture.open).toHaveBeenCalledTimes(2);
+      expect(fixture.initialize).toHaveBeenCalledTimes(2);
       expect(fixture.join).not.toHaveBeenCalled();
-      expect(fixture.error).toHaveBeenCalledWith(
-        "common.join_form.configure_before_join",
-      );
+      expect(fixture.error).not.toHaveBeenCalled();
       expect(actions.busy()).toBe(false);
-      fixture.open.mockResolvedValueOnce({ cancel: true });
-      await actions.edit();
-      expect(fixture.open).toHaveBeenCalledOnce();
-      expect(fixture.join).not.toHaveBeenCalled();
     },
   );
+
+  it("keeps first-time setup pending until the editor confirms, even with saved history", async () => {
+    setAppState("profile", "initalJoin", true);
+    setRooms([savedRoom("previous", 20)]);
+    const actions = setup();
+    let confirm!: (result: { cancel: boolean }) => void;
+    fixture.open.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          confirm = resolve;
+        }),
+    );
+    const joining = actions.join();
+    await vi.waitFor(() =>
+      expect(fixture.open).toHaveBeenCalledOnce(),
+    );
+    expect(appState.profile.roomId).toBe("room");
+    expect(appState.profile.initalJoin).toBe(true);
+    expect(fixture.join).not.toHaveBeenCalled();
+    await actions.join();
+    await actions.edit();
+    expect(fixture.open).toHaveBeenCalledOnce();
+    setAppState("profile", {
+      name: "Updated Alice",
+      roomId: "new-room",
+    });
+    confirm({ cancel: false });
+    await joining;
+    expect(fixture.join).toHaveBeenCalledOnce();
+    expect(appState.profile.roomId).toBe("new-room");
+    expect(appState.profile.initalJoin).toBe(true);
+    expect(actions.busy()).toBe(false);
+  });
+
+  it("preserves the invitation form and its credentials when retrying", async () => {
+    setRooms([savedRoom("previous", 20)]);
+    const actions = setup();
+    fixture.join.mockRejectedValueOnce(
+      new Error("incorrect password"),
+    );
+    fixture.open.mockResolvedValueOnce({ cancel: false });
+    fixture.open.mockResolvedValueOnce({ cancel: true });
+    await actions.edit({ configuredRoom: true });
+    expect(fixture.open).toHaveBeenNthCalledWith(1, {
+      configuredRoom: true,
+    });
+    expect(fixture.open).toHaveBeenNthCalledWith(2, {
+      configuredRoom: true,
+      retry: true,
+    });
+    expect(appState.profile.roomId).toBe("room");
+    expect(appState.profile.password).toBe(
+      "saved-password",
+    );
+    expect(fixture.join).toHaveBeenCalledOnce();
+    expect(actions.busy()).toBe(false);
+  });
+
+  it("stays disconnected when a shared room's editor is closed", async () => {
+    const actions = setup();
+    fixture.open.mockResolvedValueOnce({ cancel: true });
+    await actions.edit({ configuredRoom: true });
+    expect(fixture.open).toHaveBeenCalledOnce();
+    expect(fixture.join).not.toHaveBeenCalled();
+    expect(fixture.error).not.toHaveBeenCalled();
+    expect(actions.busy()).toBe(false);
+  });
 
   it("blocks concurrent actions and allows retry after a failed join", async () => {
     const actions = setup();

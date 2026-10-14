@@ -13,7 +13,7 @@ export function createUpdateFeedback(options: {
   updates: AppUpdates;
   enabled: Accessor<boolean>;
   ready: Accessor<boolean>;
-  notifications?: NotificationService;
+  notifications: NotificationService;
   openUpdates(): void;
 }) {
   const { updates } = options;
@@ -22,8 +22,7 @@ export function createUpdateFeedback(options: {
   let disposed = false;
   const dismiss = () => {
     if (!notificationId) return;
-    toast.dismiss(notificationId);
-    options.notifications?.dismiss(notificationId);
+    options.notifications.dismiss(notificationId);
     notificationId = undefined;
   };
   createEffect(() => {
@@ -56,17 +55,20 @@ export function createUpdateFeedback(options: {
       const open = () => {
         if (current()) options.openUpdates();
       };
-      toast.info(title, {
-        id,
-        duration: 10_000,
-        action: {
-          label: t("setting.updates.view"),
-          onClick: open,
-        },
-      });
-      void options.notifications?.show({
+      void options.notifications.show({
         category: "updates",
         current,
+        present() {
+          toast.info(title, {
+            id,
+            duration: 10_000,
+            action: {
+              label: t("setting.updates.view"),
+              onClick: open,
+            },
+          });
+          return { dismiss: () => toast.dismiss(id) };
+        },
         notification: {
           id,
           title,

@@ -1,6 +1,5 @@
 import {
   createEffect,
-  mapArray,
   createMemo,
   on,
   onCleanup,
@@ -13,7 +12,6 @@ import { platform } from "@/libs/platform/runtime";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import { messageStores } from "@/libs/application/messaging/message-store";
-import { sessionService } from "@/libs/application/session-service";
 import { NotificationService } from "@/libs/application/notifications/notification-service";
 import { messageNotificationContent } from "@/libs/application/notifications/message-notification";
 import { renderNotificationAvatar } from "@/libs/application/notifications/notification-avatar";
@@ -25,6 +23,7 @@ import { isRemoteContentTransferTask } from "@/libs/application/task-service";
 import { createUpdateFeedback } from "@/libs/hooks/create-update-feedback";
 import { createMessageFeedback } from "@/libs/hooks/create-message-feedback";
 import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
+import { RemoteControlStatus } from "./remote-control-status";
 
 export function SystemNotificationBridge() {
   const state = useAppState();
@@ -40,23 +39,15 @@ export function SystemNotificationBridge() {
         console.warn("Could not show application", error),
       );
   };
-  const name = (id: string) =>
-    appState.session.clientViewData[id]?.name ??
-    messageStores.clients.find(
-      (client) => client.clientId === id,
-    )?.name ??
-    id;
   const preferences = () => appState.options.notifications;
   const visible = createPresentationVisible();
-  const service =
-    platform.notifications &&
-    new NotificationService(
-      platform.notifications,
-      preferences,
-      () => visible() && document.hasFocus(),
-      (error) =>
-        console.warn("System notification failed", error),
-    );
+  const service = new NotificationService(
+    platform.notifications,
+    preferences,
+    visible,
+    (error) =>
+      console.warn("System notification failed", error),
+  );
   createRemoteTransferFeedback({
     tasks: state.tasks.tasks,
     notifications: service,
@@ -198,72 +189,6 @@ export function SystemNotificationBridge() {
     },
   );
   onCleanup(unsubscribe);
-  if (!service) return null;
-  createEffect(
-    mapArray(
-      () =>
-        sessionService.remoteControl
-          .status()
-          .pending.map((p) => p.consentId),
-      (consentId) => {
-        const pending = sessionService.remoteControl
-          .status()
-          .pending.find((p) => p.consentId === consentId);
-        if (!pending) return;
-        const id = `control:${consentId}`;
-        untrack(() => {
-          void service.show({
-            category: "controlRequests",
-            current: () =>
-              sessionService.remoteControl
-                .status()
-                .pending.some(
-                  (p) => p.consentId === consentId,
-                ),
-            notification: {
-              id,
-              title: t("remote_control.request_title"),
-              body: preferences().preview
-                ? t("remote_control.request_description", {
-                    name: name(pending.clientId),
-                  })
-                : t("remote_control.request_title"),
-              expiresAt: Date.now() + 5 * 60_000,
-              actions: [
-                {
-                  id: "approve",
-                  title: t("remote_control.allow"),
-                },
-                {
-                  id: "decline",
-                  title: t("remote_control.decline"),
-                },
-              ],
-            },
-            async respond(action) {
-              if (
-                action.action === "approve" ||
-                action.action === "decline"
-              ) {
-                try {
-                  await sessionService.remoteControl.approve(
-                    consentId,
-                    action.action === "approve",
-                  );
-                } catch (error) {
-                  toast.error(
-                    t("remote_control.approval_failed"),
-                  );
-                  throw error;
-                }
-              }
-            },
-          });
-        });
-        onCleanup(() => service.dismiss(id));
-      },
-    ),
-  );
   createEffect(
     on(state.speedTestApproval, (request) => {
       if (!request) return;
@@ -273,6 +198,7 @@ export function SystemNotificationBridge() {
           category: "speedTestRequests",
           current: () =>
             state.speedTestApproval()?.id === request.id,
+          present: () => request.present(),
           notification: {
             id,
             title: t("speed_test.phases.approval_incoming"),
@@ -373,6 +299,9 @@ export function SystemNotificationBridge() {
       service.clear();
       previousPreferences = next;
     }
+    visible();
+    // Delivery is imperative; pending records must not become reactive dependencies.
+    untrack(() => service.reconcile());
   });
   const cleanup = setInterval(
     () => service.reconcile(),
@@ -382,5 +311,19 @@ export function SystemNotificationBridge() {
     clearInterval(cleanup);
     service.close();
   });
-  return null;
+  return (
+    <RemoteControlStatus
+      notifications={service}
+      showApplication={() => {
+        void platform.application
+          ?.show()
+          .catch((error) =>
+            console.warn(
+              "Could not show application",
+              error,
+            ),
+          );
+      }}
+    />
+  );
 }

@@ -559,8 +559,13 @@ describe("meeting page navigation and panels", () => {
     for (let cycle = 0; cycle < 2; cycle++) {
       setCurrentRoomId(undefined);
       await screen.findByText("meeting.preview_hint");
+      expect(
+        within(stage).queryByRole("button", {
+          name: "meeting.join_room",
+        }),
+      ).toBeNull();
       fireEvent.click(
-        within(stage).getByRole("button", {
+        screen.getByRole("button", {
           name: "meeting.join_room",
         }),
       );
