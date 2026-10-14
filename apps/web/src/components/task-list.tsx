@@ -62,6 +62,7 @@ type TaskKind = AppTask["kind"];
 
 const taskStatuses: TaskStatus[] = [
   "waiting",
+  "queued",
   "running",
   "finalizing",
   "paused",
@@ -282,6 +283,7 @@ function TaskRow(props: {
 
   const fileAction = () => {
     const task = file();
+    if (task?.status === "queued") return "cancel" as const;
     if (task?.canPause) return "pause" as const;
     if (
       task?.canResume !== false &&
@@ -290,6 +292,18 @@ function TaskRow(props: {
     )
       return "resume" as const;
     return undefined;
+  };
+  const controlFile = () => {
+    const task = file();
+    const control = fileAction();
+    if (!task || !control) return;
+    if (control === "resume") return resume();
+    if ("shared" in task)
+      return control === "cancel"
+        ? task.cancel()
+        : task.pause();
+    // Cancelling admission retires the run while keeping the chat attachment resumable.
+    return app.pauseFile(task.message.fid!, task.peerId);
   };
   const label = () =>
     file()?.fileName ??
@@ -346,21 +360,7 @@ function TaskRow(props: {
               pending() ||
               (fileAction() === "resume" && !online())
             }
-            onAction={() =>
-              void action(
-                fileAction() === "pause"
-                  ? () => {
-                      const task = file()!;
-                      if ("shared" in task) task.pause();
-                      else
-                        return app.pauseFile(
-                          task.message.fid!,
-                          props.task.peerId,
-                        );
-                    }
-                  : resume,
-              )
-            }
+            onAction={() => void action(controlFile)}
           />
         )}
       </Show>
@@ -424,6 +424,7 @@ function TaskRow(props: {
                   received={task().bytes}
                   total={task().total}
                   live={task().status === "running"}
+                  queued={task().status === "queued"}
                   error={task().error}
                 />
               </div>
@@ -552,7 +553,7 @@ function TaskRow(props: {
         <Show
           when={
             sharedFile() &&
-            !["completed", "cancelled"].includes(
+            !["queued", "completed", "cancelled"].includes(
               props.task.status,
             )
           }

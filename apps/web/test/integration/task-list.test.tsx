@@ -159,6 +159,54 @@ afterEach(() => {
 });
 
 describe("unified task list controls", () => {
+  it("shows waiting instead of speed and cancels queued chat transfers while preserving their attachment", async () => {
+    const queued = message({
+      progress: { received: 256, total: 1024 },
+    });
+    setMessages([queued]);
+    setTransfers({
+      run: {
+        id: "run",
+        fileId: "file",
+        messageId: queued.id,
+        queued: true,
+        session: {
+          clientId: "self",
+          targetClientId: "peer",
+        } as PeerSession,
+        transferer: {} as FileTransferer,
+      },
+    });
+    pause.mockImplementationOnce(async () =>
+      setTransfers({}),
+    );
+    render(() => <TaskList onInspect={inspect} />);
+    const row = within(
+      screen.getByText("example.bin").closest("li")!,
+    );
+    expect(
+      row.getByText("tasks.status.waiting"),
+    ).toBeInTheDocument();
+    expect(row.queryByText(/\/s$/)).toBeNull();
+    expect(
+      row.queryByRole("button", { name: "tasks.pause" }),
+    ).toBeNull();
+    fireEvent.click(
+      row.getByRole("button", {
+        name: "common.action.cancel",
+      }),
+    );
+    await waitFor(() =>
+      expect(pause).toHaveBeenCalledWith("file", "peer"),
+    );
+    expect(
+      row.getByText("example.bin"),
+    ).toBeInTheDocument();
+    expect(
+      row.getByRole("button", { name: "tasks.resume" }),
+    ).toBeInTheDocument();
+    expect(tasks.activeCount()).toBe(1); // Only the independent speed test remains active.
+  });
   it("makes the original clipboard failure available as selectable diagnostic text", () => {
     const error =
       "Clipboard transfer interrupted <details>";
@@ -558,7 +606,7 @@ describe("unified task list controls", () => {
       screen.getByText(/speed_test.phases.download/),
     ).toBeInTheDocument();
   });
-  it.each(["running", "paused"] as const)(
+  it.each(["queued", "running", "paused"] as const)(
     "cancels a %s shared task without acting on chat attachments",
     async (status) => {
       const cancelShared = vi.fn(async () => {
@@ -582,7 +630,8 @@ describe("unified task list controls", () => {
         total: 1024,
         createdAt: 30,
         status,
-        canPause: status === "running",
+        canPause:
+          status === "running" || status === "queued",
         canResume: true,
         pause: vi.fn(),
         resume: vi.fn(async () => {}),
@@ -590,6 +639,24 @@ describe("unified task list controls", () => {
       };
       setShared([shared]);
       render(() => <TaskList onInspect={inspect} />);
+      if (status === "queued") {
+        const row = within(
+          screen.getByText("shared.bin").closest("li")!,
+        );
+        expect(
+          row.getByText("tasks.status.waiting"),
+        ).toBeInTheDocument();
+        expect(
+          row.queryByRole("button", {
+            name: "tasks.pause",
+          }),
+        ).toBeNull();
+        expect(
+          row.getAllByRole("button", {
+            name: "common.action.cancel",
+          }),
+        ).toHaveLength(1);
+      }
       fireEvent.click(
         screen.getByRole("button", {
           name: "common.action.cancel",

@@ -19,14 +19,19 @@ export function DirectFileMessageCard(props: {
 }) {
   const state = useAppState();
   const [pending, setPending] = createSignal(false);
+  const transfer = createMemo(() =>
+    props.message.localContentDetached
+      ? undefined
+      : findMessageTransfer(
+          appState.transfer.transfers,
+          props.message,
+        ),
+  );
+  const queued = () => transfer()?.queued === true;
   const live = createMemo(
     () =>
       !props.message.localContentDetached &&
-      (!!props.message.localContentPending ||
-        !!findMessageTransfer(
-          appState.transfer.transfers,
-          props.message,
-        )),
+      (!!props.message.localContentPending || !!transfer()),
   );
   const sender = () =>
     props.message.client === appState.profile.clientId;
@@ -49,7 +54,13 @@ export function DirectFileMessageCard(props: {
     !live() &&
     (sender() || (!cache()?.isComplete && !merging()));
   const control = (): TransferAction | undefined =>
-    live() ? "pause" : canResume() ? "resume" : undefined;
+    queued()
+      ? "cancel"
+      : live()
+        ? "pause"
+        : canResume()
+          ? "resume"
+          : undefined;
   const showTransfer = () =>
     live() ||
     merging() ||
@@ -126,6 +137,7 @@ export function DirectFileMessageCard(props: {
               received={props.message.progress?.received}
               total={props.message.fileSize}
               live={live()}
+              queued={queued()}
               error={props.message.error}
             />
           </Show>

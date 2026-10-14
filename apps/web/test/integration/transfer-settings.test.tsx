@@ -33,6 +33,7 @@ it("restores the global limit, persists edits and keeps it independent of room r
   localStorage.setItem(
     STORAGE_KEYS.appOptions,
     JSON.stringify({
+      maxConcurrentTransfers: 4,
       autoDownloadMaxSize: 2 * megabyte,
       roomConfigs: {
         first: {
@@ -55,6 +56,7 @@ it("restores the global limit, persists edits and keeps it independent of room r
       localStorage.getItem(STORAGE_KEYS.appOptions)!,
     );
   expect(savedOptions()).toMatchObject({
+    maxConcurrentTransfers: 4,
     autoDownloadMaxSize: 2 * megabyte,
     roomConfigs: {
       first: { name: "First", autoDownloadFiles: true },
@@ -62,6 +64,17 @@ it("restores the global limit, persists edits and keeps it independent of room r
     },
   });
   render(() => <TransferSettings />);
+  const concurrency = screen.getByRole("slider", {
+    name: /setting\.transfer_queue\.title/,
+    value: { now: 4 },
+  });
+  expect(concurrency).toHaveAttribute("aria-valuenow", "4");
+  concurrency.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await waitFor(() => {
+    expect(appState.options.maxConcurrentTransfers).toBe(5);
+    expect(savedOptions().maxConcurrentTransfers).toBe(5);
+  });
   const limit = screen.getByRole("button", {
     name: /^setting\.receiver\.auto_download_limit\.title/,
   });
@@ -87,6 +100,7 @@ it("restores the global limit, persists edits and keeps it independent of room r
 
   resetRoomConfig("first");
   forgetRoomConfig("second", undefined);
+  expect(savedOptions().maxConcurrentTransfers).toBe(5);
   expect(savedOptions().autoDownloadMaxSize).toBe(
     10 * megabyte,
   );

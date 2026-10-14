@@ -26,6 +26,7 @@
       "file-prepare": "Dateiidentifikation"
     },
     "status": {
+      "queued": "In Warteschlange",
       "waiting": "Wartend",
       "running": "Läuft",
       "finalizing": "Speichern / Zusammenführen",
@@ -77,6 +78,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "Maximale gleichzeitige Übertragungen",
+      "description": "Zusätzliche Dateien werden eingereiht. Änderungen gelten sofort; laufende Übertragungen laufen beim Senken des Limits zu Ende. Beide Teilnehmer müssen Warteschlangen unterstützen."
+    },
     "appearance": {
       "title": "Darstellung",
       "theme": {

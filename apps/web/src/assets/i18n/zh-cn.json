@@ -21,6 +21,7 @@
       "file-prepare": "文件识别"
     },
     "status": {
+      "queued": "排队中",
       "waiting": "等待中",
       "running": "进行中",
       "finalizing": "保存 / 合并中",
@@ -72,6 +73,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "最大并发传输数",
+      "description": "同时传输的文件数量，超出后自动排队。调整后立即生效，降低上限不会中断正在进行的传输。需要双方都支持队列功能。"
+    },
     "appearance": {
       "title": "外观",
       "theme": {

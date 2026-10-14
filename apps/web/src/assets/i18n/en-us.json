@@ -21,6 +21,7 @@
       "file-prepare": "File identification"
     },
     "status": {
+      "queued": "Queued",
       "waiting": "Waiting",
       "running": "Running",
       "finalizing": "Saving / merging",
@@ -72,6 +73,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "Maximum concurrent transfers",
+      "description": "Transfer up to this many files at once. Additional files wait in the queue. Changes apply immediately; lowering the limit lets running transfers finish. Both peers must support queuing."
+    },
     "appearance": {
       "title": "Appearance",
       "theme": {

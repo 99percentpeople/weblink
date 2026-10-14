@@ -42,6 +42,7 @@ export interface SharedFileTransferOptions {
   getSession(peerId: string): PeerSession | undefined;
   canShare(session: PeerSession): boolean;
   supports(session: PeerSession): boolean;
+  supportsQueue?(session: PeerSession): boolean;
   reportError(error: unknown): void;
 }
 type Job = {
@@ -239,7 +240,12 @@ export class SharedFileTransfers {
         async () => {},
       );
       this.check(job, setupSignal);
-      const run = this.register(job, cache, true);
+      const run = this.register(
+        job,
+        cache,
+        true,
+        message.queue,
+      );
       run.transferer.addEventListener(
         "ready",
         () => {
@@ -265,7 +271,9 @@ export class SharedFileTransfers {
     job: Job,
     cache: ChunkCache,
     sending: boolean,
+    queue = false,
   ): TransferRun {
+    if (queue) this.update(job, { status: "queued" });
     const lifecycle: NonNullable<
       TransferRegistration["lifecycle"]
     > = {
@@ -362,6 +370,7 @@ export class SharedFileTransfers {
         ? TransferMode.Send
         : TransferMode.Receive,
       incomingChannel: sending,
+      queue,
       lifecycle,
     });
     job.run = run;
@@ -408,9 +417,12 @@ export class SharedFileTransfers {
       [...this.jobs.values()].some(
         (job) =>
           job.task.kind === "file-receive" &&
-          ["waiting", "running", "finalizing"].includes(
-            job.task.status,
-          ) &&
+          [
+            "queued",
+            "waiting",
+            "running",
+            "finalizing",
+          ].includes(job.task.status) &&
           job.info.fingerprint &&
           contentKey(job.info.fingerprint) ===
             contentKey(info.fingerprint!),
@@ -428,9 +440,12 @@ export class SharedFileTransfers {
     );
     if (
       job &&
-      ["waiting", "running", "finalizing"].includes(
-        job.task.status,
-      )
+      [
+        "queued",
+        "waiting",
+        "running",
+        "finalizing",
+      ].includes(job.task.status)
     )
       return;
     job ??= this.newJob(
@@ -510,7 +525,10 @@ export class SharedFileTransfers {
       createdAt: job.task.createdAt,
       libraryPinned: true,
     };
+    const queue =
+      this.options.supportsQueue?.(session) === true;
     const payload = {
+      ...(queue ? { queue: true } : {}),
       fid: job.info.id,
       transferId: job.fileId,
       fingerprint: job.info.fingerprint!,
@@ -619,7 +637,7 @@ export class SharedFileTransfers {
       );
       await permission;
       this.check(job, signal);
-      const run = this.register(job, cache, false);
+      const run = this.register(job, cache, false, queue);
       await this.options.registry.initialize(run);
       this.check(job, signal);
       const channel = await session.createChannel(

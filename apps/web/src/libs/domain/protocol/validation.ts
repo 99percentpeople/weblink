@@ -312,6 +312,10 @@ export function validateSessionMessage(
       break;
     case "request-room-file":
       valid =
+        optional(
+          value.queue,
+          (v) => typeof v === "boolean",
+        ) &&
         value.version === P2P_ROOM_FILE_PROTOCOL_VERSION &&
         roomBinding(value) &&
         id(value.offerId) &&
@@ -336,6 +340,7 @@ export function validateSessionMessage(
             "fid",
             "ranges",
             "resume",
+            "queue",
           ].includes(key),
         );
       // The authorized offer supplies the actual chunk count for range checks.
@@ -397,10 +402,19 @@ export function validateSessionMessage(
       valid = id(value.fid);
       break;
     case "send-file":
-      valid = fileMetadata(value, false);
+      valid =
+        fileMetadata(value, false) &&
+        optional(
+          value.queue,
+          (v) => typeof v === "boolean",
+        );
       break;
     case "request-shared-file":
       valid =
+        optional(
+          value.queue,
+          (v) => typeof v === "boolean",
+        ) &&
         value.version === 1 &&
         id(value.fid) &&
         id(value.transferId) &&
@@ -433,11 +447,16 @@ export function validateSessionMessage(
             "chunkSize",
             "ranges",
             "have",
+            "queue",
           ].includes(key),
         );
       break;
     case "request-file":
       valid =
+        optional(
+          value.queue,
+          (v) => typeof v === "boolean",
+        ) &&
         fileMetadata(value, false) &&
         typeof value.resume === "boolean" &&
         optional(value.ranges, (items) =>

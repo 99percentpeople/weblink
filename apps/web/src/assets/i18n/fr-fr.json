@@ -26,6 +26,7 @@
       "file-prepare": "Identification du fichier"
     },
     "status": {
+      "queued": "En attente dans la file",
       "waiting": "En attente",
       "running": "En cours",
       "finalizing": "Sauvegarde / fusion",
@@ -77,6 +78,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "Transferts simultanés maximum",
+      "description": "Les fichiers supplémentaires attendent dans la file. Les changements sont immédiats ; réduire la limite ne coupe pas les transferts en cours. Les deux participants doivent prendre en charge la file."
+    },
     "appearance": {
       "title": "Apparence",
       "theme": {

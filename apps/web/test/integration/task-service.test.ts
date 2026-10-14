@@ -112,6 +112,23 @@ function setup(initial: StoreMessage[] = []) {
 }
 
 describe("application task list", () => {
+  it("keeps queued transfers active and pausable without losing resumed bytes", () => {
+    const { service, setTransfers } = setup([
+      file({ progress: { total: 1024, received: 512 } }),
+    ]);
+    setTransfers({ active: { ...live(), queued: true } });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "queued",
+      bytes: 512,
+      canPause: true,
+    });
+    expect(service.activeCount()).toBe(1);
+    setTransfers({ active: { ...live(), queued: false } });
+    expect(service.tasks()[0]).toMatchObject({
+      status: "running",
+      bytes: 512,
+    });
+  });
   it("unifies file sends, file receives and speed tests with the latest status change first", () => {
     const { service, setTransfers } = setup([
       file(),

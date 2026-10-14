@@ -63,6 +63,7 @@ export interface FileTransferServiceOptions {
   getChunkSize(): number;
   automaticCacheDeletion?(): boolean;
   supportsContent?(session: PeerSession): boolean;
+  supportsQueue?(session: PeerSession): boolean;
   waitForCapabilities?(
     session: PeerSession,
     signal: AbortSignal,
@@ -414,6 +415,7 @@ export class FileTransferService {
       mode,
       incomingChannel,
       info,
+      queue: op.queue,
     });
     op.run = run;
     if (mode === TransferMode.Receive)
@@ -467,6 +469,9 @@ export class FileTransferService {
         "The file recipient is not connected",
       );
     const messageId = metadata.id ?? createUuid();
+    op.queue =
+      this.deps.supportsQueue?.(op.session) === true;
+    if (op.queue) payload = { ...payload, queue: true };
     const mode =
       type === "send-file"
         ? TransferMode.Send
@@ -1287,6 +1292,7 @@ export class FileTransferService {
       message.fid,
       signal,
       async (op) => {
+        op.queue = message.queue === true;
         const previous = this.deps.messages.messages.find(
           (item) => item.id === message.id,
         );
@@ -1459,6 +1465,7 @@ export class FileTransferService {
       message.fid,
       signal,
       async (op) => {
+        op.queue = message.queue === true;
         const offer = this.deps.messages.messages.findLast(
           (item) =>
             item.type === "file" &&

@@ -14,6 +14,7 @@ import { setAppOptions, CompressionLevel } from "@/options";
 
 import { appState } from "@/libs/state/app-state";
 import RemoteTransferSettings from "./remote-transfer-settings";
+import { MAX_CONCURRENT_TRANSFERS } from "@/libs/application/transfer/transfer-queue";
 
 export default function TransferSettings() {
   const megabyte = 1024 * 1024;
@@ -22,6 +23,20 @@ export default function TransferSettings() {
       id="transfer-settings"
       title={t("app_menu.settings_transfer")}
     >
+      <SettingSlider
+        minValue={1}
+        maxValue={MAX_CONCURRENT_TRANSFERS}
+        step={1}
+        value={[appState.options.maxConcurrentTransfers]}
+        getValueLabel={({ values }) => `${values[0]}`}
+        onChange={(values) =>
+          setAppOptions("maxConcurrentTransfers", values[0])
+        }
+        label={t("setting.transfer_queue.title")}
+        description={t(
+          "setting.transfer_queue.description",
+        )}
+      />
       <SettingHeading id="sender">
         {t("setting.sender.title")}
       </SettingHeading>

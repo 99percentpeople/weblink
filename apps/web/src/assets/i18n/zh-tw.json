@@ -21,6 +21,7 @@
       "file-prepare": "檔案識別"
     },
     "status": {
+      "queued": "排隊中",
       "waiting": "等待中",
       "running": "進行中",
       "finalizing": "儲存 / 合併中",
@@ -72,6 +73,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "最大同時傳輸數",
+      "description": "同時傳輸的檔案數量，超出後自動排隊。調整後立即生效，降低上限不會中斷正在進行的傳輸。需要雙方都支援佇列功能。"
+    },
     "appearance": {
       "title": "外觀",
       "theme": {

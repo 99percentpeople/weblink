@@ -64,7 +64,7 @@ export class SessionService {
       fileDrop: platform.fileDrop?.hover
         ? { hover: true, hoverUpdates: true }
         : {},
-      files: { content: true, shared: true },
+      files: { content: true, shared: true, queue: true },
       room: { chat: true, files: true },
       screen: {
         decode: browserDecodeCapabilities(),

@@ -34,6 +34,7 @@ export interface RoomFileSharingOptions {
     >;
   getMessages(): readonly StoreMessage[];
   getSession(peerId: string): PeerSession | undefined;
+  supportsQueue?(session: PeerSession): boolean;
   getLocalClientId(): string;
   getAutoDownloadLimit?(conversationId: string): number;
 }
@@ -88,6 +89,7 @@ export class RoomFileSharingService {
         if (signal.aborted)
           throw new Error("Room file session closed");
         await options.files.serveFileOffer(session, {
+          queue: message.queue,
           fid: message.fid,
           messageId: offer.id,
           ranges: message.ranges,
@@ -179,10 +181,13 @@ export class RoomFileSharingService {
         throw new Error(
           "Join the original room to transfer this file",
         );
+      const queue =
+        this.options.supportsQueue?.(session) === true;
       await this.options.files.receiveFileOffer(
         session,
         this.metadata(offer),
         {
+          queue,
           messageId: offer.id,
           signal: binding.signal,
           reused: async () => {
@@ -208,6 +213,7 @@ export class RoomFileSharingService {
               session,
               "request-room-file",
               {
+                ...(queue ? { queue: true } : {}),
                 roomId: binding.room.roomId,
                 senderToken: binding.senderToken,
                 recipientToken: binding.recipientToken,

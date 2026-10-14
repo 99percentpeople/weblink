@@ -42,6 +42,7 @@ afterEach(() => {
 
 it("round-trips current settings while discarding unknown fields at every settings level", async () => {
   store({
+    maxConcurrentTransfers: 7,
     backgroundImage: "wallpaper",
     backgroundPreset: "aurora",
     redirectToClient: "peer",
@@ -107,6 +108,7 @@ it("round-trips current settings while discarding unknown fields at every settin
   await boot();
   const current = saved();
   expect(current).toMatchObject({
+    maxConcurrentTransfers: 7,
     backgroundImage: "wallpaper",
     backgroundPreset: "aurora",
     redirectToClient: "peer",
@@ -243,6 +245,16 @@ it("uses current defaults without importing obsolete preferences or historical p
     appState.options.roomConfigs["old-room"],
   ).toBeUndefined();
 });
+
+it.each([undefined, 0, -1, 1.5, 11, "5", null])(
+  "restores the default concurrency for invalid or missing settings (%j)",
+  async (value) => {
+    store({ maxConcurrentTransfers: value });
+    const { appState } = await boot();
+    expect(appState.options.maxConcurrentTransfers).toBe(3);
+    expect(saved().maxConcurrentTransfers).toBe(3);
+  },
+);
 
 it("continues to restore current session media constraints", async () => {
   sessionStorage.setItem(

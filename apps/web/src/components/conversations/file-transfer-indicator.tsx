@@ -1,11 +1,21 @@
 import { userErrorMessage } from "@/libs/user-error";
 import { Match, Show, Switch, type JSX } from "solid-js";
-import { Check, Download, Pause, Play } from "lucide-solid";
+import {
+  Check,
+  Download,
+  Pause,
+  Play,
+  Square,
+} from "lucide-solid";
 import { t } from "@/i18n";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 
-export type TransferAction = "pause" | "resume" | "request";
+export type TransferAction =
+  | "pause"
+  | "resume"
+  | "request"
+  | "cancel";
 
 /** The SVG owns progress semantics; its sibling button remains accessible. */
 export function FileTransferIndicator(props: {
@@ -35,11 +45,13 @@ export function FileTransferIndicator(props: {
   const label = () =>
     props.label ??
     t(
-      props.action === "request"
-        ? "conversations.room_file_request"
-        : props.action === "pause"
-          ? "tasks.pause"
-          : "tasks.resume",
+      props.action === "cancel"
+        ? "common.action.cancel"
+        : props.action === "request"
+          ? "conversations.room_file_request"
+          : props.action === "pause"
+            ? "tasks.pause"
+            : "tasks.resume",
     );
   const indeterminate = () =>
     !!props.busy &&
@@ -133,6 +145,9 @@ export function FileTransferIndicator(props: {
           onClick={() => props.onAction?.()}
         >
           <Switch fallback={<Download class="size-4" />}>
+            <Match when={props.action === "cancel"}>
+              <Square class="size-4" />
+            </Match>
             <Match when={props.action === "pause"}>
               <Pause class="size-4" />
             </Match>
@@ -152,12 +167,13 @@ export function FileTransferDetails(props: {
   received?: number;
   total: number;
   live?: boolean;
+  queued?: boolean;
   error?: string;
 }) {
   return (
     <span
-      class="flex min-w-0 items-center gap-x-2 overflow-hidden text-xs
-        whitespace-nowrap tabular-nums"
+      class="flex min-h-4 min-w-0 items-center gap-x-2 overflow-hidden
+        whitespace-nowrap text-xs tabular-nums leading-4"
       title={
         props.error
           ? userErrorMessage(
@@ -172,7 +188,14 @@ export function FileTransferDetails(props: {
         class="min-w-0 flex-1 truncate"
         data-slot="file-transfer-status"
       >
-        <Show when={props.live} fallback={props.status}>
+        <Show
+          when={props.live && !props.queued}
+          fallback={
+            props.queued
+              ? t("tasks.status.waiting")
+              : props.status
+          }
+        >
           {(_live) => {
             const speed = createTransferSpeed(
               () => props.received ?? 0,
@@ -189,7 +212,7 @@ export function FileTransferDetails(props: {
       </span>
       <Show when={props.received !== undefined}>
         <span
-          class="max-w-[65%] min-w-0 truncate"
+          class="min-w-0 max-w-[65%] truncate"
           title={`${formatBtyeSize(props.received ?? 0)} / ${formatBtyeSize(props.total)}`}
         >
           {formatBtyeSize(props.received ?? 0)} /{" "}

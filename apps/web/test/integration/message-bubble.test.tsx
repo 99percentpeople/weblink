@@ -1233,6 +1233,108 @@ describe("room file offers", () => {
 
 describe("shared attachment bubbles and transfer controls", () => {
   it.each([
+    "room-receiver",
+    "room-sender",
+    "private-receiver",
+    "private-sender",
+  ])(
+    "shows waiting and cancels queued %s transfers without removing the message",
+    async (kind) => {
+      onlineSender();
+      const room = kind.startsWith("room");
+      const sender = kind.endsWith("sender");
+      const progress = { received: 256, total: 1024 };
+      const initial = roomFileMessage({
+        room: room ? roomFileMessage().room : undefined,
+        client: sender ? "self" : "peer",
+        target: sender
+          ? room
+            ? "active-room"
+            : "peer"
+          : "self",
+        transferStatus: "init",
+        progress,
+        roomTransfers:
+          room && sender
+            ? { peer: { status: "init", progress } }
+            : undefined,
+      });
+      const [message, setMessage] = createSignal(initial);
+      setAppState("transfer", "transfers", "queued", {
+        id: "queued",
+        messageId: initial.id,
+        fileId: "binary",
+        queued: true,
+        session: {
+          clientId: "self",
+          targetClientId: "peer",
+        },
+        transferer: {
+          mode: sender
+            ? TransferMode.Send
+            : TransferMode.Receive,
+        },
+      } as unknown as ActiveFileTransfer);
+      pauseFile.mockImplementationOnce(async () => {
+        setAppState(
+          "transfer",
+          "transfers",
+          "queued",
+          undefined,
+        );
+        setMessage({
+          ...initial,
+          transferStatus: "paused",
+          roomTransfers:
+            room && sender
+              ? { peer: { status: "paused", progress } }
+              : undefined,
+        });
+      });
+      render(() => (
+        <ul>
+          <MessageContent message={message()} />
+        </ul>
+      ));
+      if (room && sender) {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "conversations.room_file_details",
+          }),
+        );
+        await screen.findByRole("dialog");
+      }
+      expect(
+        screen.getByText("tasks.status.waiting"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/\/s$/)).toBeNull();
+      expect(
+        screen.queryByRole("button", {
+          name: /^tasks.pause/,
+        }),
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^common.action.cancel/,
+        }),
+      );
+      await waitFor(() =>
+        expect(pauseFile).toHaveBeenCalledWith(
+          "binary",
+          "peer",
+        ),
+      );
+      expect(
+        screen.getByText("tasks.status.paused"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTitle(initial.fileName),
+      ).toBeInTheDocument();
+      expect(requestRoomFile).not.toHaveBeenCalled();
+      expect(requestFile).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
     "image/png",
     "video/mp4",
     "audio/ogg",
@@ -1327,6 +1429,7 @@ describe("shared attachment bubbles and transfer controls", () => {
       });
       setAppState("transfer", "transfers", "active", {
         id: "active",
+        queued: true,
         messageId: initial.id,
         fileId: "binary",
         session: {
@@ -1344,6 +1447,21 @@ describe("shared attachment bubbles and transfer controls", () => {
           <MessageContent message={message()} />
         </ul>
       ));
+      expect(
+        screen.getByText("tasks.status.waiting"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "common.action.cancel",
+        }),
+      ).toBeInTheDocument();
+      setAppState(
+        "transfer",
+        "transfers",
+        "active",
+        (run) =>
+          run ? { ...run, queued: false } : undefined,
+      );
       const pause = screen.getByRole("button", {
         name: "tasks.pause",
       });

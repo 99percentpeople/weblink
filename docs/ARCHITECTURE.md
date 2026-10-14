@@ -496,6 +496,15 @@ may select concrete infrastructure implementations.
     a separate directory reference, including content sent in room chats.
     Explicit local forwarding creates a private attachment with a fresh ID backed by shared immutable content;
     it does not make the original room cache available through private requests.
+    Private, room and shared-file binary runs negotiate `files.queue` and an optional
+    `queue` request flag. The registry acknowledges setup before waiting, then admits
+    runs through one FIFO queue (default 3, adjustable from 1 to 10). Endpoint slots
+    are acquired in client-ID order; both must be reserved before workers initialize.
+    A receiver installs its handler before permitting bytes. Queue time is excluded
+    from request/channel deadlines; slots remain held through verification and are
+    released on completion, cancellation or disconnect. Lowering the limit drains
+    existing runs. Legacy peers and interactive clipboard/drop RPCs retain their
+    existing startup behavior and count toward occupancy without waiting for admission.
   - `file-library-service.ts`: content-addressed storage ownership, independent
     attachment references, explicit library retention, and lazy indexing of old
     completed caches. The metadata database `weblink-file-library-v1` indexes

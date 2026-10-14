@@ -26,6 +26,7 @@
       "file-prepare": "파일 식별"
     },
     "status": {
+      "queued": "대기열",
       "waiting": "대기 중",
       "running": "진행 중",
       "finalizing": "저장/병합",
@@ -77,6 +78,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "최대 동시 전송 수",
+      "description": "추가 파일은 대기열에서 기다립니다. 변경 사항은 즉시 적용되며 한도를 낮춰도 진행 중인 전송은 중단되지 않습니다. 양쪽 모두 대기열을 지원해야 합니다."
+    },
     "appearance": {
       "title": "모양",
       "theme": {

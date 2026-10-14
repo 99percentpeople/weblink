@@ -8,6 +8,8 @@ import {
 } from "@/libs/domain/transfer/file-transferer";
 import { FILE_TRANSFER_CHANNEL_PROTOCOL } from "@/libs/domain/transfer/protocol";
 import type { ActiveFileTransfer } from "./file-transfer-state";
+import { TransferQueue } from "./transfer-queue";
+import { admitTransfer } from "./transfer-admission";
 
 export interface TransferRegistration {
   session: PeerSession;
@@ -21,6 +23,8 @@ export interface TransferRegistration {
   mode: TransferMode;
   info?: FileMetaData;
   incomingChannel: boolean;
+  /** Agreed in the control request, only with a queue-capable peer. */
+  queue?: boolean;
 }
 export interface TransferRegistryOptions {
   createTransfer(
@@ -42,6 +46,7 @@ export interface TransferRegistryOptions {
   automaticCacheDeletion(): boolean;
   reportError(error: unknown): void;
   channelTimeoutMs?: number;
+  maxConcurrentTransfers?: number;
 }
 export interface TransferRun extends ActiveFileTransfer {
   readonly signal: AbortSignal;
@@ -62,10 +67,14 @@ type Entry = {
   flushing?: Promise<void>;
   dirty?: boolean;
   releaseCache: () => void;
+  queued: boolean;
+  prepare?: () => Promise<void>;
+  admissionStarted?: boolean;
 };
 
 /** Owns runs, never cache identity. Unknown/retired channels are not buffered globally. */
 export class TransferRegistry {
+  private readonly queue: TransferQueue;
   private readonly sessions = new Map<
     PeerSession,
     Map<string, Entry>
@@ -93,7 +102,32 @@ export class TransferRegistry {
 
   constructor(
     private readonly options: TransferRegistryOptions,
-  ) {}
+  ) {
+    this.queue = new TransferQueue(
+      options.maxConcurrentTransfers,
+    );
+  }
+
+  setMaxConcurrentTransfers(limit: number): void {
+    this.queue.setLimit(limit);
+  }
+
+  private publish(entry: Entry): void {
+    // Publish a snapshot so reactive stores observe admission without changing run identity.
+    this.options.publish(entry.run.id, { ...entry.run });
+  }
+
+  private startTimeout(entry: Entry): void {
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(
+      () =>
+        this.fail(
+          entry.run,
+          new Error("file transfer channel timeout"),
+        ),
+      this.options.channelTimeoutMs ?? 30_000,
+    );
+  }
 
   get(
     session: PeerSession,
@@ -194,6 +228,9 @@ export class TransferRegistry {
       taskId: input.taskId,
       transferer,
       signal: controller.signal,
+      get queued() {
+        return entry.queued;
+      },
     };
     const entry: Entry = {
       run,
@@ -203,6 +240,7 @@ export class TransferRegistry {
       initialized: false,
       finishing: false,
       releaseCache,
+      queued: input.queue === true,
     };
     let entries = this.sessions.get(input.session);
     if (!entries)
@@ -252,15 +290,9 @@ export class TransferRegistry {
       () => this.destroy(run),
       { signal: controller.signal },
     );
-    entry.timer = setTimeout(
-      () =>
-        this.fail(
-          run,
-          new Error("file transfer channel timeout"),
-        ),
-      this.options.channelTimeoutMs ?? 30_000,
-    );
-    this.options.publish(run.id, run);
+    if (!input.queue) this.queue.occupy(run.signal);
+    this.startTimeout(entry);
+    this.publish(entry);
     return run;
   }
 
@@ -289,6 +321,7 @@ export class TransferRegistry {
     }
     if (!entry.initialized) {
       entry.pendingChannel = channel;
+      this.startAdmission(entry);
       return;
     }
     try {
@@ -319,6 +352,59 @@ export class TransferRegistry {
     const entry = this.entry(run);
     if (!entry)
       throw new Error("file transfer is no longer active");
+    if (entry.queued) {
+      entry.prepare = () =>
+        this.initializeNow(entry, afterInitialize);
+      this.startAdmission(entry);
+      return;
+    }
+    await this.initializeNow(entry, afterInitialize);
+  }
+
+  private startAdmission(entry: Entry): void {
+    const { run, pendingChannel: channel } = entry;
+    if (
+      !entry.queued ||
+      !entry.prepare ||
+      !channel ||
+      entry.admissionStarted
+    )
+      return;
+    entry.admissionStarted = true;
+    admitTransfer({
+      channel,
+      signal: run.signal,
+      queue: this.queue,
+      first:
+        run.session.clientId < run.session.targetClientId,
+      initiator: !entry.incomingChannel,
+      sending: run.transferer.mode === TransferMode.Send,
+      connected: () => {
+        clearTimeout(entry.timer);
+        entry.timer = undefined;
+      },
+      initialize: async () => {
+        this.assertCurrent(run);
+        entry.queued = false;
+        this.publish(entry);
+        this.startTimeout(entry);
+        await entry.prepare!();
+      },
+      start: () => {
+        this.assertCurrent(run);
+        run.transferer.setChannel(channel);
+        entry.pendingChannel = undefined;
+      },
+      closed: () => this.destroy(run),
+      failed: (error) => this.fail(run, error),
+    });
+  }
+
+  private async initializeNow(
+    entry: Entry,
+    afterInitialize?: () => void | Promise<void>,
+  ): Promise<void> {
+    const { run } = entry;
     await run.transferer.initialize();
     this.assertCurrent(run);
     await afterInitialize?.();
@@ -334,9 +420,11 @@ export class TransferRegistry {
         { signal: run.signal },
       );
     }
-    const pending = entry.pendingChannel;
-    entry.pendingChannel = undefined;
-    if (pending) this.setChannel(run, pending);
+    if (!entry.admissionStarted) {
+      const pending = entry.pendingChannel;
+      entry.pendingChannel = undefined;
+      if (pending) this.setChannel(run, pending);
+    }
   }
 
   private scheduleFlush(entry: Entry): void {

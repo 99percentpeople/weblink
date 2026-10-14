@@ -26,6 +26,7 @@
       "file-prepare": "Identificación de archivos"
     },
     "status": {
+      "queued": "En cola",
       "waiting": "En espera",
       "running": "En curso",
       "finalizing": "Guardando / combinando",
@@ -77,6 +78,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "Máximo de transferencias simultáneas",
+      "description": "Los archivos adicionales esperan en la cola. Los cambios se aplican de inmediato; reducir el límite no interrumpe las transferencias activas. Ambos participantes deben admitir colas."
+    },
     "appearance": {
       "title": "Apariencia",
       "theme": {

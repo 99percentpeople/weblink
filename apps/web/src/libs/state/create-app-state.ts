@@ -235,7 +235,16 @@ export function createAppState(
   onCleanup(() => roomMessaging.dispose());
   cacheManager.isCacheInUse = (cache) =>
     transferManager.isCacheInUse(cache);
+  createEffect(() =>
+    transferManager.setMaxConcurrentTransfers(
+      appState.options.maxConcurrentTransfers,
+    ),
+  );
+  const supportsTransferQueue = (session: PeerSession) =>
+    sessionService.capabilities.get(session)?.files
+      ?.queue === true;
   const files = new FileTransferService({
+    supportsQueue: supportsTransferQueue,
     protocol,
     rtc,
     registry: transferManager,
@@ -354,6 +363,7 @@ export function createAppState(
     previousAttachments = current;
   });
   const roomFiles = new RoomFileSharingService(protocol, {
+    supportsQueue: supportsTransferQueue,
     rooms: roomMessaging,
     files,
     getMessages: () => appState.message.messages,
@@ -395,6 +405,7 @@ export function createAppState(
       session.targetClientId,
     ).provideFileList;
   const sharedFiles = new SharedFileTransfers({
+    supportsQueue: supportsTransferQueue,
     protocol,
     rtc,
     registry: transferManager,

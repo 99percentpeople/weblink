@@ -10,4 +10,5 @@ export interface FileTransferOperation {
   controller: AbortController;
   releases: Array<() => void>;
   run?: TransferRun;
+  queue?: boolean;
 }

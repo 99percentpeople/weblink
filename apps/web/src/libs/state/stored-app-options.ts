@@ -1,4 +1,5 @@
 import { resolveAudioSampling } from "../application/meeting-audio-settings";
+import { normalizeTransferConcurrency } from "../application/transfer/transfer-queue";
 import { resolveApplicationOptions } from "../domain/application-options";
 import { sanitizeTurnServers } from "../domain/ice-server";
 import { resolveNotificationOptions } from "../domain/notification-options";
@@ -116,6 +117,11 @@ export function resolveStoredAppOptions(
   )
     options.autoDownloadMaxSize =
       defaults.autoDownloadMaxSize;
+
+  options.maxConcurrentTransfers =
+    normalizeTransferConcurrency(
+      options.maxConcurrentTransfers,
+    );
 
   const servers = options.servers;
   options.servers = {

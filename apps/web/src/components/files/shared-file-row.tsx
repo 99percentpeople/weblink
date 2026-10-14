@@ -44,6 +44,7 @@ export function SharedFileRow(props: {
   const action = () => {
     const task = props.task;
     if (!task) return;
+    if (task.status === "queued") return "cancel";
     if (isActiveTask(task) && task.canPause) return "pause";
     if (
       task.canResume &&
@@ -54,13 +55,15 @@ export function SharedFileRow(props: {
   const control = () => {
     if (action() === "pause") props.task?.pause();
     else
-      void props.task
-        ?.resume()
-        .catch((error) =>
-          toast.error(
-            userErrorMessage(error, "errors.file_failed"),
-          ),
-        );
+      void (
+        action() === "cancel"
+          ? props.task?.cancel()
+          : props.task?.resume()
+      )?.catch((error) =>
+        toast.error(
+          userErrorMessage(error, "errors.file_failed"),
+        ),
+      );
   };
   return (
     <li
@@ -82,39 +85,41 @@ export function SharedFileRow(props: {
           {props.file.fileName}
         </CheckboxLabel>
       </Checkbox>
-      <Show
-        when={transfer()}
-        fallback={
-          <FileThumbnail
-            file={{
-              ...props.file,
-              file: props.localFile,
-              mimetype:
-                props.file.mimetype ??
-                props.localFile?.type,
-            }}
-          />
-        }
-      >
-        {(task) => (
-          <FileTransferIndicator
-            received={
-              ["waiting", "finalizing"].includes(
-                task().status,
-              )
-                ? undefined
-                : task().bytes
-            }
-            total={task().total}
-            busy={isActiveTask(task())}
-            action={action()}
-            disabled={
-              action() === "resume" && !props.connected
-            }
-            onAction={control}
-          />
-        )}
-      </Show>
+      <div class="flex size-11 shrink-0 items-center justify-center">
+        <Show
+          when={transfer()}
+          fallback={
+            <FileThumbnail
+              file={{
+                ...props.file,
+                file: props.localFile,
+                mimetype:
+                  props.file.mimetype ??
+                  props.localFile?.type,
+              }}
+            />
+          }
+        >
+          {(task) => (
+            <FileTransferIndicator
+              received={
+                ["waiting", "finalizing"].includes(
+                  task().status,
+                )
+                  ? undefined
+                  : task().bytes
+              }
+              total={task().total}
+              busy={isActiveTask(task())}
+              action={action()}
+              disabled={
+                action() === "resume" && !props.connected
+              }
+              onAction={control}
+            />
+          )}
+        </Show>
+      </div>
       <button
         type="button"
         class="min-w-0 flex-1 text-left"
@@ -125,12 +130,15 @@ export function SharedFileRow(props: {
         }}
       >
         <span
-          class="block truncate text-sm font-medium"
+          class="block truncate text-sm font-medium leading-5"
           title={props.file.fileName}
         >
           {props.file.fileName}
         </span>
-        <span class="text-muted-foreground mt-1 block text-xs">
+        <span
+          class="text-muted-foreground mt-1 block min-h-4 truncate text-xs
+            leading-4"
+        >
           <Show
             when={transfer()}
             fallback={formatBtyeSize(props.file.fileSize)}
@@ -141,13 +149,14 @@ export function SharedFileRow(props: {
                 received={task().bytes}
                 total={task().total}
                 live={task().status === "running"}
+                queued={task().status === "queued"}
                 error={task().error}
               />
             )}
           </Show>
         </span>
       </button>
-      <Show when={transfer()}>
+      <Show when={transfer() && action() !== "cancel"}>
         <Button
           size="icon"
           variant="ghost"

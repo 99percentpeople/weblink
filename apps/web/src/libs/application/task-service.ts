@@ -18,6 +18,7 @@ import type { RoomFileTransferState } from "../domain/message";
 import type { SpeedTestState } from "./speed-test-service";
 
 export type TaskStatus =
+  | "queued"
   | "waiting"
   | "running"
   | "finalizing"
@@ -87,7 +88,7 @@ export const isRemoteContentTransferTask = <
   (task.origin === "clipboard" || task.origin === "drop");
 
 export const isActiveTask = (task: AppTask): boolean =>
-  ["waiting", "running", "finalizing"].includes(
+  ["queued", "waiting", "running", "finalizing"].includes(
     task.status,
   );
 
@@ -132,6 +133,7 @@ export function fileTasks(
     state: RoomFileTransferState,
     live: boolean,
     id = `file:${message.id}`,
+    queued = false,
   ): FileTask => {
     const candidate = caches[message.fid!];
     const cache =
@@ -157,6 +159,7 @@ export function fileTasks(
         cache?.isComplete)
     )
       status = "completed";
+    else if (live && queued) status = "queued";
     else if (message.localContentPending)
       status = "waiting";
     else if (live)
@@ -237,6 +240,10 @@ export function fileTasks(
               entry?.session.targetClientId === peerId,
           ),
           `file:${JSON.stringify([message.id, peerId])}`,
+          runs.find(
+            (entry) =>
+              entry?.session.targetClientId === peerId,
+          )?.queued,
         ),
       );
     }
@@ -256,6 +263,8 @@ export function fileTasks(
           error: message.error,
         },
         live,
+        undefined,
+        findMessageTransfer(transfers, message)?.queued,
       ),
     ];
   });

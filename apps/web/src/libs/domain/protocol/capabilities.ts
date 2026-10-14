@@ -30,7 +30,11 @@ export interface PeerCapabilities {
   [service: string]: unknown;
   messaging?: Record<string, never>;
   fileDrop?: { hover?: boolean; hoverUpdates?: boolean };
-  files?: { content: boolean; shared: boolean };
+  files?: {
+    content: boolean;
+    shared: boolean;
+    queue?: boolean;
+  };
   room?: { chat: boolean; files: boolean };
   screen?: {
     decode: MediaDecodeCapabilities;
@@ -96,7 +100,10 @@ const validators: Record<
     (v.hoverUpdates === undefined ||
       typeof v.hoverUpdates === "boolean") &&
     (v.hoverUpdates !== true || v.hover === true),
-  files: (v) => flags(v, ["content", "shared"]),
+  files: (v) =>
+    flags(v, ["content", "shared"]) &&
+    record(v) &&
+    (v.queue === undefined || typeof v.queue === "boolean"),
   room: (v) => flags(v, ["chat", "files"]),
   screen: (v) =>
     record(v) &&

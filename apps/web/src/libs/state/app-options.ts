@@ -2,6 +2,7 @@ import {
   defaultNotificationOptions,
   type NotificationOptions,
 } from "@/libs/domain/notification-options";
+import { DEFAULT_MAX_CONCURRENT_TRANSFERS } from "../application/transfer/transfer-queue";
 import type {
   IceServerOptions,
   TurnServerOptions,
@@ -101,6 +102,7 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  maxConcurrentTransfers: number;
   autoCheckUpdates: boolean;
   notifications: NotificationOptions;
   application: ApplicationOptions;
@@ -228,6 +230,8 @@ export const signalingWebSocketUrl =
 export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
+    maxConcurrentTransfers:
+      DEFAULT_MAX_CONCURRENT_TRANSFERS,
     chunkSize: 512 * 1024,
     blockSize: 32 * 1024,
     ordered: false,

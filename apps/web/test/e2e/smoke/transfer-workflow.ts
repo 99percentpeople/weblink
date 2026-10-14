@@ -154,6 +154,8 @@ function makeNode(
   const caches = new Map<string, ChunkCache>();
   const messages: FileTransferMessage[] = [];
   const active: FileTransferStates = {};
+  let completionGate: Promise<void> | undefined;
+  let peakActive = 0;
   const errors: string[] = [];
   let progressCallback:
     | ((message: FileTransferMessage) => void)
@@ -305,10 +307,18 @@ function makeNode(
     publish: (runId, entry) => {
       if (entry) active[runId] = entry;
       else delete active[runId];
+      peakActive = Math.max(
+        peakActive,
+        Object.values(active).filter(
+          (run) => run && !run.queued,
+        ).length,
+      );
     },
     bind: (run, signal) =>
       bindTransferMessage(run, store, signal),
     complete: async (run, signal) => {
+      await completionGate;
+      signal.throwIfAborted();
       if (
         run.messageId &&
         run.transferer.mode === TransferMode.Receive
@@ -328,6 +338,8 @@ function makeNode(
     reportError: (error) => errors.push(String(error)),
   });
   const service = new FileTransferService({
+    supportsQueue: (session) =>
+      !session.targetClientId.includes("legacy"),
     protocol,
     rtc: transport,
     registry,
@@ -415,6 +427,7 @@ function makeNode(
     : undefined;
   const roomFiles = rooms
     ? new RoomFileSharingService(protocol, {
+        supportsQueue: () => true,
         rooms,
         files: service,
         getMessages: () => messages,
@@ -424,6 +437,7 @@ function makeNode(
     : undefined;
   const shared = library
     ? new SharedFileTransfers({
+        supportsQueue: () => true,
         protocol,
         rtc: transport,
         registry,
@@ -445,6 +459,12 @@ function makeNode(
       transport.onSessionClosed(handler),
   });
   return {
+    holdCompletion(gate: Promise<void>) {
+      completionGate = gate;
+    },
+    get peakActive() {
+      return peakActive;
+    },
     shared,
     catalog,
     index,
@@ -1002,12 +1022,109 @@ async function main() {
     browser: navigator.userAgent,
     abortSignalAnyAvailable:
       typeof AbortSignal.any === "function",
+    transferQueue: await runTransferQueueSmoke(),
     roomFiles: await runRoomFileSmoke(),
     contentLibrary: await runContentLibrarySmoke(),
     sharedFiles: await runSharedFilesSmoke(),
     productionLibrary: await runProductionLibrarySmoke(),
     fingerprintBenchmark: await fingerprintBenchmark(),
   };
+}
+async function runTransferQueueSmoke() {
+  const a = makeNode("queue-a"),
+    b = makeNode("queue-b");
+  const connection = await connect(a, b);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  a.holdCompletion(gate);
+  b.holdCompletion(gate);
+  try {
+    const files = Array.from({ length: 6 }, () =>
+      payload(128 * 1024 + 17),
+    );
+    await Promise.all(
+      files.map((file, index) =>
+        index % 2
+          ? b.service.sendFile(connection.bSession, file)
+          : a.service.sendFile(connection.aSession, file),
+      ),
+    );
+    await until(
+      () =>
+        [a, b].every(
+          (node) =>
+            Object.values(node.active).filter(
+              (run) => run?.queued,
+            ).length === 3,
+        ),
+      "bulk transfers did not enter the queue",
+    );
+    assert(
+      a.peakActive === 3 && b.peakActive === 3,
+      "concurrency exceeded the default at an endpoint",
+    );
+    release();
+    await until(
+      () =>
+        [a, b].every(
+          (node) =>
+            node.messages.length === 6 &&
+            node.messages.every(
+              (message) =>
+                message.transferStatus === "complete",
+            ),
+        ),
+      "queued bidirectional files did not finish",
+      30000,
+    );
+    const originals = new Set(
+      await Promise.all(files.map((file) => hash(file))),
+    );
+    const received = [];
+    for (const node of [a, b]) {
+      for (const message of node.messages.filter(
+        (message) => message.target === node.id,
+      )) {
+        const file = await node.caches
+          .get(message.fid!)!
+          .getFile();
+        assert(
+          file,
+          "queued file missing from receiver cache",
+        );
+        received.push(await hash(file));
+      }
+    }
+    assert(
+      received.length === 6 &&
+        received.every((digest) =>
+          originals.delete(digest),
+        ) &&
+        originals.size === 0,
+      "queued file bytes differ from the originals",
+    );
+    assert(
+      a.peakActive === 3 && b.peakActive === 3,
+      "queue exceeded the limit while draining",
+    );
+    assert(
+      a.errors.length === 0 && b.errors.length === 0,
+      "queued transfer reported an error",
+    );
+    return {
+      files: files.length,
+      peakConcurrentPerEndpoint: 3,
+      queued: 3,
+      bidirectional: true,
+      byteExact: true,
+    };
+  } finally {
+    release();
+    connection.close();
+    await Promise.all([a.close(), b.close()]);
+  }
 }
 async function runProductionLibrarySmoke() {
   const [

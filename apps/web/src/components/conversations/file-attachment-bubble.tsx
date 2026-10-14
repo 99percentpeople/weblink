@@ -39,7 +39,7 @@ export function FileAttachmentBubble(props: {
           />
         )}
       </Show>
-      <div class="flex min-w-0 items-center gap-2">
+      <div class="flex min-h-11 min-w-0 items-center gap-2">
         <Show when={!props.file || !media()}>
           <span
             class="bg-foreground/5 flex size-10 shrink-0 items-center
@@ -53,12 +53,15 @@ export function FileAttachmentBubble(props: {
         </Show>
         <div class="min-w-0 flex-1">
           <p
-            class="truncate text-sm font-medium"
+            class="truncate text-sm font-medium leading-5"
             title={props.name}
           >
             {props.name}
           </p>
-          <div class="text-muted-foreground mt-0.5 text-xs tabular-nums">
+          <div
+            class="text-muted-foreground mt-0.5 min-h-4 truncate text-xs
+              tabular-nums leading-4"
+          >
             {details() ?? formatBtyeSize(props.size)}
           </div>
         </div>

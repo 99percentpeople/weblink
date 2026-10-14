@@ -181,6 +181,7 @@ export function RoomFileMessageCard(props: {
               }
               received={props.message.progress?.received}
               total={props.message.fileSize}
+              queued={incomingTransfer()?.queued}
               live={
                 !!incomingTransfer() ||
                 !!props.message.localContentPending
@@ -233,12 +234,14 @@ export function RoomFileMessageCard(props: {
                 action={
                   merging()
                     ? undefined
-                    : incomingTransfer() ||
-                        props.message.localContentPending
-                      ? "pause"
-                      : props.message.transferStatus
-                        ? "resume"
-                        : "request"
+                    : incomingTransfer()?.queued
+                      ? "cancel"
+                      : incomingTransfer() ||
+                          props.message.localContentPending
+                        ? "pause"
+                        : props.message.transferStatus
+                          ? "resume"
+                          : "request"
                 }
                 disabled={
                   pending() ||
@@ -369,6 +372,11 @@ export function RoomFileMessageCard(props: {
                                     props.message.fileSize
                                   }
                                   live={live()}
+                                  queued={
+                                    recipientTransfer(
+                                      peerId,
+                                    )?.queued
+                                  }
                                   error={progress().error}
                                 />
                               </div>
@@ -385,9 +393,14 @@ export function RoomFileMessageCard(props: {
                               }
                               busy={live()}
                               action={
-                                live() ? "pause" : undefined
+                                recipientTransfer(peerId)
+                                  ?.queued
+                                  ? "cancel"
+                                  : live()
+                                    ? "pause"
+                                    : undefined
                               }
-                              label={`${t("tasks.pause")} · ${peerName(peerId)}`}
+                              label={`${t(recipientTransfer(peerId)?.queued ? "common.action.cancel" : "tasks.pause")} · ${peerName(peerId)}`}
                               disabled={pending()}
                               onAction={() =>
                                 void pause(peerId)

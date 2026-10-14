@@ -60,7 +60,9 @@ function setup() {
     },
   };
   const waitForCapabilities = vi.fn(async () => {});
+  const supportsQueue = vi.fn(() => false);
   const service = new FileTransferService({
+    supportsQueue,
     waitForCapabilities,
     protocol,
     rtc,
@@ -108,6 +110,7 @@ function setup() {
   };
   return {
     ...f,
+    supportsQueue,
     waitForCapabilities,
     transport,
     protocol,
@@ -146,6 +149,66 @@ const payload = {
 };
 
 describe("file control handlers", () => {
+  it("removes a queued run through the existing stop action without initializing it or deleting its message", async () => {
+    await f.transport.emit(
+      f.session,
+      createSessionMessage(
+        remote,
+        "send-file",
+        { ...payload, queue: true },
+        { id: "queued-cancel" },
+      ),
+    );
+    const run = f.registry.get(f.session, payload.fid)!;
+    await f.service.pauseFile(f.session, payload.fid);
+    expect(run.signal.aborted).toBe(true);
+    expect(
+      f.registry.get(f.session, payload.fid),
+    ).toBeUndefined();
+    expect(f.created[0].initialize).not.toHaveBeenCalled();
+    expect(
+      f.messages.messages.find(
+        (message) => message.id === "queued-cancel",
+      ),
+    ).toMatchObject({
+      transferStatus: "paused",
+      fid: payload.fid,
+    });
+  });
+  it("acknowledges queued requests before initializing binary workers", async () => {
+    await f.transport.emit(
+      f.session,
+      createSessionMessage(
+        remote,
+        "send-file",
+        { ...payload, queue: true },
+        { id: "queued" },
+      ),
+    );
+    expect(
+      f.transport.sendCalls.some(
+        ({ message }) =>
+          message.type === "ack" && message.id === "queued",
+      ),
+    ).toBe(true);
+    expect(f.registry.get(f.session, "file")?.queued).toBe(
+      true,
+    );
+    expect(f.created[0].initialize).not.toHaveBeenCalled();
+  });
+  it("negotiates queue admission only with capable peers", async () => {
+    f.supportsQueue.mockReturnValue(true);
+    f.autoAck();
+    await f.service.sendFile(
+      f.session,
+      new File(["queued"], "queued.txt"),
+    );
+    const request = f.transport.sendCalls.find(
+      ({ message }) => message.type === "send-file",
+    )!.message;
+    expect(request).toMatchObject({ queue: true });
+    expect(f.created[0].initialize).not.toHaveBeenCalled();
+  });
   it("waits for capability discovery before sending an offer or opening its channel", async () => {
     const ready = deferred<void>();
     f.waitForCapabilities.mockReturnValue(ready.promise);

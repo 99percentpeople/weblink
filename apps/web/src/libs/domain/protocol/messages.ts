@@ -90,6 +90,7 @@ export type SendRoomFileMessage = BaseExchangeMessage & {
 
 /** Each download attempt has its own envelope id, separate from offerId. */
 export type RequestRoomFileMessage = BaseExchangeMessage & {
+  queue?: boolean;
   type: "request-room-file";
   version: typeof P2P_ROOM_FILE_PROTOCOL_VERSION;
   roomId: string;
@@ -113,6 +114,7 @@ export type ReadTextMessage = BaseExchangeMessage & {
 };
 
 export type RequestFileMessage = BaseExchangeMessage & {
+  queue?: boolean;
   type: "request-file";
   fid: ProtocolFileID;
   ranges?: ProtocolChunkRange[];
@@ -130,6 +132,7 @@ export type ResumeFileMessage = BaseExchangeMessage & {
 };
 
 export type SendFileMessage = BaseExchangeMessage & {
+  queue?: boolean;
   type: "send-file";
   fingerprint?: FileFingerprint;
   fid: ProtocolFileID;
@@ -244,6 +247,7 @@ export type FileContentReadyMessage =
 
 export type RequestSharedFileMessage =
   BaseExchangeMessage & {
+    queue?: boolean;
     type: "request-shared-file";
     version: 1;
     fid: string;

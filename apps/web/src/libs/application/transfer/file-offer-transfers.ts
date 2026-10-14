@@ -19,6 +19,7 @@ import type { TransferRun } from "./transfer-registry";
 import { finishReceivedFile } from "./transfer-message-binding";
 
 export interface ReceiveFileOfferOptions {
+  queue?: boolean;
   reused?(): Promise<void>;
   messageId: string;
   signal: AbortSignal;
@@ -28,6 +29,7 @@ export interface ReceiveFileOfferOptions {
   ): Promise<void>;
 }
 export interface ServeFileOfferOptions {
+  queue?: boolean;
   fid: string;
   messageId: string;
   ranges?: ChunkRange[];
@@ -224,6 +226,7 @@ export class FileOfferTransfers {
       info.id,
       options.signal,
       async (op) => {
+        op.queue = options.queue;
         const message = this.message(
           session,
           options.messageId,
@@ -330,6 +333,7 @@ export class FileOfferTransfers {
       options.fid,
       options.signal,
       async (op) => {
+        op.queue = options.queue;
         const message = this.message(
           session,
           options.messageId,

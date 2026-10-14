@@ -12,6 +12,7 @@ export interface ActiveFileTransfer {
   readonly fileId: string;
   readonly messageId?: string;
   readonly taskId?: string;
+  readonly queued?: boolean;
   readonly transferer: FileTransferer;
 }
 

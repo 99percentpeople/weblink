@@ -26,6 +26,7 @@
       "file-prepare": "ファイル識別"
     },
     "status": {
+      "queued": "待機列",
       "waiting": "待機中",
       "running": "実行中",
       "finalizing": "保存・結合中",
@@ -77,6 +78,10 @@
     }
   },
   "setting": {
+    "transfer_queue": {
+      "title": "最大同時転送数",
+      "description": "上限を超えたファイルは順番に待機します。変更はすぐに反映され、上限を下げても進行中の転送は中断しません。双方がキュー機能に対応している必要があります。"
+    },
     "appearance": {
       "title": "外観",
       "theme": {
