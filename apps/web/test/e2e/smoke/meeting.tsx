@@ -749,34 +749,23 @@ async function checkChatScroll(name: string) {
       `${name}: delivery avatars overflowed the chat viewport`,
     );
   }
-  const roomChat = Boolean(
-    viewport.closest('[data-slot="room-conversation"]'),
+  const groups = viewport.querySelectorAll(
+    '[data-chat-message][data-group="start"], [data-chat-message][data-group="single"]',
   );
-  for (const row of viewport.querySelectorAll<HTMLElement>(
-    "[data-chat-message]",
-  )) {
-    const avatar = row.querySelector<HTMLElement>(
-      '[data-slot="message-sender-avatar"]',
-    );
-    assert(
-      Boolean(avatar) === roomChat,
-      `${name}: sender avatars must appear only in room chat`,
-    );
-    if (!avatar) continue;
-    const bubbleRect = row
-      .querySelector<HTMLElement>(
-        '[data-slot="message-bubble"]',
-      )!
-      .getBoundingClientRect();
-    const avatarRect = avatar.getBoundingClientRect();
-    const outgoing = row.dataset.side === "outgoing";
-    assert(
-      outgoing
-        ? avatarRect.left >= bubbleRect.right - 1
-        : avatarRect.right <= bubbleRect.left + 1,
-      `${name}: sender avatar must remain on the outer side of the bubble`,
-    );
-  }
+  const expectedAvatars = viewport.closest(
+    '[data-slot="room-conversation"]',
+  )
+    ? groups.length
+    : 0;
+  assert(
+    viewport.querySelectorAll(
+      '[data-slot="message-avatar-group"] [data-slot="message-sender-avatar"]',
+    ).length === expectedAvatars &&
+      !viewport.querySelector(
+        '[data-chat-message] [data-slot="message-sender-avatar"]',
+      ),
+    `${name}: only room messages must share a sender avatar per group`,
+  );
   assert(
     viewport.clientHeight > 100 &&
       viewport.scrollHeight > viewport.clientHeight + 100,

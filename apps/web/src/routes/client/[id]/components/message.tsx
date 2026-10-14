@@ -50,7 +50,8 @@ import { toast } from "solid-sonner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { downloadFile } from "@/libs/utils/download-file";
 import { canShareFile } from "@/libs/utils/can-share";
-import { ClientAvatar } from "@/components/common/client-avatar";
+import { MessageSenderAvatar } from "@/components/conversations/message-sender-avatar";
+import { TextMessageContent } from "@/components/conversations/text-message-content";
 import { RoomDeliverySummary } from "@/components/conversations/room-delivery-summary";
 import {
   getRoomFileCache,
@@ -62,6 +63,8 @@ export interface MessageCardProps extends ComponentProps<"li"> {
   onDelete?: () => void;
   joinedPrevious?: boolean;
   joinedNext?: boolean;
+  showAvatar?: boolean;
+  onExpandText?: (expand: () => void) => void;
 }
 
 export const MessageContent: Component<MessageCardProps> = (
@@ -73,27 +76,11 @@ export const MessageContent: Component<MessageCardProps> = (
     "onDelete",
     "joinedPrevious",
     "joinedNext",
+    "showAvatar",
+    "onExpandText",
   ]);
   const outgoing = () =>
     appState.profile.clientId === local.message.client;
-  const roomSender = createMemo(() => {
-    const message = local.message;
-    if (!message.room) return;
-    const client =
-      appState.session.clientViewData[message.client] ??
-      appState.message.clients.find(
-        (client) => client.clientId === message.client,
-      );
-    return {
-      name: message.room.senderName,
-      avatar:
-        message.room.senderAvatar ??
-        (outgoing()
-          ? appState.profile.avatar
-          : client?.avatar) ??
-        undefined,
-    };
-  });
   const sentAt = createMemo(
     () => new Date(local.message.createdAt),
   );
@@ -439,18 +426,15 @@ export const MessageContent: Component<MessageCardProps> = (
                 : "justify-start",
             )}
           >
-            <Show when={roomSender()}>
-              {(sender) => (
-                <ClientAvatar
-                  data-slot="message-sender-avatar"
-                  name={sender().name}
-                  avatar={sender().avatar}
-                  class="size-7 shrink-0 self-start text-[10px]"
-                  title={sender().name}
-                  aria-label={sender().name}
-                  role="img"
-                />
-              )}
+            <Show
+              when={
+                local.showAvatar !== false &&
+                local.message.room
+              }
+            >
+              <MessageSenderAvatar
+                message={local.message}
+              />
             </Show>
             <div
               data-slot="message-bubble"
@@ -496,9 +480,10 @@ export const MessageContent: Component<MessageCardProps> = (
                     }
                   >
                     {(message) => (
-                      <p class="whitespace-pre-wrap">
-                        {message().data}
-                      </p>
+                      <TextMessageContent
+                        text={message().data}
+                        onExpand={local.onExpandText}
+                      />
                     )}
                   </Match>
                   <Match

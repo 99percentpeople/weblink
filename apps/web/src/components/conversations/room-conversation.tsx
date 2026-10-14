@@ -1,5 +1,5 @@
 import { layoutScroll } from "@/components/ui/motion-layout";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
 import { A, useLocation } from "@solidjs/router";
 import { ConversationHeader } from "./conversation-header";
 import { Users, Video } from "lucide-solid";
@@ -17,9 +17,7 @@ import type { Conversation } from "@/libs/domain/conversation";
 
 import { createBottomScroll } from "@/libs/hooks/create-bottom-scroll";
 import { createConversationReadTracking } from "@/libs/hooks/conversation-read";
-import { MessageContent } from "@/routes/client/[id]/components/message";
-import { createMessageLayout } from "@/routes/client/[id]/components/message-layout";
-import { ChatTimeSeparator } from "@/routes/client/[id]/components/chat-time-separator";
+import { ConversationMessages } from "./conversation-messages";
 import { createMessageGallery } from "./message-gallery";
 import { cn } from "@/libs/cn";
 import { t } from "@/i18n";
@@ -79,9 +77,6 @@ export function RoomConversation(props: {
     messages: allMessages,
   });
   const messages = messageWindow.messages;
-  const layout = createMemo(() =>
-    createMessageLayout(messages()),
-  );
   const scroll = createBottomScroll({
     ready,
     revision: messages,
@@ -221,34 +216,13 @@ export function RoomConversation(props: {
             >
               <ChatEmptyState />
             </Show>
-            <For each={messages()}>
-              {(message, index) => (
-                <>
-                  <Show
-                    when={layout()[index()]?.timeSeparator}
-                  >
-                    <ChatTimeSeparator
-                      timestamp={message.createdAt}
-                    />
-                  </Show>
-                  <MessageContent
-                    data-chat-message={message.id}
-                    message={message}
-                    joinedPrevious={
-                      layout()[index()]?.joinedPrevious
-                    }
-                    joinedNext={
-                      layout()[index()]?.joinedNext
-                    }
-                    onDelete={() =>
-                      messageStores.deleteMessage(
-                        message.id,
-                      )
-                    }
-                  />
-                </>
-              )}
-            </For>
+            <ConversationMessages
+              messages={messages()}
+              onExpandText={scroll.preservePosition}
+              onDelete={(message) =>
+                messageStores.deleteMessage(message.id)
+              }
+            />
           </ul>
         </div>
         <ChatScrollButton

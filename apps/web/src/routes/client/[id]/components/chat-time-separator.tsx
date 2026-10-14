@@ -3,6 +3,7 @@ import { resolvedLocale } from "@/libs/state/app-locale";
 
 export function ChatTimeSeparator(props: {
   timestamp: number;
+  row?: number;
 }) {
   const date = createMemo(() => new Date(props.timestamp));
   const label = createMemo(() =>
@@ -14,7 +15,8 @@ export function ChatTimeSeparator(props: {
   return (
     <li
       data-slot="chat-time-separator"
-      class="flex shrink-0 justify-center py-3 first:pt-0"
+      class="col-span-full flex shrink-0 justify-center py-3 first:pt-0"
+      style={{ "grid-row": props.row }}
     >
       <time
         dateTime={date().toISOString()}

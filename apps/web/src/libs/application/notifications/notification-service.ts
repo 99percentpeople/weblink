@@ -15,6 +15,8 @@ export interface NotificationIntent {
     | "updates"
     | "transfers";
   current(): boolean;
+  /** Display policy only; opening a notification may change it before its action arrives. */
+  canDisplay?(): boolean;
   /** Defer image work until display is allowed; cancellation is checked again afterwards. */
   prepareIcon?(): Promise<string | undefined>;
   respond(action: NotificationAction): Promise<void>;
@@ -46,6 +48,7 @@ export class NotificationService {
       options.enabled &&
       options[intent.category] &&
       (!options.backgroundOnly || !this.focused()) &&
+      (intent.canDisplay?.() ?? true) &&
       intent.current() &&
       intent.notification.expiresAt > Date.now()
     );

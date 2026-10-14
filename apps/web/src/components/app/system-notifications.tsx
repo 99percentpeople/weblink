@@ -23,6 +23,8 @@ import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog
 import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 import { isRemoteContentTransferTask } from "@/libs/application/task-service";
 import { createUpdateFeedback } from "@/libs/hooks/create-update-feedback";
+import { createMessageFeedback } from "@/libs/hooks/create-message-feedback";
+import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
 
 export function SystemNotificationBridge() {
   const state = useAppState();
@@ -45,14 +47,13 @@ export function SystemNotificationBridge() {
     )?.name ??
     id;
   const preferences = () => appState.options.notifications;
+  const visible = createPresentationVisible();
   const service =
     platform.notifications &&
     new NotificationService(
       platform.notifications,
       preferences,
-      () =>
-        document.visibilityState === "visible" &&
-        document.hasFocus(),
+      () => visible() && document.hasFocus(),
       (error) =>
         console.warn("System notification failed", error),
     );
@@ -87,7 +88,11 @@ export function SystemNotificationBridge() {
       },
     });
   }
-  if (!service) return null;
+  const showMessage = createMessageFeedback({
+    preferences,
+    visible,
+    notifications: service,
+  });
   const unsubscribe = messageStores.onMessageStored(
     (message) => {
       const localId = appState.profile.clientId;
@@ -124,8 +129,7 @@ export function SystemNotificationBridge() {
         messageStores.conversations.some(
           (item) => item.id === conversationId,
         );
-      void service.show({
-        category: "messages",
+      void showMessage({
         current,
         prepareIcon: content.avatar
           ? () => renderNotificationAvatar(content.avatar!)
@@ -193,6 +197,8 @@ export function SystemNotificationBridge() {
       });
     },
   );
+  onCleanup(unsubscribe);
+  if (!service) return null;
   createEffect(
     mapArray(
       () =>
@@ -374,7 +380,6 @@ export function SystemNotificationBridge() {
   );
   onCleanup(() => {
     clearInterval(cleanup);
-    unsubscribe();
     service.close();
   });
   return null;

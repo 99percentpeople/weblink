@@ -5,7 +5,6 @@ import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-s
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   createMemo,
-  For,
   onCleanup,
   onMount,
   Show,
@@ -28,9 +27,7 @@ import type { Client } from "@/libs/domain/client";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { catchError } from "@/libs/catch";
 import { ChatMoreMessageButton } from "@/routes/client/[id]/components/chat-more-message-button";
-import { MessageContent } from "@/routes/client/[id]/components/message";
-import { createMessageLayout } from "@/routes/client/[id]/components/message-layout";
-import { ChatTimeSeparator } from "@/routes/client/[id]/components/chat-time-separator";
+import { ConversationMessages } from "./conversation-messages";
 import { ClientHeader } from "@/routes/client/[id]/components/client-header";
 import { appState } from "@/libs/state/app-state";
 import { transferManager } from "@/libs/application/transfer/transfer-service";
@@ -101,9 +98,6 @@ export function ChatConversation(props: {
     messages: allMessages,
   });
   const messages = messageWindow.messages;
-  const messageLayout = createMemo(() =>
-    createMessageLayout(messages()),
-  );
   const scroll = createBottomScroll({
     ready,
     revision: messages,
@@ -334,43 +328,16 @@ export function ChatConversation(props: {
                   >
                     <ChatEmptyState />
                   </Show>
-                  <For each={messages()}>
-                    {(message, index) => {
-                      const layout = () =>
-                        messageLayout()[index()];
-                      return (
-                        <>
-                          <Show
-                            when={layout().timeSeparator}
-                          >
-                            <ChatTimeSeparator
-                              timestamp={message.createdAt}
-                            />
-                          </Show>
-                          <MessageContent
-                            data-chat-message={message.id}
-                            message={message}
-                            joinedPrevious={
-                              layout().joinedPrevious
-                            }
-                            joinedNext={layout().joinedNext}
-                            onDelete={() => {
-                              void deleteMessage(message);
-                            }}
-                            class={cn(
-                              !layout().joinedPrevious &&
-                                !layout().timeSeparator &&
-                                "mt-2",
-                              messageWindow
-                                .animatedIds()
-                                .has(message.id) &&
-                                "animate-message",
-                            )}
-                          />
-                        </>
-                      );
+                  <ConversationMessages
+                    messages={messages()}
+                    peer={client()}
+                    showAvatars={false}
+                    animatedIds={messageWindow.animatedIds()}
+                    onExpandText={scroll.preservePosition}
+                    onDelete={(message) => {
+                      void deleteMessage(message);
                     }}
-                  </For>
+                  />
                 </ul>
               </div>
               <ChatScrollButton

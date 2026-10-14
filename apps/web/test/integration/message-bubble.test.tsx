@@ -28,6 +28,7 @@ import {
   type MessageCardProps,
 } from "@/routes/client/[id]/components/message";
 import { ChatTimeSeparator } from "@/routes/client/[id]/components/chat-time-separator";
+import { ConversationMessages } from "@/components/conversations/conversation-messages";
 import {
   createInitialAppState,
   setAppState,
@@ -128,6 +129,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal(
     "URL",
     class extends URL {
       static createObjectURL = vi.fn(
@@ -208,6 +216,105 @@ function bubble(
     )!,
   };
 }
+
+describe("shared conversation avatars", () => {
+  it.each([false, true])(
+    "preserves messages through append, prepend and regrouping with sender avatars only in rooms (room=%s)",
+    (room) => {
+      setAppState("profile", "name", "Me");
+      const makeMessage = (
+        index: number,
+        client = "peer",
+      ) =>
+        textMessage({
+          id: `group-${index}`,
+          client,
+          target: room
+            ? "room"
+            : client === "peer"
+              ? "self"
+              : "peer",
+          createdAt: 1700000000000 + index * 1000,
+          room: room
+            ? {
+                roomId: "room",
+                senderAvatar: null,
+                senderName:
+                  client === "peer" ? "Peer" : "Me",
+              }
+            : undefined,
+        });
+      const [messages, setMessages] = createSignal([
+        makeMessage(1),
+        makeMessage(2),
+        makeMessage(3, "self"),
+        makeMessage(4),
+      ]);
+      const view = render(() => (
+        <ul>
+          <ConversationMessages
+            messages={messages()}
+            showAvatars={room}
+            peer={{
+              clientId: "peer",
+              name: "Peer",
+              avatar: null,
+            }}
+            onDelete={() => {}}
+          />
+        </ul>
+      ));
+      const rows = () => [
+        ...view.container.querySelectorAll(
+          "[data-chat-message]",
+        ),
+      ];
+      const original = rows();
+      expect(
+        screen.queryAllByRole("img", { name: "Peer" }),
+      ).toHaveLength(room ? 2 : 0);
+      expect(
+        screen.queryAllByRole("img", { name: "Me" }),
+      ).toHaveLength(room ? 1 : 0);
+
+      setMessages((items) => [...items, makeMessage(5)]);
+      expect(rows().slice(0, original.length)).toEqual(
+        original,
+      );
+      expect(
+        screen.queryAllByRole("img", { name: "Peer" }),
+      ).toHaveLength(room ? 2 : 0);
+
+      setMessages((items) => [makeMessage(0), ...items]);
+      expect(rows().slice(1, 1 + original.length)).toEqual(
+        original,
+      );
+      expect(
+        screen.queryAllByRole("img", { name: "Peer" }),
+      ).toHaveLength(room ? 2 : 0);
+
+      setMessages((items) =>
+        items.filter(
+          (message) => message.client === "peer",
+        ),
+      );
+      expect(
+        screen.queryByRole("img", { name: "Me" }),
+      ).toBeNull();
+      expect(
+        screen.queryAllByRole("img", { name: "Peer" }),
+      ).toHaveLength(room ? 1 : 0);
+      expect(rows()).toContain(original[3]);
+
+      const remaining = rows().slice(1);
+      setMessages((items) => items.slice(1));
+      expect(rows()).toEqual(remaining);
+      expect(
+        screen.queryAllByRole("img", { name: "Peer" }),
+      ).toHaveLength(room ? 1 : 0);
+    },
+  );
+});
 
 describe("message bubble layout", () => {
   it("keeps the anchor row separate from a bounded, theme-aware outgoing bubble", () => {
