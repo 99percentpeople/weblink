@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-10-15
+
+Weblink 1.1.1 adds configurable file transfer queuing, improves long-message reading, and makes room invitations and notifications more consistent.
+
+### File transfers
+
+- **Configurable concurrency:** Settings → Transfer now lets you choose how many files transfer at once, from 1 to 10, with a default of 3. Additional transfers wait in a first-in, first-out queue. Changes apply immediately; lowering the limit lets running transfers finish.
+- **Visible, cancellable queues:** chat attachments, shared files and the task list show queued transfers with cancel controls. File rows remain stable as transfer indicators change.
+- **Reliable queue handling:** waiting for a transfer slot does not consume the transfer startup timeout. Slots remain occupied through saving and merging, and are released when a transfer finishes, fails or is cancelled. Coordinate admission at both ends so simultaneous transfers in opposite directions can make progress.
+- **Compatibility:** queuing requires support from both peers. Compatible clients without queue support continue using the existing transfer behavior, so their transfers are not held to the configured concurrency limit.
+
+### Chat and meeting views
+
+- **Expandable long messages:** long text messages initially show a compact preview with a Show more action. Expanding preserves the conversation's scroll position, and previews keep emoji and combined characters intact.
+- **Grouped room messages:** keep sender avatars visible alongside their message groups while scrolling, and preserve existing message elements when older history is loaded or messages are deleted.
+- **Accurate screen labels:** show the monitor icon and screen-source label only on shared-screen tiles, avoiding misleading screen labels on camera tiles.
+
+### Joining rooms
+
+- Open the profile and room setup flow when joining for the first time or when required details are missing.
+- Open shared room invitations in the room editor with their connection details filled in, even when automatic joining is disabled. Skip the first-launch About dialog when following an invitation.
+- Clear a previously saved password when an invitation points to a room without a password, and remove the duplicate join button from the local preview notice.
+
+### Notifications
+
+- **One reminder per event:** coordinate in-app toasts and system notifications so switching between visible and hidden windows does not repeat an already delivered reminder. This covers remote-control requests, speed-test requests, remote file transfers and desktop update notices.
+- **Quieter chat:** show system message notifications only while the application is hidden. Remove the separate background-only toggle; message preview, sound and category preferences remain available.
+- **Working notification actions:** opening a notification can bring the application forward without invalidating its action. Browsers without notification action buttons can open remote-control and speed-test approval dialogs, while expired or cancelled requests are ignored.
+- Recheck visibility and notification preferences during asynchronous delivery, withdraw stale notifications, and update transfer progress without creating duplicate reminders.
+
 ## [1.1.0] - 2026-10-13
 
 Weblink 1.1.0 brings native Windows screen sharing and remote control. View and operate a Windows desktop from another computer or phone while chatting, meeting and exchanging files in the same session. This release also improves desktop window behavior, notifications, update checks and localization.
