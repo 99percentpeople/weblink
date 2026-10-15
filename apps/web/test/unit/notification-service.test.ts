@@ -546,6 +546,50 @@ describe("shared toast and system delivery", () => {
     },
   );
 
+  it("retains opted-in foreground feedback beyond native expiry without sending an expired system notification", async () => {
+    vi.useFakeTimers();
+    const x = withToast();
+    x.intent.retainInApp = true;
+    x.options.enabled = false;
+    await x.service.show(x.intent);
+    vi.setSystemTime(Date.now() + 2 * 60_000);
+    x.service.reconcile();
+    x.options.enabled = true;
+    await x.service.show(x.intent);
+    expect(x.session.show).not.toHaveBeenCalled();
+    x.visibility(true);
+    x.service.reconcile();
+    x.service.update(x.intent.notification.id);
+    expect(x.present).toHaveBeenCalledOnce();
+    expect(x.presentation.update).toHaveBeenCalledOnce();
+    expect(x.presentation.dismiss).not.toHaveBeenCalled();
+    x.visibility(false);
+    x.visibility(true);
+    expect(x.present).toHaveBeenCalledOnce();
+    vi.mocked(x.intent.current).mockReturnValue(false);
+    x.service.reconcile();
+    expect(x.presentation.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it.each(["stale", "closed", "dismissed", "delivered"])(
+    "does not replay retained feedback that is %s after native expiry",
+    async (reason) => {
+      vi.useFakeTimers();
+      const x = withToast();
+      x.intent.retainInApp = true;
+      x.options.enabled = reason === "delivered";
+      await x.service.show(x.intent);
+      if (reason === "stale")
+        vi.mocked(x.intent.current).mockReturnValue(false);
+      if (reason === "closed") x.service.close();
+      if (reason === "dismissed")
+        x.service.dismiss(x.intent.notification.id);
+      vi.setSystemTime(Date.now() + 2 * 60_000);
+      x.visibility(true);
+      expect(x.present).not.toHaveBeenCalled();
+    },
+  );
+
   it("deduplicates by event ID without suppressing a different event with identical text", async () => {
     const x = withToast();
     x.visibility(true);

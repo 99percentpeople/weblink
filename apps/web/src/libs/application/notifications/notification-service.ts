@@ -21,6 +21,8 @@ export interface NotificationIntent {
     | "updates"
     | "transfers";
   current(): boolean;
+  /** Keep in-app feedback while current(), independently of native notification expiry. */
+  retainInApp?: boolean;
   /** Display policy only; opening a notification may change it before its action arrives. */
   canDisplay?(): boolean;
   /** Defer image work until display is allowed; cancellation is checked again afterwards. */
@@ -62,11 +64,17 @@ export class NotificationService {
     );
     void this.session?.catch(onError);
   }
-  private current(intent: NotificationIntent) {
+  private current(
+    intent: NotificationIntent,
+    inApp = false,
+  ) {
     return (
       !this.closed &&
       intent.current() &&
-      intent.notification.expiresAt > Date.now()
+      (intent.notification.expiresAt > Date.now() ||
+        (inApp &&
+          !!intent.present &&
+          intent.retainInApp === true))
     );
   }
   private allowed(intent: NotificationIntent) {
@@ -84,7 +92,7 @@ export class NotificationService {
     if (
       delivery.state !== "waiting" ||
       !this.visible() ||
-      !this.current(delivery.intent) ||
+      !this.current(delivery.intent, true) ||
       !delivery.intent.present
     )
       return;
@@ -100,7 +108,7 @@ export class NotificationService {
   }
   async show(intent: NotificationIntent): Promise<void> {
     const id = intent.notification.id;
-    if (!this.current(intent)) return;
+    if (!this.current(intent, true)) return;
     let delivery = this.deliveries.get(id);
     if (delivery) {
       delivery.intent.notification.expiresAt = Math.max(
@@ -209,7 +217,7 @@ export class NotificationService {
       delivery.intent.notification.expiresAt = expiresAt;
     if (
       delivery?.state === "toast" &&
-      this.current(delivery.intent)
+      this.current(delivery.intent, true)
     )
       delivery.presentation?.update?.();
   }
@@ -234,7 +242,11 @@ export class NotificationService {
   reconcile(): void {
     for (const [id, delivery] of this.deliveries) {
       const intent = delivery.intent;
-      if (!this.current(intent)) {
+      const inApp =
+        delivery.state === "waiting" ||
+        delivery.state === "preparing" ||
+        delivery.state === "toast";
+      if (!this.current(intent, inApp)) {
         this.dismiss(id);
         // An expired event can no longer act; discard its callbacks and delivery record.
         if (intent.notification.expiresAt <= Date.now())

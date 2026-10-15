@@ -7,7 +7,7 @@ import type {
   NativeUpdates,
 } from "@weblink/platform";
 
-/** One owner for startup checks, settings checks, and installs across view remounts. */
+/** One owner for automatic checks, settings checks, and installs across view remounts. */
 export function createAppUpdates(native: NativeUpdates) {
   const [result, setResult] =
     createSignal<NativeUpdateCheck>();
@@ -19,6 +19,10 @@ export function createAppUpdates(native: NativeUpdates) {
   >(null);
   const [progress, setProgress] =
     createSignal<NativeUpdateProgress>();
+  // Discovery remains valid for reminders when a later check fails. Installation
+  // still requires the candidate returned by the latest successful check.
+  const [automaticUpdate, setAutomaticUpdate] =
+    createSignal<NativeUpdateInfo>();
   let disposed = false;
   onCleanup(() => {
     disposed = true;
@@ -63,13 +67,26 @@ export function createAppUpdates(native: NativeUpdates) {
   const runCheck = async () => {
     setPending("check");
     setError(null);
-    setResult(undefined);
+    // Preserve the displayed result while refreshing. The pending guard prevents
+    // installation until the native candidate is refreshed.
     try {
       const checked = await native.check();
-      if (!disposed) setResult(checked);
+      if (!disposed) {
+        if (
+          checked.status !== "available" ||
+          checked.update.version !==
+            automaticUpdate()?.version
+        ) {
+          setAutomaticUpdate(undefined);
+        }
+        setResult(checked);
+      }
       return disposed ? undefined : checked;
     } catch {
-      if (!disposed) setError("check");
+      if (!disposed) {
+        setResult(undefined);
+        setError("check");
+      }
     } finally {
       if (!disposed) setPending(null);
     }
@@ -99,23 +116,26 @@ export function createAppUpdates(native: NativeUpdates) {
     }
   };
 
-  let startupChecked = false;
-  const [startupUpdate, setStartupUpdate] =
-    createSignal<NativeUpdateInfo>();
-  const checkOnStartup = async (
+  const checkAutomatically = async (
     enabled: Accessor<boolean>,
   ) => {
-    if (startupChecked || disposed) return;
-    startupChecked = true;
-    if (!enabled()) return;
+    if (disposed || !enabled()) return;
     const checked = await check();
     if (
       !disposed &&
       enabled() &&
       checked?.status === "available"
     ) {
-      setStartupUpdate(checked.update);
+      setAutomaticUpdate(checked.update);
     }
+  };
+  let startupChecked = false;
+  const checkOnStartup = async (
+    enabled: Accessor<boolean>,
+  ) => {
+    if (startupChecked || disposed) return;
+    startupChecked = true;
+    await checkAutomatically(enabled);
   };
   return {
     result,
@@ -127,7 +147,8 @@ export function createAppUpdates(native: NativeUpdates) {
     percent,
     check,
     install,
-    startupUpdate,
+    automaticUpdate,
+    checkAutomatically,
     checkOnStartup,
   };
 }

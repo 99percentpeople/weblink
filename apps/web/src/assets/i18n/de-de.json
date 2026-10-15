@@ -575,7 +575,7 @@
       "download_installer": "Installationsprogramm herunterladen",
       "install": "Herunterladen und neu starten",
       "automatic": "Automatisch nach Updates suchen",
-      "automatic_description": "Beim Start einmal prüfen und über neue stabile Versionen informieren.",
+      "automatic_description": "Beim Start und während die App läuft stündlich prüfen und über neue stabile Versionen informieren.",
       "view": "Update ansehen",
       "notification_body": "Öffne Weblink, um das Update anzusehen und herunterzuladen."
     }

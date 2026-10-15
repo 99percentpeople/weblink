@@ -575,7 +575,7 @@
       "download_installer": "インストーラーをダウンロード",
       "install": "ダウンロードして再起動",
       "automatic": "更新を自動的に確認",
-      "automatic_description": "起動時に一度確認し、新しい安定版がある場合に通知します。",
+      "automatic_description": "起動時とアプリの実行中は1時間ごとに確認し、新しい安定版がある場合に通知します。",
       "view": "更新を表示",
       "notification_body": "Weblink を開いて更新を確認し、ダウンロードしてください。"
     }

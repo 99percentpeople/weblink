@@ -575,7 +575,7 @@
       "download_installer": "Télécharger le programme d’installation",
       "install": "Télécharger et redémarrer",
       "automatic": "Rechercher automatiquement les mises à jour",
-      "automatic_description": "Vérifier une fois au démarrage et signaler toute nouvelle version stable.",
+      "automatic_description": "Vérifier au démarrage et toutes les heures tant que l’application est ouverte, et signaler toute nouvelle version stable.",
       "view": "Voir la mise à jour",
       "notification_body": "Ouvrez Weblink pour consulter et télécharger la mise à jour."
     }

@@ -49,7 +49,7 @@ it("shares a pending startup/manual check and only checks once on startup", asyn
   request.resolve(available);
   await Promise.all([startup, manual]);
   expect(updates.update()?.version).toBe("1.2.0");
-  expect(updates.startupUpdate()?.version).toBe("1.2.0");
+  expect(updates.automaticUpdate()?.version).toBe("1.2.0");
   await updates.checkOnStartup(() => true);
   expect(native.check).toHaveBeenCalledTimes(1);
   expect(native.install).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ it("honors disabled startup checks while preserving manual checks", async () => 
   expect(native.check).not.toHaveBeenCalled();
   await updates.check();
   expect(updates.update()).toBeDefined();
-  expect(updates.startupUpdate()).toBeUndefined();
+  expect(updates.automaticUpdate()).toBeUndefined();
 });
 
 it("suppresses a startup notification if the switch is disabled during the request", async () => {
@@ -80,7 +80,7 @@ it("suppresses a startup notification if the switch is disabled during the reque
   setEnabled(false);
   request.resolve(available);
   await startup;
-  expect(updates.startupUpdate()).toBeUndefined();
+  expect(updates.automaticUpdate()).toBeUndefined();
 });
 
 it("clears stale install candidates after check errors and allows retry", async () => {
@@ -164,5 +164,5 @@ it("ignores a result arriving after application disposal", async () => {
   request.resolve(available);
   await startup;
   expect(updates.result()).toBeUndefined();
-  expect(updates.startupUpdate()).toBeUndefined();
+  expect(updates.automaticUpdate()).toBeUndefined();
 });

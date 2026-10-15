@@ -570,7 +570,7 @@
       "download_installer": "Download installer",
       "install": "Download and restart",
       "automatic": "Automatically check for updates",
-      "automatic_description": "Check once at startup and notify when a stable update is available.",
+      "automatic_description": "Check at startup and every hour while the app is running, and notify when a stable update is available.",
       "view": "View update",
       "notification_body": "Open Weblink to review and download the update."
     }

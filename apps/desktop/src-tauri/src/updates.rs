@@ -4,15 +4,13 @@ use tauri::{ipc::Channel, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
 
-const RELEASES: &str = "https://github.com/99percentpeople/weblink/releases";
-const ENDPOINT: &str =
-    "https://github.com/99percentpeople/weblink/releases/latest/download/latest.json";
+mod github;
 
 #[derive(Default)]
 pub struct Service(Mutex<Option<Pending>>);
 
 struct Pending {
-    update: Update,
+    release: github::ReleaseUpdate,
     can_install: bool,
 }
 
@@ -87,42 +85,19 @@ pub async fn updates_check(app: tauri::AppHandle) -> Result<CheckResult, String>
     }
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let installed = executable.parent().is_some_and(is_installed);
-    let can_install = installed && !public_key(&app).is_empty();
-    let exit_app = app.clone();
-    let updater = app
-        .updater_builder()
-        .endpoints(vec![ENDPOINT.parse().expect("valid update endpoint")])
-        .map_err(|error| error.to_string())?
-        .timeout(Duration::from_secs(30))
-        .on_before_exit(move || {
-            // The Windows updater exits directly, without delivering RunEvent::Exit.
-            crate::shutdown(&exit_app);
-            exit_app.cleanup_before_exit();
-        })
-        .build()
-        .map_err(|error| error.to_string())?;
-    let Some(mut update) = updater.check().await.map_err(|error| error.to_string())? else {
+    let Some(release) = github::check(&app.package_info().version, installed).await? else {
         return Ok(CheckResult::Current);
     };
-    // Installer downloads need a longer deadline than the small manifest request.
-    update.timeout = Some(Duration::from_secs(20 * 60));
-    let asset = if installed {
-        "setup.exe"
-    } else {
-        "portable.zip"
-    };
+    let can_install = installed && !public_key(&app).is_empty() && release.manifest_url.is_some();
     let info = UpdateInfo {
-        version: update.version.clone(),
-        notes: update.body.clone(),
+        version: release.version.clone(),
+        notes: release.notes.clone(),
         can_install,
         download_kind: if installed { "installer" } else { "portable" },
-        download_url: format!(
-            "{RELEASES}/download/v{}/Weblink-windows-x64-{asset}",
-            update.version
-        ),
+        download_url: release.download_url.clone(),
     };
     *pending = Some(Pending {
-        update,
+        release,
         can_install,
     });
     Ok(CheckResult::Available { update: info })
@@ -133,6 +108,54 @@ fn validate_install(candidate: Option<(&str, bool)>, version: &str) -> Result<()
         Some((checked, true)) if checked == version => Ok(()),
         _ => Err("Check for a signed installer update before installing".into()),
     }
+}
+
+async fn prepare_install(app: &tauri::AppHandle, candidate: &Pending) -> Result<Update, String> {
+    let endpoint = candidate
+        .release
+        .manifest_url
+        .as_ref()
+        .ok_or("The checked release has no updater manifest")?;
+    let exit_app = app.clone();
+    let updater = app
+        .updater_builder()
+        // Pin to the release the user confirmed, even if GitHub Latest changes meanwhile.
+        .endpoints(vec![endpoint
+            .parse()
+            .map_err(|error| format!("Invalid updater URL: {error}"))?])
+        .map_err(|error| error.to_string())?
+        .timeout(Duration::from_secs(30))
+        .on_before_exit(move || {
+            // The Windows updater exits directly, without delivering RunEvent::Exit.
+            crate::shutdown(&exit_app);
+            exit_app.cleanup_before_exit();
+        })
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut update = updater
+        .check()
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or("The checked release is no longer available for installation")?;
+    validate_manifest(
+        &candidate.release,
+        &update.version,
+        update.download_url.as_str(),
+    )?;
+    // Installer downloads need a longer deadline than the small manifest request.
+    update.timeout = Some(Duration::from_secs(20 * 60));
+    Ok(update)
+}
+
+fn validate_manifest(
+    release: &github::ReleaseUpdate,
+    version: &str,
+    download_url: &str,
+) -> Result<(), String> {
+    if release.version != version || release.download_url != download_url {
+        return Err("Update manifest does not match the checked GitHub release".into());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -149,14 +172,14 @@ pub async fn updates_install(
     validate_install(
         pending
             .as_ref()
-            .map(|candidate| (candidate.update.version.as_str(), candidate.can_install)),
+            .map(|candidate| (candidate.release.version.as_str(), candidate.can_install)),
         &version,
     )?;
     let candidate = pending.as_ref().expect("validated update");
+    let update = prepare_install(&app, candidate).await?;
     let mut downloaded = 0;
     // Download verifies the signature before returning bytes or entering install.
-    let bytes = candidate
-        .update
+    let bytes = update
         .download(
             |length, total| {
                 downloaded += length as u64;
@@ -175,10 +198,7 @@ pub async fn updates_install(
         downloaded: bytes.len() as u64,
         total: Some(bytes.len() as u64),
     });
-    candidate
-        .update
-        .install(bytes)
-        .map_err(|error| error.to_string())
+    update.install(bytes).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -208,6 +228,24 @@ mod tests {
         assert!(validate_install(Some(("1.2.0", false)), "1.2.0").is_err());
         assert!(validate_install(Some(("1.2.0", true)), "1.3.0").is_err());
         assert!(validate_install(Some(("1.2.0", true)), "1.2.0").is_ok());
+    }
+
+    #[test]
+    fn installation_rejects_a_manifest_for_another_release_or_installer() {
+        let release = github::ReleaseUpdate {
+            version: "1.2.0".into(),
+            notes: None,
+            download_url: "https://github.com/99percentpeople/weblink/releases/download/v1.2.0/Weblink-windows-x64-setup.exe".into(),
+            manifest_url: None,
+        };
+        assert!(validate_manifest(&release, "1.2.0", &release.download_url).is_ok());
+        assert!(validate_manifest(&release, "1.3.0", &release.download_url).is_err());
+        assert!(validate_manifest(
+            &release,
+            "1.2.0",
+            "https://github.com/99percentpeople/weblink/releases/latest/download/Weblink-windows-x64-setup.exe",
+        )
+        .is_err());
     }
 
     #[test]

@@ -575,7 +575,7 @@
       "download_installer": "설치 파일 다운로드",
       "install": "다운로드 후 다시 시작",
       "automatic": "자동으로 업데이트 확인",
-      "automatic_description": "시작 시 한 번 확인하고 새 안정 버전이 있으면 알립니다.",
+      "automatic_description": "시작 시와 앱 실행 중 매시간 확인하고 새 안정 버전이 있으면 알립니다.",
       "view": "업데이트 보기",
       "notification_body": "Weblink를 열어 업데이트를 확인하고 다운로드하세요."
     }

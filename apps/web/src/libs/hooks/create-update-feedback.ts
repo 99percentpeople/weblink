@@ -9,6 +9,8 @@ import { t } from "@/i18n";
 import type { AppUpdates } from "@/libs/state/create-app-updates";
 import type { NotificationService } from "@/libs/application/notifications/notification-service";
 
+const AUTOMATIC_CHECK_INTERVAL_MS = 60 * 60_000;
+
 export function createUpdateFeedback(options: {
   updates: AppUpdates;
   enabled: Accessor<boolean>;
@@ -26,19 +28,26 @@ export function createUpdateFeedback(options: {
     notificationId = undefined;
   };
   createEffect(() => {
-    if (options.ready()) {
-      untrack(
-        () => void updates.checkOnStartup(options.enabled),
-      );
-    }
+    if (!options.ready()) return;
+    untrack(
+      () => void updates.checkOnStartup(options.enabled),
+    );
+    if (!options.enabled()) return;
+    const timer = setInterval(
+      () =>
+        void updates.checkAutomatically(options.enabled),
+      AUTOMATIC_CHECK_INTERVAL_MS,
+    );
+    onCleanup(() => clearInterval(timer));
   });
   createEffect(() => {
-    const available = updates.startupUpdate();
+    const available = updates.automaticUpdate();
     const current = () =>
       !disposed &&
       options.enabled() &&
       updates.pending() !== "install" &&
-      updates.update()?.version === available?.version;
+      updates.automaticUpdate()?.version ===
+        available?.version;
     if (!available || !current()) {
       untrack(dismiss);
       return;
@@ -58,6 +67,7 @@ export function createUpdateFeedback(options: {
       void options.notifications.show({
         category: "updates",
         current,
+        retainInApp: true,
         present() {
           toast.info(title, {
             id,

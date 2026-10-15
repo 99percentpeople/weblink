@@ -570,7 +570,7 @@
       "download_installer": "下載安裝程式",
       "install": "下載並重新啟動",
       "automatic": "自動檢查更新",
-      "automatic_description": "應用程式啟動時檢查一次，有新的正式版本時通知。",
+      "automatic_description": "應用程式啟動時及執行期間每小時檢查一次，有新的正式版本時通知。",
       "view": "查看更新",
       "notification_body": "開啟 Weblink 查看並下載更新。"
     }

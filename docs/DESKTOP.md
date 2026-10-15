@@ -129,21 +129,40 @@ failures produce a localized error. Browser builds retain ordinary download link
 
 Settings → About provides a manual update check and a persisted “Automatically
 check for updates” switch, enabled by default. The desktop checks once per app
-startup. Finding a new stable version shows an in-app toast and sends an update
-intent through the existing notification service. The “Application updates”
+startup and every hour while the app is running and automatic checks are enabled.
+Automatic and manual checks share an in-flight request; checks are skipped during
+installation. Each version is announced at most once per app session.
+Finding a new stable version sends an update intent through the existing
+notification service: a foreground toast or a permitted background system notice.
+An undelivered reminder remains pending while the app is hidden and is shown as a
+toast when it becomes visible, including after failed checks or a long suspension.
+Only the native notice expires after 24 hours; the pending in-app reminder follows
+the last confirmed update until a successful check supersedes it, installation
+starts, automatic checks are disabled, or the application scope is disposed.
+Delivered system notices are never replayed as foreground toasts.
+The “Application updates”
 notification category, OS permission, background-only and sound settings apply
 to system notifications. Clicking either notification opens Settings → About;
 checks never download or install automatically. Background failures and current
-versions do not produce notifications. Disabling the startup switch leaves manual
-checks available and takes effect for pending reminders and the next startup.
+versions do not produce notifications. Disabling automatic checks immediately
+clears the timer and withdraws pending reminders, while manual checks remain
+available. Re-enabling starts a new hourly timer. The timer is also cleared when
+its application scope is disposed.
 
-Only stable Windows x64 builds use the GitHub endpoint
-`https://github.com/99percentpeople/weblink/releases/latest/download/latest.json`.
+Only stable Windows x64 builds check
+`https://api.github.com/repos/99percentpeople/weblink/releases/latest`.
+Checks compare the release's `tag_name` with the installed semantic version and
+read its notes and attachment URLs from the API response. They do not download
+`latest.json`, signatures or installers. Drafts, prereleases and older or equal
+versions are not offered. A release without an updater manifest still supports
+manual downloads when the matching Windows package is present.
 Development builds and unsupported platforms report that in-app updates are
 unavailable. The shared application controller serializes startup/manual checks
 and installs and retains progress when settings are closed. The Rust service
-accepts installation only for the version it most recently checked. Installer
-updates use Tauri's updater plugin to verify the package signature before running
+accepts installation only for the version it most recently checked. After the
+user confirms installation, it fetches `latest.json` from that specific release,
+validates that its version and installer URL match the checked release, and uses
+Tauri's updater plugin to verify the package signature before running
 NSIS. Installing closes active sessions and restarts Weblink. Native capture,
 remote input and keyboard resources are released before the Windows updater exits.
 
@@ -350,6 +369,15 @@ window is unfocused. Content preview and sound can be disabled separately. Brows
 permission is requested only by explicit header or settings actions. New-message events follow
 durable insertion; loading history, duplicate delivery and ACKs do not notify.
 Transfer completion requires an observed state transition in the current session.
+
+In-app toast delivery is reserved for update reminders, control and speed-test
+approvals, and remote clipboard/file-drop transfer feedback. Chat messages and
+ordinary file-transfer completion use system notifications only; they are not
+replayed as toasts when the app becomes visible. For events with in-app feedback,
+an undelivered, still-valid notice can appear on return to the foreground. An event
+already delivered through a system notification does not also produce a toast.
+Update reminders retain the pending lifetime described in Desktop updates above;
+other requests and transfers keep their existing expiry and validity checks.
 
 Browser permission is reconciled from Notifications and Permissions APIs and
 refreshed automatically on focus, visibility, page restoration and permission changes;

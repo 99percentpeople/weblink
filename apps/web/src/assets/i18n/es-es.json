@@ -575,7 +575,7 @@
       "download_installer": "Descargar instalador",
       "install": "Descargar y reiniciar",
       "automatic": "Buscar actualizaciones automáticamente",
-      "automatic_description": "Comprobar una vez al iniciar y avisar si hay una nueva versión estable.",
+      "automatic_description": "Comprobar al iniciar y cada hora mientras la aplicación esté abierta, y avisar si hay una nueva versión estable.",
       "view": "Ver actualización",
       "notification_body": "Abre Weblink para revisar y descargar la actualización."
     }
