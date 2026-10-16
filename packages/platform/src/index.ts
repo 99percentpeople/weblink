@@ -1,4 +1,22 @@
 import type { InputDeviceSnapshot } from "./input";
+import type {
+  BinarySource,
+  NativeFileSystem,
+  StoredFile,
+} from "./filesystem";
+export type * from "./filesystem";
+export {
+  LocalFileSystemError,
+  type FileSystemOperation,
+} from "./filesystem-error";
+export { RangeFile } from "./range-file";
+import type { FileBatchSaveOptions } from "./file-save";
+export type * from "./file-save";
+export {
+  createFileSaveProgress,
+  runFileSaveBatch,
+  resolveFileSaveConflict,
+} from "./file-save";
 import type { NativeUpdates } from "./updates";
 export type * from "./updates";
 export type * from "./input";
@@ -20,16 +38,39 @@ export interface RuntimeCapabilities {
 }
 
 export interface FileSaveOptions {
-  /** Save to Downloads using the existing automatic-download preference. */
+  /** Save directly to the system Downloads directory without opening a picker. */
   automatic?: boolean;
 }
 
+export type FileConflictAction =
+  | "overwrite"
+  | "skip"
+  | "keep_both";
+export interface FileSaveConflict {
+  fileName: string;
+  /** Directories and other non-regular entries cannot be replaced with a file. */
+  canOverwrite: boolean;
+}
+/** null cancels the remaining batch; skip continues with the next file. */
+export type FileConflictResolver = (
+  conflict: FileSaveConflict,
+) => Promise<FileConflictAction | null>;
+
 export interface PlatformRuntime {
-  /** Save local content through the native picker; false means the user cancelled. */
+  readonly filesystem?: NativeFileSystem;
+  /** Open local content with the system default application. */
+  openFile?(file: StoredFile): Promise<void>;
+  /** Save through the native picker or directly to Downloads; false means cancellation. */
   saveFile?(
-    file: Blob,
+    file: BinarySource,
     name: string,
     options?: FileSaveOptions,
+  ): Promise<boolean>;
+  /** Pick one temporary export directory for all files; false means cancellation. */
+  saveFilesToDirectory?(
+    files: readonly StoredFile[],
+    resolveConflict: FileConflictResolver,
+    options?: FileBatchSaveOptions,
   ): Promise<boolean>;
   readonly updates?: NativeUpdates;
   readonly fileDrop?: NativeFileDrop;

@@ -1,11 +1,16 @@
 import { nativeNotifications } from "./notifications";
+import { nativeFileSystem } from "./filesystem";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createRawPreview } from "./preview";
 import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
 import { nativeUpdates } from "./updates";
-import { saveNativeFile } from "./save-file";
+import {
+  saveNativeFile,
+  saveNativeFilesToDirectory,
+} from "./save-file";
+import { openNativeFile } from "./open-file";
 import { nativePictureInPicture } from "./picture-in-picture";
 import { keepDesktopActive } from "./background";
 import { watchStatus } from "./status-watch";
@@ -22,7 +27,10 @@ import {
 } from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  filesystem: nativeFileSystem,
   saveFile: saveNativeFile,
+  saveFilesToDirectory: saveNativeFilesToDirectory,
+  openFile: openNativeFile,
   fileDrop: {
     hover: (scope, operationId, target, point, types) =>
       invoke("file_drop_hover", {

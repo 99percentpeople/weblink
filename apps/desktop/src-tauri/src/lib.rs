@@ -9,6 +9,7 @@ mod capture;
 mod clipboard;
 mod file_drop;
 mod file_save;
+mod filesystem;
 mod keyboard;
 mod media_permissions;
 mod notifications;
@@ -20,6 +21,7 @@ mod updates;
 
 fn shutdown(app: &tauri::AppHandle) {
     app.state::<file_save::Service>().clear();
+    app.state::<filesystem::Service>().clear_page();
     clipboard::shutdown();
     file_drop::shutdown();
     app.state::<application::Service>().shutdown();
@@ -66,6 +68,15 @@ pub fn run() {
         .plugin(application::single_instance::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(file_save::Service::default())
+        .manage(filesystem::Service::default())
+        .register_asynchronous_uri_scheme_protocol("weblink-file", |context, request, responder| {
+            if context.webview_label() != "main" {
+                responder.respond(tauri::http::Response::builder().status(403).body(Vec::<u8>::new()).unwrap());
+                return;
+            }
+            let app = context.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || responder.respond(filesystem::protocol::respond(&app, request)));
+        })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Service::default())
         .manage(notifications::Service::default())
@@ -85,7 +96,28 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             capabilities::runtime_capabilities,
+            filesystem::commands::vfs_volumes,
+            filesystem::commands::vfs_pick_directory,
+            filesystem::commands::vfs_open_directory,
+            filesystem::commands::vfs_open_file,
+            filesystem::commands::vfs_reveal_file,
+            filesystem::commands::vfs_stat,
+            filesystem::commands::vfs_list,
+            filesystem::commands::vfs_read,
+            filesystem::commands::vfs_resize,
+            filesystem::commands::vfs_write,
+            filesystem::commands::vfs_sync,
+            filesystem::commands::vfs_remove,
+            filesystem::commands::vfs_move,
+            filesystem::commands::vfs_watch,
+            filesystem::commands::vfs_unwatch,
+            filesystem::commands::vfs_media,
+
             file_save::file_save_begin,
+            file_save::file_save_directory_pick,
+            file_save::file_save_directory_begin,
+            file_save::file_save_directory_release,
+            file_save::file_open_begin,
             file_save::file_save_write,
             file_save::file_save_finish,
             file_save::file_save_abort,
@@ -213,6 +245,7 @@ pub fn run() {
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                         webview.state::<file_save::Service>().clear();
+                        webview.state::<filesystem::Service>().clear_page();
                         preview::clear(&webview);
                         webview.state::<capture::Service>().clear_watches();
                         webview.state::<notifications::Service>().clear();
