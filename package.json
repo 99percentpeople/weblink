@@ -36,6 +36,7 @@
     "test:e2e:native-screen": "bun run --cwd apps/web test:e2e:native-screen",
     "test:e2e:playback": "bun run --cwd apps/web test:e2e:playback",
     "test:e2e:transfer": "bun run --cwd apps/web test:e2e:transfer",
+    "test:e2e:vfs": "bun run --cwd apps/web test:e2e:vfs",
     "test:e2e:cache": "bun run --cwd apps/web test:e2e:cache",
     "test:e2e:clipboard": "bun run --cwd apps/web test:e2e:clipboard",
     "test:e2e:clipboard-cache": "bun run --cwd apps/web test:e2e:clipboard-cache",

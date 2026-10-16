@@ -1,4 +1,8 @@
 import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
+import {
   createEffect,
   createSignal,
   For,
@@ -45,9 +49,9 @@ export function FileThumbnail(props: {
       setUrl(undefined);
       return;
     }
-    const value = URL.createObjectURL(file);
+    const value = fileObjectUrl(file);
     setUrl(value);
-    onCleanup(() => URL.revokeObjectURL(value));
+    onCleanup(() => revokeFileUrl(value));
   });
   const icon = () =>
     ({

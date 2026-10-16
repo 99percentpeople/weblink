@@ -3,9 +3,9 @@ import type { FileFingerprint } from "@/libs/domain/protocol/file-fingerprint";
 
 export const FINGERPRINT_CHUNK_SIZE = 2 * 1024 * 1024;
 
-/** Called in a worker; bounded memory even for multi-gigabyte files. */
+/** Incremental hashing with bounded reads, usable in workers and native range readers. */
 export async function fingerprintBlob(
-  file: Blob,
+  file: import("@weblink/platform").BinarySource,
   progress?: (bytes: number) => void,
   signal?: AbortSignal,
 ): Promise<FileFingerprint> {

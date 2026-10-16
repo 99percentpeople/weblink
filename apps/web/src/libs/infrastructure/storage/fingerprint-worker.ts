@@ -17,12 +17,20 @@ self.onmessage = async (
     );
     self.postMessage({ id, fingerprint });
   } catch (error) {
+    const details = error as {
+      message?: unknown;
+      name?: unknown;
+    } | null;
     self.postMessage({
       id,
       error:
-        error instanceof Error
-          ? error.message
+        typeof details?.message === "string"
+          ? details.message
           : String(error),
+      errorName:
+        typeof details?.name === "string"
+          ? details.name
+          : undefined,
     });
   }
 };

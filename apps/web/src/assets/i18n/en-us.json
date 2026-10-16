@@ -840,7 +840,8 @@
       "picture_in_picture": "PIP Mode",
       "exit_picture_in_picture": "Exit PIP Mode",
       "continue": "Continue",
-      "retry": "Retry"
+      "retry": "Retry",
+      "open": "Open"
     },
     "notification": {
       "copy_success": "Copy success",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "Could not clear app cache: {{error}}",
       "copy_failed": "Unable to copy. Check clipboard permissions and try again.",
       "room_unprotected": "This room does not require a password.",
-      "file_save_failed": "Could not save the file. Check the destination and available disk space, then try again."
+      "file_save_failed": "Could not save the file. Check the destination and available disk space, then try again.",
+      "file_open_failed": "Could not open the file. Check that it is available and that a default application is installed."
     },
     "forward_dialog": {
       "title": "Forward items",
@@ -1225,12 +1227,16 @@
     "actions": "File actions",
     "action_preview": "Preview",
     "action_download": "Save to device",
+    "action_save_as": "Save as…",
+    "action_reveal": "Open file location",
     "action_send": "Send",
     "action_details": "Details",
     "action_delete": "Delete local file",
     "choose": "Choose from files",
     "choose_hint": "Select available files to send to this conversation.",
     "selection": "{{count}} selected · {{size}}",
+    "select_all": "Select all",
+    "clear_selection": "Clear selection",
     "send_count": "Send {{count}} files",
     "import": "Import",
     "reused": "Already exists; reused local content",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "Copy to clipboard",
     "clipboard_write_failed": "Could not write the clipboard",
     "clipboard_file_unsupported": "Only a single PNG/JPG image file is supported. All other types are unsupported."
+  },
+  "file_import_error": {
+    "title": "File import failed",
+    "stage": "Stage: {{stage}}",
+    "preparing": "Preparing files",
+    "authorizing": "Accessing cache storage",
+    "identifying": "Reading file",
+    "writing": "Writing to cache",
+    "verifying": "Checking file",
+    "sharing": "Sharing file",
+    "copy_details": "Copy error details",
+    "unknown": "No error details were provided."
+  },
+  "file_import_progress": {
+    "title": "Import progress",
+    "preparing": "Preparing files…",
+    "identifying": "Reading file",
+    "writing": "Importing file",
+    "verifying": "Checking file",
+    "counts": "Imported {{completed}} of {{total}}"
+  },
+  "file_save_progress": {
+    "title": "Save progress",
+    "saving": "Saving files",
+    "waiting": "Waiting for a file conflict decision",
+    "cancelling": "Cancelling…",
+    "completed": "Save complete",
+    "cancelled": "Remaining saves cancelled",
+    "failed": "Save failed",
+    "cancel_remaining": "Cancel remaining",
+    "current_file": "Current file: {{fileName}} ({{index}}/{{total}})",
+    "counts": "Saved {{saved}} of {{total}}, skipped {{skipped}}",
+    "preparing": "Preparing to save…"
+  },
+  "file_save_conflict": {
+    "title": "File already exists",
+    "description": "The destination already contains “{{fileName}}”. Choose how to proceed.",
+    "cannot_overwrite": "The destination contains a folder or another item named “{{fileName}}” that cannot be overwritten. Skip it or keep both.",
+    "overwrite": "Overwrite",
+    "skip": "Skip",
+    "keep_both": "Keep both",
+    "apply_to_all": "Apply to all conflicts in this batch"
+  },
+  "storage": {
+    "title": "File storage",
+    "default": "Storage method",
+    "description": "Changing this location applies to new files. Existing files and unfinished transfers keep their original location.",
+    "browser": "Browser storage",
+    "local_directory": "Local directory",
+    "choose": "Choose a directory",
+    "open_directory": "Open directory",
+    "open_cache": "Open file cache",
+    "reconnect": "Reconnect directory",
+    "unsupported": "Directory access is unavailable in this browser. Files remain in browser storage.",
+    "directory": "Directory",
+    "unavailable": "Storage unavailable",
+    "write_failed": "Could not save {{fileName}} to the directory ({{stage}}).",
+    "stage_create": "creating file",
+    "stage_write": "writing data",
+    "stage_commit": "saving file",
+    "name_blocked": "The browser does not allow creating {{fileName}} in this directory. Use the desktop app or select browser storage manually.",
+    "write_blocked": "A browser or system security check blocked saving {{fileName}}."
   }
 }

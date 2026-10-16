@@ -840,7 +840,8 @@
       "picture_in_picture": "子母畫面",
       "exit_picture_in_picture": "退出子母畫面",
       "continue": "繼續",
-      "retry": "重試"
+      "retry": "重試",
+      "open": "開啟"
     },
     "clipboard_history": {
       "title": "剪貼簿歷史"
@@ -909,7 +910,8 @@
       "clear_cache_failed": "清除應用程式快取失敗：{{error}}",
       "copy_failed": "複製失敗，請檢查剪貼簿權限後重試。",
       "room_unprotected": "此房間未設定密碼。",
-      "file_save_failed": "儲存檔案失敗，請檢查儲存位置和磁碟剩餘空間後重試。"
+      "file_save_failed": "儲存檔案失敗，請檢查儲存位置和磁碟剩餘空間後重試。",
+      "file_open_failed": "無法開啟檔案，請檢查檔案是否可用及系統預設應用程式是否已安裝。"
     },
     "nav": {
       "settings": "設定",
@@ -1225,12 +1227,16 @@
     "actions": "檔案操作",
     "action_preview": "預覽",
     "action_download": "儲存到裝置",
+    "action_save_as": "另存為",
+    "action_reveal": "開啟所在位置",
     "action_send": "傳送",
     "action_details": "查看詳情",
     "action_delete": "刪除本機檔案",
     "choose": "從檔案清單選擇",
     "choose_hint": "選擇可用的檔案，傳送到目前對話。",
     "selection": "已選 {{count}} 項 · {{size}}",
+    "select_all": "全選",
+    "clear_selection": "取消選取",
     "send_count": "傳送 {{count}} 個檔案",
     "import": "匯入",
     "reused": "檔案已存在，已重用本機內容",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "複製到本機剪貼簿",
     "clipboard_write_failed": "無法寫入剪貼簿",
     "clipboard_file_unsupported": "目前僅支援單個 PNG/JPG 圖片檔案，其他類型均不支援。"
+  },
+  "file_import_error": {
+    "title": "檔案匯入失敗",
+    "stage": "處理階段：{{stage}}",
+    "preparing": "準備檔案",
+    "authorizing": "存取快取儲存空間",
+    "identifying": "讀取檔案",
+    "writing": "寫入快取",
+    "verifying": "驗證檔案",
+    "sharing": "設定檔案分享",
+    "copy_details": "複製錯誤詳情",
+    "unknown": "未傳回具體錯誤資訊。"
+  },
+  "file_import_progress": {
+    "title": "匯入進度",
+    "preparing": "正在準備檔案…",
+    "identifying": "正在讀取檔案",
+    "writing": "正在匯入檔案",
+    "verifying": "正在檢查檔案",
+    "counts": "已匯入 {{completed}} / {{total}}"
+  },
+  "file_save_progress": {
+    "title": "儲存進度",
+    "saving": "正在儲存",
+    "waiting": "等待同名檔案確認",
+    "cancelling": "正在取消…",
+    "completed": "儲存完成",
+    "cancelled": "已取消剩餘操作",
+    "failed": "儲存失敗",
+    "cancel_remaining": "取消剩餘操作",
+    "current_file": "目前檔案：{{fileName}}（{{index}}/{{total}}）",
+    "counts": "已儲存 {{saved}} / {{total}}，已略過 {{skipped}}",
+    "preparing": "正在準備儲存…"
+  },
+  "file_save_conflict": {
+    "title": "檔案已存在",
+    "description": "目標目錄中已存在「{{fileName}}」，請選擇處理方式。",
+    "cannot_overwrite": "目標目錄中已存在同名目錄或其他無法覆寫的項目「{{fileName}}」，請選擇略過或保留兩份。",
+    "overwrite": "覆寫",
+    "skip": "略過",
+    "keep_both": "保留兩份",
+    "apply_to_all": "套用至本次所有衝突"
+  },
+  "storage": {
+    "title": "檔案儲存",
+    "default": "儲存方式",
+    "description": "變更位置僅影響新檔案。已有檔案及未完成傳輸繼續使用原來的儲存位置。",
+    "browser": "瀏覽器儲存",
+    "local_directory": "本機目錄",
+    "choose": "選擇目錄",
+    "open_directory": "開啟目錄",
+    "open_cache": "開啟檔案快取",
+    "reconnect": "重新連接目錄",
+    "unsupported": "此瀏覽器不支援目錄存取，檔案將保存在瀏覽器儲存中。",
+    "directory": "目錄",
+    "unavailable": "儲存空間無法使用",
+    "write_failed": "無法將 {{fileName}} 儲存到目錄（{{stage}}）。",
+    "stage_create": "建立檔案",
+    "stage_write": "寫入資料",
+    "stage_commit": "最終儲存",
+    "name_blocked": "瀏覽器不允許在此目錄中建立 {{fileName}}。可使用桌面版，或手動選擇瀏覽器儲存空間。",
+    "write_blocked": "瀏覽器或系統安全檢查阻止了 {{fileName}} 的儲存。"
   }
 }

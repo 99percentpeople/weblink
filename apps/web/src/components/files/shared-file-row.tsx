@@ -1,3 +1,4 @@
+import type { StoredFile } from "@weblink/platform";
 import { userErrorMessage } from "@/libs/user-error";
 import { Show } from "solid-js";
 import { X } from "lucide-solid";
@@ -29,11 +30,11 @@ export function SharedFileRow(props: {
   connected: boolean;
   canGet: boolean;
   available: boolean;
-  localFile?: File;
+  localFile?: StoredFile;
   selectable: boolean;
   onSelect(selected: boolean): void;
   onGet(): void;
-  onPreview(file: File): void;
+  onPreview(file: StoredFile): void;
 }) {
   const transfer = () =>
     !props.available &&

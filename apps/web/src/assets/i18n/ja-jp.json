@@ -840,7 +840,8 @@
       "picture_in_picture": "PIPモード",
       "exit_picture_in_picture": "PIP モードを終了する",
       "continue": "続行",
-      "retry": "再試行"
+      "retry": "再試行",
+      "open": "開く"
     },
     "notification": {
       "copy_success": "コピー成功",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "アプリのキャッシュをクリアできませんでした: {{error}}",
       "copy_failed": "コピーできません。クリップボードのアクセス許可を確認して、再試行してください。",
       "room_unprotected": "このルームにはパスワードは必要ありません。",
-      "file_save_failed": "ファイルを保存できませんでした。保存先とディスクの空き容量を確認して、もう一度お試しください。"
+      "file_save_failed": "ファイルを保存できませんでした。保存先とディスクの空き容量を確認して、もう一度お試しください。",
+      "file_open_failed": "ファイルを開けませんでした。ファイルが利用可能で、既定のアプリがインストールされているか確認してください。"
     },
     "forward_dialog": {
       "title": "転送アイテム",
@@ -1225,12 +1227,16 @@
     "actions": "ファイルアクション",
     "action_preview": "プレビュー",
     "action_download": "デバイスに保存",
+    "action_save_as": "名前を付けて保存",
+    "action_reveal": "ファイルの場所を開く",
     "action_send": "送信",
     "action_details": "詳細",
     "action_delete": "ローカルファイルを削除する",
     "choose": "ファイルから選択",
     "choose_hint": "この会話に送信する利用可能なファイルを選択してください。",
     "selection": "{{count}} 選択済み · {{size}}",
+    "select_all": "すべて選択",
+    "clear_selection": "選択を解除",
     "send_count": "{{count}} 件のファイルを送信",
     "import": "インポート",
     "reused": "すでに存在します。ローカルコンテンツを再利用",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "クリップボードにコピー",
     "clipboard_write_failed": "クリップボードに書き込めませんでした",
     "clipboard_file_unsupported": "PNG/JPG画像ファイル1個のみ対応しています。その他の形式には対応していません。"
+  },
+  "file_import_error": {
+    "title": "ファイルのインポートに失敗しました",
+    "stage": "処理段階：{{stage}}",
+    "preparing": "ファイルの準備",
+    "authorizing": "キャッシュストレージへのアクセス",
+    "identifying": "ファイルの読み込み",
+    "writing": "キャッシュへの書き込み",
+    "verifying": "ファイルの確認",
+    "sharing": "ファイル共有の設定",
+    "copy_details": "エラーの詳細をコピー",
+    "unknown": "エラーの詳細はありません。"
+  },
+  "file_import_progress": {
+    "title": "インポートの進行状況",
+    "preparing": "ファイルを準備中…",
+    "identifying": "ファイルを読み込み中",
+    "writing": "ファイルをインポート中",
+    "verifying": "ファイルを確認中",
+    "counts": "{{total}} 件中 {{completed}} 件をインポート済み"
+  },
+  "file_save_progress": {
+    "title": "保存の進行状況",
+    "saving": "ファイルを保存中",
+    "waiting": "同名ファイルの処理を確認待ち",
+    "cancelling": "キャンセル中…",
+    "completed": "保存完了",
+    "cancelled": "残りの保存をキャンセルしました",
+    "failed": "保存に失敗しました",
+    "cancel_remaining": "残りをキャンセル",
+    "current_file": "現在のファイル：{{fileName}}（{{index}}/{{total}}）",
+    "counts": "{{total}} 件中 {{saved}} 件を保存、{{skipped}} 件をスキップ",
+    "preparing": "保存を準備中…"
+  },
+  "file_save_conflict": {
+    "title": "ファイルが既に存在します",
+    "description": "保存先に「{{fileName}}」が既に存在します。処理方法を選択してください。",
+    "cannot_overwrite": "保存先に「{{fileName}}」という名前のフォルダーなど、上書きできない項目があります。スキップするか、両方を保持してください。",
+    "overwrite": "上書き",
+    "skip": "スキップ",
+    "keep_both": "両方を保持",
+    "apply_to_all": "今回のすべての競合に適用"
+  },
+  "storage": {
+    "title": "ファイルの保存先",
+    "default": "保存方法",
+    "description": "変更は新しいファイルにのみ適用されます。既存のファイルと未完了の転送は元の保存先を使用します。",
+    "browser": "ブラウザーのストレージ",
+    "local_directory": "ローカルフォルダー",
+    "choose": "フォルダーを選択",
+    "open_directory": "フォルダーを開く",
+    "open_cache": "ファイルキャッシュを開く",
+    "reconnect": "フォルダーに再接続",
+    "unsupported": "このブラウザーはフォルダーへのアクセスに対応していません。ファイルはブラウザーに保存されます。",
+    "directory": "フォルダー",
+    "unavailable": "ストレージを利用できません",
+    "write_failed": "{{fileName}} をフォルダーに保存できませんでした（{{stage}}）。",
+    "stage_create": "ファイルの作成",
+    "stage_write": "データの書き込み",
+    "stage_commit": "ファイルの保存",
+    "name_blocked": "ブラウザーはこのフォルダーでの {{fileName}} の作成を許可していません。デスクトップ版を使用するか、ブラウザーストレージを手動で選択してください。",
+    "write_blocked": "ブラウザーまたはシステムのセキュリティチェックにより {{fileName}} の保存がブロックされました。"
   }
 }

@@ -124,7 +124,9 @@ async function put(
     await done;
   });
 }
-async function verifyFile(file: File | null) {
+async function verifyFile(
+  file: import("@weblink/platform").StoredFile | null,
+) {
   assert(file, "File missing");
   equal(
     [...new Uint8Array(await file.arrayBuffer())],

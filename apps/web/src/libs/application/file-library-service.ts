@@ -1,8 +1,14 @@
+import type {
+  BinarySource,
+  StoredFile,
+} from "@weblink/platform";
+import { StorageUnavailableError } from "@/libs/domain/vfs";
 import { createUuid } from "@/libs/domain/ids";
 import type {
   ChunkCache,
   ChunkMetaData,
   FileSource,
+  FileWriteProgress,
 } from "@/libs/domain/file";
 import {
   contentKey,
@@ -21,10 +27,15 @@ export interface FileLibraryOptions {
   repository: FileLibraryRepository;
   getChunkSize?(): number;
   fingerprint(
-    file: Blob,
+    file: BinarySource,
     options?: FingerprintOptions,
   ): Promise<FileFingerprint>;
-  storage(id: string): Promise<ChunkCache>;
+  storage(
+    id: string,
+    existingOnly?: boolean,
+  ): Promise<ChunkCache>;
+  /** Explicit list deletion removes the indexed path even when its content was deduplicated. */
+  removeSource?(id: string): Promise<void>;
   getCache(id: string): ChunkCache | null;
   publish(cache: ReferenceChunkCache): Promise<void>;
 }
@@ -32,8 +43,14 @@ export interface FileImportResult {
   cache: ChunkCache;
   reused: boolean;
 }
+export type FileImportProgress =
+  | { phase: "identifying"; bytes: number }
+  | FileWriteProgress;
+export interface FileImportOptions extends FingerprintOptions {
+  onImportProgress?(progress: FileImportProgress): void;
+}
 const metadata = (
-  file: File,
+  file: StoredFile,
 ): Omit<ChunkMetaData, "id" | "file"> => ({
   fileName: file.name,
   fileSize: file.size,
@@ -193,6 +210,7 @@ export class FileLibraryService {
 
   dispose(): void {
     this.channel?.close();
+    this.channel = undefined;
     this.changes.clear();
     this.removals.clear();
     this.unshares.clear();
@@ -213,19 +231,64 @@ export class FileLibraryService {
     return this.storageOwners.has(id);
   }
 
+  private async fingerprintFile(
+    cache: ChunkCache,
+    file: StoredFile,
+    options: FingerprintOptions = {},
+  ): Promise<FileFingerprint> {
+    return (
+      (await cache.fingerprint?.(
+        file,
+        {
+          signal: options.signal,
+          onProgress: options.onProgress
+            ? ({ bytes }) => options.onProgress!(bytes)
+            : undefined,
+        },
+        () => this.options.fingerprint(file, options),
+      )) ?? (await this.options.fingerprint(file, options))
+    );
+  }
+
   private async read(
     record: ContentRecord,
-  ): Promise<File | null> {
+    strict = false,
+  ): Promise<StoredFile | null> {
     if (record.state !== "ready") return null;
     try {
-      const info = await (
-        await this.options.storage(record.storageId)
-      ).getInfo();
+      const cache = await this.options.storage(
+        record.storageId,
+        true,
+      );
+      const info = await cache.getInfo();
+      if (info?.storageUnavailable)
+        throw new StorageUnavailableError(
+          info.storageUnavailable,
+          { missing: info.storageMissing },
+        );
+      if (
+        info?.isComplete &&
+        info.file &&
+        info.verifyContent &&
+        contentKey(
+          await this.fingerprintFile(cache, info.file, {
+            silent: true,
+          }),
+        ) !== record.key
+      )
+        throw new StorageUnavailableError(
+          "Directory file no longer matches its retained content fingerprint",
+        );
       return info?.isComplete &&
         info.file?.size === record.fingerprint.size
         ? (info.file ?? null)
         : null;
-    } catch {
+    } catch (error) {
+      if (
+        strict &&
+        error instanceof StorageUnavailableError
+      )
+        throw error;
       return null;
     }
   }
@@ -234,8 +297,22 @@ export class FileLibraryService {
   ): Promise<ContentRecord | undefined> {
     const record = await this.repository.content(key);
     if (!record || record.state !== "ready") return;
-    if (await this.read(record)) return record;
+    if (await this.read(record, true)) return record;
     await this.removeRecord(record);
+  }
+
+  private async reusableContent(
+    key: string,
+  ): Promise<ContentRecord | undefined> {
+    try {
+      return await this.available(key);
+    } catch (error) {
+      if (!(error instanceof StorageUnavailableError))
+        throw error;
+      // Missing/offline bytes cannot satisfy a receive. Keep their references;
+      // verifyReceived can restore them once identical new bytes are committed.
+      return undefined;
+    }
   }
 
   /** Check verified local bytes without creating another file reference. */
@@ -245,7 +322,7 @@ export class FileLibraryService {
     const key = contentKey(fingerprint);
     return withContentLock(
       key,
-      async () => !!(await this.available(key)),
+      async () => !!(await this.reusableContent(key)),
     );
   }
 
@@ -290,13 +367,29 @@ export class FileLibraryService {
             (await this.repository.content(
               current.contentKey,
             ));
-          return record ? this.read(record) : null;
+          return record ? this.read(record, true) : null;
         },
         (next) => this.repository.putReference(next),
         () => this.release(ref.id),
         async () =>
           !!(await this.repository.content(ref.contentKey))
             ?.isShared,
+        async () => {
+          const current = await this.repository.reference(
+            ref.id,
+          );
+          const content =
+            current &&
+            (await this.repository.content(
+              current.contentKey,
+            ));
+          if (!content) return null;
+          const source = await this.options.storage(
+            content.storageId,
+            true,
+          );
+          return source.storageLocation?.() ?? null;
+        },
       );
       this.references.set(ref.id, cache);
       await this.options.publish(cache);
@@ -305,14 +398,29 @@ export class FileLibraryService {
   }
 
   async importFile(
-    file: File,
-    options: FingerprintOptions = {},
+    file: StoredFile,
+    options: FileImportOptions = {},
   ): Promise<FileImportResult> {
+    const { onImportProgress, ...fingerprintOptions } =
+      options;
+    onImportProgress?.({ phase: "identifying", bytes: 0 });
     const fingerprint = await this.options.fingerprint(
       file,
-      options,
+      onImportProgress
+        ? {
+            ...fingerprintOptions,
+            onProgress: (bytes) => {
+              fingerprintOptions.onProgress?.(bytes);
+              onImportProgress({
+                phase: "identifying",
+                bytes,
+              });
+            },
+          }
+        : fingerprintOptions,
     );
     options.signal?.throwIfAborted();
+    onImportProgress?.({ phase: "writing", bytes: 0 });
     return this.acquire(
       file,
       fingerprint,
@@ -334,8 +442,8 @@ export class FileLibraryService {
   ): Promise<ChunkCache> {
     const id = info.id ?? createUuid();
     const fingerprintOptions = { ...options, fileId: id };
-    const isLibrary = !(source instanceof File);
-    let file: File;
+    const isLibrary = "localFileId" in source;
+    let file: StoredFile;
     let fingerprint: FileFingerprint;
     let storageId: string | undefined;
     if (isLibrary) {
@@ -351,7 +459,8 @@ export class FileLibraryService {
       if (stored.contentKey && stored.fingerprint)
         fingerprint = stored.fingerprint;
       else {
-        fingerprint = await this.options.fingerprint(
+        fingerprint = await this.fingerprintFile(
+          cache,
           file,
           fingerprintOptions,
         );
@@ -399,10 +508,10 @@ export class FileLibraryService {
   }
 
   private async acquire(
-    file: File,
+    file: StoredFile,
     fingerprint: FileFingerprint,
     info: ChunkMetaData,
-    options: FingerprintOptions,
+    options: FileImportOptions,
     borrowedStorage?: string,
   ): Promise<FileImportResult> {
     const deadline = Date.now() + 10_000;
@@ -438,11 +547,58 @@ export class FileLibraryService {
       });
     }
   }
+
+  /** Replace unavailable content only after the supplied identical bytes commit. */
+  private async restoreContent(
+    record: ContentRecord,
+    reference: FileReference,
+    file: StoredFile,
+    options: FileImportOptions,
+    borrowedStorage?: string,
+  ): Promise<ContentRecord> {
+    const storageId =
+      borrowedStorage ?? `content_${createUuid()}`;
+    const cache = await this.options.storage(storageId);
+    let restored: ContentRecord;
+    try {
+      if (!borrowedStorage)
+        await cache.setInfo(
+          {
+            ...metadata(file),
+            file,
+            fingerprint: record.fingerprint,
+            contentStorage: true,
+          },
+          options.signal,
+          options.onImportProgress,
+        );
+      options.signal?.throwIfAborted();
+      restored = {
+        ...record,
+        storageId:
+          (await cache.storageIdentity?.()) ?? storageId,
+      };
+      options.signal?.throwIfAborted();
+      await this.repository.commit(restored, reference);
+    } catch (error) {
+      // Failed repairs must leave the retained record, its references and the
+      // previous directory's bytes intact. Only this import's new copy is owned.
+      if (!borrowedStorage)
+        await cache
+          .cleanup({ deleteSource: true })
+          .catch(() => {});
+      throw error;
+    }
+    this.storageOwners.delete(record.storageId);
+    this.storageOwners.set(restored.storageId, record.key);
+    return restored;
+  }
+
   private async acquireOnce(
-    file: File,
+    file: StoredFile,
     fingerprint: FileFingerprint,
     info: ChunkMetaData,
-    options: FingerprintOptions,
+    options: FileImportOptions,
     borrowedStorage?: string,
   ): Promise<FileImportResult | null> {
     fingerprint = { ...fingerprint };
@@ -457,11 +613,55 @@ export class FileLibraryService {
           Date.now() - pending.createdAt > 300_000)
       )
         await this.removeRecord(pending);
-      let record = await this.available(key);
-      const reused = !!record;
+      if (borrowedStorage) {
+        const current = await (
+          await this.options.storage(borrowedStorage)
+        ).getInfo();
+        if (
+          !current?.isComplete ||
+          !current.file ||
+          current.storageUnavailable
+        )
+          throw new StorageUnavailableError(
+            "File changed while identifying its content",
+          );
+      }
+      let record: ContentRecord | undefined;
+      let restored = false;
+      try {
+        record = await this.available(key);
+      } catch (error) {
+        // A new import or renamed directory entry can supply the exact verified
+        // bytes of an unavailable version without losing retained references.
+        if (
+          !(error instanceof StorageUnavailableError) ||
+          !pending ||
+          pending.state !== "ready" ||
+          pending.storageId === borrowedStorage
+        )
+          throw error;
+        const [retained] =
+          await this.repository.references(key);
+        if (!retained) throw error;
+        record = await this.restoreContent(
+          pending,
+          retained,
+          file,
+          options,
+          borrowedStorage,
+        );
+        restored = true;
+      }
+      const reused =
+        !!record && (!restored || !!borrowedStorage);
       const refs = record
         ? await this.repository.references(key)
         : [];
+      if (restored) {
+        for (const ref of refs) await this.publish(ref);
+        this.changed();
+        options.signal?.throwIfAborted();
+      }
       const pinned =
         info.libraryPinned &&
         borrowedStorage !== info.id &&
@@ -481,7 +681,7 @@ export class FileLibraryService {
         this.changed();
         return {
           cache: await this.publish(updated),
-          reused: true,
+          reused,
         };
       }
       const rest = referenceMetadata(info);
@@ -514,29 +714,43 @@ export class FileLibraryService {
         if (!(await this.repository.claim(record)))
           return null;
         this.storageOwners.set(record.storageId, key);
+        const allocatedStorage = record.storageId;
         try {
+          const cache = await this.options.storage(
+            record.storageId,
+          );
           if (!borrowedStorage) {
-            const cache = await this.options.storage(
-              record.storageId,
+            await cache.setInfo(
+              {
+                ...metadata(file),
+                file,
+                fingerprint,
+                contentStorage: true,
+              },
+              options.signal,
+              options.onImportProgress,
             );
-            await cache.setInfo({
-              ...metadata(file),
-              file,
-              fingerprint,
-              contentStorage: true,
-            });
           }
           options.signal?.throwIfAborted();
+          // Plain directory filenames carry no hidden persistent ID after the
+          // transfer trailer is removed. Retain the identity directory scans use.
+          record.storageId =
+            (await cache.storageIdentity?.()) ??
+            record.storageId;
+          this.storageOwners.set(record.storageId, key);
           record.state = "ready";
           await this.repository.commit(record, reference);
+          if (allocatedStorage !== record.storageId)
+            this.storageOwners.delete(allocatedStorage);
         } catch (error) {
           await this.repository.removeContent(key);
+          this.storageOwners.delete(allocatedStorage);
           this.storageOwners.delete(record.storageId);
           if (!borrowedStorage)
             await (
               await this.options.storage(record.storageId)
             )
-              .cleanup()
+              .cleanup({ deleteSource: true })
               .catch(() => {});
           throw error;
         }
@@ -547,7 +761,10 @@ export class FileLibraryService {
         cache.invalidate();
         this.references.delete(reference.id);
         if (!(await this.repository.references(key)).length)
-          await this.removeRecord(record);
+          await this.removeRecord(
+            record,
+            !borrowedStorage && !reused,
+          );
         this.changed();
         options.signal.throwIfAborted();
       }
@@ -570,7 +787,7 @@ export class FileLibraryService {
       );
     return withContentLock(key, async () => {
       signal?.throwIfAborted();
-      if (!(await this.available(key))) return null;
+      if (!(await this.reusableContent(key))) return null;
       const metadata = referenceMetadata(info);
       const reference: FileReference = {
         ...metadata,
@@ -607,11 +824,12 @@ export class FileLibraryService {
   async verifyReceived(
     cache: ChunkCache,
     signal?: AbortSignal,
-  ): Promise<File | null> {
+  ): Promise<StoredFile | null> {
     const info = await cache.getInfo();
     const file = await cache.getFile();
     if (!info || !file) return null;
-    const fingerprint = await this.options.fingerprint(
+    const fingerprint = await this.fingerprintFile(
+      cache,
       file,
       { signal, fileId: cache.id },
     );
@@ -753,6 +971,87 @@ export class FileLibraryService {
     if (ref && !ref.libraryPinned) await this.release(id);
   }
 
+  async releaseDirectoryPin(id: string): Promise<void> {
+    const direct = await this.repository.reference(id);
+    const records = (
+      await this.repository.contents()
+    ).filter(
+      (record) =>
+        record.storageId === id ||
+        record.key === direct?.contentKey,
+    );
+    for (const record of records)
+      await withContentLock(record.key, async () => {
+        const current = await this.repository.content(
+          record.key,
+        );
+        if (current)
+          await this.releaseDirectoryPins(current, id);
+      });
+  }
+
+  private async releaseDirectoryPins(
+    record: ContentRecord,
+    id: string,
+  ): Promise<void> {
+    const refs = await this.repository.references(
+      record.key,
+    );
+    for (const ref of refs)
+      if (
+        ref.libraryPinned &&
+        !ref.sharedReference &&
+        (record.storageId === id || ref.id === id)
+      )
+        await this.releaseReference(ref);
+    if (!refs.length) await this.removeRecord(record);
+  }
+
+  /** Startup has no previous directory listing, so reconcile retained pins against confirmed absence too. */
+  async reconcileMissingDirectoryFiles(): Promise<void> {
+    const refs = await this.repository.references();
+    const retained = new Set(
+      refs.map((ref) => ref.contentKey),
+    );
+    const local = new Set(
+      refs
+        .filter(
+          (ref) =>
+            ref.libraryPinned && !ref.sharedReference,
+        )
+        .map((ref) => ref.contentKey),
+    );
+    for (const record of await this.repository.contents()) {
+      if (
+        record.state !== "ready" ||
+        !record.storageId.startsWith("directory_") ||
+        (retained.has(record.key) && !local.has(record.key))
+      )
+        continue;
+      await withContentLock(record.key, async () => {
+        const current = await this.repository.content(
+          record.key,
+        );
+        if (
+          current?.storageId !== record.storageId ||
+          current.state !== "ready"
+        )
+          return;
+        const cache = await this.options.storage(
+          current.storageId,
+          true,
+        );
+        // Inaccessibility alone cannot prove deletion. A successful scan must
+        // have confirmed that this exact directory version is absent.
+        if ((await cache.getInfo())?.storageMissing)
+          await this.releaseDirectoryPins(
+            current,
+            current.storageId,
+          );
+      });
+    }
+  }
+
   async release(id: string): Promise<void> {
     const reference = await this.repository.reference(id);
     if (!reference || reference.sharedReference) return;
@@ -787,21 +1086,34 @@ export class FileLibraryService {
   async removeFile(id: string): Promise<void> {
     const ref = await this.repository.reference(id);
     if (!ref) {
+      await this.options.removeSource?.(id);
+      await this.options
+        .getCache(id)
+        ?.cleanup({ deleteSource: true });
       this.removals.forEach((listener) => listener([id]));
-      await this.options.getCache(id)?.cleanup();
       return;
     }
     await withContentLock(ref.contentKey, async () => {
+      await this.options.removeSource?.(id);
       const record = await this.repository.content(
         ref.contentKey,
       );
-      if (record) await this.removeRecord(record);
+      if (record) await this.removeRecord(record, true);
       this.changed();
     });
   }
   private async removeRecord(
     record: ContentRecord,
+    deleteSource = false,
   ): Promise<void> {
+    const storage = await this.options.storage(
+      record.storageId,
+      true,
+    );
+    // Validate/delete an indexed source before dropping references. If permission
+    // was lost or the source was replaced, the failed action retains metadata.
+    if (deleteSource)
+      await storage.cleanup({ deleteSource: true });
     const refs = await this.repository.references(
       record.key,
     );
@@ -814,9 +1126,7 @@ export class FileLibraryService {
       this.references.delete(ref.id);
     }
     this.storageOwners.delete(record.storageId);
-    await (
-      await this.options.storage(record.storageId)
-    ).cleanup();
+    await storage.cleanup({ deleteSource });
   }
   referenceCount(id: string): Promise<number> {
     return this.repository

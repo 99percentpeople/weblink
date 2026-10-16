@@ -840,7 +840,8 @@
       "picture_in_picture": "Mode PIP",
       "exit_picture_in_picture": "Quitter le mode PIP",
       "continue": "Continuer",
-      "retry": "Réessayer"
+      "retry": "Réessayer",
+      "open": "Ouvrir"
     },
     "notification": {
       "copy_success": "Copie réussie",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "Impossible de vider le cache de l'application : {{error}}",
       "copy_failed": "Impossible de copier. Vérifiez les autorisations du presse-papiers et réessayez.",
       "room_unprotected": "Cette salle ne nécessite pas de mot de passe.",
-      "file_save_failed": "Impossible d’enregistrer le fichier. Vérifiez la destination et l’espace disque disponible, puis réessayez."
+      "file_save_failed": "Impossible d’enregistrer le fichier. Vérifiez la destination et l’espace disque disponible, puis réessayez.",
+      "file_open_failed": "Impossible d’ouvrir le fichier. Vérifiez sa disponibilité et qu’une application par défaut est installée."
     },
     "forward_dialog": {
       "title": "Transférer des éléments",
@@ -1225,12 +1227,16 @@
     "actions": "Actions sur les fichiers",
     "action_preview": "Aperçu",
     "action_download": "Enregistrer sur l'appareil",
+    "action_save_as": "Enregistrer sous…",
+    "action_reveal": "Ouvrir l’emplacement du fichier",
     "action_send": "Envoyer",
     "action_details": "Détails",
     "action_delete": "Supprimer le fichier local",
     "choose": "Choisissez parmi les fichiers",
     "choose_hint": "Sélectionnez les fichiers disponibles à envoyer à cette conversation.",
     "selection": "{{count}} sélectionné · {{size}}",
+    "select_all": "Tout sélectionner",
+    "clear_selection": "Désélectionner tout",
     "send_count": "Envoyer {{count}} fichiers",
     "import": "Importer",
     "reused": "Existe déjà ; contenu local réutilisé",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "Copier dans le presse-papiers",
     "clipboard_write_failed": "Impossible d’écrire dans le presse-papiers",
     "clipboard_file_unsupported": "Une seule image PNG/JPG est prise en charge. Les autres types ne sont pas pris en charge."
+  },
+  "file_import_error": {
+    "title": "Échec de l’importation du fichier",
+    "stage": "Étape : {{stage}}",
+    "preparing": "Préparation des fichiers",
+    "authorizing": "Accès au stockage du cache",
+    "identifying": "Lecture du fichier",
+    "writing": "Écriture dans le cache",
+    "verifying": "Vérification du fichier",
+    "sharing": "Partage du fichier",
+    "copy_details": "Copier les détails de l’erreur",
+    "unknown": "Aucun détail d’erreur n’a été fourni."
+  },
+  "file_import_progress": {
+    "title": "Progression de l’importation",
+    "preparing": "Préparation des fichiers…",
+    "identifying": "Lecture du fichier",
+    "writing": "Importation du fichier",
+    "verifying": "Vérification du fichier",
+    "counts": "{{completed}} sur {{total}} importés"
+  },
+  "file_save_progress": {
+    "title": "Progression de l’enregistrement",
+    "saving": "Enregistrement des fichiers",
+    "waiting": "En attente d’une décision sur le fichier existant",
+    "cancelling": "Annulation…",
+    "completed": "Enregistrement terminé",
+    "cancelled": "Enregistrements restants annulés",
+    "failed": "Échec de l’enregistrement",
+    "cancel_remaining": "Annuler le reste",
+    "current_file": "Fichier actuel : {{fileName}} ({{index}}/{{total}})",
+    "counts": "{{saved}} sur {{total}} enregistrés, {{skipped}} ignorés",
+    "preparing": "Préparation de l’enregistrement…"
+  },
+  "file_save_conflict": {
+    "title": "Le fichier existe déjà",
+    "description": "La destination contient déjà « {{fileName}} ». Choisissez une action.",
+    "cannot_overwrite": "La destination contient un dossier ou un autre élément nommé « {{fileName}} » qui ne peut pas être remplacé. Ignorez-le ou conservez les deux.",
+    "overwrite": "Remplacer",
+    "skip": "Ignorer",
+    "keep_both": "Conserver les deux",
+    "apply_to_all": "Appliquer à tous les conflits de ce lot"
+  },
+  "storage": {
+    "title": "Stockage des fichiers",
+    "default": "Mode de stockage",
+    "description": "Ce changement concerne uniquement les nouveaux fichiers. Les fichiers existants et les transferts en cours conservent leur emplacement initial.",
+    "browser": "Stockage du navigateur",
+    "local_directory": "Dossier local",
+    "choose": "Choisir un dossier",
+    "open_directory": "Ouvrir le dossier",
+    "open_cache": "Ouvrir le cache de fichiers",
+    "reconnect": "Reconnecter le dossier",
+    "unsupported": "Ce navigateur ne permet pas d’accéder aux dossiers. Les fichiers restent dans le stockage du navigateur.",
+    "directory": "Dossier",
+    "unavailable": "Stockage indisponible",
+    "write_failed": "Impossible d’enregistrer {{fileName}} dans le dossier ({{stage}}).",
+    "stage_create": "création du fichier",
+    "stage_write": "écriture des données",
+    "stage_commit": "enregistrement du fichier",
+    "name_blocked": "Le navigateur ne permet pas de créer {{fileName}} dans ce dossier. Utilisez l’application de bureau ou sélectionnez manuellement le stockage du navigateur.",
+    "write_blocked": "Un contrôle de sécurité du navigateur ou du système a bloqué l’enregistrement de {{fileName}}."
   }
 }

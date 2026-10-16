@@ -31,10 +31,22 @@ export function fileKind(
 /** One visible row per content; per-offer aliases remain independent underneath. */
 export function libraryFiles(
   infos: readonly FileMetaData[],
+  mountId?: string,
 ): LibraryFile[] {
   const groups = new Map<string, LibraryFile>();
   for (const info of infos) {
-    if (info.contentStorage) continue;
+    if (info.contentStorage || info.storageMissing)
+      continue;
+    // Scope before grouping references, so a preferred reference from another
+    // mount cannot hide this directory's copy of the same content.
+    const storageMountId =
+      info.storageMountId ??
+      (info.storageKind === "indexeddb" ||
+      (!info.storageKind && !info.storageUnavailable)
+        ? "indexeddb"
+        : undefined);
+    if (mountId !== undefined && storageMountId !== mountId)
+      continue;
     const key = info.contentKey ?? info.id;
     const previous = groups.get(key);
     if (!previous)

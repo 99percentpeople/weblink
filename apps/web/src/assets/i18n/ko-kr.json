@@ -840,7 +840,8 @@
       "picture_in_picture": "PIP 모드",
       "exit_picture_in_picture": "PIP 모드 종료",
       "continue": "계속",
-      "retry": "다시 시도"
+      "retry": "다시 시도",
+      "open": "열기"
     },
     "notification": {
       "copy_success": "복사 성공",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "앱 캐시를 지울 수 없습니다: {{error}}",
       "copy_failed": "복사할 수 없습니다. 클립보드 권한을 확인하고 다시 시도하세요.",
       "room_unprotected": "이 방에는 비밀번호가 필요하지 않습니다.",
-      "file_save_failed": "파일을 저장할 수 없습니다. 저장 위치와 디스크 여유 공간을 확인한 후 다시 시도하세요."
+      "file_save_failed": "파일을 저장할 수 없습니다. 저장 위치와 디스크 여유 공간을 확인한 후 다시 시도하세요.",
+      "file_open_failed": "파일을 열 수 없습니다. 파일을 사용할 수 있는지, 기본 앱이 설치되어 있는지 확인하세요."
     },
     "forward_dialog": {
       "title": "항목 전달",
@@ -1225,12 +1227,16 @@
     "actions": "파일 작업",
     "action_preview": "미리보기",
     "action_download": "장치에 저장",
+    "action_save_as": "다른 이름으로 저장",
+    "action_reveal": "파일 위치 열기",
     "action_send": "보내기",
     "action_details": "세부 정보",
     "action_delete": "로컬 파일 삭제",
     "choose": "파일에서 선택",
     "choose_hint": "이 대화에 보낼 수 있는 파일을 선택하세요.",
     "selection": "{{count}} 선택됨 · {{size}}",
+    "select_all": "모두 선택",
+    "clear_selection": "선택 해제",
     "send_count": "파일 {{count}}개 보내기",
     "import": "가져오기",
     "reused": "이미 존재합니다. 재사용된 로컬 콘텐츠",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "클립보드에 복사",
     "clipboard_write_failed": "클립보드에 쓸 수 없습니다",
     "clipboard_file_unsupported": "PNG/JPG 이미지 파일 하나만 지원하며 다른 형식은 지원하지 않습니다."
+  },
+  "file_import_error": {
+    "title": "파일 가져오기 실패",
+    "stage": "단계: {{stage}}",
+    "preparing": "파일 준비",
+    "authorizing": "캐시 저장소 접근",
+    "identifying": "파일 읽기",
+    "writing": "캐시에 쓰기",
+    "verifying": "파일 확인",
+    "sharing": "파일 공유 설정",
+    "copy_details": "오류 세부 정보 복사",
+    "unknown": "오류 세부 정보가 제공되지 않았습니다."
+  },
+  "file_import_progress": {
+    "title": "가져오기 진행률",
+    "preparing": "파일 준비 중…",
+    "identifying": "파일 읽는 중",
+    "writing": "파일 가져오는 중",
+    "verifying": "파일 확인 중",
+    "counts": "{{total}}개 중 {{completed}}개 가져옴"
+  },
+  "file_save_progress": {
+    "title": "저장 진행 상황",
+    "saving": "파일 저장 중",
+    "waiting": "동일한 이름의 파일 처리 확인 대기 중",
+    "cancelling": "취소 중…",
+    "completed": "저장 완료",
+    "cancelled": "남은 저장 취소됨",
+    "failed": "저장 실패",
+    "cancel_remaining": "남은 작업 취소",
+    "current_file": "현재 파일: {{fileName}} ({{index}}/{{total}})",
+    "counts": "{{total}}개 중 {{saved}}개 저장, {{skipped}}개 건너뜀",
+    "preparing": "저장 준비 중…"
+  },
+  "file_save_conflict": {
+    "title": "파일이 이미 존재합니다",
+    "description": "대상 폴더에 “{{fileName}}”이(가) 이미 있습니다. 처리 방법을 선택하세요.",
+    "cannot_overwrite": "대상 폴더에 덮어쓸 수 없는 “{{fileName}}” 폴더 또는 다른 항목이 있습니다. 건너뛰거나 둘 다 유지하세요.",
+    "overwrite": "덮어쓰기",
+    "skip": "건너뛰기",
+    "keep_both": "둘 다 유지",
+    "apply_to_all": "이번 작업의 모든 충돌에 적용"
+  },
+  "storage": {
+    "title": "파일 저장소",
+    "default": "저장 방식",
+    "description": "위치 변경은 새 파일에만 적용됩니다. 기존 파일과 완료되지 않은 전송은 원래 저장 위치를 유지합니다.",
+    "browser": "브라우저 저장소",
+    "local_directory": "로컬 폴더",
+    "choose": "폴더 선택",
+    "open_directory": "폴더 열기",
+    "open_cache": "파일 캐시 열기",
+    "reconnect": "폴더 다시 연결",
+    "unsupported": "이 브라우저는 폴더 접근을 지원하지 않습니다. 파일은 브라우저 저장소에 저장됩니다.",
+    "directory": "폴더",
+    "unavailable": "저장소를 사용할 수 없음",
+    "write_failed": "{{fileName}}을(를) 폴더에 저장하지 못했습니다({{stage}}).",
+    "stage_create": "파일 생성",
+    "stage_write": "데이터 쓰기",
+    "stage_commit": "파일 저장",
+    "name_blocked": "브라우저가 이 폴더에 {{fileName}}을(를) 생성하는 것을 허용하지 않습니다. 데스크톱 앱을 사용하거나 브라우저 저장소를 직접 선택하세요.",
+    "write_blocked": "브라우저 또는 시스템 보안 검사로 {{fileName}} 저장이 차단되었습니다."
   }
 }

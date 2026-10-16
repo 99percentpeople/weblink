@@ -1,6 +1,9 @@
 import { MAX_SHARE_FILE_SIZE_BYTES } from "@/constants";
 
-export function canShareFile(file: File) {
+export function canShareFile(
+  file: import("@weblink/platform").StoredFile,
+): file is File {
+  if (!(file instanceof File)) return false;
   // Check if navigator.canShare is supported
   if (!navigator.canShare) return false;
 

@@ -256,7 +256,11 @@ function makeNode(
         if (caches.get(fid) === scoped) caches.delete(fid);
       });
       if (contentEnabled) {
-        let verified: Promise<File | null> | undefined;
+        let verified:
+          | Promise<
+              import("@weblink/platform").StoredFile | null
+            >
+          | undefined;
         scoped.verifyFile = (signal) =>
           (verified ??= library!
             .verifyReceived(scoped, signal)
@@ -611,7 +615,9 @@ async function connect(a: Node, b: Node) {
   };
 }
 
-async function hash(file: File) {
+async function hash(
+  file: import("@weblink/platform").StoredFile,
+) {
   const digest = await crypto.subtle.digest(
     "SHA-256",
     await file.arrayBuffer(),

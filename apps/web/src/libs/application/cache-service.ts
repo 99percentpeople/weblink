@@ -1,10 +1,11 @@
-import { DBNAME_PREFIX } from "@/constants";
+import { platform } from "@/libs/platform/runtime";
+import { FileStorageService } from "./file-storage-service";
+import type { StoredFile } from "@weblink/platform";
 import type {
   ChunkCache,
   FileMetaData,
 } from "@/libs/domain/file";
 import type { FileID } from "@/libs/domain/ids";
-import { IDBChunkCache } from "@/libs/infrastructure/storage/indexeddb-chunk-cache";
 import type { Accessor } from "solid-js";
 import { v4 } from "uuid";
 import { FileFingerprintService } from "./file-fingerprint-service";
@@ -19,6 +20,21 @@ import {
 import { FileCatalogIndex } from "./file-catalog-index";
 
 export class FileCacheFactory {
+  constructor(
+    readonly storage = new FileStorageService(
+      platform.filesystem,
+    ),
+  ) {}
+  private stopStorageWatch?: () => void;
+  private stopLibraryWatch?: () => void;
+  private readonly storageCaches =
+    new WeakSet<ChunkCache>();
+  private storageRefreshTimer?: ReturnType<
+    typeof setTimeout
+  >;
+  private storageRefreshing?: Promise<void>;
+  private storageRefreshRequested = false;
+  private disposed = false;
   /** Ephemeral remote content transfers never enter the library or chat history. */
   async temporaryTransferCache(
     id: string,
@@ -29,9 +45,9 @@ export class FileCacheFactory {
       throw new Error(
         "Invalid temporary transfer cache id",
       );
-    const cache = new IDBChunkCache({
-      id,
-      maxMomeryCacheSize: 4 * 1024 * 1024,
+    const cache = await this.storage.createCache(id, {
+      memoryChunks: 16,
+      isRetained: () => false,
     });
     await cache.initialize();
     return cache;
@@ -54,9 +70,13 @@ export class FileCacheFactory {
     getChunkSize: () => appState.options.chunkSize,
     fingerprint: (file, options) =>
       this.fingerprints.hash(file, options),
-    storage: (id) => this.loadStorage(id),
+    storage: (id, existingOnly) =>
+      this.loadStorage(id, existingOnly),
+    removeSource: (id) =>
+      this.storage.removeDirectorySource(id),
     getCache: (id) => this.getCache(id),
     publish: async (cache) => {
+      if (this.disposed) return;
       const previous = this.getCache(cache.id);
       this.observe(cache);
       this.addCache(cache.id, cache);
@@ -81,15 +101,14 @@ export class FileCacheFactory {
   async initialize() {
     setAppState("cache", "status", "loading");
     setAppState("cache", "error", undefined);
+    this.stopLibraryWatch?.();
+    this.stopLibraryWatch = this.library.onChange(() =>
+      this.hideOwnedStorage(),
+    );
     try {
+      await this.storage.initialize();
       await this.library.initialize();
-      const databases = await indexedDB.databases();
-
-      const fileDBs = databases
-        .filter((db) => db.name?.startsWith(DBNAME_PREFIX))
-        .map((db) =>
-          db.name!.substring(DBNAME_PREFIX.length),
-        );
+      const fileDBs = await this.storage.storageIds();
 
       const caches = await Promise.all(
         fileDBs.map((id) => this.loadStorage(id)),
@@ -104,7 +123,7 @@ export class FileCacheFactory {
           .getInfo()
           .catch(() => null);
         if (
-          info?.contentStorage ||
+          (info?.contentStorage && !info.verifyContent) ||
           this.library.ownsStorage(cache.id) ||
           this.caches[cache.id]
         )
@@ -139,6 +158,20 @@ export class FileCacheFactory {
       );
       console.error(e);
     } finally {
+      this.stopStorageWatch?.();
+      this.stopStorageWatch = this.storage.onChange(() => {
+        if (this.disposed || this.storageRefreshTimer)
+          return;
+        this.storageRefreshTimer = setTimeout(() => {
+          this.storageRefreshTimer = undefined;
+          void this.refreshStorage().catch((error) => {
+            if (!this.disposed) console.error(error);
+          });
+        }, 300);
+      });
+      await this.refreshStorage().catch((error) => {
+        if (!this.disposed) console.error(error);
+      });
       setAppState("cache", "status", "ready");
     }
   }
@@ -154,22 +187,30 @@ export class FileCacheFactory {
     await this.library.removeFile(id);
   }
 
-  private loadStorage(id: FileID): Promise<ChunkCache> {
+  private loadStorage(
+    id: FileID,
+    existingOnly = false,
+  ): Promise<ChunkCache> {
     const existing = this.rawCaches.get(id);
     if (existing) return existing;
-    const cache: ChunkCache = new IDBChunkCache({
-      id,
-      maxMomeryCacheSize:
-        appState.options.maxMomeryCacheSlices,
-      isRetained: () => this.library.ownsStorage(id),
-    });
-    this.attachVerification(cache);
-    cache.addEventListener("cleanup", () =>
-      this.rawCaches.delete(id),
-    );
-    const pending = cache
-      .initialize()
-      .then(() => cache)
+    const pending = this.storage
+      .createCache(id, {
+        existingOnly,
+        memoryChunks: appState.options.maxMomeryCacheSlices,
+        isRetained: () => this.library.ownsStorage(id),
+      })
+      .then(async (cache) => {
+        this.storageCaches.add(cache);
+        this.attachVerification(cache);
+        cache.addEventListener(
+          "cleanup",
+          () =>
+            this.rawCaches.get(id) === pending &&
+            this.rawCaches.delete(id),
+        );
+        await cache.initialize();
+        return cache;
+      })
       .catch((error) => {
         this.rawCaches.delete(id);
         throw error;
@@ -181,7 +222,8 @@ export class FileCacheFactory {
   private observe(cache: ChunkCache): void {
     const id = cache.id;
     cache.addEventListener("update", (ev) => {
-      if (this.caches[id] !== cache) return;
+      if (this.disposed || this.caches[id] !== cache)
+        return;
       // Fingerprinted receives are not previewable/advertised until verification.
       const info =
         ev.detail?.fingerprint &&
@@ -197,11 +239,13 @@ export class FileCacheFactory {
       this.catalog.update(id, info);
       if (info) {
         setAppState("cache", "cacheInfo", id, info);
-      }
+      } else
+        setAppState("cache", "cacheInfo", id, undefined!);
     });
 
     cache.addEventListener("cleanup", () => {
-      if (this.caches[id] !== cache) return;
+      if (this.disposed || this.caches[id] !== cache)
+        return;
       this.catalog.update(id, null);
       setAppState("cache", "cacheInfo", id, undefined!);
       setAppState("cache", "caches", id, undefined!);
@@ -210,6 +254,23 @@ export class FileCacheFactory {
 
   private async addCache(id: FileID, cache: ChunkCache) {
     setAppState("cache", "caches", id, cache);
+  }
+
+  private hideOwnedStorage(): void {
+    if (this.disposed) return;
+    for (const [id, cache] of Object.entries(this.caches)) {
+      if (
+        cache &&
+        this.storageCaches.has(cache) &&
+        this.library.ownsStorage(id)
+      ) {
+        // A scan can discover a newly committed file before its library reference
+        // is published. Keep that raw cache for reads, but show only the reference.
+        this.catalog.update(id, null);
+        setAppState("cache", "cacheInfo", id, undefined!);
+        setAppState("cache", "caches", id, undefined!);
+      }
+    }
   }
 
   private collectRetiredStorage(): void {
@@ -227,7 +288,10 @@ export class FileCacheFactory {
   }
 
   private attachVerification(cache: ChunkCache): void {
-    let verified: Promise<File | null> | undefined;
+    let verified: Promise<StoredFile | null> | undefined;
+    cache.addEventListener("update", ({ detail }) => {
+      if (detail?.storageUnavailable) verified = undefined;
+    });
     cache.verifyFile = (signal) =>
       (verified ??= (async () => {
         const file = await this.library.verifyReceived(
@@ -254,6 +318,91 @@ export class FileCacheFactory {
     };
   }
 
+  private refreshStorage(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    this.storageRefreshRequested = true;
+    if (this.storageRefreshing)
+      return this.storageRefreshing;
+    const refresh = async () => {
+      do {
+        this.storageRefreshRequested = false;
+        const directory =
+          await this.storage.synchronizeDirectories();
+        if (this.disposed) return;
+        for (const id of directory.removed) {
+          // Release the directory's pin only. Sent/shared references still retain
+          // their old content identity and become unavailable if the bytes changed.
+          await this.library.releaseDirectoryPin(id);
+          if (this.disposed) return;
+          const cache = await this.rawCaches.get(id);
+          // Completing a directory receive replaces its temporary ID with a
+          // directory ID. The receiver still needs the old cache to verify and
+          // publish the file before its transfer releases it.
+          if (cache && this.isCacheInUse(cache)) {
+            this.retired.add(cache);
+            this.collectRetiredStorage();
+            continue;
+          }
+          await cache?.cleanup();
+          if (this.disposed) return;
+          if (this.caches[id] === cache) {
+            this.catalog.update(id, null);
+            setAppState(
+              "cache",
+              "cacheInfo",
+              id,
+              undefined!,
+            );
+            setAppState("cache", "caches", id, undefined!);
+          }
+        }
+        for (const id of directory.files) {
+          const cache = await this.loadStorage(id);
+          if (this.disposed) return;
+          if (
+            !this.caches[id] &&
+            !this.library.ownsStorage(id)
+          ) {
+            this.observe(cache);
+            await this.addCache(id, cache);
+          }
+        }
+        const caches = await Promise.allSettled(
+          this.rawCaches.values(),
+        );
+        await Promise.all(
+          caches.map(async (result) => {
+            if (result.status === "fulfilled")
+              await result.value.refresh?.();
+          }),
+        );
+        if (!this.disposed)
+          await this.library.reconcileMissingDirectoryFiles();
+        if (!this.disposed) await this.library.refresh();
+      } while (
+        this.storageRefreshRequested &&
+        !this.disposed
+      );
+    };
+    return (this.storageRefreshing = refresh().finally(
+      () => {
+        this.storageRefreshing = undefined;
+      },
+    ));
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    clearTimeout(this.retirementTimer);
+    clearTimeout(this.storageRefreshTimer);
+    this.stopStorageWatch?.();
+    this.stopLibraryWatch?.();
+    for (const cache of this.rawCaches.values())
+      void cache.then((value) => value.dispose?.());
+    this.storage.dispose();
+    this.library.dispose();
+  }
+
   async createCache(id?: FileID): Promise<ChunkCache> {
     const cacheId = id ?? v4();
     if (this.caches[cacheId]) return this.caches[cacheId];
@@ -274,3 +423,6 @@ export function createCacheManager() {
   }
   return cacheManager;
 }
+
+if (import.meta.hot)
+  import.meta.hot.dispose(() => cacheManager?.dispose());

@@ -840,7 +840,8 @@
       "picture_in_picture": "画中画",
       "exit_picture_in_picture": "退出画中画",
       "continue": "继续",
-      "retry": "重试"
+      "retry": "重试",
+      "open": "打开"
     },
     "clipboard_history": {
       "title": "剪贴板历史"
@@ -909,7 +910,8 @@
       "clear_cache_failed": "清除应用缓存失败：{{error}}",
       "copy_failed": "复制失败，请检查剪贴板权限后重试。",
       "room_unprotected": "此房间未设置密码。",
-      "file_save_failed": "保存文件失败，请检查保存位置和磁盘剩余空间后重试。"
+      "file_save_failed": "保存文件失败，请检查保存位置和磁盘剩余空间后重试。",
+      "file_open_failed": "无法打开文件，请检查文件是否可用及系统默认应用是否已安装。"
     },
     "nav": {
       "settings": "设置",
@@ -1225,12 +1227,16 @@
     "actions": "文件操作",
     "action_preview": "预览",
     "action_download": "保存到设备",
+    "action_save_as": "另存为",
+    "action_reveal": "打开位置",
     "action_send": "发送",
     "action_details": "查看详情",
     "action_delete": "删除本地文件",
     "choose": "从文件列表选择",
     "choose_hint": "选择可用的文件，发送到当前会话。",
     "selection": "已选 {{count}} 项 · {{size}}",
+    "select_all": "全选",
+    "clear_selection": "取消选择",
     "send_count": "发送 {{count}} 个文件",
     "import": "导入",
     "reused": "文件已存在，已复用本地内容",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "复制到本机剪贴板",
     "clipboard_write_failed": "无法写入剪贴板",
     "clipboard_file_unsupported": "目前仅支持单个 PNG/JPG 图片文件，其他类型均不支持。"
+  },
+  "file_import_error": {
+    "title": "文件导入失败",
+    "stage": "处理阶段：{{stage}}",
+    "preparing": "准备文件",
+    "authorizing": "访问缓存存储",
+    "identifying": "读取文件",
+    "writing": "写入缓存",
+    "verifying": "校验文件",
+    "sharing": "设置文件共享",
+    "copy_details": "复制错误详情",
+    "unknown": "未返回具体错误信息。"
+  },
+  "file_import_progress": {
+    "title": "导入进度",
+    "preparing": "正在准备文件…",
+    "identifying": "正在读取文件",
+    "writing": "正在导入文件",
+    "verifying": "正在检查文件",
+    "counts": "已导入 {{completed}} / {{total}}"
+  },
+  "file_save_progress": {
+    "title": "保存进度",
+    "saving": "正在保存",
+    "waiting": "等待重名文件确认",
+    "cancelling": "正在取消…",
+    "completed": "保存完成",
+    "cancelled": "已取消剩余操作",
+    "failed": "保存失败",
+    "cancel_remaining": "取消剩余操作",
+    "current_file": "当前文件：{{fileName}}（{{index}}/{{total}}）",
+    "counts": "已保存 {{saved}} / {{total}}，已跳过 {{skipped}}",
+    "preparing": "正在准备保存…"
+  },
+  "file_save_conflict": {
+    "title": "文件已存在",
+    "description": "目标目录中已存在“{{fileName}}”，请选择处理方式。",
+    "cannot_overwrite": "目标目录中已存在同名目录或其他无法覆盖的项目“{{fileName}}”，请选择跳过或保留两份。",
+    "overwrite": "覆盖",
+    "skip": "跳过",
+    "keep_both": "保留两份",
+    "apply_to_all": "应用到本次所有冲突"
+  },
+  "storage": {
+    "title": "文件存储",
+    "default": "保存方式",
+    "description": "更换位置仅影响新文件。已有文件和未完成传输继续使用原来的存储位置。",
+    "browser": "浏览器存储",
+    "local_directory": "本地目录",
+    "choose": "选择目录",
+    "open_directory": "打开目录",
+    "open_cache": "打开文件缓存",
+    "reconnect": "重新连接目录",
+    "unsupported": "此浏览器不支持目录访问，文件将保存在浏览器存储中。",
+    "directory": "目录",
+    "unavailable": "存储不可用",
+    "write_failed": "无法将 {{fileName}} 保存到目录（{{stage}}）。",
+    "stage_create": "创建文件",
+    "stage_write": "写入数据",
+    "stage_commit": "最终保存",
+    "name_blocked": "浏览器不允许在此目录中创建 {{fileName}}。可使用桌面端，或手动选择浏览器存储。",
+    "write_blocked": "浏览器或系统安全检查阻止了 {{fileName}} 的保存。"
   }
 }

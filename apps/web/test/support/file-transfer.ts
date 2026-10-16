@@ -131,7 +131,9 @@ export function fakeCache(id = "file") {
       > => [[0, 1]],
     ),
     getFile: vi.fn(
-      async (): Promise<File | null> =>
+      async (): Promise<
+        import("@weblink/platform").StoredFile | null
+      > =>
         info.file ??
         new File(
           [new Uint8Array(info.fileSize)],

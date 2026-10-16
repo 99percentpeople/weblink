@@ -1,4 +1,5 @@
 import { FileLibraryService } from "@/libs/application/file-library-service";
+import { StorageUnavailableError } from "@/libs/domain/vfs";
 import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import {
   afterEach,
@@ -16,6 +17,245 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared file library", () => {
+  it("preserves references and bytes when a mounted directory needs reconnection", async () => {
+    const f = setup();
+    const result = await f.library.importFile(
+      new File(["offline"], "keep.txt"),
+    );
+    const info = (await result.cache.getInfo())!;
+    const raw = [...f.raw.values()][0];
+    raw.getInfo.mockResolvedValue({
+      ...info,
+      file: undefined,
+      isComplete: false,
+      storageUnavailable: "Reconnect directory",
+    });
+    expect(
+      await f.library.hasContent(info.fingerprint!),
+    ).toBe(false);
+    expect(
+      await f.library.reuse(info.fingerprint!, {
+        id: "new-receive",
+        fileName: "keep.txt",
+        fileSize: info.fileSize,
+        chunkSize: 4,
+        from: "peer",
+      }),
+    ).toBeNull();
+    await expect(
+      result.cache.getFile(),
+    ).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(await f.repository.references()).toHaveLength(1);
+    expect(await f.repository.contents()).toHaveLength(1);
+    expect(raw.cleanup).not.toHaveBeenCalled();
+    await f.library.refresh();
+    expect(await f.repository.references()).toHaveLength(1);
+    expect(
+      (await result.cache.getInfo())?.storageUnavailable,
+    ).toBe("Reconnect directory");
+    raw.getInfo.mockResolvedValue(info);
+    await f.library.refresh();
+    expect((await result.cache.getInfo())?.isComplete).toBe(
+      true,
+    );
+    expect(
+      (await result.cache.getInfo())?.storageUnavailable,
+    ).toBeUndefined();
+  });
+
+  it.each(["write", "cancel", "commit"])(
+    "preserves unavailable content and all references when reimport fails during %s",
+    async (failure) => {
+      const f = setup();
+      const file = new File(["original"], "keep.dll");
+      const imported = await f.library.importFile(file);
+      const sent = await f.library.prepare(
+        { kind: "library", localFileId: imported.cache.id },
+        { id: "sent", chunkSize: 4 },
+      );
+      await f.library.setShared(imported.cache.id, true);
+      const contents = await f.repository.contents();
+      const references = await f.repository.references();
+      const original = f.raw.get(contents[0].storageId)!;
+      original.getInfo.mockResolvedValue({
+        ...(await original.getInfo())!,
+        file: undefined,
+        isComplete: false,
+        storageUnavailable: "Reconnect directory",
+      });
+      const controller = new AbortController();
+      const error = new Error("Storage write failed");
+      let staged: ReturnType<typeof fakeCache> | undefined;
+      const library = new FileLibraryService({
+        repository: f.repository,
+        fingerprint: f.hash,
+        getCache: (id) => f.caches.get(id) ?? null,
+        publish: async (cache) => cache.initialize(),
+        storage: async (id) => {
+          const cache = await f.storage(id);
+          if (cache !== original) {
+            staged = cache;
+            if (failure === "write")
+              cache.setInfo.mockRejectedValue(error);
+            else if (failure === "cancel") {
+              const write =
+                cache.setInfo.getMockImplementation()!;
+              cache.setInfo.mockImplementation(
+                async (value) => {
+                  await write(value);
+                  controller.abort();
+                },
+              );
+            }
+          }
+          return cache;
+        },
+      });
+      const commit = vi.spyOn(f.repository, "commit");
+      if (failure === "commit")
+        commit.mockRejectedValueOnce(error);
+      const importing = library.importFile(file, {
+        signal: controller.signal,
+      });
+      if (failure === "cancel")
+        await expect(importing).rejects.toMatchObject({
+          name: "AbortError",
+        });
+      else await expect(importing).rejects.toBe(error);
+      expect(await f.repository.contents()).toEqual(
+        contents,
+      );
+      expect(await f.repository.references()).toEqual(
+        references,
+      );
+      expect(original.cleanup).not.toHaveBeenCalled();
+      expect(staged!.cleanup).toHaveBeenCalledWith({
+        deleteSource: true,
+      });
+      expect(f.raw.size).toBe(1);
+      expect(
+        (await sent.getInfo())?.storageUnavailable,
+      ).toBe("Reconnect directory");
+      commit.mockRestore();
+
+      const restored = await f.library.importFile(file);
+      expect(restored.cache.id).toBe(imported.cache.id);
+      expect(restored.reused).toBe(false);
+      expect(await (await sent.getFile())!.text()).toBe(
+        "original",
+      );
+      expect(await f.repository.references()).toMatchObject(
+        references.map(
+          ({ aliases: _aliases, ...ref }) => ref,
+        ),
+      );
+      expect(original.cleanup).not.toHaveBeenCalled();
+      expect(await f.library.sharedFiles()).toHaveLength(1);
+    },
+  );
+
+  it("does not repair unavailable content with different bytes under the same filename", async () => {
+    const f = setup();
+    const imported = await f.library.importFile(
+      new File(["before"], "same.dll"),
+    );
+    const [content] = await f.repository.contents();
+    const original = f.raw.get(content.storageId)!;
+    original.getInfo.mockResolvedValue({
+      ...(await original.getInfo())!,
+      file: undefined,
+      isComplete: false,
+      storageUnavailable: "Reconnect directory",
+    });
+    const next = await f.library.importFile(
+      new File(["after!"], "same.dll"),
+    );
+    expect(next.cache.id).not.toBe(imported.cache.id);
+    expect(await f.repository.content(content.key)).toEqual(
+      content,
+    );
+    expect(
+      (await imported.cache.getInfo())?.storageUnavailable,
+    ).toBe("Reconnect directory");
+    expect(await (await next.cache.getFile())!.text()).toBe(
+      "after!",
+    );
+    expect(original.cleanup).not.toHaveBeenCalled();
+  });
+
+  it.each(["corrupt", "cancel", "commit"])(
+    "preserves unavailable references when receiving replacement bytes fails during %s",
+    async (failure) => {
+      const f = setup();
+      const imported = await f.library.importFile(
+        new File(["good"], "keep.dll"),
+      );
+      const info = (await imported.cache.getInfo())!;
+      const contents = await f.repository.contents();
+      const references = await f.repository.references();
+      const original = f.raw.get(contents[0].storageId)!;
+      original.getInfo.mockResolvedValue({
+        ...info,
+        file: undefined,
+        isComplete: false,
+        storageUnavailable: "Reconnect directory",
+      });
+      const incoming = {
+        id: "incoming",
+        fileName: info.fileName,
+        fileSize: info.fileSize,
+        chunkSize: 4,
+        fingerprint: info.fingerprint,
+      };
+      expect(
+        await f.library.reuse(info.fingerprint!, incoming),
+      ).toBeNull();
+      const cache = await f.storage(incoming.id);
+      await cache.setInfo({
+        ...incoming,
+        file: new File(
+          [failure === "corrupt" ? "evil" : "good"],
+          info.fileName,
+        ),
+      });
+      const controller = new AbortController();
+      if (failure === "cancel")
+        f.hash.mockImplementationOnce(async () => {
+          controller.abort();
+          return info.fingerprint!;
+        });
+      if (failure === "commit")
+        vi.spyOn(
+          f.repository,
+          "commit",
+        ).mockRejectedValueOnce(
+          new Error("Content commit failed"),
+        );
+      const verifying = f.library.verifyReceived(
+        cache,
+        controller.signal,
+      );
+      await expect(verifying).rejects.toThrow(
+        failure === "corrupt"
+          ? "verification failed"
+          : failure === "cancel"
+            ? "aborted"
+            : "Content commit failed",
+      );
+      expect(await f.repository.contents()).toEqual(
+        contents,
+      );
+      expect(await f.repository.references()).toEqual(
+        references,
+      );
+      expect(original.cleanup).not.toHaveBeenCalled();
+      expect(
+        (await imported.cache.getInfo())
+          ?.storageUnavailable,
+      ).toBe("Reconnect directory");
+    },
+  );
+
   it.each(["send-reference", undefined])(
     "associates send identification with the published reference (%s)",
     async (id) => {

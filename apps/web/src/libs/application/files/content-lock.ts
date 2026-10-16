@@ -1,23 +1,9 @@
-const pending = new Map<string, Promise<unknown>>();
+import { withExclusiveTask } from "@/libs/utils/exclusive-task";
 
-/** Web Locks serialize imports/deletes across tabs; the repository also claims unique keys. */
-export async function withContentLock<T>(
+/** Preserve the content-lock namespace used by existing browser clients. */
+export function withContentLock<T>(
   key: string,
   work: () => Promise<T>,
 ): Promise<T> {
-  const run = async (): Promise<T> =>
-    typeof navigator !== "undefined" && navigator.locks
-      ? navigator.locks.request(
-          `weblink:content:${key}`,
-          work,
-        )
-      : work();
-  const previous = pending.get(key) ?? Promise.resolve();
-  const current = previous.catch(() => {}).then(run);
-  pending.set(key, current);
-  try {
-    return await current;
-  } finally {
-    if (pending.get(key) === current) pending.delete(key);
-  }
+  return withExclusiveTask(`content:${key}`, work);
 }

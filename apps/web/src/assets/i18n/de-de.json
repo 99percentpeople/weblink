@@ -840,7 +840,8 @@
       "picture_in_picture": "PIP-Modus",
       "exit_picture_in_picture": "Verlassen Sie den PIP-Modus",
       "continue": "Fortfahren",
-      "retry": "Erneut versuchen"
+      "retry": "Erneut versuchen",
+      "open": "Öffnen"
     },
     "notification": {
       "copy_success": "Kopiererfolg",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "App-Cache konnte nicht geleert werden: {{error}}",
       "copy_failed": "Kopieren nicht möglich. Überprüfen Sie die Berechtigungen für die Zwischenablage und versuchen Sie es erneut.",
       "room_unprotected": "Für diesen Raum ist kein Passwort erforderlich.",
-      "file_save_failed": "Die Datei konnte nicht gespeichert werden. Prüfe den Speicherort und den freien Speicherplatz und versuche es erneut."
+      "file_save_failed": "Die Datei konnte nicht gespeichert werden. Prüfe den Speicherort und den freien Speicherplatz und versuche es erneut.",
+      "file_open_failed": "Die Datei konnte nicht geöffnet werden. Prüfen Sie, ob sie verfügbar und eine Standardanwendung installiert ist."
     },
     "forward_dialog": {
       "title": "Artikel weiterleiten",
@@ -1225,12 +1227,16 @@
     "actions": "Dateiaktionen",
     "action_preview": "Vorschau",
     "action_download": "Auf Gerät speichern",
+    "action_save_as": "Speichern unter…",
+    "action_reveal": "Dateispeicherort öffnen",
     "action_send": "Senden",
     "action_details": "Details",
     "action_delete": "Lokale Datei löschen",
     "choose": "Wählen Sie aus Dateien",
     "choose_hint": "Wählen Sie verfügbare Dateien aus, die Sie an diese Konversation senden möchten.",
     "selection": "{{count}} ausgewählt · {{size}}",
+    "select_all": "Alle auswählen",
+    "clear_selection": "Auswahl aufheben",
     "send_count": "{{count}} Dateien senden",
     "import": "Importieren",
     "reused": "Existiert bereits; lokale Inhalte wiederverwendet",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "In Zwischenablage kopieren",
     "clipboard_write_failed": "Zwischenablage konnte nicht geschrieben werden",
     "clipboard_file_unsupported": "Es wird nur eine einzelne PNG/JPG-Bilddatei unterstützt. Alle anderen Dateitypen werden nicht unterstützt."
+  },
+  "file_import_error": {
+    "title": "Dateiimport fehlgeschlagen",
+    "stage": "Schritt: {{stage}}",
+    "preparing": "Dateien vorbereiten",
+    "authorizing": "Auf den Cache zugreifen",
+    "identifying": "Datei lesen",
+    "writing": "In den Cache schreiben",
+    "verifying": "Datei prüfen",
+    "sharing": "Datei freigeben",
+    "copy_details": "Fehlerdetails kopieren",
+    "unknown": "Keine Fehlerdetails verfügbar."
+  },
+  "file_import_progress": {
+    "title": "Importfortschritt",
+    "preparing": "Dateien werden vorbereitet…",
+    "identifying": "Datei wird gelesen",
+    "writing": "Datei wird importiert",
+    "verifying": "Datei wird geprüft",
+    "counts": "{{completed}} von {{total}} importiert"
+  },
+  "file_save_progress": {
+    "title": "Speicherfortschritt",
+    "saving": "Dateien werden gespeichert",
+    "waiting": "Warten auf eine Entscheidung zum Dateikonflikt",
+    "cancelling": "Wird abgebrochen…",
+    "completed": "Speichern abgeschlossen",
+    "cancelled": "Verbleibende Speichervorgänge abgebrochen",
+    "failed": "Speichern fehlgeschlagen",
+    "cancel_remaining": "Rest abbrechen",
+    "current_file": "Aktuelle Datei: {{fileName}} ({{index}}/{{total}})",
+    "counts": "{{saved}} von {{total}} gespeichert, {{skipped}} übersprungen",
+    "preparing": "Speichern wird vorbereitet…"
+  },
+  "file_save_conflict": {
+    "title": "Datei bereits vorhanden",
+    "description": "Am Ziel ist „{{fileName}}“ bereits vorhanden. Wählen Sie eine Aktion.",
+    "cannot_overwrite": "Am Ziel ist ein Ordner oder ein anderer Eintrag namens „{{fileName}}“ vorhanden, der nicht überschrieben werden kann. Überspringen Sie ihn oder behalten Sie beide.",
+    "overwrite": "Überschreiben",
+    "skip": "Überspringen",
+    "keep_both": "Beide behalten",
+    "apply_to_all": "Auf alle Konflikte in diesem Vorgang anwenden"
+  },
+  "storage": {
+    "title": "Dateispeicher",
+    "default": "Speicherart",
+    "description": "Die Änderung gilt nur für neue Dateien. Vorhandene Dateien und unvollständige Übertragungen behalten ihren ursprünglichen Speicherort.",
+    "browser": "Browserspeicher",
+    "local_directory": "Lokaler Ordner",
+    "choose": "Ordner auswählen",
+    "open_directory": "Ordner öffnen",
+    "open_cache": "Dateicache öffnen",
+    "reconnect": "Ordner erneut verbinden",
+    "unsupported": "Dieser Browser unterstützt keinen Ordnerzugriff. Dateien bleiben im Browserspeicher.",
+    "directory": "Ordner",
+    "unavailable": "Speicher nicht verfügbar",
+    "write_failed": "{{fileName}} konnte nicht im Ordner gespeichert werden ({{stage}}).",
+    "stage_create": "Datei erstellen",
+    "stage_write": "Daten schreiben",
+    "stage_commit": "Datei speichern",
+    "name_blocked": "Der Browser erlaubt das Erstellen von {{fileName}} in diesem Ordner nicht. Verwenden Sie die Desktop-App oder wählen Sie den Browserspeicher manuell aus.",
+    "write_blocked": "Eine Sicherheitsprüfung des Browsers oder Systems hat das Speichern von {{fileName}} blockiert."
   }
 }

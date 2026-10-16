@@ -1,3 +1,5 @@
+import type { BinarySource } from "@weblink/platform";
+import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import { createUuid } from "@/libs/domain/ids";
 import { createSignal } from "solid-js";
 import FingerprintWorker from "@/libs/infrastructure/storage/fingerprint-worker?worker";
@@ -58,14 +60,14 @@ export class FileFingerprintService {
     );
   private worker?: Worker;
   private tail: Promise<unknown> = Promise.resolve();
-  private jobs = new WeakMap<Blob, Job>();
+  private jobs = new WeakMap<BinarySource, Job>();
   constructor(
     private readonly createWorker = () =>
       new FingerprintWorker(),
   ) {}
 
   hash(
-    file: Blob,
+    file: BinarySource,
     options: FingerprintOptions = {},
   ): Promise<FileFingerprint> {
     options.signal?.throwIfAborted();
@@ -101,7 +103,11 @@ export class FileFingerprintService {
             kind: "file-prepare",
             fileIds: options.fileId ? [options.fileId] : [],
             peerId: "",
-            fileName: file instanceof File ? file.name : "",
+            fileName:
+              "name" in file &&
+              typeof file.name === "string"
+                ? file.name
+                : "",
             createdAt: Date.now(),
             status: "waiting",
             bytes: 0,
@@ -199,11 +205,13 @@ export class FileFingerprintService {
   }
 
   private run(
-    file: Blob,
+    file: BinarySource,
     signal: AbortSignal,
     progress: (bytes: number) => void,
   ): Promise<FileFingerprint> {
     signal.throwIfAborted();
+    if (!(file instanceof Blob) && !(file instanceof File))
+      return fingerprintBlob(file, progress, signal);
     const worker = (this.worker ??= this.createWorker());
     const id = createUuid();
     return new Promise((resolve, reject) => {
@@ -263,8 +271,15 @@ export class FileFingerprintService {
         );
       const message = (event: MessageEvent) => {
         if (event.data.id !== id) return;
-        if (event.data.error)
-          return fail(new Error(event.data.error));
+        if (typeof event.data.error === "string") {
+          const reason = new Error(event.data.error);
+          if (
+            typeof event.data.errorName === "string" &&
+            event.data.errorName
+          )
+            reason.name = event.data.errorName;
+          return fail(reason);
+        }
         if (event.data.fingerprint) {
           if (
             !isFileFingerprint(event.data.fingerprint) ||

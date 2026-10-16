@@ -1,3 +1,9 @@
+import type { StoredFile } from "@weblink/platform";
+import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
+import { onCleanup } from "solid-js";
 import { createDialog } from "@/components/dialogs/dialog";
 import { t } from "@/i18n";
 import {
@@ -11,20 +17,29 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { downloadFile } from "@/libs/utils/download-file";
-import { IconDownload, IconShare } from "@/components/icons";
+import {
+  IconDownload,
+  IconShare,
+} from "@/components/icons";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { catchError } from "@/libs/catch";
 import { canShareFile } from "@/libs/utils/can-share";
+import { platform } from "@/libs/platform/runtime";
+import { openFileExternally } from "@/libs/utils/open-file";
 
 export type PreviewDialogProps = {
   src: File | Blob;
 };
 
-const PreviewContent = (props: { src: File | null }) => {
+const PreviewContent = (props: {
+  src: StoredFile | null;
+}) => {
   const dataUrl = createMemo(() => {
     const file = props.src;
     if (!file) return null;
-    return URL.createObjectURL(file);
+    const url = fileObjectUrl(file);
+    onCleanup(() => revokeFileUrl(url));
+    return url;
   });
 
   return (
@@ -84,7 +99,11 @@ const PreviewContent = (props: { src: File | null }) => {
 };
 
 export const createPreviewDialog = () => {
-  const [src, setSrc] = createSignal<File | null>(null);
+  if (platform.openFile)
+    return { open: openFileExternally };
+  const [src, setSrc] = createSignal<StoredFile | null>(
+    null,
+  );
   const shareableData = createMemo(() => {
     const f = src();
     if (!f) return null;
@@ -139,7 +158,7 @@ export const createPreviewDialog = () => {
     ),
   });
 
-  const handleOpen = async (src: File) => {
+  const handleOpen = async (src: StoredFile) => {
     setSrc(src);
     return await open();
   };
@@ -150,7 +169,9 @@ export const createPreviewDialog = () => {
 };
 
 export const createSendItemPreviewDialog = () => {
-  const [src, setSrc] = createSignal<File | null>(null);
+  const [src, setSrc] = createSignal<StoredFile | null>(
+    null,
+  );
 
   const [name, setName] = createSignal("");
 

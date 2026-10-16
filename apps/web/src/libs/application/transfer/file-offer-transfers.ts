@@ -103,7 +103,7 @@ export class FileOfferTransfers {
         throw new Error("File content is unavailable");
       return info;
     }
-    if (!(file instanceof File))
+    if ("localFileId" in file)
       throw new Error("File library is unavailable");
     const info: ChunkMetaData = {
       id: createUuid(),

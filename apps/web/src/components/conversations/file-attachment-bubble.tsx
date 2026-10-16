@@ -1,3 +1,4 @@
+import type { StoredFile } from "@weblink/platform";
 import { children, Show, type JSX } from "solid-js";
 import { Download, Eye } from "lucide-solid";
 import { IconFile } from "@/components/icon-file";
@@ -10,7 +11,7 @@ import { LocalFileMedia } from "./local-file-media";
 
 /** Shared presentation only: the caller decides whether bytes are available. */
 export function FileAttachmentBubble(props: {
-  file?: File;
+  file?: StoredFile;
   route: MediaHashRoute;
   name: string;
   size: number;

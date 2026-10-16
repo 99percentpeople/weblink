@@ -882,7 +882,7 @@ export class FileTransferService {
             ),
           );
         } else {
-          if (!(file instanceof File))
+          if ("localFileId" in file)
             throw new Error("File library is unavailable");
           cache = await this.step(
             op,

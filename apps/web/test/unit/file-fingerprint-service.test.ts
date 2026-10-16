@@ -64,6 +64,42 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("file fingerprint worker lifecycle", () => {
+  it.each(["NotReadableError", "SecurityError", undefined])(
+    "preserves worker read errors including their original name (%s)",
+    async (errorName) => {
+      const f = setup();
+      const pending = f.service.hash(f.file);
+      const rejection = expect(
+        pending,
+      ).rejects.toMatchObject({
+        name: errorName ?? "Error",
+        message: "The selected file could not be read",
+      });
+      const worker = await started(f.workers);
+      worker.reply({
+        error: "The selected file could not be read",
+        errorName,
+      });
+      await rejection;
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("settles failed worker jobs even when the runtime supplies an empty error message", async () => {
+    const f = setup();
+    const pending = f.service.hash(f.file);
+    const rejection = expect(pending).rejects.toMatchObject(
+      { name: "NotReadableError", message: "" },
+    );
+    const worker = await started(f.workers);
+    worker.reply({
+      error: "",
+      errorName: "NotReadableError",
+    });
+    await rejection;
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  });
+
   it("can reuse hashing for clipboard cache imports without creating an extra task", async () => {
     const f = setup();
     const result = f.service.hash(f.file, { silent: true });

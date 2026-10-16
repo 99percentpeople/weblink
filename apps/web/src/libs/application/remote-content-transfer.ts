@@ -1,3 +1,4 @@
+import { materializeFile } from "@/libs/utils/stored-file";
 import type { ChunkCache } from "../domain/file";
 import type { PeerSession } from "../domain/session";
 import {
@@ -120,7 +121,10 @@ export async function transferRemoteContent(
         let received: File | undefined;
         if (!file) {
           await cache.flush();
-          received = (await cache.mergeFile()) ?? undefined;
+          const stored = await cache.mergeFile();
+          received = stored
+            ? await materializeFile(stored)
+            : undefined;
           options.check();
           if (!received || received.size !== size)
             throw new Error(

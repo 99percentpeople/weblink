@@ -1,3 +1,7 @@
+import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
 import { resolveStoredAppOptions } from "@/libs/state/stored-app-options";
 export {
   getClientConfig,
@@ -148,7 +152,7 @@ createEffect(() => {
     .getFile()
     .then((file) => {
       if (cancelled || !file) return;
-      url = URL.createObjectURL(file);
+      url = fileObjectUrl(file);
       setBackgroundImage(url);
     })
     .catch((error) => {
@@ -161,7 +165,7 @@ createEffect(() => {
 
   onCleanup(() => {
     cancelled = true;
-    if (url) URL.revokeObjectURL(url);
+    if (url) revokeFileUrl(url);
   });
 });
 

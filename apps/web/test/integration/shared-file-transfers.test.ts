@@ -187,6 +187,44 @@ describe("shared file authorization and independent jobs", () => {
     });
     expect(b.created).toHaveLength(1);
   });
+  it("downloads when a retained local copy is unavailable and preserves it on cancellation", async () => {
+    const { a, b } = pair();
+    const { info } = await share(a);
+    await b.library.importFile(
+      new File(["shared content"], "kept.txt"),
+    );
+    const contents = await b.repository.contents();
+    const references = await b.repository.references();
+    const original = b.raw.get(contents[0].storageId)!;
+    original.getInfo.mockResolvedValue({
+      ...(await original.getInfo())!,
+      file: undefined,
+      isComplete: false,
+      storageUnavailable:
+        "Storage directory is unavailable",
+    });
+
+    await b.shared.download("a", info);
+    const requests = b.transport.sendCalls.filter(
+      ({ message }) =>
+        message.type === "request-shared-file",
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0].message).toMatchObject({
+      have: false,
+    });
+    expect(b.created).toHaveLength(1);
+    expect(b.created[0].cache).not.toBe(original);
+    expect(b.report).not.toHaveBeenCalled();
+
+    await b.shared.tasks()[0].cancel();
+    expect(await b.repository.contents()).toEqual(contents);
+    expect(await b.repository.references()).toEqual(
+      references,
+    );
+    expect(original.cleanup).not.toHaveBeenCalled();
+    expect(b.shared.tasks()[0].status).toBe("cancelled");
+  });
   it.each([false, true])(
     "cancels a download (paused=%s) terminally and allows a fresh get",
     async (paused) => {

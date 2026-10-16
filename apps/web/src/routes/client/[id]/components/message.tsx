@@ -1,3 +1,7 @@
+import {
+  materializeFile,
+  materializeBlob,
+} from "@/libs/utils/stored-file";
 import { resolvedLocale } from "@/libs/state/app-locale";
 import { MessageRetryButton } from "@/components/conversations/message-retry-button";
 import { userErrorMessage } from "@/libs/user-error";
@@ -252,7 +256,9 @@ export const MessageContent: Component<MessageCardProps> = (
                       onSelect={async () => {
                         props.close();
                         const convertedPng =
-                          await convertImageToPNG(f());
+                          await convertImageToPNG(
+                            await materializeFile(f()),
+                          );
                         const item = new ClipboardItem({
                           [convertedPng.type]: convertedPng,
                         });
@@ -289,7 +295,8 @@ export const MessageContent: Component<MessageCardProps> = (
                         class="gap-2"
                         onSelect={async () => {
                           const item = new ClipboardItem({
-                            [f().type]: f(),
+                            [f().type]:
+                              await materializeBlob(f()),
                           });
                           const [err] = await catchError(
                             navigator.clipboard.write([

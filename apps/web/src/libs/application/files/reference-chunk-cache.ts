@@ -1,4 +1,10 @@
 import type {
+  FileStorageLocation,
+  StoredFile,
+} from "@weblink/platform";
+import { namedFile } from "@/libs/utils/stored-file";
+import { StorageUnavailableError } from "@/libs/domain/vfs";
+import type {
   ChunkCache,
   ChunkCacheEventMap,
   ChunkMetaData,
@@ -14,51 +20,107 @@ export class ReferenceChunkCache
 {
   readonly id: string;
   private removed = false;
+  private snapshot?: {
+    source: StoredFile;
+    file: StoredFile;
+  };
   constructor(
     private reference: FileReference,
-    private readonly read: () => Promise<File | null>,
+    private readonly read: () => Promise<StoredFile | null>,
     private readonly update: (
       reference: FileReference,
     ) => Promise<void>,
     private readonly release: () => Promise<void>,
     private readonly shared: () => Promise<boolean> = async () =>
       false,
+    private readonly location: () => Promise<FileStorageLocation | null> = async () =>
+      null,
   ) {
     super();
     this.id = reference.id;
   }
-  async refresh(reference: FileReference): Promise<void> {
+  async refresh(
+    reference: FileReference = this.reference,
+  ): Promise<void> {
     this.reference = reference;
     await this.initialize();
   }
   async initialize(): Promise<void> {
     this.dispatchEvent("update", await this.getInfo());
   }
-  async getFile(): Promise<File | null> {
+  async getFile(): Promise<StoredFile | null> {
     if (this.removed) return null;
     const file = await this.read();
     if (
       !file ||
       this.removed ||
       file.size !== this.reference.fileSize
-    )
+    ) {
+      this.snapshot = undefined;
       return null;
-    return new File([file], this.reference.fileName, {
-      type: this.reference.mimetype,
-      lastModified: this.reference.lastModified,
-    });
+    }
+    const name = this.reference.fileName;
+    const type = this.reference.mimetype ?? file.type;
+    const modified =
+      this.reference.lastModified ?? file.lastModified;
+    if (
+      this.snapshot?.source === file &&
+      this.snapshot.file.name === name &&
+      this.snapshot.file.type === type &&
+      this.snapshot.file.lastModified === modified
+    )
+      return this.snapshot.file;
+    const named = namedFile(file, name, type, modified);
+    this.snapshot = { source: file, file: named };
+    return named;
   }
   async getInfo(): Promise<FileMetaData> {
-    const file = await this.getFile();
+    let file: StoredFile | null = null;
+    let storageUnavailable: string | undefined;
+    let storageMissing: boolean | undefined;
+    try {
+      file = await this.getFile();
+    } catch (error) {
+      if (!(error instanceof StorageUnavailableError))
+        throw error;
+      file = null;
+      storageUnavailable = error.message;
+      storageMissing = error.missing;
+      this.snapshot = undefined;
+    }
+    // Permission loss must not move this reference into another storage view.
+    const location = await this.storageLocation().catch(
+      (error) => {
+        if (!(error instanceof StorageUnavailableError))
+          throw error;
+        storageUnavailable ??= error.message;
+        storageMissing ??= error.missing;
+        file = null;
+        this.snapshot = undefined;
+        return null;
+      },
+    );
     return {
       ...this.reference,
+      storageKind: location?.kind,
+      storageMountId:
+        location?.kind === "indexeddb"
+          ? "indexeddb"
+          : location?.mountId,
       isShared: await this.shared(),
       file: file ?? undefined,
       isComplete: !!file,
       chunkCount: 0,
       cachedBytes: file?.size ?? 0,
       isMerging: false,
+      storageUnavailable,
+      storageMissing,
     };
+  }
+  storageLocation(): Promise<FileStorageLocation | null> {
+    return this.removed
+      ? Promise.resolve(null)
+      : this.location();
   }
   async setInfo(
     data: Omit<ChunkMetaData, "id">,
@@ -131,6 +193,7 @@ export class ReferenceChunkCache
   invalidate(): void {
     if (this.removed) return;
     this.removed = true;
+    this.snapshot = undefined;
     this.dispatchEvent("cleanup", undefined);
   }
 }

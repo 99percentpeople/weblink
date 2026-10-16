@@ -1,3 +1,5 @@
+import type { StoredFile } from "@weblink/platform";
+import { materializeFile } from "@/libs/utils/stored-file";
 import { DBNAME_PREFIX } from "@/constants";
 import type {
   ChunkCache,
@@ -58,7 +60,8 @@ export class IDBChunkCache implements ChunkCache {
   private memoryCache = new Map<number, Blob>();
   private flushPromise: Promise<void> | null = null;
   private flushTransaction: IDBTransaction | null = null;
-  private mergePromise: Promise<File | null> | null = null;
+  private mergePromise: Promise<StoredFile | null> | null =
+    null;
   private cancelMerge?: (error: Error) => void;
   private cleanupPromise: Promise<void> | null = null;
   private generation = 0;
@@ -286,6 +289,8 @@ export class IDBChunkCache implements ChunkCache {
       ...data,
       id: this.id,
     });
+    if (setData.file && !(setData.file instanceof File))
+      setData.file = await materializeFile(setData.file);
     await this.flush();
     this.assertGeneration(generation);
     const transaction = this.database().transaction(
@@ -358,6 +363,8 @@ export class IDBChunkCache implements ChunkCache {
     this.info = data
       ? {
           ...data,
+          storageKind: "indexeddb",
+          storageMountId: "indexeddb",
           isComplete: !!data.file,
           chunkCount,
           cachedBytes: cachedBytes(
@@ -369,6 +376,12 @@ export class IDBChunkCache implements ChunkCache {
         }
       : null;
     return this.info;
+  }
+
+  async storageLocation(): Promise<
+    import("@weblink/platform").FileStorageLocation
+  > {
+    return { kind: "indexeddb" };
   }
 
   // Every caller waits for the current commit and for any chunks arriving during
@@ -576,11 +589,11 @@ export class IDBChunkCache implements ChunkCache {
     return pending;
   }
 
-  getFile(): Promise<File | null> {
+  getFile(): Promise<StoredFile | null> {
     return this.mergeFile();
   }
 
-  mergeFile(): Promise<File | null> {
+  mergeFile(): Promise<StoredFile | null> {
     if (this.mergePromise) return this.mergePromise;
     const generation = this.generation;
     const pending = this.performMerge(generation).finally(
@@ -600,7 +613,7 @@ export class IDBChunkCache implements ChunkCache {
 
   private async performMerge(
     generation: number,
-  ): Promise<File | null> {
+  ): Promise<StoredFile | null> {
     await this.flush();
     this.assertGeneration(generation);
     const info = await this.getInfo();

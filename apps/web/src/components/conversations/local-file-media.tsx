@@ -1,4 +1,9 @@
 import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
+import type { StoredFile } from "@weblink/platform";
+import {
   createMemo,
   Match,
   onCleanup,
@@ -8,9 +13,9 @@ import {
 import { MediaThumbnail } from "./media-thumbnail";
 import type { MediaHashRoute } from "./media-hash-route";
 
-/** Local bytes only. Images and videos join their conversation's PhotoSwipe gallery. */
+/** Local bytes only. Images and videos open in the conversation gallery. */
 export function LocalFileMedia(props: {
-  file: File;
+  file: StoredFile;
   mimeType?: string;
   route: MediaHashRoute;
 }) {
@@ -18,8 +23,8 @@ export function LocalFileMedia(props: {
     props.file.type || props.mimeType || "";
   const url = createMemo(() => {
     if (!/^(image|video|audio)\//.test(type())) return;
-    const value = URL.createObjectURL(props.file);
-    onCleanup(() => URL.revokeObjectURL(value));
+    const value = fileObjectUrl(props.file);
+    onCleanup(() => revokeFileUrl(value));
     return value;
   });
   return (

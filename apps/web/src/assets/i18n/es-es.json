@@ -840,7 +840,8 @@
       "picture_in_picture": "Modo PIP",
       "exit_picture_in_picture": "Salir del modo PIP",
       "continue": "Continuar",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "open": "Abrir"
     },
     "notification": {
       "copy_success": "Copia exitosa",
@@ -855,7 +856,8 @@
       "clear_cache_failed": "No se pudo borrar el caché de la aplicación: {{error}}",
       "copy_failed": "No se puede copiar. Verifique los permisos del portapapeles e inténtelo nuevamente.",
       "room_unprotected": "Esta sala no requiere contraseña.",
-      "file_save_failed": "No se pudo guardar el archivo. Comprueba el destino y el espacio libre en disco e inténtalo de nuevo."
+      "file_save_failed": "No se pudo guardar el archivo. Comprueba el destino y el espacio libre en disco e inténtalo de nuevo.",
+      "file_open_failed": "No se pudo abrir el archivo. Comprueba que esté disponible y que haya una aplicación predeterminada instalada."
     },
     "forward_dialog": {
       "title": "Artículos reenviados",
@@ -1225,12 +1227,16 @@
     "actions": "Acciones de archivo",
     "action_preview": "Vista previa",
     "action_download": "Guardar en dispositivo",
+    "action_save_as": "Guardar como…",
+    "action_reveal": "Abrir ubicación del archivo",
     "action_send": "Enviar",
     "action_details": "Detalles",
     "action_delete": "Eliminar archivo local",
     "choose": "Elija entre archivos",
     "choose_hint": "Seleccione los archivos disponibles para enviar a esta conversación.",
     "selection": "{{count}} seleccionado · {{size}}",
+    "select_all": "Seleccionar todo",
+    "clear_selection": "Borrar selección",
     "send_count": "Enviar {{count}} archivos",
     "import": "Importar",
     "reused": "Ya existe; contenido local reutilizado",
@@ -1387,5 +1393,67 @@
     "clipboard_write": "Copiar al portapapeles",
     "clipboard_write_failed": "No se pudo escribir en el portapapeles",
     "clipboard_file_unsupported": "Solo se admite una imagen PNG/JPG. No se admiten otros tipos."
+  },
+  "file_import_error": {
+    "title": "Error al importar el archivo",
+    "stage": "Etapa: {{stage}}",
+    "preparing": "Preparando archivos",
+    "authorizing": "Accediendo al almacenamiento de caché",
+    "identifying": "Leyendo archivo",
+    "writing": "Escribiendo en la caché",
+    "verifying": "Comprobando archivo",
+    "sharing": "Compartiendo archivo",
+    "copy_details": "Copiar detalles del error",
+    "unknown": "No se proporcionaron detalles del error."
+  },
+  "file_import_progress": {
+    "title": "Progreso de importación",
+    "preparing": "Preparando archivos…",
+    "identifying": "Leyendo archivo",
+    "writing": "Importando archivo",
+    "verifying": "Comprobando archivo",
+    "counts": "{{completed}} de {{total}} importados"
+  },
+  "file_save_progress": {
+    "title": "Progreso de guardado",
+    "saving": "Guardando archivos",
+    "waiting": "Esperando una decisión sobre el archivo duplicado",
+    "cancelling": "Cancelando…",
+    "completed": "Guardado completado",
+    "cancelled": "Guardados restantes cancelados",
+    "failed": "Error al guardar",
+    "cancel_remaining": "Cancelar restantes",
+    "current_file": "Archivo actual: {{fileName}} ({{index}}/{{total}})",
+    "counts": "Guardados {{saved}} de {{total}}, omitidos {{skipped}}",
+    "preparing": "Preparando el guardado…"
+  },
+  "file_save_conflict": {
+    "title": "El archivo ya existe",
+    "description": "El destino ya contiene «{{fileName}}». Elige cómo continuar.",
+    "cannot_overwrite": "El destino contiene una carpeta u otro elemento llamado «{{fileName}}» que no se puede sobrescribir. Omítelo o conserva ambos.",
+    "overwrite": "Sobrescribir",
+    "skip": "Omitir",
+    "keep_both": "Conservar ambos",
+    "apply_to_all": "Aplicar a todos los conflictos de este lote"
+  },
+  "storage": {
+    "title": "Almacenamiento de archivos",
+    "default": "Método de almacenamiento",
+    "description": "El cambio solo se aplica a los archivos nuevos. Los archivos existentes y las transferencias pendientes conservan su ubicación original.",
+    "browser": "Almacenamiento del navegador",
+    "local_directory": "Carpeta local",
+    "choose": "Elegir una carpeta",
+    "open_directory": "Abrir carpeta",
+    "open_cache": "Abrir caché de archivos",
+    "reconnect": "Reconectar carpeta",
+    "unsupported": "Este navegador no permite acceder a carpetas. Los archivos se guardarán en el navegador.",
+    "directory": "Carpeta",
+    "unavailable": "Almacenamiento no disponible",
+    "write_failed": "No se pudo guardar {{fileName}} en la carpeta ({{stage}}).",
+    "stage_create": "crear archivo",
+    "stage_write": "escribir datos",
+    "stage_commit": "guardar archivo",
+    "name_blocked": "El navegador no permite crear {{fileName}} en esta carpeta. Use la aplicación de escritorio o seleccione manualmente el almacenamiento del navegador.",
+    "write_blocked": "Una comprobación de seguridad del navegador o del sistema bloqueó el guardado de {{fileName}}."
   }
 }
