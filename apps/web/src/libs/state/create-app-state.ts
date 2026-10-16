@@ -1,5 +1,6 @@
 import { ConversationMessagingService } from "@/libs/application/messaging/conversation-messaging-service";
 import { userErrorMessage } from "@/libs/user-error";
+import { showFileOperationError } from "@/components/files/file-operation-error";
 import { setRoomConfig } from "@/libs/state/permission-options";
 import { t } from "@/i18n";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
@@ -416,10 +417,7 @@ export function createAppState(
     supports: (session) =>
       sessionService.capabilities.get(session)?.files
         ?.shared === true,
-    reportError: (error) =>
-      toast.error(
-        userErrorMessage(error, "errors.file_failed"),
-      ),
+    reportError: showFileOperationError,
   });
   createEffect(() => {
     // Read the permission sources even before any transfer has started.
@@ -834,9 +832,7 @@ export function createAppState(
       )
         return;
       console.error(error);
-      toast.error(
-        userErrorMessage(error, "errors.file_failed"),
-      );
+      showFileOperationError(error);
     }
   };
   const withFileSession = (

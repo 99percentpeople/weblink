@@ -79,7 +79,7 @@ export default function FilePickerDialog(props: {
             onSelection={setSelection}
           />
         </DialogBody>
-        <DialogFooter class="items-center">
+        <DialogFooter class="items-center sm:flex-wrap">
           <span class="text-muted-foreground mr-auto text-xs">
             {t("file_library.selection", {
               count: selected().length,

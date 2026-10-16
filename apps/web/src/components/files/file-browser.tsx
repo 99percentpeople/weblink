@@ -4,6 +4,7 @@ import {
   createMemo,
   createSignal,
   Show,
+  type Accessor,
   type JSX,
 } from "solid-js";
 import { FolderOpen, LoaderCircle } from "lucide-solid";
@@ -15,17 +16,24 @@ import {
   type LibraryFile,
 } from "@/libs/application/files/library-query";
 import { FileFilters } from "./file-filters";
+import { FileSelectionCheckbox } from "./file-selection-checkbox";
 import { FileList, type FileAction } from "./file-list";
 import { t } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { cacheManager } from "@/libs/application/cache-service";
 
-export function useLibraryFiles() {
+export function useLibraryFiles(
+  mountId?: Accessor<string | undefined>,
+) {
   return createMemo(() =>
-    libraryFiles(Object.values(appState.cache.cacheInfo)),
+    libraryFiles(
+      Object.values(appState.cache.cacheInfo),
+      mountId?.(),
+    ),
   );
 }
 export function FileBrowser(props: {
+  mountId?: string;
   selected: readonly string[];
   onSelection(ids: string[]): void;
   picker?: boolean;
@@ -34,7 +42,7 @@ export function FileBrowser(props: {
   onAction?(action: FileAction, file: LibraryFile): void;
   footer?: JSX.Element;
 }) {
-  const files = useLibraryFiles();
+  const files = useLibraryFiles(() => props.mountId);
   const [search, setSearch] = createSignal("");
   const [kind, setKind] = createSignal<FileKind>("all");
   const [status, setStatus] = createSignal<
@@ -87,6 +95,18 @@ export function FileBrowser(props: {
         sort={sort()}
         onSort={setSort}
       />
+      <Show
+        when={
+          !appState.cache.error &&
+          appState.cache.status === "ready"
+        }
+      >
+        <FileSelectionCheckbox
+          files={visible()}
+          selected={props.selected}
+          onSelection={props.onSelection}
+        />
+      </Show>
       <div
         class="scrollbar-thin min-h-0 flex-1 overflow-y-auto
           overscroll-contain"
@@ -145,9 +165,6 @@ export function FileBrowser(props: {
               files={visible()}
               picker={props.picker}
               showSharedStatus={!props.sharing}
-              showAvailableStatus={
-                props.sharing !== "shared"
-              }
               actions={props.actions}
               selected={props.selected}
               onToggle={(id) =>

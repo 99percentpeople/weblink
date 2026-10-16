@@ -4,6 +4,7 @@ import cn from "@/assets/i18n/zh-cn.json";
 import tw from "@/assets/i18n/zh-tw.json";
 import { userErrorMessage } from "@/libs/user-error";
 import { P2PProtocolError } from "@/libs/domain/protocol/errors";
+import { DirectoryWriteError } from "@/libs/domain/vfs";
 
 const language = vi.hoisted(() => ({ current: "zh-cn" }));
 const dictionaries = {
@@ -36,6 +37,67 @@ vi.mock("@/i18n", () => ({
 describe.each(Object.keys(dictionaries))(
   "user-facing errors in %s",
   (locale) => {
+    it.each(["IObit Unlocker.lnk", "nppc64_12.dll"])(
+      "explains the browser name restriction for %s using the actual error",
+      (fileName) => {
+        language.current = locale;
+        const error = new DirectoryWriteError(
+          fileName,
+          "create",
+          new TypeError(
+            "Failed to execute 'getFileHandle' on 'FileSystemDirectoryHandle': Name is not allowed.",
+          ),
+        );
+        expect(userErrorMessage(error)).toBe(
+          dictionaries[
+            locale as keyof typeof dictionaries
+          ].storage.name_blocked.replace(
+            "{{fileName}}",
+            fileName,
+          ),
+        );
+        expect(error.detail).toContain(
+          "Name is not allowed.",
+        );
+      },
+    );
+    it("explains a browser security rejection only when its original error confirms it", () => {
+      language.current = locale;
+      const error = new DirectoryWriteError(
+        "program.exe",
+        "commit",
+        new DOMException(
+          "Blocked by Safe Browsing.",
+          "AbortError",
+        ),
+      );
+      expect(userErrorMessage(error)).toBe(
+        dictionaries[
+          locale as keyof typeof dictionaries
+        ].storage.write_blocked.replace(
+          "{{fileName}}",
+          "program.exe",
+        ),
+      );
+    });
+    it("distinguishes a rejected browser commit from user cancellation", () => {
+      language.current = locale;
+      const error = new DirectoryWriteError(
+        "program.exe",
+        "commit",
+        new DOMException("Blocked", "AbortError"),
+      );
+      const message = userErrorMessage(error);
+      expect(message).toContain("program.exe");
+      expect(message).toContain(
+        dictionaries[locale as keyof typeof dictionaries]
+          .storage.stage_commit,
+      );
+      expect(message).not.toBe(
+        dictionaries[locale as keyof typeof dictionaries]
+          .errors.cancelled,
+      );
+    });
     it.each([
       [
         new Error("Room is already open in another tab"),

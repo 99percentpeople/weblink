@@ -38,7 +38,7 @@ export function SharedFileMenu(props: {
   importer?: LibraryImport;
 }) {
   const [picking, setPicking] = createSignal(false);
-  const { importing, importFiles } =
+  const { importing, importFiles, openPicker } =
     props.importer ?? createLibraryImport({ shared: true });
   let fileInput!: HTMLInputElement;
   let folderInput!: HTMLInputElement;
@@ -100,13 +100,13 @@ export function SharedFileMenu(props: {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onSelect={() => fileInput.click()}
+            onSelect={() => void openPicker(fileInput)}
           >
             <Upload />
             {t("shared_files.upload_files")}
           </DropdownMenuItem>
           <DropdownMenuItem
-            onSelect={() => folderInput.click()}
+            onSelect={() => void openPicker(folderInput)}
           >
             <FolderUp />
             {t("shared_files.upload_folder")}

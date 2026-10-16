@@ -18,7 +18,7 @@ import userEvent from "@testing-library/user-event";
 import { SharedFileMenu } from "@/components/files/shared-file-menu";
 import { cacheManager } from "@/libs/application/cache-service";
 import { handleSelectFolder } from "@/libs/utils/process-file";
-import { toast } from "solid-sonner";
+import { toast, Toaster } from "solid-sonner";
 import { fakeCache } from "../support/file-transfer";
 import { deferred } from "../support/rtc-transport";
 import type { FileImportResult } from "@/libs/application/file-library-service";
@@ -26,6 +26,7 @@ import type { FileImportResult } from "@/libs/application/file-library-service";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/application/cache-service", () => ({
   cacheManager: {
+    storage: { authorizeDefault: vi.fn(async () => {}) },
     library: {
       importFile: vi.fn(),
       setShared: vi.fn(async () => {}),
@@ -35,14 +36,6 @@ vi.mock("@/libs/application/cache-service", () => ({
 }));
 vi.mock("@/libs/utils/process-file", () => ({
   handleSelectFolder: vi.fn(),
-}));
-vi.mock("solid-sonner", () => ({
-  toast: {
-    loading: vi.fn(() => "upload-toast"),
-    dismiss: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-  },
 }));
 vi.mock("@/components/files/file-picker-dialog", () => ({
   default: (props: {
@@ -67,6 +60,16 @@ vi.mock("@/components/files/file-picker-dialog", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("scrollTo", vi.fn());
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  vi.spyOn(toast, "message");
+  vi.spyOn(toast, "dismiss");
+  vi.spyOn(toast, "success");
+  vi.spyOn(toast, "error");
+  render(() => <Toaster theme="light" />);
   vi.mocked(
     cacheManager.library.importFile,
   ).mockImplementation(async (file) => ({
@@ -76,6 +79,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  toast.dismiss();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -156,7 +160,7 @@ describe("shared file header menu", () => {
     ]);
     expect(input.value).toBe("");
     expect(toast.dismiss).toHaveBeenCalledWith(
-      "upload-toast",
+      vi.mocked(toast.message).mock.calls[0][1]!.id,
     );
   });
 
@@ -187,6 +191,8 @@ describe("shared file header menu", () => {
       cacheManager.library.importFile,
     ).toHaveBeenCalledWith(zip, {
       signal: expect.any(AbortSignal),
+      silent: true,
+      onImportProgress: expect.any(Function),
     });
   });
 
@@ -201,7 +207,12 @@ describe("shared file header menu", () => {
     );
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "errors.storage_full",
+        "file_import_error.title",
+        expect.objectContaining({
+          description: expect.stringContaining(
+            "Error: Storage full",
+          ),
+        }),
       ),
     );
     expect(
@@ -232,17 +243,11 @@ describe("shared file header menu", () => {
       ).mock.calls[0][1]!.signal!;
       if (action === "unmount") view.unmount();
       else {
-        const action = vi.mocked(toast.loading).mock
-          .calls[0][1]!.action;
-        if (
-          !action ||
-          typeof action !== "object" ||
-          !("onClick" in action)
-        )
-          throw new Error(
-            "Missing import cancellation action",
-          );
-        action.onClick(new MouseEvent("click") as never);
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "common.action.cancel",
+          }),
+        );
       }
       expect(signal.aborted).toBe(true);
       pending.resolve({

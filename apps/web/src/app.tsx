@@ -364,15 +364,16 @@ export default function App(
           }`}
         </Style>
         <Toaster />
-        <AudioPlayerView player={props.runtime.audio} />
-        <ModalProvider>
-          <InnerApp>{props.children}</InnerApp>
-        </ModalProvider>
-        <AppDialogsView />
-        <MeetingSessionView
-          session={props.runtime.meeting}
-          confirmation={props.runtime.confirmation.Dialog}
-        />
+        <AppDialogsView>
+          <AudioPlayerView player={props.runtime.audio} />
+          <ModalProvider>
+            <InnerApp>{props.children}</InnerApp>
+          </ModalProvider>
+          <MeetingSessionView
+            session={props.runtime.meeting}
+            confirmation={props.runtime.confirmation.Dialog}
+          />
+        </AppDialogsView>
       </MetaProvider>
     </>
   );

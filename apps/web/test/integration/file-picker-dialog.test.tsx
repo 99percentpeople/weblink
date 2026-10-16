@@ -63,6 +63,73 @@ const checkbox = (name: string) =>
 
 describe("library file selection eligibility", () => {
   it.each([false, true])(
+    "selects only eligible filtered files and clears all selection without closing (sharing=%s)",
+    async (sharing) => {
+      const select = vi.fn();
+      const close = vi.fn();
+      render(() => (
+        <FilePickerDialog
+          open
+          sharing={sharing}
+          onClose={close}
+          onSelect={select}
+        />
+      ));
+      await screen.findByTitle("private.txt");
+      const selectAll = screen.getByRole("checkbox", {
+        name: "file_library.select_all",
+      });
+      expect(selectAll).not.toBeChecked();
+      expect(selectAll).not.toBePartiallyChecked();
+      fireEvent.click(selectAll);
+      expect(selectAll).toBeChecked();
+      fireEvent.click(selectAll);
+      expect(checkbox("empty.txt")).not.toBeChecked();
+      fireEvent.click(checkbox("empty.txt"));
+      expect(selectAll).toBePartiallyChecked();
+      const search = screen.getByRole("textbox", {
+        name: "file_library.search",
+      });
+      fireEvent.input(search, {
+        target: { value: "private" },
+      });
+      fireEvent.click(selectAll);
+      expect(checkbox("private.txt")).toBeChecked();
+      expect(selectAll).toBeChecked();
+      fireEvent.input(search, { target: { value: "" } });
+      expect(checkbox("empty.txt")).toBeChecked();
+      if (!sharing)
+        expect(checkbox("shared.txt")).not.toBeChecked();
+      const send = screen.getByRole("button", {
+        name: sharing
+          ? "shared_files.share_count"
+          : "file_library.send_count",
+      });
+      fireEvent.click(send);
+      expect(select).toHaveBeenLastCalledWith([
+        "private",
+        "empty",
+      ]);
+      if (!sharing) {
+        expect(selectAll).toBePartiallyChecked();
+        fireEvent.click(selectAll);
+        fireEvent.click(send);
+        expect(select).toHaveBeenLastCalledWith([
+          "private",
+          "shared",
+          "empty",
+        ]);
+      }
+      fireEvent.click(selectAll);
+      expect(send).toBeDisabled();
+      expect(selectAll).not.toBeChecked();
+      expect(selectAll).not.toBePartiallyChecked();
+      expect(checkbox("private.txt")).not.toBeChecked();
+      expect(checkbox("empty.txt")).not.toBeChecked();
+      expect(close).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
     "filters the %s sharing picker and removes selections that become ineligible",
     async (sharing) => {
       const select = vi.fn();

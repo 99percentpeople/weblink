@@ -12,6 +12,10 @@ import type { NotificationAction } from "@weblink/platform";
 import type { StoreMessage } from "@/libs/domain/message";
 import { SystemNotificationBridge } from "@/components/app/system-notifications";
 import {
+  useNotifications,
+  type AppNotifications,
+} from "@/libs/state/notifications-context";
+import {
   appState,
   createInitialAppState,
   setAppState,
@@ -181,6 +185,39 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it("shares the existing background notification session with child views", async () => {
+  hidden = true;
+  let notifications: AppNotifications | undefined;
+  const Child = () => {
+    notifications = useNotifications();
+    return null;
+  };
+  const view = render(() => (
+    <SystemNotificationBridge>
+      <Child />
+    </SystemNotificationBridge>
+  ));
+  expect(notifications).toBeDefined();
+  await notifications!.show({
+    category: "transfers",
+    current: () => true,
+    notification: {
+      id: "file-save-test",
+      title: "Conflict",
+      body: "report.txt",
+      expiresAt: Date.now() + 60_000,
+    },
+    respond: async () => {},
+  });
+  expect(mocks.watch).toHaveBeenCalledOnce();
+  expect(mocks.show).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "file-save-test" }),
+  );
+  view.unmount();
+  await flush();
+  expect(mocks.close).toHaveBeenCalledOnce();
 });
 
 it.each([true, false])(

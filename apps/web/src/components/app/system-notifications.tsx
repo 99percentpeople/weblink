@@ -4,6 +4,7 @@ import {
   on,
   onCleanup,
   untrack,
+  type ParentProps,
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { toast } from "solid-sonner";
@@ -17,6 +18,7 @@ import { messageNotificationContent } from "@/libs/application/notifications/mes
 import { renderNotificationAvatar } from "@/libs/application/notifications/notification-avatar";
 import { appendConversationDraft } from "@/libs/hooks/conversation-draft";
 import { useAppDialogs } from "@/libs/state/app-dialogs-context";
+import { NotificationsContext } from "@/libs/state/notifications-context";
 import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
 import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 import { isRemoteContentTransferTask } from "@/libs/application/task-service";
@@ -25,7 +27,9 @@ import { createMessageFeedback } from "@/libs/hooks/create-message-feedback";
 import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
 import { RemoteControlStatus } from "./remote-control-status";
 
-export function SystemNotificationBridge() {
+export function SystemNotificationBridge(
+  props: ParentProps,
+) {
   const state = useAppState();
   const dialogs = useAppDialogs();
   const navigate = useNavigate();
@@ -312,18 +316,21 @@ export function SystemNotificationBridge() {
     service.close();
   });
   return (
-    <RemoteControlStatus
-      notifications={service}
-      showApplication={() => {
-        void platform.application
-          ?.show()
-          .catch((error) =>
-            console.warn(
-              "Could not show application",
-              error,
-            ),
-          );
-      }}
-    />
+    <NotificationsContext.Provider value={service}>
+      {props.children}
+      <RemoteControlStatus
+        notifications={service}
+        showApplication={() => {
+          void platform.application
+            ?.show()
+            .catch((error) =>
+              console.warn(
+                "Could not show application",
+                error,
+              ),
+            );
+        }}
+      />
+    </NotificationsContext.Provider>
   );
 }

@@ -1,4 +1,5 @@
 import { userErrorMessage } from "@/libs/user-error";
+import { showFileOperationError } from "./file-operation-error";
 import {
   createEffect,
   createMemo,
@@ -14,7 +15,6 @@ import {
   RefreshCw,
   Search,
 } from "lucide-solid";
-import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -52,10 +52,7 @@ import type {
   StorageSortField,
 } from "@/libs/domain/protocol";
 
-const report = (error: unknown) =>
-  toast.error(
-    userErrorMessage(error, "errors.file_failed"),
-  );
+const report = showFileOperationError;
 
 function MySharedFiles() {
   const [selected, setSelected] = createSignal<string[]>(
@@ -234,8 +231,8 @@ function RemoteSharedFiles(props: {
         <div class="flex items-center gap-2">
           <div class="relative min-w-0 flex-1">
             <Search
-              class="text-muted-foreground pointer-events-none absolute top-2.5
-                left-2.5 size-4"
+              class="text-muted-foreground pointer-events-none absolute left-2.5
+                top-2.5 size-4"
               aria-hidden="true"
             />
             <Input
@@ -624,7 +621,7 @@ export function SharedFilesPanel(props: {
                           }
                         >
                           <span
-                            class="border-background absolute right-0 bottom-0 size-2.5
+                            class="border-background absolute bottom-0 right-0 size-2.5
                               rounded-full border-2 bg-emerald-500"
                             aria-hidden="true"
                           />

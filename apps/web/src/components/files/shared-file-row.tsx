@@ -1,8 +1,7 @@
 import type { StoredFile } from "@weblink/platform";
-import { userErrorMessage } from "@/libs/user-error";
+import { showFileOperationError } from "./file-operation-error";
 import { Show } from "solid-js";
 import { X } from "lucide-solid";
-import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
 import {
   Checkbox,
@@ -60,11 +59,7 @@ export function SharedFileRow(props: {
         action() === "cancel"
           ? props.task?.cancel()
           : props.task?.resume()
-      )?.catch((error) =>
-        toast.error(
-          userErrorMessage(error, "errors.file_failed"),
-        ),
-      );
+      )?.catch(showFileOperationError);
   };
   return (
     <li
@@ -167,14 +162,7 @@ export function SharedFileRow(props: {
           onClick={() =>
             void props.task
               ?.cancel()
-              .catch((error) =>
-                toast.error(
-                  userErrorMessage(
-                    error,
-                    "errors.file_failed",
-                  ),
-                ),
-              )
+              .catch(showFileOperationError)
           }
         >
           <X class="size-4" />

@@ -15,6 +15,7 @@ import {
   waitFor,
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
+import type { ParentProps } from "solid-js";
 import { AccountMenu } from "@/components/app/account-menu";
 import { AppDialogsProvider } from "../support/app-dialogs-provider";
 import { ModalProvider } from "@/components/dialogs/base";
@@ -23,7 +24,8 @@ vi.mock("@/components/app/remote-control-status", () => ({
   RemoteControlStatus: () => null,
 }));
 vi.mock("@/components/app/system-notifications", () => ({
-  SystemNotificationBridge: () => null,
+  SystemNotificationBridge: (props: ParentProps) =>
+    props.children,
 }));
 
 const loaded = vi.hoisted(() => ({

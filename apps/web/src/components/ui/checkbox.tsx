@@ -1,6 +1,9 @@
 import { cn } from "@/libs/cn";
 import type { CheckboxControlProps } from "@kobalte/core/checkbox";
-import { Checkbox as CheckboxPrimitive } from "@kobalte/core/checkbox";
+import {
+  Checkbox as CheckboxPrimitive,
+  useCheckboxContext,
+} from "@kobalte/core/checkbox";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 import type { ValidComponent, VoidProps } from "solid-js";
 import { splitProps } from "solid-js";
@@ -21,6 +24,7 @@ export const CheckboxControl = <
 >(
   props: PolymorphicProps<T, checkboxControlProps<T>>,
 ) => {
+  const context = useCheckboxContext();
   const [local, rest] = splitProps(
     props as checkboxControlProps,
     ["class", "children"],
@@ -40,6 +44,10 @@ export const CheckboxControl = <
           `border-input dark:bg-input/30 data-[checked]:bg-primary
           data-[checked]:text-primary-foreground
           dark:data-[checked]:bg-primary data-[checked]:border-primary
+          data-[indeterminate]:bg-primary
+          data-[indeterminate]:text-primary-foreground
+          dark:data-[indeterminate]:bg-primary
+          data-[indeterminate]:border-primary
           focus-visible:border-ring focus-visible:ring-ring/50
           aria-invalid:ring-destructive/20
           dark:aria-invalid:ring-destructive/40
@@ -66,7 +74,11 @@ export const CheckboxControl = <
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
-              d="m5 12l4 4 8-8"
+              d={
+                context.indeterminate()
+                  ? "M5 12h14"
+                  : "m5 12l4 4 8-8"
+              }
             />
             <title>Checkbox</title>
           </svg>

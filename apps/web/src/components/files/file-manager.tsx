@@ -3,6 +3,8 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onCleanup,
+  onMount,
   For,
   Show,
 } from "solid-js";
@@ -25,7 +27,11 @@ import { appState } from "@/libs/state/app-state";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { createForwardDialog } from "@/components/dialogs/forward-dialog";
 import { createDialog } from "@/components/dialogs/dialog";
-import { downloadFile } from "@/libs/utils/download-file";
+import {
+  downloadFile,
+  saveFile,
+  saveFileAs,
+} from "@/libs/utils/download-file";
 import { handleSelectFolder } from "@/libs/utils/process-file";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
@@ -33,19 +39,56 @@ import { toast } from "solid-sonner";
 import DropArea from "@/components/drop-area";
 import { FileDropOverlay } from "@/components/file-drop-overlay";
 import { createLibraryImport } from "@/libs/hooks/create-library-import";
+import { MountedDirectoryMenu } from "./mounted-directory-menu";
+import { platform } from "@/libs/platform/runtime";
+import { useNotifications } from "@/libs/state/notifications-context";
+import { saveFilesWithFeedback } from "./save-files-with-feedback";
 
 export default function FileManager() {
-  const files = useLibraryFiles();
+  const [mountId, setMountId] = createSignal(
+    cacheManager.storage.defaultMountId,
+  );
+  onMount(() => {
+    const refresh = () =>
+      setMountId(cacheManager.storage.defaultMountId);
+    onCleanup(cacheManager.storage.onChange(refresh));
+    refresh();
+  });
+  const files = useLibraryFiles(mountId);
   const [selection, setSelection] = createSignal<string[]>(
     [],
   );
   const selected = createMemo(() =>
     files().filter((file) => selection().includes(file.id)),
   );
+  const [saving, setSaving] = createSignal(false);
+  const notifications = useNotifications();
+  let disposed = false;
+  onCleanup(() => {
+    disposed = true;
+  });
+  const selectedDownloads = createMemo(() =>
+    selected().filter(
+      (file) => file.storageKind === "indexeddb",
+    ),
+  );
+  const selectedSaveAs = createMemo(() =>
+    selected().filter(
+      (file) =>
+        file.storageKind === "directory" ||
+        file.storageKind === "native",
+    ),
+  );
+  const saveSelectionLabel = () =>
+    selectedSaveAs().length
+      ? t("file_library.action_save_as")
+      : selectedDownloads().length
+        ? t("file_library.action_download")
+        : "";
   const [storage, setStorage] =
     createSignal<StorageEstimate>();
-  const { importing, importFiles, onDrop } =
-    createLibraryImport();
+  const { importing, importFiles, openPicker, onDrop } =
+    createLibraryImport({ background: true });
   const [detail, setDetail] = createSignal<LibraryFile>();
   const [deleting, setDeleting] = createSignal<
     LibraryFile[]
@@ -72,7 +115,7 @@ export default function FileManager() {
   const details = createDialog<void>({
     title: () => detail()?.fileName,
     content: () => (
-      <dl class="space-y-3 text-sm break-all">
+      <dl class="space-y-3 break-all text-sm">
         <dt class="text-muted-foreground">
           {t("file_library.aliases")}
         </dt>
@@ -90,9 +133,11 @@ export default function FileManager() {
         </dt>
         <dd>
           {t(
-            detail()?.isComplete
-              ? "file_library.status_complete"
-              : "file_library.status_incomplete",
+            detail()?.storageUnavailable
+              ? "storage.unavailable"
+              : detail()?.isComplete
+                ? "file_library.status_complete"
+                : "file_library.status_incomplete",
           )}
         </dd>
         <dt class="text-muted-foreground">
@@ -189,6 +234,37 @@ export default function FileManager() {
       await cacheManager.remove(file.id);
     setSelection([]);
   };
+  const saveSelection = async () => {
+    if (saving()) return;
+    const downloads = selectedDownloads();
+    const saveAs = selectedSaveAs();
+    if (
+      downloads.length + saveAs.length !==
+        selected().length ||
+      selected().some(
+        (file) => !file.isComplete || !file.file,
+      )
+    )
+      return;
+    setSaving(true);
+    try {
+      // Invoke browser pickers before any cache reads or downloads.
+      if (saveAs.length) {
+        const files = selected().map((file) => file.file!);
+        await saveFilesWithFeedback(files, notifications);
+        return;
+      }
+      for (const file of downloads)
+        if (
+          !(await saveFile(file.file!, file.file!.name, {
+            automatic: true,
+          }))
+        )
+          return;
+    } finally {
+      if (!disposed) setSaving(false);
+    }
+  };
   const act = async (
     action: FileAction,
     file: LibraryFile,
@@ -204,6 +280,27 @@ export default function FileManager() {
       await details.open();
       return;
     }
+    if (action === "reveal") {
+      const location = await cacheManager
+        .getCache(file.id)
+        ?.storageLocation?.();
+      if (
+        location?.kind !== "native" ||
+        !platform.filesystem?.revealFile
+      )
+        throw new Error("File location is unavailable");
+      await platform.filesystem.revealFile(
+        location.mountId,
+        location.path,
+      );
+      return;
+    }
+    if (action === "save_as") {
+      if (!file.file || !file.isComplete)
+        throw new Error("File is incomplete");
+      await saveFileAs(file.file);
+      return;
+    }
     const cache = cacheManager.getCache(file.id);
     const current = await cache?.getInfo();
     if (!current?.file || !current.isComplete)
@@ -211,7 +308,7 @@ export default function FileManager() {
     if (action === "preview")
       await preview.open(current.file);
     else if (action === "download")
-      downloadFile(current.file);
+      downloadFile(current.file, { automatic: true });
     else await forward.forwardCache(current);
   };
   return (
@@ -272,32 +369,42 @@ export default function FileManager() {
             ).finally(() => (input.value = ""));
           }}
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            as={Button}
-            variant="outline"
-            size="sm"
-            disabled={importing()}
-          >
-            <Upload class="mr-2 size-4" />
-            {t("file_library.import")}
-            <ChevronDown class="ml-2 size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              onSelect={() => fileInput.click()}
+        <div class="flex flex-wrap items-center gap-2">
+          <Show when={platform.filesystem}>
+            <MountedDirectoryMenu
+              storage={cacheManager.storage}
+            />
+          </Show>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              as={Button}
+              variant="outline"
+              size="sm"
+              disabled={importing()}
             >
-              {t("shared_files.upload_files")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => folderInput.click()}
-            >
-              {t("shared_files.upload_folder")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <Upload class="mr-2 size-4" />
+              {t("file_library.import")}
+              <ChevronDown class="ml-2 size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem
+                onSelect={() => void openPicker(fileInput)}
+              >
+                {t("shared_files.upload_files")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  void openPicker(folderInput)
+                }
+              >
+                {t("shared_files.upload_folder")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <FileBrowser
+        mountId={mountId()}
         selected={selection()}
         onSelection={setSelection}
         onAction={(action, file) =>
@@ -330,21 +437,26 @@ export default function FileManager() {
           >
             {t("common.action.send")}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={selected().some(
-              (file) => !file.isComplete || !file.file,
-            )}
-            onClick={() =>
-              selected().forEach(
-                (file) =>
-                  void act("download", file).catch(report),
-              )
-            }
-          >
-            {t("common.action.download")}
-          </Button>
+          <Show when={saveSelectionLabel()}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                saving() ||
+                selectedDownloads().length +
+                  selectedSaveAs().length !==
+                  selected().length ||
+                selected().some(
+                  (file) => !file.isComplete || !file.file,
+                )
+              }
+              onClick={() =>
+                void saveSelection().catch(report)
+              }
+            >
+              {saveSelectionLabel()}
+            </Button>
+          </Show>
           <For each={[true, false]}>
             {(enabled) => (
               <Button

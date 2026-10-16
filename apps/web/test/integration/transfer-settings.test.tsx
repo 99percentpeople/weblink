@@ -18,6 +18,9 @@ import {
 } from "@/options";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/state/app-dialogs-context", () => ({
+  useAppDialogs: () => ({ openFiles: vi.fn() }),
+}));
 
 let dispose: (() => void) | undefined;
 afterEach(() => {

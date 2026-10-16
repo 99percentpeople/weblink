@@ -14,6 +14,7 @@ import { setAppOptions, CompressionLevel } from "@/options";
 
 import { appState } from "@/libs/state/app-state";
 import RemoteTransferSettings from "./remote-transfer-settings";
+import StorageSettings from "./storage-settings";
 import { MAX_CONCURRENT_TRANSFERS } from "@/libs/application/transfer/transfer-queue";
 
 export default function TransferSettings() {
@@ -23,6 +24,7 @@ export default function TransferSettings() {
       id="transfer-settings"
       title={t("app_menu.settings_transfer")}
     >
+      <StorageSettings />
       <SettingSlider
         minValue={1}
         maxValue={MAX_CONCURRENT_TRANSFERS}

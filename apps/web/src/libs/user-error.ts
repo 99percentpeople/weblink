@@ -1,7 +1,21 @@
 import { t } from "@/i18n";
 import type en from "@/assets/i18n/en-us.json";
+import { DirectoryWriteError } from "@/libs/domain/vfs";
+import { LocalFileSystemError } from "@weblink/platform";
 
 type ErrorKey = `errors.${keyof typeof en.errors}`;
+
+const writeStages: Partial<
+  Record<
+    LocalFileSystemError["operation"],
+    "create" | "write" | "commit"
+  >
+> = {
+  resize: "create",
+  write: "write",
+  sync: "commit",
+  move: "commit",
+};
 
 const messages: readonly [RegExp, ErrorKey][] = [
   [
@@ -104,6 +118,37 @@ export function userErrorMessage(
   error: unknown,
   fallback: ErrorKey = "errors.unexpected",
 ): string {
+  if (error instanceof LocalFileSystemError) {
+    const stage = writeStages[error.operation];
+    if (stage)
+      return t("storage.write_failed", {
+        fileName:
+          error.path.split("/").at(-1) ?? error.path,
+        stage: t(`storage.stage_${stage}`),
+      });
+  }
+  if (error instanceof DirectoryWriteError) {
+    if (
+      error.stage === "create" &&
+      /Name is not allowed/i.test(error.detail ?? "")
+    )
+      return t("storage.name_blocked", {
+        fileName: error.fileName,
+      });
+    if (
+      error.stage === "commit" &&
+      /Blocked by Safe Browsing|Aborted due to security policy/i.test(
+        error.detail ?? "",
+      )
+    )
+      return t("storage.write_blocked", {
+        fileName: error.fileName,
+      });
+    return t("storage.write_failed", {
+      fileName: error.fileName,
+      stage: t(`storage.stage_${error.stage}`),
+    });
+  }
   const value =
     typeof error === "object" && error !== null
       ? (error as {
