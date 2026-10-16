@@ -1,31 +1,58 @@
-import type { StoredFile } from "@weblink/platform";
-import { children, Show, type JSX } from "solid-js";
-import { Download, Eye } from "lucide-solid";
+import type {
+  FileStorageLocation,
+  StoredFile,
+} from "@weblink/platform";
+import {
+  children,
+  createMemo,
+  Show,
+  type JSX,
+} from "solid-js";
+import { Download, Eye, ExternalLink } from "lucide-solid";
 import { IconFile } from "@/components/icon-file";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
-import { downloadFile } from "@/libs/utils/download-file";
+import { fileSaveAction } from "@/libs/utils/file-save-action";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
-import { t } from "@/i18n";
 import type { MediaHashRoute } from "./media-hash-route";
 import { LocalFileMedia } from "./local-file-media";
+import { platform } from "@/libs/platform/runtime";
+import { fileOpenLabel } from "@/libs/utils/open-file";
 
 /** Shared presentation only: the caller decides whether bytes are available. */
 export function FileAttachmentBubble(props: {
   file?: StoredFile;
+  storageKind?: FileStorageLocation["kind"];
   route: MediaHashRoute;
   name: string;
   size: number;
   mimeType?: string;
   action?: JSX.Element;
+  /** Total buttons available after message-level actions such as retry. */
+  actionLimit?: number;
+  /** Buttons supplied by the caller in action, before local open/save actions. */
+  actionCount?: number;
   details?: JSX.Element;
   children?: JSX.Element;
 }) {
   const { open: preview } = createPreviewDialog();
+  const saveAction = createMemo(() =>
+    fileSaveAction(props.storageKind),
+  );
   const details = children(() => props.details);
   const media = () =>
     /^(image|video|audio)\//.test(
       props.file?.type || props.mimeType || "",
     );
+  const localActionLimit = () =>
+    Math.max(
+      0,
+      (props.actionLimit ?? 2) - (props.actionCount ?? 0),
+    );
+  const showOpen = () => !media() && localActionLimit() > 0;
+  const showSave = () =>
+    (platform.kind !== "desktop" ||
+      props.storageKind !== "native") &&
+    localActionLimit() > Number(!media());
   return (
     <div
       class="flex min-w-0 flex-col gap-2"
@@ -68,38 +95,49 @@ export function FileAttachmentBubble(props: {
         </div>
         <Show when={props.file}>
           {(file) => (
-            <div class="flex shrink-0 items-center gap-0.5">
-              <Show when={!media()}>
-                <button
-                  type="button"
-                  class="hover:bg-foreground/10 focus-visible:ring-ring flex size-8
-                    items-center justify-center rounded-full outline-none
-                    focus-visible:ring-2"
-                  aria-label={t("common.action.preview")}
-                  title={t("common.action.preview")}
-                  onClick={() => void preview(file())}
-                >
-                  <Eye class="size-4" />
-                  <span class="sr-only">
-                    {t("common.action.preview")}
-                  </span>
-                </button>
-              </Show>
-              <button
-                type="button"
-                class="hover:bg-foreground/10 focus-visible:ring-ring flex size-8
-                  items-center justify-center rounded-full outline-none
-                  focus-visible:ring-2"
-                aria-label={t("common.action.download")}
-                title={t("common.action.download")}
-                onClick={() => downloadFile(file())}
-              >
-                <Download class="size-4" />
-                <span class="sr-only">
-                  {t("common.action.download")}
-                </span>
-              </button>
-            </div>
+            <Show when={showOpen() || showSave()}>
+              <div class="flex shrink-0 items-center gap-0.5">
+                <Show when={showOpen()}>
+                  <button
+                    type="button"
+                    class="hover:bg-foreground/10 focus-visible:ring-ring flex size-8
+                      items-center justify-center rounded-full outline-none
+                      focus-visible:ring-2"
+                    aria-label={fileOpenLabel()}
+                    title={fileOpenLabel()}
+                    onClick={() => void preview(file())}
+                  >
+                    <Show
+                      when={platform.openFile}
+                      fallback={<Eye class="size-4" />}
+                    >
+                      <ExternalLink class="size-4" />
+                    </Show>
+                    <span class="sr-only">
+                      {fileOpenLabel()}
+                    </span>
+                  </button>
+                </Show>
+                <Show when={showSave()}>
+                  <button
+                    type="button"
+                    class="hover:bg-foreground/10 focus-visible:ring-ring flex size-8
+                      items-center justify-center rounded-full outline-none
+                      focus-visible:ring-2"
+                    aria-label={saveAction().label}
+                    title={saveAction().label}
+                    onClick={() =>
+                      saveAction().save(file())
+                    }
+                  >
+                    <Download class="size-4" />
+                    <span class="sr-only">
+                      {saveAction().label}
+                    </span>
+                  </button>
+                </Show>
+              </div>
+            </Show>
           )}
         </Show>
         {props.action}

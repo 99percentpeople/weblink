@@ -12,6 +12,7 @@ import {
   ComponentProps,
   createMemo,
   createResource,
+  createSignal,
   Match,
   Show,
   splitProps,
@@ -52,7 +53,10 @@ import {
 import { catchError } from "@/libs/catch";
 import { toast } from "solid-sonner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
-import { downloadFile } from "@/libs/utils/download-file";
+import { fileOpenLabel } from "@/libs/utils/open-file";
+import { fileSaveAction } from "@/libs/utils/file-save-action";
+import { platform } from "@/libs/platform/runtime";
+import { FolderOpen, Info } from "lucide-solid";
 import { canShareFile } from "@/libs/utils/can-share";
 import { MessageSenderAvatar } from "@/components/conversations/message-sender-avatar";
 import { TextMessageContent } from "@/components/conversations/text-message-content";
@@ -114,15 +118,31 @@ export const MessageContent: Component<MessageCardProps> = (
     () =>
       appState.session.clientViewData[local.message.target],
   );
-  const { retryMessage } = useAppState();
+  const { retryMessage, activeRoomConversationId } =
+    useAppState();
   const { open: openPreviewDialog } = createPreviewDialog();
+  const [fileDetailsOpen, setFileDetailsOpen] =
+    createSignal(false);
 
-  const shouldShowRestoreButton = createMemo(() => {
-    if (props.message.room) return false;
+  const canRetry = createMemo(() => {
+    if (props.message.room)
+      return (
+        outgoing() &&
+        props.message.conversationId ===
+          activeRoomConversationId() &&
+        Object.entries(props.message.deliveries ?? {}).some(
+          ([peer, status]) =>
+            status === "failed" &&
+            appState.session.clientViewData[peer]
+              ?.messageChannel,
+        )
+      );
     if (!targetClientInfo()?.messageChannel) return false;
     if (props.message.status !== "error") return false;
     return true;
   });
+  // Include the room retry beside the bubble in the same two-button limit.
+  const fileActionLimit = () => 2 - Number(canRetry());
 
   const contentOptions = {
     text: (props: {
@@ -197,9 +217,45 @@ export const MessageContent: Component<MessageCardProps> = (
       message: FileTransferMessage;
       close: () => void;
     }) => {
+      const cacheInfo = createMemo(() =>
+        props.message.room
+          ? getRoomFileCache(props.message)
+          : appState.cache.cacheInfo[
+              props.message.fid ?? ""
+            ],
+      );
+      const saveAction = createMemo(() =>
+        fileSaveAction(cacheInfo()?.storageKind),
+      );
+      const reveal = async () => {
+        const info = cacheInfo();
+        const cache =
+          info && appState.cache.caches[info.id];
+        props.close();
+        try {
+          const location = await cache?.storageLocation?.();
+          if (
+            location?.kind !== "native" ||
+            !platform.filesystem?.revealFile
+          )
+            throw new Error("File location is unavailable");
+          await platform.filesystem.revealFile(
+            location.mountId,
+            location.path,
+          );
+        } catch (error) {
+          toast.error(
+            userErrorMessage(error, "errors.file_failed"),
+          );
+        }
+      };
       const [file] = createResource(async () => {
         if (!props.message.fid) return null;
-        return await getFileFromCache(props.message);
+        // Metadata-only actions remain available when local bytes cannot be read.
+        const [error, cachedFile] = await catchError(
+          getFileFromCache(props.message),
+        );
+        return error ? null : cachedFile;
       });
       const shareableData = createMemo(() => {
         const f = file();
@@ -335,7 +391,7 @@ export const MessageContent: Component<MessageCardProps> = (
                   }}
                 >
                   <IconPreview class="size-4" />
-                  {t("common.action.preview")}
+                  {fileOpenLabel()}
                 </ContextMenuItem>
                 <Show when={shareableData()}>
                   {(shareData) => (
@@ -358,16 +414,46 @@ export const MessageContent: Component<MessageCardProps> = (
                 </Show>
                 <ContextMenuItem
                   class="gap-2"
-                  onSelect={async () => {
+                  onSelect={() => {
                     props.close();
-                    downloadFile(f());
+                    saveAction().save(f());
                   }}
                 >
                   <IconDownload class="size-4" />
-                  {t("common.action.download")}
+                  {saveAction().label}
                 </ContextMenuItem>
               </>
             )}
+          </Show>
+          <Show
+            when={
+              cacheInfo()?.storageKind === "native" &&
+              platform.filesystem?.revealFile
+            }
+          >
+            <ContextMenuItem
+              class="gap-2"
+              disabled={
+                !!cacheInfo()?.storageUnavailable ||
+                !!cacheInfo()?.storageMissing
+              }
+              onSelect={() => void reveal()}
+            >
+              <FolderOpen class="size-4" />
+              {t("file_library.action_reveal")}
+            </ContextMenuItem>
+          </Show>
+          <Show when={props.message.room && outgoing()}>
+            <ContextMenuItem
+              class="gap-2"
+              onSelect={() => {
+                props.close();
+                setFileDetailsOpen(true);
+              }}
+            >
+              <Info class="size-4" />
+              {t("conversations.room_file_details")}
+            </ContextMenuItem>
           </Show>
         </>
       );
@@ -505,11 +591,17 @@ export const MessageContent: Component<MessageCardProps> = (
                         fallback={
                           <FileMessageCard
                             message={message()}
+                            actionLimit={fileActionLimit()}
                           />
                         }
                       >
                         <RoomFileMessageCard
                           message={message()}
+                          actionLimit={fileActionLimit()}
+                          detailsOpen={fileDetailsOpen()}
+                          onDetailsOpenChange={
+                            setFileDetailsOpen
+                          }
                         />
                       </Show>
                     )}
@@ -534,7 +626,11 @@ export const MessageContent: Component<MessageCardProps> = (
                   <Show when={props.message.error}>
                     {(error) => (
                       <Tooltip>
-                        <TooltipTrigger class="text-destructive text-[11px]">
+                        <TooltipTrigger
+                          as="span"
+                          tabIndex={0}
+                          class="text-destructive text-[11px]"
+                        >
                           {t("client.message_error")}
                         </TooltipTrigger>
                         <TooltipContent>
@@ -543,7 +639,9 @@ export const MessageContent: Component<MessageCardProps> = (
                       </Tooltip>
                     )}
                   </Show>
-                  <Show when={shouldShowRestoreButton()}>
+                  <Show
+                    when={!props.message.room && canRetry()}
+                  >
                     <MessageRetryButton
                       retry={() =>
                         retryMessage(props.message)
@@ -603,7 +701,14 @@ export const MessageContent: Component<MessageCardProps> = (
               }
             >
               {(message) => (
-                <RoomDeliverySummary message={message()} />
+                <RoomDeliverySummary
+                  message={message()}
+                  retry={
+                    canRetry()
+                      ? () => retryMessage(message())
+                      : undefined
+                  }
+                />
               )}
             </Show>
           </div>

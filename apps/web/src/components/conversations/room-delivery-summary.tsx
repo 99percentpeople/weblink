@@ -1,7 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { ClientAvatar } from "@/components/common/client-avatar";
 import { MessageRetryButton } from "./message-retry-button";
-import { useAppState } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
 import type { RoomMessage } from "@/libs/domain/message";
 import { t } from "@/i18n";
@@ -9,8 +8,8 @@ import { cn } from "@/libs/cn";
 
 export function RoomDeliverySummary(props: {
   message: RoomMessage;
+  retry?(): Promise<void>;
 }) {
-  const state = useAppState();
   const deliveries = createMemo(() =>
     Object.entries(props.message.deliveries ?? {}),
   );
@@ -37,13 +36,6 @@ export function RoomDeliverySummary(props: {
     deliveries().filter(
       ([, status]) => status === "delivered",
     ).length;
-  const failed = () =>
-    deliveries().some(
-      ([peer, status]) =>
-        status === "failed" &&
-        appState.session.clientViewData[peer]
-          ?.messageChannel,
-    );
   return (
     <Show when={deliveries().length}>
       <div
@@ -56,7 +48,7 @@ export function RoomDeliverySummary(props: {
           total: deliveries().length,
         })}
       >
-        <div class="isolate flex max-w-16 min-w-0 justify-end -space-x-1.5">
+        <div class="isolate flex min-w-0 max-w-16 justify-end -space-x-1.5">
           <For each={visibleDeliveries()}>
             {([peer, status]) => {
               const client = createMemo(() =>
@@ -101,16 +93,10 @@ export function RoomDeliverySummary(props: {
             </span>
           </Show>
         </div>
-        <Show
-          when={
-            failed() &&
-            props.message.conversationId ===
-              state.activeRoomConversationId()
-          }
-        >
-          <MessageRetryButton
-            retry={() => state.retryMessage(props.message)}
-          />
+        <Show when={props.retry}>
+          {(retry) => (
+            <MessageRetryButton retry={retry()} />
+          )}
         </Show>
       </div>
     </Show>

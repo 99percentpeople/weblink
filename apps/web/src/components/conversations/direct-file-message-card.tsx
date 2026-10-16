@@ -1,6 +1,5 @@
-import { userErrorMessage } from "@/libs/user-error";
+import { showFileOperationError } from "@/components/files/file-operation-error";
 import { createMemo, createSignal, Show } from "solid-js";
-import { toast } from "solid-sonner";
 import { appState } from "@/libs/state/app-state";
 import { useAppState } from "@/libs/state/app-state-context";
 import type { FileTransferMessage } from "@/libs/domain/message";
@@ -16,6 +15,7 @@ import {
 
 export function DirectFileMessageCard(props: {
   message: FileTransferMessage;
+  actionLimit?: number;
 }) {
   const state = useAppState();
   const [pending, setPending] = createSignal(false);
@@ -103,9 +103,7 @@ export function DirectFileMessageCard(props: {
         else await state.requestFile(peerId(), info, true);
       }
     } catch (error) {
-      toast.error(
-        userErrorMessage(error, "errors.file_failed"),
-      );
+      showFileOperationError(error);
     } finally {
       setPending(false);
     }
@@ -122,9 +120,14 @@ export function DirectFileMessageCard(props: {
         messageId: props.message.id,
       }}
       file={cache()?.file}
+      storageKind={cache()?.storageKind}
       name={props.message.fileName}
       size={props.message.fileSize}
       mimeType={props.message.mimeType ?? cache()?.mimetype}
+      actionLimit={props.actionLimit}
+      actionCount={
+        showTransfer() && !merging() && control() ? 1 : 0
+      }
       details={
         props.message.completionSource === "local" ? (
           <span class="text-muted-foreground text-[11px]">

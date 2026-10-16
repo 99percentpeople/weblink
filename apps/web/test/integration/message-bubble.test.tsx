@@ -13,16 +13,18 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
+import userEvent from "@testing-library/user-event";
+import { toast } from "solid-sonner";
+import type { FileStorageLocation } from "@weblink/platform";
+import { fakeCache } from "../support/file-transfer";
 import type { ActiveFileTransfer } from "@/libs/application/transfer/file-transfer-state";
 import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import { reconcile } from "solid-js/store";
-import type {
-  ComponentProps,
-  JSX,
-  ParentProps,
-} from "solid-js";
-import { createSignal } from "solid-js";
+import type { ComponentProps, ParentProps } from "solid-js";
+import { createSignal, splitProps } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import {
   MessageContent,
   type MessageCardProps,
@@ -48,6 +50,9 @@ const {
   pauseFile,
   previewFile,
   downloadFile,
+  saveFileAs,
+  runtime,
+  revealFile,
 } = vi.hoisted(() => ({
   retryMessage: vi.fn(),
   contextMenu: vi.fn(),
@@ -57,11 +62,40 @@ const {
   pauseFile: vi.fn(),
   previewFile: vi.fn(),
   downloadFile: vi.fn(),
+  saveFileAs: vi.fn(),
+  runtime: { desktop: false, contextMenu: false },
+  revealFile: vi.fn(),
   activeRoomConversationId: vi.fn<() => string | null>(
     () => "active-room",
   ),
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock(
+  "@/libs/platform/runtime",
+  async (importOriginal) => {
+    const original =
+      await importOriginal<
+        typeof import("@/libs/platform/runtime")
+      >();
+    return {
+      ...original,
+      platform: {
+        ...original.platform,
+        get kind() {
+          return runtime.desktop ? "desktop" : "browser";
+        },
+        get openFile() {
+          return runtime.desktop ? previewFile : undefined;
+        },
+        get filesystem() {
+          return runtime.desktop
+            ? { revealFile }
+            : undefined;
+        },
+      },
+    };
+  },
+);
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     retryMessage,
@@ -78,19 +112,37 @@ vi.mock("@/components/dialogs/preview-dialog", () => ({
 }));
 vi.mock("@/libs/utils/download-file", () => ({
   downloadFile,
+  saveFileAs,
 }));
-vi.mock("@/components/portable-contextmenu", () => ({
-  PortableContextMenu: (props: {
-    children: (bindings: {
-      onContextMenu: typeof contextMenu;
-    }) => JSX.Element;
-  }) => props.children({ onContextMenu: contextMenu }),
-}));
+vi.mock(
+  "@/components/portable-contextmenu",
+  async (importOriginal) => {
+    const original =
+      await importOriginal<
+        typeof import("@/components/portable-contextmenu")
+      >();
+    return {
+      PortableContextMenu: (
+        props: import("@/components/portable-contextmenu").PortableContextMenuProps,
+      ) =>
+        runtime.contextMenu ? (
+          <original.PortableContextMenu {...props} />
+        ) : (
+          props.children({ onContextMenu: contextMenu })
+        ),
+    };
+  },
+);
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: (props: ParentProps) => <>{props.children}</>,
-  TooltipTrigger: (props: ComponentProps<"button">) => (
-    <button {...props} />
-  ),
+  TooltipTrigger: (
+    props: ComponentProps<"button"> & { as?: "span" },
+  ) => {
+    const [local, rest] = splitProps(props, ["as"]);
+    return (
+      <Dynamic component={local.as ?? "button"} {...rest} />
+    );
+  },
   TooltipContent: (props: ParentProps) => (
     <span>{props.children}</span>
   ),
@@ -125,8 +177,17 @@ const textMessage = (
     ...overrides,
   }) as StoreMessage;
 
+let animationStyle: HTMLStyleElement;
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom has no animation lifecycle; let menus and dialogs unmount on close.
+  animationStyle = document.createElement("style");
+  animationStyle.textContent =
+    "* { animation-name: none !important; }";
+  document.head.append(animationStyle);
+  runtime.desktop = false;
+  runtime.contextMenu = false;
+  revealFile.mockResolvedValue(undefined);
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
     "ResizeObserver",
@@ -146,12 +207,15 @@ beforeEach(() => {
   );
   activeRoomConversationId.mockReturnValue("active-room");
   requestRoomFile.mockResolvedValue(undefined);
+  saveFileAs.mockResolvedValue(true);
   setAppState(reconcile(createInitialAppState()));
   setAppState("profile", "clientId", "self");
 });
 afterEach(() => {
   cleanup();
+  animationStyle.remove();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const roomFileMessage = (
@@ -215,6 +279,20 @@ function bubble(
       '[data-slot="message-meta"]',
     )!,
   };
+}
+
+async function openRoomFileDetails(element: HTMLElement) {
+  fireEvent.contextMenu(element);
+  await userEvent.click(
+    await screen.findByRole("menuitem", {
+      name: "conversations.room_file_details",
+    }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() =>
+    expect(screen.queryByRole("menu")).toBeNull(),
+  );
+  return dialog;
 }
 
 describe("shared conversation avatars", () => {
@@ -881,6 +959,498 @@ describe("message bubble layout", () => {
   });
 });
 
+describe.each([
+  [false, "indexeddb"],
+  [false, "directory"],
+  [true, "indexeddb"],
+  [true, "native"],
+] as const)(
+  "message action limit (desktop: %s, storage: %s)",
+  (desktop, storageKind) => {
+    it.each([
+      "private-sender",
+      "private-receiver",
+      "room-sender",
+      "room-receiver",
+    ])(
+      "keeps %s within two buttons through transfer and delivery changes",
+      (kind) => {
+        runtime.desktop = desktop;
+        onlineSender();
+        const room = kind.startsWith("room");
+        const sender = kind.endsWith("sender");
+        for (const mimeType of [
+          "application/zip",
+          "image/png",
+          "video/mp4",
+          "audio/ogg",
+        ]) {
+          const file = new File(
+            [new Uint8Array(1024)],
+            "attachment",
+            { type: mimeType },
+          );
+          const initial = roomFileMessage({
+            room: room ? roomFileMessage().room : undefined,
+            conversationId: room
+              ? "active-room"
+              : undefined,
+            client: sender ? "self" : "peer",
+            target: sender
+              ? room
+                ? "active-room"
+                : "peer"
+              : "self",
+            fileName: file.name,
+            mimeType,
+          });
+          const [message, setMessage] =
+            createSignal(initial);
+          const view = render(() => (
+            <ul>
+              <MessageContent message={message()} />
+            </ul>
+          ));
+          const row = view.container.querySelector("li")!;
+          for (const phase of [
+            "offered",
+            "queued",
+            "transfering",
+            "paused",
+            "error",
+            "error-active",
+            "merging",
+            "complete",
+          ] as const) {
+            const active =
+              phase === "queued" ||
+              phase === "transfering" ||
+              phase === "error-active";
+            const failed =
+              phase === "error" || phase === "error-active";
+            const complete = sender || phase === "complete";
+            setMessage({
+              ...initial,
+              status: failed ? "error" : "received",
+              error: failed ? "Disconnected" : undefined,
+              transferStatus:
+                phase === "offered"
+                  ? undefined
+                  : phase === "queued"
+                    ? "init"
+                    : phase === "error-active" ||
+                        phase === "merging"
+                      ? "transfering"
+                      : phase,
+              deliveries:
+                room && sender
+                  ? {
+                      peer: failed ? "failed" : "delivered",
+                    }
+                  : undefined,
+            });
+            setAppState("cache", "cacheInfo", "binary", {
+              id: "binary",
+              fileName: file.name,
+              fileSize: file.size,
+              mimetype: mimeType,
+              chunkSize: initial.chunkSize,
+              roomAttachment: room,
+              roomOfferId: room ? initial.id : undefined,
+              from: initial.client,
+              file: complete ? file : undefined,
+              isComplete: complete,
+              isMerging: !sender && phase === "merging",
+              storageKind,
+            });
+            setAppState(
+              "transfer",
+              "transfers",
+              "active",
+              active
+                ? ({
+                    id: "active",
+                    messageId: initial.id,
+                    fileId: "binary",
+                    queued: phase === "queued",
+                    session: {
+                      clientId: "self",
+                      targetClientId: "peer",
+                    },
+                    transferer: {
+                      mode: sender
+                        ? TransferMode.Send
+                        : TransferMode.Receive,
+                    },
+                  } as unknown as ActiveFileTransfer)
+                : undefined,
+            );
+            const buttons =
+              within(row).queryAllByRole("button");
+            expect(
+              buttons.length,
+              `${kind}, ${mimeType}, ${phase}: ${buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent).join(", ")}`,
+            ).toBeLessThanOrEqual(2);
+            if (room && sender) {
+              expect(
+                within(row).queryByRole("button", {
+                  name: "conversations.room_file_details",
+                }),
+              ).toBeNull();
+              if (mimeType === "application/zip")
+                expect(
+                  within(row).getByRole("button", {
+                    name: desktop
+                      ? "common.action.open"
+                      : "common.action.preview",
+                  }),
+                ).toBeInTheDocument();
+            }
+            if (!room && active)
+              expect(
+                within(row).getByRole("button", {
+                  name:
+                    phase === "queued"
+                      ? "common.action.cancel"
+                      : "tasks.pause",
+                }),
+              ).toBeInTheDocument();
+            if (sender && failed)
+              expect(
+                within(row).getByRole("button", {
+                  name: "conversations.retry_failed",
+                }),
+              ).toBeInTheDocument();
+          }
+          view.unmount();
+        }
+      },
+    );
+  },
+);
+
+describe("message action overflow", () => {
+  it.each([false, true])(
+    "keeps long failed text expandable and retryable within two buttons (room: %s)",
+    (room) => {
+      onlineSender();
+      // Model text capacity to exercise the disclosure, without relying on layout.
+      vi.spyOn(
+        HTMLElement.prototype,
+        "clientWidth",
+        "get",
+      ).mockReturnValue(100);
+      vi.spyOn(
+        HTMLElement.prototype,
+        "clientHeight",
+        "get",
+      ).mockReturnValue(100);
+      vi.spyOn(
+        HTMLElement.prototype,
+        "scrollHeight",
+        "get",
+      ).mockImplementation(function (this: HTMLElement) {
+        return (this.textContent?.length ?? 0) > 80
+          ? 200
+          : 100;
+      });
+      const message = textMessage({
+        data: "Long text message ".repeat(40),
+        status: "error",
+        error: "Disconnected",
+        conversationId: room ? "active-room" : undefined,
+        room: room ? roomFileMessage().room : undefined,
+        deliveries: room ? { peer: "failed" } : undefined,
+      });
+      const view = bubble(message);
+      expect(
+        within(view.row).getAllByRole("button"),
+      ).toHaveLength(2);
+      const status = screen.getByText(
+        "client.message_error",
+      );
+      expect(status.tagName).toBe("SPAN");
+      expect(status).toHaveAttribute("tabindex", "0");
+      expect(
+        screen.getByText("errors.connection_closed"),
+      ).toBeInTheDocument();
+      fireEvent.click(
+        within(view.row).getByRole("button", {
+          name: "common.show_more",
+        }),
+      );
+      expect(
+        within(view.row).getAllByRole("button"),
+      ).toHaveLength(1);
+      fireEvent.click(
+        within(view.row).getByRole("button", {
+          name: "conversations.retry_failed",
+        }),
+      );
+      expect(retryMessage).toHaveBeenCalledWith(message);
+    },
+  );
+
+  it("prioritizes opening the file and retrying while keeping room details and save actions in the context menu", async () => {
+    runtime.desktop = true;
+    runtime.contextMenu = true;
+    onlineSender();
+    const file = new File(
+      [new Uint8Array(1024)],
+      "firmware.bin",
+      { type: "application/octet-stream" },
+    );
+    const message = roomFileMessage({
+      client: "self",
+      target: "active-room",
+      status: "error",
+      error: "Disconnected",
+      deliveries: { peer: "failed" },
+    });
+    const cache = {
+      ...fakeCache("binary"),
+      storageLocation: vi
+        .fn<() => Promise<FileStorageLocation>>()
+        .mockResolvedValue({
+          kind: "native",
+          mountId: "native-main",
+          path: file.name,
+        }),
+    };
+    cache.getFile.mockResolvedValue(file);
+    setAppState("cache", "caches", "binary", cache);
+    setAppState("cache", "cacheInfo", "binary", {
+      id: "binary",
+      fileName: file.name,
+      fileSize: file.size,
+      mimetype: file.type,
+      chunkSize: message.chunkSize,
+      roomAttachment: true,
+      roomOfferId: message.id,
+      from: "self",
+      file,
+      isComplete: true,
+      storageKind: "native",
+    });
+    const view = bubble(message);
+    expect(
+      within(view.row).getAllByRole("button"),
+    ).toHaveLength(2);
+    expect(
+      within(view.row).getByRole("button", {
+        name: "common.action.open",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(view.row).queryByRole("button", {
+        name: "conversations.room_file_details",
+      }),
+    ).toBeNull();
+    expect(
+      within(view.row).getByRole("button", {
+        name: "conversations.retry_failed",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.contextMenu(view.bubble);
+    expect(
+      await screen.findByRole("menuitem", {
+        name: "common.action.open",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", {
+        name: "file_library.action_reveal",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", {
+        name: "conversations.room_file_details",
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("menuitem", {
+        name: "file_library.action_save_as",
+      }),
+    );
+    expect(saveFileAs).toHaveBeenCalledWith(file);
+  });
+});
+
+describe("message file locations", () => {
+  function showFileMenu(
+    room: boolean,
+    complete: boolean,
+    kind: FileStorageLocation["kind"] = "native",
+  ) {
+    runtime.desktop = kind !== "directory";
+    runtime.contextMenu = true;
+    const message = roomFileMessage(
+      room
+        ? {}
+        : { room: undefined, conversationId: undefined },
+    );
+    const file = complete
+      ? new File(
+          [new Uint8Array(message.fileSize)],
+          message.fileName,
+        )
+      : undefined;
+    const storageLocation = vi
+      .fn<() => Promise<FileStorageLocation | null>>()
+      .mockResolvedValue(
+        kind === "indexeddb"
+          ? { kind }
+          : {
+              kind,
+              mountId: "native-other",
+              path: "original.bin",
+            },
+      );
+    const cache = {
+      ...fakeCache("binary"),
+      storageLocation,
+    };
+    cache.getFile.mockResolvedValue(file ?? null);
+    setAppState("cache", "cacheInfo", "binary", {
+      id: "binary",
+      fileName: message.fileName,
+      fileSize: message.fileSize,
+      mimetype: message.mimeType,
+      chunkSize: message.chunkSize,
+      roomAttachment: room,
+      roomOfferId: room ? message.id : undefined,
+      from: message.client,
+      file,
+      isComplete: complete,
+      storageKind: kind,
+    });
+    setAppState("cache", "caches", "binary", cache);
+    const view = bubble(message);
+    fireEvent.contextMenu(view.bubble);
+    return cache;
+  }
+
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ])(
+    "reveals the current native path from a message menu (room: %s, complete: %s)",
+    async (room, complete) => {
+      const cache = showFileMenu(room, complete);
+      const action = await screen.findByRole("menuitem", {
+        name: "file_library.action_reveal",
+      });
+      if (complete) {
+        expect(
+          await screen.findByRole("menuitem", {
+            name: "file_library.action_save_as",
+          }),
+        ).toBeEnabled();
+      }
+      expect(cache.storageLocation).not.toHaveBeenCalled();
+      const path = complete
+        ? "nested/firmware (1).bin"
+        : "nested/firmware (1).bin.part";
+      cache.storageLocation.mockResolvedValue({
+        kind: "native",
+        mountId: "native-other",
+        path,
+      });
+      await userEvent.click(action);
+      await waitFor(() =>
+        expect(revealFile).toHaveBeenCalledWith(
+          "native-other",
+          path,
+        ),
+      );
+      expect(downloadFile).not.toHaveBeenCalled();
+      expect(saveFileAs).not.toHaveBeenCalled();
+      expect(previewFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["indexeddb", "directory"] as const)(
+    "hides file location for %s storage",
+    async (kind) => {
+      const cache = showFileMenu(false, true, kind);
+      await screen.findByRole("menu");
+      expect(
+        screen.queryByRole("menuitem", {
+          name: "file_library.action_reveal",
+        }),
+      ).toBeNull();
+      expect(cache.storageLocation).not.toHaveBeenCalled();
+      expect(revealFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not reveal another room offer's cached file", async () => {
+    const cache = showFileMenu(true, false);
+    await screen.findByRole("menuitem", {
+      name: "file_library.action_reveal",
+    });
+    setAppState(
+      "cache",
+      "cacheInfo",
+      "binary",
+      "roomOfferId",
+      "another-offer",
+    );
+    expect(
+      screen.queryByRole("menuitem", {
+        name: "file_library.action_reveal",
+      }),
+    ).toBeNull();
+    expect(cache.storageLocation).not.toHaveBeenCalled();
+    expect(revealFile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { storageMissing: true },
+    {
+      storageUnavailable:
+        "Storage directory is unavailable",
+    },
+  ])(
+    "disables file location when its storage is unavailable: %j",
+    async (state) => {
+      const cache = showFileMenu(false, false);
+      const action = await screen.findByRole("menuitem", {
+        name: "file_library.action_reveal",
+      });
+      setAppState("cache", "cacheInfo", "binary", state);
+      expect(action).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(cache.storageLocation).not.toHaveBeenCalled();
+      expect(revealFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports native reveal failures in a toast", async () => {
+    const error = vi
+      .spyOn(toast, "error")
+      .mockReturnValue("reveal-error");
+    revealFile.mockRejectedValueOnce(
+      new Error("Cannot open file manager"),
+    );
+    showFileMenu(false, true);
+    await userEvent.click(
+      await screen.findByRole("menuitem", {
+        name: "file_library.action_reveal",
+      }),
+    );
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        "errors.file_failed",
+      ),
+    );
+  });
+});
+
 describe("room file offers", () => {
   it.each([true, false])(
     "renders locally owned images without requesting bytes (sender: %s)",
@@ -1004,95 +1574,112 @@ describe("room file offers", () => {
     },
   );
 
-  it("keeps the download control stable until real room-file progress exists", async () => {
-    onlineSender();
-    let finishRequest!: () => void;
-    requestRoomFile.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          finishRequest = resolve;
-        }),
-    );
-    const offer = roomFileMessage();
-    const view = bubble(offer);
-    expect(
-      screen.getByTitle("firmware.bin"),
-    ).toBeInTheDocument();
-    expect(
-      view.row.querySelector(
-        '[data-slot="message-sender-avatar"]',
-      ),
-    ).toHaveAttribute("aria-label", "Alice");
-    expect(screen.getByText("Alice")).toBeInTheDocument();
-    expect(requestRoomFile).not.toHaveBeenCalled();
-    const request = screen.getByRole("button", {
-      name: "conversations.room_file_request",
-    });
-    expect(request).toBeEnabled();
-    const indicator = request.closest(
-      '[data-slot="file-transfer-indicator"]',
-    );
-    expect(indicator).toBeInTheDocument();
-    expect(
-      screen.queryByRole("progressbar", {
-        name: "tasks.progress",
-      }),
-    ).toBeNull();
-    fireEvent.click(request);
-    await waitFor(() =>
-      expect(requestRoomFile).toHaveBeenCalledWith(offer),
-    );
-    expect(request).toBeDisabled();
-    expect(
-      screen.queryByRole("progressbar", {
-        name: "tasks.progress",
-      }),
-    ).toBeNull();
-    expect(
-      request.closest(
-        '[data-slot="file-transfer-indicator"]',
-      ),
-    ).toBe(indicator);
-    finishRequest();
-    await waitFor(() => expect(request).toBeEnabled());
-    expect(requestRoomFile).toHaveBeenCalledTimes(1);
-
-    const file = new File(
-      [new Uint8Array(1024)],
-      "firmware.bin",
-      { type: "application/octet-stream" },
-    );
-    setAppState("cache", "cacheInfo", "binary", {
-      id: "binary",
-      fileName: file.name,
-      fileSize: file.size,
-      chunkSize: offer.chunkSize,
-      mimetype: offer.mimeType,
-      roomAttachment: true,
-      roomOfferId: offer.id,
-      from: offer.client,
-      file,
-      isComplete: true,
-    });
-    expect(
-      screen.queryByRole("button", {
+  it.each([false, true])(
+    "keeps the download control stable until real room-file progress exists (desktop: %s)",
+    async (desktop) => {
+      runtime.desktop = desktop;
+      onlineSender();
+      let finishRequest!: () => void;
+      requestRoomFile.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishRequest = resolve;
+          }),
+      );
+      const offer = roomFileMessage();
+      const view = bubble(offer);
+      expect(
+        screen.getByTitle("firmware.bin"),
+      ).toBeInTheDocument();
+      expect(
+        view.row.querySelector(
+          '[data-slot="message-sender-avatar"]',
+        ),
+      ).toHaveAttribute("aria-label", "Alice");
+      expect(screen.getByText("Alice")).toBeInTheDocument();
+      expect(requestRoomFile).not.toHaveBeenCalled();
+      const request = screen.getByRole("button", {
         name: "conversations.room_file_request",
-      }),
-    ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.preview",
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.download",
-      }),
-    );
-    expect(previewFile).toHaveBeenCalledWith(file);
-    expect(downloadFile).toHaveBeenCalledWith(file);
-    expect(requestRoomFile).toHaveBeenCalledTimes(1);
-  });
+      });
+      expect(request).toBeEnabled();
+      const indicator = request.closest(
+        '[data-slot="file-transfer-indicator"]',
+      );
+      expect(indicator).toBeInTheDocument();
+      expect(
+        screen.queryByRole("progressbar", {
+          name: "tasks.progress",
+        }),
+      ).toBeNull();
+      fireEvent.click(request);
+      await waitFor(() =>
+        expect(requestRoomFile).toHaveBeenCalledWith(offer),
+      );
+      expect(request).toBeDisabled();
+      expect(
+        screen.queryByRole("progressbar", {
+          name: "tasks.progress",
+        }),
+      ).toBeNull();
+      expect(
+        request.closest(
+          '[data-slot="file-transfer-indicator"]',
+        ),
+      ).toBe(indicator);
+      finishRequest();
+      await waitFor(() => expect(request).toBeEnabled());
+      expect(requestRoomFile).toHaveBeenCalledTimes(1);
+
+      const file = new File(
+        [new Uint8Array(1024)],
+        "firmware.bin",
+        { type: "application/octet-stream" },
+      );
+      setAppState("cache", "cacheInfo", "binary", {
+        id: "binary",
+        fileName: file.name,
+        fileSize: file.size,
+        chunkSize: offer.chunkSize,
+        mimetype: offer.mimeType,
+        roomAttachment: true,
+        roomOfferId: offer.id,
+        from: offer.client,
+        file,
+        isComplete: true,
+        storageKind: desktop ? "native" : "directory",
+      });
+      expect(
+        screen.queryByRole("button", {
+          name: "conversations.room_file_request",
+        }),
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: desktop
+            ? "common.action.open"
+            : "common.action.preview",
+        }),
+      );
+      if (desktop) {
+        expect(
+          screen.queryByRole("button", {
+            name: "file_library.action_save_as",
+          }),
+        ).toBeNull();
+        expect(saveFileAs).not.toHaveBeenCalled();
+      } else {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "file_library.action_save_as",
+          }),
+        );
+        expect(saveFileAs).toHaveBeenCalledWith(file);
+      }
+      expect(previewFile).toHaveBeenCalledWith(file);
+      expect(downloadFile).not.toHaveBeenCalled();
+      expect(requestRoomFile).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("does not expose cached bytes belonging to a private file or another room offer", () => {
     onlineSender();
@@ -1109,6 +1696,7 @@ describe("room file offers", () => {
         offer.fileName,
       ),
       isComplete: true,
+      storageKind: "directory" as const,
       roomAttachment: true,
       roomOfferId: offer.id,
       from: offer.client,
@@ -1130,7 +1718,7 @@ describe("room file offers", () => {
       ).toBeNull();
       expect(
         screen.queryByRole("button", {
-          name: "common.action.download",
+          name: "file_library.action_save_as",
         }),
       ).toBeNull();
       expect(
@@ -1161,9 +1749,11 @@ describe("room file offers", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens recipient-specific progress on demand without proactively resuming uploads", async () => {
-    const view = bubble(
-      roomFileMessage({
+  it.each([false, true])(
+    "opens recipient-specific progress from the context menu without requiring local bytes or resuming uploads (cache read fails: %s)",
+    async (unavailable) => {
+      runtime.contextMenu = true;
+      const offer = roomFileMessage({
         client: "self",
         target: "self",
         room: {
@@ -1185,50 +1775,83 @@ describe("room file offers", () => {
             progress: { received: 512, total: 1024 },
           },
         },
-      }),
-    );
-    expect(
-      view.row.querySelector(
-        '[data-slot="message-sender-avatar"]',
-      ),
-    ).toHaveAttribute("aria-label", "Me");
-    const receipts = view.row.querySelector(
-      '[data-slot="room-deliveries"]',
-    );
-    expect(receipts?.parentElement).toBe(
-      view.bubble.parentElement,
-    );
-    expect(
-      view.row.querySelector("[data-transfer-recipient]"),
-    ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "conversations.room_file_details",
-      }),
-    );
-    const dialog = await screen.findByRole("dialog");
-    expect(
-      dialog.querySelector(
-        '[data-transfer-recipient="alice"]',
-      ),
-    ).toHaveTextContent("tasks.status.completed");
-    expect(
-      dialog.querySelector(
-        '[data-transfer-recipient="ben"]',
-      ),
-    ).toHaveTextContent("tasks.status.paused");
-    expect(
-      screen.queryByRole("button", {
-        name: "tasks.resume",
-      }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "conversations.room_file_request",
-      }),
-    ).toBeNull();
-    expect(requestRoomFile).not.toHaveBeenCalled();
-  });
+      });
+      if (unavailable) {
+        const cache = fakeCache("binary");
+        cache.getFile.mockRejectedValue(
+          new Error("Storage directory is unavailable"),
+        );
+        setAppState("cache", "caches", "binary", cache);
+        setAppState("cache", "cacheInfo", "binary", {
+          id: "binary",
+          fileName: offer.fileName,
+          fileSize: offer.fileSize,
+          mimetype: offer.mimeType,
+          chunkSize: offer.chunkSize,
+          roomAttachment: true,
+          roomOfferId: offer.id,
+          from: offer.client,
+          storageKind: "native",
+          storageUnavailable:
+            "Storage directory is unavailable",
+        });
+      }
+      const view = bubble(offer);
+      expect(
+        view.row.querySelector(
+          '[data-slot="message-sender-avatar"]',
+        ),
+      ).toHaveAttribute("aria-label", "Me");
+      const receipts = view.row.querySelector(
+        '[data-slot="room-deliveries"]',
+      );
+      expect(receipts?.parentElement).toBe(
+        view.bubble.parentElement,
+      );
+      expect(
+        view.row.querySelector("[data-transfer-recipient]"),
+      ).toBeNull();
+      expect(
+        within(view.row).queryByRole("button", {
+          name: "conversations.room_file_details",
+        }),
+      ).toBeNull();
+      const dialog = await openRoomFileDetails(view.bubble);
+      expect(
+        dialog.querySelector(
+          '[data-transfer-recipient="alice"]',
+        ),
+      ).toHaveTextContent("tasks.status.completed");
+      expect(
+        dialog.querySelector(
+          '[data-transfer-recipient="ben"]',
+        ),
+      ).toHaveTextContent("tasks.status.paused");
+      expect(
+        screen.queryByRole("button", {
+          name: "tasks.resume",
+        }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", {
+          name: "conversations.room_file_request",
+        }),
+      ).toBeNull();
+      expect(requestRoomFile).not.toHaveBeenCalled();
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).toBeNull(),
+      );
+      const reopened = await openRoomFileDetails(
+        view.bubble,
+      );
+      expect(
+        reopened.querySelector(
+          '[data-transfer-recipient="ben"]',
+        ),
+      ).toHaveTextContent("tasks.status.paused");
+    },
+  );
 });
 
 describe("shared attachment bubbles and transfer controls", () => {
@@ -1243,6 +1866,7 @@ describe("shared attachment bubbles and transfer controls", () => {
       onlineSender();
       const room = kind.startsWith("room");
       const sender = kind.endsWith("sender");
+      runtime.contextMenu = room && sender;
       const progress = { received: 256, total: 1024 };
       const initial = roomFileMessage({
         room: room ? roomFileMessage().room : undefined,
@@ -1291,18 +1915,17 @@ describe("shared attachment bubbles and transfer controls", () => {
               : undefined,
         });
       });
-      render(() => (
+      const view = render(() => (
         <ul>
           <MessageContent message={message()} />
         </ul>
       ));
       if (room && sender) {
-        fireEvent.click(
-          screen.getByRole("button", {
-            name: "conversations.room_file_details",
-          }),
+        await openRoomFileDetails(
+          view.container.querySelector<HTMLElement>(
+            '[data-slot="message-bubble"]',
+          )!,
         );
-        await screen.findByRole("dialog");
       }
       expect(
         screen.getByText("tasks.status.waiting"),
@@ -1335,13 +1958,18 @@ describe("shared attachment bubbles and transfer controls", () => {
     },
   );
   it.each([
-    "image/png",
-    "video/mp4",
-    "audio/ogg",
-    "application/zip",
-  ])(
-    "renders private %s through the shared bubble",
-    (type) => {
+    ["image/png", "directory", false],
+    ["video/mp4", "native", true],
+    ["audio/ogg", "indexeddb", false],
+    ["application/zip", undefined, false],
+    ["image/png", "native", true],
+    ["audio/ogg", "native", true],
+    ["application/zip", "native", true],
+    ["application/zip", "indexeddb", true],
+  ] as const)(
+    "renders private %s through the shared bubble with %s storage (desktop: %s)",
+    (type, storageKind, desktop) => {
+      runtime.desktop = desktop;
       const file = new File(["bytes"], "attachment", {
         type,
       });
@@ -1363,6 +1991,7 @@ describe("shared attachment bubbles and transfer controls", () => {
         mimetype: type,
         file,
         isComplete: true,
+        storageKind,
       });
       const view = bubble(message);
       expect(
@@ -1388,12 +2017,47 @@ describe("shared attachment bubbles and transfer controls", () => {
           view.row.querySelector("img, video, audio"),
         ).toBeNull();
       }
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "common.action.download",
-        }),
-      );
-      expect(downloadFile).toHaveBeenCalledWith(file);
+      const openLabel = desktop
+        ? "common.action.open"
+        : "common.action.preview";
+      if (type.startsWith("application/")) {
+        fireEvent.click(
+          screen.getByRole("button", { name: openLabel }),
+        );
+        expect(previewFile).toHaveBeenCalledWith(file);
+      } else {
+        expect(
+          screen.queryByRole("button", { name: openLabel }),
+        ).toBeNull();
+        expect(previewFile).not.toHaveBeenCalled();
+      }
+      if (desktop && storageKind === "native") {
+        expect(
+          screen.queryByRole("button", {
+            name: "file_library.action_save_as",
+          }),
+        ).toBeNull();
+        expect(saveFileAs).not.toHaveBeenCalled();
+        expect(downloadFile).not.toHaveBeenCalled();
+      } else {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name:
+              storageKind === "directory"
+                ? "file_library.action_save_as"
+                : "file_library.action_download",
+          }),
+        );
+        if (storageKind === "directory") {
+          expect(saveFileAs).toHaveBeenCalledWith(file);
+          expect(downloadFile).not.toHaveBeenCalled();
+        } else {
+          expect(downloadFile).toHaveBeenCalledWith(file, {
+            automatic: true,
+          });
+          expect(saveFileAs).not.toHaveBeenCalled();
+        }
+      }
       expect(view.row).toHaveTextContent("5.00 B");
       expect(requestFile).not.toHaveBeenCalled();
       expect(requestRoomFile).not.toHaveBeenCalled();
@@ -1555,6 +2219,7 @@ describe("shared attachment bubbles and transfer controls", () => {
   );
 
   it("keeps room upload controls and progress isolated by recipient", async () => {
+    runtime.contextMenu = true;
     const offer = roomFileMessage({
       client: "self",
       target: "active-room",
@@ -1583,12 +2248,7 @@ describe("shared attachment bubbles and transfer controls", () => {
     expect(
       view.row.querySelector("[data-transfer-recipient]"),
     ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "conversations.room_file_details",
-      }),
-    );
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openRoomFileDetails(view.bubble);
     expect(
       dialog.querySelector(
         '[data-transfer-recipient="alice"] [role="progressbar"]',

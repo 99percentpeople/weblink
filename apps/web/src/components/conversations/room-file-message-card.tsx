@@ -1,4 +1,4 @@
-import { userErrorMessage } from "@/libs/user-error";
+import { showFileOperationError } from "@/components/files/file-operation-error";
 import {
   createMemo,
   createSignal,
@@ -15,8 +15,6 @@ import type { FileMetaData } from "@/libs/domain/file";
 import { findMessageTransfer } from "@/libs/application/transfer/file-transfer-state";
 import { TransferMode } from "@/libs/domain/transfer/file-transferer";
 import { t } from "@/i18n";
-import { toast } from "solid-sonner";
-import { Info } from "lucide-solid";
 import {
   Dialog,
   DialogBody,
@@ -63,9 +61,11 @@ function transferStatus(
 /** The sender previews local bytes; recipients fetch them only on request. */
 export function RoomFileMessageCard(props: {
   message: FileTransferMessage;
+  actionLimit?: number;
+  detailsOpen: boolean;
+  onDetailsOpenChange(open: boolean): void;
 }) {
   const state = useAppState();
-  const [detailsOpen, setDetailsOpen] = createSignal(false);
   const [pending, setPending] = createSignal(false);
   const outgoing = () =>
     props.message.client === appState.profile.clientId;
@@ -125,9 +125,7 @@ export function RoomFileMessageCard(props: {
     try {
       await run();
     } catch (error) {
-      toast.error(
-        userErrorMessage(error, "errors.file_failed"),
-      );
+      showFileOperationError(error);
     } finally {
       setPending(false);
     }
@@ -157,9 +155,12 @@ export function RoomFileMessageCard(props: {
           messageId: props.message.id,
         }}
         file={cache()?.file}
+        storageKind={cache()?.storageKind}
         name={props.message.fileName}
         size={props.message.fileSize}
         mimeType={props.message.mimeType}
+        actionLimit={props.actionLimit}
+        actionCount={needsFile() && !merging() ? 1 : 0}
         details={
           <Show
             when={
@@ -192,24 +193,6 @@ export function RoomFileMessageCard(props: {
         }
         action={
           <>
-            <Show when={outgoing()}>
-              <button
-                type="button"
-                class="hover:bg-foreground/10 focus-visible:ring-ring flex size-8
-                  shrink-0 items-center justify-center rounded-full
-                  outline-none focus-visible:ring-2"
-                aria-label={t(
-                  "conversations.room_file_details",
-                )}
-                title={t("conversations.room_file_details")}
-                onClick={() => setDetailsOpen(true)}
-              >
-                <Info class="size-4" />
-                <span class="sr-only">
-                  {t("conversations.room_file_details")}
-                </span>
-              </button>
-            </Show>
             <Show when={needsFile()}>
               <FileTransferIndicator
                 received={
@@ -296,8 +279,8 @@ export function RoomFileMessageCard(props: {
       </FileAttachmentBubble>
       <Show when={outgoing()}>
         <Dialog
-          open={detailsOpen()}
-          onOpenChange={setDetailsOpen}
+          open={props.detailsOpen}
+          onOpenChange={props.onDetailsOpenChange}
         >
           <DialogContent class="flex min-w-0 flex-col sm:max-w-md">
             <DialogHeader>
@@ -318,7 +301,7 @@ export function RoomFileMessageCard(props: {
                   {t("file_library.local_completion")}
                 </p>
               </Show>
-              <Show when={detailsOpen()}>
+              <Show when={props.detailsOpen}>
                 <Show
                   when={recipients().length}
                   fallback={
