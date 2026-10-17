@@ -144,6 +144,66 @@ const waitNames = (expected: string[]) =>
     interval: 20,
   });
 
+it.each(["", ".dbe2140c-f3d9-4168-a594-98af70daf63d"])(
+  "hides dotfiles and browser transaction files, retaining one incomplete video name (token=%s)",
+  async (token) => {
+    const f = await fixture();
+    const draftPath = `movie.webm${token}.recording.part`;
+    await f.write(".env", "private");
+    await f.write(".git/nested/config", "hidden tree");
+    await f.write("nested/.secret", "nested private");
+    await f.write("nested/report.v2.txt", "visible");
+    await f.write(draftPath, "unfinished");
+    await f.write(`${draftPath}.crswap`, "growing");
+    await f.write(
+      `${draftPath}.1.crswap`,
+      "another writer",
+    );
+    const list = vi.spyOn(f.volume, "list");
+    const file = vi.spyOn(f.volume, "file");
+    await f.manager.initialize();
+    expect(names()).toEqual([
+      "movie.webm",
+      "report.v2.txt",
+    ]);
+    expect(
+      list.mock.calls.map(([path]) => path),
+    ).not.toContain(".git");
+    expect(
+      file.mock.calls
+        .map(([path]) => path)
+        .every(
+          (path) =>
+            !path
+              .split("/")
+              .some(
+                (name) =>
+                  name.startsWith(".") ||
+                  name.endsWith(".crswap"),
+              ),
+        ),
+    ).toBe(true);
+    const draft = files().find(
+      (file) => file.fileName === "movie.webm",
+    )!;
+    expect(draft.isComplete).toBe(false);
+    expect(draft.file).toBeUndefined();
+    expect((await f.volume.stat(".env"))?.size).toBe(7);
+    expect(
+      (await f.volume.stat(".git/nested/config"))?.size,
+    ).toBe(11);
+    expect(
+      (await f.volume.stat(`${draftPath}.crswap`))?.size,
+    ).toBe(7);
+    await f.write("nested/added.txt", "new");
+    await waitNames([
+      "added.txt",
+      "movie.webm",
+      "report.v2.txt",
+    ]);
+  },
+);
+
 it("retains each reference's capabilities and mount after the default changes", async () => {
   const f = await fixture();
   await f.manager.initialize();
@@ -1391,3 +1451,26 @@ it.each(["indexeddb", "native-default"])(
       ).toEqual(["keep.txt"]);
   },
 );
+
+it("publishes a recorded file in place without another import or duplicate list item", async () => {
+  const f = await fixture();
+  await f.manager.initialize();
+  const output = await f.storage.createWritableFile({
+    name: "recording.webm",
+    type: "video/webm",
+  });
+  await output.write(new TextEncoder().encode("first"));
+  await f.storage.setDefault("indexeddb");
+  await output.write(new TextEncoder().encode("last"));
+  const result = await output.finish();
+  const commit = vi.spyOn(f.volume, "commit");
+  const cache = await f.manager.createCache(result.id);
+  const file =
+    await f.manager.library.verifyReceived(cache);
+  expect(await file?.text()).toBe("firstlast");
+  await waitNames(["recording.webm"]);
+  expect(commit).not.toHaveBeenCalled();
+  expect((await f.storage.synchronize()).files).toEqual([
+    result.id,
+  ]);
+});

@@ -1469,5 +1469,16 @@
     "close_other_tabs": "Schließen Sie andere Weblink-Seiten, um fortzufahren.",
     "retained": "Die alten Datenbanken der fehlgeschlagenen Dateien bleiben erhalten. Beim nächsten Start wird die Migration erneut versucht.",
     "error_details": "Fehlerdetails"
+  },
+  "recording": {
+    "pause": "Aufnahme pausieren",
+    "resume": "Aufnahme fortsetzen",
+    "paused": "Aufnahme pausiert",
+    "start": "Aufnahme starten",
+    "stop": "Stoppen und speichern",
+    "preparing": "Aufnahme wird vorbereitet",
+    "recording": "Aufnahme läuft",
+    "saving": "Aufnahme wird gespeichert",
+    "failed": "Aufnahme fehlgeschlagen"
   }
 }

@@ -2,6 +2,8 @@ import type {
   FileStorage,
   FileStorageMount,
   FileStorageSnapshot,
+  WritableStoredFile,
+  StorageAuthorizationOptions,
 } from "@/libs/domain/file-storage";
 import type { ChunkCache } from "@/libs/domain/file";
 import {
@@ -24,6 +26,8 @@ import { scanDirectory } from "@/libs/infrastructure/vfs/directory-index";
 import { DirectoryFileStore } from "@/libs/infrastructure/vfs/directory-file-store";
 import { DirectoryVerification } from "@/libs/infrastructure/vfs/directory-verification";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
+import { WritableFileStore } from "./writable-file-store";
+import { isHiddenDirectoryEntry } from "./directory-visibility";
 
 export class FileStorageService implements FileStorage {
   private readonly volumes = new Map<string, VfsVolume>();
@@ -57,6 +61,7 @@ export class FileStorageService implements FileStorage {
     string,
     string[]
   >();
+  private readonly writableFiles: WritableFileStore;
   private directoriesAccessible = false;
   private scanning?: Promise<{
     files: string[];
@@ -65,7 +70,33 @@ export class FileStorageService implements FileStorage {
   constructor(
     private readonly native?: NativeFileSystem,
     readonly database = new VfsDatabase(),
-  ) {}
+  ) {
+    this.writableFiles = new WritableFileStore(
+      database,
+      this.directoryFiles,
+      this.directoryVerification,
+      (id) => this.changed(id),
+    );
+  }
+  async createWritableFile(
+    options: Parameters<
+      FileStorage["createWritableFile"]
+    >[0],
+  ): Promise<WritableStoredFile> {
+    // Request permission before capture/encoding preparation can consume activation.
+    const authorization = this.authorizeDefault({
+      refresh: false,
+    });
+    await this.initialize();
+    const mountId = this.selected;
+    await authorization;
+    if (this.disposed)
+      throw new Error("File storage was closed");
+    return this.writableFiles.create(
+      await this.getVolume(mountId),
+      options,
+    );
+  }
   get defaultMountId(): string {
     return this.selected;
   }
@@ -241,7 +272,10 @@ export class FileStorageService implements FileStorage {
     this.changed();
     return volume.id;
   }
-  async authorize(id: string): Promise<void> {
+  async authorize(
+    id: string,
+    options: StorageAuthorizationOptions = {},
+  ): Promise<void> {
     const volume = this.volumes.get(id);
     if (volume instanceof DirectoryVolume) {
       await volume.authorize();
@@ -251,8 +285,10 @@ export class FileStorageService implements FileStorage {
         );
       // A previous scan may have failed before permission was granted. Finish it,
       // then restore directory identities before the upload can reuse content.
-      await this.scanning;
-      await this.scanDirectories();
+      if (options.refresh !== false) {
+        await this.scanning;
+        await this.scanDirectories();
+      }
     } else if (
       (await (await this.getVolume(id)).stat(""))?.kind !==
       "directory"
@@ -260,10 +296,12 @@ export class FileStorageService implements FileStorage {
       throw new StorageUnavailableError(
         "Storage directory is unavailable",
       );
-    this.changed(id);
+    if (options.refresh !== false) this.changed(id);
   }
   /** Call from the upload gesture, before file reading/hashing can consume activation. */
-  async authorizeDefault(): Promise<void> {
+  async authorizeDefault(
+    options?: StorageAuthorizationOptions,
+  ): Promise<void> {
     if (
       !(
         this.volumes.get(this.selected) instanceof
@@ -271,7 +309,7 @@ export class FileStorageService implements FileStorage {
       )
     )
       await this.initialize();
-    await this.authorize(this.selected);
+    await this.authorize(this.selected, options);
   }
   async readFile(
     mountId: string,
@@ -310,6 +348,15 @@ export class FileStorageService implements FileStorage {
     if (!this.directoryFiles.has(id)) {
       const record = await this.database.file(id);
       if (!record) return;
+      if (
+        this.writableFiles.isWriting(
+          record.mountId,
+          record.path,
+        )
+      )
+        throw new Error(
+          "Stop recording before deleting this file",
+        );
       const cache = await this.createCache(id, {
         memoryChunks: 0,
         isRetained: () => false,
@@ -326,6 +373,15 @@ export class FileStorageService implements FileStorage {
       )
         return;
       const volume = await this.getVolume(record.mountId);
+      if (
+        this.writableFiles.isWriting(
+          record.mountId,
+          record.path,
+        )
+      )
+        throw new Error(
+          "Stop recording before deleting this file",
+        );
       const stat = await volume.stat(record.path);
       if (stat && stat.revision !== record.revision)
         throw new StorageUnavailableError(
@@ -384,6 +440,10 @@ export class FileStorageService implements FileStorage {
             volume,
             this.lifetime.signal,
             (path) =>
+              this.writableFiles.isWriting(
+                volume.id,
+                path,
+              ) ||
               this.directoryFiles.isWriting(
                 volume.id,
                 path,
@@ -397,7 +457,17 @@ export class FileStorageService implements FileStorage {
             throw new StorageUnavailableError(
               "Directory is completing a transfer",
             );
-          return records;
+          return [
+            ...records,
+            ...this.writableFiles
+              .records(volume.id)
+              .filter(
+                (record) =>
+                  !record.path
+                    .split("/")
+                    .some(isHiddenDirectoryEntry),
+              ),
+          ];
         }),
       );
       this.lifetime.signal.throwIfAborted();
@@ -509,6 +579,7 @@ export class FileStorageService implements FileStorage {
           : this.getVolume(mountId),
       options.isRetained,
       this.native,
+      this.directoryVerification,
     );
   }
   onMigrationProgress(
@@ -546,6 +617,7 @@ export class FileStorageService implements FileStorage {
     // after it settles, so its cleanup cannot reopen a disposed service's DB.
     void (this.initializing ?? Promise.resolve())
       .catch(() => {})
+      .then(() => this.writableFiles.dispose())
       .then(() => this.database.close());
   }
 }

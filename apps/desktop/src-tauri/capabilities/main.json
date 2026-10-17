@@ -21,6 +21,10 @@
     "allow-vfs-watch",
     "allow-vfs-unwatch",
     "allow-vfs-media",
+    "allow-vfs-writer-open",
+    "allow-vfs-writer-append",
+    "allow-vfs-writer-close",
+    "allow-vfs-writer-abort",
 
     "allow-file-save-begin",
     "allow-file-save-directory-pick",

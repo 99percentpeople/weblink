@@ -1469,5 +1469,16 @@
     "close_other_tabs": "계속하려면 다른 Weblink 페이지를 닫아 주세요.",
     "retained": "실패한 파일의 이전 데이터베이스는 보존됩니다. 다음 실행 시 다시 시도합니다.",
     "error_details": "오류 세부 정보"
+  },
+  "recording": {
+    "pause": "녹화 일시 중지",
+    "resume": "녹화 재개",
+    "paused": "녹화 일시 중지됨",
+    "start": "녹화 시작",
+    "stop": "중지 및 저장",
+    "preparing": "녹화 준비 중",
+    "recording": "녹화 중",
+    "saving": "녹화 저장 중",
+    "failed": "녹화 실패"
   }
 }

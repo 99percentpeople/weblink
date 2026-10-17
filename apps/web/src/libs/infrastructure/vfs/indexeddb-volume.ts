@@ -1,8 +1,13 @@
+import {
+  RangeFile,
+  sequentialWriter,
+} from "@weblink/platform";
 import type {
   VfsVolume,
   VfsStat,
   VfsEntry,
   VfsWrite,
+  VfsWriter,
   VfsFileMetadata,
 } from "@weblink/platform";
 import { vfsPath } from "@/libs/domain/vfs";
@@ -80,6 +85,7 @@ export class IndexedDbVolume implements VfsVolume {
     path: string,
     offset: number,
     length: number,
+    revision?: string,
   ): Promise<ArrayBuffer> {
     vfsPath(path);
     const tx = (await this.database.open()).transaction([
@@ -92,6 +98,8 @@ export class IndexedDbVolume implements VfsVolume {
         tx.objectStore("nodes").get(path),
       );
       if (!node) throw new Error("File does not exist");
+      if (revision && node.revision !== revision)
+        throw new Error("File changed while reading");
       if (
         !Number.isSafeInteger(offset) ||
         offset < 0 ||
@@ -131,6 +139,7 @@ export class IndexedDbVolume implements VfsVolume {
     path: string,
     writes: readonly VfsWrite[],
     size?: number,
+    revision?: string,
   ): Promise<VfsStat> {
     vfsPath(path);
     if (!path)
@@ -146,6 +155,10 @@ export class IndexedDbVolume implements VfsVolume {
       const old = await requestResult<Node | undefined>(
         nodes.get(path),
       );
+      if (revision && old?.revision !== revision)
+        throw new Error(
+          "Recording file changed while writing",
+        );
       const length = size ?? old?.size;
       if (
         length === undefined ||
@@ -235,50 +248,75 @@ export class IndexedDbVolume implements VfsVolume {
     await done;
     this.database.changed();
   }
+  async openWriter(path: string): Promise<VfsWriter> {
+    vfsPath(path);
+    if (!path)
+      throw new Error("Cannot write the root directory");
+    const tx = (await this.database.open()).transaction(
+      "nodes",
+      "readwrite",
+    );
+    const done = transactionDone(tx);
+    let stat: VfsStat = {
+      kind: "file",
+      size: 0,
+      modified: Date.now(),
+      revision: crypto.randomUUID(),
+    };
+    tx.objectStore("nodes").add({ ...stat, path }, path);
+    await done;
+    this.database.changed();
+    return sequentialWriter({
+      write: async (data, offset) => {
+        const current = await this.stat(path);
+        if (current?.revision !== stat.revision)
+          throw new Error(
+            "Recording file changed while writing",
+          );
+        stat = await this.commit(
+          path,
+          [{ offset, data }],
+          offset + data.length,
+          stat.revision,
+        );
+      },
+      close: async (size, patches) => {
+        if (
+          (await this.stat(path))?.revision !==
+          stat.revision
+        )
+          throw new Error(
+            "Recording file changed while closing",
+          );
+        if (patches.length)
+          stat = await this.commit(
+            path,
+            patches,
+            size,
+            stat.revision,
+          );
+        return stat;
+      },
+      abort: async () => {},
+    });
+  }
   async file(
     path: string,
     metadata: VfsFileMetadata,
-  ): Promise<File> {
-    const tx = (await this.database.open()).transaction([
+  ): Promise<RangeFile> {
+    const node = await this.database.get<Node>(
       "nodes",
-      "pages",
-    ]);
-    const done = transactionDone(tx);
-    try {
-      const node = await requestResult<Node | undefined>(
-        tx.objectStore("nodes").get(vfsPath(path)),
-      );
-      if (!node) throw new Error("File does not exist");
-      const parts: BlobPart[] = [];
-      for (
-        let offset = 0;
-        offset < node.size;
-        offset += PAGE
-      ) {
-        const buffer = await requestResult<
-          ArrayBuffer | undefined
-        >(
-          tx
-            .objectStore("pages")
-            .get([path, offset / PAGE]),
-        );
-        parts.push(
-          new Uint8Array(
-            buffer ?? new ArrayBuffer(PAGE),
-            0,
-            Math.min(PAGE, node.size - offset),
-          ),
-        );
-      }
-      await done;
-      return new File(parts, metadata.name, {
-        type: metadata.type,
-        lastModified: metadata.lastModified,
-      });
-    } catch (error) {
-      await done.catch(() => {});
-      throw error;
-    }
+      vfsPath(path),
+    );
+    if (!node) throw new Error("File does not exist");
+    return new RangeFile(
+      metadata.name,
+      node.size,
+      metadata.type,
+      metadata.lastModified,
+      (offset, length) =>
+        this.read(path, offset, length, node.revision),
+    );
   }
   async watch(changed: () => void): Promise<() => void> {
     return this.database.watch(changed);

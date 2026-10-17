@@ -26,6 +26,7 @@ import {
   type AudioPlayerController,
 } from "./create-audio-player";
 import { createMeetingMedia } from "./create-meeting-media";
+import { createRecording } from "./create-recording";
 import { createRoomActions } from "@/libs/state/create-room-actions";
 import { createMeetingSession } from "./create-meeting-session";
 import { createAppDialogs } from "./create-app-dialogs";
@@ -77,6 +78,7 @@ export function createApplicationRoot(
           () => {
             const media = createMeetingMedia({
               state,
+              recording: createRecording(state),
               audio: audio.value,
               nativePicker:
                 platform.capture && platform.screenShare

@@ -107,6 +107,7 @@ export class DirectoryFileStore implements VfsFileStore {
     const previous = this.entries.get(record.id);
     if (
       !previous ||
+      record.draft ||
       previous.missing ||
       (previous.record.mountId === record.mountId &&
         previous.record.path !== record.path)

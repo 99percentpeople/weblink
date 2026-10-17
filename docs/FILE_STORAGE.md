@@ -204,6 +204,10 @@ so switching members cannot publish a late result into the wrong shared list.
 Directory scan entries already owned by a library reference are hidden from the
 file-cache projection. Unchanged file snapshots and keyed list rows are reused
 so synchronization does not recreate thumbnail URLs.
+Directory catalogs omit names beginning with `.`, their entire directory trees,
+and Chromium's `.crswap` transaction files. Filtering happens before opening files
+or traversing hidden folders; it does not delete their contents. Recording drafts
+remain visible as a single incomplete entry while the browser's swap file grows.
 
 ## Change notifications and file access
 
@@ -298,3 +302,92 @@ The action resolves the current mount-relative physical path (which may have a
 collision name or `.part` suffix), validates it inside the registered root, then
 asks the system file manager to reveal and select it. It does not open or export
 the file's contents. This action is absent for IndexedDB and browser directories.
+
+## Generated files and recordings
+
+`FileStorage.createWritableFile()` creates an unknown-length, sequential output
+session on the selected mount. The session pins that mount until `finish()` or
+`abort()`; a later default-directory change does not move its bytes. Applications
+write through this contract without choosing a storage provider. Existing
+known-size transfers continue to use their original checkpoints and `.part` format.
+Starting a generated file validates write permission and root availability without
+waiting for a full directory refresh. Ordinary imports still refresh identities
+before content reuse; catalog synchronization continues independently.
+
+Recording drafts use `.recording.part`, distinct from resumable transfers. Their
+catalog identity stays stable as they grow; even an empty draft is incomplete.
+The catalog displays the intended final video filename without the physical
+session token or temporary suffix, retaining the incomplete state until publication.
+Drafts have no preview, shareable file, or resumable transfer ranges. Active drafts
+cannot be deleted through the file library. Aborting retains committed draft bytes
+but does not promise a playable video or recovery after a crash.
+
+IndexedDB commits bounded data pages transactionally and publishes completion in
+metadata. Its `StoredFile` reads ranges lazily and checks the captured revision.
+Native directories retain a page-scoped file handle, append bounded binary IPC
+messages, synchronize at close, and rename without replacing existing files.
+Browser directories keep one writable stream open until close. Browser writes may
+not become durable or visible until close, so abort can leave an empty draft.
+Uncommitted stream blocks do not restat or republish the unchanged draft; recording
+progress comes from the writer, and catalog updates reflect committed changes.
+Publishing the final browser filename requires a bounded streaming copy and can
+add a noticeable saving phase for long recordings. Name collisions retain both
+files using a numbered suffix.
+
+Completion verifies and registers the existing storage object without reimporting
+its bytes. Verification is reused for the same file version; native rename carries
+that result forward, while browser copy verifies its new destination before
+removing the draft.
+
+`finish(patches)` can update existing metadata bytes before close and verification.
+Updates cannot extend the file and are limited to 16 ranges and 64 KiB total.
+Browser directories apply them to the already-open stream; native directories
+seek on the retained handle, and IndexedDB commits the affected pages.
+
+## Single-source recording
+
+A recording belongs to the application lifetime, independently of a video tile,
+menu, or file-cache dialog. One local or received source can be recorded at a time.
+Its selected audio tracks are mixed into one recording track without adding other
+participants or producing extra audible playback. A private muted audio consumer
+also activates remote decoding independently of the meeting's audio player.
+
+Pause and resume retain the same MediaRecorder, source connection, and VFS write
+session on its original mount. Pausing stops media collection without stopping
+shared source tracks or committing the output. Already accepted writes can drain
+while paused; the catalog still contains one incomplete video. Elapsed time and
+the saved duration exclude paused intervals. Stop, source end/replacement, and
+leaving the conversation also save a paused recording, including its final data
+event. Pausing does not make a draft recoverable after a reload or crash.
+
+`RecordingService` selects a supported WebM format, with MP4 as fallback, and uses
+the actual recorder MIME type for the file extension. MediaRecorder events enter
+an ordered write queue with a 32 MiB pending-data limit. An encoder/storage error
+or an overfull queue stops the session and retains only the committed draft.
+Normal stop waits for the final data event and every accepted write before
+publishing. Source end, replacement, and leaving the conversation stop and save;
+cleanup releases only recording-owned resources, leaving original tracks live.
+
+MediaRecorder's live WebM output can omit duration and seek indexes. The recorder
+reserves Duration and SeekHead space in the bounded header. While writing, it
+inspects block headers and remembers video keyframe positions without retaining
+encoded frames. Normal stop appends Cues, fills SeekHead, and writes elapsed
+duration using TimestampScale. Segment keeps its unknown-size marker because
+the recorder's Cluster elements can also have unknown sizes.
+The index contains fewer than 8192 entries; very long recordings progressively
+thin it while retaining seek points throughout the recording. It does not re-encode
+media, scan the completed file again, or buffer the full recording. Existing finite
+durations and indexed containers are preserved; MP4 passes through unchanged.
+Earlier recordings are not rewritten.
+
+Local native screen recording opens a separate receive-only WebRTC peer attached
+to the existing capture session. It consumes real native video/audio independently
+of the UI's raw preview, silent placeholder track, and visibility changes. Closing
+that recording peer does not stop capture or other sharing peers.
+
+The meeting header status exposes elapsed time, accepted bytes, pause/resume, and stop, using
+the same presentation as sharing/control status. The selected video label carries
+a recording or paused icon. Saving remains visible while writes, verification, and publication
+finish; closing a view does not own or stop the recording session. Only normally completed
+recordings are promised as continuous playable files. Individual MediaRecorder
+chunks and interrupted drafts are not independently playable recordings.

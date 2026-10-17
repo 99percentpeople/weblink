@@ -1,8 +1,10 @@
+import { sequentialWriter } from "@weblink/platform";
 import type {
   VfsVolume,
   VfsStat,
   VfsEntry,
   VfsWrite,
+  VfsWriter,
   VfsFileMetadata,
   BinarySource,
 } from "@weblink/platform";
@@ -12,6 +14,7 @@ import {
   vfsPath,
 } from "@/libs/domain/vfs";
 import { decodeDirectoryFilename } from "./directory-filename";
+import { isHiddenDirectoryEntry } from "./directory-visibility";
 
 type Observer = {
   observe(
@@ -130,6 +133,7 @@ export class DirectoryVolume implements VfsVolume {
     for await (const [name, handle] of (
       await this.directory(path)
     ).entries()) {
+      if (isHiddenDirectoryEntry(name)) continue;
       result.push(
         handle.kind === "file"
           ? {
@@ -216,6 +220,49 @@ export class DirectoryVolume implements VfsVolume {
       throw error;
     }
     return this.fileStat(await handle.getFile());
+  }
+  async openWriter(path: string): Promise<VfsWriter> {
+    if (await this.stat(path))
+      throw new Error("File already exists");
+    const handle = await this.handleFor(path, true);
+    const stream = await handle.createWritable({
+      keepExistingData: false,
+    });
+    const fail = (
+      stage: "write" | "commit",
+      cause: unknown,
+    ) =>
+      new DirectoryWriteError(
+        path.split("/").at(-1)!,
+        stage,
+        cause,
+      );
+    return sequentialWriter({
+      write: async (data) => {
+        try {
+          await stream.write(data);
+        } catch (error) {
+          throw fail("write", error);
+        }
+      },
+      close: async (_size, patches) => {
+        try {
+          for (const { offset, data } of patches)
+            await stream.write({
+              type: "write",
+              position: offset,
+              data,
+            });
+          await stream.close();
+          return this.fileStat(await handle.getFile());
+        } catch (error) {
+          throw fail("commit", error);
+        }
+      },
+      abort: async () => {
+        await stream.abort();
+      },
+    });
   }
   async writeFile(
     path: string,

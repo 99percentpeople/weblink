@@ -259,3 +259,103 @@ it("exports a native file through range reads without materializing the entire f
     1024 * 1024,
   );
 });
+
+it("streams native recording bytes in bounded ordered IPC writes and closes once", async () => {
+  const stat = {
+    kind: "file",
+    size: 2 * 1024 * 1024 + 3,
+    modified: 1,
+    revision: "saved",
+  };
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "vfs_volumes")
+      return [
+        {
+          id: "native-default",
+          name: "Disk",
+          kind: "native",
+        },
+      ];
+    if (command === "vfs_writer_open")
+      return "writer-capability";
+    if (command === "vfs_writer_close") return stat;
+  });
+  const [volume] = await nativeFileSystem.volumes();
+  const writer = await volume.openWriter!(
+    "recording.webm.recording.part",
+  );
+  await writer.write(new Uint8Array(2 * 1024 * 1024 + 3));
+  const result = writer.close([
+    { offset: 5, data: new Uint8Array([42]) },
+  ]);
+  expect(writer.close()).toBe(result);
+  expect(await result).toEqual(stat);
+  expect(invoke).toHaveBeenLastCalledWith(
+    "vfs_writer_close",
+    {
+      id: "writer-capability",
+      patches: [{ offset: 5, data: [42] }],
+    },
+  );
+  const chunks = vi
+    .mocked(invoke)
+    .mock.calls.filter(
+      ([command]) => command === "vfs_writer_append",
+    );
+  expect(
+    chunks.map(([, data]) => (data as Uint8Array).length),
+  ).toEqual([1024 * 1024, 1024 * 1024, 3]);
+  expect(
+    chunks.map(([, , options]) => options?.headers),
+  ).toEqual(
+    [0, 1024 * 1024, 2 * 1024 * 1024].map((offset) => ({
+      "x-vfs-writer": "writer-capability",
+      "x-vfs-offset": String(offset),
+    })),
+  );
+  expect(
+    vi
+      .mocked(invoke)
+      .mock.calls.some(
+        ([command]) => command === "vfs_resize",
+      ),
+  ).toBe(false);
+});
+it("releases a failed native writer without writing later chunks", async () => {
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "vfs_volumes")
+      return [
+        {
+          id: "native-default",
+          name: "Disk",
+          kind: "native",
+        },
+      ];
+    if (command === "vfs_writer_open")
+      return "writer-capability";
+    if (command === "vfs_writer_append") throw "Disk full";
+  });
+  const [volume] = await nativeFileSystem.volumes();
+  const writer = await volume.openWriter!("recording.part");
+  await expect(
+    writer.write(new Uint8Array(1)),
+  ).rejects.toMatchObject({
+    cause: "Disk full",
+    operation: "write",
+  });
+  await expect(
+    writer.write(new Uint8Array(1)),
+  ).rejects.toThrow();
+  await writer.abort();
+  expect(
+    vi
+      .mocked(invoke)
+      .mock.calls.filter(
+        ([command]) => command === "vfs_writer_append",
+      ),
+  ).toHaveLength(1);
+  expect(invoke).toHaveBeenLastCalledWith(
+    "vfs_writer_abort",
+    { id: "writer-capability" },
+  );
+});

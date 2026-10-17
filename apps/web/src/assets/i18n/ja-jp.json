@@ -1469,5 +1469,16 @@
     "close_other_tabs": "続行するには他の Weblink ページを閉じてください。",
     "retained": "失敗したファイルの旧データベースは保持されています。次回起動時に再試行します。",
     "error_details": "エラーの詳細"
+  },
+  "recording": {
+    "pause": "録画を一時停止",
+    "resume": "録画を再開",
+    "paused": "録画を一時停止中",
+    "start": "録画を開始",
+    "stop": "停止して保存",
+    "preparing": "録画を準備中",
+    "recording": "録画中",
+    "saving": "録画を保存中",
+    "failed": "録画に失敗しました"
   }
 }

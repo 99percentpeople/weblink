@@ -1469,5 +1469,16 @@
     "close_other_tabs": "請關閉其他 Weblink 頁面以繼續遷移。",
     "retained": "失敗檔案的舊資料庫已保留，下次啟動 Weblink 時會自動重試。",
     "error_details": "錯誤詳情"
+  },
+  "recording": {
+    "pause": "暫停錄影",
+    "resume": "繼續錄影",
+    "paused": "錄影已暫停",
+    "start": "開始錄影",
+    "stop": "停止並儲存",
+    "preparing": "正在準備錄影",
+    "recording": "正在錄影",
+    "saving": "正在儲存錄影",
+    "failed": "錄影失敗"
   }
 }

@@ -40,7 +40,8 @@
     "dev:desktop": "vite --mode desktop --host 127.0.0.1 --port 1420",
     "build:desktop": "vite build --mode desktop",
     "test:e2e:notifications": "bun scripts/run-browser-check.mjs --notifications",
-    "test:e2e:hmr": "node scripts/run-hmr-check.mjs"
+    "test:e2e:hmr": "node scripts/run-hmr-check.mjs",
+    "test:e2e:recording": "node scripts/run-browser-check.mjs --recording"
   },
   "dependencies": {
     "@corvu/drawer": "^0.2.4",

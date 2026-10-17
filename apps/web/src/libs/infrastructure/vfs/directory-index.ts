@@ -6,6 +6,7 @@ import {
 import type { StoredVfsFile } from "./database";
 import { directoryEntry } from "./directory-entry";
 import { DirectoryVerification } from "./directory-verification";
+import { isHiddenDirectoryEntry } from "./directory-visibility";
 import { contentKey } from "@/libs/domain/protocol/file-fingerprint";
 import {
   hasPartialTrailer,
@@ -29,6 +30,9 @@ export async function scanDirectory(
   const visit = async (parent: string): Promise<void> => {
     for (const stat of await volume.list(parent)) {
       signal.throwIfAborted();
+      // Apply equally to native and browser mounts, before entering folders or
+      // opening files. Hidden directory trees can contain thousands of entries.
+      if (isHiddenDirectoryEntry(stat.name)) continue;
       const path = vfsPath(
         parent ? `${parent}/${stat.name}` : stat.name,
       );
@@ -57,7 +61,8 @@ export async function scanDirectory(
         file,
       );
       if (
-        await hasPartialTrailer(volume, path, stat.size)
+        !record.draft &&
+        (await hasPartialTrailer(volume, path, stat.size))
       ) {
         try {
           const header = await readPartialHeader(

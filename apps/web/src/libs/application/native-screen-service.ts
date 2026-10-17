@@ -12,6 +12,7 @@ import { readBrowserVideoStats } from "@/libs/domain/video-stats";
 import { monitorNativeCapture } from "./native-capture-monitor";
 import { createNativeCodecSelection } from "./native-codec-selection";
 import { NativeScreenPeers } from "./native-screen-peers";
+import { openNativeRecordingStream } from "./native-recording-stream";
 
 import type { NativeScreenPublication } from "@/libs/domain/native-screen/session";
 const publications = new WeakMap<
@@ -187,6 +188,19 @@ export async function createNativeScreenStream(
     );
     if (closed) throw new Error("Native screen closed");
     const publication: NativeScreenPublication = {
+      openRecording: (signal, ended) => {
+        if (closed)
+          return Promise.reject(
+            new Error("Native screen closed"),
+          );
+        return openNativeRecordingStream(
+          share,
+          id,
+          options,
+          signal,
+          ended,
+        );
+      },
       sourceId: createUuid(),
       controlEligible: status.source?.kind === "monitor",
       setReceivers: codecs.setReceivers,

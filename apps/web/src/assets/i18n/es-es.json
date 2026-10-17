@@ -1469,5 +1469,16 @@
     "close_other_tabs": "Cierra las demás páginas de Weblink para continuar.",
     "retained": "Se conservan las bases de datos anteriores de los archivos fallidos. La migración se reintentará al iniciar Weblink.",
     "error_details": "Detalles del error"
+  },
+  "recording": {
+    "pause": "Pausar grabación",
+    "resume": "Reanudar grabación",
+    "paused": "Grabación en pausa",
+    "start": "Iniciar grabación",
+    "stop": "Detener y guardar",
+    "preparing": "Preparando grabación",
+    "recording": "Grabando",
+    "saving": "Guardando grabación",
+    "failed": "Error de grabación"
   }
 }

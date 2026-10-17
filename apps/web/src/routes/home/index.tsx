@@ -69,6 +69,7 @@ import { platform } from "@/libs/platform/runtime";
 import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";
+import { MeetingRecordingStatus } from "./components/meeting-recording-status";
 import { createControlState } from "./components/remote-control-action";
 import { RemoteInputToggles } from "./components/remote-input-toggles";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
@@ -125,7 +126,7 @@ export default function Home() {
   const navigate = useNavigate();
   const routeLocation = useLocation<HomeRouteState>();
   const audio = useAudioPlayer();
-  const { media, devices } = useMeetingMedia();
+  const { media, devices, recording } = useMeetingMedia();
   const { open: openRoomInfo } = createRoomInfoDialog();
   const meeting = useMeetingSession();
   // The native window and toolbar resize continuously. Keep the stage in flow
@@ -603,6 +604,16 @@ export default function Home() {
             class="meeting-header-actions ml-auto flex min-w-0 shrink flex-wrap
               items-center justify-end gap-2.5 max-md:gap-1"
           >
+            <Show when={recording?.state()}>
+              {(state) => (
+                <MeetingRecordingStatus
+                  state={state()}
+                  onPause={() => recording?.pause()}
+                  onResume={() => recording?.resume()}
+                  onStop={() => recording?.stop()}
+                />
+              )}
+            </Show>
             <Show when={media.sharing()}>
               <MeetingSharingStatus
                 name={appState.profile.name}

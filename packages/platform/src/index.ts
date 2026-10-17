@@ -10,6 +10,7 @@ export {
   type FileSystemOperation,
 } from "./filesystem-error";
 export { RangeFile } from "./range-file";
+export { sequentialWriter } from "./sequential-writer";
 import type { FileBatchSaveOptions } from "./file-save";
 export type * from "./file-save";
 export {

@@ -33,6 +33,14 @@ export interface VfsWrite {
   offset: number;
   data: Uint8Array<ArrayBuffer>;
 }
+/** Sequential, unknown-length output. write accepts bytes; close confirms commit.
+ * abort releases the writer and retains only bytes already committed by the backend. */
+export interface VfsWriter {
+  write(data: Uint8Array<ArrayBuffer>): Promise<void>;
+  /** Apply bounded, in-place metadata updates before the final commit. */
+  close(patches?: readonly VfsWrite[]): Promise<VfsStat>;
+  abort(): Promise<void>;
+}
 export interface VfsFileMetadata {
   name: string;
   type: string;
@@ -69,6 +77,8 @@ export interface VfsVolume extends VfsVolumeInfo {
     writes: readonly VfsWrite[],
     size?: number,
   ): Promise<VfsStat>;
+  /** Create a new file for sequential output. Never truncate an existing file. */
+  openWriter?(path: string): Promise<VfsWriter>;
   /** Replace a complete payload in one commit, without reopening between chunks. */
   writeFile?(
     path: string,

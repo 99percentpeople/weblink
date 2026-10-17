@@ -24,6 +24,7 @@ const taskUi = process.argv.includes("--tasks");
 const chatUi = process.argv.includes("--chat");
 const meetingUi = process.argv.includes("--meeting");
 const playbackTest = process.argv.includes("--playback");
+const recordingTest = process.argv.includes("--recording");
 const dropTest = process.argv.includes("--drop");
 const conversationStorage = process.argv.includes(
   "--conversations",
@@ -71,13 +72,15 @@ const defaultEntry = notificationsTest
                         : transferTest
                           ? "test/e2e/smoke/transfer-workflow.html"
                           : "test/e2e/smoke/speed-test.html";
-const entry = process.argv.includes("--vfs")
-  ? "test/e2e/smoke/vfs.html"
-  : clipboardTest
-    ? "test/e2e/smoke/clipboard.html"
-    : clipboardCacheTest
-      ? "test/e2e/smoke/clipboard-cache.html"
-      : defaultEntry;
+const entry = recordingTest
+  ? "test/e2e/smoke/recording.html"
+  : process.argv.includes("--vfs")
+    ? "test/e2e/smoke/vfs.html"
+    : clipboardTest
+      ? "test/e2e/smoke/clipboard.html"
+      : clipboardCacheTest
+        ? "test/e2e/smoke/clipboard-cache.html"
+        : defaultEntry;
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -135,9 +138,21 @@ async function main() {
     });
     await vite.listen();
     const address = vite.httpServer.address();
-    const query =
-      transferTest &&
-      process.argv.includes("--legacy-abort")
+    const recordingQuery = new URLSearchParams();
+    if (process.env.RECORDING_TEST_DURATION_MS)
+      recordingQuery.set(
+        "duration",
+        process.env.RECORDING_TEST_DURATION_MS,
+      );
+    if (process.env.RECORDING_TEST_DIRECTORY_FILES)
+      recordingQuery.set(
+        "directoryFiles",
+        process.env.RECORDING_TEST_DIRECTORY_FILES,
+      );
+    const query = recordingTest
+      ? `?${recordingQuery}`
+      : transferTest &&
+          process.argv.includes("--legacy-abort")
         ? "?without-abort-any=1"
         : chatUi && process.env.CHAT_TEST_SCREENSHOT
           ? "?snapshot=1"
@@ -167,6 +182,7 @@ async function main() {
         ...(protocolTest ||
         recoveryTest ||
         playbackTest ||
+        recordingTest ||
         nativeScreenTest
           ? ["--autoplay-policy=no-user-gesture-required"]
           : []),
@@ -318,7 +334,20 @@ async function main() {
       await shortcut("v", "KeyV", 86);
     }
     const start = Date.now();
-    while (Date.now() - start < 80000) {
+    const timeout = recordingTest
+      ? 80000 +
+        4 *
+          Math.min(
+            600000,
+            Math.max(
+              0,
+              Number(
+                process.env.RECORDING_TEST_DURATION_MS,
+              ) || 0,
+            ),
+          )
+      : 80000;
+    while (Date.now() - start < timeout) {
       const evaluation = await cdp.call(
         "Runtime.evaluate",
         {

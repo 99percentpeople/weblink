@@ -1,7 +1,11 @@
 import { Show } from "solid-js";
 import { Monitor, MousePointer2 } from "lucide-solid";
 import { Badge } from "@/components/ui/badge";
-import { IconVolumeUpFilled } from "@/components/icons";
+import {
+  IconRecord,
+  IconPause,
+  IconVolumeUpFilled,
+} from "@/components/icons";
 import { t } from "@/i18n";
 
 export interface VideoLabelProps {
@@ -9,9 +13,17 @@ export interface VideoLabelProps {
   screen?: string;
   controller?: string;
   speaking?: boolean;
+  recording?: boolean;
+  recordingPaused?: boolean;
 }
 
 export function VideoLabel(props: VideoLabelProps) {
+  const recordingLabel = () =>
+    t(
+      props.recordingPaused
+        ? "recording.paused"
+        : "recording.recording",
+    );
   const controller = () =>
     t("remote_control.controlled_by", {
       name: props.controller ?? "",
@@ -36,6 +48,26 @@ export function VideoLabel(props: VideoLabelProps) {
         )}
       </Show>
       <span class="truncate">{props.name}</span>
+      <Show when={props.recording}>
+        <span
+          role="img"
+          aria-label={recordingLabel()}
+          title={recordingLabel()}
+          class="shrink-0"
+        >
+          <Show
+            when={props.recordingPaused}
+            fallback={
+              <IconRecord
+                class="size-4"
+                aria-hidden="true"
+              />
+            }
+          >
+            <IconPause class="size-4" aria-hidden="true" />
+          </Show>
+        </span>
+      </Show>
       <Show when={props.controller}>
         <span
           role="img"

@@ -6,6 +6,7 @@ import {
 import {
   LocalFileSystemError,
   RangeFile,
+  sequentialWriter,
   type FileSystemOperation,
   type NativeFileSystem,
   type VfsVolume,
@@ -13,6 +14,7 @@ import {
   type VfsStat,
   type VfsEntry,
   type VfsWrite,
+  type VfsWriter,
   type VfsFileMetadata,
   type StoredFile,
 } from "@weblink/platform";
@@ -192,6 +194,54 @@ class NativeVolume implements VfsVolume {
     return this.io("sync", path, () =>
       invoke("vfs_sync", { mountId: this.id, path }),
     );
+  }
+  async openWriter(path: string): Promise<VfsWriter> {
+    const id = await this.io<string>("write", path, () =>
+      invoke("vfs_writer_open", { mountId: this.id, path }),
+    );
+    return sequentialWriter({
+      write: async (bytes, offset) => {
+        for (
+          let cursor = 0;
+          cursor < bytes.length;
+          cursor += IO_BYTES
+        ) {
+          const data = bytes.subarray(
+            cursor,
+            cursor + IO_BYTES,
+          );
+          await this.io(
+            "write",
+            path,
+            () =>
+              invoke("vfs_writer_append", data, {
+                headers: {
+                  "x-vfs-writer": id,
+                  "x-vfs-offset": String(offset + cursor),
+                },
+              }),
+            {
+              offset: offset + cursor,
+              length: data.length,
+            },
+          );
+        }
+      },
+      close: (_size, patches) =>
+        this.io<VfsStat>("sync", path, () =>
+          invoke("vfs_writer_close", {
+            id,
+            patches: patches.map(({ offset, data }) => ({
+              offset,
+              data: Array.from(data),
+            })),
+          }),
+        ),
+      abort: () =>
+        this.io<void>("sync", path, () =>
+          invoke("vfs_writer_abort", { id }),
+        ),
+    });
   }
   remove(path: string): Promise<void> {
     return this.io("remove", path, () =>

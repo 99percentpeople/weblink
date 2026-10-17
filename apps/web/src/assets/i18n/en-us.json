@@ -1469,5 +1469,16 @@
     "close_other_tabs": "Close other Weblink pages to continue.",
     "retained": "The old databases for failed files are preserved. Migration will retry the next time Weblink starts.",
     "error_details": "Error details"
+  },
+  "recording": {
+    "pause": "Pause recording",
+    "resume": "Resume recording",
+    "paused": "Recording paused",
+    "start": "Start recording",
+    "stop": "Stop and save",
+    "preparing": "Preparing recording",
+    "recording": "Recording",
+    "saving": "Saving recording",
+    "failed": "Recording failed"
   }
 }

@@ -19,6 +19,7 @@ import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { AudioPlayerContextValue } from "./audio-player-context";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
+import type { RecordingControls } from "./create-recording";
 
 import type { MeetingMediaContextValue } from "@/libs/state/meeting-media-context";
 
@@ -26,12 +27,14 @@ export function createMeetingMedia({
   state,
   audio,
   nativePicker,
+  recording,
 }: {
   state: AppStateContextProps;
   audio: AudioPlayerContextValue;
   nativePicker?: ReturnType<
     typeof createNativeScreenDialog
   >;
+  recording?: RecordingControls;
 }): MeetingMediaContextValue {
   const access = state.permissions.media;
   let disposed = false;
@@ -262,5 +265,5 @@ export function createMeetingMedia({
       }
     },
   };
-  return { media, devices };
+  return { media, devices, recording };
 }

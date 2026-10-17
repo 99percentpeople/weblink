@@ -37,6 +37,11 @@ class Stream {
       (track) => track.kind === "video",
     );
   }
+  getAudioTracks() {
+    return this.tracks.filter(
+      (track) => track.kind === "audio",
+    );
+  }
 }
 vi.mock("@/libs/domain/native-screen/receiver", () => ({
   ScreenReceiver: class {
@@ -58,6 +63,7 @@ vi.mock("@/libs/domain/native-screen/receiver", () => ({
     answer = vi.fn(async () => "answer");
     addIceCandidate = vi.fn(async () => {});
     connected = vi.fn(async () => {});
+    monitorDecode = vi.fn();
     close = vi.fn(() =>
       this.stream
         .getTracks()
@@ -633,4 +639,103 @@ it("keeps preview audio out of browser senders and releases it with the screen",
       .every((track) => track.readyState === "ended"),
   ).toBe(true);
   expect(capture.stop).toHaveBeenCalledOnce();
+});
+
+it("opens an independent native recording receiver with real audio and closes only that peer", async () => {
+  const { capture, share } = setup();
+  const raw = new Stream([
+    new Track(),
+    Object.assign(new Track(), { kind: "audio" }),
+  ]);
+  const closePreview = vi.fn();
+  share.preview = vi.fn(async () => ({
+    stream: raw as unknown as MediaStream,
+    close: closePreview,
+    stats: vi.fn(),
+  }));
+  share.codecs = vi.fn(async () => ["audio/opus"]);
+  const stream = await createNativeScreenStream(
+    capture,
+    share,
+    "screen",
+    undefined,
+    {
+      audio: true,
+      maxWidth: 1280,
+      maxHeight: 720,
+      frameRate: 30,
+      maxBitrate: 2000000,
+      codec: null,
+      degradationPreference: "balanced",
+    },
+  );
+  const publication = getNativeScreenPublication(
+    stream.getVideoTracks()[0],
+  )!;
+  previewAudio = true;
+  const signal = new AbortController();
+  const ended = vi.fn();
+  const recording = await publication.openRecording!(
+    signal.signal,
+    ended,
+  );
+  expect(recording.stream).not.toBe(stream);
+  expect(recording.stream.getAudioTracks()).toHaveLength(1);
+  expect(share.offer).toHaveBeenCalledWith(
+    "owned",
+    expect.any(String),
+    [],
+    false,
+    true,
+    expect.any(Function),
+    undefined,
+    expect.objectContaining({ audio: "audio/opus" }),
+  );
+  const peerId = vi.mocked(share.offer).mock.calls[0][1];
+  recording.close();
+  await flush();
+  expect(share.closePeer).toHaveBeenCalledWith(
+    "owned",
+    peerId,
+  );
+  expect(capture.stop).not.toHaveBeenCalled();
+  expect(closePreview).not.toHaveBeenCalled();
+  expect(ended).not.toHaveBeenCalled();
+  stream.getVideoTracks()[0].stop();
+});
+it("cleans up an aborted recording offer even if native peer creation finishes late", async () => {
+  const { capture, share } = setup();
+  const stream = await createNativeScreenStream(
+    capture,
+    share,
+    "screen",
+  );
+  const publication = getNativeScreenPublication(
+    stream.getVideoTracks()[0],
+  )!;
+  let finish!: (sdp: string) => void;
+  vi.mocked(share.offer).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const controller = new AbortController();
+  const pending = publication.openRecording!(
+    controller.signal,
+    vi.fn(),
+  ).catch((error) => error);
+  await flush();
+  controller.abort();
+  finish("late");
+  await pending;
+  await flush();
+  const peer = vi.mocked(share.offer).mock.calls.at(-1)![1];
+  expect(
+    vi
+      .mocked(share.closePeer)
+      .mock.calls.filter(([, id]) => id === peer).length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(capture.stop).not.toHaveBeenCalled();
+  stream.getVideoTracks()[0].stop();
 });

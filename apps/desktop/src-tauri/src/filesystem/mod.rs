@@ -11,6 +11,7 @@ use std::{
 use tauri::Manager;
 pub mod commands;
 pub mod protocol;
+pub mod writer;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Root {
@@ -41,6 +42,7 @@ struct State {
     roots: Option<Vec<Root>>,
     watchers: HashMap<String, notify::RecommendedWatcher>,
     media: HashMap<String, MediaFile>,
+    writers: HashMap<String, std::sync::Arc<Mutex<writer::SequentialFile>>>,
 }
 #[derive(Default)]
 pub struct Service(Mutex<State>);
@@ -50,6 +52,11 @@ impl Service {
             state.generation = state.generation.wrapping_add(1);
             state.watchers.clear();
             state.media.clear();
+            for (_, writer) in state.writers.drain() {
+                if let Ok(mut writer) = writer.lock() {
+                    writer.retire();
+                }
+            }
         }
     }
 }

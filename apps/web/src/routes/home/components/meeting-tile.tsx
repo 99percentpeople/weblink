@@ -25,6 +25,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  useContext,
   on,
   onCleanup,
   Show,
@@ -41,6 +42,12 @@ import {
   VolumeX,
   X,
 } from "lucide-solid";
+import {
+  IconPause,
+  IconPlayArrow,
+  IconRecord,
+  IconStop,
+} from "@/components/icons";
 import { t } from "@/i18n";
 import { createFullscreen } from "@/libs/hooks/fullscreen";
 import { createFullscreenVideoOrientation } from "@/libs/hooks/fullscreen-video-orientation";
@@ -51,6 +58,7 @@ import { VideoStatisticsOverlay } from "./video-statistics-overlay";
 import { sessionService } from "@/libs/application/session-service";
 import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 import { VideoDisplay } from "./video-display";
+import { MeetingMediaContext } from "@/libs/state/meeting-media-context";
 
 export function MeetingTile(props: {
   ref?: (element: HTMLElement) => void;
@@ -84,6 +92,18 @@ export function MeetingTile(props: {
   onKeyboardVisibleChange?: (visible: boolean) => void;
 }) {
   const app = useAppState();
+  const recording = useContext(
+    MeetingMediaContext,
+  )?.recording;
+  const isRecording = () =>
+    (recording?.state()?.phase === "recording" ||
+      recording?.state()?.phase === "paused") &&
+    recording?.state()?.sourceId ===
+      (props.sourceId ??
+        props.trackId ??
+        props.stream
+          ?.getTracks()
+          .find((track) => track.kind === "video")?.id);
   const participantName = () =>
     props.participantName ?? props.name;
   const controllerName = createMemo(() => {
@@ -227,6 +247,10 @@ export function MeetingTile(props: {
                   t("common.media_selection_dialog.screen")
                 : undefined,
             controller: controllerName(),
+            recording: isRecording(),
+            recordingPaused:
+              isRecording() &&
+              recording?.state()?.phase === "paused",
           }}
           avatar={props.avatar}
           isPlaceholderStream={props.placeholder}
@@ -293,6 +317,7 @@ export function MeetingTile(props: {
             <TileActions
               container={displayRef()}
               sourceId={props.sourceId}
+              sourceKind={props.sourceKind}
               clientId={props.clientId}
               requestScreen={props.sourceKind !== "screen"}
               fullscreen={fullscreen}
@@ -312,6 +337,9 @@ export function MeetingTile(props: {
               registerKeyboard={registerKeyboard}
               onStop={props.onStop}
               name={props.name}
+              participantName={participantName()}
+              avatar={props.avatar}
+              sourceLabel={props.sourceLabel}
             />
           </Show>
         </VideoDisplay>
@@ -323,6 +351,7 @@ export function MeetingTile(props: {
 function TileActions(props: {
   container?: HTMLElement;
   sourceId?: string;
+  sourceKind?: string;
   clientId?: string;
   requestScreen: boolean;
   fullscreen: ReturnType<typeof createFullscreen>;
@@ -340,8 +369,24 @@ function TileActions(props: {
   desktopPip?: MeetingPipControls;
   onStop?: () => void;
   name: string;
+  participantName?: string;
+  avatar?: string;
+  sourceLabel?: string;
 }) {
   const app = useAppState();
+  const recording = useContext(
+    MeetingMediaContext,
+  )?.recording;
+  const isRecording = () =>
+    !!recording?.state() &&
+    recording.state()?.sourceId ===
+      (props.sourceId ?? videoTrack()?.id);
+  const canControlRecording = () =>
+    isRecording() &&
+    (recording?.state()?.phase === "recording" ||
+      recording?.state()?.phase === "paused");
+  const recordingPaused = () =>
+    recording?.state()?.phase === "paused";
   const { videoRef, videoTrack, audioTracks } =
     useVideoDisplay();
   const videoControl = createVideoRemoteControl();
@@ -408,6 +453,7 @@ function TileActions(props: {
 
   const hasActions = createMemo(
     () =>
+      Boolean(videoTrack() && recording?.supported()) ||
       Boolean(showControl()) ||
       Boolean(props.onStop) ||
       Boolean(
@@ -515,6 +561,70 @@ function TileActions(props: {
               : undefined
           }
         >
+          <Show
+            when={videoTrack() && recording?.supported()}
+          >
+            <Show when={canControlRecording()}>
+              <MeetingTileAction
+                label={t(
+                  recordingPaused()
+                    ? "recording.resume"
+                    : "recording.pause",
+                )}
+                active={recordingPaused()}
+                onAction={() =>
+                  recordingPaused()
+                    ? recording?.resume()
+                    : recording?.pause()
+                }
+              >
+                <Show
+                  when={recordingPaused()}
+                  fallback={
+                    <IconPause aria-hidden="true" />
+                  }
+                >
+                  <IconPlayArrow aria-hidden="true" />
+                </Show>
+              </MeetingTileAction>
+            </Show>
+            <MeetingTileAction
+              label={t(
+                isRecording()
+                  ? "recording.stop"
+                  : "recording.start",
+              )}
+              active={isRecording()}
+              disabled={
+                !!recording?.state() &&
+                !canControlRecording()
+              }
+              onAction={() => {
+                const video = videoTrack();
+                if (isRecording()) recording?.stop();
+                else if (video)
+                  recording?.start({
+                    id: props.sourceId ?? video.id,
+                    name: props.name,
+                    participantName: props.participantName,
+                    avatar: props.avatar,
+                    sourceLabel: props.sourceLabel,
+                    local: props.local === true,
+                    participantId: props.clientId,
+                    kind: props.sourceKind,
+                    video,
+                    audio: audioTracks(),
+                  });
+              }}
+            >
+              <Show
+                when={isRecording()}
+                fallback={<IconRecord aria-hidden="true" />}
+              >
+                <IconStop aria-hidden="true" />
+              </Show>
+            </MeetingTileAction>
+          </Show>
           <Show when={showControl() && remote.control()}>
             {(control) => (
               <RemoteControlAction

@@ -23,6 +23,7 @@ export interface StoredVfsFile {
   info: ChunkCacheInfo | null;
   chunks: Record<number, string>;
   complete: boolean;
+  draft?: "recording";
   revision?: string;
   checkpointVersion?: number;
   /** Identifies a verified migration whose old database may still await deletion. */

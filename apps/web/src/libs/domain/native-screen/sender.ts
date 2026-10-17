@@ -11,6 +11,10 @@ import type { ScreenSignal } from "./signaling";
 import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 
 export interface NativeScreenPublication {
+  openRecording?(
+    signal: AbortSignal,
+    ended: (error?: Error) => void,
+  ): Promise<{ stream: MediaStream; close(): void }>;
   readonly sourceId: string;
   readonly controlEligible?: boolean;
   setReceivers?(

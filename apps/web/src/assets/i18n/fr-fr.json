@@ -1469,5 +1469,16 @@
     "close_other_tabs": "Fermez les autres pages Weblink pour continuer.",
     "retained": "Les anciennes bases des fichiers en échec sont conservées. La migration sera réessayée au prochain démarrage.",
     "error_details": "Détails de l’erreur"
+  },
+  "recording": {
+    "pause": "Suspendre l’enregistrement",
+    "resume": "Reprendre l’enregistrement",
+    "paused": "Enregistrement en pause",
+    "start": "Démarrer l’enregistrement",
+    "stop": "Arrêter et enregistrer",
+    "preparing": "Préparation de l’enregistrement",
+    "recording": "Enregistrement en cours",
+    "saving": "Sauvegarde de l’enregistrement",
+    "failed": "Échec de l’enregistrement"
   }
 }

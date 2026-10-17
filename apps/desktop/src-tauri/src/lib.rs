@@ -112,6 +112,10 @@ pub fn run() {
             filesystem::commands::vfs_watch,
             filesystem::commands::vfs_unwatch,
             filesystem::commands::vfs_media,
+            filesystem::writer::vfs_writer_open,
+            filesystem::writer::vfs_writer_append,
+            filesystem::writer::vfs_writer_close,
+            filesystem::writer::vfs_writer_abort,
 
             file_save::file_save_begin,
             file_save::file_save_directory_pick,

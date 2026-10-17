@@ -24,6 +24,12 @@ import { setAppState } from "@/libs/state/app-state";
 import { getAvatarFallbackImage } from "@/libs/utils/avatar";
 import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 import type { NativeControlStatus } from "@weblink/platform";
+import {
+  MeetingMediaContext,
+  type MeetingMediaContextValue,
+} from "@/libs/state/meeting-media-context";
+import type { RecordingControls } from "@/libs/state/create-recording";
+import type { RecordingState } from "@/libs/application/recording-service";
 
 vi.hoisted(() => {
   Object.defineProperty(document, "fullscreenEnabled", {
@@ -95,6 +101,10 @@ vi.mock(
   },
 );
 vi.mock("@/components/icons", () => ({
+  IconRecord: () => <svg />,
+  IconStop: () => <svg />,
+  IconPause: () => <svg />,
+  IconPlayArrow: () => <svg />,
   IconVolumeUpFilled: () => null,
 }));
 vi.mock("@/components/common/spinner", () => ({
@@ -1040,4 +1050,165 @@ it("synchronizes the screen peer clipboard without adding action buttons", () =>
       name: "remote_control.end",
     }),
   ).toBeEnabled();
+});
+
+it("delegates recording to its application owner and disables other sources until saving finishes", async () => {
+  const [state, setState] =
+    createSignal<RecordingState | null>(null);
+  const start = vi.fn<RecordingControls["start"]>(
+    (options) =>
+      setState({
+        sourceId: options.id,
+        name: options.name,
+        phase: "recording",
+        bytes: 0,
+        elapsed: 0,
+      }),
+  );
+  const stop = vi.fn(() =>
+    setState(
+      (current) =>
+        current && { ...current, phase: "saving" as const },
+    ),
+  );
+  const recording: RecordingControls = {
+    state,
+    start,
+    stop,
+    pause: vi.fn(() =>
+      setState(
+        (current) =>
+          current && {
+            ...current,
+            phase: "paused" as const,
+          },
+      ),
+    ),
+    resume: vi.fn(() =>
+      setState(
+        (current) =>
+          current && {
+            ...current,
+            phase: "recording" as const,
+          },
+      ),
+    ),
+    supported: () => true,
+  };
+  const track = new Track("selected");
+  const view = render(() => (
+    <MeetingMediaContext.Provider
+      value={{ recording } as MeetingMediaContextValue}
+    >
+      <MeetingTile
+        name="Camera"
+        participantName="Alice"
+        avatar="https://example.test/alice.png"
+        sourceLabel="Camera 1"
+        sourceId="selected"
+        sourceKind="camera"
+        local
+        pinned={false}
+        stream={
+          new Stream([
+            track as unknown as MediaStreamTrack,
+          ]) as unknown as MediaStream
+        }
+      />
+      <MeetingTile
+        name="Screen"
+        sourceId="other"
+        sourceKind="screen"
+        local
+        pinned={false}
+        stream={
+          new Stream([
+            new Track(
+              "other",
+            ) as unknown as MediaStreamTrack,
+          ]) as unknown as MediaStream
+        }
+      />
+    </MeetingMediaContext.Provider>
+  ));
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", {
+        name: "recording.start",
+      }),
+    ).toHaveLength(2),
+  );
+  fireEvent.click(
+    screen.getAllByRole("button", {
+      name: "recording.start",
+    })[0],
+  );
+  expect(start).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: "selected",
+      kind: "camera",
+      video: track,
+      local: true,
+      participantName: "Alice",
+      avatar: "https://example.test/alice.png",
+      sourceLabel: "Camera 1",
+    }),
+  );
+  expect(
+    screen.getAllByRole("img", {
+      name: "recording.recording",
+    }),
+  ).toHaveLength(1);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "recording.start",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "recording.pause" }),
+  );
+  expect(recording.pause).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("img", { name: "recording.paused" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "recording.stop" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "recording.start" }),
+  ).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "recording.resume",
+    }),
+  );
+  expect(recording.resume).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("img", {
+      name: "recording.recording",
+    }),
+  ).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "recording.pause" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "recording.stop" }),
+  );
+  expect(stop).toHaveBeenCalledOnce();
+  expect(
+    screen.queryByRole("img", {
+      name: "recording.recording",
+    }),
+  ).toBeNull();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "recording.stop",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  view.unmount();
+  expect(stop).toHaveBeenCalledOnce();
 });

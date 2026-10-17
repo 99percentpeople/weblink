@@ -27,6 +27,7 @@ import {
   type VfsFileStore,
   type StoredVfsFile,
 } from "./database";
+import type { DirectoryVerification } from "./directory-verification";
 
 const BATCH_BYTES = 4 * 1024 * 1024;
 const digest = async (bytes: ArrayBuffer) =>
@@ -60,6 +61,7 @@ export class VfsChunkCache
     private readonly isRetained: () => boolean = () =>
       false,
     private readonly native?: NativeFileSystem,
+    private readonly verification?: DirectoryVerification,
   ) {
     super();
   }
@@ -106,6 +108,8 @@ export class VfsChunkCache
       );
     const volume = await this.volume(record.mountId);
     if (!record.info) return volume;
+    if (record.draft)
+      throw new Error("Recording is unfinished");
     const stat = await volume.stat(record.path);
     if (
       !stat ||
@@ -373,6 +377,25 @@ export class VfsChunkCache
         record,
         await this.volume(record.mountId),
       ).capabilities;
+      if (record.draft) {
+        const stat = await (
+          await this.volume(record.mountId)
+        ).stat(record.path);
+        if (!stat || record.present === false)
+          throw new StorageUnavailableError(
+            "Recording draft was removed",
+            { missing: true },
+          );
+        return {
+          ...record.info,
+          fileSize: stat.size,
+          capabilities,
+          storageMountId: record.mountId,
+          isComplete: false,
+          cachedBytes: stat.size,
+          chunkCount: 0,
+        };
+      }
       await this.checked(record);
       const complete =
         record.complete ||
@@ -572,6 +595,7 @@ export class VfsChunkCache
     await this.flush();
     return this.run(async () => {
       const record = await this.record();
+      if (record.draft) return [];
       await this.checked(record);
       return Object.keys(record.chunks)
         .map(Number)
@@ -589,6 +613,7 @@ export class VfsChunkCache
     await this.flush();
     return this.run(async () => {
       const record = await this.record();
+      if (record.draft) return null;
       await this.checked(record);
       if (!record.info) return null;
       if (record.complete) return [];
@@ -611,6 +636,7 @@ export class VfsChunkCache
     await this.flush();
     return this.run(async () => {
       const record = await this.record();
+      if (record.draft) return null;
       const volume = await this.checked(record);
       if (
         !record.info ||
@@ -650,6 +676,7 @@ export class VfsChunkCache
     await this.flush();
     return this.run(async () => {
       const record = await this.record();
+      if (record.draft) return null;
       await this.checked(record);
       if (
         !record.info ||
@@ -671,7 +698,8 @@ export class VfsChunkCache
     options: FileWriteOptions = {},
     compute?: () => Promise<FileFingerprint>,
   ): Promise<FileFingerprint | undefined> {
-    if (!this.database.fingerprint) return undefined;
+    if (!this.database.fingerprint && !this.verification)
+      return undefined;
     return this.run(async () => {
       options.signal?.throwIfAborted();
       const record = await this.record();
@@ -683,8 +711,20 @@ export class VfsChunkCache
         throw new StorageUnavailableError(
           "File changed while identifying its content",
         );
-      return this.database.fingerprint!(
-        record,
+      if (this.database.fingerprint)
+        return this.database.fingerprint(
+          record,
+          file,
+          options,
+          compute,
+        );
+      const volume = await this.volume(record.mountId);
+      const stat = await volume.stat(record.path);
+      if (!stat) throw new Error("File is unavailable");
+      return this.verification!.verify(
+        volume,
+        record.path,
+        stat,
         file,
         options,
         compute,

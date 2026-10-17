@@ -1469,5 +1469,16 @@
     "close_other_tabs": "请关闭其他 Weblink 页面以继续迁移。",
     "retained": "失败文件的旧数据库已保留，下次启动 Weblink 时会自动重试。",
     "error_details": "错误详情"
+  },
+  "recording": {
+    "pause": "暂停录像",
+    "resume": "继续录像",
+    "paused": "录像已暂停",
+    "start": "开始录像",
+    "stop": "停止并保存",
+    "preparing": "正在准备录像",
+    "recording": "正在录像",
+    "saving": "正在保存录像",
+    "failed": "录像失败"
   }
 }

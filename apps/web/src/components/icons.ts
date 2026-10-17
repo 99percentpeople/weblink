@@ -68,6 +68,8 @@ import IconEditSquare from "@material-symbols/svg-400/outlined/edit_square.svg?c
 import IconLink from "@material-symbols/svg-400/outlined/link.svg?component-solid";
 import IconPlayArrow from "@material-symbols/svg-400/outlined/play_arrow.svg?component-solid";
 import IconPause from "@material-symbols/svg-400/outlined/pause.svg?component-solid";
+import IconRecord from "@material-symbols/svg-400/outlined/fiber_manual_record-fill.svg?component-solid";
+import IconStop from "@material-symbols/svg-400/outlined/stop-fill.svg?component-solid";
 import IconMonitor from "@material-symbols/svg-400/outlined/monitor.svg?component-solid";
 import IconScreenShare from "@material-symbols/svg-400/outlined/screen_share.svg?component-solid";
 import IconStopScreenShare from "@material-symbols/svg-400/outlined/stop_screen_share.svg?component-solid";
@@ -168,6 +170,8 @@ export {
   IconLink,
   IconPlayArrow,
   IconPause,
+  IconRecord,
+  IconStop,
   IconMonitor,
   IconScreenShare,
   IconStopScreenShare,
