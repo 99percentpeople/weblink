@@ -173,7 +173,7 @@ async function main() {
         "--disable-dev-shm-usage",
         "--disable-extensions",
         "--disable-background-networking",
-        ...(nativeScreenTest
+        ...(nativeScreenTest || recordingTest
           ? [
               "--use-fake-device-for-media-stream",
               "--use-fake-ui-for-media-stream",
@@ -336,7 +336,7 @@ async function main() {
     const start = Date.now();
     const timeout = recordingTest
       ? 80000 +
-        6 *
+        8 *
           Math.min(
             600000,
             Math.max(

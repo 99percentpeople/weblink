@@ -130,6 +130,7 @@ it.each(["camera", "screen"])(
     expect(f.source?.audio).toEqual([
       kind === "camera" ? microphone : screenAudio,
     ]);
+    expect(f.source?.local).toBe(false);
     expect(f.source?.available()).toBe(true);
     expect(recording.state()).toMatchObject({
       participantName: "Alice",
@@ -177,3 +178,25 @@ it.each(["camera", "screen"])(
     expect(f.stop).toHaveBeenCalledOnce();
   },
 );
+
+it("identifies direct local camera capture for recorder codec selection", () => {
+  const camera = track("camera", "video");
+  const recording = createRoot((release) => {
+    dispose = release;
+    return createRecording({
+      localStream: () => stream(camera),
+      activeRoomConversationId: () => "room",
+    } as AppStateContextProps);
+  });
+  recording.start({
+    id: "camera",
+    name: "Camera",
+    local: true,
+    kind: "camera",
+    video: camera,
+    audio: [],
+  });
+  expect(f.source?.local).toBe(true);
+  expect(f.source?.video).toBe(camera);
+  expect(f.source?.available()).toBe(true);
+});

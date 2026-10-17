@@ -25,11 +25,11 @@ function assert(
 const sleep = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 async function waitFor(
-  ready: () => boolean,
+  ready: () => boolean | Promise<boolean>,
   timeout = 10000,
 ) {
   const until = performance.now() + timeout;
-  while (!ready()) {
+  while (!(await ready())) {
     if (performance.now() > until)
       throw new Error("Recording check timed out");
     await sleep(20);
@@ -206,6 +206,7 @@ async function run() {
         RTCRtpSender.getCapabilities("video")!.codecs;
       const sources = [
         undefined,
+        "camera",
         "video/VP8",
         ...(codecs.some(
           (codec) => codec.mimeType === "video/H264",
@@ -214,7 +215,8 @@ async function run() {
           : []),
       ];
       for (const codec of sources) {
-        const remote = codec !== undefined;
+        const camera = codec === "camera";
+        const remote = !!codec && !camera;
         const storage = new FileStorageService(
           undefined,
           new VfsDatabase(
@@ -225,7 +227,23 @@ async function run() {
         const receiver = new RTCPeerConnection();
         const incoming = new MediaStream();
         let service: RecordingService | undefined;
+        let capture: MediaStream | undefined;
         try {
+          if (camera)
+            capture =
+              await navigator.mediaDevices.getUserMedia({
+                video: {
+                  width: { exact: 640 },
+                  height: { exact: 360 },
+                  frameRate: { ideal: 30, max: 30 },
+                },
+              });
+          const local = capture
+            ? new MediaStream([
+                ...capture.getVideoTracks(),
+                ...source.getAudioTracks(),
+              ])
+            : source;
           await storage.initialize();
           if (kind === "directory")
             await storage.setDefault(
@@ -241,24 +259,25 @@ async function run() {
           };
           receiver.ontrack = ({ track }) =>
             incoming.addTrack(track);
-          if (remote) {
-            source
+          if (remote || camera) {
+            local
               .getTracks()
               .forEach((track) =>
-                sender.addTrack(track, source),
+                sender.addTrack(track, local),
               );
-            sender
-              .getTransceivers()
-              .find(
-                (transceiver) =>
-                  transceiver.sender.track?.kind ===
-                  "video",
-              )!
-              .setCodecPreferences(
-                codecs.filter(
-                  (entry) => entry.mimeType === codec,
-                ),
-              );
+            if (remote)
+              sender
+                .getTransceivers()
+                .find(
+                  (transceiver) =>
+                    transceiver.sender.track?.kind ===
+                    "video",
+                )!
+                .setCodecPreferences(
+                  codecs.filter(
+                    (entry) => entry.mimeType === codec,
+                  ),
+                );
             await sender.setLocalDescription(
               await sender.createOffer(),
             );
@@ -277,7 +296,7 @@ async function run() {
                 incoming.getTracks().length === 2,
             );
           }
-          const stream = remote ? incoming : source;
+          const stream = remote ? incoming : local;
           let saved: StoredFile | undefined;
           let outputs = 0;
           let completions = 0;
@@ -317,7 +336,8 @@ async function run() {
           const preparing = performance.now();
           await service.start({
             id: "source",
-            name: `${kind}-${remote ? "remote" : "local"}`,
+            name: `${kind}-${remote ? "remote" : camera ? "camera" : "local"}`,
+            local: !remote,
             video: stream.getVideoTracks()[0],
             audio: stream.getAudioTracks(),
             available: () => true,
@@ -472,6 +492,7 @@ async function run() {
           const measurement = {
             kind,
             remote,
+            camera,
             codec,
             type: file.type,
             bytes: file.size,
@@ -508,6 +529,29 @@ async function run() {
             ),
           };
           measurements.push(measurement);
+          if (camera) {
+            const receivedFrames =
+              async (): Promise<number> => {
+                const stats = [
+                  ...(await receiver.getStats()).values(),
+                ];
+                return (
+                  stats.find(
+                    (entry) =>
+                      entry.type === "inbound-rtp" &&
+                      entry.kind === "video",
+                  )?.framesReceived ?? 0
+                );
+              };
+            const before = await receivedFrames();
+            assert(
+              before > 0,
+              "Camera sharing stopped during recording",
+            );
+            await waitFor(
+              async () => (await receivedFrames()) > before,
+            );
+          }
           const player = document.createElement("video");
           const poster = await videoThumbnail(
             file,
@@ -613,12 +657,15 @@ async function run() {
             revokeFileUrl(url);
           }
           passed.push(
-            `${kind}: ${remote ? `received WebRTC ${codec}` : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
+            `${kind}: ${remote ? `received WebRTC ${codec}` : camera ? "getUserMedia camera with concurrent WebRTC sharing" : "local canvas"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
           );
         } finally {
           await service?.stop();
           sender.close();
           receiver.close();
+          capture
+            ?.getTracks()
+            .forEach((track) => track.stop());
           storage.dispose();
         }
       }
@@ -630,6 +677,8 @@ async function run() {
       measurements,
       storage:
         "real IndexedDB and OPFS; directory-picker permissions simulated",
+      camera:
+        "getUserMedia with Chromium's fake camera device",
     };
   } finally {
     clearInterval(timer);

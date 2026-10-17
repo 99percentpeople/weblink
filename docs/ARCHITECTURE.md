@@ -427,7 +427,10 @@ may select concrete infrastructure implementations.
   - `session-service.ts`: owns live `PeerSession` instances and client views.
   - `recording-service.ts`: owns a single recorder and its continuous VFS writer.
     Automatic format selection lets supporting browsers reuse encoded remote
-    WebRTC video instead of encoding it again. The first output chunk determines
+    WebRTC video instead of encoding it again. Direct local capture instead
+    prefers a Matroska container when supported so Chromium can choose an
+    accelerated encoder, including H.264. Native screen recording inputs opened
+    over WebRTC keep automatic format selection. The first output chunk determines
     the final MIME type and extension (WebM, Matroska or MP4); publication updates
     that metadata on the writer's original mount. WebM and Matroska duration/seek
     indexing preserves encoded frames. Recording never reconfigures or stops

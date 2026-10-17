@@ -187,6 +187,76 @@ it("leaves the format unset so received video can bypass re-encoding", async () 
   ]);
 });
 
+it("lets local capture select accelerated codecs without changing its tracks", async () => {
+  const f = fixture();
+  f.source.local = true;
+  await f.service.start(f.source);
+  expect(f.recorder().options).toEqual({
+    mimeType: "video/x-matroska",
+    videoBitsPerSecond: 10_000_000,
+  });
+  expect(f.recorder().stream.getVideoTracks()).toEqual([
+    f.video,
+  ]);
+  f.recorder().data(
+    new Blob(["first"], {
+      type: "video/x-matroska;codecs=avc1,opus",
+    }),
+  );
+  await f.service.stop();
+  expect(f.writer.finish).toHaveBeenCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      type: "video/x-matroska;codecs=avc1,opus",
+      name: expect.stringMatching(/\.mkv$/),
+    }),
+  );
+  expect(f.video.stop).not.toHaveBeenCalled();
+  expect(f.audio.stop).not.toHaveBeenCalled();
+});
+
+it.each(["unsupported", "constructor failure"])(
+  "falls back to automatic local recording after %s",
+  async (failure) => {
+    const f = fixture();
+    f.source.local = true;
+    let checks = 0;
+    Recorder.isTypeSupported.mockImplementation(
+      (type) =>
+        type !== "video/x-matroska" ||
+        (failure === "constructor failure" &&
+          checks++ === 0),
+    );
+    await f.service.start(f.source);
+    expect(f.recorder().options).not.toHaveProperty(
+      "mimeType",
+    );
+    await f.service.stop();
+    expect(f.port.complete).toHaveBeenCalledOnce();
+    expect(f.port.failed).not.toHaveBeenCalled();
+  },
+);
+
+it("keeps pass-through for a local native screen opened over WebRTC", async () => {
+  const f = fixture();
+  f.source.local = true;
+  const close = vi.fn();
+  f.source.open = vi.fn(async () => ({
+    stream: new Stream([
+      f.video,
+      f.audio,
+    ]) as unknown as MediaStream,
+    close,
+  }));
+  await f.service.start(f.source);
+  expect(f.recorder().options).not.toHaveProperty(
+    "mimeType",
+  );
+  await f.service.stop();
+  expect(close).toHaveBeenCalledOnce();
+  expect(f.video.stop).not.toHaveBeenCalled();
+});
+
 it.each([
   ["video/x-matroska;codecs=avc1,opus", "mkv"],
   ["video/mp4;codecs=avc1", "mp4"],

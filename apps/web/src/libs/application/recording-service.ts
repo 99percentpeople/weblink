@@ -17,6 +17,7 @@ export interface RecordingInput {
 export interface RecordingSource {
   id: string;
   name: string;
+  local?: boolean;
   video: MediaStreamTrack;
   audio: readonly MediaStreamTrack[];
   available(): boolean;
@@ -209,6 +210,13 @@ export class RecordingService {
         "No supported recording format",
       );
       for (const mimeType of [
+        // Raw local capture needs an encoder. An explicit container lets
+        // Chromium choose from its accelerated codec profiles; an empty type
+        // falls back to VP8. Matroska also permits hardware H.264 encoders.
+        // Native screen inputs opened over WebRTC still need pass-through.
+        ...(source.local && !source.open
+          ? ["video/x-matroska"]
+          : []),
         // An explicit MIME disables Chromium's encoded WebRTC pass-through.
         // Let the browser reuse received frames before requesting an encoder.
         undefined,

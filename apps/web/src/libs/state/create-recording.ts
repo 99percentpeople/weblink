@@ -133,6 +133,7 @@ export function createRecording(app: AppStateContextProps) {
         .start({
           id: options.id,
           name: options.name,
+          local: options.local,
           video: options.video,
           audio,
           available: () =>
