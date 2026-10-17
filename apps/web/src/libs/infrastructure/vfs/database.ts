@@ -10,7 +10,7 @@ import type {
 import {
   requestResult,
   transactionDone,
-} from "../storage/chunk-assembly";
+} from "../storage/indexeddb-helpers";
 import type { FileFingerprint } from "@/libs/domain/protocol/file-fingerprint";
 
 export interface StoredMount extends VfsVolumeInfo {
@@ -25,6 +25,8 @@ export interface StoredVfsFile {
   complete: boolean;
   revision?: string;
   checkpointVersion?: number;
+  /** Identifies a verified migration whose old database may still await deletion. */
+  migrationSource?: string;
   /** Reconstructed from the partial file while publishing its final name. */
   finalization?: { source: string; target: string };
   /** Ordinary files discovered in a mount are read in place, never transfer destinations. */

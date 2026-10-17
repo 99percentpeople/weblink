@@ -1455,5 +1455,19 @@
     "stage_commit": "파일 저장",
     "name_blocked": "브라우저가 이 폴더에 {{fileName}}을(를) 생성하는 것을 허용하지 않습니다. 데스크톱 앱을 사용하거나 브라우저 저장소를 직접 선택하세요.",
     "write_blocked": "브라우저 또는 시스템 보안 검사로 {{fileName}} 저장이 차단되었습니다."
+  },
+  "storage_migration": {
+    "title": "파일 캐시 마이그레이션",
+    "preparing": "마이그레이션 준비 중",
+    "copying": "파일 캐시 마이그레이션 중",
+    "verifying": "마이그레이션 데이터 확인 중",
+    "waiting": "다른 페이지가 닫히기를 기다리는 중",
+    "deleting": "검증된 이전 캐시 삭제 중",
+    "completed": "파일 캐시 마이그레이션 완료",
+    "failed": "일부 파일을 마이그레이션하지 못했습니다",
+    "counts": "마이그레이션 완료 {{completed}} / {{total}}",
+    "close_other_tabs": "계속하려면 다른 Weblink 페이지를 닫아 주세요.",
+    "retained": "실패한 파일의 이전 데이터베이스는 보존됩니다. 다음 실행 시 다시 시도합니다.",
+    "error_details": "오류 세부 정보"
   }
 }

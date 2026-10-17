@@ -1455,5 +1455,19 @@
     "stage_commit": "guardar archivo",
     "name_blocked": "El navegador no permite crear {{fileName}} en esta carpeta. Use la aplicación de escritorio o seleccione manualmente el almacenamiento del navegador.",
     "write_blocked": "Una comprobación de seguridad del navegador o del sistema bloqueó el guardado de {{fileName}}."
+  },
+  "storage_migration": {
+    "title": "Migrar caché de archivos",
+    "preparing": "Preparando la migración",
+    "copying": "Migrando caché de archivos",
+    "verifying": "Verificando datos migrados",
+    "waiting": "Esperando el cierre de otras páginas",
+    "deleting": "Eliminando caché anterior verificada",
+    "completed": "Caché de archivos migrada",
+    "failed": "No se pudieron migrar algunos archivos",
+    "counts": "Migrados {{completed}} / {{total}}",
+    "close_other_tabs": "Cierra las demás páginas de Weblink para continuar.",
+    "retained": "Se conservan las bases de datos anteriores de los archivos fallidos. La migración se reintentará al iniciar Weblink.",
+    "error_details": "Detalles del error"
   }
 }

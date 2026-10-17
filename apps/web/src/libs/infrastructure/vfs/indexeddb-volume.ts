@@ -9,7 +9,7 @@ import { vfsPath } from "@/libs/domain/vfs";
 import {
   requestResult,
   transactionDone,
-} from "../storage/chunk-assembly";
+} from "../storage/indexeddb-helpers";
 import { VfsDatabase } from "./database";
 
 const PAGE = 256 * 1024;

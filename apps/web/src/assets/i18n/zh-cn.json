@@ -1455,5 +1455,19 @@
     "stage_commit": "最终保存",
     "name_blocked": "浏览器不允许在此目录中创建 {{fileName}}。可使用桌面端，或手动选择浏览器存储。",
     "write_blocked": "浏览器或系统安全检查阻止了 {{fileName}} 的保存。"
+  },
+  "storage_migration": {
+    "title": "迁移文件缓存",
+    "preparing": "正在准备缓存迁移",
+    "copying": "正在迁移文件缓存",
+    "verifying": "正在校验迁移数据",
+    "waiting": "正在等待其他页面关闭",
+    "deleting": "正在清理已验证的旧缓存",
+    "completed": "文件缓存迁移完成",
+    "failed": "部分文件迁移失败",
+    "counts": "已迁移 {{completed}} / {{total}}",
+    "close_other_tabs": "请关闭其他 Weblink 页面以继续迁移。",
+    "retained": "失败文件的旧数据库已保留，下次启动 Weblink 时会自动重试。",
+    "error_details": "错误详情"
   }
 }

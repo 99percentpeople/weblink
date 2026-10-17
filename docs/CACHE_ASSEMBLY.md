@@ -1,113 +1,75 @@
-# Blob-backed chunk caching and final assembly
+# IndexedDB file caching and migration
 
-This optimizes the cache behind the existing file-transfer service. It does not
-change the P2P protocol, channel labels or missing-range requests, and does not
-introduce OPFS or require a new storage permission.
+File transfers use `VfsChunkCache` for both directories and IndexedDB. The
+IndexedDB volume stores logical file nodes and sparse 256 KiB pages in
+`weblink-vfs-v1`. File metadata and committed chunk hashes live in `files` and
+`checkpoints`; file contents live in `nodes` and `pages`.
 
-## Receive and read paths
+## Receiving and completing files
 
-`IDBChunkCache.storeChunk()` snapshots each decompressed ArrayBuffer into a Blob
-when it is received. A bounded in-memory map holds pending records; duplicate
-indices replace their previous pending value. `flush()` serializes overlapping
-calls and waits for their transactions to commit. Failed batches are restored,
-without replacing newer buffered values for the same index.
+Reserving a file records its logical size without writing zero-filled pages.
+Only committed chunk checkpoints count toward progress and missing-range
+requests. Pending writes are bounded and snapshotted, including duplicate and
+out-of-order chunks. Checkpoints advance after the page transaction completes.
 
-IndexedDB still uses the same `chunks` store and `chunkIndex` keys. New records
-contain Blobs. Existing ArrayBuffer records, including a partially downloaded
-cache containing both formats after an upgrade, remain readable. `getChunk()`
-converts only the requested Blob to an ArrayBuffer for retransmission. No bulk
-migration, cache reset or schema version bump is required.
+Completion reconstructs a File from committed pages for consumers. It does not
+write a second whole-file copy into IndexedDB or run the retired assembly worker.
+The P2P protocol, transfer IDs and missing-range contract are unchanged. See
+[FILE_STORAGE.md](FILE_STORAGE.md) for directory storage and content verification.
 
-Missing-range calculation returns no ranges for an already finalized File.
-Cached-byte accounting handles both zero-length files and a full-sized last
-chunk correctly.
+## Automatic migration
 
-## Finalization
+Before the file library opens, storage initialization discovers old `file-*`
+databases and migrates them into the IndexedDB VFS, regardless of the default
+mount selected for new files. The old runtime cache and assembly worker are
+removed; only the migration reader understands their format.
 
-`getFile()` and `mergeFile()` share the same in-flight Promise per cache instance.
-A completed cached File is returned without spawning a worker. A failed attempt
-releases its Promise so the caller may repair missing data and retry.
+Each file retains its storage ID, filename, metadata and committed chunk indices.
+Chat attachments, shared references and library content records therefore keep
+using the same IDs. Completed Blob/File payloads and partial caches containing
+Blob or ArrayBuffer chunks are supported, including holes and short final chunks.
 
-The worker no longer creates another `IDBChunkCache` or calls back into its merge
-logic. `chunk-assembly.ts` reads and commits through one IndexedDB transaction:
+The migration proceeds per database:
 
-1. Read metadata and confirm the expected number of chunk records.
-2. Read ordered `getAll(range, count)` batches, bounded to 64 records and a target
-   of 8 MiB of nominal chunk data per batch (at least one record). A chunk larger
-   than that target still requires one complete record read. Convert legacy
-   ArrayBuffers only; existing Blobs are directly reused as File parts.
-3. Validate contiguous numeric indices, each chunk's byte length, the final
-   partial chunk and total file size. Build the File once.
-4. Put the final File into `info` and clear `chunks` in the **same transaction**.
-5. Report completion only from `transaction.oncomplete`.
+1. Upgrade the old database and rename its stores within the version transaction.
+   This waits for old connections to close and prevents old clients from writing
+   through their retired store names after verification. Interrupted migrations
+   recognize the renamed stores on the next startup; source bytes remain intact.
+2. Copy into unpublished VFS pages with bounded 4 MiB buffers. An old ArrayBuffer
+   chunk still requires reading its full IndexedDB record. A partial file reserves
+   its logical size but copies only committed chunks.
+3. Read back the destination and compare BLAKE3 digests. Completed files also
+   check their existing fingerprint when present. Validate chunk lengths, resume
+   checkpoints, file length and destination revision.
+4. Publish metadata and checkpoints in one transaction, checking the verified
+   node's revision again. The file becomes visible only after transaction commit.
+5. Close the source and delete its database. Count success only when deletion
+   completes, including when another connection initially blocks it.
 
-The next read is scheduled inside the previous request's success callback so
-IndexedDB does not auto-commit between batches. The transaction covers both
-stores in readwrite mode, serializing concurrent finalization attempts. A second
-cache instance observes and returns the first committed File instead of
-reassembling it. A failed put, clear or transaction abort preserves the original
-metadata and chunks together.
+Copy, checksum or publication failures preserve the old database and discard
+unpublished staging data. A retry after publication verifies and reuses the new
+copy, retaining any additional chunks received since publication. Unrelated
+files with a colliding storage ID are never overwritten. Abandoned staging pages
+are reclaimed without deleting published files.
 
-The main thread only updates observable state from the worker result; it does
-not write the File back a second time. Worker startup, message decoding and
-reported failures reject the Promise and reset the merging flag. Cache cleanup
-cancels its worker and guards late results. A blocked database deletion is not
-reported as successful. Transaction completion here means IndexedDB commit, not
-a promise about physical fsync or survival of every possible power failure.
+An app-level toast shows the current filename, copy/verification progress and
+file counts. Blocked connections prompt the user to close other Weblink pages.
+Failures retain error details and retry automatically on the next startup.
+Closing the file cache dialog does not affect migration. Migration temporarily
+needs space for both the old data and its new copy; a quota failure preserves
+original data. IndexedDB transaction completion is the storage success boundary,
+not a guarantee against every possible operating-system or hardware failure.
 
-`IDBChunkCache.mergeMetrics` exposes the last worker's read, build and commit
-latencies plus chunk/batch counts, without adding timers or progress UI.
+## Checks and benchmark
 
-## What this does and does not accelerate
+`test:e2e:cache` exercises actual IndexedDB transactions, source sealing, blocked
+connections, rollback, readback and retry in Chromium. Focused unit tests inject
+quota errors, corruption, interruption and destination conflicts. The transfer
+smoke harness uses VFS caches behind real WebRTC transfers.
 
-Conversion work is distributed over receipt, and the final read no longer
-materializes every new chunk as an ArrayBuffer. Batch reads also reduce cursor
-callbacks. This is **not** continuous writing into a final filesystem file:
-completion still waits for all required chunks, and IndexedDB still has to
-commit the assembled File. Blob storage and copying decisions vary by browser.
-Do not assume zero-copy assembly or a universal end-to-end speedup.
-
-In the local real-Chromium benchmark, the remaining finalization time is mostly
-File commit, not `new File(parts)`. Removing that final whole-file persistence
-step would require a separate storage design, such as OPFS offset writes.
-
-## Testing and benchmarks
-
-Correctness tests, real-Chromium cache/transfer smoke checks and the browser
-benchmark are documented separately in [TESTING.md](TESTING.md). Benchmarks are
-not correctness gates and do not run in the normal test suite.
-
-### Local before/after measurements
-
-The benchmark generates and hashes data outside its timed interval. It measures
-all chunk stores/flushes, `getFile()` and final readback confirmation separately.
-It excludes WebRTC, decompression, OS download/export and the post-timing SHA-256
-verification. Tests run in a disposable headless Chromium 148 profile on the
-same host. Chunk size: 512 KiB. Buffered chunks: 4. Each value below is the median
-of three runs; files have an additional 17-byte tail to exercise partial chunks.
-
-Deterministic pseudo-random data (`xorshift32`, the default):
-
-| File size      | Final readback confirmed: before |    After | Store + finalization: before |    After |
-| -------------- | -------------------------------: | -------: | ---------------------------: | -------: |
-| 32 MiB + 17 B  |                         251.4 ms | 143.7 ms |                     394.3 ms | 271.6 ms |
-| 128 MiB + 17 B |                         914.5 ms | 498.2 ms |                    1523.7 ms | 974.3 ms |
-
-The old `getFile()` Promise returned before its writes were committed: its
-128 MiB median Promise time was 540.1 ms, compared with 487.1 ms for the new
-Promise, which already includes the atomic commit. The larger final-readback
-improvement should not be confused with the old UI's early success indication.
-Old baseline runs also sometimes retained all chunk records after returning a
-valid final File; every optimized run cleared them. The benchmark reports
-`remainingChunks` rather than concealing this old cleanup race.
-
-A repetitive byte-pattern trial showed a different tradeoff:
-
-| File size      | Final readback confirmed: before |    After | Store + finalization: before |    After |
-| -------------- | -------------------------------: | -------: | ---------------------------: | -------: |
-| 32 MiB + 17 B  |                         217.7 ms | 141.9 ms |                     266.0 ms | 256.2 ms |
-| 128 MiB + 17 B |                         706.5 ms | 480.3 ms |                     883.7 ms | 973.0 ms |
-
-Thus the repetitive 128 MiB case improved the final tail but made the isolated
-store-plus-finalization total about 10% slower. Data-dependent storage costs
-matter; these results are not a prediction for every browser, disk or file.
+`bench:browser:cache` measures chunk writes, file reconstruction and committed
+readback separately, excluding WebRTC and checksum verification from timing.
+It checks exported bytes against an independently computed SHA-256 and reports
+remaining resume checkpoints, which VFS intentionally retains. It does not
+measure migration or predict timings on other browsers and devices. Commands
+and test boundaries are in [TESTING.md](TESTING.md).

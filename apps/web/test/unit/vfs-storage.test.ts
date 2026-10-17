@@ -17,7 +17,7 @@ import {
 import { IndexedDbVolume } from "@/libs/infrastructure/vfs/indexeddb-volume";
 import { DirectoryVolume } from "@/libs/infrastructure/vfs/directory-volume";
 import { VfsChunkCache } from "@/libs/infrastructure/vfs/chunk-cache";
-import { IDBChunkCache } from "@/libs/infrastructure/storage/indexeddb-chunk-cache";
+import { legacyDatabase } from "../helpers/legacy-indexeddb";
 import { vfsPath } from "@/libs/domain/vfs";
 import {
   RangeFile,
@@ -406,19 +406,17 @@ describe("VFS checkpoints and legacy storage", () => {
   });
   it("discovers legacy chunk databases and retains their partial bytes", async () => {
     const id = `legacy-${crypto.randomUUID()}`;
-    const legacy = new IDBChunkCache({
-      id,
-      maxMomeryCacheSize: 4,
-    });
-    await legacy.initialize();
-    await legacy.setInfo({
-      id,
-      fileName: "old.bin",
-      fileSize: 6,
-      chunkSize: 4,
-    });
-    await legacy.storeChunk(0, bytes(1, 2, 3, 4));
-    await legacy.flush();
+    (
+      await legacyDatabase(
+        id,
+        {
+          fileName: "old.bin",
+          fileSize: 6,
+          chunkSize: 4,
+        },
+        [{ chunkIndex: 0, data: bytes(1, 2, 3, 4) }],
+      )
+    ).close();
     const storage = new FileStorageService(
       undefined,
       database(),
@@ -430,13 +428,12 @@ describe("VFS checkpoints and legacy storage", () => {
       memoryChunks: 4,
       isRetained: () => false,
     });
-    expect(reopened).toBeInstanceOf(IDBChunkCache);
+    expect(reopened).toBeInstanceOf(VfsChunkCache);
     await reopened.initialize();
     expect(await reopened.getReqRanges()).toEqual([1]);
     expect([
       ...new Uint8Array((await reopened.getChunk(0))!),
     ]).toEqual([1, 2, 3, 4]);
-    await legacy.cleanup();
     await reopened.cleanup();
   });
   it("preserves sparse pages, truncation, and transactions across page boundaries", async () => {

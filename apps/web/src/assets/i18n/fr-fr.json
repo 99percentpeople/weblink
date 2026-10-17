@@ -1455,5 +1455,19 @@
     "stage_commit": "enregistrement du fichier",
     "name_blocked": "Le navigateur ne permet pas de créer {{fileName}} dans ce dossier. Utilisez l’application de bureau ou sélectionnez manuellement le stockage du navigateur.",
     "write_blocked": "Un contrôle de sécurité du navigateur ou du système a bloqué l’enregistrement de {{fileName}}."
+  },
+  "storage_migration": {
+    "title": "Migration du cache de fichiers",
+    "preparing": "Préparation de la migration",
+    "copying": "Migration du cache de fichiers",
+    "verifying": "Vérification des données migrées",
+    "waiting": "En attente de la fermeture des autres pages",
+    "deleting": "Suppression de l’ancien cache vérifié",
+    "completed": "Cache de fichiers migré",
+    "failed": "Certains fichiers n’ont pas pu être migrés",
+    "counts": "Migrés : {{completed}} / {{total}}",
+    "close_other_tabs": "Fermez les autres pages Weblink pour continuer.",
+    "retained": "Les anciennes bases des fichiers en échec sont conservées. La migration sera réessayée au prochain démarrage.",
+    "error_details": "Détails de l’erreur"
   }
 }

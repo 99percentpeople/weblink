@@ -13,7 +13,6 @@ export const MAX_SHARE_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 export const FILE_PREFIX = "file-" as const;
 export const TRANSFER_CHANNEL_PREFIX = FILE_PREFIX;
-export const DBNAME_PREFIX = FILE_PREFIX;
 
 export const MIN_IOS_VERSION = "16.0.0";
 export const MIN_VERSIONS: Record<string, string> = {

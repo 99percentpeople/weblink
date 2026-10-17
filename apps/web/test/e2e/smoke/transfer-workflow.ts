@@ -2,11 +2,9 @@ import { FileLibraryService } from "../../../src/libs/application/file-library-s
 import { FileFingerprintService } from "../../../src/libs/application/file-fingerprint-service";
 import { IndexedDbFileLibrary } from "../../../src/libs/infrastructure/storage/indexeddb-file-library";
 import { completeLocalFile } from "../../../src/libs/application/transfer/file-content-completion";
-import type {
-  ChunkCache,
-  FileMetaData,
-} from "../../../src/libs/domain/file";
-import { IDBChunkCache } from "../../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import type { ChunkCache } from "../../../src/libs/domain/file";
+import { FileStorageService } from "../../../src/libs/application/file-storage-service";
+import { VfsDatabase } from "../../../src/libs/infrastructure/vfs/database";
 import { FileSender } from "../../../src/libs/domain/transfer/file-sender";
 import { FileReceiver } from "../../../src/libs/domain/transfer/file-receiver";
 import { TransferMode } from "../../../src/libs/domain/transfer/file-transferer";
@@ -215,6 +213,10 @@ function makeNode(
     },
     updateTransferMessage: update,
   };
+  const storage = new FileStorageService(
+    undefined,
+    new VfsDatabase(`transfer-vfs-${id}`),
+  );
   const rawCaches = new Map<string, ChunkCache>();
   const index = new FileCatalogIndex();
   let sharing = true;
@@ -229,27 +231,13 @@ function makeNode(
     ) => {
       const existing = rawCaches.get(fid);
       if (existing) return existing;
-      // Nodes share this test origin. Isolate physical IndexedDB names, while the
-      // actual sender/receiver still see the same logical wire file ID.
-      const raw = new IDBChunkCache({
-        id: `${id}-${fid}`,
-        maxMomeryCacheSize: 4,
+      // Each node has its own VFS database; storage and wire identities stay equal.
+      const raw = await storage.createCache(fid, {
+        memoryChunks: 4,
+        isRetained: () => false,
       });
       await raw.initialize();
-      const scoped: ChunkCache = new Proxy(raw, {
-        get(target, key) {
-          if (key === "id") return fid;
-          if (key === "getInfo")
-            return async (): Promise<FileMetaData | null> => {
-              const info = await target.getInfo();
-              return info ? { ...info, id: fid } : null;
-            };
-          const value = Reflect.get(target, key, target);
-          return typeof value === "function"
-            ? value.bind(target)
-            : value;
-        },
-      });
+      const scoped = raw;
       rawCaches.set(fid, scoped);
       raw.addEventListener("cleanup", () => {
         rawCaches.delete(fid);
@@ -509,6 +497,7 @@ function makeNode(
           cache.cleanup(),
         ),
       );
+      storage.dispose();
     },
   };
 }

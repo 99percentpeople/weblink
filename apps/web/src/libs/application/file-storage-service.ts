@@ -6,8 +6,8 @@ import {
   type VfsVolumeInfo,
 } from "@/libs/domain/vfs";
 import type { NativeFileSystem } from "@weblink/platform";
-import { DBNAME_PREFIX } from "@/constants";
-import { IDBChunkCache } from "@/libs/infrastructure/storage/indexeddb-chunk-cache";
+import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
+import { migrateLegacyIndexedDb } from "@/libs/infrastructure/storage/indexeddb-migration";
 import {
   VfsDatabase,
   type StoredMount,
@@ -23,7 +23,10 @@ import { withExclusiveTask } from "@/libs/utils/exclusive-task";
 
 export class FileStorageService {
   private readonly volumes = new Map<string, VfsVolume>();
-  private readonly legacy = new Set<string>();
+  migrationProgress?: StorageMigrationProgress;
+  private readonly migrationListeners = new Set<
+    (progress: StorageMigrationProgress) => void
+  >();
   private readonly listeners = new Set<
     (mountId?: string) => void
   >();
@@ -108,19 +111,22 @@ export class FileStorageService {
         this.nativeError = error;
       }
     }
-    // New desktop content goes to its native root. Legacy files stay where they are.
+    // New desktop content goes to its native root; migrated caches stay in IndexedDB.
     this.selected =
       (await this.database.get<string>(
         "settings",
         "defaultMount",
       )) ?? (this.native ? "native-default" : "indexeddb");
-    if (typeof indexedDB.databases === "function") {
-      for (const db of await indexedDB.databases())
-        if (db.name?.startsWith(DBNAME_PREFIX))
-          this.legacy.add(
-            db.name.slice(DBNAME_PREFIX.length),
-          );
-    }
+    await migrateLegacyIndexedDb(
+      this.database,
+      this.lifetime.signal,
+      (progress) => {
+        this.migrationProgress = progress;
+        this.migrationListeners.forEach((listener) =>
+          listener(progress),
+        );
+      },
+    );
     for (const volume of this.volumes.values())
       await this.observe(volume);
     await this.scanDirectories();
@@ -268,15 +274,17 @@ export class FileStorageService {
   }
   async storageIds(): Promise<string[]> {
     await this.initialize();
+    const failed = new Set(
+      this.migrationProgress?.failures.map(({ id }) => id),
+    );
     return [
       ...new Set([
-        ...this.legacy,
         ...[...this.directoryListing.values()].flat(),
         ...(await this.database.all<StoredVfsFile>("files"))
           .filter((file) => file.mountId === "indexeddb")
           .map((file) => file.id),
       ]),
-    ];
+    ].filter((id) => !failed.has(id));
   }
   /** Explicit deletion removes the selected path even after content deduplication. */
   async removeDirectorySource(id: string): Promise<void> {
@@ -395,24 +403,13 @@ export class FileStorageService {
     },
   ): Promise<ChunkCache> {
     await this.initialize();
-    // Discover databases created by another window after initialization as well.
-    if (
-      !this.legacy.has(id) &&
-      typeof indexedDB.databases === "function"
-    ) {
-      if (
-        (await indexedDB.databases()).some(
-          (db) => db.name === `${DBNAME_PREFIX}${id}`,
-        )
-      )
-        this.legacy.add(id);
-    }
-    if (this.legacy.has(id))
-      return new IDBChunkCache({
-        id,
-        maxMomeryCacheSize: options.memoryChunks,
-        isRetained: options.isRetained,
-      });
+    const failed = this.migrationProgress?.failures.find(
+      (failure) => failure.id === id,
+    );
+    if (failed)
+      throw new StorageUnavailableError(
+        `Legacy file migration failed: ${failed.error}`,
+      );
     if (!/^[a-zA-Z0-9_-]+$/.test(id))
       throw new Error("Invalid storage ID");
     let directory = this.directoryFiles.has(id);
@@ -469,6 +466,16 @@ export class FileStorageService {
       options.isRetained,
     );
   }
+  onMigrationProgress(
+    listener: (progress: StorageMigrationProgress) => void,
+  ): () => void {
+    this.migrationListeners.add(listener);
+    if (this.migrationProgress)
+      listener(this.migrationProgress);
+    return () => {
+      this.migrationListeners.delete(listener);
+    };
+  }
   onChange(
     listener: (mountId?: string) => void,
   ): () => void {
@@ -489,6 +496,11 @@ export class FileStorageService {
     this.watches.forEach((stop) => stop());
     this.watches.clear();
     this.listeners.clear();
-    void this.database.close();
+    this.migrationListeners.clear();
+    // Migration may still be rolling back staging pages after abort. Close only
+    // after it settles, so its cleanup cannot reopen a disposed service's DB.
+    void (this.initializing ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => this.database.close());
   }
 }

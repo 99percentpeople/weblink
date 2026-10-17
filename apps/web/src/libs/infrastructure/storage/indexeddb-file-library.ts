@@ -6,13 +6,13 @@ import type {
 import {
   requestResult,
   transactionDone,
-} from "./chunk-assembly";
+} from "./indexeddb-helpers";
 import {
   snapshotContentRecord,
   snapshotFileMetadata,
 } from "./metadata-snapshot";
 
-/** Only metadata lives here. File bytes remain in the existing chunk databases. */
+/** Only metadata lives here. File bytes live behind the VFS storage contract. */
 export class IndexedDbFileLibrary implements FileLibraryRepository {
   private opening?: Promise<IDBDatabase>;
   constructor(

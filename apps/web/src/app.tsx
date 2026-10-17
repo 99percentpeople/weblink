@@ -21,6 +21,7 @@ import {
   Show,
 } from "solid-js";
 import { Toaster } from "@/components/ui/sonner";
+import { StorageMigrationToast } from "@/components/files/storage-migration-toast";
 import { AccountMenu } from "@/components/app/account-menu";
 import { NotificationPermissionButton } from "@/components/app/notification-permission-button";
 import { RoomConnectionOverlay } from "@/components/app/room-connection-overlay";
@@ -364,6 +365,7 @@ export default function App(
           }`}
         </Style>
         <Toaster />
+        <StorageMigrationToast />
         <AppDialogsView>
           <AudioPlayerView player={props.runtime.audio} />
           <ModalProvider>

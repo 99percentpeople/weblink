@@ -19,7 +19,7 @@ import {
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import { mergeRanges } from "@/libs/utils/range";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
-import { expectedChunkSize } from "../storage/chunk-assembly";
+import { expectedChunkSize } from "@/libs/domain/file-chunks";
 import { snapshotFileMetadata } from "../storage/metadata-snapshot";
 import { fingerprintBlob } from "../storage/fingerprint";
 import {

@@ -34,10 +34,14 @@ allowed`: `name.ext.weblink`. Ordinary accepted names stay unchanged. Listings,
 - Changing the default selects the destination for new objects and the storage
   shown in the file cache. The open cache list follows the selected mount and
   clears selections from the previous mount. Active transfers, library aliases,
-  and old chunk databases retain their existing storage location.
-- Previous production per-file IndexedDB databases remain readable and resumable
-  without bulk migration. Intermediate development VFS directory indexes and
-  formats are not migrated.
+  and existing files retain their storage mount.
+- Previous production per-file IndexedDB databases automatically migrate to the
+  unified IndexedDB VFS on startup, preserving IDs and committed resume chunks.
+  An app-level toast shows migration and verification progress. Each old database
+  is deleted only after the new copy passes readback verification and its metadata
+  commits. Failed files retain their old databases for retry on the next startup.
+  See [CACHE_ASSEMBLY.md](CACHE_ASSEMBLY.md) for recovery and concurrency rules.
+  Intermediate development VFS directory indexes and formats are not migrated.
 - Real directories have no persistent file list or separate checkpoint records.
   Application settings, directory handles, chat references, content fingerprints
   and explicit sharing permissions remain application metadata. Clearing that

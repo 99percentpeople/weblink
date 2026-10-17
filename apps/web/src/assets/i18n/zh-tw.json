@@ -1455,5 +1455,19 @@
     "stage_commit": "最終儲存",
     "name_blocked": "瀏覽器不允許在此目錄中建立 {{fileName}}。可使用桌面版，或手動選擇瀏覽器儲存空間。",
     "write_blocked": "瀏覽器或系統安全檢查阻止了 {{fileName}} 的儲存。"
+  },
+  "storage_migration": {
+    "title": "遷移檔案快取",
+    "preparing": "正在準備快取遷移",
+    "copying": "正在遷移檔案快取",
+    "verifying": "正在驗證遷移資料",
+    "waiting": "正在等待其他頁面關閉",
+    "deleting": "正在清理已驗證的舊快取",
+    "completed": "檔案快取遷移完成",
+    "failed": "部分檔案遷移失敗",
+    "counts": "已遷移 {{completed}} / {{total}}",
+    "close_other_tabs": "請關閉其他 Weblink 頁面以繼續遷移。",
+    "retained": "失敗檔案的舊資料庫已保留，下次啟動 Weblink 時會自動重試。",
+    "error_details": "錯誤詳情"
   }
 }

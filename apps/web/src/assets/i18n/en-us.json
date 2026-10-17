@@ -1455,5 +1455,19 @@
     "stage_commit": "saving file",
     "name_blocked": "The browser does not allow creating {{fileName}} in this directory. Use the desktop app or select browser storage manually.",
     "write_blocked": "A browser or system security check blocked saving {{fileName}}."
+  },
+  "storage_migration": {
+    "title": "Migrating file cache",
+    "preparing": "Preparing cache migration",
+    "copying": "Migrating file cache",
+    "verifying": "Verifying migrated files",
+    "waiting": "Waiting for other pages",
+    "deleting": "Removing verified old cache",
+    "completed": "File cache migrated",
+    "failed": "Some files could not be migrated",
+    "counts": "Migrated {{completed}} / {{total}}",
+    "close_other_tabs": "Close other Weblink pages to continue.",
+    "retained": "The old databases for failed files are preserved. Migration will retry the next time Weblink starts.",
+    "error_details": "Error details"
   }
 }

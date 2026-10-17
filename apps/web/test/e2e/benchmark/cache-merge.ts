@@ -1,4 +1,5 @@
-import { IDBChunkCache } from "../../../src/libs/infrastructure/storage/indexeddb-chunk-cache";
+import { FileStorageService } from "../../../src/libs/application/file-storage-service";
+import { VfsDatabase } from "../../../src/libs/infrastructure/vfs/database";
 
 const MiB = 1024 * 1024;
 const repetitive = new URLSearchParams(location.search).has(
@@ -44,13 +45,16 @@ async function measure(
     chunks.push(
       input.buffer.slice(offset, offset + chunkSize),
     );
-  const cache = new IDBChunkCache({
-    id: crypto.randomUUID(),
-    maxMomeryCacheSize: 4,
-  });
+  const storage = new FileStorageService(
+    undefined,
+    new VfsDatabase(`benchmark-vfs-${crypto.randomUUID()}`),
+  );
+  const cache = await storage.createCache(
+    crypto.randomUUID(),
+    { memoryChunks: 4, isRetained: () => false },
+  );
   await cache.initialize();
   await cache.setInfo({
-    id: cache.id,
     fileName: "benchmark.bin",
     fileSize: bytes,
     chunkSize,
@@ -63,19 +67,8 @@ async function measure(
     const storedAt = performance.now();
     const file = await cache.getFile();
     const resolvedAt = performance.now();
-    // The old implementation resolved before commit. Confirm that the File can
-    // be read back too, rather than comparing unlike definitions of completion.
-    let persisted = await cache.getInfo();
-    const deadline = performance.now() + 5000;
-    while (
-      !persisted?.file &&
-      performance.now() < deadline
-    ) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, 10),
-      );
-      persisted = await cache.getInfo();
-    }
+    // Confirm VFS metadata and the file reconstructed from committed pages.
+    const persisted = await cache.getInfo();
     const remaining = await cache.getChunkCount();
     const committedAt = performance.now();
     if (!file || file.size !== bytes || !persisted?.file)
@@ -97,11 +90,13 @@ async function measure(
       filePromiseMs: round(resolvedAt - storedAt),
       finalizeMs: round(committedAt - storedAt),
       totalMs: round(committedAt - startedAt),
-      worker: cache.mergeMetrics,
+      storage: "IndexedDB VFS pages",
       sha256: expected,
     };
   } finally {
     await cache.cleanup();
+    cache.dispose?.();
+    storage.dispose();
   }
 }
 

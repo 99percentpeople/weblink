@@ -130,7 +130,7 @@ and verifies Unicode text and line breaks using a real Ctrl+V paste event, with 
 custom formats. The disposable browser context receives clipboard permissions for
 the local test origin.
 `bun run test:e2e:clipboard-cache` covers copying a multi-chunk remote file into File
-cache through real WebRTC data channels, compression/merge/fingerprint Workers and
+cache through real WebRTC data channels, compression/fingerprint Workers, VFS caches and
 IndexedDB. It resets the controller input epoch after 8 MiB has arrived, then
 verifies every byte of the 12 MiB file and successful completion on both peers. It also
 transfers the file in the opposite direction through RemoteFileDrop, checking native
@@ -159,6 +159,12 @@ bun run test:e2e:meeting
 bun run test:e2e:hmr
 bun run test:e2e:speed
 ```
+
+`test:e2e:cache` checks VFS page storage and automatic migration of old per-file
+IndexedDB databases, including partial resume, source sealing, blocked deletion,
+publication rollback and checksum failures. Unit migration tests cover quota
+failure, interruption, destination conflicts and restart recovery. Toast tests
+cover startup replay, progress, blocked connections and retained failure details.
 
 `test:e2e:recovery` uses Node 22+ and Chromium to exercise interrupted initial
 negotiation, repeated simultaneous peer recovery, forced colliding SDP offers,
@@ -335,8 +341,7 @@ bun run bench:browser:cache --repeating
 ```
 
 The benchmark uses real Chromium and IndexedDB but deliberately excludes WebRTC.
-See [CACHE_ASSEMBLY.md](CACHE_ASSEMBLY.md) for the measured operation and historical
-results.
+See [CACHE_ASSEMBLY.md](CACHE_ASSEMBLY.md) for the measured operation and storage contract.
 
 ## Directory layout
 
@@ -361,7 +366,7 @@ Use the narrowest boundary that proves the behavior:
 - `P2PProtocol` resolves a request through a fake transport → **integration**.
 - A dialog reacts to application state in jsdom → **integration**.
 - A real DataChannel sends queued protocol traffic in Chromium → **E2E smoke**.
-- Real IndexedDB + module Worker finalizes a cached file → **E2E smoke**.
+- Real IndexedDB VFS finalizes or migrates a cached file → **E2E smoke**.
 - Timing 128 MiB cache finalization → **benchmark**.
 
 Do not promote every regression to E2E. Prefer unit/integration coverage first,

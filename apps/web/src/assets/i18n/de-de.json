@@ -1455,5 +1455,19 @@
     "stage_commit": "Datei speichern",
     "name_blocked": "Der Browser erlaubt das Erstellen von {{fileName}} in diesem Ordner nicht. Verwenden Sie die Desktop-App oder wählen Sie den Browserspeicher manuell aus.",
     "write_blocked": "Eine Sicherheitsprüfung des Browsers oder Systems hat das Speichern von {{fileName}} blockiert."
+  },
+  "storage_migration": {
+    "title": "Dateicache migrieren",
+    "preparing": "Migration wird vorbereitet",
+    "copying": "Dateicache wird migriert",
+    "verifying": "Migrierte Daten werden geprüft",
+    "waiting": "Warten auf andere Seiten",
+    "deleting": "Geprüfter alter Cache wird entfernt",
+    "completed": "Dateicache migriert",
+    "failed": "Einige Dateien konnten nicht migriert werden",
+    "counts": "Migriert: {{completed}} / {{total}}",
+    "close_other_tabs": "Schließen Sie andere Weblink-Seiten, um fortzufahren.",
+    "retained": "Die alten Datenbanken der fehlgeschlagenen Dateien bleiben erhalten. Beim nächsten Start wird die Migration erneut versucht.",
+    "error_details": "Fehlerdetails"
   }
 }
