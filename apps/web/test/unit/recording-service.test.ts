@@ -40,7 +40,7 @@ class Recorder extends EventTarget {
   mimeType: string;
   constructor(
     readonly stream: Stream,
-    options: MediaRecorderOptions,
+    readonly options: MediaRecorderOptions,
   ) {
     super();
     this.mimeType = options.mimeType!;
@@ -166,6 +166,39 @@ it("drains the final event and queued writes before publishing, and stops only o
   expect(f.video.stop).not.toHaveBeenCalled();
   expect(f.audio.stop).not.toHaveBeenCalled();
   expect(f.port.changed).toHaveBeenLastCalledWith(null);
+});
+
+it("sizes recording quality from the opened video stream, not a native preview placeholder", async () => {
+  const f = fixture();
+  const actual = new Track();
+  Object.assign(actual, {
+    getSettings: () => ({
+      width: 3840,
+      height: 2160,
+      frameRate: 60,
+    }),
+  });
+  Object.assign(f.video, {
+    getSettings: () => ({
+      width: 320,
+      height: 180,
+      frameRate: 15,
+    }),
+  });
+  f.source.open = async () => ({
+    stream: new Stream([actual]) as unknown as MediaStream,
+    close() {},
+  });
+  await f.service.start(f.source);
+  expect(f.recorder().options.videoBitsPerSecond).toBe(
+    40_000_000,
+  );
+  f.recorder().data("first");
+  f.recorder().data("next");
+  await f.service.stop();
+  expect(Recorder.instances).toHaveLength(1);
+  expect(f.recorder().stop).toHaveBeenCalledOnce();
+  expect(f.data.join("")).toBe("firstnextlast");
 });
 it("pauses repeatedly without creating another file or recorder and excludes pauses from the saved duration", async () => {
   const f = fixture();

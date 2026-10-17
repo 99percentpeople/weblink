@@ -5,6 +5,7 @@ import type {
 import type { StoredFile } from "@weblink/platform";
 import { createRecordingAudio } from "./recording-audio";
 import { WebmRecordingMetadata } from "./recording-webm";
+import { recordingVideoBitrate } from "./recording-options";
 
 export interface RecordingInput {
   stream: MediaStream;
@@ -197,6 +198,9 @@ export class RecordingService {
         this.port.recorder ?? MediaRecorder;
       const audio =
         session.input.stream.getAudioTracks().length > 0;
+      const videoBitsPerSecond = recordingVideoBitrate(
+        stream.getVideoTracks()[0]?.getSettings?.(),
+      );
       let cause: unknown = new Error(
         "No supported recording format",
       );
@@ -212,6 +216,7 @@ export class RecordingService {
         try {
           session.recorder = new Constructor(stream, {
             mimeType,
+            videoBitsPerSecond,
           });
           break;
         } catch (error) {
@@ -310,6 +315,7 @@ export class RecordingService {
         throw new Error(
           "The selected video source has ended",
         );
+      // This only flushes encoded bytes; never restart the encoder for each chunk.
       recorder.start(1000);
       session.started = performance.now();
       session.state.phase = "recording";
