@@ -7,6 +7,7 @@ import {
 } from "solid-js";
 import { toast } from "solid-sonner";
 import { ChevronDown } from "lucide-solid";
+import { ToastButton } from "./toast-content";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,31 +86,26 @@ export function showRequestToast(
         </>
       ),
       cancel: (
-        <button
-          type="button"
-          data-button
-          data-cancel
+        <ToastButton
+          variant="secondary"
           disabled={busy()}
           onClick={() =>
             void respond(() => options.respond(false))
           }
         >
           {options.declineLabel()}
-        </button>
+        </ToastButton>
       ),
       action: (
         <div data-request-actions>
-          <button
-            type="button"
-            data-button
-            data-action
+          <ToastButton
             disabled={busy()}
             onClick={() =>
               void respond(() => options.respond(true))
             }
           >
             {options.acceptLabel()}
-          </button>
+          </ToastButton>
           <Show when={options.choices?.length}>
             <DropdownMenu
               placement="bottom-end"

@@ -11,6 +11,7 @@ import {
 import { reconcile } from "solid-js/store";
 import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
+import { ToastContent } from "@/components/ui/toast-content";
 
 import { t } from "@/i18n";
 import {
@@ -42,7 +43,9 @@ function CheckAvailabilityButton(props: {
         try {
           const results = await props.check();
           toast.info(() => (
-            <div class="flex flex-col gap-2 text-xs">
+            <ToastContent
+              title={t("common.action.check_availability")}
+            >
               <For each={results}>
                 {(result) => (
                   <p
@@ -50,7 +53,7 @@ function CheckAvailabilityButton(props: {
                       "space-x-1",
                       result.msg === "available"
                         ? "text-success-foreground"
-                        : "text-destructive-foreground",
+                        : "text-destructive",
                     )}
                   >
                     <span>{result.server}:</span>
@@ -65,7 +68,7 @@ function CheckAvailabilityButton(props: {
                   </p>
                 )}
               </For>
-            </div>
+            </ToastContent>
           ));
         } catch (error) {
           toast.error(

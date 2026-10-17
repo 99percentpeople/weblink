@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import { toast } from "solid-sonner";
 import { Progress } from "@/components/ui/progress";
+import { ToastContent } from "@/components/ui/toast-content";
 import { t } from "@/i18n";
 import { createCacheManager } from "@/libs/application/cache-service";
 import type { FileStorage } from "@/libs/domain/file-storage";
@@ -56,20 +57,18 @@ export function StorageMigrationToast(props: {
     visible = true;
     toast.message(
       () => (
-        <section
+        <ToastContent
           aria-label={t("storage_migration.title")}
-          class="min-w-0 space-y-1.5 text-xs font-normal"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span role="status" class="font-medium">
-              {t(`storage_migration.${progress()!.phase}`)}
-            </span>
+          status
+          title={t(
+            `storage_migration.${progress()!.phase}`,
+          )}
+          trailing={
             <Show when={!finished()}>
-              <span class="text-muted-foreground tabular-nums">
-                {percent()}%
-              </span>
+              <span>{percent()}%</span>
             </Show>
-          </div>
+          }
+        >
           <Show when={!finished()}>
             <p
               class="truncate"
@@ -82,13 +81,14 @@ export function StorageMigrationToast(props: {
               indeterminate={
                 progress()!.phase === "waiting"
               }
+              classList={{
+                "animate-pulse":
+                  progress()!.phase === "waiting",
+              }}
               aria-label={t("storage_migration.title")}
             />
           </Show>
-          <div
-            class="text-muted-foreground flex justify-between gap-2
-              tabular-nums"
-          >
+          <div class="toast-meta">
             <span>
               {t("storage_migration.counts", {
                 completed: progress()!.completedFiles,
@@ -115,7 +115,7 @@ export function StorageMigrationToast(props: {
               <summary class="cursor-pointer">
                 {t("storage_migration.error_details")}
               </summary>
-              <pre class="max-h-40 overflow-auto whitespace-pre-wrap break-all">
+              <pre class="toast-error-details">
                 {progress()!
                   .failures.map(
                     (failure) =>
@@ -125,7 +125,7 @@ export function StorageMigrationToast(props: {
               </pre>
             </details>
           </Show>
-        </section>
+        </ToastContent>
       ),
       {
         id,

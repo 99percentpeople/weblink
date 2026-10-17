@@ -8,7 +8,7 @@
   pointer-events: auto;
 
   [data-sonner-toast][data-styled="true"] {
-    @apply flex-wrap gap-3 rounded-lg px-4 py-3.5 text-sm;
+    @apply flex-wrap items-start gap-3 rounded-lg px-4 py-3.5 text-sm;
     box-shadow:
       0 8px 24px -8px rgb(0 0 0 / 0.18),
       0 2px 6px -2px rgb(0 0 0 / 0.08);
@@ -17,13 +17,15 @@
       @apply min-w-0 flex-1 gap-1;
     }
 
-    [data-title] {
-      @apply font-medium leading-5;
+    [data-title],
+    .toast-heading {
+      @apply text-sm font-medium leading-5;
       overflow-wrap: anywhere;
     }
 
-    [data-description] {
-      @apply text-muted-foreground text-xs leading-5;
+    [data-description],
+    .toast-body {
+      @apply text-muted-foreground text-xs font-normal leading-5;
       overflow-wrap: anywhere;
     }
 
@@ -55,19 +57,52 @@
       @apply m-auto;
     }
 
+    .toast-content {
+      @apply flex min-w-0 flex-col gap-1;
+    }
+
+    .toast-body {
+      @apply flex min-w-0 flex-col gap-2;
+    }
+
+    .toast-header {
+      @apply flex min-w-0 items-start gap-2;
+    }
+
+    .toast-heading {
+      @apply min-w-0 flex-1;
+    }
+
+    .toast-trailing {
+      @apply text-muted-foreground ml-auto flex shrink-0 items-center gap-2 text-xs font-normal tabular-nums;
+    }
+
+    .toast-meta {
+      @apply flex flex-wrap items-center justify-between gap-x-3 gap-y-1 tabular-nums;
+    }
+
+    .toast-error-details {
+      @apply max-h-48 select-text overflow-y-auto whitespace-pre-wrap break-words;
+    }
+
+    [data-toast-actions] {
+      @apply flex flex-wrap justify-end gap-3;
+    }
+
     /* Give actionable notices a full text row, including on narrow screens. */
-    &:has(> [data-button]) [data-content] {
+    &:has(> [data-button], > [data-request-actions])
+      > [data-content] {
       flex-basis: calc(100% - --spacing(8));
     }
 
     [data-button] {
-      @apply m-0 h-auto min-h-8 min-w-0 shrink rounded-md px-3 py-1.5 text-xs font-medium;
+      @apply m-0 inline-flex h-auto min-h-8 min-w-0 shrink items-center justify-center gap-1.5 whitespace-normal rounded-md px-3 py-1.5 text-xs font-medium leading-5;
       transition:
         background-color 150ms,
         box-shadow 150ms;
     }
 
-    [data-button]:first-of-type {
+    > [data-button]:first-of-type {
       margin-inline-start: auto;
     }
 
@@ -96,29 +131,60 @@
       @apply border-primary-foreground/25 m-0 rounded-l-none border-l px-2;
     }
 
-    [data-cancel] {
+    [data-cancel],
+    .toast-secondary-action {
       @apply bg-secondary text-secondary-foreground;
     }
 
-    [data-cancel]:hover {
+    [data-cancel]:hover,
+    .toast-secondary-action:hover {
       @apply bg-secondary/80;
     }
 
-    [data-close-button] {
-      @apply border-border bg-popover text-muted-foreground size-6;
+    [data-destructive] {
+      @apply bg-destructive text-white;
     }
 
-    [data-close-button] svg {
+    [data-destructive]:hover {
+      @apply bg-destructive/90;
+    }
+
+    [data-close-button],
+    [data-toast-dismiss] {
+      @apply text-muted-foreground inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 transition-colors;
+    }
+
+    [data-close-button] {
+      top: --spacing(3);
+      inset-inline-start: auto;
+      inset-inline-end: --spacing(3);
+      transform: none;
+    }
+
+    &:has(> [data-close-button])
+      > [data-content]
+      > [data-title] {
+      padding-inline-end: --spacing(7);
+    }
+
+    [data-close-button] svg,
+    [data-toast-dismiss] svg {
       @apply size-4;
     }
 
-    &:hover [data-close-button]:hover {
-      @apply border-border bg-accent text-accent-foreground;
+    &:hover [data-close-button]:hover,
+    [data-toast-dismiss]:hover {
+      @apply bg-accent text-accent-foreground;
+    }
+
+    [data-toast-dismiss]:disabled {
+      @apply pointer-events-none opacity-50;
     }
 
     &:focus-visible,
     [data-button]:focus-visible,
-    [data-close-button]:focus-visible {
+    [data-close-button]:focus-visible,
+    [data-toast-dismiss]:focus-visible {
       @apply outline-ring outline-2 outline-offset-2;
     }
   }

@@ -1,10 +1,8 @@
-import {
-  IconCheck,
-  IconClose,
-  IconInfo,
-} from "@/components/icons";
+import { IconCheck, IconInfo } from "@/components/icons";
 import { cn } from "@/libs/cn";
+import { t } from "@/i18n";
 import { useColorMode } from "@kobalte/core";
+import { X } from "lucide-solid";
 import IconError from "@material-symbols/svg-400/outlined/error.svg?component-solid";
 import IconWarning from "@material-symbols/svg-400/outlined/warning.svg?component-solid";
 import type {
@@ -23,6 +21,7 @@ const Toaster: Component<ToasterProps> = (props) => {
   const [local, rest] = splitProps(props, [
     "className",
     "position",
+    "toastOptions",
   ]);
   const mergedProps = mergeProps(
     { position: "top-center" as const },
@@ -36,12 +35,16 @@ const Toaster: Component<ToasterProps> = (props) => {
         theme={colorMode()}
         className={cn("toaster", local.className)}
         position={mergedProps.position}
+        toastOptions={{
+          closeButtonAriaLabel: t("common.action.close"),
+          ...local.toastOptions,
+        }}
         icons={{
           success: <IconCheck aria-hidden="true" />,
           info: <IconInfo aria-hidden="true" />,
           warning: <IconWarning aria-hidden="true" />,
           error: <IconError aria-hidden="true" />,
-          close: <IconClose aria-hidden="true" />,
+          close: <X aria-hidden="true" />,
         }}
         style={
           {

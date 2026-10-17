@@ -4,10 +4,12 @@ import {
   createUniqueId,
   Show,
 } from "solid-js";
-import { X } from "lucide-solid";
 import { toast } from "solid-sonner";
 import type { FileImportProgress } from "@/libs/application/file-library-service";
-import { Button } from "@/components/ui/button";
+import {
+  ToastContent,
+  ToastDismissButton,
+} from "@/components/ui/toast-content";
 import { Progress } from "@/components/ui/progress";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
@@ -60,32 +62,25 @@ export function showFileImportProgress(
       );
     toast.message(
       () => (
-        <section
+        <ToastContent
           aria-label={t("file_import_progress.title")}
-          class="min-w-0 space-y-1.5 text-xs font-normal"
+          status
+          title={t(
+            `file_import_progress.${state().ready ? state().progress.phase : "preparing"}`,
+          )}
+          trailing={
+            <>
+              <Show when={state().ready}>
+                <span>{percent()}%</span>
+              </Show>
+              <ToastDismissButton
+                aria-label={t("common.action.cancel")}
+                title={t("common.action.cancel")}
+                onClick={() => controller.abort()}
+              />
+            </>
+          }
         >
-          <div class="flex items-center justify-between gap-2">
-            <span role="status" class="font-medium">
-              {t(
-                `file_import_progress.${state().ready ? state().progress.phase : "preparing"}`,
-              )}
-            </span>
-            <Show when={state().ready}>
-              <span class="text-muted-foreground ml-auto tabular-nums">
-                {percent()}%
-              </span>
-            </Show>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              aria-label={t("common.action.cancel")}
-              title={t("common.action.cancel")}
-              onClick={() => controller.abort()}
-            >
-              <X class="size-3.5" />
-            </Button>
-          </div>
           <Show when={state().fileName}>
             <p class="truncate" title={state().fileName}>
               {state().fileName}
@@ -98,10 +93,7 @@ export function showFileImportProgress(
             aria-label={t("file_import_progress.title")}
           />
           <Show when={state().ready}>
-            <div
-              class="text-muted-foreground flex justify-between gap-2
-                tabular-nums"
-            >
+            <div class="toast-meta">
               <span>
                 {t("file_import_progress.counts", {
                   completed: state().completedFiles,
@@ -114,7 +106,7 @@ export function showFileImportProgress(
               </span>
             </div>
           </Show>
-        </section>
+        </ToastContent>
       ),
       {
         id,

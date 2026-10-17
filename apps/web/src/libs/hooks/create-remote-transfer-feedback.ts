@@ -138,6 +138,9 @@ export function createRemoteTransferFeedback(options: {
               duration: Infinity,
               dismissible: false,
               closeButton: false,
+              classNames: {
+                actionButton: "toast-secondary-action",
+              },
               action: {
                 label: t("common.action.cancel"),
                 onClick: () => void cancel(task.id),

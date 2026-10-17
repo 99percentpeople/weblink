@@ -54,8 +54,7 @@ export function showFileImportError(
   toast.error(title, {
     description,
     classNames: {
-      description:
-        "max-h-48 overflow-y-auto whitespace-pre-wrap break-words select-text",
+      description: "toast-error-details",
     },
     duration: 30000,
     closeButton: true,

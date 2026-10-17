@@ -4,14 +4,16 @@ import {
   createUniqueId,
   Show,
 } from "solid-js";
-import { X } from "lucide-solid";
 import { toast } from "solid-sonner";
 import {
   createFileSaveProgress,
   type FileSaveProgress,
   type StoredFile,
 } from "@weblink/platform";
-import { Button } from "@/components/ui/button";
+import {
+  ToastContent,
+  ToastDismissButton,
+} from "@/components/ui/toast-content";
 import { Progress } from "@/components/ui/progress";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
@@ -142,46 +144,37 @@ function FileSaveProgressContent(props: {
     );
   };
   return (
-    <section
+    <ToastContent
       aria-label={t("file_save_progress.title")}
-      class="min-w-0 space-y-1.5 text-xs font-normal"
-    >
-      <div class="flex items-center justify-between gap-2">
-        <span role="status" class="font-medium">
-          {t(`file_save_progress.${props.state.status}`)}
-        </span>
-        <span class="text-muted-foreground ml-auto tabular-nums">
-          {percent()}%
-        </span>
-        <Show
-          when={active()}
-          fallback={
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-6"
-              aria-label={t("common.action.close")}
-              onClick={props.onDismiss}
-            >
-              <X class="size-3.5" />
-            </Button>
-          }
-        >
-          <Button
-            size="icon"
-            variant="ghost"
-            class="size-6"
-            aria-label={t(
-              "file_save_progress.cancel_remaining",
-            )}
-            title={t("file_save_progress.cancel_remaining")}
-            disabled={props.state.status === "cancelling"}
-            onClick={props.onCancel}
+      status
+      title={t(`file_save_progress.${props.state.status}`)}
+      trailing={
+        <>
+          <span>{percent()}%</span>
+          <Show
+            when={active()}
+            fallback={
+              <ToastDismissButton
+                aria-label={t("common.action.close")}
+                title={t("common.action.close")}
+                onClick={props.onDismiss}
+              />
+            }
           >
-            <X class="size-3.5" />
-          </Button>
-        </Show>
-      </div>
+            <ToastDismissButton
+              aria-label={t(
+                "file_save_progress.cancel_remaining",
+              )}
+              title={t(
+                "file_save_progress.cancel_remaining",
+              )}
+              disabled={props.state.status === "cancelling"}
+              onClick={props.onCancel}
+            />
+          </Show>
+        </>
+      }
+    >
       <Show when={active() && progress().fileIndex > 0}>
         <p class="truncate" title={progress().fileName}>
           {t("file_save_progress.current_file", {
@@ -192,15 +185,13 @@ function FileSaveProgressContent(props: {
         </p>
       </Show>
       <Show when={active() && !progress().fileIndex}>
-        <p class="text-muted-foreground text-xs">
-          {t("file_save_progress.preparing")}
-        </p>
+        <p>{t("file_save_progress.preparing")}</p>
       </Show>
       <Progress
         value={percent()}
         aria-label={t("file_save_progress.title")}
       />
-      <div class="text-muted-foreground flex justify-between gap-2 text-xs">
+      <div class="toast-meta">
         <span>
           {t("file_save_progress.counts", {
             saved: progress().savedFiles,
@@ -223,6 +214,6 @@ function FileSaveProgressContent(props: {
           {props.state.error}
         </p>
       </Show>
-    </section>
+    </ToastContent>
   );
 }

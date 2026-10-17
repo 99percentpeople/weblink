@@ -72,6 +72,9 @@ export function ChatFileDropArea(
       t("common.notification.processing_files"),
       {
         duration: Infinity,
+        classNames: {
+          actionButton: "toast-secondary-action",
+        },
         action: {
           label: t("common.action.cancel"),
           onClick: () =>

@@ -8,7 +8,11 @@ import type {
   FileConflictAction,
   FileConflictResolver,
 } from "@weblink/platform";
-import { Button } from "@/components/ui/button";
+import {
+  ToastActions,
+  ToastButton,
+  ToastContent,
+} from "@/components/ui/toast-content";
 import {
   Checkbox,
   CheckboxControl,
@@ -93,20 +97,15 @@ export function createFileSaveConflictResolver(options: {
                 // background channel only reminds the user and opens this same prompt.
                 toast.message(
                   () => (
-                    <section
+                    <ToastContent
                       id={id}
                       tabIndex={-1}
                       aria-label={t(
                         "file_save_conflict.title",
                       )}
-                      class="min-w-0 space-y-2 text-xs font-normal"
+                      title={t("file_save_conflict.title")}
                     >
-                      <p class="font-medium">
-                        {t("file_save_conflict.title")}
-                      </p>
-                      <p class="text-muted-foreground break-words">
-                        {description()}
-                      </p>
+                      <p>{description()}</p>
                       <Checkbox
                         class="flex items-center gap-2"
                         checked={applyToAll()}
@@ -119,27 +118,24 @@ export function createFileSaveConflictResolver(options: {
                           )}
                         </CheckboxLabel>
                       </Checkbox>
-                      <div class="flex flex-wrap justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
+                      <ToastActions>
+                        <ToastButton
+                          variant="secondary"
                           onClick={() => {
                             if (current())
                               options.controller.abort();
                           }}
                         >
                           {t("common.action.cancel")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
+                        </ToastButton>
+                        <ToastButton
+                          variant="secondary"
                           onClick={() => settle("skip")}
                         >
                           {t("file_save_conflict.skip")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
+                        </ToastButton>
+                        <ToastButton
+                          variant="secondary"
                           onClick={() =>
                             settle("keep_both")
                           }
@@ -147,9 +143,8 @@ export function createFileSaveConflictResolver(options: {
                           {t(
                             "file_save_conflict.keep_both",
                           )}
-                        </Button>
-                        <Button
-                          size="sm"
+                        </ToastButton>
+                        <ToastButton
                           variant="destructive"
                           disabled={!conflict.canOverwrite}
                           onClick={() =>
@@ -159,9 +154,9 @@ export function createFileSaveConflictResolver(options: {
                           {t(
                             "file_save_conflict.overwrite",
                           )}
-                        </Button>
-                      </div>
-                    </section>
+                        </ToastButton>
+                      </ToastActions>
+                    </ToastContent>
                   ),
                   {
                     id,
