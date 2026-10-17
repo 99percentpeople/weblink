@@ -305,7 +305,7 @@ async function main() {
       await value.storeChunk(1, bytes(1, 8).buffer);
       await verifyFile(await value.getFile());
     });
-    await test("completed legacy File is verified and old database removed", async () => {
+    await test("completed legacy File preserves native metadata, is verified and removes the old database", async () => {
       const id = crypto.randomUUID();
       const file = new File(
         [bytes(0, 8), bytes(1, 8), bytes(2, 3)],
@@ -315,7 +315,14 @@ async function main() {
           lastModified: info.lastModified,
         },
       );
-      (await legacyDatabase(id, { ...info, file })).close();
+      // Old completed imports can store metadata only on the File itself.
+      (
+        await legacyDatabase(id, {
+          fileName: file.name,
+          fileSize: file.size,
+          file,
+        })
+      ).close();
       equal((await migrate())?.phase, "completed");
       equal(await exists(id), false);
       await verifyFile(

@@ -42,6 +42,9 @@ const fixture = vi.hoisted(() => ({
   success: vi.fn(),
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/state/app-dialogs-context", () => ({
+  useAppDialogs: () => ({ openFiles: vi.fn() }),
+}));
 vi.mock("solid-sonner", () => ({
   toast: {
     error: fixture.error,

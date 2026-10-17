@@ -13,42 +13,33 @@ import {
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { MountedDirectoryMenu } from "@/components/files/mounted-directory-menu";
-import type { FileStorageService } from "@/libs/application/file-storage-service";
+import type { FileStorage } from "@/libs/domain/file-storage";
 
-const fixture = vi.hoisted(() => {
-  const openDirectory = vi.fn();
-  return {
-    openDirectory,
-    platform: {
-      filesystem: undefined as
-        | { openDirectory: typeof openDirectory }
-        | undefined,
-    },
-  };
-});
-vi.mock("@/libs/platform/runtime", () => ({
-  platform: fixture.platform,
-}));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 const stop = vi.fn();
-const mounts = vi.fn();
+const mounts = vi.fn<FileStorage["mounts"]>();
+const openDirectory = vi.fn<FileStorage["openDirectory"]>();
 const storage = {
   mounts,
+  openDirectory,
   onChange: () => stop,
-} as unknown as FileStorageService;
+} as unknown as FileStorage;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  fixture.platform.filesystem = {
-    openDirectory: fixture.openDirectory,
-  };
-  fixture.openDirectory.mockResolvedValue(undefined);
+  openDirectory.mockResolvedValue(undefined);
   mounts.mockReturnValue([
-    { id: "indexeddb", name: "Browser", kind: "indexeddb" },
+    {
+      id: "indexeddb",
+      name: "Browser",
+      kind: "indexeddb",
+      canOpen: false,
+    },
     {
       id: "native-default",
       name: "C:\\Cache",
       kind: "native",
+      canOpen: true,
     },
   ]);
 });
@@ -69,7 +60,7 @@ it("opens a single mounted root directly with the system file manager and releas
       name: "storage.open_directory",
     }),
   );
-  expect(fixture.openDirectory).toHaveBeenCalledWith(
+  expect(openDirectory).toHaveBeenCalledWith(
     "native-default",
   );
   view.unmount();
@@ -83,6 +74,7 @@ it("lets the user choose among native mounts and never presents IndexedDB as a d
       id: "native-other",
       name: "D:\\Received",
       kind: "native",
+      canOpen: true,
     },
   ]);
   mount();
@@ -96,7 +88,7 @@ it("lets the user choose among native mounts and never presents IndexedDB as a d
       name: "D:\\Received",
     }),
   );
-  expect(fixture.openDirectory).toHaveBeenCalledWith(
+  expect(openDirectory).toHaveBeenCalledWith(
     "native-other",
   );
   expect(
@@ -105,12 +97,20 @@ it("lets the user choose among native mounts and never presents IndexedDB as a d
 });
 
 it("hides the mounted-directory browse feature in the browser", () => {
-  fixture.platform.filesystem = undefined;
+  mounts.mockReturnValue([
+    mounts()[0],
+    {
+      id: "directory-mounted",
+      name: "Mounted folder",
+      kind: "directory",
+      canOpen: false,
+    },
+  ]);
   mount();
   expect(
     screen.queryByRole("button", {
       name: "storage.open_directory",
     }),
   ).not.toBeInTheDocument();
-  expect(fixture.openDirectory).not.toHaveBeenCalled();
+  expect(openDirectory).not.toHaveBeenCalled();
 });

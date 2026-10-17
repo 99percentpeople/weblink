@@ -82,8 +82,11 @@ bun run test
 ```
 
 CI runs unit and integration as separate steps so a failure clearly identifies
-the affected boundary. The shared Checks job runs web/desktop TypeScript checks,
-desktop adapter tests, and Chromium conversation storage and private messaging
+the affected boundary. Vitest runs under Node 24, including when invoked by Bun;
+CI selects it before checks so `structuredClone(File)` preserves file metadata
+in fake IndexedDB. Real Chromium migration coverage verifies the browser contract.
+The shared Checks job runs web/desktop TypeScript checks,
+desktop adapter tests, and Chromium cache migration, conversation storage and private messaging
 regressions once. Web deployment and the Windows development build depend on
 that job. `web-dev.yml`, `web-production.yml`, `desktop-dev.yml`, and
 `desktop-production.yml` are reusable workflows called by `ci.yml`; development

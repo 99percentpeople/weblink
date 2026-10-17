@@ -34,6 +34,13 @@ jobs:
         with:
           bun-version: 1.4.2
 
+      # Vitest runs in Node. Node 22 clones File as Blob, losing metadata before
+      # fake-indexeddb can exercise the browser's File persistence contract.
+      - name: Set up Node for checks and browser regressions
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
       - name: Verify release version and notes
         if: github.ref_type == 'tag'
         run: |
@@ -70,16 +77,12 @@ jobs:
       - name: Run integration tests
         run: bun run test:integration
 
-      - name: Set up Node for browser regressions
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
       - name: Check real browser persistence and private messaging
         timeout-minutes: 5
         env:
           CHROMIUM_PATH: google-chrome
         run: |
+          dbus-run-session -- node apps/web/scripts/run-browser-check.mjs --cache
           dbus-run-session -- node apps/web/scripts/run-browser-check.mjs --conversations
           dbus-run-session -- node apps/web/scripts/run-messaging-check.mjs
 
