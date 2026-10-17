@@ -164,6 +164,19 @@ export default function Home() {
         : undefined)
     );
   });
+  const hasOutgoingControl = createMemo(
+    () =>
+      outgoingControl.state() === "active" ||
+      outgoingControl.state() === "activating",
+  );
+  const hasHeaderStatus = createMemo(() =>
+    Boolean(
+      recording?.state() ||
+      media.sharing() ||
+      controller() ||
+      hasOutgoingControl(),
+    ),
+  );
   const keyboardCollapse = createMeetingKeyboardCollapse();
   const displayedToolbarCollapsed = () =>
     toolbarCollapsed() || keyboardCollapse.collapsed();
@@ -568,9 +581,10 @@ export default function Home() {
         >
           <button
             type="button"
-            class="meeting-heading min-w-0 text-left"
+            class="meeting-heading max-w-1/3 min-w-0 shrink-0 whitespace-nowrap
+              text-left"
             classList={{
-              "max-md:sr-only": media.sharing(),
+              "max-md:sr-only": hasHeaderStatus(),
             }}
             aria-label={t("room_dialog.open")}
             onClick={() =>
@@ -601,112 +615,124 @@ export default function Home() {
             </span>
           </button>
           <div
-            class="meeting-header-actions ml-auto flex min-w-0 shrink flex-wrap
+            class="meeting-header-actions ml-auto flex min-w-0 flex-1
               items-center justify-end gap-2.5 max-md:gap-1"
           >
-            <Show when={recording?.state()}>
-              {(state) => (
-                <MeetingRecordingStatus
-                  state={state()}
-                  onPause={() => recording?.pause()}
-                  onResume={() => recording?.resume()}
-                  onStop={() => recording?.stop()}
-                />
-              )}
+            <Show when={hasHeaderStatus()}>
+              <div class="meeting-status-scroll">
+                <div
+                  class="flex w-max min-w-full items-center justify-end gap-2.5 px-1
+                    max-md:gap-1"
+                >
+                  <Show when={recording?.state()}>
+                    {(state) => (
+                      <MeetingRecordingStatus
+                        state={state()}
+                        onPause={() => recording?.pause()}
+                        onResume={() => recording?.resume()}
+                        onStop={() => recording?.stop()}
+                      />
+                    )}
+                  </Show>
+                  <Show when={media.sharing()}>
+                    <MeetingSharingStatus
+                      name={appState.profile.name}
+                      avatar={
+                        appState.profile.avatar ?? undefined
+                      }
+                      count={
+                        sources().filter(
+                          (source) =>
+                            source.local &&
+                            source.kind === "screen",
+                        ).length
+                      }
+                      onStop={() =>
+                        void media.toggleSharing()
+                      }
+                      audioAvailable={media.sharingAudioAvailable()}
+                      audioOn={media.sharingAudioOn()}
+                      onAudioChange={
+                        media.setSharingAudioEnabled
+                      }
+                    />
+                  </Show>
+                  <Show when={controller()}>
+                    {(active) => (
+                      <MeetingControlStatus
+                        name={active().name}
+                        emergencyShortcut={emergencyShortcut()}
+                        revoke={active().revoke}
+                      />
+                    )}
+                  </Show>
+                  <Show when={hasOutgoingControl()}>
+                    <MeetingControlStatus
+                      side="controller"
+                      name={meeting.selected()?.name ?? ""}
+                      revoke={() =>
+                        outgoingControl.control()?.cancel()
+                      }
+                    >
+                      <RemoteInputToggles
+                        controls={sources().flatMap(
+                          (source) => {
+                            if (
+                              source.id !==
+                                meeting.selected()?.id ||
+                              source.local ||
+                              !source.track
+                            )
+                              return [];
+                            const control =
+                              sessionService.getRemoteControl(
+                                source.track,
+                              );
+                            return control ? [control] : [];
+                          },
+                        )}
+                      />
+                    </MeetingControlStatus>
+                  </Show>
+                </div>
+              </div>
             </Show>
-            <Show when={media.sharing()}>
-              <MeetingSharingStatus
-                name={appState.profile.name}
-                avatar={
-                  appState.profile.avatar ?? undefined
-                }
-                count={
-                  sources().filter(
-                    (source) =>
-                      source.local &&
-                      source.kind === "screen",
-                  ).length
-                }
-                onStop={() => void media.toggleSharing()}
-                audioAvailable={media.sharingAudioAvailable()}
-                audioOn={media.sharingAudioOn()}
-                onAudioChange={media.setSharingAudioEnabled}
-              />
-            </Show>
-            <Show when={controller()}>
-              {(active) => (
-                <MeetingControlStatus
-                  name={active().name}
-                  emergencyShortcut={emergencyShortcut()}
-                  revoke={active().revoke}
-                />
-              )}
-            </Show>
-            <Show
-              when={
-                outgoingControl.state() === "active" ||
-                outgoingControl.state() === "activating"
-              }
-            >
-              <MeetingControlStatus
-                side="controller"
-                name={meeting.selected()?.name ?? ""}
-                revoke={() =>
-                  outgoingControl.control()?.cancel()
+            <div class="flex shrink-0 items-center gap-2.5 max-md:gap-1">
+              <Show
+                when={
+                  !isMobile() &&
+                  devices.access.needsPermission()
                 }
               >
-                <RemoteInputToggles
-                  controls={sources().flatMap((source) => {
-                    if (
-                      source.id !==
-                        meeting.selected()?.id ||
-                      source.local ||
-                      !source.track
+                <button
+                  type="button"
+                  class="meeting-icon-button meeting-permission-button"
+                  aria-label={t("meeting.get_permission")}
+                  title={t("meeting.get_permission")}
+                  onClick={() =>
+                    void openRoomInfo(
+                      state.activeRoomConversationId(),
+                      "devices",
                     )
-                      return [];
-                    const control =
-                      sessionService.getRemoteControl(
-                        source.track,
-                      );
-                    return control ? [control] : [];
-                  })}
-                />
-              </MeetingControlStatus>
-            </Show>
-            <Show
-              when={
-                !isMobile() &&
-                devices.access.needsPermission()
-              }
-            >
+                  }
+                >
+                  <ShieldAlert />
+                  <span>{t("meeting.get_permission")}</span>
+                </button>
+              </Show>
+              <NotificationPermissionButton />
               <button
                 type="button"
-                class="meeting-icon-button meeting-permission-button"
-                aria-label={t("meeting.get_permission")}
-                title={t("meeting.get_permission")}
-                onClick={() =>
-                  void openRoomInfo(
-                    state.activeRoomConversationId(),
-                    "devices",
-                  )
-                }
+                class="meeting-icon-button meeting-member-count"
+                onClick={() => openTab("members")}
+                aria-label={t("meeting.members")}
+                title={t("meeting.members")}
               >
-                <ShieldAlert />
-                <span>{t("meeting.get_permission")}</span>
+                <Users />
+                <span>{clients().length + 1}</span>
               </button>
-            </Show>
-            <NotificationPermissionButton />
-            <button
-              type="button"
-              class="meeting-icon-button meeting-member-count"
-              onClick={() => openTab("members")}
-              aria-label={t("meeting.members")}
-              title={t("meeting.members")}
-            >
-              <Users />
-              <span>{clients().length + 1}</span>
-            </button>
-            <AccountMenu />
+              <AccountMenu />
+            </div>
           </div>
         </header>
         <div

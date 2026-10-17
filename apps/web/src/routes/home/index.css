@@ -47,8 +47,12 @@
 .meeting-member-count {
   @apply gap-1.75 w-auto px-2 py-0 text-[12px];
 }
+.meeting-status-scroll {
+  @apply -my-1 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain py-1;
+  scrollbar-width: none;
+}
 .meeting-status-pill {
-  @apply bg-card flex min-h-9 min-w-0 items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1 text-[12px] max-md:text-[11px];
+  @apply bg-card flex min-h-9 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border py-1 pl-2.5 pr-1 text-[12px] max-md:gap-1 max-md:text-[11px];
 }
 .meeting-status-action {
   @apply text-muted-foreground hover:bg-accent hover:text-accent-foreground inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-colors;

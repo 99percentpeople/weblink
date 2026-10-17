@@ -33,7 +33,7 @@ export function MeetingRecordingStatus(props: {
     t(paused() ? "recording.resume" : "recording.pause");
   return (
     <div
-      class="meeting-status-pill max-w-[440px]"
+      class="meeting-status-pill max-w-[440px] max-md:max-w-60"
       title={`${label()} · ${props.state.name}`}
     >
       <Switch
@@ -59,24 +59,24 @@ export function MeetingRecordingStatus(props: {
       </Switch>
       <div
         role="status"
-        class="flex min-w-0 items-center gap-1.5"
+        class="flex min-w-0 items-center gap-1.5 max-md:gap-1"
         title={`${label()} · ${props.state.name}`}
       >
         <span class="sr-only">{label()}</span>
         <ClientAvatar
-          class="size-6 shrink-0 text-[10px]"
+          class="size-6 shrink-0 text-[10px] max-md:size-5"
           name={participantName()}
           avatar={props.state.avatar}
           role="img"
           aria-label={participantName()}
           title={participantName()}
         />
-        <span class="min-w-0 truncate font-medium">
+        <span class="min-w-0 truncate font-medium max-md:max-w-16">
           {props.state.sourceLabel || props.state.name}
         </span>
       </div>
       <span class="shrink-0 tabular-nums">{elapsed()}</span>
-      <span class="text-muted-foreground shrink-0 tabular-nums max-sm:hidden">
+      <span class="text-muted-foreground shrink-0 tabular-nums max-md:hidden">
         {formatBtyeSize(props.state.bytes)}
       </span>
       <Show when={props.state.phase !== "saving"}>
