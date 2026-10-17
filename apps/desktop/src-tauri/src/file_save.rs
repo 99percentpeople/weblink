@@ -546,6 +546,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let mut state = State::default();
         let id = state.add_directory(directory.path().to_owned()).unwrap();
+        let canonical_directory = directory.path().canonicalize().unwrap();
         std::fs::write(directory.path().join("report.txt"), b"original").unwrap();
         std::fs::create_dir(directory.path().join("report (1).txt")).unwrap();
         for counter in 2..14 {
@@ -560,7 +561,7 @@ mod tests {
             let destination = save.finish().unwrap();
             assert_eq!(
                 destination,
-                directory.path().join(format!("report ({counter}).txt"))
+                canonical_directory.join(format!("report ({counter}).txt"))
             );
             assert_eq!(std::fs::read(destination).unwrap(), [counter]);
         }
