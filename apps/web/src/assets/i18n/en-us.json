@@ -786,6 +786,7 @@
       "reload": "Reload the page after clearing"
     },
     "preview_dialog": {
+      "loading": "Loading preview…",
       "title": "Preview",
       "unsupported_file_type": "Unsupported file type"
     },

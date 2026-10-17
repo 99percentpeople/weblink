@@ -1,13 +1,8 @@
-import {
-  fileObjectUrl,
-  revokeFileUrl,
-} from "@/libs/utils/stored-file";
+import { createFileUrl } from "@/libs/hooks/create-file-url";
 import {
   createEffect,
   createMemo,
-  createSignal,
   For,
-  onCleanup,
   Show,
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
@@ -44,22 +39,11 @@ import type { FileMetaData } from "@/libs/domain/file";
 export function FileThumbnail(props: {
   file: FileMetaData;
 }) {
-  const [url, setUrl] = createSignal<string>();
-  const source = createMemo(() =>
+  const { url } = createFileUrl(() =>
     fileKind(props.file) === "image"
       ? props.file.file
       : undefined,
   );
-  createEffect(() => {
-    const file = source();
-    if (!file) {
-      setUrl(undefined);
-      return;
-    }
-    const value = fileObjectUrl(file);
-    setUrl(value);
-    onCleanup(() => revokeFileUrl(value));
-  });
   const icon = () =>
     ({
       image: Image,

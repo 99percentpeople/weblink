@@ -741,6 +741,7 @@
       "delete_cache": "同時刪除本地快取"
     },
     "preview_dialog": {
+      "loading": "正在載入預覽…",
       "title": "預覽",
       "unsupported_file_type": "不支援的檔案類型"
     },

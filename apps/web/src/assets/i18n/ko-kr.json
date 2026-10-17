@@ -786,6 +786,7 @@
       "reload": "삭제 후 페이지를 새로고침하세요"
     },
     "preview_dialog": {
+      "loading": "미리보기 로딩 중…",
       "title": "미리보기",
       "unsupported_file_type": "지원되지 않는 파일 형식"
     },

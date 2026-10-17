@@ -1,9 +1,6 @@
 import type { StoredFile } from "@weblink/platform";
-import {
-  fileObjectUrl,
-  revokeFileUrl,
-} from "@/libs/utils/stored-file";
-import { onCleanup } from "solid-js";
+import { createFileUrl } from "@/libs/hooks/create-file-url";
+import { LoaderCircle } from "lucide-solid";
 import { createDialog } from "@/components/dialogs/dialog";
 import { t } from "@/i18n";
 import {
@@ -34,12 +31,14 @@ export type PreviewDialogProps = {
 const PreviewContent = (props: {
   src: StoredFile | null;
 }) => {
-  const dataUrl = createMemo(() => {
+  const preview = createFileUrl(() => {
     const file = props.src;
-    if (!file) return null;
-    const url = fileObjectUrl(file);
-    onCleanup(() => revokeFileUrl(url));
-    return url;
+    return file &&
+      /^(image\/|video\/|audio\/|application\/pdf)/.test(
+        file.type,
+      )
+      ? file
+      : undefined;
   });
 
   return (
@@ -53,6 +52,24 @@ const PreviewContent = (props: {
           </>
         }
       >
+        <Match when={preview.error()}>
+          {(error) => (
+            <div
+              role="alert"
+              class="text-muted-foreground space-y-2 text-sm"
+            >
+              <p>{t("errors.file_unavailable")}</p>
+              <p>{error().message}</p>
+            </div>
+          )}
+        </Match>
+        <Match when={preview.loading()}>
+          <LoaderCircle
+            class="size-6 animate-spin"
+            role="status"
+            aria-label={t("common.preview_dialog.loading")}
+          />
+        </Match>
         <Match when={props.src?.type.startsWith("text/")}>
           {(_) => {
             const [text, setText] = createSignal("");
@@ -72,26 +89,29 @@ const PreviewContent = (props: {
         </Match>
         <Match when={props.src?.type.startsWith("image/")}>
           <img
-            src={dataUrl()!}
+            src={preview.url()}
             class="h-full w-full object-contain"
           />
         </Match>
         <Match when={props.src?.type.startsWith("video/")}>
           <video
             controls
-            src={dataUrl()!}
+            src={preview.url()}
             class="h-full w-full object-contain"
           />
         </Match>
         <Match when={props.src?.type.startsWith("audio/")}>
-          <audio controls src={dataUrl()!} />
+          <audio controls src={preview.url()} />
         </Match>
         <Match
           when={props.src?.type.startsWith(
             "application/pdf",
           )}
         >
-          <iframe src={dataUrl()!} class="h-full w-full" />
+          <iframe
+            src={preview.url()}
+            class="h-full w-full"
+          />
         </Match>
       </Switch>
     </div>

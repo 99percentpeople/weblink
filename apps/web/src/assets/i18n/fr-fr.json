@@ -786,6 +786,7 @@
       "reload": "Recharger la page après l'avoir effacée"
     },
     "preview_dialog": {
+      "loading": "Chargement de l’aperçu…",
       "title": "Aperçu",
       "unsupported_file_type": "Type de fichier non pris en charge"
     },

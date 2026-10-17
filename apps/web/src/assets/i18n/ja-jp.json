@@ -786,6 +786,7 @@
       "reload": "クリア後​​にページをリロードしてください"
     },
     "preview_dialog": {
+      "loading": "プレビューを読み込み中…",
       "title": "プレビュー",
       "unsupported_file_type": "サポートされていないファイル形式です"
     },

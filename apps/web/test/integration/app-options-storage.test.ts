@@ -7,6 +7,8 @@ import {
   vi,
 } from "vitest";
 import { STORAGE_KEYS } from "@/constants";
+import { RangeFile } from "@weblink/platform";
+import type { ChunkCache } from "@/libs/domain/file";
 
 const disposers: (() => void)[] = [];
 const boot = async () => {
@@ -38,6 +40,51 @@ beforeEach(() => {
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("restores a paged background image and releases its URL when cleared", async () => {
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = vi.fn(
+        () => "blob:background",
+      );
+      static revokeObjectURL = vi.fn();
+    },
+  );
+  const { setAppState } = await boot();
+  const { backgroundImage } = await import("@/options");
+  const bytes = new TextEncoder().encode("image bytes");
+  const file = new RangeFile(
+    "background.png",
+    bytes.length,
+    "image/png",
+    1,
+    async (offset, length) =>
+      bytes.slice(offset, offset + length).buffer,
+  );
+  setAppState("cache", {
+    status: "ready",
+    caches: {
+      background: {
+        getFile: async () => file,
+      } as unknown as ChunkCache,
+    },
+  });
+  try {
+    setAppState("options", "backgroundImage", "background");
+    await vi.waitFor(() =>
+      expect(backgroundImage()).toBe("blob:background"),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "image/png" }),
+    );
+  } finally {
+    setAppState("options", "backgroundImage", undefined);
+  }
+  expect(backgroundImage()).toBeUndefined();
+  expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
 });
 
 it("round-trips current settings while discarding unknown fields at every settings level", async () => {

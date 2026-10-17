@@ -15,6 +15,10 @@ import { FileStorageService } from "@/libs/application/file-storage-service";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import { IndexedDbVolume } from "@/libs/infrastructure/vfs/indexeddb-volume";
 import { legacyDatabase } from "../../helpers/legacy-indexeddb";
+import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
 
 const assert: (
   value: unknown,
@@ -43,9 +47,8 @@ const rejects = async (
   }
   throw new Error("Expected rejection");
 };
-const database = new VfsDatabase(
-  `cache-vfs-smoke-${crypto.randomUUID()}`,
-);
+const databaseName = `cache-vfs-smoke-${crypto.randomUUID()}`;
+const database = new VfsDatabase(databaseName);
 const storage = new FileStorageService(undefined, database);
 const volume = new IndexedDbVolume(database);
 const controller = new AbortController();
@@ -123,6 +126,77 @@ async function partial() {
 async function main() {
   try {
     await storage.initialize();
+    await test("paged IndexedDB files preview through browser URLs after reopening storage", async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 32;
+      canvas.height = 24;
+      canvas.getContext("2d")!.fillRect(0, 0, 32, 24);
+      const image = await new Promise<Blob>(
+        (resolve, reject) =>
+          canvas.toBlob(
+            (blob) =>
+              blob
+                ? resolve(blob)
+                : reject(
+                    new Error("Image encoding failed"),
+                  ),
+            "image/png",
+          ),
+      );
+      const value = await cache(image.size);
+      await value.setInfo({
+        ...info,
+        fileName: "preview.png",
+        fileSize: image.size,
+        mimetype: image.type,
+        file: new File([image], "preview.png", {
+          type: image.type,
+        }),
+      });
+      const reopened = new FileStorageService(
+        undefined,
+        new VfsDatabase(databaseName),
+      );
+      try {
+        await reopened.initialize();
+        const restored = await reopened.createCache(
+          value.id,
+          { memoryChunks: 4, isRetained: () => false },
+        );
+        caches.push(restored);
+        await restored.initialize();
+        const file = await restored.getFile();
+        assert(
+          file && !(file instanceof Blob),
+          "Preview must exercise a paged file after reopening",
+        );
+        const url = await fileObjectUrl(file);
+        try {
+          const response = await fetch(url);
+          equal(
+            response.headers.get("Content-Type"),
+            "image/png",
+          );
+          equal(
+            await response
+              .arrayBuffer()
+              .then((bytes) => bytes.byteLength),
+            image.size,
+          );
+          const preview = new Image();
+          preview.src = url;
+          await preview.decode();
+          equal(
+            [preview.naturalWidth, preview.naturalHeight],
+            [32, 24],
+          );
+        } finally {
+          revokeFileUrl(url);
+        }
+      } finally {
+        reopened.dispose();
+      }
+    });
     await test("reactive metadata is snapshotted while file bytes use VFS pages", async () => {
       const value = await cache(7);
       const file = new File(["content"], "source.txt", {

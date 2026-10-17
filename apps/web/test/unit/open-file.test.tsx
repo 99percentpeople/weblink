@@ -12,6 +12,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@solidjs/testing-library";
 import {
   RangeFile,
@@ -22,6 +23,7 @@ import {
   createSendItemPreviewDialog,
 } from "@/components/dialogs/preview-dialog";
 import { LocalFileMedia } from "@/components/conversations/local-file-media";
+import { FileThumbnail } from "@/components/files/file-list";
 import { parseMediaHash } from "@/components/conversations/media-hash-route";
 import { sourceForFileUrl } from "@/libs/utils/stored-file";
 
@@ -193,3 +195,132 @@ it.each(["image/png", "video/mp4"])(
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   },
 );
+
+function pagedFile(type: string) {
+  const bytes = new TextEncoder().encode("stored bytes");
+  return new RangeFile(
+    "preview",
+    bytes.length,
+    type,
+    1,
+    async (offset, length) =>
+      bytes.slice(offset, offset + length).buffer,
+  );
+}
+function mockObjectUrls() {
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = vi.fn(() => "blob:paged");
+      static revokeObjectURL = vi.fn();
+    },
+  );
+}
+
+it.each([
+  ["image/png", "img"],
+  ["video/webm", "video"],
+  ["audio/ogg", "audio"],
+  ["application/pdf", "iframe"],
+])(
+  "previews paged %s files and releases their URL",
+  async (type, tag) => {
+    mockObjectUrls();
+    await preview().open(pagedFile(type));
+    const content =
+      fixture.dialog.mock.lastCall![0].content;
+    const view = render(() => content());
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        view.container.querySelector(tag),
+      ).toHaveAttribute("src", "blob:paged"),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledWith(
+      expect.objectContaining({ type }),
+    );
+    view.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(
+      "blob:paged",
+    );
+  },
+);
+
+it("reads paged text directly and skips URL preparation for unsupported files", async () => {
+  mockObjectUrls();
+  const dialog = preview();
+  await dialog.open(pagedFile("text/plain"));
+  const content = fixture.dialog.mock.lastCall![0].content;
+  render(() => content());
+  await waitFor(() =>
+    expect(screen.getByRole("textbox")).toHaveValue(
+      "stored bytes",
+    ),
+  );
+  await dialog.open(pagedFile("application/octet-stream"));
+  expect(
+    screen.getByText(
+      "common.preview_dialog.unsupported_file_type",
+    ),
+  ).toBeInTheDocument();
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+});
+
+it("shows a readable error when paged storage fails", async () => {
+  mockObjectUrls();
+  const file = new RangeFile(
+    "image",
+    10,
+    "image/png",
+    1,
+    async () => {
+      throw new Error("File changed while reading");
+    },
+  );
+  await preview().open(file);
+  const content = fixture.dialog.mock.lastCall![0].content;
+  render(() => content());
+  expect(
+    await screen.findByRole("alert"),
+  ).toHaveTextContent("File changed while reading");
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+});
+
+it("loads paged images in file lists and conversation thumbnails", async () => {
+  mockObjectUrls();
+  const file = pagedFile("image/png");
+  const route = {
+    conversationId: "room",
+    messageId: "message",
+  };
+  const view = render(() => (
+    <>
+      <FileThumbnail
+        file={{
+          id: "image",
+          fileName: "image.png",
+          fileSize: file.size,
+          mimetype: file.type,
+          chunkSize: 1,
+          file,
+          isComplete: true,
+        }}
+      />
+      <LocalFileMedia file={file} route={route} />
+    </>
+  ));
+  await waitFor(() =>
+    expect(
+      view.container.querySelectorAll(
+        'img[src="blob:paged"]',
+      ),
+    ).toHaveLength(2),
+  );
+  expect(screen.getByRole("link")).toHaveAttribute(
+    "data-pswp-src",
+    "blob:paged",
+  );
+  view.unmount();
+  expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+});

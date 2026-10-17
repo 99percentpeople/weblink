@@ -741,6 +741,7 @@
       "delete_cache": "同时删除本地缓存"
     },
     "preview_dialog": {
+      "loading": "正在加载预览…",
       "title": "预览",
       "unsupported_file_type": "不支持的文件类型"
     },

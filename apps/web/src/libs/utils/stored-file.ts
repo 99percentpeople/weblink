@@ -27,7 +27,12 @@ export function namedFile(
       );
 }
 
-export function fileObjectUrl(file: StoredFile): string {
+/** Native and Blob URLs are immediate; paged storage is streamed into a preview Blob. */
+export function fileObjectUrl(
+  file: StoredFile,
+  signal?: AbortSignal,
+): string | Promise<string> {
+  signal?.throwIfAborted();
   if (file instanceof Blob)
     return URL.createObjectURL(file);
   if (file.url) {
@@ -38,7 +43,10 @@ export function fileObjectUrl(file: StoredFile): string {
     });
     return file.url;
   }
-  throw new Error("File preview is unavailable");
+  return materializeBlob(file, signal).then((blob) => {
+    signal?.throwIfAborted();
+    return URL.createObjectURL(blob);
+  });
 }
 export function revokeFileUrl(url: string): void {
   if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -65,8 +73,18 @@ export async function materializeFile(
 }
 export async function materializeBlob(
   file: BinarySource,
+  signal?: AbortSignal,
 ): Promise<Blob> {
-  return file instanceof Blob
-    ? file
-    : new Response(file.stream()).blob();
+  signal?.throwIfAborted();
+  if (file instanceof Blob) return file;
+  // Keep reads bounded; do not allocate a file-sized ArrayBuffer in JavaScript.
+  // The browser owns the resulting Blob until the preview URL is released.
+  const stream = signal
+    ? file.stream().pipeThrough(new TransformStream(), {
+        signal,
+      })
+    : file.stream();
+  return new Response(stream, {
+    headers: { "Content-Type": file.type },
+  }).blob();
 }

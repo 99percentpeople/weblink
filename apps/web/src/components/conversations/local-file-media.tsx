@@ -1,15 +1,6 @@
-import {
-  fileObjectUrl,
-  revokeFileUrl,
-} from "@/libs/utils/stored-file";
+import { createFileUrl } from "@/libs/hooks/create-file-url";
 import type { StoredFile } from "@weblink/platform";
-import {
-  createMemo,
-  Match,
-  onCleanup,
-  Switch,
-  Show,
-} from "solid-js";
+import { Match, Switch, Show } from "solid-js";
 import { MediaThumbnail } from "./media-thumbnail";
 import type { MediaHashRoute } from "./media-hash-route";
 
@@ -21,12 +12,11 @@ export function LocalFileMedia(props: {
 }) {
   const type = () =>
     props.file.type || props.mimeType || "";
-  const url = createMemo(() => {
-    if (!/^(image|video|audio)\//.test(type())) return;
-    const value = fileObjectUrl(props.file);
-    onCleanup(() => revokeFileUrl(value));
-    return value;
-  });
+  const { url } = createFileUrl(() =>
+    /^(image|video|audio)\//.test(type())
+      ? props.file
+      : undefined,
+  );
   return (
     <Show when={url()} keyed>
       {(url) => {

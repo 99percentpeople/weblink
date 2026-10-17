@@ -786,6 +786,7 @@
       "reload": "Vuelva a cargar la página después de borrarla."
     },
     "preview_dialog": {
+      "loading": "Cargando vista previa…",
       "title": "Vista previa",
       "unsupported_file_type": "Tipo de archivo no compatible"
     },

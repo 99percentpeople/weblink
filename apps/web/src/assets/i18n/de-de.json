@@ -786,6 +786,7 @@
       "reload": "Laden Sie die Seite nach dem Löschen neu"
     },
     "preview_dialog": {
+      "loading": "Vorschau wird geladen…",
       "title": "Vorschau",
       "unsupported_file_type": "Nicht unterstützter Dateityp"
     },

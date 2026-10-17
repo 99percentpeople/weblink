@@ -6,6 +6,10 @@ import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import type { StoredFile } from "@weblink/platform";
 import {
+  fileObjectUrl,
+  revokeFileUrl,
+} from "@/libs/utils/stored-file";
+import {
   element,
   unsigned,
 } from "@/libs/application/recording-ebml";
@@ -498,11 +502,8 @@ async function run() {
             decodedAudio.duration > 2 && rms > 0.1,
             `Recording lost the selected source's audio: ${kind}, remote=${remote}, duration=${decodedAudio.duration}, rms=${rms}, stats=${JSON.stringify([...(await sender.getStats()).values()].filter((stat) => stat.kind === "audio"))}, inbound=${JSON.stringify(incomingStats.filter((stat) => stat.kind === "audio"))}`,
           );
-          const url = URL.createObjectURL(
-            new Blob([content], {
-              type: file.type,
-            }),
-          );
+          // Exercise the same preview entry point as the UI, including paged IndexedDB files.
+          const url = await fileObjectUrl(file);
           try {
             player.src = url;
             await waitFor(() => player.readyState >= 1);
@@ -543,7 +544,7 @@ async function run() {
             player.pause();
             player.removeAttribute("src");
             player.load();
-            URL.revokeObjectURL(url);
+            revokeFileUrl(url);
           }
           passed.push(
             `${kind}: ${remote ? "received WebRTC" : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, final playback, source ownership`,

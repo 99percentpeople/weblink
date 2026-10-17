@@ -145,18 +145,22 @@ createEffect(() => {
   const cache = appState.cache.caches[fileId];
   if (!cache) return;
 
-  let cancelled = false;
+  const controller = new AbortController();
   let url: string | null = null;
 
   cache
     .getFile()
-    .then((file) => {
-      if (cancelled || !file) return;
-      url = fileObjectUrl(file);
+    .then(async (file) => {
+      if (controller.signal.aborted || !file) return;
+      url = await fileObjectUrl(file, controller.signal);
+      if (controller.signal.aborted) {
+        revokeFileUrl(url);
+        return;
+      }
       setBackgroundImage(url);
     })
     .catch((error) => {
-      if (!cancelled)
+      if (!controller.signal.aborted)
         console.warn(
           "Unable to load background image",
           error,
@@ -164,7 +168,7 @@ createEffect(() => {
     });
 
   onCleanup(() => {
-    cancelled = true;
+    controller.abort();
     if (url) revokeFileUrl(url);
   });
 });
