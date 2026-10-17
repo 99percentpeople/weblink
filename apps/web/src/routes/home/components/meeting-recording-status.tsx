@@ -32,7 +32,10 @@ export function MeetingRecordingStatus(props: {
   const pauseAction = () =>
     t(paused() ? "recording.resume" : "recording.pause");
   return (
-    <div class="meeting-status-pill max-w-[440px]">
+    <div
+      class="meeting-status-pill max-w-[440px]"
+      title={`${label()} · ${props.state.name}`}
+    >
       <Switch
         fallback={
           <LoaderCircle
@@ -59,14 +62,7 @@ export function MeetingRecordingStatus(props: {
         class="flex min-w-0 items-center gap-1.5"
         title={`${label()} · ${props.state.name}`}
       >
-        <span
-          class="shrink-0"
-          classList={{
-            "sr-only": props.state.phase === "recording",
-          }}
-        >
-          {label()}
-        </span>
+        <span class="sr-only">{label()}</span>
         <ClientAvatar
           class="size-6 shrink-0 text-[10px]"
           name={participantName()}
@@ -85,7 +81,7 @@ export function MeetingRecordingStatus(props: {
       </span>
       <Show when={props.state.phase !== "saving"}>
         <span
-          class="bg-input h-[18px] w-px shrink-0"
+          class="meeting-status-divider"
           aria-hidden="true"
         />
         <Show
@@ -95,8 +91,7 @@ export function MeetingRecordingStatus(props: {
         >
           <button
             type="button"
-            class="meeting-status-action inline-flex items-center
-              justify-center"
+            class="meeting-status-action"
             title={pauseAction()}
             aria-label={pauseAction()}
             onClick={() =>
@@ -121,8 +116,7 @@ export function MeetingRecordingStatus(props: {
         </Show>
         <button
           type="button"
-          class="meeting-status-action inline-flex items-center
-            justify-center"
+          class="meeting-status-action"
           title={action()}
           aria-label={action()}
           onClick={props.onStop}
@@ -131,17 +125,13 @@ export function MeetingRecordingStatus(props: {
             when={props.state.phase === "preparing"}
             fallback={
               <IconStop
-                class="size-4 shrink-0 md:hidden"
+                class="size-4 shrink-0"
                 aria-hidden="true"
               />
             }
           >
-            <X
-              class="size-3.5 shrink-0 md:hidden"
-              aria-hidden="true"
-            />
+            <X class="size-4 shrink-0" aria-hidden="true" />
           </Show>
-          <span class="max-md:hidden">{action()}</span>
         </button>
       </Show>
     </div>

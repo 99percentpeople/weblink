@@ -48,10 +48,19 @@
   @apply gap-1.75 w-auto px-2 py-0 text-[12px];
 }
 .meeting-status-pill {
-  @apply bg-card flex min-h-10 min-w-0 items-center gap-[7px] rounded-full border py-[5px] pl-2.5 pr-1.5 text-[12px] max-md:min-h-9 max-md:gap-[5px] max-md:py-1 max-md:pl-2 max-md:pr-[5px] max-md:text-[11px];
+  @apply bg-card flex min-h-9 min-w-0 items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1 text-[12px] max-md:text-[11px];
 }
 .meeting-status-action {
-  @apply bg-accent text-accent-foreground hover:bg-secondary shrink-0 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] leading-4 max-md:px-2 max-md:py-[5px];
+  @apply text-muted-foreground hover:bg-accent hover:text-accent-foreground inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-colors;
+}
+.meeting-status-action[aria-checked="true"] {
+  @apply bg-accent text-accent-foreground;
+}
+.meeting-status-action svg {
+  @apply size-4;
+}
+.meeting-status-divider {
+  @apply bg-border h-4 w-px shrink-0;
 }
 .meeting-workspace {
   @apply relative flex min-h-0 min-w-0 flex-1 gap-0;

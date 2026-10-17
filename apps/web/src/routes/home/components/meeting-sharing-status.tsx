@@ -1,12 +1,7 @@
 import { Show } from "solid-js";
 import { MonitorUp, Volume2, VolumeX } from "lucide-solid";
 import { ClientAvatar } from "@/components/common/client-avatar";
-import {
-  Switch,
-  SwitchControl,
-  SwitchLabel,
-  SwitchThumb,
-} from "@/components/ui/switch";
+import { IconStop } from "@/components/icons";
 import { t } from "@/i18n";
 
 export function MeetingSharingStatus(props: {
@@ -26,22 +21,25 @@ export function MeetingSharingStatus(props: {
     <div
       class="meeting-sharing-status meeting-status-pill max-w-[560px]"
       data-sharing-count={props.count}
+      title={presenter()}
     >
       <MonitorUp
-        class="text-primary size-4 shrink-0"
+        class="size-4 shrink-0"
         aria-hidden="true"
       />
       <ClientAvatar
-        class="size-6 shrink-0 text-[10px] max-md:hidden"
+        class="size-6 shrink-0 text-[10px]"
         name={props.name}
         avatar={props.avatar}
+        aria-hidden="true"
       />
       <span
         class="meeting-sharing-presenter min-w-0 truncate font-medium"
         title={presenter()}
         role="status"
+        aria-label={presenter()}
       >
-        {presenter()}
+        {props.name}
       </span>
       <Show when={props.count > 1}>
         <span class="text-muted-foreground shrink-0 text-[11px] tabular-nums">
@@ -49,14 +47,17 @@ export function MeetingSharingStatus(props: {
         </span>
       </Show>
       <span
-        class="bg-input h-[18px] w-px shrink-0"
+        class="meeting-status-divider"
         aria-hidden="true"
       />
-      <Switch
-        class="flex shrink-0 items-center gap-1.5 px-1"
-        checked={props.audioOn}
+      <button
+        type="button"
+        role="switch"
+        class="meeting-status-action"
+        aria-label={t("meeting.sharing_audio")}
+        aria-checked={props.audioOn}
         disabled={props.busy || !props.audioAvailable}
-        onChange={props.onAudioChange}
+        onClick={() => props.onAudioChange(!props.audioOn)}
         title={
           !props.audioAvailable
             ? t("meeting.sharing_audio_unavailable")
@@ -65,23 +66,15 @@ export function MeetingSharingStatus(props: {
               : t("meeting.enable_sharing_audio")
         }
       >
-        <SwitchLabel class="flex cursor-pointer items-center">
-          <Show
-            when={props.audioOn}
-            fallback={
-              <VolumeX class="size-4" aria-hidden="true" />
-            }
-          >
-            <Volume2 class="size-4" aria-hidden="true" />
-          </Show>
-          <span class="sr-only">
-            {t("meeting.sharing_audio")}
-          </span>
-        </SwitchLabel>
-        <SwitchControl class="h-5 w-9 bg-[#ffffff26] data-[checked]:bg-[#365889]">
-          <SwitchThumb class="size-4 bg-[#d4e3ff] data-[checked]:translate-x-4" />
-        </SwitchControl>
-      </Switch>
+        <Show
+          when={props.audioOn}
+          fallback={
+            <VolumeX class="size-4" aria-hidden="true" />
+          }
+        >
+          <Volume2 class="size-4" aria-hidden="true" />
+        </Show>
+      </button>
       <button
         type="button"
         class="meeting-status-action"
@@ -90,12 +83,7 @@ export function MeetingSharingStatus(props: {
         disabled={props.busy}
         onClick={props.onStop}
       >
-        <span class="max-md:hidden">
-          {t("meeting.stop_sharing")}
-        </span>
-        <span class="hidden max-md:inline">
-          {t("meeting.stop_sharing_short")}
-        </span>
+        <IconStop class="size-4" aria-hidden="true" />
       </button>
     </div>
   );

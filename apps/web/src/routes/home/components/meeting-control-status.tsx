@@ -1,7 +1,8 @@
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { defaultRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
-import { createSignal, type JSX } from "solid-js";
-import { MousePointer2, Square } from "lucide-solid";
+import { createSignal, Show, type JSX } from "solid-js";
+import { LoaderCircle, MousePointer2 } from "lucide-solid";
+import { IconStop } from "@/components/icons";
 import { t } from "@/i18n";
 
 export function MeetingControlStatus(props: {
@@ -30,28 +31,30 @@ export function MeetingControlStatus(props: {
       ? text
       : `${text} · ${shortcutLabel(props.emergencyShortcut ?? defaultRemoteKeyboardOptions.emergencyShortcut)}`;
   return (
-    <div class="meeting-status-pill max-w-[360px]">
+    <div
+      class="meeting-status-pill max-w-[360px]"
+      title={title(label())}
+    >
       <MousePointer2
-        class="text-primary size-4 shrink-0"
+        class="size-4 shrink-0"
         aria-hidden="true"
       />
       <span
         role="status"
         class="min-w-0 truncate font-medium"
         title={title(label())}
+        aria-label={label()}
       >
-        <span class="max-md:hidden">{label()}</span>
-        <span class="md:hidden" aria-label={label()}>
-          {t(
+        {props.name ||
+          t(
             props.side === "controller"
               ? "remote_control.controller_active_short"
               : "remote_control.host_active_short",
           )}
-        </span>
       </span>
       {props.children}
       <span
-        class="bg-input h-[18px] w-px shrink-0"
+        class="meeting-status-divider"
         aria-hidden="true"
       />
       <button
@@ -70,11 +73,17 @@ export function MeetingControlStatus(props: {
           }
         }}
       >
-        <Square
-          class="size-3.5 md:hidden"
-          aria-hidden="true"
-        />
-        <span class="max-md:hidden">{actionLabel()}</span>
+        <Show
+          when={revoking()}
+          fallback={
+            <IconStop class="size-4" aria-hidden="true" />
+          }
+        >
+          <LoaderCircle
+            class="size-4 animate-spin"
+            aria-hidden="true"
+          />
+        </Show>
       </button>
     </div>
   );

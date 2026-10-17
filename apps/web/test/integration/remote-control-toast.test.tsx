@@ -34,6 +34,9 @@ const fixture = vi.hoisted(() => ({
   approve: vi.fn(),
   revoke: vi.fn(),
 }));
+vi.mock("@/components/icons", () => ({
+  IconStop: () => <svg />,
+}));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     remoteControl: {
@@ -328,8 +331,10 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   ).toBeNull();
   setController({ name: "Alice", revoke });
   expect(
-    screen.getByText("remote_control.host_active: Alice"),
-  ).toBeVisible();
+    screen.getByRole("status", {
+      name: "remote_control.host_active: Alice",
+    }),
+  ).toHaveTextContent("Alice");
   const button = screen.getByRole("button", {
     name: "remote_control.revoke",
   });
@@ -355,6 +360,66 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
       name: "meeting.stop_sharing",
     }),
   ).toBeVisible();
+});
+
+it("toggles shared audio from the status icon and preserves availability and busy guards", async () => {
+  const [audio, setAudio] = createSignal(false);
+  const [available, setAvailable] = createSignal(true);
+  const [busy, setBusy] = createSignal(false);
+  const changed = vi.fn((enabled: boolean) =>
+    setAudio(enabled),
+  );
+  const stop = vi.fn();
+  render(() => (
+    <MeetingSharingStatus
+      name="Host"
+      count={1}
+      audioOn={audio()}
+      audioAvailable={available()}
+      busy={busy()}
+      onAudioChange={changed}
+      onStop={stop}
+    />
+  ));
+  const user = userEvent.setup();
+  const toggle = screen.getByRole("switch", {
+    name: "meeting.sharing_audio",
+  });
+  expect(toggle).toHaveAttribute("aria-checked", "false");
+  expect(toggle).toHaveAttribute(
+    "title",
+    "meeting.enable_sharing_audio",
+  );
+  await user.click(toggle);
+  expect(changed).toHaveBeenLastCalledWith(true);
+  expect(toggle).toHaveAttribute("aria-checked", "true");
+  expect(toggle).toHaveAttribute(
+    "title",
+    "meeting.mute_sharing_audio",
+  );
+  // A native button keeps the icon-only switch keyboard accessible.
+  await user.keyboard(" ");
+  expect(changed).toHaveBeenLastCalledWith(false);
+  setAvailable(false);
+  expect(toggle).toBeDisabled();
+  expect(toggle).toHaveAttribute(
+    "title",
+    "meeting.sharing_audio_unavailable",
+  );
+  await user.click(toggle);
+  expect(changed).toHaveBeenCalledTimes(2);
+  setAvailable(true);
+  setBusy(true);
+  const stopping = screen.getByRole("button", {
+    name: "meeting.stop_sharing",
+  });
+  expect(toggle).toBeDisabled();
+  expect(stopping).toBeDisabled();
+  await user.click(stopping);
+  expect(stop).not.toHaveBeenCalled();
+  setBusy(false);
+  await user.click(stopping);
+  expect(stop).toHaveBeenCalledOnce();
 });
 
 it.each([
