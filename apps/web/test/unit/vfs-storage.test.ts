@@ -79,6 +79,43 @@ const bytes = (...values: number[]) =>
   new Uint8Array(values).buffer;
 
 describe("VFS checkpoints and legacy storage", () => {
+  it("keeps a retained cache's missing state and makes release idempotent after external metadata deletion", async () => {
+    const f = await fixture();
+    const retained = new VfsChunkCache(
+      f.cache.id,
+      f.db,
+      (id) => f.storage.getVolume(id),
+      () => true,
+    );
+    resources.push(retained);
+    await retained.initialize();
+    await f.storage.removeSource(f.cache.id);
+    for (let pass = 0; pass < 2; pass++) {
+      expect(await retained.getInfo()).toMatchObject({
+        storageMountId: "indexeddb",
+        storageMissing: true,
+        isComplete: false,
+        capabilities: { save: "download", reveal: false },
+      });
+      expect((await retained.storageInfo())?.mountId).toBe(
+        "indexeddb",
+      );
+    }
+    await expect(
+      f.cache.cleanup(),
+    ).resolves.toBeUndefined();
+    await expect(
+      f.cache.cleanup(),
+    ).resolves.toBeUndefined();
+    await expect(
+      retained.cleanup({ deleteSource: true }),
+    ).resolves.toBeUndefined();
+    expect(await retained.getInfo()).toBeNull();
+    expect(await f.db.all("files")).toEqual([]);
+    expect(await f.db.all("checkpoints")).toEqual([]);
+    expect(await f.db.all("pages")).toEqual([]);
+  });
+
   it("reports IndexedDB import progress only after payload bytes are written", async () => {
     const f = await fixture();
     const file = new File(["0123456789"], "test.bin");
@@ -376,13 +413,34 @@ describe("VFS checkpoints and legacy storage", () => {
         kind: "native",
       },
     );
+    const openDirectory = vi.fn(async (_id: string) => {});
     const f = await fixture({
       volumes: async () => [native],
       pickDirectory: async () => null,
-      openDirectory: async () => {},
+      openDirectory,
     });
     expect(f.storage.defaultMountId).toBe("native-default");
     expect(f.record.mountId).toBe("native-default");
+    expect(f.storage.mounts()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "native-default",
+          canOpen: true,
+        }),
+        expect.objectContaining({
+          id: "indexeddb",
+          canOpen: false,
+        }),
+      ]),
+    );
+    await f.storage.openDirectory("native-default");
+    expect(openDirectory).toHaveBeenCalledWith(
+      "native-default",
+    );
+    await expect(
+      f.storage.openDirectory("indexeddb"),
+    ).rejects.toThrow("unavailable");
+    expect(openDirectory).toHaveBeenCalledOnce();
     await f.storage.setDefault("indexeddb");
     const next = await f.storage.createCache("next-file", {
       memoryChunks: 4,
@@ -423,7 +481,7 @@ describe("VFS checkpoints and legacy storage", () => {
     );
     resources.push(storage);
     await storage.initialize();
-    expect(await storage.storageIds()).toContain(id);
+    expect(await storage.list()).toContain(id);
     const reopened = await storage.createCache(id, {
       memoryChunks: 4,
       isRetained: () => false,

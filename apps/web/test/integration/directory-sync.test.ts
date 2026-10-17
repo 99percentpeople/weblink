@@ -101,8 +101,12 @@ async function fixture() {
   const pickDirectory = vi
     .fn<() => Promise<VfsVolume | null>>()
     .mockResolvedValue(null);
+  const reveal = vi.fn(
+    async (_mountId: string, _path: string) => {},
+  );
   const storage = new FileStorageService(
     {
+      revealFile: reveal,
       volumes: async () => [volume],
       pickDirectory,
       openDirectory: async () => {},
@@ -119,7 +123,14 @@ async function fixture() {
       data.length,
     );
   };
-  return { storage, manager, volume, write, pickDirectory };
+  return {
+    storage,
+    manager,
+    volume,
+    write,
+    pickDirectory,
+    reveal,
+  };
 }
 const files = () =>
   Object.values(appState.cache.cacheInfo).filter(Boolean);
@@ -133,7 +144,7 @@ const waitNames = (expected: string[]) =>
     interval: 20,
   });
 
-it("retains each reference's actual storage kind and location after the default changes", async () => {
+it("retains each reference's capabilities and mount after the default changes", async () => {
   const f = await fixture();
   await f.manager.initialize();
   const native = (
@@ -141,37 +152,46 @@ it("retains each reference's actual storage kind and location after the default 
       new File(["native"], "report.txt"),
     )
   ).cache;
-  expect((await native.getInfo())?.storageKind).toBe(
-    "native",
-  );
+  expect((await native.getInfo())?.capabilities).toEqual({
+    save: "save-as",
+    inlineSave: false,
+    reveal: true,
+  });
   expect((await native.getInfo())?.storageMountId).toBe(
     "native-default",
   );
-  expect(await native.storageLocation?.()).toEqual({
-    kind: "native",
-    mountId: "native-default",
-    path: "report.txt",
-  });
+  expect((await native.storageInfo?.())?.mountId).toBe(
+    "native-default",
+  );
+  await native.reveal?.();
+  expect(f.reveal).toHaveBeenLastCalledWith(
+    "native-default",
+    "report.txt",
+  );
   await f.storage.setDefault("indexeddb");
   const browser = (
     await f.manager.library.importFile(
       new File(["browser"], "report.txt"),
     )
   ).cache;
-  expect((await browser.getInfo())?.storageKind).toBe(
-    "indexeddb",
-  );
+  expect((await browser.getInfo())?.capabilities).toEqual({
+    save: "download",
+    inlineSave: true,
+    reveal: false,
+  });
   expect((await browser.getInfo())?.storageMountId).toBe(
     "indexeddb",
   );
-  expect(await browser.storageLocation?.()).toEqual({
-    kind: "indexeddb",
-  });
-  expect((await native.getInfo())?.storageKind).toBe(
-    "native",
+  expect((await browser.storageInfo?.())?.mountId).toBe(
+    "indexeddb",
   );
-  expect((await native.storageLocation?.())?.kind).toBe(
-    "native",
+  await expect(browser.reveal?.()).rejects.toThrow(
+    "File location is unavailable",
+  );
+  await native.reveal?.();
+  expect(f.reveal).toHaveBeenLastCalledWith(
+    "native-default",
+    "report.txt",
   );
   const stat = vi
     .spyOn(f.volume, "stat")
@@ -182,7 +202,7 @@ it("retains each reference's actual storage kind and location after the default 
   expect(unavailable?.storageMountId).toBe(
     "native-default",
   );
-  expect(unavailable?.storageKind).toBe("native");
+  expect(unavailable?.capabilities?.save).toBe("save-as");
   expect(unavailable?.storageUnavailable).toBeTruthy();
   stat.mockRestore();
 });
@@ -331,7 +351,7 @@ it("lists existing nested files directly, syncs watch events, and never treats p
     new Uint8Array([1, 2, 3, 4]).buffer,
   );
   await receive.flush();
-  await f.storage.synchronizeDirectories();
+  await f.storage.synchronize();
   expect(await receive.getReqRanges()).toEqual([0, 2]);
   expect((await receive.getInfo())?.isComplete).toBe(false);
 });
@@ -346,19 +366,19 @@ it("preserves directory membership on failed scans, recovers permission, and ret
     .mockRejectedValue(
       new DOMException("Denied", "NotAllowedError"),
     );
-  expect(
-    (await f.storage.synchronizeDirectories()).files,
-  ).toEqual([original.id]);
-  expect(
-    (await f.storage.synchronizeDirectories()).removed,
-  ).toEqual([]);
+  expect((await f.storage.synchronize()).files).toEqual([
+    original.id,
+  ]);
+  expect((await f.storage.synchronize()).removed).toEqual(
+    [],
+  );
   list.mockRestore();
   const stat = vi
     .spyOn(f.volume, "stat")
     .mockResolvedValue(null);
-  expect(
-    (await f.storage.synchronizeDirectories()).removed,
-  ).toEqual([]);
+  expect((await f.storage.synchronize()).removed).toEqual(
+    [],
+  );
   stat.mockRestore();
   const restarted = new FileStorageService(
     {
@@ -369,9 +389,9 @@ it("preserves directory membership on failed scans, recovers permission, and ret
     db(),
   );
   await restarted.initialize();
-  expect(
-    (await restarted.synchronizeDirectories()).files,
-  ).toEqual([original.id]);
+  expect((await restarted.synchronize()).files).toEqual([
+    original.id,
+  ]);
   restarted.dispose();
 });
 
@@ -508,9 +528,7 @@ it("removes the selected source path after deduplication against existing manage
   expect(await f.volume.stat("source.txt")).not.toBeNull();
   await f.manager.remove(source.id);
   expect(await f.volume.stat("source.txt")).toBeNull();
-  expect(
-    (await f.storage.synchronizeDirectories()).files,
-  ).toEqual([]);
+  expect((await f.storage.synchronize()).files).toEqual([]);
 });
 
 it("does not list a managed file twice and verifies retained content again after restart", async () => {
@@ -794,9 +812,9 @@ it("keeps an uncommitted local import out of directory scans and removes it on c
     { signal: controller.signal },
   );
   await entered;
-  expect(
-    (await f.storage.synchronizeDirectories()).files,
-  ).toEqual([files()[0].id]);
+  expect((await f.storage.synchronize()).files).toEqual([
+    files()[0].id,
+  ]);
   controller.abort();
   const rejected = expect(importing).rejects.toMatchObject({
     name: "AbortError",
@@ -962,7 +980,7 @@ it.each(["running", "restarted", "orphaned"])(
     const [content] = await repository.contents();
     expect(content.storageId).toMatch(/^directory_/);
     expect(content.storageId).not.toBe(imported.cache.id);
-    await f.storage.synchronizeDirectories();
+    await f.storage.synchronize();
     if (state !== "running") f.manager.dispose();
     if (state === "orphaned")
       await repository.removeReference(imported.cache.id);
@@ -999,8 +1017,8 @@ it.each(["running", "restarted"])(
       );
     const active =
       state === "restarted" ? await restart(f.volume) : f;
-    await active.storage.synchronizeDirectories();
-    await active.manager.library.reconcileMissingDirectoryFiles();
+    await active.storage.synchronize();
+    await active.manager.library.reconcileMissingFiles();
     expect(await repository.contents()).toEqual(contents);
     expect(await repository.references()).toEqual(refs);
     expect(
@@ -1032,7 +1050,7 @@ it("removes an old version's index without deleting the replacement file", async
   const imported = await f.manager.library.importFile(
     new File(["original"], "replace.txt"),
   );
-  await f.storage.synchronizeDirectories();
+  await f.storage.synchronize();
   await f.write("replace.txt", "replaced");
   await f.storage.authorizeDefault();
   const repository = new IndexedDbFileLibrary();
@@ -1083,8 +1101,8 @@ it("does not infer deletion from a newly mounted root when loading the previous 
   await manager.initialize();
   await storage.mountDirectory();
   await storage.setDefault(next.id);
-  await storage.synchronizeDirectories();
-  await manager.library.reconcileMissingDirectoryFiles();
+  await storage.synchronize();
+  await manager.library.reconcileMissingFiles();
   const repository = new IndexedDbFileLibrary();
   expect(
     await repository.reference(imported.cache.id),
@@ -1105,13 +1123,13 @@ it("does not publish a partial scan or create duplicate entries from concurrent 
   const open = vi
     .spyOn(f.volume, "file")
     .mockRejectedValue(new Error("File busy"));
-  const failed = await f.storage.synchronizeDirectories();
+  const failed = await f.storage.synchronize();
   expect(failed.files).toEqual([first.id]);
   expect(failed.removed).toEqual([]);
   open.mockRestore();
   const scans = await Promise.all([
-    f.storage.synchronizeDirectories(),
-    f.storage.synchronizeDirectories(),
+    f.storage.synchronize(),
+    f.storage.synchronize(),
   ]);
   expect(scans[0].files.sort()).toEqual(
     scans[1].files.sort(),
@@ -1134,7 +1152,7 @@ it("receives missing content again after restart and restores retained attachmen
     new TextEncoder().encode("data").buffer,
   );
   await cache.verifyFile!();
-  await f.storage.synchronizeDirectories();
+  await f.storage.synchronize();
   const reference = f.manager.getCache("received")!;
   expect(reference).not.toBe(cache);
   await f.volume.remove("received.txt");
@@ -1257,3 +1275,119 @@ it("removes a source deleted in another window and clears unavailable state on r
   expect(f.manager.getCache(id)).toBeNull();
   expect(names()).toEqual([]);
 });
+
+it("discovers and removes IndexedDB files written by a separate storage connection through the same catalog", async () => {
+  const name = crypto.randomUUID();
+  const firstDatabase = new VfsDatabase(name);
+  const secondDatabase = new VfsDatabase(name);
+  databases.push(firstDatabase, secondDatabase);
+  const first = new FileStorageService(
+    undefined,
+    firstDatabase,
+  );
+  const second = new FileStorageService(
+    undefined,
+    secondDatabase,
+  );
+  const manager = new FileCacheFactory(first);
+  managers.push(manager);
+  await manager.initialize();
+  try {
+    await second.initialize();
+    const cache = await second.createCache(
+      "opaque-catalog-entry",
+      {
+        memoryChunks: 4,
+        isRetained: () => false,
+      },
+    );
+    await cache.setInfo({
+      fileName: "other-window.txt",
+      fileSize: 4,
+      chunkSize: 4,
+      file: new File(["data"], "other-window.txt"),
+    });
+    await waitNames(["other-window.txt"]);
+    expect(files()[0].capabilities).toEqual({
+      save: "download",
+      inlineSave: true,
+      reveal: false,
+    });
+    expect(await first.list()).toContain(cache.id);
+    await second.removeSource(cache.id);
+    await waitNames([]);
+    expect((await first.synchronize()).files).not.toContain(
+      cache.id,
+    );
+    expect(await firstDatabase.all("checkpoints")).toEqual(
+      [],
+    );
+    expect(await firstDatabase.all("pages")).toEqual([]);
+  } finally {
+    second.dispose();
+  }
+});
+
+it.each(["indexeddb", "native-default"])(
+  "releases missing local pins while retaining chat references through the same lifecycle in %s",
+  async (mountId) => {
+    const f = await fixture();
+    await f.manager.initialize();
+    await f.storage.setDefault(mountId);
+    const imported = await f.manager.library.importFile(
+      new File(["gone"], "gone.txt"),
+    );
+    const attachment = await f.manager.library.prepare(
+      { kind: "library", localFileId: imported.cache.id },
+      { id: "chat-retained", chunkSize: 4 },
+    );
+    const repository = new IndexedDbFileLibrary();
+    const [content] = await repository.contents();
+    const external = await f.storage.createCache(
+      content.storageId,
+      {
+        memoryChunks: 4,
+        isRetained: () => false,
+        existingOnly: true,
+      },
+    );
+    await external.cleanup({ deleteSource: true });
+    await vi.waitFor(async () => {
+      expect(
+        (await repository.references()).map(
+          (ref) => ref.id,
+        ),
+      ).toEqual(["chat-retained"]);
+      expect(libraryFiles(files())).toEqual([]);
+    });
+    expect(
+      await repository.content(content.key),
+    ).toMatchObject({ storageId: content.storageId });
+    expect((await attachment.getInfo())?.isComplete).toBe(
+      false,
+    );
+  },
+);
+
+it.each(["indexeddb", "native-default"])(
+  "releases ownership without deleting user-owned files in %s",
+  async (mountId) => {
+    const f = await fixture();
+    await f.manager.initialize();
+    await f.storage.setDefault(mountId);
+    const imported = await f.manager.library.importFile(
+      new File(["keep"], "keep.txt"),
+    );
+    const volume = await f.storage.getVolume(mountId);
+    await f.manager.library.release(imported.cache.id);
+    expect(
+      await new IndexedDbFileLibrary().contents(),
+    ).toEqual([]);
+    if (mountId === "indexeddb")
+      expect(await volume.list("")).toEqual([]);
+    else
+      expect(
+        (await volume.list("")).map((entry) => entry.name),
+      ).toEqual(["keep.txt"]);
+  },
+);

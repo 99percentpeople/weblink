@@ -2,10 +2,11 @@ import type { ClientID, FileID } from "./ids";
 import type { EventHandler } from "@/libs/utils/event-emitter";
 import type { ChunkRange } from "@/libs/utils/range";
 import type { FileFingerprint } from "./protocol/file-fingerprint";
+import type { StoredFile } from "@weblink/platform";
 import type {
-  FileStorageLocation,
-  StoredFile,
-} from "@weblink/platform";
+  FileStorageInfo,
+  FileCapabilities,
+} from "./file-storage";
 
 export type FileSource =
   | StoredFile
@@ -38,14 +39,14 @@ export interface ChunkMetaData {
 export type ChunkCacheInfo = Omit<ChunkMetaData, "file">;
 
 export interface FileMetaData extends ChunkMetaData {
-  /** Local UI projection of the actual backing store, independent of the selected default. */
-  storageKind?: FileStorageLocation["kind"];
-  /** Actual local mount, including unavailable or unfinished directory files. */
+  /** Local operations on this file; never supplied by remote metadata. */
+  capabilities?: FileCapabilities;
+  /** Actual local mount, including unavailable or unfinished files. */
   storageMountId?: string;
-  /** Directory contents reconstructed without a persisted revision must be verified before reusing a content key. */
+  /** A recovered version must be verified before reusing its retained content key. */
   verifyContent?: boolean;
   storageUnavailable?: string;
-  /** A successful directory scan confirmed this version is absent, unlike lost permission. */
+  /** Storage confirmed this version is absent, unlike temporary loss of access. */
   storageMissing?: boolean;
   chunkCount?: number;
   /** Exact persisted bytes, including a possibly shorter final chunk. */
@@ -76,8 +77,10 @@ export interface ChunkCache {
   readonly id: FileID;
   /** Durable local identity after completion; transfer/reference IDs stay unchanged. */
   storageIdentity?(): Promise<string>;
-  /** Resolve the current physical location, including unfinished directory files. */
-  storageLocation?(): Promise<FileStorageLocation | null>;
+  /** Metadata-only lookup; does not read or verify file contents. */
+  storageInfo?(): Promise<FileStorageInfo | null>;
+  /** Reveal the current source, including an unfinished file, without exposing paths. */
+  reveal?(): Promise<void>;
 
   addEventListener<K extends keyof ChunkCacheEventMap>(
     eventName: K,

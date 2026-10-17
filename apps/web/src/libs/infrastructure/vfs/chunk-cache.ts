@@ -7,10 +7,11 @@ import type {
   FileWriteOptions,
 } from "@/libs/domain/file";
 import type {
-  FileStorageLocation,
+  NativeFileSystem,
   StoredFile,
   VfsVolume,
 } from "@weblink/platform";
+import type { FileStorageInfo } from "@/libs/domain/file-storage";
 import type { FileFingerprint } from "@/libs/domain/protocol/file-fingerprint";
 import {
   StorageUnavailableError,
@@ -42,6 +43,8 @@ export class VfsChunkCache
   private tail: Promise<unknown> = Promise.resolve();
   private closed = false;
   private current?: StoredVfsFile;
+  /** A live cache can prove its known version disappeared even after its metadata was removed. */
+  private missing?: StoredVfsFile;
   private snapshot?: {
     revision: string;
     mountId: string;
@@ -56,6 +59,7 @@ export class VfsChunkCache
     ) => Promise<VfsVolume>,
     private readonly isRetained: () => boolean = () =>
       false,
+    private readonly native?: NativeFileSystem,
   ) {
     super();
   }
@@ -89,12 +93,16 @@ export class VfsChunkCache
   ): Promise<VfsVolume> {
     if (record.error)
       throw new StorageUnavailableError(record.error);
+    // A finalized receive can retire its temporary identity while its payload
+    // is still needed by the active verifier. Only source/tombstone absence is final.
     if (
-      record.source === "directory" &&
-      record.present === false
+      record.present === false &&
+      (record.source === "directory" ||
+        record === this.missing)
     )
       throw new StorageUnavailableError(
-        "Directory file was removed or replaced",
+        "Stored file was removed or replaced",
+        { missing: true },
       );
     const volume = await this.volume(record.mountId);
     if (!record.info) return volume;
@@ -346,7 +354,8 @@ export class VfsChunkCache
     if (batch.length)
       this.dispatchEvent("update", {
         ...record.info,
-        storageKind: volume.kind,
+        capabilities: this.describeStorage(record, volume)
+          .capabilities,
         storageMountId: record.mountId,
         isComplete: false,
         isMerging: false,
@@ -358,10 +367,12 @@ export class VfsChunkCache
     record: StoredVfsFile,
   ): Promise<FileMetaData | null> {
     if (!record.info) return null;
-    let storageKind: FileMetaData["storageKind"];
+    let capabilities: FileMetaData["capabilities"];
     try {
-      storageKind = (await this.volume(record.mountId))
-        .kind;
+      capabilities = this.describeStorage(
+        record,
+        await this.volume(record.mountId),
+      ).capabilities;
       await this.checked(record);
       const complete =
         record.complete ||
@@ -374,7 +385,7 @@ export class VfsChunkCache
         : undefined;
       return {
         ...record.info,
-        storageKind,
+        capabilities,
         storageMountId: record.mountId,
         file,
         storageUnavailable: undefined,
@@ -392,7 +403,7 @@ export class VfsChunkCache
       this.snapshot = undefined;
       return {
         ...record.info,
-        storageKind,
+        capabilities,
         storageMountId: record.mountId,
         file: undefined,
         isComplete: false,
@@ -462,8 +473,10 @@ export class VfsChunkCache
     if (completed) {
       this.dispatchEvent("update", {
         ...record.info!,
-        storageKind: (await this.volume(record.mountId))
-          .kind,
+        capabilities: this.describeStorage(
+          record,
+          await this.volume(record.mountId),
+        ).capabilities,
         storageMountId: record.mountId,
         file,
         verifyContent: record.verifyContent,
@@ -484,6 +497,13 @@ export class VfsChunkCache
         this.current,
       );
       if (!record) {
+        const previous = this.missing ?? this.current;
+        if (previous?.info && this.isRetained()) {
+          this.missing = { ...previous, present: false };
+          clearTimeout(this.timer);
+          this.pending.clear();
+          return this.info(this.missing);
+        }
         // Another window may already have removed this directory entry/cache.
         this.closed = true;
         clearTimeout(this.timer);
@@ -492,6 +512,7 @@ export class VfsChunkCache
         this.dispatchEvent("cleanup", undefined);
         return null;
       }
+      this.missing = undefined;
       this.current = record;
       return this.info(record);
     });
@@ -503,17 +524,48 @@ export class VfsChunkCache
       return this.database.identity?.(record) ?? this.id;
     });
   }
-  async storageLocation(): Promise<FileStorageLocation> {
+  private describeStorage(
+    record: StoredVfsFile,
+    volume: VfsVolume,
+  ): FileStorageInfo {
+    return {
+      mountId: record.mountId,
+      capabilities: {
+        save:
+          volume.kind === "indexeddb"
+            ? "download"
+            : "save-as",
+        inlineSave: volume.kind !== "native",
+        reveal:
+          volume.kind === "native" &&
+          !!this.native?.revealFile,
+      },
+    };
+  }
+  async storageInfo(): Promise<FileStorageInfo | null> {
+    if (this.closed) return null;
+    return this.run(async () => {
+      const record =
+        (await this.database.file(this.id, this.current)) ??
+        this.missing;
+      if (!record) return null;
+      const volume = await this.volume(record.mountId);
+      return this.describeStorage(record, volume);
+    });
+  }
+  async reveal(): Promise<void> {
     return this.run(async () => {
       const record = await this.record();
-      const volume = await this.volume(record.mountId);
-      return volume.kind === "indexeddb"
-        ? { kind: "indexeddb" }
-        : {
-            kind: volume.kind,
-            mountId: record.mountId,
-            path: record.path,
-          };
+      const volume = await this.checked(record);
+      if (
+        !this.describeStorage(record, volume).capabilities
+          .reveal
+      )
+        throw new Error("File location is unavailable");
+      await this.native!.revealFile!(
+        record.mountId,
+        record.path,
+      );
     });
   }
   async getCachedKeys(): Promise<number[]> {
@@ -649,7 +701,17 @@ export class VfsChunkCache
       return;
     clearTimeout(this.timer);
     const removed = await this.run(async () => {
-      const record = await this.record();
+      const record = await this.database.file(
+        this.id,
+        this.current,
+      );
+      if (!record) {
+        this.closed = true;
+        this.pending.clear();
+        this.missing = undefined;
+        this.snapshot = undefined;
+        return true;
+      }
       if (
         this.database.identity &&
         record.present === false

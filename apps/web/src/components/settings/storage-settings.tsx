@@ -63,6 +63,9 @@ export default function StorageSettings() {
   });
   const mode = (): StorageMode =>
     selected() === "indexeddb" ? "indexeddb" : "directory";
+  const canOpenDirectory = () =>
+    mounts().find((mount) => mount.id === selected())
+      ?.canOpen;
   const directories = createMemo(() =>
     mounts().filter((mount) => mount.kind !== "indexeddb"),
   );
@@ -154,16 +157,15 @@ export default function StorageSettings() {
               variant="outline"
               disabled={busy()}
               onClick={() => {
-                const native = platform.filesystem;
-                if (native)
+                if (canOpenDirectory())
                   void run(() =>
-                    native.openDirectory(selected()),
+                    storage.openDirectory(selected()),
                   );
                 else void dialogs.openFiles();
               }}
             >
               {t(
-                platform.kind === "desktop"
+                canOpenDirectory()
                   ? "storage.open_directory"
                   : "storage.open_cache",
               )}

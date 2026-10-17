@@ -20,6 +20,9 @@ import {
 import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import { scanDirectory } from "@/libs/infrastructure/vfs/directory-index";
 
+const reveal = vi.fn(
+  async (_mountId: string, _path: string) => {},
+);
 const resources: { dispose(): void }[] = [];
 const databases: VfsDatabase[] = [];
 beforeEach(() => vi.stubGlobal("File", NodeFile));
@@ -41,6 +44,7 @@ function database() {
 function service(volume: VfsVolume) {
   const storage = new FileStorageService(
     {
+      revealFile: reveal,
       volumes: async () => [volume],
       pickDirectory: async () => null,
       openDirectory: async () => {},
@@ -138,14 +142,14 @@ async function reopen(volume: VfsVolume, id = "receive") {
 }
 it("recovers out-of-order zero-filled chunks from the file alone and removes its trailer on completion", async () => {
   const f = await fixture();
-  expect((await f.cache.getInfo())?.storageKind).toBe(
-    "native",
+  expect(
+    (await f.cache.getInfo())?.capabilities?.reveal,
+  ).toBe(true);
+  await f.cache.reveal?.();
+  expect(reveal).toHaveBeenLastCalledWith(
+    "native-default",
+    f.path,
   );
-  expect(await f.cache.storageLocation?.()).toEqual({
-    kind: "native",
-    mountId: "native-default",
-    path: f.path,
-  });
   expect(
     (await f.volume.stat(f.path))!.size,
   ).toBeGreaterThan(10);
@@ -166,11 +170,11 @@ it("recovers out-of-order zero-filled chunks from the file alone and removes its
   ]).toEqual([0, 0, 0, 0, 5, 6, 7, 8, 9, 10]);
   expect(await f.volume.stat(f.path)).toBeNull();
   expect((await f.volume.stat(f.finalPath))!.size).toBe(10);
-  expect(await restored.cache.storageLocation?.()).toEqual({
-    kind: "native",
-    mountId: "native-default",
-    path: f.finalPath,
-  });
+  await restored.cache.reveal?.();
+  expect(reveal).toHaveBeenLastCalledWith(
+    "native-default",
+    f.finalPath,
+  );
   const completedId =
     await restored.cache.storageIdentity!();
   const again = await reopen(f.volume, completedId);
@@ -320,9 +324,9 @@ it("follows a renamed partial file in the mounted root without writing an index"
     size,
   );
   await f.volume.remove(f.path);
-  expect(
-    (await f.storage.synchronizeDirectories()).files,
-  ).toEqual(["receive"]);
+  expect((await f.storage.synchronize()).files).toEqual([
+    "receive",
+  ]);
   expect(await f.cache.getReqRanges()).toEqual([[0, 1]]);
   await f.cache.storeChunk(0, bytes(1, 2, 3, 4));
   await f.cache.storeChunk(1, bytes(5, 6, 7, 8));
@@ -395,7 +399,7 @@ it("discovers completed renamed files without reusing the stale path", async () 
           : entry,
       ),
   );
-  const listing = await f.storage.synchronizeDirectories();
+  const listing = await f.storage.synchronize();
   expect(
     (await f.cache.getInfo())?.storageUnavailable,
   ).toBeTruthy();

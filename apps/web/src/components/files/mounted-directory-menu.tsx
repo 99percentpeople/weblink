@@ -5,7 +5,6 @@ import {
   onMount,
   Show,
 } from "solid-js";
-import type { VfsVolumeInfo } from "@weblink/platform";
 import { ChevronDown, FolderOpen } from "lucide-solid";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,32 +13,34 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FileStorageService } from "@/libs/application/file-storage-service";
-import { platform } from "@/libs/platform/runtime";
+import type {
+  FileStorage,
+  FileStorageMount,
+} from "@/libs/domain/file-storage";
 import { userErrorMessage } from "@/libs/user-error";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
 
 /** Mounted native roots open in the system file manager. */
 export function MountedDirectoryMenu(props: {
-  storage: FileStorageService;
+  storage: FileStorage;
 }) {
-  const [mounts, setMounts] = createSignal<VfsVolumeInfo[]>(
-    [],
-  );
+  const [mounts, setMounts] = createSignal<
+    FileStorageMount[]
+  >([]);
   onMount(() => {
     const refresh = () =>
       setMounts(
         props.storage
           .mounts()
-          .filter((mount) => mount.kind === "native"),
+          .filter((mount) => mount.canOpen),
       );
     refresh();
     onCleanup(props.storage.onChange(refresh));
   });
   const open = (id: string) => {
-    void platform.filesystem
-      ?.openDirectory(id)
+    void props.storage
+      .openDirectory(id)
       .catch((error) =>
         toast.error(
           userErrorMessage(error, "errors.file_failed"),
@@ -47,7 +48,7 @@ export function MountedDirectoryMenu(props: {
       );
   };
   return (
-    <Show when={platform.filesystem && mounts().length}>
+    <Show when={mounts().length}>
       <Show
         when={mounts().length === 1}
         fallback={

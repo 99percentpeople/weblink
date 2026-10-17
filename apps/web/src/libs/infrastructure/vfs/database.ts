@@ -67,7 +67,39 @@ export interface VfsFileStore {
 
 export class VfsDatabase {
   private opening?: Promise<IDBDatabase>;
+  private readonly listeners = new Set<() => void>();
+  private channel?: BroadcastChannel;
   constructor(private readonly name = "weblink-vfs-v1") {}
+  /** Invalidation follows both committed bytes and metadata publication/removal. */
+  changed(): void {
+    this.listeners.forEach((listener) => listener());
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel =
+      this.channel ??
+      new BroadcastChannel(`weblink-vfs:${this.name}`);
+    channel.postMessage(null);
+    if (channel !== this.channel) channel.close();
+  }
+  watch(listener: () => void): () => void {
+    this.listeners.add(listener);
+    if (
+      !this.channel &&
+      typeof BroadcastChannel !== "undefined"
+    ) {
+      this.channel = new BroadcastChannel(
+        `weblink-vfs:${this.name}`,
+      );
+      this.channel.onmessage = () =>
+        this.listeners.forEach((value) => value());
+    }
+    return () => {
+      this.listeners.delete(listener);
+      if (!this.listeners.size) {
+        this.channel?.close();
+        this.channel = undefined;
+      }
+    };
+  }
   open(): Promise<IDBDatabase> {
     return (this.opening ??= new Promise(
       (resolve, reject) => {
@@ -134,6 +166,7 @@ export class VfsDatabase {
     const done = transactionDone(tx);
     tx.objectStore(store).put(value, key);
     await done;
+    if (store === "files") this.changed();
   }
   async delete(
     store: string,
@@ -146,8 +179,12 @@ export class VfsDatabase {
     const done = transactionDone(tx);
     tx.objectStore(store).delete(key);
     await done;
+    if (store === "files") this.changed();
   }
   async close(): Promise<void> {
+    this.channel?.close();
+    this.channel = undefined;
+    this.listeners.clear();
     (await this.opening)?.close();
     this.opening = undefined;
   }
@@ -235,6 +272,7 @@ export class VfsDatabase {
       );
       await done;
       record.checkpointVersion = checkpointVersion;
+      this.changed();
     } catch (error) {
       try {
         tx.abort();
@@ -257,5 +295,6 @@ export class VfsDatabase {
       ),
     );
     await done;
+    this.changed();
   }
 }

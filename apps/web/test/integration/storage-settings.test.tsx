@@ -25,6 +25,7 @@ const fixture = vi.hoisted(() => {
     listeners: new Set<() => void>(),
   };
   const stat = vi.fn();
+  const openDirectory = vi.fn();
   const storage = {
     get defaultMountId() {
       return state.selected;
@@ -32,7 +33,12 @@ const fixture = vi.hoisted(() => {
     get canMountDirectory() {
       return state.canMount;
     },
-    mounts: () => [...state.mounts],
+    mounts: () =>
+      state.mounts.map((mount) => ({
+        ...mount,
+        canOpen: mount.kind === "native",
+      })),
+    openDirectory,
     initialize: vi.fn(),
     onChange: (listener: () => void) => {
       state.listeners.add(listener);
@@ -43,7 +49,6 @@ const fixture = vi.hoisted(() => {
     getVolume: vi.fn(),
     authorize: vi.fn(),
   };
-  const openDirectory = vi.fn();
   const platform = {
     kind: "browser" as "browser" | "desktop",
     filesystem: undefined as
@@ -150,7 +155,7 @@ it("keeps paths out of the method selector and opens the selected desktop root w
       name: "C:\\Default",
       kind: "native",
     },
-    directory,
+    { ...directory, kind: "native" },
   );
   fixture.state.selected = directory.id;
   await mount();

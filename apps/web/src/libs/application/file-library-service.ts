@@ -277,7 +277,7 @@ export class FileLibraryService {
         ) !== record.key
       )
         throw new StorageUnavailableError(
-          "Directory file no longer matches its retained content fingerprint",
+          "Stored file no longer matches its retained content fingerprint",
         );
       return info?.isComplete &&
         info.file?.size === record.fingerprint.size
@@ -384,11 +384,10 @@ export class FileLibraryService {
               current.contentKey,
             ));
           if (!content) return null;
-          const source = await this.options.storage(
+          return this.options.storage(
             content.storageId,
             true,
           );
-          return source.storageLocation?.() ?? null;
         },
       );
       this.references.set(ref.id, cache);
@@ -971,7 +970,7 @@ export class FileLibraryService {
     if (ref && !ref.libraryPinned) await this.release(id);
   }
 
-  async releaseDirectoryPin(id: string): Promise<void> {
+  async releaseStoragePin(id: string): Promise<void> {
     const direct = await this.repository.reference(id);
     const records = (
       await this.repository.contents()
@@ -986,11 +985,11 @@ export class FileLibraryService {
           record.key,
         );
         if (current)
-          await this.releaseDirectoryPins(current, id);
+          await this.releaseStoragePins(current, id);
       });
   }
 
-  private async releaseDirectoryPins(
+  private async releaseStoragePins(
     record: ContentRecord,
     id: string,
   ): Promise<void> {
@@ -1007,8 +1006,8 @@ export class FileLibraryService {
     if (!refs.length) await this.removeRecord(record);
   }
 
-  /** Startup has no previous directory listing, so reconcile retained pins against confirmed absence too. */
-  async reconcileMissingDirectoryFiles(): Promise<void> {
+  /** Startup has no previous listing; only confirmed absence can release local pins. */
+  async reconcileMissingFiles(): Promise<void> {
     const refs = await this.repository.references();
     const retained = new Set(
       refs.map((ref) => ref.contentKey),
@@ -1024,7 +1023,6 @@ export class FileLibraryService {
     for (const record of await this.repository.contents()) {
       if (
         record.state !== "ready" ||
-        !record.storageId.startsWith("directory_") ||
         (retained.has(record.key) && !local.has(record.key))
       )
         continue;
@@ -1037,14 +1035,19 @@ export class FileLibraryService {
           current.state !== "ready"
         )
           return;
-        const cache = await this.options.storage(
-          current.storageId,
-          true,
-        );
-        // Inaccessibility alone cannot prove deletion. A successful scan must
-        // have confirmed that this exact directory version is absent.
-        if ((await cache.getInfo())?.storageMissing)
-          await this.releaseDirectoryPins(
+        const cache = await this.options
+          .storage(current.storageId, true)
+          .catch((error) => {
+            if (error instanceof StorageUnavailableError)
+              return null;
+            throw error;
+          });
+        if (!cache) return;
+        // Permission loss and migration failures must retain references. A closed
+        // cache or a confirmed missing version can release local ownership.
+        const info = await cache.getInfo();
+        if (!info || info.storageMissing)
+          await this.releaseStoragePins(
             current,
             current.storageId,
           );
@@ -1065,8 +1068,6 @@ export class FileLibraryService {
   ): Promise<void> {
     const id = reference.id;
     await this.repository.removeReference(id);
-    this.references.get(id)?.invalidate();
-    this.references.delete(id);
     if (
       !(
         await this.repository.references(
@@ -1079,6 +1080,8 @@ export class FileLibraryService {
       );
       if (record) await this.removeRecord(record);
     }
+    this.references.get(id)?.invalidate();
+    this.references.delete(id);
     this.changed();
   }
 

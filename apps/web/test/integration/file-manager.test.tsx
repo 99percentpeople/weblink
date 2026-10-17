@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { fileCapabilities } from "../support/file-capabilities";
 import {
   afterEach,
   beforeEach,
@@ -38,7 +39,6 @@ const fixture = vi.hoisted(() => {
   return {
     openDirectory,
     revealFile,
-    storageLocation: vi.fn(),
     saveFile: vi.fn(),
     saveFileAs: vi.fn(),
     saveFilesAs: vi.fn(),
@@ -75,10 +75,11 @@ vi.mock("@/i18n", () => ({
 vi.mock("@/libs/application/cache-service", () => ({
   cacheManager: {
     getCache: (id: string) => ({
-      storageLocation: fixture.storageLocation,
+      reveal: fixture.revealFile,
       getInfo: async () => appState.cache.cacheInfo[id],
     }),
     storage: {
+      openDirectory: fixture.openDirectory,
       get defaultMountId() {
         return fixture.storageState.selected;
       },
@@ -87,6 +88,7 @@ vi.mock("@/libs/application/cache-service", () => ({
           id: "native-default",
           name: "Cache",
           kind: "native",
+          canOpen: !!fixture.platform.filesystem,
         },
       ],
       onChange: (listener: () => void) => {
@@ -145,7 +147,7 @@ beforeEach(() => {
       fileName: file.name,
       fileSize: file.size,
       isComplete: id !== "partial",
-      storageKind: "indexeddb",
+      capabilities: fileCapabilities.indexeddb,
       storageMountId: "indexeddb",
       file: id === "partial" ? undefined : file,
     });
@@ -191,7 +193,7 @@ function storageFiles(
 ) {
   for (const id of ids)
     setAppState("cache", "cacheInfo", id, {
-      storageKind: kind,
+      capabilities: fileCapabilities[kind],
       storageMountId: mountId,
     });
   return mountId;
@@ -898,11 +900,6 @@ it("reveals unfinished physical files without opening or exporting their bytes",
   selectStorage(
     storageFiles(["partial"], "native", "native-other"),
   );
-  fixture.storageLocation.mockResolvedValue({
-    kind: "native",
-    mountId: "native-other",
-    path: "nested/partial (1).txt.part",
-  });
   mount();
   await fileMenu("partial.txt");
   await userEvent.click(
@@ -911,10 +908,7 @@ it("reveals unfinished physical files without opening or exporting their bytes",
     }),
   );
   await waitFor(() =>
-    expect(fixture.revealFile).toHaveBeenCalledWith(
-      "native-other",
-      "nested/partial (1).txt.part",
-    ),
+    expect(fixture.revealFile).toHaveBeenCalledOnce(),
   );
   expect(fixture.downloadFile).not.toHaveBeenCalled();
   expect(fixture.saveFileAs).not.toHaveBeenCalled();
@@ -1046,6 +1040,8 @@ it.each(["directory", "native"] as const)(
     setAppState("cache", "cacheInfo", "legacy", {
       id: "legacy",
       fileName: legacy.name,
+      storageMountId: "indexeddb",
+      capabilities: fileCapabilities.indexeddb,
       fileSize: legacy.size,
       file: legacy,
       isComplete: true,

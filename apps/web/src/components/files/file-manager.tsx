@@ -40,9 +40,9 @@ import DropArea from "@/components/drop-area";
 import { FileDropOverlay } from "@/components/file-drop-overlay";
 import { createLibraryImport } from "@/libs/hooks/create-library-import";
 import { MountedDirectoryMenu } from "./mounted-directory-menu";
-import { platform } from "@/libs/platform/runtime";
 import { useNotifications } from "@/libs/state/notifications-context";
 import { saveFilesWithFeedback } from "./save-files-with-feedback";
+import { revealFile } from "@/libs/utils/file-save-action";
 
 export default function FileManager() {
   const [mountId, setMountId] = createSignal(
@@ -69,14 +69,12 @@ export default function FileManager() {
   });
   const selectedDownloads = createMemo(() =>
     selected().filter(
-      (file) => file.storageKind === "indexeddb",
+      (file) => file.capabilities?.save === "download",
     ),
   );
   const selectedSaveAs = createMemo(() =>
     selected().filter(
-      (file) =>
-        file.storageKind === "directory" ||
-        file.storageKind === "native",
+      (file) => file.capabilities?.save === "save-as",
     ),
   );
   const saveSelectionLabel = () =>
@@ -281,18 +279,7 @@ export default function FileManager() {
       return;
     }
     if (action === "reveal") {
-      const location = await cacheManager
-        .getCache(file.id)
-        ?.storageLocation?.();
-      if (
-        location?.kind !== "native" ||
-        !platform.filesystem?.revealFile
-      )
-        throw new Error("File location is unavailable");
-      await platform.filesystem.revealFile(
-        location.mountId,
-        location.path,
-      );
+      await revealFile(cacheManager.getCache(file.id));
       return;
     }
     if (action === "save_as") {
@@ -370,11 +357,9 @@ export default function FileManager() {
           }}
         />
         <div class="flex flex-wrap items-center gap-2">
-          <Show when={platform.filesystem}>
-            <MountedDirectoryMenu
-              storage={cacheManager.storage}
-            />
-          </Show>
+          <MountedDirectoryMenu
+            storage={cacheManager.storage}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger
               as={Button}

@@ -153,7 +153,7 @@ it("reads a native receive once across finalization, publication, aliases and di
 
 it("keeps an active receive alive when a directory scan replaces its temporary identity during verification", async () => {
   const f = await receive();
-  await f.storage.synchronizeDirectories();
+  await f.storage.synchronize();
   let active = true;
   f.manager.isCacheInUse = (cache) =>
     active && cache === f.cache;
@@ -364,7 +364,7 @@ it("verifies a physical copy separately and reuses both verified versions during
   // One read to verify the source, one to copy it and one to verify the committed destination.
   expect(readBytes(volume)).toBe(3 * f.payload.length);
   volume.reads.length = 0;
-  const listing = await f.storage.synchronizeDirectories();
+  const listing = await f.storage.synchronize();
   expect(listing.files).toEqual(["received"]);
   await f.cache.verifyFile!();
   expect(await volume.stat("large.dll.part")).toBeNull();

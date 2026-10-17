@@ -1,7 +1,5 @@
-import type {
-  FileStorageLocation,
-  StoredFile,
-} from "@weblink/platform";
+import type { StoredFile } from "@weblink/platform";
+import type { FileCapabilities } from "@/libs/domain/file-storage";
 import {
   children,
   createMemo,
@@ -21,7 +19,7 @@ import { fileOpenLabel } from "@/libs/utils/open-file";
 /** Shared presentation only: the caller decides whether bytes are available. */
 export function FileAttachmentBubble(props: {
   file?: StoredFile;
-  storageKind?: FileStorageLocation["kind"];
+  capabilities?: FileCapabilities;
   route: MediaHashRoute;
   name: string;
   size: number;
@@ -36,7 +34,7 @@ export function FileAttachmentBubble(props: {
 }) {
   const { open: preview } = createPreviewDialog();
   const saveAction = createMemo(() =>
-    fileSaveAction(props.storageKind),
+    fileSaveAction(props.capabilities),
   );
   const details = children(() => props.details);
   const media = () =>
@@ -50,8 +48,7 @@ export function FileAttachmentBubble(props: {
     );
   const showOpen = () => !media() && localActionLimit() > 0;
   const showSave = () =>
-    (platform.kind !== "desktop" ||
-      props.storageKind !== "native") &&
+    props.capabilities?.inlineSave !== false &&
     localActionLimit() > Number(!media());
   return (
     <div

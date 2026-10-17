@@ -26,8 +26,6 @@ export class IndexedDbVolume implements VfsVolume {
     commit: "transaction",
     watch: "events",
   } as const;
-  private listeners = new Set<() => void>();
-  private channel?: BroadcastChannel;
   constructor(private readonly database: VfsDatabase) {}
   async stat(path: string): Promise<VfsStat | null> {
     vfsPath(path);
@@ -210,7 +208,7 @@ export class IndexedDbVolume implements VfsVolume {
       };
       nodes.put(node, path);
       await done;
-      this.changed();
+      this.database.changed();
       return node;
     } catch (error) {
       try {
@@ -235,7 +233,7 @@ export class IndexedDbVolume implements VfsVolume {
       ),
     );
     await done;
-    this.changed();
+    this.database.changed();
   }
   async file(
     path: string,
@@ -282,28 +280,7 @@ export class IndexedDbVolume implements VfsVolume {
       throw error;
     }
   }
-  private changed(): void {
-    this.listeners.forEach((listener) => listener());
-    this.channel?.postMessage(null);
-  }
   async watch(changed: () => void): Promise<() => void> {
-    this.listeners.add(changed);
-    if (
-      !this.channel &&
-      typeof BroadcastChannel !== "undefined"
-    ) {
-      this.channel = new BroadcastChannel(
-        "weblink-vfs-files",
-      );
-      this.channel.onmessage = () =>
-        this.listeners.forEach((listener) => listener());
-    }
-    return () => {
-      this.listeners.delete(changed);
-      if (!this.listeners.size) {
-        this.channel?.close();
-        this.channel = undefined;
-      }
-    };
+    return this.database.watch(changed);
   }
 }

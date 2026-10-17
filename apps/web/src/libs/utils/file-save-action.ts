@@ -1,25 +1,23 @@
-import type {
-  FileStorageLocation,
-  StoredFile,
-} from "@weblink/platform";
+import type { StoredFile } from "@weblink/platform";
+import type { FileCapabilities } from "@/libs/domain/file-storage";
+import type { ChunkCache } from "@/libs/domain/file";
 import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import { downloadFile, saveFileAs } from "./download-file";
 
 /** Use the file's own storage, which can differ from the current default. */
 export function fileSaveAction(
-  kind?: FileStorageLocation["kind"],
+  capabilities?: FileCapabilities,
 ): { label: string; save(file: StoredFile): void } {
-  const directory =
-    kind === "directory" || kind === "native";
+  const saveAs = capabilities?.save === "save-as";
   return {
     label: t(
-      directory
+      saveAs
         ? "file_library.action_save_as"
         : "file_library.action_download",
     ),
     save(file) {
-      if (!directory) {
+      if (!saveAs) {
         downloadFile(file, { automatic: true });
         return;
       }
@@ -32,4 +30,12 @@ export function fileSaveAction(
       });
     },
   };
+}
+
+export async function revealFile(
+  cache: ChunkCache | null | undefined,
+): Promise<void> {
+  if (!cache?.reveal)
+    throw new Error("File location is unavailable");
+  await cache.reveal();
 }

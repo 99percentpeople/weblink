@@ -55,6 +55,14 @@ vi.mock("@/libs/application/cache-service", () => ({
     storage: {
       authorizeDefault: vi.fn(),
       defaultMountId: "indexeddb",
+      mounts: () => [
+        {
+          id: "indexeddb",
+          kind: "indexeddb",
+          name: "Browser storage",
+          canOpen: false,
+        },
+      ],
       onChange: () => () => {},
     },
     library: { importFile: vi.fn(), setShared: vi.fn() },

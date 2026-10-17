@@ -3,13 +3,13 @@ import { toast } from "solid-sonner";
 import { Progress } from "@/components/ui/progress";
 import { t } from "@/i18n";
 import { createCacheManager } from "@/libs/application/cache-service";
-import type { FileStorageService } from "@/libs/application/file-storage-service";
+import type { FileStorage } from "@/libs/domain/file-storage";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 
 /** App lifetime, independent of file dialogs; subscription replays startup progress. */
 export function StorageMigrationToast(props: {
-  storage?: FileStorageService;
+  storage?: FileStorage;
 }) {
   const storage =
     props.storage ?? createCacheManager().storage;

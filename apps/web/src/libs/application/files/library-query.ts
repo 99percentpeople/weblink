@@ -39,13 +39,10 @@ export function libraryFiles(
       continue;
     // Scope before grouping references, so a preferred reference from another
     // mount cannot hide this directory's copy of the same content.
-    const storageMountId =
-      info.storageMountId ??
-      (info.storageKind === "indexeddb" ||
-      (!info.storageKind && !info.storageUnavailable)
-        ? "indexeddb"
-        : undefined);
-    if (mountId !== undefined && storageMountId !== mountId)
+    if (
+      mountId !== undefined &&
+      info.storageMountId !== mountId
+    )
       continue;
     const key = info.contentKey ?? info.id;
     const previous = groups.get(key);

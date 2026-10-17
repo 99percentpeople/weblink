@@ -5,6 +5,35 @@ The web application supplies IndexedDB and browser-directory providers. Desktop
 supplies the native provider through `PlatformRuntime.filesystem`; Tauri imports
 and host paths remain in `apps/desktop`.
 
+## Business-facing storage contract
+
+`libs/domain/file-storage.ts` defines the storage service contract. Its concrete
+implementation lives in `libs/infrastructure/vfs/file-storage.ts`; the former
+application import is a compatibility entry point. File and transfer consumers
+use `ChunkCache` for creation, committed chunks, resume ranges, verification,
+completion and cleanup. They do not decode storage IDs or resolve physical paths.
+
+The service's `list()` and `synchronize()` combine every provider into one catalog.
+Synchronization returns the current IDs and confirmed removals. Both committed
+IndexedDB bytes and metadata publication/deletion invalidate this catalog across
+connections. Directory providers retain their last membership when a scan fails;
+their entries and partial checkpoints are still reconstructed from files, without
+a separate persistent directory index.
+
+Releasing a reference and explicitly deleting a source remain distinct lifecycle
+operations. The storage implementation preserves user-owned complete files on
+release, while explicit deletion validates the selected source version. Confirmed
+absence releases local library pins; chat/shared references keep their content
+identity. Permission loss and failed legacy migration never authorize cleanup.
+
+File metadata exposes `capabilities` (save mode, inline-save presentation, reveal)
+and the actual mount ID. References obtain these from their backing cache,
+independently of the current default. UI actions use these capabilities and invoke
+`cache.reveal()` without receiving filesystem handles or paths. Open/preview
+continues through the shared platform-aware file opener. Storage settings alone
+select and configure concrete providers. Mounts advertise `canOpen`; opening a
+root uses `storage.openDirectory(id)` through the same service.
+
 ## Defaults and existing files
 
 - Web defaults to browser storage. In Settings → Transfer → File storage, a

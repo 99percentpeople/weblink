@@ -106,7 +106,7 @@ async function checkBrowserUpload(passed: string[]) {
     );
     eq(await info.file!.text(), "uploaded content");
     eq(writers.get(file.name), 1);
-    const listing = await storage.synchronizeDirectories();
+    const listing = await storage.synchronize();
     eq(listing.files.length, 1);
     eq(
       await (
@@ -230,17 +230,15 @@ async function checkBrowserUpload(passed: string[]) {
     window.dispatchEvent(new Event("focus"));
     const deadline = Date.now() + 10_000;
     while (
-      !appState.cache.cacheInfo[second.cache.id]
-        ?.storageMissing &&
+      appState.cache.cacheInfo[second.cache.id] &&
       Date.now() < deadline
     )
       await new Promise((resolve) =>
         setTimeout(resolve, 50),
       );
     assert(
-      appState.cache.cacheInfo[second.cache.id]
-        ?.storageMissing,
-      "Deleted upload was not synchronized",
+      !appState.cache.cacheInfo[second.cache.id],
+      "Deleted upload was not removed from the cache index",
     );
     assert(
       !libraryFiles(
@@ -404,7 +402,7 @@ async function checkBrowserEncodedNames(passed: string[]) {
     storage.dispose();
     visible.clear();
     storage = await open();
-    const listing = await storage.synchronizeDirectories();
+    const listing = await storage.synchronize();
     eq(listing.files.length, 4);
     for (const id of listing.files) {
       const cache = await make(id, true);
@@ -452,10 +450,7 @@ async function checkBrowserEncodedNames(passed: string[]) {
     await directory.remove(
       encodeDirectoryFilename("nppc64_12.dll"),
     );
-    eq(
-      (await storage.synchronizeDirectories()).files.length,
-      3,
-    );
+    eq((await storage.synchronize()).files.length, 3);
     passed.push(
       "browser encoded filenames, original transfer metadata, empty-index reconstruction, partial resume and deletion",
     );
@@ -726,8 +721,7 @@ async function main() {
         6,
       );
       await syncedStorage.initialize();
-      const initial =
-        await syncedStorage.synchronizeDirectories();
+      const initial = await syncedStorage.synchronize();
       const external = initial.files;
       eq(external.length, 1);
       eq(initial.removed, []);
@@ -738,8 +732,7 @@ async function main() {
       caches.push(indexed);
       eq(await (await indexed.getFile())!.text(), "before");
       eq(
-        (await syncedStorage.synchronizeDirectories())
-          .files,
+        (await syncedStorage.synchronize()).files,
         initial.files,
       );
       await directory.commit(
@@ -752,8 +745,7 @@ async function main() {
         ],
         7,
       );
-      const edited =
-        await syncedStorage.synchronizeDirectories();
+      const edited = await syncedStorage.synchronize();
       const changed = edited.files;
       eq(changed.length, 1);
       assert(
@@ -775,8 +767,7 @@ async function main() {
         "changed",
       );
       await directory.remove("nested/existing.txt");
-      const deleted =
-        await syncedStorage.synchronizeDirectories();
+      const deleted = await syncedStorage.synchronize();
       eq(deleted.files, []);
       assert(
         deleted.removed.includes(changed[0]),

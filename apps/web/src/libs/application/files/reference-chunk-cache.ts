@@ -1,7 +1,5 @@
-import type {
-  FileStorageLocation,
-  StoredFile,
-} from "@weblink/platform";
+import type { StoredFile } from "@weblink/platform";
+import type { FileStorageInfo } from "@/libs/domain/file-storage";
 import { namedFile } from "@/libs/utils/stored-file";
 import { StorageUnavailableError } from "@/libs/domain/vfs";
 import type {
@@ -33,7 +31,7 @@ export class ReferenceChunkCache
     private readonly release: () => Promise<void>,
     private readonly shared: () => Promise<boolean> = async () =>
       false,
-    private readonly location: () => Promise<FileStorageLocation | null> = async () =>
+    private readonly source: () => Promise<ChunkCache | null> = async () =>
       null,
   ) {
     super();
@@ -89,7 +87,7 @@ export class ReferenceChunkCache
       this.snapshot = undefined;
     }
     // Permission loss must not move this reference into another storage view.
-    const location = await this.storageLocation().catch(
+    const storage = await this.storageInfo().catch(
       (error) => {
         if (!(error instanceof StorageUnavailableError))
           throw error;
@@ -102,11 +100,8 @@ export class ReferenceChunkCache
     );
     return {
       ...this.reference,
-      storageKind: location?.kind,
-      storageMountId:
-        location?.kind === "indexeddb"
-          ? "indexeddb"
-          : location?.mountId,
+      capabilities: storage?.capabilities,
+      storageMountId: storage?.mountId,
       isShared: await this.shared(),
       file: file ?? undefined,
       isComplete: !!file,
@@ -117,10 +112,15 @@ export class ReferenceChunkCache
       storageMissing,
     };
   }
-  storageLocation(): Promise<FileStorageLocation | null> {
-    return this.removed
-      ? Promise.resolve(null)
-      : this.location();
+  async storageInfo(): Promise<FileStorageInfo | null> {
+    if (this.removed) return null;
+    return (await this.source())?.storageInfo?.() ?? null;
+  }
+  async reveal(): Promise<void> {
+    const source = !this.removed && (await this.source());
+    if (!source || !source.reveal)
+      throw new Error("File location is unavailable");
+    await source.reveal();
   }
   async setInfo(
     data: Omit<ChunkMetaData, "id">,

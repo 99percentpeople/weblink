@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { fileCapabilities } from "../support/file-capabilities";
 import {
   afterEach,
   beforeEach,
@@ -17,7 +18,6 @@ import {
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { toast } from "solid-sonner";
-import type { FileStorageLocation } from "@weblink/platform";
 import { fakeCache } from "../support/file-transfer";
 import type { ActiveFileTransfer } from "@/libs/application/transfer/file-transfer-state";
 import { TransferMode } from "@/libs/domain/transfer/file-transferer";
@@ -1061,7 +1061,7 @@ describe.each([
               file: complete ? file : undefined,
               isComplete: complete,
               isMerging: !sender && phase === "merging",
-              storageKind,
+              capabilities: fileCapabilities[storageKind],
             });
             setAppState(
               "transfer",
@@ -1209,13 +1209,7 @@ describe("message action overflow", () => {
     });
     const cache = {
       ...fakeCache("binary"),
-      storageLocation: vi
-        .fn<() => Promise<FileStorageLocation>>()
-        .mockResolvedValue({
-          kind: "native",
-          mountId: "native-main",
-          path: file.name,
-        }),
+      reveal: revealFile,
     };
     cache.getFile.mockResolvedValue(file);
     setAppState("cache", "caches", "binary", cache);
@@ -1230,7 +1224,7 @@ describe("message action overflow", () => {
       from: "self",
       file,
       isComplete: true,
-      storageKind: "native",
+      capabilities: fileCapabilities.native,
     });
     const view = bubble(message);
     expect(
@@ -1280,7 +1274,7 @@ describe("message file locations", () => {
   function showFileMenu(
     room: boolean,
     complete: boolean,
-    kind: FileStorageLocation["kind"] = "native",
+    kind: keyof typeof fileCapabilities = "native",
   ) {
     runtime.desktop = kind !== "directory";
     runtime.contextMenu = true;
@@ -1295,20 +1289,9 @@ describe("message file locations", () => {
           message.fileName,
         )
       : undefined;
-    const storageLocation = vi
-      .fn<() => Promise<FileStorageLocation | null>>()
-      .mockResolvedValue(
-        kind === "indexeddb"
-          ? { kind }
-          : {
-              kind,
-              mountId: "native-other",
-              path: "original.bin",
-            },
-      );
     const cache = {
       ...fakeCache("binary"),
-      storageLocation,
+      reveal: revealFile,
     };
     cache.getFile.mockResolvedValue(file ?? null);
     setAppState("cache", "cacheInfo", "binary", {
@@ -1322,7 +1305,7 @@ describe("message file locations", () => {
       from: message.client,
       file,
       isComplete: complete,
-      storageKind: kind,
+      capabilities: fileCapabilities[kind],
     });
     setAppState("cache", "caches", "binary", cache);
     const view = bubble(message);
@@ -1336,7 +1319,7 @@ describe("message file locations", () => {
     [true, false],
     [true, true],
   ])(
-    "reveals the current native path from a message menu (room: %s, complete: %s)",
+    "delegates reveal to the file cache from a message menu (room: %s, complete: %s)",
     async (room, complete) => {
       const cache = showFileMenu(room, complete);
       const action = await screen.findByRole("menuitem", {
@@ -1349,21 +1332,10 @@ describe("message file locations", () => {
           }),
         ).toBeEnabled();
       }
-      expect(cache.storageLocation).not.toHaveBeenCalled();
-      const path = complete
-        ? "nested/firmware (1).bin"
-        : "nested/firmware (1).bin.part";
-      cache.storageLocation.mockResolvedValue({
-        kind: "native",
-        mountId: "native-other",
-        path,
-      });
+      expect(cache.reveal).not.toHaveBeenCalled();
       await userEvent.click(action);
       await waitFor(() =>
-        expect(revealFile).toHaveBeenCalledWith(
-          "native-other",
-          path,
-        ),
+        expect(cache.reveal).toHaveBeenCalledOnce(),
       );
       expect(downloadFile).not.toHaveBeenCalled();
       expect(saveFileAs).not.toHaveBeenCalled();
@@ -1381,7 +1353,7 @@ describe("message file locations", () => {
           name: "file_library.action_reveal",
         }),
       ).toBeNull();
-      expect(cache.storageLocation).not.toHaveBeenCalled();
+      expect(cache.reveal).not.toHaveBeenCalled();
       expect(revealFile).not.toHaveBeenCalled();
     },
   );
@@ -1403,7 +1375,7 @@ describe("message file locations", () => {
         name: "file_library.action_reveal",
       }),
     ).toBeNull();
-    expect(cache.storageLocation).not.toHaveBeenCalled();
+    expect(cache.reveal).not.toHaveBeenCalled();
     expect(revealFile).not.toHaveBeenCalled();
   });
 
@@ -1425,7 +1397,7 @@ describe("message file locations", () => {
         "aria-disabled",
         "true",
       );
-      expect(cache.storageLocation).not.toHaveBeenCalled();
+      expect(cache.reveal).not.toHaveBeenCalled();
       expect(revealFile).not.toHaveBeenCalled();
     },
   );
@@ -1646,7 +1618,9 @@ describe("room file offers", () => {
         from: offer.client,
         file,
         isComplete: true,
-        storageKind: desktop ? "native" : "directory",
+        capabilities: desktop
+          ? fileCapabilities.native
+          : fileCapabilities.directory,
       });
       expect(
         screen.queryByRole("button", {
@@ -1696,7 +1670,7 @@ describe("room file offers", () => {
         offer.fileName,
       ),
       isComplete: true,
-      storageKind: "directory" as const,
+      capabilities: fileCapabilities.directory,
       roomAttachment: true,
       roomOfferId: offer.id,
       from: offer.client,
@@ -1791,7 +1765,7 @@ describe("room file offers", () => {
           roomAttachment: true,
           roomOfferId: offer.id,
           from: offer.client,
-          storageKind: "native",
+          capabilities: fileCapabilities.native,
           storageUnavailable:
             "Storage directory is unavailable",
         });
@@ -1991,7 +1965,9 @@ describe("shared attachment bubbles and transfer controls", () => {
         mimetype: type,
         file,
         isComplete: true,
-        storageKind,
+        capabilities: storageKind
+          ? fileCapabilities[storageKind]
+          : undefined,
       });
       const view = bubble(message);
       expect(

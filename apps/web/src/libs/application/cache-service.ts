@@ -1,5 +1,6 @@
 import { platform } from "@/libs/platform/runtime";
 import { FileStorageService } from "./file-storage-service";
+import type { FileStorage } from "@/libs/domain/file-storage";
 import type { StoredFile } from "@weblink/platform";
 import type {
   ChunkCache,
@@ -21,7 +22,7 @@ import { FileCatalogIndex } from "./file-catalog-index";
 
 export class FileCacheFactory {
   constructor(
-    readonly storage = new FileStorageService(
+    readonly storage: FileStorage = new FileStorageService(
       platform.filesystem,
     ),
   ) {}
@@ -72,8 +73,7 @@ export class FileCacheFactory {
       this.fingerprints.hash(file, options),
     storage: (id, existingOnly) =>
       this.loadStorage(id, existingOnly),
-    removeSource: (id) =>
-      this.storage.removeDirectorySource(id),
+    removeSource: (id) => this.storage.removeSource(id),
     getCache: (id) => this.getCache(id),
     publish: async (cache) => {
       if (this.disposed) return;
@@ -108,10 +108,10 @@ export class FileCacheFactory {
     try {
       await this.storage.initialize();
       await this.library.initialize();
-      const fileDBs = await this.storage.storageIds();
+      const { files } = await this.storage.synchronize();
 
       const caches = await Promise.all(
-        fileDBs.map((id) => this.loadStorage(id)),
+        files.map((id) => this.loadStorage(id)),
       );
 
       for (const cache of caches) {
@@ -326,18 +326,16 @@ export class FileCacheFactory {
     const refresh = async () => {
       do {
         this.storageRefreshRequested = false;
-        const directory =
-          await this.storage.synchronizeDirectories();
+        const snapshot = await this.storage.synchronize();
         if (this.disposed) return;
-        for (const id of directory.removed) {
-          // Release the directory's pin only. Sent/shared references still retain
+        for (const id of snapshot.removed) {
+          // Release the local pin only. Sent/shared references still retain
           // their old content identity and become unavailable if the bytes changed.
-          await this.library.releaseDirectoryPin(id);
+          await this.library.releaseStoragePin(id);
           if (this.disposed) return;
           const cache = await this.rawCaches.get(id);
-          // Completing a directory receive replaces its temporary ID with a
-          // directory ID. The receiver still needs the old cache to verify and
-          // publish the file before its transfer releases it.
+          // Finalization can replace a temporary storage identity. An active
+          // receiver still needs its cache until verification and publication.
           if (cache && this.isCacheInUse(cache)) {
             this.retired.add(cache);
             this.collectRetiredStorage();
@@ -356,12 +354,19 @@ export class FileCacheFactory {
             setAppState("cache", "caches", id, undefined!);
           }
         }
-        for (const id of directory.files) {
+        for (const id of snapshot.files) {
           const cache = await this.loadStorage(id);
           if (this.disposed) return;
+          // Internal deduplicated content is exposed through references only.
+          // This rule applies to every provider, including cross-window imports.
+          const info = await cache.getInfo();
           if (
             !this.caches[id] &&
-            !this.library.ownsStorage(id)
+            !this.library.ownsStorage(id) &&
+            !(
+              info?.contentStorage && !info.verifyContent
+            ) &&
+            !/^remote-(clipboard|drop)_/.test(id)
           ) {
             this.observe(cache);
             await this.addCache(id, cache);
@@ -377,7 +382,7 @@ export class FileCacheFactory {
           }),
         );
         if (!this.disposed)
-          await this.library.reconcileMissingDirectoryFiles();
+          await this.library.reconcileMissingFiles();
         if (!this.disposed) await this.library.refresh();
       } while (
         this.storageRefreshRequested &&

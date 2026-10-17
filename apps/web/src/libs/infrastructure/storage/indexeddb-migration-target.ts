@@ -66,6 +66,7 @@ export async function publishMigratedFile(
       record.id,
     );
     await done;
+    database.changed();
   } catch (error) {
     try {
       tx.abort();

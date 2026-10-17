@@ -8,7 +8,6 @@ it("filters by actual mount before deduplication so another directory cannot sup
     contentKey: "same-content",
     fileName: "old-name.pdf",
     fileSize: 10,
-    storageKind: "directory",
     storageMountId: "directory-old",
     libraryPinned: true,
   };
@@ -42,16 +41,16 @@ it("filters by actual mount before deduplication so another directory cannot sup
   ]);
 });
 
-it("keeps unfinished and temporarily unavailable files in their original mount and legacy files in IndexedDB", () => {
+it("keeps unfinished and temporarily unavailable files in their original mount and migrated files in their reported mount", () => {
   const legacy: FileMetaData = {
     id: "legacy",
     fileName: "legacy.txt",
     fileSize: 2,
+    storageMountId: "indexeddb",
   };
   const partial: FileMetaData = {
     ...legacy,
     id: "partial",
-    storageKind: "native",
     storageMountId: "native-first",
     isComplete: false,
     cachedBytes: 1,
@@ -69,6 +68,7 @@ it("keeps unfinished and temporarily unavailable files in their original mount a
   const unknown: FileMetaData = {
     ...legacy,
     id: "unknown",
+    storageMountId: undefined,
     storageUnavailable: "Mount unavailable",
   };
   const files = [

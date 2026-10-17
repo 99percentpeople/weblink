@@ -40,7 +40,6 @@ import { fileOpenLabel } from "@/libs/utils/open-file";
 import { t } from "@/i18n";
 import { Dynamic } from "solid-js/web";
 import type { FileMetaData } from "@/libs/domain/file";
-import { platform } from "@/libs/platform/runtime";
 
 export function FileThumbnail(props: {
   file: FileMetaData;
@@ -136,18 +135,17 @@ export function FileList(props: {
               ] as FileAction[])
             ).flatMap((action): FileAction[] => {
               if (action === "reveal")
-                return file.storageKind === "native" &&
-                  platform.filesystem?.revealFile
+                return file.capabilities?.reveal
                   ? [action]
                   : [];
               if (
                 action === "download" ||
                 action === "save_as"
               )
-                return file.storageKind === "indexeddb"
+                return file.capabilities?.save ===
+                  "download"
                   ? ["download"]
-                  : file.storageKind === "directory" ||
-                      file.storageKind === "native"
+                  : file.capabilities?.save === "save-as"
                     ? ["save_as"]
                     : [];
               return [action];

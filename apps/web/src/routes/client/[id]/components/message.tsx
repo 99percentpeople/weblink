@@ -54,8 +54,10 @@ import { catchError } from "@/libs/catch";
 import { toast } from "solid-sonner";
 import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { fileOpenLabel } from "@/libs/utils/open-file";
-import { fileSaveAction } from "@/libs/utils/file-save-action";
-import { platform } from "@/libs/platform/runtime";
+import {
+  fileSaveAction,
+  revealFile,
+} from "@/libs/utils/file-save-action";
 import { FolderOpen, Info } from "lucide-solid";
 import { canShareFile } from "@/libs/utils/can-share";
 import { MessageSenderAvatar } from "@/components/conversations/message-sender-avatar";
@@ -225,7 +227,7 @@ export const MessageContent: Component<MessageCardProps> = (
             ],
       );
       const saveAction = createMemo(() =>
-        fileSaveAction(cacheInfo()?.storageKind),
+        fileSaveAction(cacheInfo()?.capabilities),
       );
       const reveal = async () => {
         const info = cacheInfo();
@@ -233,16 +235,7 @@ export const MessageContent: Component<MessageCardProps> = (
           info && appState.cache.caches[info.id];
         props.close();
         try {
-          const location = await cache?.storageLocation?.();
-          if (
-            location?.kind !== "native" ||
-            !platform.filesystem?.revealFile
-          )
-            throw new Error("File location is unavailable");
-          await platform.filesystem.revealFile(
-            location.mountId,
-            location.path,
-          );
+          await revealFile(cache);
         } catch (error) {
           toast.error(
             userErrorMessage(error, "errors.file_failed"),
@@ -425,12 +418,7 @@ export const MessageContent: Component<MessageCardProps> = (
               </>
             )}
           </Show>
-          <Show
-            when={
-              cacheInfo()?.storageKind === "native" &&
-              platform.filesystem?.revealFile
-            }
-          >
+          <Show when={cacheInfo()?.capabilities?.reveal}>
             <ContextMenuItem
               class="gap-2"
               disabled={

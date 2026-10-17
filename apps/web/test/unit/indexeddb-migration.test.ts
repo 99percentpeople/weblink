@@ -500,7 +500,7 @@ describe("verified legacy IndexedDB migration", () => {
     );
     closes.push(() => storage.dispose());
     await storage.initialize();
-    expect(await storage.storageIds()).toEqual([id]);
+    expect(await storage.list()).toEqual([id]);
     const states: StorageMigrationProgress[] = [];
     const stop = storage.onMigrationProgress((state) =>
       states.push(state),
@@ -614,6 +614,17 @@ describe("verified legacy IndexedDB migration", () => {
       });
       closes.push(() => library.dispose());
       await library.initialize();
+      await repository.putReference({
+        ...reference,
+        id: "local-pin",
+        libraryPinned: true,
+      });
+      await storage.synchronize();
+      await library.reconcileMissingFiles();
+      expect(
+        await repository.reference("local-pin"),
+      ).toBeDefined();
+      await repository.removeReference("local-pin");
       if (fail) {
         expect(
           (

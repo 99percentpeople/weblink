@@ -155,7 +155,7 @@ export function RoomFileMessageCard(props: {
           messageId: props.message.id,
         }}
         file={cache()?.file}
-        storageKind={cache()?.storageKind}
+        capabilities={cache()?.capabilities}
         name={props.message.fileName}
         size={props.message.fileSize}
         mimeType={props.message.mimeType}
