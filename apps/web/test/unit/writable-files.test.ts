@@ -274,6 +274,46 @@ it.each(["indexeddb", "directory", "native"] as const)(
   },
 );
 it.each(["indexeddb", "directory", "native"] as const)(
+  "publishes the actual generated format on the original %s mount without overwriting a namesake",
+  async (kind) => {
+    const f = await fixture(kind);
+    const existing = await f.storage.createWritableFile({
+      name: "movie.mkv",
+      type: "video/x-matroska",
+    });
+    await existing.write(bytes("existing"));
+    const kept = await existing.finish();
+    const writer = await f.storage.createWritableFile({
+      name: "movie.webm",
+      type: "video/webm",
+    });
+    await writer.write(bytes("recorded"));
+    await f.storage.setDefault("indexeddb");
+    const result = await writer.finish([], {
+      name: "movie.mkv",
+      type: "video/x-matroska;codecs=avc1,opus",
+    });
+    expect(result.file.name).toBe(
+      kind === "indexeddb" ? "movie.mkv" : "movie (1).mkv",
+    );
+    expect(result.file.type).toBe(
+      "video/x-matroska;codecs=avc1,opus",
+    );
+    expect(await result.file.text()).toBe("recorded");
+    expect(await kept.file.text()).toBe("existing");
+    const cache = await f.storage.createCache(result.id, {
+      memoryChunks: 0,
+      isRetained: () => false,
+    });
+    expect(await cache.getInfo()).toMatchObject({
+      fileName: result.file.name,
+      mimetype: result.file.type,
+      storageMountId: writer.mountId,
+      isComplete: true,
+    });
+  },
+);
+it.each(["indexeddb", "directory", "native"] as const)(
   "retains an incomplete %s draft if a metadata patch is invalid",
   async (kind) => {
     const f = await fixture(kind);

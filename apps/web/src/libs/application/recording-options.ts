@@ -29,3 +29,27 @@ export function recordingVideoBitrate(
     ),
   );
 }
+
+/** Automatic recording can pass remote H.264 through in Matroska, not WebM. */
+export function recordingFormat(type: string): {
+  type: string;
+  extension: "webm" | "mkv" | "mp4";
+} {
+  const container = type
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  switch (container) {
+    case "video/webm":
+      return { type, extension: "webm" };
+    case "video/x-matroska":
+    case "video/matroska":
+      return { type, extension: "mkv" };
+    case "video/mp4":
+      return { type, extension: "mp4" };
+    default:
+      throw new Error(
+        `Unsupported recording format: ${type || "unknown"}`,
+      );
+  }
+}

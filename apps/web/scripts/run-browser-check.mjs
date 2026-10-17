@@ -336,7 +336,7 @@ async function main() {
     const start = Date.now();
     const timeout = recordingTest
       ? 80000 +
-        4 *
+        6 *
           Math.min(
             600000,
             Math.max(

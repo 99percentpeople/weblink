@@ -57,7 +57,7 @@ export class WritableFileStore {
     options.signal?.throwIfAborted();
     if (!volume.openWriter)
       throw new Error("This storage cannot record files");
-    const name = storageFilename(options.name);
+    let name = storageFilename(options.name);
     const uuid = crypto.randomUUID();
     const indexed = volume.kind === "indexeddb";
     const path = indexed
@@ -144,9 +144,22 @@ export class WritableFileStore {
       };
       await publishRecord();
     };
-    const finish = async (patches: readonly VfsWrite[]) => {
+    const finish = async (
+      patches: readonly VfsWrite[],
+      finalMetadata?: { name: string; type: string },
+    ) => {
       await queue;
       options.signal?.throwIfAborted();
+      if (finalMetadata) {
+        name = storageFilename(finalMetadata.name);
+        metadata.name = name;
+        metadata.type = finalMetadata.type;
+        record.info = {
+          ...record.info!,
+          fileName: name,
+          mimetype: metadata.type,
+        };
+      }
       let stat = await writer.close(patches);
       if (!stat.size)
         throw new Error("Recording produced no data");
@@ -307,7 +320,7 @@ export class WritableFileStore {
         void next.catch(() => {});
         return next;
       },
-      finish: (patches = []) => {
+      finish: (patches = [], finalMetadata) => {
         if (aborting)
           return Promise.reject(
             new Error("Recording was aborted"),
@@ -318,6 +331,7 @@ export class WritableFileStore {
             offset,
             data: data.slice(),
           })),
+          finalMetadata && { ...finalMetadata },
         ).catch(async (error) => {
           await writer.abort().catch(() => {});
           await refreshDraft(true).catch(() => {});

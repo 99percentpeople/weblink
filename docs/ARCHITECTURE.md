@@ -425,6 +425,13 @@ may select concrete infrastructure implementations.
     identity before client creation, shares concurrent same-identity joins through
     the handshake, and retires old work on identity changes, leave or disposal.
   - `session-service.ts`: owns live `PeerSession` instances and client views.
+  - `recording-service.ts`: owns a single recorder and its continuous VFS writer.
+    Automatic format selection lets supporting browsers reuse encoded remote
+    WebRTC video instead of encoding it again. The first output chunk determines
+    the final MIME type and extension (WebM, Matroska or MP4); publication updates
+    that metadata on the writer's original mount. WebM and Matroska duration/seek
+    indexing preserves encoded frames. Recording never reconfigures or stops
+    the meeting's borrowed video/audio tracks.
   - `ice-server-diagnostics.ts`: coordinates STUN/TURN availability probes behind
     injectable credential/probe functions, without UI or shared-state ownership.
   - `messaging/`: reactive message history, persistence port and tracked

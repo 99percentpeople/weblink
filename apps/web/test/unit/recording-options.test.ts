@@ -1,5 +1,32 @@
 import { expect, it } from "vitest";
-import { recordingVideoBitrate } from "@/libs/application/recording-options";
+import {
+  recordingFormat,
+  recordingVideoBitrate,
+} from "@/libs/application/recording-options";
+
+it.each([
+  ["video/webm;codecs=vp8,opus", "webm"],
+  ["video/x-matroska;codecs=avc1,opus", "mkv"],
+  ["video/matroska;codecs=h264", "mkv"],
+  ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "mp4"],
+])(
+  "preserves the actual recorder format %s",
+  (type, extension) => {
+    expect(recordingFormat(type)).toEqual({
+      type,
+      extension,
+    });
+  },
+);
+
+it("rejects an unknown format instead of mislabelling its container", () => {
+  expect(() => recordingFormat("")).toThrow(
+    "Unsupported recording format",
+  );
+  expect(() => recordingFormat("video/unknown")).toThrow(
+    "Unsupported recording format",
+  );
+});
 
 it("gives higher resolution and frame rate sources more room for screen detail", () => {
   const hd = recordingVideoBitrate({

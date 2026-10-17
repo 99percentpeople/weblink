@@ -5,7 +5,10 @@ import type {
 import type { StoredFile } from "@weblink/platform";
 import { createRecordingAudio } from "./recording-audio";
 import { WebmRecordingMetadata } from "./recording-webm";
-import { recordingVideoBitrate } from "./recording-options";
+import {
+  recordingFormat,
+  recordingVideoBitrate,
+} from "./recording-options";
 
 export interface RecordingInput {
   stream: MediaStream;
@@ -39,6 +42,7 @@ interface Session {
   audio?: ReturnType<typeof createRecordingAudio>;
   recorder?: MediaRecorder;
   webm?: WebmRecordingMetadata;
+  output?: { name: string; type: string };
   timer?: ReturnType<typeof setInterval>;
   started?: number;
   pausedAt?: number;
@@ -205,17 +209,23 @@ export class RecordingService {
         "No supported recording format",
       );
       for (const mimeType of [
+        // An explicit MIME disables Chromium's encoded WebRTC pass-through.
+        // Let the browser reuse received frames before requesting an encoder.
+        undefined,
         audio
           ? "video/webm;codecs=vp8,opus"
           : "video/webm;codecs=vp8",
         "video/webm",
         "video/mp4",
       ]) {
-        if (!Constructor.isTypeSupported(mimeType))
+        if (
+          mimeType &&
+          !Constructor.isTypeSupported(mimeType)
+        )
           continue;
         try {
           session.recorder = new Constructor(stream, {
-            mimeType,
+            ...(mimeType ? { mimeType } : {}),
             videoBitsPerSecond,
           });
           break;
@@ -225,27 +235,49 @@ export class RecordingService {
       }
       const recorder = session.recorder;
       if (!recorder) throw cause;
-      const type = recorder.mimeType;
-      if (type.startsWith("video/webm"))
-        session.webm = new WebmRecordingMetadata();
-      const extension = type.startsWith("video/mp4")
-        ? "mp4"
-        : "webm";
+      // Automatic recording may not report its actual container until data arrives.
+      // Reserve a draft now so permissions, the target mount and write failures
+      // are settled before capture starts; publish under the actual format later.
+      const provisional = recordingFormat(
+        recorder.mimeType || "video/webm",
+      );
       const stamp = new Date()
         .toISOString()
         .replace(/[:.]/g, "-");
+      const basename = `${Array.from(source.name).slice(0, 32).join("")}_${stamp}`;
+      session.output = {
+        name: `${basename}.${provisional.extension}`,
+        type: provisional.type,
+      };
       session.writer =
         await this.port.storage.createWritableFile({
-          name: `${Array.from(source.name).slice(0, 32).join("")}_${stamp}.${extension}`,
-          type,
+          ...session.output,
           signal: session.controller.signal,
         });
       session.controller.signal.throwIfAborted();
+      let formatKnown = false;
       recorder.addEventListener(
         "dataavailable",
         (event) => {
           const blob = event.data;
           if (!blob.size || session.error) return;
+          if (!formatKnown) {
+            try {
+              const format = recordingFormat(
+                blob.type || recorder.mimeType,
+              );
+              session.output = {
+                name: `${basename}.${format.extension}`,
+                type: format.type,
+              };
+              if (format.extension !== "mp4")
+                session.webm = new WebmRecordingMetadata();
+              formatKnown = true;
+            } catch (error) {
+              fail(error);
+              return;
+            }
+          }
           if (session.pending + blob.size > MAX_PENDING) {
             fail(
               new Error(
@@ -416,7 +448,10 @@ export class RecordingService {
           session.state.bytes += metadata.tail.length;
         }
         await this.port.complete(
-          await session.writer.finish(metadata?.patches),
+          await session.writer.finish(
+            metadata?.patches,
+            session.output,
+          ),
         );
       } else await session.writer?.abort();
     } catch (error) {

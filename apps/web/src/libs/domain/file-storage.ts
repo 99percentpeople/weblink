@@ -39,6 +39,8 @@ export interface WritableStoredFile {
   write(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
   finish(
     patches?: readonly VfsWrite[],
+    /** Generated formats may only become known after the first output bytes. */
+    metadata?: { name: string; type: string },
   ): Promise<{ id: string; file: StoredFile }>;
   /** Release the session, retaining committed bytes as an unavailable draft. */
   abort(): Promise<void>;

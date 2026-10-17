@@ -5,6 +5,7 @@ import {
 import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import type { StoredFile } from "@weblink/platform";
+import { recordingFormat } from "@/libs/application/recording-options";
 import { videoThumbnail } from "@/libs/utils/video-thumbnail";
 import {
   fileObjectUrl,
@@ -201,7 +202,19 @@ async function run() {
       "indexeddb",
       "directory",
     ] as const) {
-      for (const remote of [false, true]) {
+      const codecs =
+        RTCRtpSender.getCapabilities("video")!.codecs;
+      const sources = [
+        undefined,
+        "video/VP8",
+        ...(codecs.some(
+          (codec) => codec.mimeType === "video/H264",
+        )
+          ? ["video/H264"]
+          : []),
+      ];
+      for (const codec of sources) {
+        const remote = codec !== undefined;
         const storage = new FileStorageService(
           undefined,
           new VfsDatabase(
@@ -233,6 +246,18 @@ async function run() {
               .getTracks()
               .forEach((track) =>
                 sender.addTrack(track, source),
+              );
+            sender
+              .getTransceivers()
+              .find(
+                (transceiver) =>
+                  transceiver.sender.track?.kind ===
+                  "video",
+              )!
+              .setCodecPreferences(
+                codecs.filter(
+                  (entry) => entry.mimeType === codec,
+                ),
               );
             await sender.setLocalDescription(
               await sender.createOffer(),
@@ -391,7 +416,7 @@ async function run() {
             "Recording did not have exactly one incomplete draft",
           );
           assert(
-            /\.(webm|mp4)$/.test(
+            /\.(webm|mkv|mp4)$/.test(
               infos.find(
                 (info) => info?.isComplete === false,
               )?.fileName ?? "",
@@ -431,9 +456,24 @@ async function run() {
             "Recorder stopped the original audio",
           );
           const file = saved as StoredFile;
+          assert(
+            file.name.endsWith(
+              `.${recordingFormat(file.type).extension}`,
+            ),
+            "Recorded file extension does not match its actual format",
+          );
+          if (remote)
+            assert(
+              file.type.includes(
+                codec === "video/H264" ? "avc1" : "vp8",
+              ),
+              `Remote ${codec} was unnecessarily transcoded: ${file.type}`,
+            );
           const measurement = {
             kind,
             remote,
+            codec,
+            type: file.type,
             bytes: file.size,
             prepareMs,
             ...(previousAuthorizationMs === undefined
@@ -494,7 +534,9 @@ async function run() {
           bitmap.close();
           player.muted = true;
           const content = await file.arrayBuffer();
-          if (file.type.startsWith("video/webm")) {
+          if (
+            recordingFormat(file.type).extension !== "mp4"
+          ) {
             measurement.seekPoints =
               countSeekPoints(content);
             assert(
@@ -571,7 +613,7 @@ async function run() {
             revokeFileUrl(url);
           }
           passed.push(
-            `${kind}: ${remote ? "received WebRTC" : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
+            `${kind}: ${remote ? `received WebRTC ${codec}` : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
           );
         } finally {
           await service?.stop();

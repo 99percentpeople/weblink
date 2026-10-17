@@ -34,7 +34,8 @@ class Stream {
   }
 }
 class Recorder extends EventTarget {
-  static isTypeSupported = vi.fn(() => true);
+  static isTypeSupported = vi.fn((_type?: string) => true);
+  static automaticType = "video/webm;codecs=vp8,opus";
   static instances: Recorder[] = [];
   state = "inactive";
   mimeType: string;
@@ -43,7 +44,13 @@ class Recorder extends EventTarget {
     readonly options: MediaRecorderOptions,
   ) {
     super();
-    this.mimeType = options.mimeType!;
+    this.mimeType =
+      options.mimeType ?? Recorder.automaticType;
+    if (!Recorder.isTypeSupported(this.mimeType))
+      throw new DOMException(
+        "Unsupported format",
+        "NotSupportedError",
+      );
     Recorder.instances.push(this);
   }
   start() {
@@ -83,6 +90,7 @@ const services: RecordingService[] = [];
 beforeEach(() => {
   vi.stubGlobal("MediaStream", Stream);
   Recorder.instances = [];
+  Recorder.automaticType = "video/webm;codecs=vp8,opus";
   Recorder.isTypeSupported
     .mockReset()
     .mockReturnValue(true);
@@ -166,6 +174,69 @@ it("drains the final event and queued writes before publishing, and stops only o
   expect(f.video.stop).not.toHaveBeenCalled();
   expect(f.audio.stop).not.toHaveBeenCalled();
   expect(f.port.changed).toHaveBeenLastCalledWith(null);
+});
+
+it("leaves the format unset so received video can bypass re-encoding", async () => {
+  const f = fixture();
+  await f.service.start(f.source);
+  expect(f.recorder().options).not.toHaveProperty(
+    "mimeType",
+  );
+  expect(f.recorder().stream.getVideoTracks()).toEqual([
+    f.video,
+  ]);
+});
+
+it.each([
+  ["video/x-matroska;codecs=avc1,opus", "mkv"],
+  ["video/mp4;codecs=avc1", "mp4"],
+  ["video/webm;codecs=vp9,opus", "webm"],
+])(
+  "publishes the actual first-chunk format %s using the original writer",
+  async (type, extension) => {
+    const f = fixture();
+    Recorder.automaticType = "";
+    await f.service.start(f.source);
+    // The initial hint can differ from the container of the received video.
+    f.recorder().mimeType = "video/webm;codecs=vp8,opus";
+    f.recorder().data(new Blob(["first"], { type }));
+    f.recorder().data("next");
+    await f.service.stop();
+    expect(
+      f.port.storage.createWritableFile,
+    ).toHaveBeenCalledOnce();
+    expect(f.writer.finish).toHaveBeenCalledWith(
+      extension === "mp4" ? undefined : expect.any(Array),
+      expect.objectContaining({
+        type,
+        name: expect.stringMatching(
+          new RegExp(`\\.${extension}$`),
+        ),
+      }),
+    );
+    expect(f.data.join("")).toBe("firstnextlast");
+    expect(f.video.stop).not.toHaveBeenCalled();
+    expect(f.audio.stop).not.toHaveBeenCalled();
+  },
+);
+
+it("retains the draft and reports an unsupported actual format", async () => {
+  const f = fixture();
+  await f.service.start(f.source);
+  f.recorder().data(
+    new Blob(["unknown"], { type: "video/unknown" }),
+  );
+  await f.service.stop();
+  expect(f.writer.write).not.toHaveBeenCalled();
+  expect(f.writer.finish).not.toHaveBeenCalled();
+  expect(f.writer.abort).toHaveBeenCalledOnce();
+  expect(f.port.failed).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message:
+        "Unsupported recording format: video/unknown",
+    }),
+  );
+  expect(f.video.stop).not.toHaveBeenCalled();
 });
 
 it("sizes recording quality from the opened video stream, not a native preview placeholder", async () => {

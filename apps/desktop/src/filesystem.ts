@@ -37,6 +37,7 @@ const mimeType = (name: string): string =>
     avif: "image/avif",
     mp4: "video/mp4",
     webm: "video/webm",
+    mkv: "video/x-matroska",
     mov: "video/quicktime",
     mp3: "audio/mpeg",
     wav: "audio/wav",
