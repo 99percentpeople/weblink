@@ -6,8 +6,12 @@ import {
   waitFor,
 } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { FileList } from "@/components/files/file-list";
+import {
+  FileList,
+  FileThumbnail,
+} from "@/components/files/file-list";
 import type { LibraryFile } from "@/libs/application/files/library-query";
+import * as thumbnails from "@/libs/utils/video-thumbnail";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/components/icons", () => ({
@@ -16,7 +20,27 @@ vi.mock("@/components/icons", () => ({
 }));
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("never decodes unfinished video files", () => {
+  const decode = vi.spyOn(thumbnails, "videoThumbnail");
+  render(() => (
+    <FileThumbnail
+      file={{
+        id: "draft",
+        fileName: "recording.webm",
+        fileSize: 10,
+        mimetype: "video/webm",
+        isComplete: false,
+        file: new File(["partial"], "recording.webm", {
+          type: "video/webm",
+        }),
+      }}
+    />
+  ));
+  expect(decode).not.toHaveBeenCalled();
 });
 
 it("keeps thumbnail URLs across list refreshes and unrelated progress, and releases them on replacement/removal", async () => {

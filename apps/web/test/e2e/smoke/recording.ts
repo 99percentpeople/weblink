@@ -5,6 +5,7 @@ import {
 import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import type { StoredFile } from "@weblink/platform";
+import { videoThumbnail } from "@/libs/utils/video-thumbnail";
 import {
   fileObjectUrl,
   revokeFileUrl,
@@ -468,6 +469,29 @@ async function run() {
           };
           measurements.push(measurement);
           const player = document.createElement("video");
+          const poster = await videoThumbnail(
+            file,
+            new AbortController().signal,
+          );
+          const bitmap = await createImageBitmap(poster);
+          assert(
+            bitmap.width > 0 && bitmap.height > 0,
+            "Recorded video has no decodable thumbnail",
+          );
+          const sample = new OffscreenCanvas(1, 1);
+          const pixels = sample.getContext("2d")!;
+          pixels.drawImage(bitmap, 0, 0, 1, 1);
+          const color = pixels.getImageData(
+            0,
+            0,
+            1,
+            1,
+          ).data;
+          assert(
+            Math.max(color[0], color[1], color[2]) > 30,
+            "Recorded thumbnail is a blank frame",
+          );
+          bitmap.close();
           player.muted = true;
           const content = await file.arrayBuffer();
           if (file.type.startsWith("video/webm")) {
@@ -547,7 +571,7 @@ async function run() {
             revokeFileUrl(url);
           }
           passed.push(
-            `${kind}: ${remote ? "received WebRTC" : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, final playback, source ownership`,
+            `${kind}: ${remote ? "received WebRTC" : "local"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
           );
         } finally {
           await service?.stop();

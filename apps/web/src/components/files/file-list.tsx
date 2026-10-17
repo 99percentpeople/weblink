@@ -35,6 +35,7 @@ import { fileOpenLabel } from "@/libs/utils/open-file";
 import { t } from "@/i18n";
 import { Dynamic } from "solid-js/web";
 import type { FileMetaData } from "@/libs/domain/file";
+import { VideoFileThumbnail } from "./video-file-thumbnail";
 
 export function FileThumbnail(props: {
   file: FileMetaData;
@@ -58,17 +59,28 @@ export function FileThumbnail(props: {
         items-center justify-center overflow-hidden rounded-md"
     >
       <Show
-        when={url()}
+        when={
+          fileKind(props.file) === "video" &&
+          props.file.isComplete &&
+          props.file.file
+        }
         fallback={
-          <Dynamic component={icon()} class="size-5" />
+          <Show
+            when={url()}
+            fallback={
+              <Dynamic component={icon()} class="size-5" />
+            }
+          >
+            <img
+              src={url()}
+              alt=""
+              class="size-full object-cover"
+              loading="lazy"
+            />
+          </Show>
         }
       >
-        <img
-          src={url()}
-          alt=""
-          class="size-full object-cover"
-          loading="lazy"
-        />
+        {(file) => <VideoFileThumbnail file={file()} />}
       </Show>
     </div>
   );
