@@ -248,14 +248,24 @@ try {
       localStorage.setItem('starter_message_sent','true');
       localStorage.setItem('profile',${JSON.stringify(JSON.stringify(user))});
       window.__downloadFiles = {};
+      const blobs = new Map();
       const create = URL.createObjectURL.bind(URL);
       URL.createObjectURL = function(blob) {
-        if (blob instanceof File && blob.name.startsWith('messaging-')) window.__downloadFiles[blob.name] = blob;
-        return create(blob);
+        const url = create(blob);
+        blobs.set(url, blob);
+        return url;
+      };
+      const revoke = URL.revokeObjectURL.bind(URL);
+      URL.revokeObjectURL = function(url) {
+        blobs.delete(url);
+        return revoke(url);
       };
       const click = HTMLAnchorElement.prototype.click;
       HTMLAnchorElement.prototype.click = function() {
-        if (this.download.startsWith('messaging-')) return;
+        if (this.download.startsWith('messaging-')) {
+          window.__downloadFiles[this.download] = blobs.get(this.href);
+          return;
+        }
         return click.call(this);
       };
     `,
@@ -411,19 +421,30 @@ try {
         "Private text contents or conversation identity changed",
       );
     for (let i = 0; i < 2; i++) {
-      const verified = await evaluate(
+      await evaluate(
         clients[i],
-        `(async () => {
+        `(() => {
         const name = 'messaging-${round}-${1 - i}.txt';
         const title = [...document.querySelectorAll('[data-slot="file-attachment-bubble"] [title]')].find(e => e.title === name);
-        const download = title?.closest('[data-slot="file-attachment-bubble"]')?.querySelector('button[aria-label="Download"]');
+        const download = title?.closest('[data-slot="file-attachment-bubble"]')?.querySelector('button[aria-label="Save to device"]');
         if (!download) throw new Error('Received file download unavailable');
         download.click();
-        const file = window.__downloadFiles[name];
-        return !!file && (await file.text()) === 'messaging-bytes-${round}-${1 - i}|'.repeat(8192);
       })()`,
       );
-      if (!verified)
+      // Saving materializes VFS content asynchronously. Verify the actual
+      // download anchor's bytes, not an earlier thumbnail or preview URL.
+      const verified = await until(
+        `round ${round}: received download from peer ${1 - i}`,
+        () =>
+          evaluate(
+            clients[i],
+            `(async () => {
+          const file = window.__downloadFiles['messaging-${round}-${1 - i}.txt'];
+          return file ? { matches: (await file.text()) === 'messaging-bytes-${round}-${1 - i}|'.repeat(8192) } : null;
+        })()`,
+          ),
+      );
+      if (!verified.matches)
         throw new Error("Downloaded file content mismatch");
     }
     console.log(
