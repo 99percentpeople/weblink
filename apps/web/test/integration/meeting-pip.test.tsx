@@ -104,23 +104,29 @@ vi.mock("@/libs/state/app-state-context", () => ({
     leaveRoom: fixture.leave,
   }),
 }));
-vi.mock("@/libs/state/meeting-media-context", () => ({
-  useMeetingMedia: () => ({
-    media: {
-      microphoneOn: () => false,
-      cameraOn: () => false,
-      sharing: () => false,
-      sharingSupported: () => true,
-      microphoneBusy: () => false,
-      cameraBusy: () => false,
-      sharingBusy: fixture.sharingBusy,
-      toggleMicrophone: fixture.microphone,
-      toggleCamera: fixture.camera,
-      toggleSharing: fixture.sharing,
-      clear: fixture.clear,
-    },
+vi.mock(
+  "@/libs/state/meeting-media-context",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/libs/state/meeting-media-context")
+    >()),
+    useMeetingMedia: () => ({
+      media: {
+        microphoneOn: () => false,
+        cameraOn: () => false,
+        sharing: () => false,
+        sharingSupported: () => true,
+        microphoneBusy: () => false,
+        cameraBusy: () => false,
+        sharingBusy: fixture.sharingBusy,
+        toggleMicrophone: fixture.microphone,
+        toggleCamera: fixture.camera,
+        toggleSharing: fixture.sharing,
+        clear: fixture.clear,
+      },
+    }),
   }),
-}));
+);
 vi.mock("@/libs/state/audio-player-context", () => ({
   useAudioPlayer: () => ({
     hasAudio: () => true,
