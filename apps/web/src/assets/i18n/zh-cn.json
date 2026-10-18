@@ -1475,7 +1475,7 @@
     "settings_title": "录像",
     "container_title": "录像保存格式",
     "container_auto": "自动",
-    "container_description": "自动：H.264/H.265 使用 MP4，其他编码使用 MKV。下次录像生效，保留原有编码；播放兼容性取决于播放器。",
+    "container_description": "自动选择能保留原编码的 MP4 或 MKV。手动指定格式时，必要时会重新编码音频。下次录像生效；播放兼容性取决于播放器。",
     "pause": "暂停录像",
     "resume": "继续录像",
     "paused": "录像已暂停",

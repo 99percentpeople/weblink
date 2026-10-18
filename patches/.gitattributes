@@ -1,0 +1,2 @@
+# Preserve upstream patch context and apply the same LF patch on every host.
+*.patch text eol=lf -whitespace

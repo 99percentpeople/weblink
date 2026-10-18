@@ -123,7 +123,8 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
           packet.clockTime = this.receiverClock.time(
             packet,
             sender.track?.kind === "audio"
-              ? (packet as EncodedAudioPacket).sampleRate
+              ? ((packet as EncodedAudioPacket).clockRate ??
+                  (packet as EncodedAudioPacket).sampleRate)
               : 90000,
           );
         const bytes = packet.data.byteLength;

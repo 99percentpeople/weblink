@@ -73,5 +73,8 @@
     "prettier-plugin-classnames": "^0.7.9",
     "prettier-plugin-merge": "^0.7.4",
     "prettier-plugin-tailwindcss": "^0.6.14"
+  },
+  "patchedDependencies": {
+    "mediabunny@1.61.6": "patches/mediabunny@1.61.6.patch"
   }
 }

@@ -1,0 +1,811 @@
+diff --git a/dist/bundles/mediabunny.cjs b/dist/bundles/mediabunny.cjs
+index af443b9f053075ccf280e9cf7424149b3e5e722a..363e78a01fd9b5c6adfdd33a3d88672c0630af8f 100644
+--- a/dist/bundles/mediabunny.cjs
++++ b/dist/bundles/mediabunny.cjs
+@@ -4757,7 +4757,8 @@ var Mediabunny = (() => {
+     "flac",
+     "ac3",
+     "eac3",
+-    "dts"
++    "dts",
++    "g722",
+   ];
+   var AUDIO_CODECS = [
+     ...NON_PCM_AUDIO_CODECS,
+@@ -5328,6 +5329,8 @@ var Mediabunny = (() => {
+       return "mp3";
+     } else if (codec === "opus") {
+       return "opus";
++    } else if (codec === "g722") {
++      return "g722";
+     } else if (codec === "vorbis") {
+       return "vorbis";
+     } else if (codec === "flac") {
+@@ -5365,6 +5368,8 @@ var Mediabunny = (() => {
+       return "mp3";
+     } else if (codec === "opus") {
+       return "opus";
++    } else if (codec === "g722") {
++      return "g722";
+     } else if (codec === "vorbis") {
+       return "vorbis";
+     } else if (codec === "flac") {
+@@ -5454,6 +5459,8 @@ var Mediabunny = (() => {
+       return "aac";
+     } else if (codecString === "opus" || codecString === "Opus") {
+       return "opus";
++    } else if (codecString === "g722") {
++        return "g722";
+     } else if (codecString === "vorbis") {
+       return "vorbis";
+     } else if (codecString === "flac") {
+@@ -5641,7 +5648,7 @@ var Mediabunny = (() => {
+       );
+     }
+   };
+-  var VALID_AUDIO_CODEC_STRING_PREFIXES = [
++  var VALID_AUDIO_CODEC_STRING_PREFIXES = ["g722",
+     "mp4a",
+     "mp3",
+     "opus",
+@@ -10202,6 +10209,9 @@ var Mediabunny = (() => {
+     "aac": "A_AAC",
+     "mp3": "A_MPEG/L3",
+     "opus": "A_OPUS",
++    "g722": "A_MS/ACM",
++    "ulaw": "A_MS/ACM",
++    "alaw": "A_MS/ACM",
+     "vorbis": "A_VORBIS",
+     "flac": "A_FLAC",
+     "ac3": "A_AC3",
+@@ -10938,6 +10948,20 @@ var Mediabunny = (() => {
+                   } else if (this.currentTrack.codecId === "A_DTS/LOSSLESS") {
+                     this.currentTrack.info.dtsFormat = "dtsl";
+                   }
++                } else if (this.currentTrack.codecId === "A_MS/ACM") {
++                    const bytes = this.currentTrack.codecPrivate;
++                    if (bytes && bytes.length >= 18) {
++                        const wave = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++                        const tag = wave.getUint16(0, true);
++                        const codec = tag === 7 ? "ulaw" : tag === 6 ? "alaw" : tag === 0x028f || tag === 0x0065 ? "g722" : null;
++                        const channels = wave.getUint16(2, true);
++                        const rate = wave.getUint32(4, true);
++                        if (codec && channels > 0 && rate > 0) {
++                            this.currentTrack.info.codec = codec;
++                            this.currentTrack.info.numberOfChannels = channels;
++                            this.currentTrack.info.sampleRate = rate;
++                        }
++                    }
+                 } else if (this.currentTrack.codecId === "A_PCM/INT/LIT") {
+                   if (this.currentTrack.info.bitDepth === 8) {
+                     this.currentTrack.info.codec = "pcm-u8";
+@@ -33443,6 +33467,25 @@ var Mediabunny = (() => {
+         });
+         requiresAdtsStripping = true;
+       }
++      // Matroska A_MS/ACM stores WAVEFORMATEX, followed by untouched RTP payloads.
++      const acmCodec = track.source._codec;
++      if (acmCodec === "g722" || acmCodec === "ulaw" || acmCodec === "alaw") {
++          const g722 = acmCodec === "g722";
++          const channels = decoderConfig.numberOfChannels;
++          if (g722 && (decoderConfig.sampleRate !== 16000 || channels !== 1)) {
++              throw new Error("G.722 Matroska passthrough requires 16 kHz mono audio.");
++          }
++          const description = new Uint8Array(18);
++          const wave = new DataView(description.buffer);
++          // 0x028f matches the G.722 ACM mapping used by FFmpeg/VLC.
++          wave.setUint16(0, g722 ? 0x028f : acmCodec === "ulaw" ? 7 : 6, true);
++          wave.setUint16(2, channels, true);
++          wave.setUint32(4, decoderConfig.sampleRate, true);
++          wave.setUint32(8, decoderConfig.sampleRate * channels / (g722 ? 2 : 1), true);
++          wave.setUint16(12, channels, true);
++          wave.setUint16(14, g722 ? 4 : 8, true);
++          decoderConfig.description = description;
++      }
+       const newTrackData = {
+         track,
+         type: "audio",
+@@ -39131,7 +39174,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...VIDEO_CODECS,
+-        ...NON_PCM_AUDIO_CODECS,
++        ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+         // These are supported via ISO/IEC 23003-5:
+         "pcm-s16",
+         "pcm-s16be",
+@@ -39172,7 +39215,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...VIDEO_CODECS,
+-        ...NON_PCM_AUDIO_CODECS,
++        ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+         // These are supported via ISO/IEC 23003-5:
+         "pcm-s16",
+         "pcm-s16be",
+@@ -39268,7 +39311,7 @@ ${cue.notes ?? ""}`;
+       return [
+         ...VIDEO_CODECS,
+         ...NON_PCM_AUDIO_CODECS,
+-        ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be", "ulaw", "alaw"].includes(codec)),
++        ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be"].includes(codec)),
+         ...SUBTITLE_CODECS
+       ];
+     }
+@@ -39405,7 +39448,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...PCM_AUDIO_CODECS.filter(
+-          (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8", "ulaw", "alaw"].includes(codec)
++          (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8"].includes(codec)
+         )
+       ];
+     }
+diff --git a/dist/bundles/mediabunny.mjs b/dist/bundles/mediabunny.mjs
+index 4234c31ad73fb6cfc8b7f28ab65df11bed368b20..c3497a5e8b871e7965d9b479542a0b989f826953 100644
+--- a/dist/bundles/mediabunny.mjs
++++ b/dist/bundles/mediabunny.mjs
+@@ -4600,7 +4600,8 @@ var NON_PCM_AUDIO_CODECS = [
+   "flac",
+   "ac3",
+   "eac3",
+-  "dts"
++  "dts",
++  "g722",
+ ];
+ var AUDIO_CODECS = [
+   ...NON_PCM_AUDIO_CODECS,
+@@ -5171,6 +5172,8 @@ var buildAudioCodecString = (codec, numberOfChannels, sampleRate) => {
+     return "mp3";
+   } else if (codec === "opus") {
+     return "opus";
++  } else if (codec === "g722") {
++    return "g722";
+   } else if (codec === "vorbis") {
+     return "vorbis";
+   } else if (codec === "flac") {
+@@ -5208,6 +5211,8 @@ var extractAudioCodecString = (trackInfo) => {
+     return "mp3";
+   } else if (codec === "opus") {
+     return "opus";
++  } else if (codec === "g722") {
++    return "g722";
+   } else if (codec === "vorbis") {
+     return "vorbis";
+   } else if (codec === "flac") {
+@@ -5297,7 +5302,9 @@ var inferCodecFromCodecString = (codecString) => {
+     return "aac";
+   } else if (codecString === "opus" || codecString === "Opus") {
+     return "opus";
+-  } else if (codecString === "vorbis") {
++  } else if (codecString === "g722") {
++        return "g722";
++    } else if (codecString === "vorbis") {
+     return "vorbis";
+   } else if (codecString === "flac") {
+     return "flac";
+@@ -5484,7 +5491,7 @@ var validateVideoChunkMetadata = (metadata, trackCodec) => {
+     );
+   }
+ };
+-var VALID_AUDIO_CODEC_STRING_PREFIXES = [
++var VALID_AUDIO_CODEC_STRING_PREFIXES = ["g722",
+   "mp4a",
+   "mp3",
+   "opus",
+@@ -10045,6 +10052,9 @@ var CODEC_STRING_MAP = {
+   "aac": "A_AAC",
+   "mp3": "A_MPEG/L3",
+   "opus": "A_OPUS",
++  "g722": "A_MS/ACM",
++  "ulaw": "A_MS/ACM",
++  "alaw": "A_MS/ACM",
+   "vorbis": "A_VORBIS",
+   "flac": "A_FLAC",
+   "ac3": "A_AC3",
+@@ -10781,6 +10791,20 @@ var MatroskaDemuxer = class extends Demuxer {
+                 } else if (this.currentTrack.codecId === "A_DTS/LOSSLESS") {
+                   this.currentTrack.info.dtsFormat = "dtsl";
+                 }
++              } else if (this.currentTrack.codecId === "A_MS/ACM") {
++                  const bytes = this.currentTrack.codecPrivate;
++                  if (bytes && bytes.length >= 18) {
++                      const wave = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++                      const tag = wave.getUint16(0, true);
++                      const codec = tag === 7 ? "ulaw" : tag === 6 ? "alaw" : tag === 0x028f || tag === 0x0065 ? "g722" : null;
++                      const channels = wave.getUint16(2, true);
++                      const rate = wave.getUint32(4, true);
++                      if (codec && channels > 0 && rate > 0) {
++                          this.currentTrack.info.codec = codec;
++                          this.currentTrack.info.numberOfChannels = channels;
++                          this.currentTrack.info.sampleRate = rate;
++                      }
++                  }
+               } else if (this.currentTrack.codecId === "A_PCM/INT/LIT") {
+                 if (this.currentTrack.info.bitDepth === 8) {
+                   this.currentTrack.info.codec = "pcm-u8";
+@@ -33286,6 +33310,25 @@ var MatroskaMuxer = class extends Muxer {
+       });
+       requiresAdtsStripping = true;
+     }
++    // Matroska A_MS/ACM stores WAVEFORMATEX, followed by untouched RTP payloads.
++    const acmCodec = track.source._codec;
++    if (acmCodec === "g722" || acmCodec === "ulaw" || acmCodec === "alaw") {
++        const g722 = acmCodec === "g722";
++        const channels = decoderConfig.numberOfChannels;
++        if (g722 && (decoderConfig.sampleRate !== 16000 || channels !== 1)) {
++            throw new Error("G.722 Matroska passthrough requires 16 kHz mono audio.");
++        }
++        const description = new Uint8Array(18);
++        const wave = new DataView(description.buffer);
++        // 0x028f matches the G.722 ACM mapping used by FFmpeg/VLC.
++        wave.setUint16(0, g722 ? 0x028f : acmCodec === "ulaw" ? 7 : 6, true);
++        wave.setUint16(2, channels, true);
++        wave.setUint32(4, decoderConfig.sampleRate, true);
++        wave.setUint32(8, decoderConfig.sampleRate * channels / (g722 ? 2 : 1), true);
++        wave.setUint16(12, channels, true);
++        wave.setUint16(14, g722 ? 4 : 8, true);
++        decoderConfig.description = description;
++    }
+     const newTrackData = {
+       track,
+       type: "audio",
+@@ -38974,7 +39017,7 @@ var Mp4OutputFormat = class extends IsobmffOutputFormat2 {
+   getSupportedCodecs() {
+     return [
+       ...VIDEO_CODECS,
+-      ...NON_PCM_AUDIO_CODECS,
++      ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+       // These are supported via ISO/IEC 23003-5:
+       "pcm-s16",
+       "pcm-s16be",
+@@ -39015,7 +39058,7 @@ var CmafOutputFormat = class extends IsobmffOutputFormat2 {
+   getSupportedCodecs() {
+     return [
+       ...VIDEO_CODECS,
+-      ...NON_PCM_AUDIO_CODECS,
++      ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+       // These are supported via ISO/IEC 23003-5:
+       "pcm-s16",
+       "pcm-s16be",
+@@ -39111,7 +39154,7 @@ var MkvOutputFormat2 = class extends OutputFormat {
+     return [
+       ...VIDEO_CODECS,
+       ...NON_PCM_AUDIO_CODECS,
+-      ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be", "ulaw", "alaw"].includes(codec)),
++      ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be"].includes(codec)),
+       ...SUBTITLE_CODECS
+     ];
+   }
+@@ -39248,7 +39291,7 @@ var WavOutputFormat = class extends OutputFormat {
+   getSupportedCodecs() {
+     return [
+       ...PCM_AUDIO_CODECS.filter(
+-        (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8", "ulaw", "alaw"].includes(codec)
++        (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8"].includes(codec)
+       )
+     ];
+   }
+diff --git a/dist/bundles/mediabunny.node.cjs b/dist/bundles/mediabunny.node.cjs
+index 90ff7d356a4829edd1b30b2d51f553f995f01789..97e6e22f021123d52e86a5aa3ce3e85022008652 100644
+--- a/dist/bundles/mediabunny.node.cjs
++++ b/dist/bundles/mediabunny.node.cjs
+@@ -4754,7 +4754,8 @@ var Mediabunny = (() => {
+     "flac",
+     "ac3",
+     "eac3",
+-    "dts"
++    "dts",
++    "g722",
+   ];
+   var AUDIO_CODECS = [
+     ...NON_PCM_AUDIO_CODECS,
+@@ -5325,6 +5326,8 @@ var Mediabunny = (() => {
+       return "mp3";
+     } else if (codec === "opus") {
+       return "opus";
++    } else if (codec === "g722") {
++      return "g722";
+     } else if (codec === "vorbis") {
+       return "vorbis";
+     } else if (codec === "flac") {
+@@ -5362,6 +5365,8 @@ var Mediabunny = (() => {
+       return "mp3";
+     } else if (codec === "opus") {
+       return "opus";
++    } else if (codec === "g722") {
++      return "g722";
+     } else if (codec === "vorbis") {
+       return "vorbis";
+     } else if (codec === "flac") {
+@@ -5451,6 +5456,8 @@ var Mediabunny = (() => {
+       return "aac";
+     } else if (codecString === "opus" || codecString === "Opus") {
+       return "opus";
++    } else if (codecString === "g722") {
++        return "g722";
+     } else if (codecString === "vorbis") {
+       return "vorbis";
+     } else if (codecString === "flac") {
+@@ -5638,7 +5645,7 @@ var Mediabunny = (() => {
+       );
+     }
+   };
+-  var VALID_AUDIO_CODEC_STRING_PREFIXES = [
++  var VALID_AUDIO_CODEC_STRING_PREFIXES = ["g722",
+     "mp4a",
+     "mp3",
+     "opus",
+@@ -10199,6 +10206,9 @@ var Mediabunny = (() => {
+     "aac": "A_AAC",
+     "mp3": "A_MPEG/L3",
+     "opus": "A_OPUS",
++    "g722": "A_MS/ACM",
++    "ulaw": "A_MS/ACM",
++    "alaw": "A_MS/ACM",
+     "vorbis": "A_VORBIS",
+     "flac": "A_FLAC",
+     "ac3": "A_AC3",
+@@ -10935,6 +10945,20 @@ var Mediabunny = (() => {
+                   } else if (this.currentTrack.codecId === "A_DTS/LOSSLESS") {
+                     this.currentTrack.info.dtsFormat = "dtsl";
+                   }
++                } else if (this.currentTrack.codecId === "A_MS/ACM") {
++                    const bytes = this.currentTrack.codecPrivate;
++                    if (bytes && bytes.length >= 18) {
++                        const wave = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++                        const tag = wave.getUint16(0, true);
++                        const codec = tag === 7 ? "ulaw" : tag === 6 ? "alaw" : tag === 0x028f || tag === 0x0065 ? "g722" : null;
++                        const channels = wave.getUint16(2, true);
++                        const rate = wave.getUint32(4, true);
++                        if (codec && channels > 0 && rate > 0) {
++                            this.currentTrack.info.codec = codec;
++                            this.currentTrack.info.numberOfChannels = channels;
++                            this.currentTrack.info.sampleRate = rate;
++                        }
++                    }
+                 } else if (this.currentTrack.codecId === "A_PCM/INT/LIT") {
+                   if (this.currentTrack.info.bitDepth === 8) {
+                     this.currentTrack.info.codec = "pcm-u8";
+@@ -33445,6 +33469,25 @@ var Mediabunny = (() => {
+         });
+         requiresAdtsStripping = true;
+       }
++      // Matroska A_MS/ACM stores WAVEFORMATEX, followed by untouched RTP payloads.
++      const acmCodec = track.source._codec;
++      if (acmCodec === "g722" || acmCodec === "ulaw" || acmCodec === "alaw") {
++          const g722 = acmCodec === "g722";
++          const channels = decoderConfig.numberOfChannels;
++          if (g722 && (decoderConfig.sampleRate !== 16000 || channels !== 1)) {
++              throw new Error("G.722 Matroska passthrough requires 16 kHz mono audio.");
++          }
++          const description = new Uint8Array(18);
++          const wave = new DataView(description.buffer);
++          // 0x028f matches the G.722 ACM mapping used by FFmpeg/VLC.
++          wave.setUint16(0, g722 ? 0x028f : acmCodec === "ulaw" ? 7 : 6, true);
++          wave.setUint16(2, channels, true);
++          wave.setUint32(4, decoderConfig.sampleRate, true);
++          wave.setUint32(8, decoderConfig.sampleRate * channels / (g722 ? 2 : 1), true);
++          wave.setUint16(12, channels, true);
++          wave.setUint16(14, g722 ? 4 : 8, true);
++          decoderConfig.description = description;
++      }
+       const newTrackData = {
+         track,
+         type: "audio",
+@@ -39133,7 +39176,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...VIDEO_CODECS,
+-        ...NON_PCM_AUDIO_CODECS,
++        ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+         // These are supported via ISO/IEC 23003-5:
+         "pcm-s16",
+         "pcm-s16be",
+@@ -39174,7 +39217,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...VIDEO_CODECS,
+-        ...NON_PCM_AUDIO_CODECS,
++        ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== "g722"),
+         // These are supported via ISO/IEC 23003-5:
+         "pcm-s16",
+         "pcm-s16be",
+@@ -39270,7 +39313,7 @@ ${cue.notes ?? ""}`;
+       return [
+         ...VIDEO_CODECS,
+         ...NON_PCM_AUDIO_CODECS,
+-        ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be", "ulaw", "alaw"].includes(codec)),
++        ...PCM_AUDIO_CODECS.filter((codec) => !["pcm-s8", "pcm-f32be", "pcm-f64be"].includes(codec)),
+         ...SUBTITLE_CODECS
+       ];
+     }
+@@ -39407,7 +39450,7 @@ ${cue.notes ?? ""}`;
+     getSupportedCodecs() {
+       return [
+         ...PCM_AUDIO_CODECS.filter(
+-          (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8", "ulaw", "alaw"].includes(codec)
++          (codec) => ["pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32", "pcm-f64", "pcm-u8"].includes(codec)
+         )
+       ];
+     }
+diff --git a/dist/mediabunny.d.ts b/dist/mediabunny.d.ts
+index 1307312e0a16b511953b89b456512c67cb6ac09c..6acd8f914a79182ba1fa84bdb955df1d6d17fea0 100644
+--- a/dist/mediabunny.d.ts
++++ b/dist/mediabunny.d.ts
+@@ -150,7 +150,7 @@ export declare type AttachedImage = {
+  * @group Codecs
+  * @public
+  */
+-export declare const AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "pcm-s16", "pcm-s16be", "pcm-s24", "pcm-s24be", "pcm-s32", "pcm-s32be", "pcm-f32", "pcm-f32be", "pcm-f64", "pcm-f64be", "pcm-u8", "pcm-s8", "ulaw", "alaw"];
++export declare const AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "g722", "pcm-s16", "pcm-s16be", "pcm-s24", "pcm-s24be", "pcm-s32", "pcm-s32be", "pcm-f32", "pcm-f32be", "pcm-f64", "pcm-f64be", "pcm-u8", "pcm-s8", "ulaw", "alaw"];
+ 
+ /**
+  * A sink that retrieves decoded audio samples from an audio track and converts them to `AudioBuffer` instances. This is
+@@ -3622,7 +3622,7 @@ export declare type MpegTsOutputFormatOptions = {
+  * @group Codecs
+  * @public
+  */
+-export declare const NON_PCM_AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts"];
++export declare const NON_PCM_AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "g722"];
+ 
+ /**
+  * This target just discards all incoming data. It is useful for when you need an {@link Output} but extract data from
+diff --git a/dist/modules/src/codec.d.ts b/dist/modules/src/codec.d.ts
+index 97dfdf3d959b46be1c7d6dcc297fbe4ff6341c6f..271fc2895b4fde9e395b037a4833974aa336f2a4 100644
+--- a/dist/modules/src/codec.d.ts
++++ b/dist/modules/src/codec.d.ts
+@@ -24,13 +24,13 @@ export declare const PCM_AUDIO_CODECS: readonly ["pcm-s16", "pcm-s16be", "pcm-s2
+  * @group Codecs
+  * @public
+  */
+-export declare const NON_PCM_AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts"];
++export declare const NON_PCM_AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "g722"];
+ /**
+  * List of known audio codecs, ordered by encoding preference.
+  * @group Codecs
+  * @public
+  */
+-export declare const AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "pcm-s16", "pcm-s16be", "pcm-s24", "pcm-s24be", "pcm-s32", "pcm-s32be", "pcm-f32", "pcm-f32be", "pcm-f64", "pcm-f64be", "pcm-u8", "pcm-s8", "ulaw", "alaw"];
++export declare const AUDIO_CODECS: readonly ["aac", "opus", "mp3", "vorbis", "flac", "ac3", "eac3", "dts", "g722", "pcm-s16", "pcm-s16be", "pcm-s24", "pcm-s24be", "pcm-s32", "pcm-s32be", "pcm-f32", "pcm-f32be", "pcm-f64", "pcm-f64be", "pcm-u8", "pcm-s8", "ulaw", "alaw"];
+ /**
+  * List of known subtitle codecs, ordered by encoding preference.
+  * @group Codecs
+diff --git a/dist/modules/src/codec.js b/dist/modules/src/codec.js
+index 65c2ed9707caad721db3d828e44e93eeaa656d6e..a278376f2f7998f9902e65c463f78b427e165fe9 100644
+--- a/dist/modules/src/codec.js
++++ b/dist/modules/src/codec.js
+@@ -56,6 +56,7 @@ export const NON_PCM_AUDIO_CODECS = [
+     'ac3',
+     'eac3',
+     'dts',
++    'g722',
+ ];
+ /**
+  * List of known audio codecs, ordered by encoding preference.
+@@ -567,6 +568,8 @@ export const buildAudioCodecString = (codec, numberOfChannels, sampleRate) => {
+     }
+     else if (codec === 'opus') {
+         return 'opus';
++      } else if (codec === 'g722') {
++        return 'g722';
+     }
+     else if (codec === 'vorbis') {
+         return 'vorbis';
+@@ -614,6 +617,8 @@ export const extractAudioCodecString = (trackInfo) => {
+     }
+     else if (codec === 'opus') {
+         return 'opus';
++      } else if (codec === 'g722') {
++        return 'g722';
+     }
+     else if (codec === 'vorbis') {
+         return 'vorbis';
+@@ -728,7 +733,9 @@ export const inferCodecFromCodecString = (codecString) => {
+     else if (codecString === 'opus' || codecString === 'Opus' /* HLS variant */) {
+         return 'opus';
+     }
+-    else if (codecString === 'vorbis') {
++    else if (codecString === 'g722') {
++        return 'g722';
++    } else if (codecString === 'vorbis') {
+         return 'vorbis';
+     }
+     else if (codecString === 'flac') {
+@@ -920,7 +927,7 @@ export const validateVideoChunkMetadata = (metadata, trackCodec) => {
+             + ` the track codec '${trackCodec}'.`);
+     }
+ };
+-const VALID_AUDIO_CODEC_STRING_PREFIXES = [
++const VALID_AUDIO_CODEC_STRING_PREFIXES = ['g722',
+     'mp4a', 'mp3', 'opus', 'vorbis', 'flac', 'ulaw', 'alaw', 'pcm', 'ac-3', 'ec-3', 'dts',
+ ];
+ export const validateAudioChunkMetadata = (metadata, trackCodec) => {
+diff --git a/dist/modules/src/matroska/ebml.js b/dist/modules/src/matroska/ebml.js
+index 103c6f227f8606b4c3b50357bff5e45b5e5f3be7..96fddd16d55f926f6cd5a070c9efc967b71a4800 100644
+--- a/dist/modules/src/matroska/ebml.js
++++ b/dist/modules/src/matroska/ebml.js
+@@ -662,6 +662,9 @@ export const CODEC_STRING_MAP = {
+     'aac': 'A_AAC',
+     'mp3': 'A_MPEG/L3',
+     'opus': 'A_OPUS',
++    'g722': 'A_MS/ACM',
++    'ulaw': 'A_MS/ACM',
++    'alaw': 'A_MS/ACM',
+     'vorbis': 'A_VORBIS',
+     'flac': 'A_FLAC',
+     'ac3': 'A_AC3',
+diff --git a/dist/modules/src/matroska/matroska-demuxer.js b/dist/modules/src/matroska/matroska-demuxer.js
+index 7fcb549cadb05f87a425e4ed5971cf0733b0c7c6..7a0ba98f4f83dedb17b30535f35b41e206cbef4b 100644
+--- a/dist/modules/src/matroska/matroska-demuxer.js
++++ b/dist/modules/src/matroska/matroska-demuxer.js
+@@ -835,7 +835,21 @@ export class MatroskaDemuxer extends Demuxer {
+                                     this.currentTrack.info.dtsFormat = 'dtsl';
+                                 }
+                             }
+-                            else if (this.currentTrack.codecId === 'A_PCM/INT/LIT') {
++                            else if (this.currentTrack.codecId === 'A_MS/ACM') {
++                                const bytes = this.currentTrack.codecPrivate;
++                                if (bytes && bytes.length >= 18) {
++                                    const wave = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++                                    const tag = wave.getUint16(0, true);
++                                    const codec = tag === 7 ? 'ulaw' : tag === 6 ? 'alaw' : tag === 0x028f || tag === 0x0065 ? 'g722' : null;
++                                    const channels = wave.getUint16(2, true);
++                                    const rate = wave.getUint32(4, true);
++                                    if (codec && channels > 0 && rate > 0) {
++                                        this.currentTrack.info.codec = codec;
++                                        this.currentTrack.info.numberOfChannels = channels;
++                                        this.currentTrack.info.sampleRate = rate;
++                                    }
++                                }
++                            } else if (this.currentTrack.codecId === 'A_PCM/INT/LIT') {
+                                 if (this.currentTrack.info.bitDepth === 8) {
+                                     this.currentTrack.info.codec = 'pcm-u8';
+                                 }
+diff --git a/dist/modules/src/matroska/matroska-muxer.js b/dist/modules/src/matroska/matroska-muxer.js
+index b4ab966b77ab937f3a92a71edc052b8c78feae52..e62715dee4b5386b43ce786b929323d70ca569ba 100644
+--- a/dist/modules/src/matroska/matroska-muxer.js
++++ b/dist/modules/src/matroska/matroska-muxer.js
+@@ -728,6 +728,25 @@ export class MatroskaMuxer extends Muxer {
+             });
+             requiresAdtsStripping = true;
+         }
++        // Matroska A_MS/ACM stores WAVEFORMATEX, followed by untouched RTP payloads.
++        const acmCodec = track.source._codec;
++        if (acmCodec === 'g722' || acmCodec === 'ulaw' || acmCodec === 'alaw') {
++            const g722 = acmCodec === 'g722';
++            const channels = decoderConfig.numberOfChannels;
++            if (g722 && (decoderConfig.sampleRate !== 16000 || channels !== 1)) {
++                throw new Error('G.722 Matroska passthrough requires 16 kHz mono audio.');
++            }
++            const description = new Uint8Array(18);
++            const wave = new DataView(description.buffer);
++            // 0x028f matches the G.722 ACM mapping used by FFmpeg/VLC.
++            wave.setUint16(0, g722 ? 0x028f : acmCodec === 'ulaw' ? 7 : 6, true);
++            wave.setUint16(2, channels, true);
++            wave.setUint32(4, decoderConfig.sampleRate, true);
++            wave.setUint32(8, decoderConfig.sampleRate * channels / (g722 ? 2 : 1), true);
++            wave.setUint16(12, channels, true);
++            wave.setUint16(14, g722 ? 4 : 8, true);
++            decoderConfig.description = description;
++        }
+         const newTrackData = {
+             track,
+             type: 'audio',
+diff --git a/dist/modules/src/output-format.js b/dist/modules/src/output-format.js
+index 92285853eb2c65fda6723008334d4e06f334d57c..56570ba4c64bfe7b3d9ad24f7ad624388a0ee82d 100644
+--- a/dist/modules/src/output-format.js
++++ b/dist/modules/src/output-format.js
+@@ -143,7 +143,7 @@ export class Mp4OutputFormat extends IsobmffOutputFormat {
+     getSupportedCodecs() {
+         return [
+             ...VIDEO_CODECS,
+-            ...NON_PCM_AUDIO_CODECS,
++            ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== 'g722'),
+             // These are supported via ISO/IEC 23003-5:
+             'pcm-s16',
+             'pcm-s16be',
+@@ -190,7 +190,7 @@ export class CmafOutputFormat extends IsobmffOutputFormat {
+     getSupportedCodecs() {
+         return [
+             ...VIDEO_CODECS,
+-            ...NON_PCM_AUDIO_CODECS,
++            ...NON_PCM_AUDIO_CODECS.filter(codec => codec !== 'g722'),
+             // These are supported via ISO/IEC 23003-5:
+             'pcm-s16',
+             'pcm-s16be',
+@@ -229,7 +229,7 @@ export class MovOutputFormat extends IsobmffOutputFormat {
+     getSupportedCodecs() {
+         return [
+             ...VIDEO_CODECS,
+-            ...AUDIO_CODECS,
++            ...AUDIO_CODECS.filter(codec => codec !== 'g722'),
+         ];
+     }
+     /** @internal */
+@@ -301,7 +301,7 @@ export class MkvOutputFormat extends OutputFormat {
+         return [
+             ...VIDEO_CODECS,
+             ...NON_PCM_AUDIO_CODECS,
+-            ...PCM_AUDIO_CODECS.filter(codec => !['pcm-s8', 'pcm-f32be', 'pcm-f64be', 'ulaw', 'alaw'].includes(codec)),
++            ...PCM_AUDIO_CODECS.filter(codec => !['pcm-s8', 'pcm-f32be', 'pcm-f64be'].includes(codec)),
+             ...SUBTITLE_CODECS,
+         ];
+     }
+@@ -457,7 +457,7 @@ export class WavOutputFormat extends OutputFormat {
+     }
+     getSupportedCodecs() {
+         return [
+-            ...PCM_AUDIO_CODECS.filter(codec => ['pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32', 'pcm-f64', 'pcm-u8', 'ulaw', 'alaw'].includes(codec)),
++            ...PCM_AUDIO_CODECS.filter(codec => ['pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32', 'pcm-f64', 'pcm-u8'].includes(codec)),
+         ];
+     }
+     get supportsVideoTransformationMetadata() {
+diff --git a/src/codec.ts b/src/codec.ts
+index ab9d1bfda331b2397a4f8c21561ddae1bedc521d..7673d49b0dda1a6081921d6383c01007135f5ac7 100644
+--- a/src/codec.ts
++++ b/src/codec.ts
+@@ -86,6 +86,7 @@ export const NON_PCM_AUDIO_CODECS = [
+ 	'ac3',
+ 	'eac3',
+ 	'dts',
++	'g722',
+ ] as const;
+ /**
+  * List of known audio codecs, ordered by encoding preference.
+@@ -743,6 +744,8 @@ export const buildAudioCodecString = (codec: AudioCodec, numberOfChannels: numbe
+ 		return 'mp3';
+ 	} else if (codec === 'opus') {
+ 		return 'opus';
++	} else if (codec === 'g722') {
++		return 'g722';
+ 	} else if (codec === 'vorbis') {
+ 		return 'vorbis';
+ 	} else if (codec === 'flac') {
+@@ -795,6 +798,8 @@ export const extractAudioCodecString = (trackInfo: {
+ 		return 'mp3';
+ 	} else if (codec === 'opus') {
+ 		return 'opus';
++	} else if (codec === 'g722') {
++		return 'g722';
+ 	} else if (codec === 'vorbis') {
+ 		return 'vorbis';
+ 	} else if (codec === 'flac') {
+@@ -909,7 +914,9 @@ export const inferCodecFromCodecString = (codecString: string): MediaCodec | nul
+ 		return 'aac';
+ 	} else if (codecString === 'opus' || codecString === 'Opus' /* HLS variant */) {
+ 		return 'opus';
+-	} else if (codecString === 'vorbis') {
++	} else if (codecString === 'g722') {
++        return 'g722';
++    } else if (codecString === 'vorbis') {
+ 		return 'vorbis';
+ 	} else if (codecString === 'flac') {
+ 		return 'flac';
+@@ -1160,7 +1167,7 @@ export const validateVideoChunkMetadata = (
+ 	}
+ };
+ 
+-const VALID_AUDIO_CODEC_STRING_PREFIXES = [
++const VALID_AUDIO_CODEC_STRING_PREFIXES = ['g722',
+ 	'mp4a', 'mp3', 'opus', 'vorbis', 'flac', 'ulaw', 'alaw', 'pcm', 'ac-3', 'ec-3', 'dts',
+ ];
+ 
+diff --git a/src/matroska/ebml.ts b/src/matroska/ebml.ts
+index fa3112be577873645129e58e4c83d318b0544237..e3fe5bd9801a12020f175023781768856bc5b8b5 100644
+--- a/src/matroska/ebml.ts
++++ b/src/matroska/ebml.ts
+@@ -748,6 +748,9 @@ export const CODEC_STRING_MAP: Partial<Record<MediaCodec, string>> = {
+ 	'aac': 'A_AAC',
+ 	'mp3': 'A_MPEG/L3',
+ 	'opus': 'A_OPUS',
++	'g722': 'A_MS/ACM',
++	'ulaw': 'A_MS/ACM',
++	'alaw': 'A_MS/ACM',
+ 	'vorbis': 'A_VORBIS',
+ 	'flac': 'A_FLAC',
+ 	'ac3': 'A_AC3',
+diff --git a/src/matroska/matroska-demuxer.ts b/src/matroska/matroska-demuxer.ts
+index f0524c32fc45447b6ea89d991735dcc7cdc3466f..ff72ec589219af04680d355c70ea91368a330965 100644
+--- a/src/matroska/matroska-demuxer.ts
++++ b/src/matroska/matroska-demuxer.ts
+@@ -1190,6 +1190,20 @@ export class MatroskaDemuxer extends Demuxer {
+ 							} else if (this.currentTrack.codecId === 'A_DTS/LOSSLESS') {
+ 								this.currentTrack.info.dtsFormat = 'dtsl';
+ 							}
++						} else if (this.currentTrack.codecId === 'A_MS/ACM') {
++						    const bytes = this.currentTrack.codecPrivate;
++						    if (bytes && bytes.length >= 18) {
++						        const wave = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++						        const tag = wave.getUint16(0, true);
++						        const codec = tag === 7 ? 'ulaw' : tag === 6 ? 'alaw' : tag === 0x028f || tag === 0x0065 ? 'g722' : null;
++						        const channels = wave.getUint16(2, true);
++						        const rate = wave.getUint32(4, true);
++						        if (codec && channels > 0 && rate > 0) {
++						            this.currentTrack.info.codec = codec;
++						            this.currentTrack.info.numberOfChannels = channels;
++						            this.currentTrack.info.sampleRate = rate;
++						        }
++						    }
+ 						} else if (this.currentTrack.codecId === 'A_PCM/INT/LIT') {
+ 							if (this.currentTrack.info.bitDepth === 8) {
+ 								this.currentTrack.info.codec = 'pcm-u8';
+diff --git a/src/matroska/matroska-muxer.ts b/src/matroska/matroska-muxer.ts
+index a0f5fcc578d95464e1b25560671d0983ec70c0b3..6833cb4f25be2d44160db30a36d1b102d79bb4c5 100644
+--- a/src/matroska/matroska-muxer.ts
++++ b/src/matroska/matroska-muxer.ts
+@@ -924,6 +924,25 @@ export class MatroskaMuxer extends Muxer {
+ 			requiresAdtsStripping = true;
+ 		}
+ 
++		// Matroska A_MS/ACM stores WAVEFORMATEX, followed by untouched RTP payloads.
++		const acmCodec = track.source._codec;
++		if (acmCodec === 'g722' || acmCodec === 'ulaw' || acmCodec === 'alaw') {
++		    const g722 = acmCodec === 'g722';
++		    const channels = decoderConfig.numberOfChannels;
++		    if (g722 && (decoderConfig.sampleRate !== 16000 || channels !== 1)) {
++		        throw new Error('G.722 Matroska passthrough requires 16 kHz mono audio.');
++		    }
++		    const description = new Uint8Array(18);
++		    const wave = new DataView(description.buffer);
++		    // 0x028f matches the G.722 ACM mapping used by FFmpeg/VLC.
++		    wave.setUint16(0, g722 ? 0x028f : acmCodec === 'ulaw' ? 7 : 6, true);
++		    wave.setUint16(2, channels, true);
++		    wave.setUint32(4, decoderConfig.sampleRate, true);
++		    wave.setUint32(8, decoderConfig.sampleRate * channels / (g722 ? 2 : 1), true);
++		    wave.setUint16(12, channels, true);
++		    wave.setUint16(14, g722 ? 4 : 8, true);
++		    decoderConfig.description = description;
++		}
+ 		const newTrackData: MatroskaAudioTrackData = {
+ 			track,
+ 			type: 'audio',
+diff --git a/src/output-format.ts b/src/output-format.ts
+index 029e79acc77c4054f715bf72178a4c608c80e03d..740c4cafc334a11d20c2c69639ad5135b701d0cc 100644
+--- a/src/output-format.ts
++++ b/src/output-format.ts
+@@ -335,7 +335,7 @@ export class Mp4OutputFormat extends IsobmffOutputFormat {
+ 	getSupportedCodecs(): MediaCodec[] {
+ 		return [
+ 			...VIDEO_CODECS,
+-			...NON_PCM_AUDIO_CODECS,
++			...NON_PCM_AUDIO_CODECS.filter(codec => codec !== 'g722'),
+ 
+ 			// These are supported via ISO/IEC 23003-5:
+ 			'pcm-s16',
+@@ -404,7 +404,7 @@ export class CmafOutputFormat extends IsobmffOutputFormat {
+ 	getSupportedCodecs(): MediaCodec[] {
+ 		return [
+ 			...VIDEO_CODECS,
+-			...NON_PCM_AUDIO_CODECS,
++			...NON_PCM_AUDIO_CODECS.filter(codec => codec !== 'g722'),
+ 
+ 			// These are supported via ISO/IEC 23003-5:
+ 			'pcm-s16',
+@@ -450,7 +450,7 @@ export class MovOutputFormat extends IsobmffOutputFormat {
+ 	getSupportedCodecs(): MediaCodec[] {
+ 		return [
+ 			...VIDEO_CODECS,
+-			...AUDIO_CODECS,
++			...AUDIO_CODECS.filter(codec => codec !== 'g722'),
+ 		];
+ 	}
+ 
+@@ -585,7 +585,7 @@ export class MkvOutputFormat extends OutputFormat {
+ 		return [
+ 			...VIDEO_CODECS,
+ 			...NON_PCM_AUDIO_CODECS,
+-			...PCM_AUDIO_CODECS.filter(codec => !['pcm-s8', 'pcm-f32be', 'pcm-f64be', 'ulaw', 'alaw'].includes(codec)),
++			...PCM_AUDIO_CODECS.filter(codec => !['pcm-s8', 'pcm-f32be', 'pcm-f64be'].includes(codec)),
+ 			...SUBTITLE_CODECS,
+ 		];
+ 	}
+@@ -836,7 +836,7 @@ export class WavOutputFormat extends OutputFormat {
+ 	getSupportedCodecs(): MediaCodec[] {
+ 		return [
+ 			...PCM_AUDIO_CODECS.filter(codec =>
+-				['pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32', 'pcm-f64', 'pcm-u8', 'ulaw', 'alaw'].includes(codec),
++				['pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32', 'pcm-f64', 'pcm-u8'].includes(codec),
+ 			),
+ 		];
+ 	}

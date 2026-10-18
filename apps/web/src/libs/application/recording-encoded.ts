@@ -32,9 +32,9 @@ import {
   encodedRecordingFormat,
   RecordingRtpTimeline,
 } from "./recording-encoded-format";
-import { RecordingEncodedAudio } from "./recording-opus";
+import { RecordingEncodedAudio } from "./recording-encoded-audio";
 
-/** Muxes borrowed video and, when available, Opus. Other audio uses the selected-source mix. */
+/** Muxes borrowed video and, when available, the original audio codec. Other audio uses the selected-source mix. */
 class EncodedRecording
   extends EventTarget
   implements RecordingEngine
@@ -152,8 +152,18 @@ class EncodedRecording
       const selected = recordingContainerForCodec(
         container,
         this.format.codec,
+        this.encodedAudio?.codec,
       );
       this.container = recordingContainer(selected);
+      if (
+        this.encodedAudio &&
+        !this.container
+          .getSupportedAudioCodecs()
+          .includes(this.encodedAudio.codec)
+      )
+        throw new Error(
+          "Selected recording container cannot preserve this audio codec",
+        );
       if (
         selected === "mkv" &&
         (this.format.codec === "avc" ||
@@ -180,7 +190,7 @@ class EncodedRecording
         throw new Error(
           "Native recording audio encoder is unavailable",
         );
-      this.mimeType = `${this.container.mimeType};codecs=${this.format.config.codec}${audio || pcmFormat || this.encodedAudio ? ",opus" : ""}`;
+      this.mimeType = `${this.container.mimeType};codecs=${this.format.config.codec}${this.encodedAudio ? `,${this.encodedAudio.codec}` : audio || pcmFormat ? ",opus" : ""}`;
       this.output = new Output({
         format: this.container,
         target: new StreamTarget(
@@ -348,6 +358,14 @@ class EncodedRecording
   }
 
   private encodedAudioFrame(packet: EncodedAudioPacket) {
+    // Receiving starts before the decoder exposes its first synchronized delivery
+    // anchor. Allow the bounded preparation timeout to wait for that clock; never
+    // substitute arrival time or silently discard clock failures during recording.
+    if (
+      this.firstAudio &&
+      !Number.isFinite(packet.clockTime)
+    )
+      return Promise.resolve();
     const result = this.accept(
       packet.data.byteLength,
       async () => {

@@ -55,11 +55,18 @@ export function recordingFormat(type: string): {
 }
 export type RecordingContainer = "auto" | "mkv" | "mp4";
 
-/** Select from the actual video codec, independently of capture or storage. */
+/** Select a container that preserves the actual codecs, independently of capture or storage. */
 export function recordingContainerForCodec(
   preference: RecordingContainer,
   codec: string,
+  audioCodec?: string,
 ): "mkv" | "mp4" {
+  if (
+    preference === "auto" &&
+    audioCodec &&
+    ["g722", "ulaw", "alaw"].includes(audioCodec)
+  )
+    return "mkv";
   return preference === "auto"
     ? codec === "avc" || codec === "hevc"
       ? "mp4"

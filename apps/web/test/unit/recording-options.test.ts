@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  recordingContainerForCodec,
   recordingFormat,
   recordingVideoBitrate,
 } from "@/libs/application/recording-options";
@@ -81,3 +82,26 @@ it("bounds small, large and temporarily incomplete track settings", () => {
     }),
   ).toBe(40_000_000);
 });
+
+it.each(["g722", "ulaw", "alaw"])(
+  "auto selects MKV to preserve %s and respects explicit MP4",
+  (audio) => {
+    for (const video of [
+      "avc",
+      "hevc",
+      "vp8",
+      "vp9",
+      "av1",
+    ]) {
+      expect(
+        recordingContainerForCodec("auto", video, audio),
+      ).toBe("mkv");
+      expect(
+        recordingContainerForCodec("mp4", video, audio),
+      ).toBe("mp4");
+    }
+    expect(
+      recordingContainerForCodec("auto", "avc", "opus"),
+    ).toBe("mp4");
+  },
+);

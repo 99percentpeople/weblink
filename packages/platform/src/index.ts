@@ -1,4 +1,5 @@
 export * from "./recording";
+export * from "./recording-audio-codec";
 import type { InputDeviceSnapshot } from "./input";
 import type {
   BinarySource,
@@ -532,11 +533,12 @@ export interface NativeSendCodecs {
   audio: string;
 }
 export interface NativeScreenShare {
-  /** Direct encoded video plus the selected capture's PCM audio; no local peer. */
+  /** Direct sender frames, with PCM audio fallback; no local peer. */
   subscribeRecording?(
     sessionId: string,
     consumer: import("./recording").EncodedMediaConsumer,
     signal?: AbortSignal,
+    options?: { encodedAudio?: boolean },
   ): Promise<
     import("./recording").EncodedMediaSubscription | null
   >;

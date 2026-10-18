@@ -5,7 +5,7 @@ export interface EncodedVideoPacket {
   timestamp: number;
   /** Browser RTP defaults to 90 kHz; native audio/video share a microsecond clock. */
   timestampScale?: 90000 | 1000000;
-  /** Shared media clock in milliseconds (capture, or receiver delivery), shared by paired browser audio/video tracks. */
+  /** Shared media clock in milliseconds (capture, or receiver delivery), shared by paired audio/video tracks. */
   clockTime?: number;
   mimeType: string;
   width: number;
@@ -31,6 +31,8 @@ export interface RecordingAudioPacket extends RecordingAudioFormat {
 export interface EncodedAudioPacket extends RecordingAudioFormat {
   data: ArrayBuffer;
   timestamp: number;
+  /** RTP timestamp frequency; sampleRate describes the decoded audio. */
+  clockRate?: number;
   clockTime?: number;
   mimeType: string;
   ssrc: number;

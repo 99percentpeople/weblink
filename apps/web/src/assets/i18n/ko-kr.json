@@ -1475,7 +1475,7 @@
     "settings_title": "녹화",
     "container_title": "녹화 저장 형식",
     "container_auto": "자동",
-    "container_description": "자동은 H.264/H.265에 MP4를, 다른 코덱에 MKV를 사용합니다. 다음 녹화부터 적용되며 원래 코덱을 유지합니다. 재생 호환성은 플레이어에 따라 다릅니다.",
+    "container_description": "자동은 원래 코덱을 유지할 수 있는 MP4 또는 MKV를 선택합니다. 형식을 직접 지정하면 오디오를 다시 인코딩할 수 있습니다. 다음 녹화부터 적용되며 재생 호환성은 플레이어에 따라 다릅니다.",
     "pause": "녹화 일시 중지",
     "resume": "녹화 재개",
     "paused": "녹화 일시 중지됨",

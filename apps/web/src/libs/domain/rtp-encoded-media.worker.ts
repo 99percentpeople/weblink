@@ -3,6 +3,7 @@ import {
   type EncodedVideoPacket,
   type EncodedAudioPacket,
 } from "./encoded-video";
+import { recordingAudioFormat } from "@weblink/platform";
 
 // The transform lives as long as the RTP endpoint. Recording only switches copying;
 // detaching a transform can stop Chromium's RTP pipeline.
@@ -148,11 +149,26 @@ scope.addEventListener("rtctransform", (event: Event) => {
                 ssrc,
                 segment,
               };
+              const sound = audio
+                ? recordingAudioFormat(
+                    common.mimeType,
+                    codec?.clockRate,
+                    codec?.channels,
+                  )
+                : undefined;
               packet = audio
                 ? {
                     ...common,
-                    sampleRate: codec?.clockRate ?? 48000,
-                    channelCount: codec?.channels ?? 2,
+                    sampleRate:
+                      sound?.sampleRate ??
+                      codec?.clockRate ??
+                      0,
+                    clockRate:
+                      sound?.clockRate ?? codec?.clockRate,
+                    channelCount:
+                      sound?.channelCount ??
+                      codec?.channels ??
+                      0,
                   }
                 : {
                     ...common,

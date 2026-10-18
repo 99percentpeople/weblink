@@ -197,74 +197,84 @@ it("does not install or replace transforms when the browser lacks support or ano
   ).toBeUndefined();
 });
 
-it("borrows receiver Opus without sender controls and ends when the selected track ends", async () => {
-  const track = Object.assign(new EventTarget(), {
-    kind: "audio",
-    readyState: "live",
-    stop: vi.fn(),
-  });
-  const receiver = {
-    track,
-    getParameters: () => ({
-      codecs: [
+it.each([
+  ["audio/opus", 48000, 48000],
+  ["audio/G722", 8000, 16000],
+  ["audio/PCMU", 8000, 8000],
+  ["audio/PCMA", 8000, 8000],
+] as const)(
+  "borrows receiver %s using its RTP clock without sender controls",
+  async (mimeType, clockRate, sampleRate) => {
+    const anchor = performance.now();
+    const track = Object.assign(new EventTarget(), {
+      kind: "audio",
+      readyState: "live",
+      stop: vi.fn(),
+    });
+    const receiver = {
+      track,
+      getParameters: () => ({
+        codecs: [
+          {
+            payloadType: 111,
+            mimeType,
+            clockRate,
+            channels: 2,
+          },
+        ],
+      }),
+      getSynchronizationSources: () => [
         {
-          payloadType: 111,
-          mimeType: "audio/opus",
-          clockRate: 48000,
-          channels: 2,
+          source: 1,
+          timestamp: anchor,
+          rtpTimestamp: 1234,
         },
       ],
-    }),
-    getSynchronizationSources: () => [
-      {
-        source: 1,
-        timestamp: performance.now(),
-        rtpTimestamp: 1234,
+    } as unknown as RTCRtpReceiver;
+    const pc = Object.assign(new EventTarget(), {
+      connectionState: "connected",
+    });
+    const tap = RtpEncodedMediaTrack.install(
+      receiver,
+      pc as RTCPeerConnection,
+      undefined,
+      "receive",
+    )!;
+    taps.push(tap);
+    const encodedAudio = vi.fn(),
+      frame = vi.fn(),
+      ended = vi.fn();
+    const subscription = tap.subscribe({
+      frame,
+      encodedAudio,
+      ended,
+    })!;
+    subscription.resume();
+    ports[0].postMessage({
+      id: 1,
+      packet: {
+        data: new ArrayBuffer(3),
+        sampleRate,
+        clockRate,
+        timestamp: 1234 + clockRate / 10,
+        ssrc: 1,
+        segment: 1,
       },
-    ],
-  } as unknown as RTCRtpReceiver;
-  const pc = Object.assign(new EventTarget(), {
-    connectionState: "connected",
-  });
-  const tap = RtpEncodedMediaTrack.install(
-    receiver,
-    pc as RTCPeerConnection,
-    undefined,
-    "receive",
-  )!;
-  taps.push(tap);
-  const encodedAudio = vi.fn(),
-    frame = vi.fn(),
-    ended = vi.fn();
-  const subscription = tap.subscribe({
-    frame,
-    encodedAudio,
-    ended,
-  })!;
-  subscription.resume();
-  ports[0].postMessage({
-    id: 1,
-    packet: {
-      data: new ArrayBuffer(3),
-      sampleRate: 48000,
-      timestamp: 1234,
-      ssrc: 1,
-      segment: 1,
-    },
-  });
-  await vi.waitFor(() =>
-    expect(encodedAudio).toHaveBeenCalledOnce(),
-  );
-  expect(encodedAudio.mock.calls[0][0].clockTime).toEqual(
-    expect.any(Number),
-  );
-  expect(frame).not.toHaveBeenCalled();
-  track.dispatchEvent(new Event("ended"));
-  expect(ended).toHaveBeenCalledOnce();
-  await subscription.stop();
-  expect(receiver.transform).toBeDefined();
-  expect(track.stop).not.toHaveBeenCalled();
-});
+    });
+    await vi.waitFor(() =>
+      expect(encodedAudio).toHaveBeenCalledOnce(),
+    );
+    expect(
+      encodedAudio.mock.calls[0][0].clockTime,
+    ).toBeCloseTo(anchor + 100, 3);
+    expect(frame).not.toHaveBeenCalled();
+    track.dispatchEvent(new Event("ended"));
+    expect(ended).toHaveBeenCalledOnce();
+    await subscription.stop();
+    expect(receiver.transform).toBeDefined();
+    expect(track.stop).not.toHaveBeenCalled();
+  },
+);
 
 it("fills AV1 receiver dimensions from existing inbound stats without creating a decoder", async () => {
   const receiver = {

@@ -1475,7 +1475,7 @@
     "settings_title": "Recording",
     "container_title": "Recording format",
     "container_auto": "Auto",
-    "container_description": "Auto uses MP4 for H.264/H.265 and MKV for other codecs. Applies to the next recording and keeps the original codecs; playback support depends on the player.",
+    "container_description": "Automatic chooses MP4 or MKV to preserve the original codecs. An explicit format may require audio re-encoding. Applies to the next recording; playback support depends on the player.",
     "pause": "Pause recording",
     "resume": "Resume recording",
     "paused": "Recording paused",

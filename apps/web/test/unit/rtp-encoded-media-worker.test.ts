@@ -1,12 +1,17 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from "vitest";
+import { RECORDING_AUDIO_CODECS } from "@weblink/platform";
 import { ENCODED_VIDEO_MAX_PENDING } from "@/libs/domain/encoded-video";
 let close: (() => void) | undefined;
 afterEach(() => {
   close?.();
   vi.unstubAllGlobals();
 });
-async function setup(kind = "video", direction = "send") {
+async function setup(
+  kind = "video",
+  direction = "send",
+  codecs: RTCRtpCodecParameters[] = [],
+) {
   vi.resetModules();
   const scope = new EventTarget();
   vi.stubGlobal("self", scope);
@@ -53,7 +58,7 @@ async function setup(kind = "video", direction = "send") {
   };
   const command = async (command: string, id = 1) => {
     const before = messages.length;
-    channel.port1.postMessage({ command, id });
+    channel.port1.postMessage({ command, id, codecs });
     await vi.waitFor(() =>
       expect(
         messages
@@ -236,3 +241,58 @@ it("a metadata/copy failure still forwards the current frame and all following f
     f.messages.filter((item) => item.packet),
   ).toHaveLength(0);
 });
+
+it.each(
+  RECORDING_AUDIO_CODECS.flatMap((format) =>
+    ["send", "receive"].map((direction) => ({
+      ...format,
+      direction,
+    })),
+  ),
+)(
+  "copies $codec $direction payloads with distinct RTP/sample clocks while forwarding originals",
+  async (format) => {
+    const f = await setup("audio", format.direction, [
+      {
+        mimeType: format.mimeType,
+        clockRate: format.clockRate,
+        channels: format.channels,
+        payloadType: 9,
+      },
+    ]);
+    const original = {
+      data: new Uint8Array(160).fill(45).buffer,
+      timestamp: 8000,
+      getMetadata: () => ({
+        payloadType: 9,
+        synchronizationSource: 7,
+        captureTime: 1000,
+      }),
+    } as unknown as RTCEncodedVideoFrame;
+    f.controller.enqueue(original);
+    await vi.waitFor(() =>
+      expect(f.messages.some((m) => m.packet)).toBe(true),
+    );
+    expect(f.forwarded).toEqual([original]);
+    expect(
+      f.messages.find((m) => m.packet)!.packet,
+    ).toMatchObject({
+      mimeType: format.mimeType,
+      sampleRate: format.sampleRate,
+      clockRate: format.clockRate,
+      channelCount: format.channels,
+      timestamp: 8000,
+    });
+    expect(
+      f.messages.find((m) => m.packet)!.packet!.data,
+    ).toEqual(original.data);
+    await f.command("pause");
+    f.controller.enqueue(original);
+    await vi.waitFor(() =>
+      expect(f.forwarded).toHaveLength(2),
+    );
+    expect(f.messages.filter((m) => m.packet)).toHaveLength(
+      1,
+    );
+  },
+);
