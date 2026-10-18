@@ -1,5 +1,6 @@
 use super::*;
 use crate::surface::{gpu::ContextLock, Rotation, TextureFrame};
+use windows::core::Interface;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 
 fn image(device: &ID3D11Device) -> ID3D11Texture2D {
@@ -83,4 +84,145 @@ fn gpu_nv12_surface_encodes_with_h264_and_hevc_without_memory_input() {
         println!("GPU input verified: {}", info.name);
     }
     let _guard = ContextLock::enter(&context).unwrap();
+}
+
+#[test]
+#[ignore = "Requires Windows GPU H.264/H.265 encoders with adapter-scoped D3D11 input"]
+fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
+    use windows::Win32::{
+        Foundation::HMODULE,
+        Graphics::{Direct3D::D3D_DRIVER_TYPE_UNKNOWN, Dxgi::*},
+    };
+    let _runtime = transform::Runtime::new().unwrap();
+    let hardware = detect().unwrap();
+    let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+    let mut index = 0;
+    let mut verified = 0;
+    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+        index += 1;
+        let desc = unsafe { adapter.GetDesc1() }.unwrap();
+        if desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+            continue;
+        }
+        let (mut device, mut context) = (None, None);
+        unsafe {
+            D3D11CreateDevice(
+                &adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut device),
+                None,
+                Some(&mut context),
+            )
+        }
+        .unwrap();
+        let device = device.unwrap();
+        let context = context.unwrap();
+        let multithread: ID3D11Multithread = device.cast().unwrap();
+        unsafe {
+            let _ = multithread.SetMultithreadProtected(true);
+        }
+        let expected = super::adapter::Adapter::from_device(&device)
+            .unwrap()
+            .label();
+        let texture = image(&device);
+        let frame = TextureFrame {
+            device: &device,
+            context: &context,
+            texture: &texture,
+            rotation: Rotation::Identity,
+            cursor: None,
+        };
+        let pool = gpu::CapturePool::new(&frame, Arc::new(|| {}));
+        let captured = pool.capture(&frame, false).unwrap().unwrap();
+        for codec in ["video/h264", "video/h265"] {
+            if !encoders::has_adapter_codec(&device, codec).unwrap() {
+                eprintln!("No {codec} encoder registered for {expected}");
+                continue;
+            }
+            let Some(info) = hardware
+                .iter()
+                .find(|info| info.codecs.iter().any(|c| c == codec))
+            else {
+                continue;
+            };
+            let options = MediaOptions::default();
+            let mut selection = encoders::Selection::new(info.id.clone(), true);
+            let mut converter = gpu::Converter::new(&device, (320, 180), Arc::new(|| {})).unwrap();
+            let mut transform = selection
+                .open(
+                    320,
+                    180,
+                    30,
+                    1_000_000,
+                    1_000_000,
+                    options.color_space(),
+                    Arc::new(|| {}),
+                    Some(&device),
+                )
+                .unwrap();
+            let report = selection.report.as_ref().unwrap().clone();
+            assert!(report.adapter_matched, "{report:?}");
+            assert_eq!(report.capture_adapter.as_deref(), Some(expected.as_str()));
+            assert_eq!(report.encoder_adapter, report.capture_adapter);
+            let mut submitted = false;
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut output = Vec::new();
+            while output.is_empty() && Instant::now() < deadline {
+                output.extend(transform.poll().unwrap());
+                if !submitted && transform.ready() {
+                    let surface = converter.convert(&captured, &options).unwrap().unwrap();
+                    transform.input_gpu(surface, 1000).unwrap();
+                    submitted = true;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            assert!(
+                !output.is_empty(),
+                "{expected} {codec} produced no GPU output"
+            );
+            drop(transform);
+            let mut fallback = selection
+                .open(
+                    320,
+                    180,
+                    30,
+                    1_000_000,
+                    1_000_000,
+                    options.color_space(),
+                    Arc::new(|| {}),
+                    None,
+                )
+                .unwrap();
+            assert!(fallback.device.is_none());
+            assert_eq!(selection.report.as_ref().unwrap().encoder, report.encoder);
+            assert_eq!(
+                selection.report.as_ref().unwrap().encoder_adapter,
+                report.encoder_adapter
+            );
+            let mut submitted = false;
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut output = Vec::new();
+            while output.is_empty() && Instant::now() < deadline {
+                output.extend(fallback.poll().unwrap());
+                if !submitted && fallback.ready() {
+                    fallback.input(&vec![128; 320 * 180 * 3 / 2], 2000).unwrap();
+                    submitted = true;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            assert!(
+                !output.is_empty(),
+                "{expected} {codec} produced no memory fallback output"
+            );
+            eprintln!(
+                "Adapter match {codec}: {report:?}; memory fallback reopened the same adapter"
+            );
+            verified += 1;
+        }
+    }
+    assert!(verified > 0, "No physical GPU encoder was verified");
 }

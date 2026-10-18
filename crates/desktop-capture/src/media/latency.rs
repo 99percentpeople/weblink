@@ -16,12 +16,25 @@ pub struct CodecControl {
 
 #[derive(Clone, Default, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HardwareEncoderSelection {
+    pub requested: String,
+    pub encoder: String,
+    pub name: String,
+    pub capture_adapter: Option<String>,
+    pub encoder_adapter: Option<String>,
+    pub adapter_matched: bool,
+    pub fallback: Option<String>,
+}
+
+#[derive(Clone, Default, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EncoderPipelineStats {
     pub peer: String,
     pub frames: u64,
     pub gpu_inputs: u64,
     pub cpu_inputs: u64,
     pub gpu_fallback: Option<String>,
+    pub selection: Option<HardwareEncoderSelection>,
     pub fresh_frames: u64,
     pub replaced_inputs: u64,
     pub rate_limited_inputs: u64,

@@ -1,7 +1,9 @@
 //! One hardware encoder per receiver, with bounded latest-frame delivery.
+mod adapter;
 mod bitstream_color;
 #[cfg(test)]
 mod color_probe;
+mod encoders;
 mod events;
 pub(super) mod gpu;
 #[cfg(test)]
@@ -12,10 +14,13 @@ use super::super::{
     bitrate::{BitrateController, FrameBudget},
     MediaOptions,
 };
-use crate::media::latency::{CodecControl, Distribution, EncoderPipelineStats};
+use crate::media::latency::{
+    CodecControl, Distribution, EncoderPipelineStats, HardwareEncoderSelection,
+};
 use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
 use crate::media::webrtc::clock_us;
 use crate::Result;
+pub use encoders::detect;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,
     video_frame::{EncodedFrameType, EncodedVideoFrame, I420Buffer, VideoBuffer},
@@ -30,7 +35,6 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
-pub use transform::detect;
 
 pub struct Frame {
     input: Input,
@@ -138,6 +142,7 @@ pub struct EncodeStatistics {
     pub gpu_inputs: u64,
     pub cpu_inputs: u64,
     pub gpu_fallback: Option<String>,
+    pub selection: Option<HardwareEncoderSelection>,
     pub seconds: f64,
     pub bitrate: Option<u32>,
     pub queue: Distribution,
@@ -158,6 +163,7 @@ impl EncodeStatistics {
             gpu_inputs: self.gpu_inputs,
             cpu_inputs: self.cpu_inputs,
             gpu_fallback: self.gpu_fallback.clone(),
+            selection: self.selection.clone(),
             fresh_frames: self.capture_to_encode.count,
             replaced_inputs: self.replaced_inputs,
             rate_limited_inputs: self.rate_limited_inputs,
@@ -313,6 +319,7 @@ fn run(
     fallback: &Fallback,
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
+    let mut selection = encoders::Selection::new(id, options.encoder == "auto");
     let mut encoder: Option<transform::Transform> = None;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
@@ -407,6 +414,9 @@ fn run(
                 in_flight.clear();
                 let opened = (|| -> Result<transform::Transform> {
                     if let Input::Texture(texture) = &frame.input {
+                        // Retain the real capture adapter even if GPU conversion fails
+                        // before a transform can open and requests memory fallback.
+                        selection.capture_device(&texture.device);
                         if converter
                             .as_ref()
                             .is_none_or(|c| !c.matches(texture, (frame.width, frame.height)))
@@ -421,8 +431,7 @@ fn run(
                             );
                         }
                     }
-                    transform::Transform::open(
-                        &id,
+                    selection.open(
                         frame.width,
                         frame.height,
                         options.frame_rate,
@@ -446,6 +455,7 @@ fn run(
                 let controls = encoder.as_ref().unwrap().control_status();
                 let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
                 stats.bitrate = Some(rate_control.current());
+                stats.selection = selection.report.clone();
                 stats.controls = controls;
                 keyframe = true;
             }

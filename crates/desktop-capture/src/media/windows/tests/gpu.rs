@@ -67,6 +67,8 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         assert!(moving > 15, "Motion stalled: {moving}");
         let stats = encoder.statistics();
         assert!(stats.gpu_inputs > 10, "GPU fallback: {:?}", stats.gpu_fallback);
+        let selection = stats.selection.unwrap();
+        assert!(selection.adapter_matched, "{selection:?}");
         assert_eq!(stats.cpu_inputs, 0);
         assert_eq!(media.pipeline_stats().frames, 0, "Hardware-only streaming performed a readback");
 
@@ -104,6 +106,7 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         wait_for_video(&remote).await;
         assert!(encoder.statistics().cpu_inputs > 0);
         assert!(encoder.statistics().gpu_fallback.is_some());
+        assert_eq!(encoder.statistics().selection.unwrap().encoder_adapter, selection.encoder_adapter);
         assert!(Arc::ptr_eq(&encoder, &media.hardware.lock().unwrap()["gpu"]));
         assert!(media.error().is_none());
         eprintln!("GPU H264: idle={idle}/2s, moving={moving}/2s, first motion={latency:?}, blocked preview={during_blocked_preview}/2s, 5FPS={limited}/2s, fallback={:?}", encoder.statistics().gpu_fallback);
@@ -119,7 +122,7 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
         assert!(!hardware.is_empty());
         for info in hardware {
             let codec = info.codecs[0].clone();
-            let media = MediaSession::new(MediaOptions { encoder: info.id, codec: Some(codec.clone()), frame_rate: 20, max_width: 640, max_height: 360, ..Default::default() }).unwrap();
+            let media = MediaSession::new(MediaOptions { encoder: "auto".into(), codec: Some(codec.clone()), frame_rate: 20, max_width: 640, max_height: 360, ..Default::default() }).unwrap();
             // An offer starts the same encoder used by a normal transport; HEVC decoding
             // is not provided by every libwebrtc build, so inspect its original packets.
             let remote = if codec == "video/h264" { Some(connect(&media, "sender", false).await.unwrap()) } else {
@@ -131,6 +134,7 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
             tokio::time::timeout(Duration::from_secs(5), async {
                 while encoder.statistics().frames == 0 { tokio::time::sleep(Duration::from_millis(10)).await; }
             }).await.unwrap();
+            assert!(encoder.statistics().selection.unwrap().adapter_matched);
             if codec == "video/h265" {
                 let tap = encoder.recording.subscribe().unwrap();
                 for segment in [1, 2] {

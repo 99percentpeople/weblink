@@ -1,14 +1,14 @@
 //! Windows hardware H.264/HEVC transforms. Every instance stays on its owning MTA thread.
-use super::super::super::EncoderInfo;
+use super::encoders::Codec;
 use crate::media::latency::CodecControl;
 use std::{mem::ManuallyDrop, ptr, sync::Arc};
 use windows::{
-    core::{Interface, PWSTR},
+    core::Interface,
     Win32::{
         Graphics::Direct3D11::ID3D11Device,
         Media::MediaFoundation::*,
         System::{
-            Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED},
+            Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED},
             Variant::VARIANT,
         },
     },
@@ -36,150 +36,15 @@ impl Drop for Runtime {
         }
     }
 }
-struct Activations(*mut Option<IMFActivate>, u32);
-impl Drop for Activations {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.0.is_null() {
-                for slot in std::slice::from_raw_parts_mut(self.0, self.1 as usize) {
-                    *slot = None;
-                }
-                CoTaskMemFree(Some(self.0.cast()));
-            }
-        }
-    }
-}
 #[derive(Clone, Copy)]
-enum Codec {
-    H264,
-    Hevc,
-}
-impl Codec {
-    fn mime(self) -> &'static str {
-        match self {
-            Self::H264 => "video/h264",
-            Self::Hevc => "video/h265",
-        }
-    }
-    fn subtype(self) -> windows::core::GUID {
-        match self {
-            Self::H264 => MFVideoFormat_H264,
-            Self::Hevc => MFVideoFormat_HEVC,
-        }
-    }
-    fn profile(self) -> u32 {
-        match self {
-            Self::H264 => eAVEncH264VProfile_Base.0 as u32,
-            Self::Hevc => eAVEncH265VProfile_Main_420_8.0 as u32,
-        }
-    }
-    fn encoded(self) -> libwebrtc::video_frame::EncodedVideoCodec {
-        match self {
-            Self::H264 => libwebrtc::video_frame::EncodedVideoCodec::H264,
-            Self::Hevc => libwebrtc::video_frame::EncodedVideoCodec::H265,
-        }
-    }
-}
-struct Configuration {
-    codec: Codec,
-    width: u32,
-    height: u32,
-    fps: u32,
-    bitrate: u32,
-    bitrate_limit: u32,
-    color: crate::media::color::ColorDescription,
-}
-fn activations(codec: Codec) -> Result<Vec<(EncoderInfo, IMFActivate)>> {
-    let mut list = Activations(ptr::null_mut(), 0);
-    let output = MFT_REGISTER_TYPE_INFO {
-        guidMajorType: MFMediaType_Video,
-        guidSubtype: codec.subtype(),
-    };
-    unsafe {
-        MFTEnumEx(
-            MFT_CATEGORY_VIDEO_ENCODER,
-            MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
-            None,
-            Some(&output),
-            &mut list.0,
-            &mut list.1,
-        )?;
-    }
-    let mut encoders = Vec::new();
-    if list.0.is_null() {
-        return Ok(encoders);
-    }
-    for activation in unsafe { std::slice::from_raw_parts(list.0, list.1 as usize) }
-        .iter()
-        .flatten()
-    {
-        let clsid = unsafe { activation.GetGUID(&MFT_TRANSFORM_CLSID_Attribute)? };
-        let mut name = PWSTR::null();
-        let mut len = 0;
-        unsafe {
-            activation.GetAllocatedString(&MFT_FRIENDLY_NAME_Attribute, &mut name, &mut len)?;
-        }
-        let label = if name.is_null() {
-            "Windows hardware video".into()
-        } else {
-            unsafe { String::from_utf16_lossy(std::slice::from_raw_parts(name.0, len as usize)) }
-        };
-        unsafe {
-            CoTaskMemFree(Some(name.0.cast()));
-        }
-        encoders.push((
-            EncoderInfo {
-                // Preserve existing H.264 IDs; disambiguate shared multi-codec MFT CLSIDs.
-                id: match codec {
-                    Codec::H264 => format!("mf:{clsid:?}"),
-                    Codec::Hevc => format!("mf:{clsid:?}:h265"),
-                },
-                name: label,
-                hardware: true,
-                codecs: vec![codec.mime().into()],
-            },
-            activation.clone(),
-        ));
-    }
-    Ok(encoders)
-}
-
-pub fn detect() -> crate::Result<Vec<EncoderInfo>> {
-    let _runtime = Runtime::new().map_err(|e| e.to_string())?;
-    let mut encoders = Vec::new();
-    for codec in [Codec::H264, Codec::Hevc] {
-        // Missing registration for one codec must not hide another working codec.
-        for (info, activation) in activations(codec).unwrap_or_default() {
-            // Some drivers register the same transform more than once. Keep a
-            // successful registration once; a failed duplicate must not hide it.
-            if encoders
-                .iter()
-                .any(|encoder: &EncoderInfo| encoder.id == info.id)
-            {
-                continue;
-            }
-            // Activation and type negotiation exclude stale registrations and missing drivers.
-            if Transform::create(
-                activation,
-                Configuration {
-                    codec,
-                    width: 320,
-                    height: 180,
-                    fps: 30,
-                    bitrate: 1_000_000,
-                    bitrate_limit: 1_000_000,
-                    color: crate::media::MediaOptions::default().color_space(),
-                },
-                Arc::new(|| {}),
-                None,
-            )
-            .is_ok()
-            {
-                encoders.push(info);
-            }
-        }
-    }
-    Ok(encoders)
+pub(super) struct Configuration {
+    pub codec: Codec,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub bitrate: u32,
+    pub bitrate_limit: u32,
+    pub color: crate::media::color::ColorDescription,
 }
 
 pub struct Packet {
@@ -205,6 +70,7 @@ pub struct Transform {
     _manager: Option<IMFDXGIDeviceManager>,
 }
 impl Transform {
+    #[cfg(test)]
     pub fn open(
         id: &str,
         width: u32,
@@ -216,33 +82,18 @@ impl Transform {
         wake: Arc<dyn Fn() + Send + Sync>,
         device: Option<&ID3D11Device>,
     ) -> crate::Result<Self> {
-        let codec = if id.ends_with(":h265") {
-            Codec::Hevc
-        } else {
-            Codec::H264
-        };
-        let (_, activation) = activations(codec)
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .find(|(info, _)| info.id == id)
-            .ok_or("Selected hardware encoder is unavailable")?;
-        Self::create(
-            activation,
-            Configuration {
-                codec,
-                width,
-                height,
-                fps,
-                bitrate,
-                bitrate_limit,
-                color,
-            },
+        super::encoders::Selection::new(id.to_string(), false).open(
+            width,
+            height,
+            fps,
+            bitrate,
+            bitrate_limit,
+            color,
             wake,
             device,
         )
-        .map_err(|e| format!("Hardware encoder initialization failed: {e}"))
     }
-    fn create(
+    pub(super) fn create(
         activation: IMFActivate,
         configuration: Configuration,
         wake: Arc<dyn Fn() + Send + Sync>,

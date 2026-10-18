@@ -646,6 +646,24 @@ raw desktop pixels are not mapped or uploaded again. This eliminates the
 GPU-to-CPU-to-GPU round trip, while retaining GPU copies needed for capture
 ownership and format conversion. Compressed output still passes through CPU memory.
 
+Automatic encoder selection resolves the capture texture's DXGI adapter LUID when
+the encoder opens. `MFTEnum2` with a `MFT_ENUM_ADAPTER_LUID` blob prioritizes that
+adapter's encoders for the already negotiated codec; unusable candidates do not
+hide the next candidate. Manual encoder settings retain their existing IDs and
+only select that transform, preferring its activation on the capture adapter.
+Capability discovery includes secondary adapters while keeping duplicate transform
+IDs out of the settings list. Enumeration runs during discovery or encoder
+initialization/reconfiguration, never per frame.
+
+Adapter enumeration is optional at runtime. Missing APIs, failed enumeration or
+unusable matching encoders retain the legacy selection and GPU-to-memory fallback.
+Memory fallback remembers the capture adapter and prefers the actual encoder that
+was running. While using textures, a replacement GPU device refreshes the adapter
+identity without replacing the WebRTC sender or recording subscription. This does not add cross-GPU
+texture sharing. Pipeline diagnostics expose each encoder's `selection`: requested
+and actual IDs, name, capture/encoder adapters with LUIDs, whether they match, and
+the reason for using legacy selection. An unknown legacy adapter is left unset.
+
 GPU admission and CPU conversion have separate workers, notifications and bounded
 pools. Hardware peers share immutable BGRA snapshots (up to four); each encoder
 uses up to eight NV12 surfaces. Tracked MF samples retain their surface lease until
