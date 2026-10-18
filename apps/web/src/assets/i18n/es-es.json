@@ -520,6 +520,7 @@
       "controlRequests": "Solicitudes de control remoto",
       "speedTestRequests": "Solicitudes de prueba de velocidad",
       "transfers": "Transferencia de archivos completada",
+      "recordings": "Grabación guardada",
       "preview": "Mostrar vistas previas de mensajes y archivos",
       "sound": "Sonido de notificación",
       "permission_default": "Aún no se ha concedido permiso para notificaciones.",
@@ -1484,6 +1485,7 @@
     "preparing": "Preparando grabación",
     "recording": "Grabando",
     "saving": "Guardando grabación",
+    "saved": "Grabación guardada",
     "failed": "Error de grabación"
   }
 }

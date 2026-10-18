@@ -1072,6 +1072,7 @@ it("delegates recording to its application owner and disables other sources unti
     ),
   );
   const recording: RecordingControls = {
+    onSaved: () => () => {},
     state,
     start,
     stop,

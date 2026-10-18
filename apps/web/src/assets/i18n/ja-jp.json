@@ -520,6 +520,7 @@
       "controlRequests": "リモート操作リクエスト",
       "speedTestRequests": "速度テストリクエスト",
       "transfers": "ファイル転送完了",
+      "recordings": "録画の保存完了",
       "preview": "メッセージとファイルのプレビューを表示",
       "sound": "通知音",
       "permission_default": "通知はまだ許可されていません。",
@@ -1484,6 +1485,7 @@
     "preparing": "録画を準備中",
     "recording": "録画中",
     "saving": "録画を保存中",
+    "saved": "録画を保存しました",
     "failed": "録画に失敗しました"
   }
 }

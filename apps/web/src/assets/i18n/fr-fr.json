@@ -520,6 +520,7 @@
       "controlRequests": "Demandes de contrôle à distance",
       "speedTestRequests": "Demandes de tests de vitesse",
       "transfers": "Transfert de fichiers terminé",
+      "recordings": "Enregistrement sauvegardé",
       "preview": "Afficher les aperçus des messages et des fichiers",
       "sound": "Son de notification",
       "permission_default": "L'autorisation de notification n'a pas été accordée.",
@@ -1484,6 +1485,7 @@
     "preparing": "Préparation de l’enregistrement",
     "recording": "Enregistrement en cours",
     "saving": "Sauvegarde de l’enregistrement",
+    "saved": "Enregistrement sauvegardé",
     "failed": "Échec de l’enregistrement"
   }
 }

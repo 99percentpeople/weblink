@@ -26,6 +26,7 @@ export default function NotificationSettings() {
     "controlRequests",
     "speedTestRequests",
     "transfers",
+    "recordings",
     ...(platform.updates ? ["updates" as const] : []),
     "preview",
     "sound",

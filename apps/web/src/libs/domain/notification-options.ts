@@ -6,6 +6,7 @@ export interface NotificationOptions {
   controlRequests: boolean;
   speedTestRequests: boolean;
   transfers: boolean;
+  recordings: boolean;
   updates: boolean;
 }
 export const defaultNotificationOptions: NotificationOptions =
@@ -17,6 +18,7 @@ export const defaultNotificationOptions: NotificationOptions =
     controlRequests: true,
     speedTestRequests: true,
     transfers: true,
+    recordings: true,
     updates: true,
   };
 export function resolveNotificationOptions(

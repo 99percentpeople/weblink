@@ -515,6 +515,7 @@
       "controlRequests": "遠端控制請求",
       "speedTestRequests": "測速請求",
       "transfers": "檔案傳輸完成",
+      "recordings": "錄影儲存完成",
       "preview": "顯示訊息和檔案內容預覽",
       "sound": "通知音效",
       "permission_default": "尚未授予通知權限。",
@@ -1484,6 +1485,7 @@
     "preparing": "正在準備錄影",
     "recording": "正在錄影",
     "saving": "正在儲存錄影",
+    "saved": "錄影已儲存",
     "failed": "錄影失敗"
   }
 }

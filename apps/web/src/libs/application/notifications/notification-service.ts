@@ -19,6 +19,7 @@ export interface NotificationIntent {
     | "controlRequests"
     | "speedTestRequests"
     | "updates"
+    | "recordings"
     | "transfers";
   current(): boolean;
   /** Keep in-app feedback while current(), independently of native notification expiry. */

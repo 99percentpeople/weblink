@@ -520,6 +520,7 @@
       "controlRequests": "Fernsteuerungsanfragen",
       "speedTestRequests": "Geschwindigkeitstestanfragen",
       "transfers": "Dateiübertragung abgeschlossen",
+      "recordings": "Aufnahme gespeichert",
       "preview": "Nachrichten- und Dateivorschauen anzeigen",
       "sound": "Benachrichtigungston",
       "permission_default": "Die Benachrichtigungsberechtigung wurde nicht erteilt.",
@@ -1484,6 +1485,7 @@
     "preparing": "Aufnahme wird vorbereitet",
     "recording": "Aufnahme läuft",
     "saving": "Aufnahme wird gespeichert",
+    "saved": "Aufnahme gespeichert",
     "failed": "Aufnahme fehlgeschlagen"
   }
 }

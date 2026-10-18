@@ -515,6 +515,7 @@
       "controlRequests": "Remote control requests",
       "speedTestRequests": "Speed test requests",
       "transfers": "File transfer completed",
+      "recordings": "Recording saved",
       "preview": "Show message and file previews",
       "sound": "Notification sound",
       "permission_default": "Notification permission has not been granted.",
@@ -1484,6 +1485,7 @@
     "preparing": "Preparing recording",
     "recording": "Recording",
     "saving": "Saving recording",
+    "saved": "Recording saved",
     "failed": "Recording failed"
   }
 }

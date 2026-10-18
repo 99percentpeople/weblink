@@ -6,6 +6,7 @@ import type {
   RecordingState,
 } from "@/libs/application/recording-service";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import type { StoredFile } from "@weblink/platform";
 
 const f = vi.hoisted(() => ({
   clients: {} as Record<string, unknown>,
@@ -13,6 +14,14 @@ const f = vi.hoisted(() => ({
   changed: undefined as
     | ((state: RecordingState | null) => void)
     | undefined,
+  complete: undefined as
+    | ((result: {
+        id: string;
+        file: StoredFile;
+      }) => Promise<void>)
+    | undefined,
+  createCache: vi.fn(async () => ({})),
+  verifyReceived: vi.fn<() => Promise<StoredFile | null>>(),
   stop: vi.fn(async () => {}),
   pause: vi.fn(),
   resume: vi.fn(),
@@ -22,7 +31,11 @@ vi.mock("@/libs/state/app-state", () => ({
   appState: { session: { clientViewData: f.clients } },
 }));
 vi.mock("@/libs/application/cache-service", () => ({
-  createCacheManager: () => ({ storage: {} }),
+  createCacheManager: () => ({
+    storage: {},
+    createCache: f.createCache,
+    library: { verifyReceived: f.verifyReceived },
+  }),
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: { getRecordingVideoSources: f.sources },
@@ -37,9 +50,14 @@ vi.mock("@/libs/application/recording-service", () => ({
     constructor(
       private port: {
         changed(value: RecordingState | null): void;
+        complete(result: {
+          id: string;
+          file: StoredFile;
+        }): Promise<void>;
       },
     ) {
       f.changed = port.changed;
+      f.complete = port.complete;
     }
     async start(source: RecordingSource) {
       f.source = source;
@@ -75,9 +93,12 @@ afterEach(() => {
   dispose?.();
   f.source = undefined;
   f.changed = undefined;
+  f.complete = undefined;
+  f.verifyReceived.mockReset();
   for (const key of Object.keys(f.clients))
     delete f.clients[key];
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 it.each(["camera", "screen"])(
   "records only the selected remote %s source's audio and stops when leaving",
@@ -208,4 +229,77 @@ it("identifies direct local camera capture for recorder codec selection", () => 
   expect(f.source?.local).toBe(true);
   expect(f.source?.video).toBe(camera);
   expect(f.source?.available()).toBe(true);
+});
+
+function savedRecording() {
+  const recording = createRoot((release) => {
+    dispose = release;
+    return createRecording({
+      localStream: () => null,
+      activeRoomConversationId: () => "room",
+    } as AppStateContextProps);
+  });
+  const file = new File(["recorded"], "screen.mp4", {
+    type: "video/mp4",
+  });
+  return { recording, file, result: { id: "saved", file } };
+}
+
+it("announces the final file only after library verification succeeds", async () => {
+  const { recording, file, result } = savedRecording();
+  let finish!: (file: StoredFile) => void;
+  f.verifyReceived.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const saved = vi.fn();
+  recording.onSaved(saved);
+  const completed = f.complete!(result);
+  await Promise.resolve();
+  expect(f.createCache).toHaveBeenCalledWith("saved");
+  expect(f.verifyReceived).toHaveBeenCalledOnce();
+  expect(saved).not.toHaveBeenCalled();
+  finish(file);
+  await completed;
+  expect(saved).toHaveBeenCalledOnce();
+  expect(saved).toHaveBeenCalledWith({
+    id: "saved",
+    fileName: "screen.mp4",
+  });
+});
+
+it.each([null, new Error("Verification failed")])(
+  "does not announce an unavailable or unverified recording: %s",
+  async (failure) => {
+    const { recording, result } = savedRecording();
+    if (failure)
+      f.verifyReceived.mockRejectedValue(failure);
+    else f.verifyReceived.mockResolvedValue(null);
+    const saved = vi.fn();
+    recording.onSaved(saved);
+    await expect(f.complete!(result)).rejects.toThrow();
+    expect(saved).not.toHaveBeenCalled();
+  },
+);
+
+it("removes completion subscribers and isolates notification failures from a saved file", async () => {
+  const { recording, file, result } = savedRecording();
+  f.verifyReceived.mockResolvedValue(file);
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const removed = vi.fn();
+  recording.onSaved(removed)();
+  recording.onSaved(() => {
+    throw new Error("Notice failed");
+  });
+  const saved = vi.fn();
+  recording.onSaved(saved);
+  await expect(
+    f.complete!(result),
+  ).resolves.toBeUndefined();
+  expect(removed).not.toHaveBeenCalled();
+  expect(saved).toHaveBeenCalledOnce();
+  dispose?.();
+  await f.complete!(result);
+  expect(saved).toHaveBeenCalledOnce();
 });

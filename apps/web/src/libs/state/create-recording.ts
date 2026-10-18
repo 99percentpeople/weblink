@@ -27,8 +27,16 @@ interface RecordingPresentation {
 export type RecordingStatus = RecordingState &
   RecordingPresentation;
 
+export interface SavedRecording {
+  id: string;
+  fileName: string;
+}
+
 export function createRecording(app: AppStateContextProps) {
   const manager = createCacheManager();
+  const savedListeners = new Set<
+    (recording: SavedRecording) => void
+  >();
   const [state, setState] =
     createSignal<RecordingStatus | null>(null);
   let presentation: RecordingPresentation = {};
@@ -49,7 +57,22 @@ export function createRecording(app: AppStateContextProps) {
       ),
     complete: async ({ id }) => {
       const cache = await manager.createCache(id);
-      await manager.library.verifyReceived(cache);
+      const file =
+        await manager.library.verifyReceived(cache);
+      if (!file)
+        throw new Error("Saved recording is unavailable");
+      // Publish only after VFS commit and library verification. Notifications
+      // retain the identity, never a potentially large or stale file snapshot.
+      for (const listener of savedListeners) {
+        try {
+          listener({ id, fileName: file.name });
+        } catch (error) {
+          console.warn(
+            "Recording completion listener failed",
+            error,
+          );
+        }
+      }
     },
     failed,
   });
@@ -67,9 +90,16 @@ export function createRecording(app: AppStateContextProps) {
     ),
   );
   onCleanup(() => {
+    savedListeners.clear();
     void service.stop();
   });
   return {
+    onSaved(listener: (recording: SavedRecording) => void) {
+      savedListeners.add(listener);
+      return () => {
+        savedListeners.delete(listener);
+      };
+    },
     state,
     supported: () => service.supported,
     pause: () => service.pause(),

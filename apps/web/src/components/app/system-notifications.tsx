@@ -4,6 +4,7 @@ import {
   on,
   onCleanup,
   untrack,
+  useContext,
   type ParentProps,
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
@@ -25,6 +26,11 @@ import { isRemoteContentTransferTask } from "@/libs/application/task-service";
 import { createUpdateFeedback } from "@/libs/hooks/create-update-feedback";
 import { createMessageFeedback } from "@/libs/hooks/create-message-feedback";
 import { createPresentationVisible } from "@/libs/hooks/presentation-visible";
+import { createRecordingFeedback } from "@/libs/hooks/create-recording-feedback";
+import { MeetingMediaContext } from "@/libs/state/meeting-media-context";
+import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
+import { createCacheManager } from "@/libs/application/cache-service";
+import { fileOpenLabel } from "@/libs/utils/open-file";
 import { RemoteControlStatus } from "./remote-control-status";
 
 export function SystemNotificationBridge(
@@ -52,6 +58,29 @@ export function SystemNotificationBridge(
     (error) =>
       console.warn("System notification failed", error),
   );
+  const recording = useContext(
+    MeetingMediaContext,
+  )?.recording;
+  if (recording) {
+    const preview = createPreviewDialog();
+    createRecordingFeedback({
+      recording,
+      notifications: service,
+      preview: () => preferences().preview,
+      openLabel: fileOpenLabel,
+      readFile: async (id) => {
+        const cache = createCacheManager().getCache(id);
+        const info = await cache?.getInfo();
+        return info?.isComplete
+          ? (info.file ?? null)
+          : null;
+      },
+      openFile: preview.open,
+      showApplication: async () => {
+        await platform.application?.show();
+      },
+    });
+  }
   createRemoteTransferFeedback({
     tasks: state.tasks.tasks,
     notifications: service,

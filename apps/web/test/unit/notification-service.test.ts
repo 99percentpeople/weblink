@@ -99,6 +99,7 @@ describe("system notification ownership and policy", () => {
     "controlRequests",
     "speedTestRequests",
     "transfers",
+    "recordings",
     "updates",
   ] as const)(
     "only displays %s notifications while hidden",

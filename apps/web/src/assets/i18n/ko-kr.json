@@ -520,6 +520,7 @@
       "controlRequests": "원격 제어 요청",
       "speedTestRequests": "속도 테스트 요청",
       "transfers": "파일 전송 완료",
+      "recordings": "녹화 저장 완료",
       "preview": "메시지 및 파일 미리보기 표시",
       "sound": "알림음",
       "permission_default": "알림 권한이 부여되지 않았습니다.",
@@ -1484,6 +1485,7 @@
     "preparing": "녹화 준비 중",
     "recording": "녹화 중",
     "saving": "녹화 저장 중",
+    "saved": "녹화가 저장되었습니다",
     "failed": "녹화 실패"
   }
 }

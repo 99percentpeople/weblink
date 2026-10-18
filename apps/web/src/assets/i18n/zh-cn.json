@@ -515,6 +515,7 @@
       "controlRequests": "远程控制请求",
       "speedTestRequests": "测速请求",
       "transfers": "文件传输完成",
+      "recordings": "录像保存完成",
       "preview": "显示消息和文件内容预览",
       "sound": "通知声音",
       "permission_default": "尚未授予通知权限。",
@@ -1484,6 +1485,7 @@
     "preparing": "正在准备录像",
     "recording": "正在录像",
     "saving": "正在保存录像",
+    "saved": "录像已保存",
     "failed": "录像失败"
   }
 }
