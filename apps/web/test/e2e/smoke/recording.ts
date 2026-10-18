@@ -1,3 +1,5 @@
+import { checkNativeRecordingPackets } from "./recording-native-packets";
+import { checkRecordingAudioSync } from "./recording-audio-sync";
 import {
   RecordingService,
   type RecordingState,
@@ -5,7 +7,10 @@ import {
 import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import type { StoredFile } from "@weblink/platform";
-import { recordingFormat } from "@/libs/application/recording-options";
+import {
+  recordingFormat,
+  resolveRecordingContainer,
+} from "@/libs/application/recording-options";
 import { videoThumbnail } from "@/libs/utils/video-thumbnail";
 import {
   fileObjectUrl,
@@ -15,6 +20,8 @@ import {
   element,
   unsigned,
 } from "@/libs/application/recording-ebml";
+import { recordingMediaSources } from "@/libs/domain/recording-media-sources";
+import { RtpEncodedMediaTrack } from "@/libs/domain/rtp-encoded-media";
 
 function assert(
   value: unknown,
@@ -24,6 +31,9 @@ function assert(
 }
 const sleep = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
+const container = resolveRecordingContainer(
+  new URL(location.href).searchParams.get("container"),
+);
 async function waitFor(
   ready: () => boolean | Promise<boolean>,
   timeout = 10000,
@@ -83,7 +93,7 @@ function countSeekPoints(content: ArrayBuffer): number {
   const seekHead = element(bytes, segment.dataAt)!;
   assert(
     seekHead.id === 0x114d9b74,
-    "Saved WebM is missing SeekHead",
+    `Saved WebM is missing SeekHead: ${JSON.stringify(Array.from(bytes.subarray(0, 320)))}`,
   );
   for (let at = seekHead.dataAt; at < seekHead.end; ) {
     const seek = element(bytes, at)!;
@@ -142,18 +152,29 @@ async function run() {
   canvas.height = 360;
   const context = canvas.getContext("2d")!;
   let frame = 0;
+  let pulse: GainNode | undefined;
   const timer = setInterval(() => {
     context.fillStyle = `hsl(${frame++ % 360} 70% 40%)`;
     context.fillRect(0, 0, 640, 360);
     context.fillStyle = "white";
     context.fillText(String(frame), 40, 40);
+    if (pulse) {
+      const on = audio.currentTime % 1 < 0.25;
+      pulse.gain.setValueAtTime(
+        on ? 1 : 0.005,
+        audio.currentTime,
+      );
+      context.fillStyle = on ? "white" : "black";
+      context.fillRect(0, 0, 32, 32);
+    }
   }, 33);
   const source = canvas.captureStream(30);
   const audio = new AudioContext();
   await audio.resume();
   const destination = audio.createMediaStreamDestination();
   const oscillator = audio.createOscillator();
-  oscillator.connect(destination);
+  pulse = audio.createGain();
+  oscillator.connect(pulse).connect(destination);
   oscillator.start();
   source.addTrack(destination.stream.getAudioTracks()[0]);
   const root = await navigator.storage.getDirectory();
@@ -204,18 +225,39 @@ async function run() {
     ] as const) {
       const codecs =
         RTCRtpSender.getCapabilities("video")!.codecs;
+      const supported = [
+        "video/VP8",
+        "video/H264",
+        "video/VP9",
+        "video/AV1",
+      ].filter((mime) =>
+        codecs.some((codec) => codec.mimeType === mime),
+      );
       const sources = [
         undefined,
         "camera",
-        "video/VP8",
-        ...(codecs.some(
-          (codec) => codec.mimeType === "video/H264",
-        )
-          ? ["video/H264"]
-          : []),
-      ];
-      for (const codec of sources) {
-        const camera = codec === "camera";
+        ...supported,
+        ...supported.map((mime) => `sender/${mime}`),
+      ].filter(
+        (source) =>
+          !new URL(location.href).searchParams.has(
+            "encodedOnly",
+          ) || source?.startsWith("sender/"),
+      );
+      for (const codec of new URL(
+        location.href,
+      ).searchParams.has("nativePacketsOnly")
+        ? []
+        : sources) {
+        const onlySource = new URL(
+          location.href,
+        ).searchParams.get("source");
+        if (onlySource && codec !== onlySource) continue;
+        const reuse = codec?.startsWith("sender/") ?? false;
+        const camera = codec === "camera" || reuse;
+        const negotiatedCodec = reuse
+          ? codec!.slice(7)
+          : codec;
         const remote = !!codec && !camera;
         const storage = new FileStorageService(
           undefined,
@@ -228,6 +270,18 @@ async function run() {
         const incoming = new MediaStream();
         let service: RecordingService | undefined;
         let capture: MediaStream | undefined;
+        let encoded: RtpEncodedMediaTrack | undefined;
+        const taps = new Map<
+          MediaStreamTrack,
+          RtpEncodedMediaTrack
+        >();
+        const AudioEncoderConstructor = window.AudioEncoder;
+        let audioEncoders = 0;
+        const VideoEncoderConstructor = window.VideoEncoder;
+        let webCodecsEncoders = 0;
+        const viewer = document.createElement("video");
+        viewer.muted = true;
+        document.body.append(viewer);
         try {
           if (camera)
             capture =
@@ -257,15 +311,37 @@ async function run() {
             if (candidate)
               void sender.addIceCandidate(candidate);
           };
-          receiver.ontrack = ({ track }) =>
-            incoming.addTrack(track);
-          if (remote || camera) {
-            local
-              .getTracks()
-              .forEach((track) =>
-                sender.addTrack(track, local),
+          receiver.ontrack = ({
+            track,
+            receiver: endpoint,
+          }) => {
+            if (remote) {
+              const tap = RtpEncodedMediaTrack.install(
+                endpoint,
+                receiver,
+                undefined,
+                "receive",
               );
-            if (remote)
+              if (tap) taps.set(track, tap);
+            }
+            incoming.addTrack(track);
+          };
+          if (remote || camera) {
+            local.getTracks().forEach((track) => {
+              const outgoing = sender.addTrack(
+                track,
+                local,
+              );
+              if (reuse) {
+                const tap = RtpEncodedMediaTrack.install(
+                  outgoing,
+                  sender,
+                );
+                if (tap) taps.set(track, tap);
+                if (track.kind === "video") encoded = tap;
+              }
+            });
+            if (remote || reuse)
               sender
                 .getTransceivers()
                 .find(
@@ -275,7 +351,8 @@ async function run() {
                 )!
                 .setCodecPreferences(
                   codecs.filter(
-                    (entry) => entry.mimeType === codec,
+                    (entry) =>
+                      entry.mimeType === negotiatedCodec,
                   ),
                 );
             await sender.setLocalDescription(
@@ -297,12 +374,68 @@ async function run() {
             );
           }
           const stream = remote ? incoming : local;
+          if (reuse || remote) {
+            assert(
+              taps.get(stream.getVideoTracks()[0]),
+              "Sender encoded transform unavailable",
+            );
+            viewer.srcObject = incoming;
+            await viewer.play();
+          }
+          const decodedFrames = async () =>
+            [...(await receiver.getStats()).values()].find(
+              (stat) =>
+                stat.type === "inbound-rtp" &&
+                stat.kind === "video",
+            )?.framesDecoded ?? 0;
+          if (reuse || remote)
+            await waitFor(
+              async () => (await decodedFrames()) > 5,
+            );
           let saved: StoredFile | undefined;
           let outputs = 0;
           let completions = 0;
           let error: unknown;
           let state: RecordingState | null = null;
+          let encoders = 0;
+          if (
+            (reuse || remote) &&
+            VideoEncoderConstructor
+          ) {
+            window.VideoEncoder = class extends (
+              VideoEncoderConstructor
+            ) {
+              constructor(init: VideoEncoderInit) {
+                super(init);
+                webCodecsEncoders++;
+              }
+            };
+          }
+          if (
+            (reuse || remote) &&
+            AudioEncoderConstructor
+          ) {
+            window.AudioEncoder = class extends (
+              AudioEncoderConstructor
+            ) {
+              constructor(init: AudioEncoderInit) {
+                super(init);
+                audioEncoders++;
+              }
+            };
+          }
+          class Recorder extends MediaRecorder {
+            constructor(
+              stream: MediaStream,
+              options?: MediaRecorderOptions,
+            ) {
+              super(stream, options);
+              encoders++;
+            }
+          }
           service = new RecordingService({
+            container: () => container,
+            recorder: Recorder,
             storage: {
               authorizeDefault: (options) =>
                 storage.authorizeDefault(options),
@@ -334,14 +467,74 @@ async function run() {
             );
           }
           const preparing = performance.now();
-          await service.start({
+          const firstFrames: unknown[] = [];
+          const firstAudio: unknown[] = [];
+          const selected = {
             id: "source",
             name: `${kind}-${remote ? "remote" : camera ? "camera" : "local"}`,
             local: !remote,
             video: stream.getVideoTracks()[0],
             audio: stream.getAudioTracks(),
             available: () => true,
-          });
+            encodedVideoSources:
+              reuse || remote
+                ? () =>
+                    recordingMediaSources(
+                      {
+                        subscribe(consumer, signal) {
+                          return taps
+                            .get(
+                              stream.getVideoTracks()[0],
+                            )!
+                            .subscribe({
+                              ...consumer,
+                              frame(packet) {
+                                if (firstFrames.length < 8)
+                                  firstFrames.push({
+                                    ...packet,
+                                    data: packet.data
+                                      .byteLength,
+                                  });
+                                return consumer.frame(
+                                  packet,
+                                );
+                              },
+                            });
+                        },
+                      },
+                      stream
+                        .getAudioTracks()
+                        .map((track) => ({
+                          subscribe(consumer) {
+                            return taps
+                              .get(track)!
+                              .subscribe({
+                                ...consumer,
+                                encodedAudio(packet) {
+                                  if (firstAudio.length < 3)
+                                    firstAudio.push({
+                                      ...packet,
+                                      data: packet.data
+                                        .byteLength,
+                                    });
+                                  return consumer.encodedAudio?.(
+                                    packet,
+                                  );
+                                },
+                              });
+                          },
+                        })),
+                    )
+                : undefined,
+          };
+          await service.start(selected);
+          assert(
+            !(reuse || remote) ||
+              (encoders === 0 &&
+                webCodecsEncoders === 0 &&
+                (!remote || audioEncoders === 0)),
+            `${remote ? "Receiver" : "Sender"} ${negotiatedCodec} recording fell back: recorders=${encoders}, video=${webCodecsEncoders}, audio=${audioEncoders}, frames=${JSON.stringify(firstFrames)}, audioFrames=${JSON.stringify(firstAudio)}`,
+          );
           const prepareMs = Math.round(
             performance.now() - preparing,
           );
@@ -353,13 +546,20 @@ async function run() {
             resume: boolean,
           ) => {
             pausedSince = performance.now();
+            const before =
+              reuse || remote ? await decodedFrames() : 0;
             service!.pause();
             const paused = state as RecordingState | null;
             assert(
               paused?.phase === "paused",
-              "Recording did not pause",
+              `Recording did not pause: state=${JSON.stringify(state)}, error=${String(error)}, completed=${completions}, frames=${JSON.stringify(firstFrames)}`,
             );
             await sleep(ms);
+            if (reuse || remote)
+              assert(
+                (await decodedFrames()) > before,
+                "Pausing recording stopped remote decoding",
+              );
             assert(
               (state as RecordingState | null)?.elapsed ===
                 paused.elapsed,
@@ -394,7 +594,7 @@ async function run() {
             await pauseFor(1500, true);
             await sleep(duration / 2);
             // Also exercise final data delivery when stopping a paused recorder.
-            if (remote) await pauseFor(300, false);
+            if (remote || reuse) await pauseFor(300, false);
           } finally {
             clearInterval(memoryTimer);
           }
@@ -457,6 +657,13 @@ async function run() {
           const activeDurationMs =
             stopping - started - pausedMs;
           await service.stop();
+          if (reuse || remote) {
+            const before = await decodedFrames();
+            await waitFor(
+              async () =>
+                (await decodedFrames()) > before + 3,
+            );
+          }
           assert(
             !error && saved,
             `Recording failed: ${String(error)}`,
@@ -475,6 +682,11 @@ async function run() {
               "live",
             "Recorder stopped the original audio",
           );
+          if (remote)
+            assert(
+              audioEncoders === 0,
+              `Audio fell back: frames=${JSON.stringify(firstFrames)}, audio=${JSON.stringify(firstAudio)}, sync=${JSON.stringify(receiver.getReceivers().map((entry) => entry.getSynchronizationSources()))}`,
+            );
           const file = saved as StoredFile;
           assert(
             file.name.endsWith(
@@ -482,18 +694,50 @@ async function run() {
             ),
             "Recorded file extension does not match its actual format",
           );
-          if (remote)
+          if (container !== "auto")
+            assert(
+              file.name.endsWith(`.${container}`),
+              "Recording did not honor the selected container",
+            );
+          if (container === "auto")
+            assert(
+              !file.name.endsWith(".webm"),
+              "Automatic recording still produced WebM",
+            );
+          if ((remote || reuse) && container === "auto") {
+            const expected =
+              negotiatedCodec === "video/H264"
+                ? "mp4"
+                : "mkv";
+            assert(
+              file.name.endsWith(`.${expected}`),
+              `Wrong automatic container for ${negotiatedCodec}: ${file.name}`,
+            );
             assert(
               file.type.includes(
-                codec === "video/H264" ? "avc1" : "vp8",
+                (
+                  {
+                    "video/H264": "avc1",
+                    "video/VP8": "vp8",
+                    "video/VP9": "vp09",
+                    "video/AV1": "av01",
+                  } as Record<string, string>
+                )[negotiatedCodec!],
               ),
               `Remote ${codec} was unnecessarily transcoded: ${file.type}`,
             );
+          }
           const measurement = {
+            container,
             kind,
             remote,
             camera,
             codec,
+            senderEncodingReused: reuse,
+            receiverEncodingReused: remote,
+            additionalAudioEncoders: audioEncoders,
+            additionalVideoEncoders:
+              encoders + webCodecsEncoders,
             type: file.type,
             bytes: file.size,
             prepareMs,
@@ -506,8 +750,9 @@ async function run() {
             durationMs: duration,
             activeDurationMs: Math.round(activeDurationMs),
             pausedMs: Math.round(pausedMs),
-            stoppedWhilePaused: remote,
+            stoppedWhilePaused: remote || reuse,
             audioDurationSeconds: 0,
+            audioSyncChecks: 0,
             videoDurationSeconds: 0,
             seekPoints: 0,
             seeks: [] as {
@@ -594,12 +839,18 @@ async function run() {
           );
           measurement.audioDurationSeconds =
             decodedAudio.duration;
+          if (remote && negotiatedCodec === "video/VP8")
+            measurement.audioSyncChecks =
+              await checkRecordingAudioSync(
+                content,
+                decodedAudio,
+              );
           assert(
             Math.abs(
               decodedAudio.duration -
                 activeDurationMs / 1000,
             ) < 0.5,
-            `Recording audio included paused time or lost a segment: active=${activeDurationMs}, audio=${decodedAudio.duration}, paused=${pausedMs}`,
+            `Recording audio included paused time or lost a segment: ${kind}, ${codec}, active=${activeDurationMs}, audio=${decodedAudio.duration}, paused=${pausedMs}`,
           );
           const samples = decodedAudio.getChannelData(0);
           const rms = Math.sqrt(
@@ -656,6 +907,103 @@ async function run() {
             player.load();
             revokeFileUrl(url);
           }
+          if (
+            (reuse || remote) &&
+            kind === "indexeddb" &&
+            negotiatedCodec === "video/VP8"
+          ) {
+            // The same sender transform must survive several recordings.
+            await service.start(selected);
+            await sleep(400);
+            await service.stop();
+            assert(
+              Number(completions) === 2 && !error,
+              "Repeated recording failed to save",
+            );
+            let failure: unknown;
+            let failedState: RecordingState | null = null;
+            const failed = new RecordingService({
+              container: () => container,
+              storage: {
+                authorizeDefault: (options) =>
+                  storage.authorizeDefault(options),
+                createWritableFile: async (options) => {
+                  const writer =
+                    await storage.createWritableFile(
+                      options,
+                    );
+                  return {
+                    ...writer,
+                    write: async () => {
+                      throw new DOMException(
+                        "Disk full",
+                        "QuotaExceededError",
+                      );
+                    },
+                  };
+                },
+              },
+              changed: (value) => {
+                failedState = value;
+              },
+              failed: (error) => {
+                failure = error;
+              },
+              complete: async () => {
+                throw new Error(
+                  "Failed recording was published",
+                );
+              },
+            });
+            try {
+              await failed.start(selected);
+              await waitFor(
+                () => !!failure && failedState === null,
+              );
+              const before = await decodedFrames();
+              await waitFor(
+                async () =>
+                  (await decodedFrames()) > before + 3,
+              );
+              assert(
+                stream
+                  .getTracks()
+                  .every(
+                    (track) => track.readyState === "live",
+                  ),
+                "Storage failure stopped shared capture",
+              );
+            } finally {
+              await failed.stop();
+            }
+            await service.start(selected);
+            await sleep(400);
+            if (reuse) {
+              sender.close();
+              encoded!.dispose();
+            } else {
+              receiver.close();
+              for (const tap of taps.values())
+                tap.dispose();
+            }
+            await waitFor(() => state === null);
+            assert(
+              Number(completions) === 3 && !error,
+              "RTP disconnect did not save the existing recording",
+            );
+            assert(
+              local.getVideoTracks()[0].readyState ===
+                "live",
+              "Recording disposal stopped the original camera",
+            );
+            assert(
+              webCodecsEncoders === 0 && encoders === 0,
+              "A repeated recording added a video encoder",
+            );
+            passed.push(
+              `${remote ? "receiver" : "sender"} reuse survives repeated recordings and quota failure; connection disposal automatically saves without stopping borrowed capture`,
+            );
+          }
           passed.push(
             `${kind}: ${remote ? `received WebRTC ${codec}` : camera ? "getUserMedia camera with concurrent WebRTC sharing" : "local canvas"} video/audio recording, pause/resume into one file, ${remote ? "stop while paused, " : ""}streaming draft, finite active duration, forward/backward seeking, video thumbnail, final playback, source ownership`,
           );
@@ -663,6 +1011,12 @@ async function run() {
           await service?.stop();
           sender.close();
           receiver.close();
+          for (const tap of taps.values()) tap.dispose();
+          window.AudioEncoder = AudioEncoderConstructor;
+          window.VideoEncoder = VideoEncoderConstructor;
+          viewer.pause();
+          viewer.srcObject = null;
+          viewer.remove();
           capture
             ?.getTracks()
             .forEach((track) => track.stop());
@@ -670,6 +1024,16 @@ async function run() {
         }
       }
     }
+    measurements.push(
+      ...(await checkNativeRecordingPackets(
+        source.getVideoTracks()[0],
+        audio,
+        container,
+      )),
+    );
+    passed.push(
+      "native H.264/H.265 packets and PCM share muxing/VFS, keep pause/resume duration and audio, and never create a video encoder/local receiver",
+    );
     window.__SPEED_TEST_REPORT__ = {
       ok: true,
       tests: passed.length,

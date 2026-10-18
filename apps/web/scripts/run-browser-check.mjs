@@ -139,6 +139,20 @@ async function main() {
     await vite.listen();
     const address = vite.httpServer.address();
     const recordingQuery = new URLSearchParams();
+    if (process.env.RECORDING_TEST_SOURCE)
+      recordingQuery.set(
+        "source",
+        process.env.RECORDING_TEST_SOURCE,
+      );
+    if (process.env.RECORDING_TEST_CONTAINER)
+      recordingQuery.set(
+        "container",
+        process.env.RECORDING_TEST_CONTAINER,
+      );
+    if (process.env.RECORDING_TEST_NATIVE_PACKETS_ONLY)
+      recordingQuery.set("nativePacketsOnly", "1");
+    if (process.env.RECORDING_TEST_ENCODED_ONLY)
+      recordingQuery.set("encodedOnly", "1");
     if (process.env.RECORDING_TEST_DURATION_MS)
       recordingQuery.set(
         "duration",
@@ -335,8 +349,8 @@ async function main() {
     }
     const start = Date.now();
     const timeout = recordingTest
-      ? 80000 +
-        8 *
+      ? 120000 +
+        24 *
           Math.min(
             600000,
             Math.max(

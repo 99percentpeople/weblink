@@ -425,16 +425,63 @@ may select concrete infrastructure implementations.
     identity before client creation, shares concurrent same-identity joins through
     the handshake, and retires old work on identity changes, leave or disposal.
   - `session-service.ts`: owns live `PeerSession` instances and client views.
-  - `recording-service.ts`: owns a single recorder and its continuous VFS writer.
-    Automatic format selection lets supporting browsers reuse encoded remote
-    WebRTC video instead of encoding it again. Direct local capture instead
-    prefers a Matroska container when supported so Chromium can choose an
-    accelerated encoder, including H.264. Native screen recording inputs opened
-    over WebRTC keep automatic format selection. The first output chunk determines
-    the final MIME type and extension (WebM, Matroska or MP4); publication updates
-    that metadata on the writer's original mount. WebM and Matroska duration/seek
-    indexing preserves encoded frames. Recording never reconfigures or stops
-    the meeting's borrowed video/audio tracks.
+  - `recording-service.ts`: owns one recorder and a continuous VFS writer whose
+    mount is fixed when the draft is created. Browser sender/receiver transforms and native
+    recording adapters implement the same `EncodedMediaSource` contract in
+    `@weblink/platform`: encoded video access units, optional encoded Opus or captured PCM audio,
+    pause/resume segments and subscription-only cleanup. Browser transforms stay
+    installed for the RTP endpoint lifetime; stopping recording only stops copying.
+    Ordinary meeting and native-screen receive connections expose selected tracks
+    through the same source interface in Web and Tauri. Video dimensions absent on
+    received delta frames inherit the last known dimensions for that SSRC. When
+    receiver keyframe metadata omits dimensions, existing inbound decode statistics
+    provide them; recording never opens a decoder to discover the size.
+    Copies are bounded by bytes and packet count independently of network forwarding.
+    A single selected Opus track can be muxed without an audio encoder. Separate
+    audio/video RTP origins are aligned with a shared capture clock or the receiver's
+    RTP/delivery-time mapping, pinned for each pause/resume segment. Missing clock
+    information, unsupported audio codecs, or multiple tracks retain the audio-mix
+    fallback; no audio track is silently omitted. Only matching tracks from the
+    same connection are paired. Receiver keyframe requests never alter sender rate control.
+    Preparation keeps a bounded prefix beginning with the validated keyframe;
+    starting consumes it without a second PLI that could be rate-limited by WebRTC.
+    `recording-encoded.ts` muxes existing VP8, VP9, AV1, H.264 and H.265 video with
+    the selected source's audio. Automatic output uses MP4 for AVC/HEVC and MKV
+    for other supported codecs, with parameter-set validation and Annex B
+    conversion delegated to the muxer. No second video encoder or
+    decoder is required by this path. Unsupported bitstreams, missing keyframes,
+    spatial layers, unavailable APIs and unavailable audio encoders fall back
+    before creating the VFS draft. Sender bitrate/resolution policy is unchanged.
+    The fallback uses MediaRecorder: raw local input prefers a hardware-capable
+    container, while received WebRTC input uses automatic format selection so
+    supporting browsers can pass through encoded frames. The actual output sets
+    the final extension and receives duration/seek metadata.
+    The recording container preference defaults to automatic and is fixed at start.
+    Automatic and explicit MKV/MP4 selections preserve codecs: sender frames go directly to the
+    selected muxer, while MediaRecorder chunks pass through bounded streaming
+    remuxing. Conversion must copy all tracks without introducing a decoder or
+    encoder; an unsupported track fails rather than silently losing audio.
+    MKV's AVC/HEVC configuration is derived from one keyframe using the common
+    muxer/demuxer, and subsequent NAL units only change their length framing.
+    VP9/AV1 profiles, bit depth and color configuration are read from the first
+    validated keyframe through the same muxer/demuxer, without creating a decoder.
+    Keyframe configuration changes stop the recording before mixing incompatible
+    samples; pauses resume on a keyframe with the original configuration.
+    Native Windows recording first subscribes directly to a connected hardware
+    H.264/H.265 sender. It creates neither another native encoder nor a local peer.
+    The original transport receives each access unit before the recording tap;
+    capture and encoder threads never perform recording IPC, muxing or file I/O.
+    The existing selected system-audio capture supplies muted-or-live PCM after
+    delivery to WebRTC. Its WASAPI timestamp and video timestamps map onto one
+    monotonic clock. Audio is encoded separately as Opus by the shared muxer path.
+    One binary read may be in flight; queue overflow terminates recording without
+    changing the original sender. Unsupported native sources retain the local
+    receiver/MediaRecorder fallback, including real source audio.
+    Each resume waits for a keyframe and removes paused time from both tracks.
+    Sender disconnect or codec/configuration changes finish the current file;
+    incompatible streams are never spliced together. Stop drains accepted packets
+    and final muxer writes, then applies bounded metadata patches through VFS close.
+    Recording never stops the meeting's borrowed video/audio tracks.
   - `ice-server-diagnostics.ts`: coordinates STUN/TURN availability probes behind
     injectable credential/probe functions, without UI or shared-state ownership.
   - `messaging/`: reactive message history, persistence port and tracked
