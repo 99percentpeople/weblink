@@ -3,13 +3,78 @@ use super::vfr::{motion, static_frames, wait_for_video, Frames};
 use super::*;
 
 #[test]
+#[ignore = "Requires Windows GPU H.264/H.265 encoders"]
+fn hardware_preview_delivers_motion_and_final_frame() {
+    use crate::media::preview::PreviewEvent;
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let encoders = hardware::detect().unwrap();
+        assert!(!encoders.is_empty());
+        let frames = Frames::with_size(2560, 1440);
+        for info in encoders {
+            let codec = info.codecs[0].clone();
+            let media = MediaSession::new(MediaOptions {
+                encoder: info.id.clone(), codec: Some(codec.clone()),
+                frame_rate: 60, max_width: 2560, max_height: 1440,
+                ..Default::default()
+            }).unwrap();
+            media.offer("preview-check".into(), vec![], false, false).await.unwrap();
+            let encoder = media.hardware.lock().unwrap()["preview-check"].clone();
+            let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
+            let preview = media.subscribe_preview(true, move |event| {
+                !matches!(event, PreviewEvent::Frame) || send.send(()).is_ok()
+            }).unwrap();
+            let mut pixels = vec![0; 2560 * 1440 * 3 / 2];
+            let mut sequence = 0;
+            let mut delivered = 0;
+            let mut index = 0;
+            let start = Instant::now();
+            let mut feed = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
+            feed.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            while start.elapsed() < Duration::from_secs(3) {
+                tokio::select! {
+                    _ = feed.tick() => { frames.send(&media, index); index += 1; }
+                    event = receive.recv() => {
+                        assert!(event.is_some());
+                        if let Some(frame) = media.copy_preview_frame(sequence, &mut pixels).unwrap() {
+                            sequence = frame.sequence;
+                            delivered += 1;
+                        }
+                        preview.acknowledge(sequence);
+                    }
+                }
+            }
+            let pipeline = media.pipeline_stats();
+            eprintln!("Preview {}: inputs={index}, delivered={delivered}, encoded={}, map={:?}, prepare={:?}, wait={:?}", info.id, encoder.statistics().frames, pipeline.map, pipeline.prepare, pipeline.capture_wait);
+            assert!(delivered > 30, "Visible preview stalled: {}", info.id);
+            assert!(encoder.statistics().frames > 0, "Encoder stopped: {}", info.id);
+            assert_eq!(encoder.statistics().selection.as_ref().unwrap().encoder, info.id);
+            assert_eq!(encoder.statistics().cpu_inputs, 0);
+
+            // Delay acknowledgement as a busy WebView would, then change the source
+            // one last time. No capture event may be required to rescue that frame.
+            frames.send(&media, index);
+            tokio::time::timeout(Duration::from_secs(2), receive.recv()).await.unwrap().unwrap();
+            sequence = media.copy_preview_frame(sequence, &mut pixels).unwrap().unwrap().sequence;
+            frames.send(&media, index + 1);
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            let resumed = Instant::now();
+            preview.acknowledge(sequence);
+            tokio::time::timeout(Duration::from_secs(2), receive.recv()).await.unwrap().unwrap();
+            assert!(media.copy_preview_frame(sequence, &mut pixels).unwrap().is_some());
+            eprintln!("Final preview {}: {:?}", info.id, resumed.elapsed());
+            media.close();
+        }
+    });
+}
+
+#[test]
 #[ignore = "Requires an unlocked Windows desktop, WGC/DXGI and GPU H.264/H.265 encoders"]
 fn gpu_real_desktop_backends_deliver_both_codecs_without_readback() {
     use crate::{CaptureMethod, CaptureOptions, CaptureService, SourceKind};
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let service = CaptureService::new().unwrap();
         let screen = service.sources().unwrap().into_iter().find(|s| s.kind == SourceKind::Monitor).expect("Interactive display required");
-        let encoders = mf::detect().unwrap();
+        let encoders = hardware::detect().unwrap();
         assert!(!encoders.is_empty());
         for backend in [CaptureMethod::Dxgi, CaptureMethod::Wgc] {
             for info in &encoders {
@@ -32,8 +97,13 @@ fn gpu_real_desktop_backends_deliver_both_codecs_without_readback() {
                         tokio::time::sleep(Duration::from_millis(25)).await;
                     }
                 }).await.expect("Captured GPU frames did not reach encoder");
-                if let Some(remote) = remote { assert!(decoded(&remote).await > 0); }
+                if let Some(remote) = remote {
+                    // Encoder completion may precede ICE/decoder startup. Require actual
+                    // decoded frames with a deadline instead of racing the fifth packet.
+                    wait_for_video(&remote).await;
+                }
                 let metrics = encoder.statistics();
+                assert_eq!(metrics.selection.as_ref().unwrap().encoder, info.id);
                 assert_eq!(metrics.cpu_inputs, 0, "{:?}", metrics.gpu_fallback);
                 assert!(metrics.gpu_inputs >= 5);
                 assert_eq!(media.pipeline_stats().frames, 0);
@@ -69,6 +139,11 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         assert!(stats.gpu_inputs > 10, "GPU fallback: {:?}", stats.gpu_fallback);
         let selection = stats.selection.unwrap();
         assert!(selection.adapter_matched, "{selection:?}");
+        if nvenc::detect().iter().any(|e| e.id == nvenc::H264) { assert_eq!(selection.encoder, nvenc::H264); }
+        let expected = if selection.encoder.starts_with("nvenc:") { "NVENC" } else { "Media Foundation" };
+        let report = media.stats("gpu").await.unwrap();
+        assert!(!report.is_empty());
+        assert!(report.iter().all(|s| s.implementation == expected));
         assert_eq!(stats.cpu_inputs, 0);
         assert_eq!(media.pipeline_stats().frames, 0, "Hardware-only streaming performed a readback");
 
@@ -97,6 +172,26 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         let (limited, _) = motion(&frames, &media, &remote).await;
         assert!(limited > 3 && limited <= 15, "Live FPS change failed: {limited}");
 
+        if selection.encoder.starts_with("nvenc:") {
+            let before = encoder.statistics().frames;
+            encoder.fail_nvenc_output();
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let stats = encoder.statistics();
+                    if stats.frames > before && stats.selection.as_ref().is_some_and(|s| s.encoder.starts_with("mf:")) { break; }
+                    assert!(encoder.error().is_none(), "{:?}", encoder.error());
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }).await.expect("NVENC failure did not recover on retained static content");
+            assert!(!encoder.needs_readback());
+            assert_eq!(encoder.statistics().cpu_inputs, 0);
+            assert!(Arc::ptr_eq(&encoder, &media.hardware.lock().unwrap()["gpu"]));
+            wait_for_video(&remote).await;
+            let report = media.stats("gpu").await.unwrap();
+            assert!(!report.is_empty());
+            assert!(report.iter().all(|s| s.implementation == "Media Foundation"));
+        }
+
         // An unsupported GPU cursor input uses the old CPU compositor and keeps the peer.
         let invalid_cursor = crate::surface::Cursor { visible: true, width: 2, height: 2, pitch: 8, bytes: Arc::new(vec![]), ..Default::default() };
         frames.send_with_cursor(&media, 0, Some(&invalid_cursor));
@@ -118,11 +213,11 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
 #[ignore = "Requires Windows GPU H.264/H.265 encoders"]
 fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_transport() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let hardware = mf::detect().unwrap();
+        let hardware = hardware::detect().unwrap();
         assert!(!hardware.is_empty());
         for info in hardware {
             let codec = info.codecs[0].clone();
-            let media = MediaSession::new(MediaOptions { encoder: "auto".into(), codec: Some(codec.clone()), frame_rate: 20, max_width: 640, max_height: 360, ..Default::default() }).unwrap();
+            let media = MediaSession::new(MediaOptions { encoder: info.id.clone(), codec: Some(codec.clone()), frame_rate: 20, max_width: 640, max_height: 360, ..Default::default() }).unwrap();
             // An offer starts the same encoder used by a normal transport; HEVC decoding
             // is not provided by every libwebrtc build, so inspect its original packets.
             let remote = if codec == "video/h264" { Some(connect(&media, "sender", false).await.unwrap()) } else {
@@ -134,7 +229,8 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
             tokio::time::timeout(Duration::from_secs(5), async {
                 while encoder.statistics().frames == 0 { tokio::time::sleep(Duration::from_millis(10)).await; }
             }).await.unwrap();
-            assert!(encoder.statistics().selection.unwrap().adapter_matched);
+            assert!(encoder.statistics().selection.as_ref().unwrap().adapter_matched);
+            assert_eq!(encoder.statistics().selection.unwrap().encoder, info.id);
             if codec == "video/h265" {
                 let tap = encoder.recording.subscribe().unwrap();
                 for segment in [1, 2] {

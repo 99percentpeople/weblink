@@ -1,6 +1,6 @@
 //! Windows adapters for the portable recording inputs. Selection stays with the
 //! media session; recording lifetime and binary delivery stay in the common core.
-use super::{audio, mf};
+use super::{audio, hardware};
 use crate::media::recording::{
     EncodedAudioSource, EncodedRecordingTap, PcmAudioSource, RecordingAudioInputs, RecordingInputs,
     VideoSource,
@@ -10,7 +10,7 @@ use libwebrtc::peer_connection::{PeerConnection, PeerConnectionState};
 use std::sync::{Arc, Weak};
 
 struct SenderVideo {
-    encoder: Weak<mf::Encoder>,
+    encoder: Weak<hardware::Encoder>,
     tap: Arc<EncodedRecordingTap>,
     sender: PeerConnection,
 }
@@ -29,7 +29,7 @@ impl VideoSource for SenderVideo {
 }
 
 pub(super) fn inputs(
-    encoder: &Arc<mf::Encoder>,
+    encoder: &Arc<hardware::Encoder>,
     sender: PeerConnection,
     audio: Option<&audio::Loopback>,
     encoded: Option<Arc<SenderAudioRecording>>,

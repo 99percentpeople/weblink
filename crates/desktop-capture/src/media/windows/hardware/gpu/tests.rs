@@ -161,8 +161,9 @@ fn gpu_color_rotation_and_all_cursor_shapes_match_cpu_composition() {
                         &mut reference,
                         options.color_space().yuv_matrix(),
                     );
-                    let reference = crate::media::windows::mf::Frame::from_i420(&reference, None);
-                    let crate::media::windows::mf::Input::Memory(reference) = reference.input
+                    let reference =
+                        crate::media::windows::hardware::Frame::from_i420(&reference, None);
+                    let crate::media::windows::hardware::Input::Memory(reference) = reference.input
                     else {
                         unreachable!()
                     };

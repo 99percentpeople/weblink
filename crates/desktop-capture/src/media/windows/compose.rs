@@ -39,13 +39,16 @@ pub(super) fn compose_with_cursor_scale(
         Rotation::Clockwise90 | Rotation::Clockwise270 => (height as usize, width as usize),
         _ => (width as usize, height as usize),
     };
-    output.resize(w * h * 4, 0);
     if rotation == Rotation::Identity {
+        // Every byte is copied from the source. Avoid first filling an entire
+        // desktop-sized allocation with zeroes (especially costly in debug).
+        output.clear();
+        output.reserve(w * h * 4);
         for y in 0..h {
-            output[y * w * 4..(y + 1) * w * 4]
-                .copy_from_slice(&input[y * stride..y * stride + w * 4]);
+            output.extend_from_slice(&input[y * stride..y * stride + w * 4]);
         }
     } else {
+        output.resize(w * h * 4, 0);
         for y in 0..height as usize {
             for x in 0..width as usize {
                 let (dx, dy) = match rotation {
@@ -122,6 +125,33 @@ pub(super) fn compose_with_cursor_scale(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unrotated_rows_ignore_padding_and_replace_previous_scratch_pixels() {
+        let mut output = vec![255; 64];
+        let scratch = output.as_ptr();
+        compose(
+            &[1, 2, 3, 4, 99, 99, 99, 99, 5, 6, 7, 8],
+            8,
+            1,
+            2,
+            Rotation::Identity,
+            None,
+            &mut output,
+        );
+        assert_eq!(output, [1, 2, 3, 4, 5, 6, 7, 8]);
+        compose(
+            &[9, 10, 11, 12],
+            4,
+            1,
+            1,
+            Rotation::Identity,
+            None,
+            &mut output,
+        );
+        assert_eq!(output, [9, 10, 11, 12]);
+        assert_eq!(output.as_ptr(), scratch);
+    }
+
     #[test]
     fn gpu_scaled_cursor_uses_scaled_position_and_samples_source_pixels() {
         let mut output = vec![];

@@ -481,7 +481,11 @@ may select concrete infrastructure implementations.
     Backends supply audio/video timestamps normalized to one monotonic clock.
     The reusable SDK adapter in `media/webrtc/` supplies sender audio observations
     and that SDK clock; it is currently enabled with the Windows SDK dependency.
-    Windows adapters retain Media Foundation encoder selection and WASAPI capture.
+    Windows adapters own a shared `hardware` worker for GPU conversion, VFR,
+    bitrate feedback and bounded recording delivery. Its `nvenc` and `mf` backends
+    share that worker; optional NVENC initialization/output failures retain the
+    same-codec MF fallback. NVIDIA's driver API is loaded at runtime through a
+    narrow C++ shim. WASAPI capture remains in the Windows adapter.
     Closing a recording releases its subscriptions before another can open, even
     if a pending read retains the old source. Teardown never closes borrowed media.
     Native Windows recording first subscribes directly to a connected hardware

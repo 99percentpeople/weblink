@@ -11,7 +11,7 @@ use windows::{
 };
 
 #[derive(Clone, Debug)]
-pub(super) struct Adapter {
+pub(in crate::media::windows) struct Adapter {
     pub luid: LUID,
     pub name: String,
 }

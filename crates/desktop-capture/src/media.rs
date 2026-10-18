@@ -151,6 +151,7 @@ impl MediaOptions {
         }
         if self.encoder != "auto"
             && self.encoder != "software"
+            && !matches!(self.encoder.as_str(), "nvenc:h264" | "nvenc:h265")
             && !(self.encoder.starts_with("mf:") && self.encoder.len() <= 64)
         {
             return Err("Invalid native encoder".into());

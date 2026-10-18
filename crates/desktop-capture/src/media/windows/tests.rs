@@ -1097,3 +1097,34 @@ fn external_hevc_factory_is_scoped_and_cancelled_offers_release_media() {
         }
     });
 }
+
+#[test]
+fn saved_nvenc_selection_can_use_mf_without_changing_the_requested_codec() {
+    for (id, codec) in [(nvenc::H264, "video/h264"), (nvenc::HEVC, "video/h265")] {
+        let options = MediaOptions {
+            encoder: id.into(),
+            codec: Some(codec.into()),
+            ..Default::default()
+        };
+        let available = vec![EncoderInfo {
+            id: format!(
+                "mf:existing{}",
+                if codec == "video/h265" { ":h265" } else { "" }
+            ),
+            name: "Existing hardware".into(),
+            hardware: true,
+            codecs: vec![codec.into()],
+        }];
+        let selected = select_hardware_encoder(&options, available.clone())
+            .unwrap()
+            .unwrap();
+        assert_eq!(selected.id, id);
+        assert_eq!(selected.codecs, vec![codec]);
+        assert!(select_hardware_encoder(&options, vec![]).is_err());
+        let mismatch = MediaOptions {
+            codec: Some("video/vp8".into()),
+            ..options
+        };
+        assert!(select_hardware_encoder(&mismatch, available).is_err());
+    }
+}

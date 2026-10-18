@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, &'static str>;
 const INVALID: &str = "Unsupported or truncated hardware SPS colour description";
 
 /// Normalizes Annex B SPS units. Delta access units need no allocation or copy.
-pub(super) fn normalize(
+pub(in crate::media::windows) fn normalize(
     bytes: &mut Vec<u8>,
     codec: EncodedVideoCodec,
     color: ColorDescription,

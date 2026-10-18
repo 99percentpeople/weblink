@@ -67,9 +67,8 @@ export async function createRawPreview(
   let running = false;
   let initialized = false;
   let nativeVisible = false;
+  let presenting = false;
   let dirty = true;
-  let frameDue = false;
-  let raf: number | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let refreshTimer:
     | ReturnType<typeof setTimeout>
@@ -111,7 +110,6 @@ export async function createRawPreview(
     rejectBuffer(new Error("Preview closed"));
     clearTimeout(timeout);
     clearTimeout(refreshTimer);
-    if (raf !== undefined) cancelAnimationFrame(raf);
     signal?.removeEventListener("abort", aborted);
     document.removeEventListener(
       "visibilitychange",
@@ -194,25 +192,10 @@ export async function createRawPreview(
     firstFrameReady();
     return true;
   };
-  const schedule = () => {
-    if (
-      raf === undefined &&
-      !closed &&
-      initialized &&
-      visible() &&
-      dirty
-    )
-      raf = requestAnimationFrame(() => {
-        raf = undefined;
-        frameDue = true;
-        void pump();
-      });
-  };
   const pump = async () => {
     if (closed || !initialized || !visible() || running)
       return;
     running = true;
-    frameDue = false;
     clearTimeout(refreshTimer);
     try {
       if (dirty) await draw();
@@ -228,12 +211,11 @@ export async function createRawPreview(
     } finally {
       running = false;
       if (!closed && visible()) {
-        // A display tick can arrive during IPC or a track write. Consume that
-        // tick once the shared buffer is released instead of adding a second
-        // vsync wait to every busy frame.
-        if (dirty && frameDue)
-          queueMicrotask(() => void pump());
-        else schedule();
+        // Native availability already paces delivery and coalesces updates.
+        // Waiting for a WebView paint here adds another display interval to
+        // the read/ack handshake, and throttled rAF can stall a visible preview.
+        // A notice during a read/write consumes only the latest frame afterward.
+        if (dirty) queueMicrotask(() => void pump());
         // Static generated tracks need sparse local repeats, never another IPC read.
         if (presenter.needsRefresh)
           refreshTimer = setTimeout(() => void pump(), 500);
@@ -241,10 +223,10 @@ export async function createRawPreview(
     }
   };
   const updatePresentation = () => {
-    if (!visible()) {
-      if (raf !== undefined) cancelAnimationFrame(raf);
-      raf = undefined;
-      frameDue = false;
+    const active = initialized && visible();
+    if (active === presenting) return;
+    presenting = active;
+    if (!active) {
       clearTimeout(refreshTimer);
       firstFrameReady();
     } else {
@@ -275,7 +257,7 @@ export async function createRawPreview(
       onEnded();
     } else if (event.type === "frame") {
       dirty = true;
-      schedule();
+      void pump();
     } else if (nativeVisible !== event.visible) {
       nativeVisible = event.visible;
       updatePresentation();

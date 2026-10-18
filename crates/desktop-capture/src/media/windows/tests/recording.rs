@@ -363,7 +363,7 @@ fn native_recording_hardware_h265_access_units_use_the_same_bounded_tap() {
         else {
             return;
         };
-        let encoder = mf::Encoder::new(
+        let encoder = hardware::Encoder::new(
             hardware.id,
             MediaOptions {
                 codec: Some("video/h265".into()),
@@ -382,7 +382,7 @@ fn native_recording_hardware_h265_access_units_use_the_same_bounded_tap() {
         for index in 0..60 {
             let mut buffer = I420Buffer::new_black(640, 360);
             buffer.data_mut().0.fill(40 + index as u8);
-            encoder.submit(Arc::new(mf::Frame::from_i420(&buffer, None)));
+            encoder.submit(Arc::new(hardware::Frame::from_i420(&buffer, None)));
             tokio::time::sleep(Duration::from_millis(33)).await;
             while let Ok(packet) = subscriber.receive(Duration::ZERO) {
                 assert_eq!(

@@ -4,8 +4,10 @@ mod capture;
 mod compose;
 mod control;
 mod gpu_capture;
+mod hardware;
 mod ice;
 mod mf;
+mod nvenc;
 mod pixels;
 mod presentation;
 use pixels::from_bgra;
@@ -58,7 +60,7 @@ pub struct MediaSession {
     preview_source: NativeVideoSource,
     audio: Option<audio::Loopback>,
     peers: Mutex<HashMap<String, MediaPeer>>,
-    hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
+    hardware: Mutex<HashMap<String, Arc<hardware::Encoder>>>,
     recordings: RecordingSessions,
     encoder_id: Option<String>,
     encoders: Vec<EncoderInfo>,
@@ -133,13 +135,13 @@ impl MediaSession {
             hardware: false,
             codecs: Self::software_codecs(),
         }];
-        encoders.extend(mf::detect().unwrap_or_default());
+        encoders.extend(hardware::detect().unwrap_or_default());
         Ok(encoders)
     }
     pub fn codecs() -> Vec<String> {
         let mut codecs = Self::software_codecs();
         codecs.extend(
-            mf::detect()
+            hardware::detect()
                 .unwrap_or_default()
                 .into_iter()
                 .flat_map(|e| e.codecs),
@@ -210,9 +212,9 @@ impl MediaSession {
         let encoders = if options.encoder == "software" {
             Vec::new()
         } else if options.encoder == "auto" {
-            mf::detect().unwrap_or_default()
+            hardware::detect().unwrap_or_default()
         } else {
-            mf::detect()?
+            hardware::detect()?
         };
         let hardware = select_hardware_encoder(&options, encoders.clone())?;
         if let Some(encoder) = &hardware {
@@ -546,7 +548,7 @@ impl MediaSession {
         };
         // Conversion must not hold the encoder registry lock: a CPU fallback peer
         // cannot delay admission to independent GPU peers.
-        let frame = Arc::new(mf::Frame::from_i420(buffer, captured_at));
+        let frame = Arc::new(hardware::Frame::from_i420(buffer, captured_at));
         for encoder in hardware {
             encoder.submit(frame.clone());
         }
@@ -864,7 +866,7 @@ impl MediaSession {
                 .map(|id| {
                     let requested = self.readback_requested.clone();
                     let notify = self.notify.clone();
-                    mf::Encoder::with_fallback(
+                    hardware::Encoder::with_fallback(
                         id.clone(),
                         options.clone(),
                         preview,
@@ -1188,6 +1190,33 @@ fn select_hardware_encoder(
             .into_iter()
             .find(|e| e.codecs.iter().any(|c| c == requested)))
     } else {
+        // A saved NVENC choice must survive a driver/device change. Keep its
+        // codec and let the worker select a same-codec MF fallback on capture.
+        if matches!(options.encoder.as_str(), nvenc::H264 | nvenc::HEVC)
+            && !encoders.iter().any(|e| e.id == options.encoder)
+        {
+            let codec = if options.encoder == nvenc::HEVC {
+                "video/h265"
+            } else {
+                "video/h264"
+            };
+            if options.codec.as_deref().is_some_and(|c| c != codec) {
+                return Err(
+                    "Selected hardware encoder does not support the requested codec".into(),
+                );
+            }
+            if encoders
+                .iter()
+                .any(|e| e.id.starts_with("mf:") && e.codecs.iter().any(|c| c == codec))
+            {
+                return Ok(Some(EncoderInfo {
+                    id: options.encoder.clone(),
+                    name: "NVIDIA NVENC (Media Foundation fallback)".into(),
+                    hardware: true,
+                    codecs: vec![codec.into()],
+                }));
+            }
+        }
         let encoder = encoders
             .into_iter()
             .find(|e| e.id == options.encoder)

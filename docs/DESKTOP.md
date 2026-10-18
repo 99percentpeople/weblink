@@ -497,8 +497,9 @@ are preserved. Invalid live limits are rejected before commit; constraint and se
 parameter failures are reported to the user.
 
 Software formats come from libwebrtc's sender capabilities. Hardware H.264 and HEVC encoders
-come from Media Foundation hardware-transform enumeration followed by activation
-and input/output type negotiation, not GPU model names. Automatic encoding exchanges
+come from optional NVIDIA NVENC session initialization and Media Foundation
+hardware-transform enumeration followed by activation and input/output type negotiation,
+not GPU model names. Automatic encoding exchanges
 browser/WebView decoder MIME capabilities in the existing authenticated media hello.
 The application owns the connected-peer set, including peers whose capabilities are
 still unknown. It intersects local encoding formats with every connected receiver;
@@ -529,11 +530,30 @@ combinations still apply. The Windows local preview does not create an encoder o
 WebRTC connection; encoder selection and bitrate govern remote publication.
 Camera and microphone still use browser codec preferences. Saved bitrate and browser
 codec preferences retain their existing storage keys.
+
+On NVIDIA capture devices, automatic hardware encoding first tries native NVENC
+with D3D11 NV12 textures. Discovery checks the installed driver's API, codec, input
+format, asynchronous output and dynamic bitrate support, then initializes a session.
+The optional driver DLL is loaded from Windows System32; neither CUDA nor NVIDIA
+SDK binaries are required or bundled. The pinned API 12.2 header retains its NVIDIA
+MIT notice in `crates/desktop-capture/vendor/nvcodec`.
+
+NVENC uses a low-latency preset, CBR and no B frames or lookahead. H.264 uses Baseline
+and HEVC uses Main 8-bit, preserving the existing RTP and recording packet formats.
+Missing/older drivers, unsupported configurations or exhausted encoder sessions
+fall back to MF with the same codec. An active NVENC failure also reopens MF and
+requests an IDR while retaining the sender and recording tap; that receiver does
+not repeatedly retry NVENC. If MF GPU input fails, the existing memory-input path
+remains available. These are compatibility fallbacks, not guarantees that every
+driver supports every resolution or that MF can recover a lost GPU device.
+Manual MF selections stay on MF. Saved `nvenc:h264` / `nvenc:h265` selections can
+use a same-codec MF fallback when NVIDIA hardware is no longer available.
+
 The Media Foundation path is vendor-neutral: AMD, Intel and NVIDIA hardware
 depend on the installed GPU and driver exposing a compatible H.264 or HEVC transform.
 A CPU brand alone does not establish hardware encoding support. HEVC uses Main
-8-bit NV12 input and the H.265 RTP codec. Only a session with an activated HEVC
-transform opts into the Cargo fork's external-HEVC factory; normal/software factories
+8-bit NV12 input and the H.265 RTP codec. Only a session with a detected HEVC
+hardware backend opts into the Cargo fork's external-HEVC factory; normal/software factories
 do not advertise an encoder they cannot provide. Existing H.264 encoder IDs stay
 stable; HEVC IDs include a codec suffix for multi-codec driver registrations.
 Receivers must negotiate H.265 support. A rejected video answer fails promptly
@@ -641,12 +661,12 @@ each peer and local preview separate; rates and
 per-frame processing times use successive counter differences. Unavailable values
 remain absent. Actual bitrate is RTP payload byte growth over the report interval,
 independent of display FPS. Sender rows separately show the WebRTC target, the
-last bitrate successfully applied to MF, and the selected transport's outgoing
+last bitrate successfully applied to the encoder, and the selected transport's outgoing
 bandwidth estimate when available. These are budgets, not measured traffic or
 guaranteed capacity. Each receiver has its own encoder and congestion feedback;
 compare its sender row with that same receiver, not another peer's bitrate. A
 receiving browser's outgoing bandwidth estimate describes the reverse path and
-is not displayed as incoming video capacity. Native hardware encode time measures accepted MF input to output,
+is not displayed as incoming video capacity. Native hardware encode time measures accepted encoder input to output,
 including driver and output-delivery latency, rather than WebRTC's encoded-frame passthrough.
 Hardware input wait is measured separately. Capture-to-encoded time starts at
 arrival in the application's capture callback; cached static repeats are excluded.
@@ -666,17 +686,18 @@ the configured FPS.
 
 Native capture retains the original GPU texture. H.264 and H.265 hardware encoders
 share a D3D11 texture input path: GPU shaders scale, rotate, composite the DXGI
-cursor and convert SDR BGRA to NV12 with the selected matrix/range. The MFT must
-advertise D3D11 support and accept the capture device through an
-`IMFDXGIDeviceManager`. Inputs wrap NV12 textures with `MFCreateDXGISurfaceBuffer`;
-raw desktop pixels are not mapped or uploaded again. This eliminates the
+cursor and convert SDR BGRA to NV12 with the selected matrix/range. NVENC registers
+these textures on the capture device. The MF backend must advertise D3D11 support
+and accept that device through an `IMFDXGIDeviceManager`; its inputs wrap NV12
+textures with `MFCreateDXGISurfaceBuffer`.
+Raw desktop pixels are not mapped or uploaded again. This eliminates the
 GPU-to-CPU-to-GPU round trip, while retaining GPU copies needed for capture
 ownership and format conversion. Compressed output still passes through CPU memory.
 
 Automatic encoder selection resolves the capture texture's DXGI adapter LUID when
 the encoder opens. `MFTEnum2` with a `MFT_ENUM_ADAPTER_LUID` blob prioritizes that
 adapter's encoders for the already negotiated codec; unusable candidates do not
-hide the next candidate. Manual encoder settings retain their existing IDs and
+hide the next candidate. Manual MF settings retain their existing IDs and
 only select that transform, preferring its activation on the capture adapter.
 Capability discovery includes secondary adapters while keeping duplicate transform
 IDs out of the settings list. Enumeration runs during discovery or encoder
@@ -694,7 +715,12 @@ the reason for using legacy selection. An unknown legacy adapter is left unset.
 GPU admission and CPU conversion have separate workers, notifications and bounded
 pools. Hardware peers share immutable BGRA snapshots (up to four); each encoder
 uses up to eight NV12 surfaces. Tracked MF samples retain their surface lease until
-the MFT releases its last sample reference. A full pool coalesces pending input and
+the MFT releases its last sample reference. NVENC caches texture registrations and
+keeps at most four inputs in flight; it unmaps each texture before releasing its
+lease. A dedicated completion-event waiter only wakes the shared worker, which
+copies the compressed output and publishes transport before the bounded recording
+queue. Recording writes never run in that waiter or the encode worker.
+A full pool coalesces pending input and
 wakes on release instead of blocking the capture or recording producer. Shader
 command batches hold the D3D multithread lock so preview scaling and encoder
 conversion cannot interleave context bindings. Static refreshes reuse the cached
@@ -719,7 +745,10 @@ or change the encoded recording tap.
 
 CPU readback is requested only by a software sender, a hardware encoder using
 memory fallback, or a visible preview waiting for its next frame. An outstanding
-preview notification suppresses further preview-only readbacks until acknowledged.
+preview notification suppresses further preview-only readbacks until acknowledged,
+while retaining the bounded staging pool and cursor-composition buffer for reuse.
+Acknowledgement resumes from the newest retained source; it does not allocate a
+new desktop-sized buffer for every preview frame.
 For unrotated sources, a D3D11 shader scales to the selected dimensions before CPU
 readback and color conversion. DXGI cursor coordinates and pixels follow that scale.
 Unsupported GPU processing falls back to CPU scaling; rotated displays retain the
@@ -743,9 +772,10 @@ throughput estimate. Source size/device changes preserve in-flight ownership,
 and stopping releases pending slots without publishing late frames. Software and
 hardware share variable-frame-rate scheduling: the selected FPS caps new content,
 missed deadlines do not accumulate a burst, and new content starts promptly after idle.
-Hardware MFT input/output readiness wakes its worker through
-Media Foundation events; there is no second encoder FPS gate or output polling
-timer. Each encoder keeps only its latest pending input. Reconfiguration and
+Hardware input/output readiness wakes its shared worker through Media Foundation
+or NVENC completion events; there is no second encoder FPS gate. NVENC additionally
+detects output stalled for three seconds and retries temporary input backpressure
+without blocking capture. Each encoder keeps only its latest pending input. Reconfiguration and
 shutdown release callback state without retaining the capture session. On Windows versions supporting
 WGC's minimum update interval, capture requests updates at a 1 ms minimum interval
 and the worker enforces the selected output rate; older Windows versions retain
@@ -768,7 +798,7 @@ bandwidth can still reduce frame rate or quality according to the selected
 degradation preference. This policy is scoped to the native screen factory's
 software H.264 backend. Hardware pass-through disables the encoder-input rate
 dropper because its inputs are already compressed reference frames. Hardware
-workers apply transport bitrate feedback to MF and account for actual encoded
+workers apply transport bitrate feedback to the active backend and account for actual encoded
 bytes with a bounded 50 ms burst allowance. When a driver overshoots its accepted
 target, raw inputs are skipped before encoding; completed encoded references are
 preserved. Idle time cannot bank an unbounded burst, and bitrate reductions retain
@@ -813,7 +843,9 @@ only the latest frame and repeats it at most twice per
 second during static content, so a newly attached player can display it without
 another shared-memory copy. Closing releases the writer and retained frame.
 Frame notifications are coalesced until the presenter acknowledges a shared-buffer
-read. Static content causes no repeated IPC frame queries; only generated tracks
+read. New-frame notifications drive the next serialized read directly, without
+waiting for a WebView animation tick; duplicate visibility notices do not request
+another frame. Static content causes no repeated IPC frame queries; only generated tracks
 need the sparse local repeats above. Canvas previews sleep until a frame or
 visibility event arrives.
 Hiding or minimizing the native window pauses local preview requests, pixel copies
@@ -822,8 +854,8 @@ stream and shared buffer. Native visibility notifications also cover tray hiding
 and automatic hiding after control approval; a visible, unfocused PiP keeps its
 preview running. Capture, remote publication, system audio and control ownership
 remain active while local presentation is paused. When there are no remote peers
-requiring CPU pixels and no visible previews awaiting a frame, the CPU conversion
-worker sleeps and releases pending readbacks; GPU hardware senders keep running.
+requiring CPU pixels and no visible previews, the CPU conversion worker sleeps and
+releases its staging and composition buffers; GPU hardware senders keep running.
 Capture retains the latest GPU source, including an unpublished final update,
 so a static screen can resume without another capture arrival.
 The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;

@@ -38,7 +38,7 @@ impl Drop for Runtime {
     }
 }
 #[derive(Clone, Copy)]
-pub(super) struct Configuration {
+pub(in crate::media::windows) struct Configuration {
     pub codec: Codec,
     pub width: u32,
     pub height: u32,

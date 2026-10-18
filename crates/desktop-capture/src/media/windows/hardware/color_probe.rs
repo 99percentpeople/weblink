@@ -11,7 +11,7 @@ fn hardware_color_bitstreams() {
         std::env::var_os("WEBLINK_COLOR_PROBE_DIR").expect("WEBLINK_COLOR_PROBE_DIR"),
     );
     std::fs::create_dir_all(&dir).unwrap();
-    let encoders = detect().unwrap();
+    let encoders = super::super::mf::detect().unwrap();
     assert!(!encoders.is_empty(), "No usable hardware encoder");
     let _runtime = transform::Runtime::new().unwrap();
     let mut mismatches = Vec::new();

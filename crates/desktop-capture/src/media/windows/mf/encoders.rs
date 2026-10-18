@@ -16,19 +16,19 @@ use windows::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Codec {
+pub(in crate::media::windows) enum Codec {
     H264,
     Hevc,
 }
 impl Codec {
-    fn from_id(id: &str) -> Self {
+    pub fn from_id(id: &str) -> Self {
         if id.ends_with(":h265") {
             Self::Hevc
         } else {
             Self::H264
         }
     }
-    fn mime(self) -> &'static str {
+    pub fn mime(self) -> &'static str {
         match self {
             Self::H264 => "video/h264",
             Self::Hevc => "video/h265",
@@ -198,7 +198,7 @@ pub(super) fn has_adapter_codec(device: &ID3D11Device, mime: &str) -> Result<boo
     Ok(!enumerate(codec, Some(&adapter))?.is_empty())
 }
 
-pub(super) struct Selection {
+pub(in crate::media::windows) struct Selection {
     requested: String,
     automatic: bool,
     codec: Codec,
@@ -207,6 +207,12 @@ pub(super) struct Selection {
     pub report: Option<HardwareEncoderSelection>,
 }
 impl Selection {
+    // A different backend may fall back to any working MFT for the same codec.
+    pub fn for_codec(codec: Codec) -> Self {
+        let mut selection = Self::new(String::new(), true);
+        selection.codec = codec;
+        selection
+    }
     pub fn new(requested: String, automatic: bool) -> Self {
         Self {
             codec: Codec::from_id(&requested),
@@ -323,7 +329,10 @@ impl Selection {
                 {
                     continue;
                 }
-                if (!matched || !self.automatic) && candidate.info.id != self.requested {
+                if (!matched || !self.automatic)
+                    && !self.requested.is_empty()
+                    && candidate.info.id != self.requested
+                {
                     continue;
                 }
                 // Never deliberately submit textures to a known different adapter.

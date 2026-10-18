@@ -88,7 +88,8 @@ impl MediaSession {
                     break;
                 }
                 if !session.has_cpu_consumers() {
-                    // Keep only the latest GPU source so resuming a static screen works.
+                    // Keep the latest GPU source for a static-screen resume. A
+                    // visible preview waiting for its ACK can reuse CPU buffers.
                     session.pause_conversion(
                         &mut session.conversion.lock().unwrap_or_else(|e| e.into_inner()),
                     );
@@ -322,6 +323,16 @@ impl MediaSession {
                 .unwrap_or_else(|e| e.into_inner())
                 .dirty = true;
         }
-        *conversion = Conversion::default();
+        if self.has_visible_previews() {
+            // Waiting for a preview ACK is normal per-frame backpressure, not
+            // the end of a consumer. Keep the bounded staging pool and cursor
+            // composition scratch instead of reallocating full-size buffers on
+            // every frame. Re-admit the newest retained source after the ACK.
+            conversion
+                .reusable
+                .extend(conversion.pending.drain(..).map(|frame| frame.gpu));
+        } else {
+            *conversion = Conversion::default();
+        }
     }
 }

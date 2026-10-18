@@ -259,6 +259,7 @@ it("presents raw frames, resizes without replacing the stream, and serializes re
     height: 2,
     frames: 1,
   });
+  notifyFrame();
   document.dispatchEvent(new Event("visibilitychange"));
   document.dispatchEvent(new Event("visibilitychange"));
   expect(peak).toBe(1);
@@ -320,13 +321,45 @@ it("coalesces new frame events during IPC without overlapping shared-buffer requ
   expect(requests).toBe(2);
   finish({ sequence: 2, width: 2, height: 2 });
   await tick();
-  // The display tick already arrived during the pending read: no extra vsync.
+  // The notice arrived during the pending read: consume it once that read ends.
   expect(requests).toBe(3);
   expect(scheduled).toBeUndefined();
   preview.close();
   finish(null);
   await tick();
   expect(scheduled).toBeUndefined();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it("presents notified frames without waiting for a WebView animation tick", async () => {
+  let requests = 0;
+  mockIPC((command, args: any) => {
+    if (command === "capture_preview_open")
+      openBuffer(args);
+    if (command === "capture_preview_frame")
+      return { sequence: ++requests, width: 2, height: 2 };
+  });
+  const preview = await createRawPreview(
+    "capture",
+    false,
+    vi.fn(),
+  );
+  await tick();
+  // Deliberately never run rAF. Native frame availability already paces the
+  // preview; a delayed WebView paint must not stall its read/ack handshake.
+  for (let index = 0; index < 5; index++) {
+    events?.onmessage({ type: "frame" });
+    await tick();
+  }
+  expect(preview.stats().frames).toBe(6);
+  expect(requests).toBe(6);
+  expect(scheduled).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requests).toBe(6); // No frame event means no polling.
+  preview.close();
+  events?.onmessage({ type: "frame" });
+  await tick();
+  expect(requests).toBe(6);
   expect(release).toHaveBeenCalledOnce();
 });
 

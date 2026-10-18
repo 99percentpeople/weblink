@@ -111,7 +111,7 @@ pub(crate) struct Surface {
     y: ID3D11RenderTargetView,
     uv: ID3D11RenderTargetView,
 }
-pub(super) struct Converter {
+pub(in crate::media::windows) struct Converter {
     pub device: ID3D11Device,
     size: (u32, u32),
     vertex: ID3D11VertexShader,

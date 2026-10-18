@@ -44,7 +44,11 @@ impl MediaSession {
                     .unwrap_or_default();
                 let (encode_frames, encode_seconds, implementation) =
                     if let Some(metrics) = &hardware {
-                        (metrics.frames, metrics.seconds, "Media Foundation".into())
+                        (
+                            metrics.frames,
+                            metrics.seconds,
+                            metrics.implementation.into(),
+                        )
                     } else {
                         (
                             s.outbound.frames_encoded as u64,

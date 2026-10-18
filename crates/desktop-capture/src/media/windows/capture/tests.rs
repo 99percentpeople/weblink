@@ -506,3 +506,82 @@ fn hiding_during_readback_retains_the_final_static_update_for_resume() {
             media.close();
         });
 }
+
+#[test]
+fn preview_ack_backpressure_reuses_buffers_and_hiding_releases_them() {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            for readback_buffers in 1..=3 {
+                let media = MediaSession::new(MediaOptions {
+                    encoder: "software".into(),
+                    readback_buffers,
+                    ..Default::default()
+                })
+                .unwrap();
+                let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+                let preview = media.subscribe_preview(true, |_| true).unwrap();
+                let cursor = Cursor {
+                    visible: true,
+                    width: 1,
+                    height: 1,
+                    pitch: 4,
+                    bytes: Arc::new(vec![255; 4]),
+                    ..Default::default()
+                };
+                let first = texture(&device, (16, 8), 32);
+                media
+                    .frame(TextureFrame {
+                        cursor: Some(&cursor),
+                        ..frame(&device, &context, &first)
+                    })
+                    .unwrap();
+                media.flush().unwrap();
+                let scratch = media.conversion.lock().unwrap().composed.as_ptr();
+                let sequence = media.latest_sequence.load(Ordering::Acquire);
+                assert!(
+                    !media.has_cpu_consumers(),
+                    "Preview has not acknowledged its frame"
+                );
+
+                // More desktop updates cannot bypass backpressure or discard the
+                // bounded reusable storage. Only the newest pixels need to survive.
+                for value in [64, 128, 240] {
+                    let pixels = texture(&device, (16, 8), value);
+                    media
+                        .frame(TextureFrame {
+                            cursor: Some(&cursor),
+                            ..frame(&device, &context, &pixels)
+                        })
+                        .unwrap();
+                    media.capture_step(true).unwrap();
+                    assert_eq!(media.latest_sequence.load(Ordering::Acquire), sequence);
+                    let state = media.conversion.lock().unwrap();
+                    assert_eq!(state.composed.as_ptr(), scratch);
+                    assert_eq!(state.composed.len(), 16 * 8 * 4);
+                    assert!(!state.reusable.is_empty());
+                    assert!(
+                        state.pending.len() + state.reusable.len() <= readback_buffers as usize
+                    );
+                }
+                preview.acknowledge(sequence);
+                media.flush().unwrap();
+                {
+                    let latest = media.latest.lock().unwrap();
+                    assert!(latest.as_ref().unwrap().buffer.data().0[1] > 180);
+                    let state = media.conversion.lock().unwrap();
+                    assert_eq!(state.composed.as_ptr(), scratch);
+                }
+                preview.set_visible(false);
+                media.capture_step(false).unwrap();
+                {
+                    let state = media.conversion.lock().unwrap();
+                    assert!(state.pending.is_empty() && state.reusable.is_empty());
+                    assert_eq!(state.composed.capacity(), 0);
+                }
+                media.close();
+            }
+        });
+}

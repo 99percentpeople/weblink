@@ -9,7 +9,7 @@ use windows::{
     },
 };
 
-pub(super) fn tracked(surface: Arc<Lease<Surface>>) -> Result<IMFSample> {
+pub(in crate::media::windows) fn tracked(surface: Arc<Lease<Surface>>) -> Result<IMFSample> {
     unsafe {
         let buffer = MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &surface.texture, 0, false)?;
         let tracked = MFCreateTrackedSample()?;

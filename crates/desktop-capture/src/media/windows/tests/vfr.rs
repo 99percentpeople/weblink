@@ -10,12 +10,15 @@ pub(super) struct Frames {
 }
 impl Frames {
     pub(super) fn new() -> Self {
+        Self::with_size(640, 360)
+    }
+    pub(super) fn with_size(width: u32, height: u32) -> Self {
         let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
         let textures = (0..4)
             .map(|phase| {
-                let mut pixels = Vec::with_capacity(640 * 360 * 4);
-                for y in 0..360 {
-                    for x in 0..640 {
+                let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+                for y in 0..height {
+                    for x in 0..width {
                         // Hard scene changes after idle expose the software
                         // encoder's sparse-input rate-control recovery.
                         let value = ((x / 16 * 37 + y / 16 * 71 + phase * 89) % 192 + 32) as u8;
@@ -23,8 +26,8 @@ impl Frames {
                     }
                 }
                 let desc = D3D11_TEXTURE2D_DESC {
-                    Width: 640,
-                    Height: 360,
+                    Width: width,
+                    Height: height,
                     MipLevels: 1,
                     ArraySize: 1,
                     Format: DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -38,7 +41,7 @@ impl Frames {
                 };
                 let data = D3D11_SUBRESOURCE_DATA {
                     pSysMem: pixels.as_ptr().cast(),
-                    SysMemPitch: 640 * 4,
+                    SysMemPitch: width * 4,
                     SysMemSlicePitch: 0,
                 };
                 let mut texture = None;

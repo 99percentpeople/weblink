@@ -1,5 +1,11 @@
 use super::*;
+use crate::media::MediaOptions;
 use crate::surface::{gpu::ContextLock, Rotation, TextureFrame};
+use std::{
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 use windows::core::Interface;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 

@@ -192,12 +192,14 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .is_empty()
-            || self
-                .previews
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .values()
-                .any(|watch| watch.visible)
+            || self.has_visible_previews()
+    }
+    pub(super) fn has_visible_previews(&self) -> bool {
+        self.previews
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .any(|watch| watch.visible)
     }
     pub(super) fn notify_previews(&self, sequence: u64) {
         self.previews

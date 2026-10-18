@@ -1,6 +1,6 @@
 //! A local transport fed by an existing encoder. Its rate control never reaches
 //! the borrowed sender; only keyframe requests cross that boundary.
-use super::{mf, MediaOptions};
+use super::{hardware, MediaOptions};
 use crate::media::RecordingEnded;
 use crate::Result;
 use libwebrtc::{
@@ -19,7 +19,7 @@ use std::{
 };
 
 pub(super) struct Reuse {
-    pub encoder: Arc<mf::Encoder>,
+    pub encoder: Arc<hardware::Encoder>,
     pub sender: PeerConnection,
     pub ended: RecordingEnded,
 }
@@ -85,7 +85,7 @@ impl Drop for RecordingRelay {
 }
 
 fn relay(
-    encoder: Weak<mf::Encoder>,
+    encoder: Weak<hardware::Encoder>,
     sender: &PeerConnection,
     connection: &PeerConnection,
     output: &NativeVideoSource,

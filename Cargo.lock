@@ -5297,6 +5297,7 @@ dependencies = [
 name = "weblink-desktop-capture"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "libwebrtc",
  "png 0.18.1",
  "serde",

@@ -1,7 +1,7 @@
 //! GPU admission runs independently of CPU readback/conversion and preview consumers.
 use super::{
     capture::{Work, STATIC_REFRESH_INTERVAL},
-    mf, MediaSession,
+    hardware, MediaSession,
 };
 use crate::media::cadence::CaptureCadence;
 use std::{
@@ -11,8 +11,8 @@ use std::{
 
 #[derive(Default)]
 pub(super) struct State {
-    pool: Option<mf::gpu::CapturePool>,
-    latest: Option<Arc<mf::gpu::Captured>>,
+    pool: Option<hardware::gpu::CapturePool>,
+    latest: Option<Arc<hardware::gpu::Captured>>,
     generation: u64,
     sent: Option<Instant>,
 }
@@ -103,7 +103,7 @@ impl MediaSession {
         if dirty {
             if state.pool.as_ref().is_none_or(|pool| !pool.matches(&frame)) {
                 let notify = self.gpu_notify.clone();
-                state.pool = Some(mf::gpu::CapturePool::new(
+                state.pool = Some(hardware::gpu::CapturePool::new(
                     &frame,
                     Arc::new(move || notify.notify_one()),
                 ));
@@ -130,7 +130,7 @@ impl MediaSession {
         }
         let captured_at = if dirty { readback.captured_at } else { None };
         drop(readback);
-        let frame = Arc::new(mf::Frame::from_gpu(
+        let frame = Arc::new(hardware::Frame::from_gpu(
             state.latest.as_ref().unwrap().clone(),
             &options,
             captured_at,
