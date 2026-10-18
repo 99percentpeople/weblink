@@ -169,12 +169,70 @@ fn frame<'a>(
     texture: &'a ID3D11Texture2D,
 ) -> TextureFrame<'a> {
     TextureFrame {
+        dirty_regions: None,
         device,
         context,
         texture,
         rotation: Rotation::Identity,
         cursor: None,
     }
+}
+
+#[test]
+fn retained_damage_survives_skipped_captures_and_independent_cpu_readback() {
+    use crate::damage::DirtyRect;
+    let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let source = texture(&device, (100, 80), 96);
+    let first = [DirtyRect {
+        left: 2,
+        top: 4,
+        right: 6,
+        bottom: 8,
+    }];
+    let second = [DirtyRect {
+        left: 40,
+        top: 20,
+        right: 60,
+        bottom: 40,
+    }];
+    let mut retained = Readback::default();
+    let input = |regions| TextureFrame {
+        dirty_regions: Some(regions),
+        ..frame(&device, &context, &source)
+    };
+    retained.copy(&input(&first)).unwrap();
+    assert_eq!(
+        retained.frame().unwrap().dirty_regions,
+        None,
+        "First frame has no baseline"
+    );
+    retained.gpu_damage.take();
+    retained.copy(&input(&first)).unwrap();
+    // A preview/software consumer cannot consume the hardware receiver's damage.
+    drop(retained.map().unwrap());
+    retained.copy(&input(&second)).unwrap();
+    assert_eq!(
+        retained.frame().unwrap().dirty_regions.unwrap(),
+        &[first[0], second[0]]
+    );
+    retained.gpu_damage.take();
+    retained.copy(&input(&[])).unwrap();
+    assert!(retained.frame().unwrap().dirty_regions.unwrap().is_empty());
+    retained.invalidate();
+    assert_eq!(
+        retained.frame().unwrap().dirty_regions,
+        None,
+        "Settings invalidation requires a full update"
+    );
+    retained.gpu_damage.take();
+    let resized = texture(&device, (120, 80), 96);
+    retained
+        .copy(&TextureFrame {
+            dirty_regions: Some(&first),
+            ..frame(&device, &context, &resized)
+        })
+        .unwrap();
+    assert_eq!(retained.frame().unwrap().dirty_regions, None);
 }
 
 #[test]

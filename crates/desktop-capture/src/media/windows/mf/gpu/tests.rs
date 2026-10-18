@@ -119,6 +119,7 @@ fn gpu_color_rotation_and_all_cursor_shapes_match_cpu_composition() {
                 }),
             });
             let frame = TextureFrame {
+                dirty_regions: None,
                 device: &device,
                 context: &context,
                 texture: &texture,

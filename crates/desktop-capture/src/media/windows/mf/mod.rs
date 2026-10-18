@@ -3,6 +3,7 @@ mod adapter;
 mod bitstream_color;
 #[cfg(test)]
 mod color_probe;
+mod damage;
 mod encoders;
 mod events;
 pub(super) mod gpu;
@@ -14,6 +15,7 @@ use super::super::{
     bitrate::{BitrateController, FrameBudget},
     MediaOptions,
 };
+use crate::damage::Damage;
 use crate::media::latency::{
     CodecControl, Distribution, EncoderPipelineStats, HardwareEncoderSelection,
 };
@@ -42,6 +44,7 @@ pub struct Frame {
     height: u32,
     captured_at: Option<Instant>,
     ready_at: Instant,
+    damage: Damage,
 }
 enum Input {
     Memory(Vec<u8>),
@@ -56,6 +59,7 @@ impl Frame {
         let (width, height) = frame.size();
         let (width, height) = options.dimensions(width, height);
         Self {
+            damage: frame.damage((width, height)),
             input: Input::Texture(frame),
             width,
             height,
@@ -95,6 +99,7 @@ impl Frame {
         );
         Self {
             input: Input::Memory(bytes),
+            damage: Damage::default(),
             width: width as u32,
             height: height as u32,
             captured_at,
@@ -106,10 +111,27 @@ impl Frame {
 #[derive(Default)]
 struct Pending {
     frame: Option<Arc<Frame>>,
+    damage: Damage,
     options: Option<MediaOptions>,
     stopped: bool,
     wake: bool,
     keyframe: bool,
+}
+impl Pending {
+    fn replace_frame(&mut self, frame: Arc<Frame>) -> bool {
+        if self
+            .frame
+            .as_ref()
+            .is_some_and(|old| (old.width, old.height) != (frame.width, frame.height))
+        {
+            self.damage = Damage::default();
+        }
+        self.damage.merge(&frame.damage);
+        self.frame.replace(frame).is_some()
+    }
+    fn take_input(&mut self) -> (Option<Arc<Frame>>, Damage) {
+        (self.frame.take(), self.damage.take())
+    }
 }
 pub struct Encoder {
     pub source: NativeVideoSource,
@@ -265,7 +287,7 @@ impl Encoder {
         if pending.stopped {
             return;
         }
-        if pending.frame.replace(frame).is_some() {
+        if pending.replace_frame(frame) {
             self.statistics
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -323,6 +345,9 @@ fn run(
     let mut encoder: Option<transform::Transform> = None;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
+    // Independent of the latest-frame slot: discarded/rate-limited inputs must
+    // remain in the damage baseline until this receiver's MFT accepts a frame.
+    let mut damage = Damage::default();
     let started = Instant::now();
     let recording_origin = clock_us();
     let mut rate_control = if preview {
@@ -347,19 +372,21 @@ fn run(
     // discards outstanding frames; cumulative completed-frame counters survive it.
     let mut in_flight = HashMap::<i64, InputTiming>::new();
     loop {
-        let (next_options, next_input) = {
+        let (next_options, next_input, next_damage) = {
             let mut pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
             pending.wake = false;
             if pending.stopped {
                 break;
             }
             keyframe |= std::mem::take(&mut pending.keyframe);
-            (pending.options.take(), pending.frame.take())
+            let (frame, damage) = pending.take_input();
+            (pending.options.take(), frame, damage)
         };
         // Shutdown may wait for an MFT callback, which also signals this work
         // mutex. Never drop a transform while holding the producer lock.
         {
             if let Some(next) = next_options {
+                damage = Damage::default();
                 rate_control.set_limit(next.max_bitrate as u32);
                 if next.frame_rate != options.frame_rate || next.max_bitrate != options.max_bitrate
                 {
@@ -379,6 +406,13 @@ fn run(
             if let Some(frame) = next_input
                 .filter(|frame| frame.device().is_none() || !fallback.cpu.load(Ordering::Acquire))
             {
+                if latest
+                    .as_ref()
+                    .is_some_and(|old| (old.width, old.height) != (frame.width, frame.height))
+                {
+                    damage = Damage::default();
+                }
+                damage.merge(&next_damage);
                 if latest.replace(frame).is_some() {
                     statistics
                         .lock()
@@ -543,15 +577,18 @@ fn run(
                     }
                     if keyframe {
                         active.request_keyframe()?;
+                        damage = Damage::default();
                         keyframe = false;
                     }
                     let timestamp = started.elapsed().as_micros() as i64;
                     let input_at = Instant::now();
                     let input = match &frame.input {
-                        Input::Memory(bytes) => active.input(bytes, timestamp),
+                        Input::Memory(bytes) => active.input(bytes, timestamp, damage.rects()),
                         Input::Texture(texture) => {
                             match converter.as_mut().unwrap().convert(texture, &options) {
-                                Ok(Some(surface)) => active.input_gpu(surface, timestamp),
+                                Ok(Some(surface)) => {
+                                    active.input_gpu(surface, timestamp, damage.rects())
+                                }
                                 Ok(None) => {
                                     // All surfaces are still owned by MF. Keep only the newest
                                     // input and wait for an output or final sample-release wake.
@@ -575,6 +612,13 @@ fn run(
                         in_flight.clear();
                         keyframe = true;
                         continue;
+                    }
+                    damage.take();
+                    if active.take_controls_changed() {
+                        statistics
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .controls = active.control_status();
                     }
                     {
                         let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
@@ -644,6 +688,50 @@ fn continue_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn latest_input_replacement_keeps_damage_until_a_receiver_accepts_it() {
+        use crate::damage::DirtyRect;
+        let buffer = I420Buffer::new_black(320, 180);
+        let a = [DirtyRect {
+            left: 2,
+            top: 4,
+            right: 6,
+            bottom: 8,
+        }];
+        let b = [DirtyRect {
+            left: 100,
+            top: 40,
+            right: 120,
+            bottom: 60,
+        }];
+        let make = |regions: &[DirtyRect]| {
+            let mut frame = Frame::from_i420(&buffer, None);
+            frame.damage = Damage::from_rects(Some(regions), (320, 180));
+            Arc::new(frame)
+        };
+        let mut pending = Pending::default();
+        pending.replace_frame(make(&a));
+        assert_eq!(
+            pending.take_input().1.rects(),
+            None,
+            "A new receiver needs a full baseline"
+        );
+        let mut worker_damage = Damage::unchanged();
+        pending.replace_frame(make(&a));
+        assert!(pending.replace_frame(make(&b)));
+        let (latest, damage) = pending.take_input();
+        assert_eq!(latest.unwrap().damage.rects(), Some(b.as_slice()));
+        worker_damage.merge(&damage);
+        // An input dropped by FrameBudget does not clear the worker's baseline.
+        pending.replace_frame(make(&[]));
+        worker_damage.merge(&pending.take_input().1);
+        assert_eq!(worker_damage.rects(), Some([a[0], b[0]].as_slice()));
+        worker_damage.take(); // Only successful ProcessInput acknowledges changes.
+        pending.replace_frame(make(&b));
+        worker_damage.merge(&pending.take_input().1);
+        assert_eq!(worker_damage.rects(), Some(b.as_slice()));
+    }
 
     #[test]
     fn failed_peer_encoder_does_not_end_capture_or_another_encoder() {

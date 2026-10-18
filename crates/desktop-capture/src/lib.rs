@@ -14,6 +14,8 @@ mod cursor;
 mod lifecycle;
 mod observers;
 pub use observers::StatusObserver;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub mod damage;
 pub mod geometry;
 pub mod media;
 #[cfg(windows)]

@@ -63,6 +63,7 @@ impl Frames {
     ) {
         media
             .frame(TextureFrame {
+                dirty_regions: None,
                 device: &self.device,
                 context: &self.context,
                 texture: &self.textures[index % self.textures.len()],

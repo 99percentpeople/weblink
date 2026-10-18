@@ -3,7 +3,7 @@
 //! One reusable shared surface hands a borrowed frame to the sink. The sink copies
 //! it to its retained source before returning; no frames queue up in this bridge.
 use crate::{
-    surface::{Cursor, Rotation, TextureFrame},
+    surface::{Cursor, DirtyRect, Rotation, TextureFrame},
     Result,
 };
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -75,6 +75,7 @@ impl Transfer {
         texture: &ID3D11Texture2D,
         rotation: Rotation,
         cursor: Option<&Cursor>,
+        dirty_regions: Option<&[DirtyRect]>,
         consume: impl FnOnce(TextureFrame<'_>) -> Result<()>,
     ) -> Result<()> {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
@@ -102,6 +103,7 @@ impl Transfer {
             texture: &self.surface.consumer,
             rotation,
             cursor,
+            dirty_regions,
         });
         // Release even when the sink fails. RAII also covers unwinding.
         let released = reading.release();

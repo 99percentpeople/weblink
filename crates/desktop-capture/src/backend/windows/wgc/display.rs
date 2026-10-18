@@ -8,7 +8,10 @@ use windows::{
     core::Interface,
     Foundation::TypedEventHandler,
     Graphics::{
-        Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession},
+        Capture::{
+            Direct3D11CaptureFramePool, GraphicsCaptureDirtyRegionMode, GraphicsCaptureItem,
+            GraphicsCaptureSession,
+        },
         DirectX::DirectXPixelFormat,
     },
     Win32::{
@@ -89,6 +92,11 @@ pub(in super::super) fn start(
             .SetMinUpdateInterval(windows::Foundation::TimeSpan { Duration: 10_000 })
             .map_err(|e| e.to_string())?;
     }
+    let dirty_regions = GraphicsCaptureApi::is_dirty_region_supported().unwrap_or(false)
+        && capture
+            .session
+            .SetDirtyRegionMode(GraphicsCaptureDirtyRegionMode::ReportOnly)
+            .is_ok();
     let callback_frames = frames.clone();
     capture.closed = Some(
         capture
@@ -135,12 +143,29 @@ pub(in super::super) fn start(
                             surface.cast().map_err(|e| e.to_string())?;
                         let texture: ID3D11Texture2D =
                             unsafe { access.GetInterface() }.map_err(|e| e.to_string())?;
+                        let regions = if dirty_regions && next_size == *current_size {
+                            frame.DirtyRegions().ok().and_then(|regions| {
+                                let count = regions.Size().ok()?;
+                                if count as usize > crate::damage::MAX_DIRTY_RECTS {
+                                    return None;
+                                }
+                                (0..count)
+                                    .map(|index| {
+                                        let r = regions.GetAt(index).ok()?;
+                                        super::dirty_rect(r.X, r.Y, r.Width, r.Height)
+                                    })
+                                    .collect::<Option<Vec<_>>>()
+                            })
+                        } else {
+                            None
+                        };
                         let texture = TextureFrame {
                             device: &device,
                             context: &context,
                             texture: &texture,
                             rotation: Rotation::Identity,
                             cursor: None,
+                            dirty_regions: regions.as_deref(),
                         };
                         // Retain one startup GPU frame until DXGI is retired and
                         // the sink attaches, even if the desktop stays static.

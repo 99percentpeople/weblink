@@ -926,6 +926,7 @@ fn cursor_visibility_recomposes_a_static_frame_without_losing_its_shape() {
         };
         media
             .frame(TextureFrame {
+                dirty_regions: None,
                 device: &device,
                 context: &context,
                 texture: &texture.unwrap(),

@@ -1,4 +1,4 @@
-use crate::{Frames, Result, Session};
+use crate::{damage::DirtyRect, Frames, Result, Session};
 mod display;
 mod exit;
 pub(super) use display::start as start_display;
@@ -51,7 +51,7 @@ fn borderless_capture(timeout: Duration) -> Result<DrawBorderSettings> {
     Ok(DrawBorderSettings::WithoutBorder)
 }
 
-pub(super) fn start<T: TryInto<GraphicsCaptureItemType> + Send + 'static>(
+pub(super) fn start<T: TryInto<GraphicsCaptureItemType> + Clone + Send + 'static>(
     item: T,
     frames: Arc<Mutex<Frames>>,
 ) -> Result<Box<dyn Session>> {
@@ -72,17 +72,32 @@ pub(super) fn start<T: TryInto<GraphicsCaptureItemType> + Send + 'static>(
         } else {
             MinimumUpdateIntervalSettings::Default
         };
-    let settings = Settings::new(
-        item,
-        CursorCaptureSettings::Default,
-        border,
-        SecondaryWindowSettings::Default,
-        minimum_update_interval,
-        DirtyRegionSettings::Default,
-        ColorFormat::Bgra8,
-        frames.clone(),
-    );
-    let control = Handler::start_free_threaded(settings).map_err(|e| e.to_string())?;
+    let start = |dirty_regions| {
+        Handler::start_free_threaded(Settings::new(
+            item.clone(),
+            CursorCaptureSettings::Default,
+            border,
+            SecondaryWindowSettings::Default,
+            minimum_update_interval,
+            if dirty_regions {
+                DirtyRegionSettings::ReportOnly
+            } else {
+                DirtyRegionSettings::Default
+            },
+            ColorFormat::Bgra8,
+            Flags {
+                frames: frames.clone(),
+                dirty_regions,
+            },
+        ))
+    };
+    // Region reporting must never be required for a working capture session.
+    let control = if GraphicsCaptureApi::is_dirty_region_supported().unwrap_or(false) {
+        start(true).or_else(|_| start(false))
+    } else {
+        start(false)
+    }
+    .map_err(|e| e.to_string())?;
     // The library owns the capture loop; observing the actual thread exit also
     // catches failures that bypass Handler::on_closed (including a panic).
     let callback = control.callback();
@@ -129,9 +144,13 @@ impl Drop for WindowsSession {
     }
 }
 
-struct Handler(Arc<Mutex<Frames>>);
+struct Flags {
+    frames: Arc<Mutex<Frames>>,
+    dirty_regions: bool,
+}
+struct Handler(Flags);
 impl GraphicsCaptureApiHandler for Handler {
-    type Flags = Arc<Mutex<Frames>>;
+    type Flags = Flags;
     type Error = String;
     fn new(ctx: Context<Self::Flags>) -> std::result::Result<Self, Self::Error> {
         Ok(Self(ctx.flags))
@@ -141,23 +160,57 @@ impl GraphicsCaptureApiHandler for Handler {
         frame: &mut Frame,
         control: InternalCaptureControl,
     ) -> std::result::Result<(), Self::Error> {
+        let dirty_regions = self
+            .0
+            .dirty_regions
+            .then(|| frame.dirty_regions().ok())
+            .flatten()
+            .and_then(|regions| {
+                regions
+                    .into_iter()
+                    .map(|r| dirty_rect(r.x, r.y, r.width, r.height))
+                    .collect::<Option<Vec<_>>>()
+            });
         Frames::deliver(
-            &self.0,
+            &self.0.frames,
             crate::surface::TextureFrame {
                 device: frame.device(),
                 context: frame.device_context(),
                 texture: frame.as_raw_texture(),
                 rotation: crate::surface::Rotation::Identity,
                 cursor: None,
+                dirty_regions: dirty_regions.as_deref(),
             },
         )?;
-        if self.0.lock().unwrap_or_else(|e| e.into_inner()).thumbnail {
+        if self
+            .0
+            .frames
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .thumbnail
+        {
             control.stop();
         }
         Ok(())
     }
     fn on_closed(&mut self) -> std::result::Result<(), Self::Error> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).finish();
+        self.0
+            .frames
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .finish();
         Ok(())
     }
+}
+
+fn dirty_rect(x: i32, y: i32, width: i32, height: i32) -> Option<DirtyRect> {
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    Some(DirtyRect {
+        left: x,
+        top: y,
+        right: x.checked_add(width)?,
+        bottom: y.checked_add(height)?,
+    })
 }

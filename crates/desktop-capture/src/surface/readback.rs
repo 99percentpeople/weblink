@@ -1,4 +1,5 @@
 //! Reuse the staging texture instead of allocating one per captured frame.
+use crate::damage::Damage;
 use crate::surface::{Cursor, Rotation, TextureFrame};
 use crate::Result;
 use std::sync::Arc;
@@ -30,6 +31,8 @@ pub(crate) struct Readback {
     pub generation: u64,
     pub rotation: Rotation,
     pub cursor: Option<Cursor>,
+    /// Changes not yet admitted by the GPU consumer. CPU readback never clears it.
+    pub gpu_damage: Damage,
 }
 impl Readback {
     pub(crate) fn frame(&self) -> Option<TextureFrame<'_>> {
@@ -39,6 +42,7 @@ impl Readback {
             texture: self.texture.as_ref()?,
             rotation: self.rotation,
             cursor: self.cursor.as_ref(),
+            dirty_regions: self.gpu_damage.rects(),
         })
     }
 
@@ -46,6 +50,7 @@ impl Readback {
         self.captured_at = None;
         self.dirty = true;
         self.generation = self.generation.wrapping_add(1);
+        self.gpu_damage = Damage::default();
     }
 
     pub fn copy(&mut self, frame: &TextureFrame<'_>) -> Result<()> {
@@ -63,6 +68,7 @@ impl Readback {
             return Err("Unsupported capture dimensions".into());
         }
         if self.size != size || self.device.as_ref() != Some(frame.device) {
+            self.gpu_damage = Damage::default();
             // Pending readbacks use this context outside the capture mutex.
             // This also covers the generic WGC/window path and injected sources.
             let protection: ID3D11Multithread = frame.context.cast().map_err(|e| e.to_string())?;
@@ -100,9 +106,22 @@ impl Readback {
         unsafe {
             frame.context.CopyResource(texture, frame.texture);
         }
+        if self.rotation != frame.rotation {
+            self.gpu_damage = Damage::default();
+        }
+        self.gpu_damage
+            .merge(&Damage::from_rects(frame.dirty_regions, size));
+        super::damage::include_cursor(
+            &mut self.gpu_damage,
+            self.cursor.as_ref(),
+            frame.cursor,
+            size,
+            frame.rotation,
+        );
         self.rotation = frame.rotation;
         self.cursor = frame.cursor.cloned();
-        self.invalidate();
+        self.dirty = true;
+        self.generation = self.generation.wrapping_add(1);
         self.captured_at = Some(captured_at);
         self.prepared = false;
         Ok(())

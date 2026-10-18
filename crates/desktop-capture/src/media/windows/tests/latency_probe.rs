@@ -126,6 +126,7 @@ async fn run_probe() {
             cadence.tick().await;
             media
                 .frame(TextureFrame {
+                    dirty_regions: None,
                     device: &device,
                     context: &context,
                     texture: &textures[index as usize % textures.len()],

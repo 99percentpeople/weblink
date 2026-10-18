@@ -42,6 +42,7 @@ fn gpu_nv12_surface_encodes_with_h264_and_hevc_without_memory_input() {
     let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
     let texture = image(&device);
     let frame = TextureFrame {
+        dirty_regions: None,
         device: &device,
         context: &context,
         texture: &texture,
@@ -75,7 +76,7 @@ fn gpu_nv12_surface_encodes_with_h264_and_hevc_without_memory_input() {
             }
             if !submitted && encoder.ready() {
                 let surface = converter.convert(&captured, &options).unwrap().unwrap();
-                encoder.input_gpu(surface, 1000).unwrap();
+                encoder.input_gpu(surface, 1000, None).unwrap();
                 submitted = true;
             }
             thread::sleep(Duration::from_millis(5));
@@ -130,6 +131,7 @@ fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
             .label();
         let texture = image(&device);
         let frame = TextureFrame {
+            dirty_regions: None,
             device: &device,
             context: &context,
             texture: &texture,
@@ -175,7 +177,7 @@ fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
                 output.extend(transform.poll().unwrap());
                 if !submitted && transform.ready() {
                     let surface = converter.convert(&captured, &options).unwrap().unwrap();
-                    transform.input_gpu(surface, 1000).unwrap();
+                    transform.input_gpu(surface, 1000, None).unwrap();
                     submitted = true;
                 }
                 thread::sleep(Duration::from_millis(5));
@@ -209,7 +211,9 @@ fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
             while output.is_empty() && Instant::now() < deadline {
                 output.extend(fallback.poll().unwrap());
                 if !submitted && fallback.ready() {
-                    fallback.input(&vec![128; 320 * 180 * 3 / 2], 2000).unwrap();
+                    fallback
+                        .input(&vec![128; 320 * 180 * 3 / 2], 2000, None)
+                        .unwrap();
                     submitted = true;
                 }
                 thread::sleep(Duration::from_millis(5));
@@ -225,4 +229,82 @@ fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
         }
     }
     assert!(verified > 0, "No physical GPU encoder was verified");
+}
+
+#[test]
+#[ignore = "Requires Windows GPU H.264/H.265 encoders; reports actual optional dirty-region support"]
+fn gpu_dirty_region_hints_preserve_full_partial_and_unchanged_inputs() {
+    use crate::damage::DirtyRect;
+    let _runtime = transform::Runtime::new().unwrap();
+    let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let texture = image(&device);
+    let frame = TextureFrame {
+        device: &device,
+        context: &context,
+        texture: &texture,
+        rotation: Rotation::Identity,
+        cursor: None,
+        dirty_regions: None,
+    };
+    let pool = gpu::CapturePool::new(&frame, Arc::new(|| {}));
+    let captured = pool.capture(&frame, false).unwrap().unwrap();
+    let options = MediaOptions::default();
+    let partial = [DirtyRect {
+        left: 10,
+        top: 20,
+        right: 30,
+        bottom: 40,
+    }];
+    let mut tested = 0;
+    for info in detect().unwrap() {
+        let mut converter = gpu::Converter::new(&device, (320, 180), Arc::new(|| {})).unwrap();
+        let mut encoder = transform::Transform::open(
+            &info.id,
+            320,
+            180,
+            30,
+            1_000_000,
+            1_000_000,
+            options.color_space(),
+            Arc::new(|| {}),
+            Some(&device),
+        )
+        .unwrap();
+        encoder.request_keyframe().unwrap();
+        let hints = [None, Some(partial.as_slice()), Some([].as_slice())];
+        let mut submitted = 0;
+        let mut completed = 0;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && completed < hints.len() {
+            completed += encoder.poll().unwrap().len();
+            if submitted < hints.len() && encoder.ready() {
+                let surface = converter.convert(&captured, &options).unwrap().unwrap();
+                encoder
+                    .input_gpu(surface, submitted as i64 * 33_333, hints[submitted])
+                    .unwrap();
+                submitted += 1;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            completed,
+            hints.len(),
+            "{} did not continue encoding all inputs",
+            info.name
+        );
+        println!(
+            "DIRTY_REGIONS {} {}",
+            info.name,
+            serde_json::to_string(
+                &encoder
+                    .control_status()
+                    .into_iter()
+                    .filter(|c| c.name == "dirtyRegions")
+                    .collect::<Vec<_>>()
+            )
+            .unwrap()
+        );
+        tested += 1;
+    }
+    assert!(tested > 0, "No hardware encoders were exercised");
 }

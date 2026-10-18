@@ -1,5 +1,6 @@
 //! Shared H.264/H.265 GPU input. Raw desktop pixels never enter CPU memory here.
 use crate::{
+    damage::Damage,
     media::MediaOptions,
     surface::{
         gpu::{ContextLock, Lease, Pool, Wake},
@@ -27,8 +28,12 @@ pub(crate) struct Captured {
     size: (u32, u32),
     rotation: Rotation,
     cursor: Option<Cursor>,
+    damage: Damage,
 }
 impl Captured {
+    pub(super) fn damage(&self, output: (u32, u32)) -> Damage {
+        self.damage.for_output(self.size, self.rotation, output)
+    }
     pub fn size(&self) -> (u32, u32) {
         match self.rotation {
             Rotation::Clockwise90 | Rotation::Clockwise270 => (self.size.1, self.size.0),
@@ -96,6 +101,7 @@ impl CapturePool {
             size: self.size,
             rotation: frame.rotation,
             cursor: frame.cursor.filter(|c| cursor && c.visible).cloned(),
+            damage: Damage::from_rects(frame.dirty_regions, self.size),
         })))
     }
 }

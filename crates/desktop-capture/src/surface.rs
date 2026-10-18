@@ -1,8 +1,10 @@
 //! Borrowed GPU frames, independent of WebRTC, encoding and Tauri.
+mod damage;
 pub(crate) mod gpu;
 pub(crate) mod readback;
 mod scale;
 pub(crate) mod thumbnail;
+pub use crate::damage::{DirtyRect, Rotation};
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D};
 
 /// The texture is valid only during `FrameSink::frame`. Copy it before returning.
@@ -14,15 +16,10 @@ pub struct TextureFrame<'a> {
     /// Clockwise rotation required to produce the displayed orientation.
     pub rotation: Rotation,
     pub cursor: Option<&'a Cursor>,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Rotation {
-    #[default]
-    Identity,
-    Clockwise90,
-    Clockwise180,
-    Clockwise270,
+    /// Changed texture pixels since the previous delivered frame, excluding a
+    /// separate cursor. None is unknown; Some([]) means no texture changes.
+    /// The texture is always complete, including when this hint is present.
+    pub dirty_regions: Option<&'a [DirtyRect]>,
 }
 
 pub trait FrameSink: Send + Sync {

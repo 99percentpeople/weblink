@@ -57,7 +57,7 @@ fn hardware_color_bitstreams() {
                         let super::Input::Memory(bytes) = &frame.input else {
                             unreachable!()
                         };
-                        encoder.input(bytes, inputs * 33_333).unwrap();
+                        encoder.input(bytes, inputs * 33_333, None).unwrap();
                         inputs += 1;
                     }
                     thread::sleep(Duration::from_millis(1));

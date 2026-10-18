@@ -1,4 +1,5 @@
 //! Display-only Desktop Duplication. Acquisition and release stay on one worker.
+mod damage;
 mod transfer;
 
 use crate::{
@@ -171,11 +172,17 @@ impl Duplication {
                 cursor.pitch = shape.Pitch;
                 cursor.bytes = Arc::new(data);
             }
+            let mut desc = D3D11_TEXTURE2D_DESC::default();
+            unsafe {
+                texture.GetDesc(&mut desc);
+            }
+            let damage = damage::read(&self.output, &info, (desc.Width, desc.Height));
             self.transfer.deliver(
                 &self.context,
                 &texture,
                 self.rotation,
                 Some(&cursor),
+                damage.rects(),
                 |frame| Frames::deliver(frames, frame),
             )?;
         }

@@ -86,7 +86,7 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
+        let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
         let Some(frame) = readback.frame() else {
             return Work::default();
         };
@@ -124,6 +124,9 @@ impl MediaSession {
                 }
             }
             state.generation = readback.generation;
+            // Only successful admission consumes damage. Pacing and pool
+            // exhaustion leave it pending alongside the newest full texture.
+            readback.gpu_damage.take();
         }
         let captured_at = if dirty { readback.captured_at } else { None };
         drop(readback);

@@ -704,6 +704,19 @@ that encoder, retain the same WebRTC sender and recording tap, and request CPU
 readback plus a new
 keyframe. This fallback is retained until the peer's encoder is recreated.
 
+Capture frames may include dirty rectangles in unrotated texture coordinates;
+the texture is still complete. Missing metadata means unknown/full damage, while
+an empty list means unchanged pixels. DXGI folds move regions into changed bounds;
+WGC uses optional ReportOnly support. Metadata errors retain full-frame processing.
+Damage accumulates through capture pacing and each receiver's input replacement or
+rate limiting, and is acknowledged only after successful admission/input. Separate
+cursor bounds, rotation, scaling and NV12 alignment are included conservatively;
+first frames, invalidation and encoder keyframes use full damage. GPU AVC/HEVC input
+offers the Media Foundation dirty-region hint only when its optional control is
+accepted; rejected hints disable that feature and retry the full texture. Software
+and memory fallback retain full-frame input. This does not enable partial GPU copies
+or change the encoded recording tap.
+
 CPU readback is requested only by a software sender, a hardware encoder using
 memory fallback, or a visible preview waiting for its next frame. An outstanding
 preview notification suppresses further preview-only readbacks until acknowledged.

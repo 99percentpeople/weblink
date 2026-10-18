@@ -1,5 +1,6 @@
 //! Windows hardware H.264/HEVC transforms. Every instance stays on its owning MTA thread.
 use super::encoders::Codec;
+use crate::damage::DirtyRect;
 use crate::media::latency::CodecControl;
 use std::{mem::ManuallyDrop, ptr, sync::Arc};
 use windows::{
@@ -68,6 +69,9 @@ pub struct Transform {
     color: crate::media::color::ColorDescription,
     pub device: Option<ID3D11Device>,
     _manager: Option<IMFDXGIDeviceManager>,
+    dirty_regions: bool,
+    frame_number: u32,
+    controls_changed: bool,
 }
 impl Transform {
     #[cfg(test)]
@@ -220,6 +224,17 @@ impl Transform {
                         );
                     }
                 }
+                let mut dirty_regions = false;
+                // Only the GPU path currently supplies capture metadata. Memory
+                // fallback and software encoding continue to consume full frames.
+                if device.is_some() {
+                    if let Some(api) = &controls {
+                        let control = super::damage::configure(api);
+                        dirty_regions =
+                            control.accepted && control.actual.is_none_or(|value| value == 1);
+                        configuration.push(control);
+                    }
+                }
                 let events = super::events::Events::start(transform.cast()?, wake)?;
                 transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
                 transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
@@ -239,6 +254,9 @@ impl Transform {
                     color,
                     device: device.cloned(),
                     _manager: manager,
+                    dirty_regions,
+                    frame_number: 0,
+                    controls_changed: false,
                 })
             };
             let result = configure();
@@ -268,6 +286,7 @@ impl Transform {
                     "rateControl" => &CODECAPI_AVEncCommonRateControlMode,
                     "qualityVsSpeed" => &CODECAPI_AVEncCommonQualityVsSpeed,
                     "bufferBytes" => &CODECAPI_AVEncCommonBufferSize,
+                    "dirtyRegions" => &CODECAPI_AVEncVideoDirtyRectEnabled,
                     _ => continue,
                 };
                 match unsafe { api.GetValue(guid) } {
@@ -311,7 +330,12 @@ impl Transform {
     pub fn ready(&self) -> bool {
         self.ready > 0
     }
-    pub fn input(&mut self, nv12: &[u8], timestamp_us: i64) -> Result<()> {
+    pub fn input(
+        &mut self,
+        nv12: &[u8],
+        timestamp_us: i64,
+        dirty_regions: Option<&[DirtyRect]>,
+    ) -> Result<()> {
         unsafe {
             let buffer = MFCreateMemoryBuffer(nv12.len() as u32)?;
             let mut data = ptr::null_mut();
@@ -323,8 +347,7 @@ impl Transform {
             sample.AddBuffer(&buffer)?;
             sample.SetSampleTime(timestamp_us * 10)?;
             sample.SetSampleDuration(10_000_000 / i64::from(self.fps))?;
-            self.transform.ProcessInput(self.input, &sample, 0)?;
-            self.ready = self.ready.saturating_sub(1);
+            self.process_input(&sample, dirty_regions)?;
         }
         Ok(())
     }
@@ -332,13 +355,68 @@ impl Transform {
         &mut self,
         surface: Arc<crate::surface::gpu::Lease<super::gpu::Surface>>,
         timestamp_us: i64,
+        dirty_regions: Option<&[DirtyRect]>,
     ) -> Result<()> {
         let sample = super::sample::tracked(surface)?;
         unsafe {
             sample.SetSampleTime(timestamp_us * 10)?;
             sample.SetSampleDuration(10_000_000 / i64::from(self.fps))?;
-            self.transform.ProcessInput(self.input, &sample, 0)?;
+            self.process_input(&sample, dirty_regions)?;
         }
+        Ok(())
+    }
+    pub fn take_controls_changed(&mut self) -> bool {
+        std::mem::take(&mut self.controls_changed)
+    }
+    fn disable_dirty_regions(&mut self, reason: String) -> Result<()> {
+        if let Some(api) = &self.controls {
+            unsafe { api.SetValue(&CODECAPI_AVEncVideoDirtyRectEnabled, &VARIANT::from(0_u32)) }?;
+        }
+        self.dirty_regions = false;
+        self.controls_changed = true;
+        if let Some(control) = self
+            .configuration
+            .iter_mut()
+            .find(|c| c.name == "dirtyRegions")
+        {
+            control.accepted = false;
+            control.actual = Some(0);
+            control.error = Some(reason);
+        }
+        Ok(())
+    }
+    fn process_input(
+        &mut self,
+        sample: &IMFSample,
+        dirty_regions: Option<&[DirtyRect]>,
+    ) -> Result<()> {
+        unsafe {
+            let mut annotated = false;
+            if self.dirty_regions {
+                let blob = super::damage::blob(
+                    self.frame_number,
+                    (self.width, self.height),
+                    dirty_regions,
+                );
+                match sample.SetBlob(&MFSampleExtension_DirtyRects, &blob) {
+                    Ok(()) => annotated = true,
+                    Err(error) => self.disable_dirty_regions(format!(
+                        "Dirty region attribute rejected: {error}"
+                    ))?,
+                }
+            }
+            if let Err(error) = self.transform.ProcessInput(self.input, sample, 0) {
+                if !annotated || error.code() == MF_E_NOTACCEPTING {
+                    return Err(error);
+                }
+                // A driver may advertise the control but reject the sample hint.
+                // Retry this same full texture once without the optional feature.
+                self.disable_dirty_regions(format!("Dirty region input rejected: {error}"))?;
+                sample.DeleteItem(&MFSampleExtension_DirtyRects)?;
+                self.transform.ProcessInput(self.input, sample, 0)?;
+            }
+        }
+        self.frame_number = self.frame_number.wrapping_add(1);
         self.ready = self.ready.saturating_sub(1);
         Ok(())
     }

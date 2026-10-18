@@ -70,7 +70,7 @@ fn isolated_transfer_preserves_inflight_pixels_resize_and_retained_source() {
         for (size, value) in [((8, 8), 32), ((16, 8), 96), ((16, 8), 160)] {
             let input = texture(&device, size, value);
             transfer
-                .deliver(&context, &input, Rotation::Identity, None, |frame| {
+                .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
                     retained.copy(&frame)
                 })
                 .unwrap();
@@ -112,14 +112,14 @@ fn isolated_transfer_releases_on_sink_failure_and_rejects_positive_timeout() {
     drop(Access::acquire(&transfer.surface.write, 0, 0, 0).unwrap());
     let input = texture(&device, (8, 8), 64);
     assert_eq!(
-        transfer.deliver(&context, &input, Rotation::Identity, None, |_| Err(
+        transfer.deliver(&context, &input, Rotation::Identity, None, None, |_| Err(
             "sink failed".into()
         )),
         Err("sink failed".into())
     );
     let mut retained = Readback::default();
     transfer
-        .deliver(&context, &input, Rotation::Identity, None, |frame| {
+        .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
             retained.copy(&frame)
         })
         .unwrap();
@@ -135,7 +135,7 @@ fn isolated_readback_completes_while_acquisition_context_is_locked() {
         let mut retained = Readback::default();
         let input = texture(&device, (32, 16), 96);
         transfer
-            .deliver(&context, &input, Rotation::Identity, None, |frame| {
+            .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
                 retained.copy(&frame)
             })
             .unwrap();
@@ -191,13 +191,14 @@ fn synthetic_dxgi_transfer_cost() {
                 let input = &inputs[index % 2];
                 if isolated {
                     transfer
-                        .deliver(&context, input, Rotation::Identity, None, |frame| {
+                        .deliver(&context, input, Rotation::Identity, None, None, |frame| {
                             retained.copy(&frame)
                         })
                         .unwrap();
                 } else {
                     retained
                         .copy(&TextureFrame {
+                            dirty_regions: None,
                             device: &device,
                             context: &context,
                             texture: input,
