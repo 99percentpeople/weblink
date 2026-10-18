@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - Unreleased
+
+Weblink 1.2 introduces local and remote video recording, a unified file library backed by browser storage or real directories, and more efficient Windows screen encoding. This section is the release draft; the release date will be set when 1.2.0 is published.
+
+### File storage and transfers
+
+- **Choose where files live:** Web defaults to IndexedDB and can mount a user-selected directory in supported browsers. Windows desktop defaults to a real local directory. Imports and received files go directly into the selected directory, without an extra `Weblink Files` subfolder. Changing the default affects new files; existing files and active transfers retain their original storage.
+- **One file interface:** file listing, lifecycle, preview, saving and location actions use the same VFS contracts for IndexedDB, browser directories and native directories. Directory contents are synchronized into the library, including files added or removed outside Weblink. Changing directories refreshes the cache view, and confirmed deletions remove stale entries and content indexes.
+- **Automatic IndexedDB migration:** migrate legacy file databases into the new paged storage with visible copy and verification progress. Preserve completed files and resumable chunks, and delete each old file database only after the migrated data has been verified. Failed migrations retain the old data for retry; migration does not move files into the newly selected directory.
+- **Resumable directory files:** unfinished transfers use a protective `.part` suffix and keep their resume metadata in the file itself. Incomplete files remain visible as unfinished and cannot be previewed or shared. Hide dot-prefixed entries and browser `.crswap` transaction files from directory lists.
+- **Browser filename compatibility:** when a browser rejects a filename while creating a directory file, retry with a `.weblink` suffix. The file list and transfers retain the original filename; native directory storage does not add this suffix. Permission, write and final-save errors still report their actual failure rather than being treated as filename restrictions.
+- **Faster completion and clearer failures:** reuse successful full-file verification for the same unchanged file version, reduce duplicate reads after large transfers, discard stale cache references, and include file, processing stage and underlying storage error details in import failures. Restore directory authorization through an explicit user action when the browser requires it after reload.
+- **LAN HTTP compatibility:** use the existing UUID fallback for saving and legacy migration when secure-context `crypto` APIs are unavailable. Browser permissions and secure-context requirements for directory access and media capture still apply.
+
+### File actions and previews
+
+- **Storage-aware actions:** IndexedDB files offer Save to device; directory files offer Save As. Windows files can be opened with their system application or revealed and selected in Explorer from file and message menus. Keep image/video preview controls where available, and keep the cache dialog for inspecting unfinished files.
+- **Batch saving:** select one destination directory for a batch, see the current filename and progress, and cancel remaining work. Name collisions offer overwrite, skip or keep both, with an apply-to-all option. A separate confirmation toast pauses progress and uses the existing background notification flow.
+- **Background imports and saves:** closing the file-cache dialog does not cancel ongoing imports or saves. Progress and collision confirmations remain available until completion or explicit cancellation; import progress now includes a progress bar.
+- **Cleaner file lists and messages:** add a list-header selection checkbox, make Import directly accessible, remove redundant availability labels, and keep message bubbles to at most two primary actions. Additional actions, including group-file details and Open location, live in the context menu.
+- **Reliable previews:** preview paged VFS files through cancellable URLs, add cached video thumbnails, and avoid duplicate file rows and unnecessary repeated thumbnail refreshes.
+
+### Recording
+
+- **Record one source:** record a selected local or remote camera or shared screen with only its associated audio, on both Web and Windows desktop. Pause and resume into the same file, then stop and save. Source removal, replacement or leaving the meeting ends the recording without stopping the original meeting tracks.
+- **Compact controls:** start recording from the video menu and manage pause, resume and save in the header status. Show the participant avatar and source name, mark the recorded tile, and keep recording independent of open menus or the file-cache dialog.
+- **Save completion notifications:** announce a recording only after saving and file-library verification succeed. The shared notification flow chooses an in-app toast or background system notice without repeating it on return. Open the recording in Web preview or the desktop system application; notification settings include a recording category and respect filename-preview and sound preferences.
+- **Continuous VFS writing:** append recording data to the storage chosen when recording starts. Changing the default directory does not redirect an active recording. Show one unfinished library entry while writing a `.recording.part` file, then finalize its metadata and register the completed file without importing it again.
+- **Reuse existing encoded media:** share video/audio frame subscription, muxing and file writing across Web and Tauri. Reuse supported sender and receiver video in H.264, H.265, VP8, VP9 and AV1, and audio in Opus, G.722, PCMU and PCMA. Windows native screen recording can subscribe directly to its connected H.264/H.265 hardware sender and encoded audio; unavailable audio reuse retains the PCM encoding fallback.
+- **Automatic fallback:** when encoded frames, codec configuration or required APIs are unavailable during preparation, retain the MediaRecorder path and the native local-receiver fallback. Prefer hardware-capable local capture where supported, adapt fallback bitrate to the source, and avoid forcing received media through another video encoder when reuse is available.
+- **Container preference:** choose Automatic, MKV or MP4. Automatic uses MP4 for H.264/H.265 and MKV for other supported video codecs; G.722, PCMU or PCMA audio also selects MKV to retain the encoded audio. Explicit MP4 can use the audio-encoding fallback for these audio formats while retaining video reuse. MediaRecorder output is remuxed to the selected container without silently dropping tracks.
+- **Duration, seeking and bounded buffering:** write duration and seek metadata, preserve the last data block when stopping, resume on a keyframe, and remove paused time from both tracks. Limit queues between capture, muxing and storage; slow or failed recording writes stop recording instead of blocking normal stream delivery or growing memory without bound.
+
+### Windows capture and encoding
+
+- **GPU texture input:** H.264 and H.265 share the D3D11 texture path from DXGI or Windows Graphics Capture through GPU color conversion and scaling into Media Foundation. Supported paths avoid the GPU-to-CPU-to-GPU frame round trip. Preview, diagnostics and software encoders read back only when needed; incompatible devices or drivers retain the memory-input fallback.
+- **Match the capture adapter:** automatic hardware selection prefers an encoder on the GPU that produced the captured texture, for the negotiated codec. Include encoders on secondary adapters during discovery, retain explicit encoder choices, and report the actual adapter selection and fallback reason. Matching occurs during initialization or reconfiguration, not for every frame.
+- **Shared variable frame rate:** software and hardware screen encoders use the same change-driven scheduling and bounded refresh behavior for static content. Keep frame-rate limits, live settings, keyframe requests and recording subscriptions working across the GPU and memory paths.
+- **Reusable native media core:** separate recording lifetime, pause/resume, codec validation and encoded-audio observation from the Windows capture adapters. This prepares the interfaces for future platforms; native Linux and macOS capture backends are not included in this release.
+
+### Interface and updates
+
+- Unify toast layout, icons, progress and action styling across notifications and file operations.
+- Compact mobile meeting and recording statuses, use icon actions, and allow the status area to scroll horizontally without wrapping neighboring header controls.
+- Stable Windows builds check for updates at startup and hourly when automatic checks are enabled. Retain pending update reminders across hidden-window periods and failed checks, without repeating notices already delivered. Downloading and installing still require user confirmation.
+
+### Compatibility and storage notes
+
+- Windows desktop remains Windows 10 22H2 / Windows 11 x64 with WebView2 120 or newer. GPU input and adapter selection depend on the available driver, capture device and Media Foundation encoder; they do not guarantee hardware support on every Intel, AMD, NVIDIA or multi-GPU configuration.
+- Directory mounting in Web requires browser support and explicit permission. Files remain local to the selected storage; browser and desktop profiles do not synchronize automatically. Batch directory saving also depends on the available picker APIs.
+- Recording supports one source at a time. Container choice does not make unsupported codecs playable in every external player. Browser-directory finalization can still require a streaming copy; an unfinished recording is not guaranteed to be playable or recoverable after a crash or forced shutdown.
+
 ## [1.1.1] - 2026-10-15
 
 Weblink 1.1.1 adds configurable file transfer queuing, improves long-message reading, and makes room invitations and notifications more consistent.

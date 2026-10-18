@@ -55,21 +55,26 @@ its participant or shared-display actions on another device. The host approves
 the request or uses a previously saved allow rule. A request can start display
 sharing after approval; window shares remain view-only.
 
-Windows x64 installers are produced as the `weblink-windows-x64-installer`
-artifact in successful stable-tag [CI runs](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml).
-Development runs produce a `weblink-windows-x64` executable artifact.
+Download the Windows x64 installer or portable ZIP from
+[GitHub Releases](https://github.com/99percentpeople/weblink/releases/latest).
+The installer sets up WebView2 when needed; the portable ZIP requires WebView2
+120 or newer and its `weblink-portable` marker beside the executable.
+Development [CI runs](https://github.com/99percentpeople/weblink/actions/workflows/ci.yml)
+provide a `weblink-windows-x64` executable artifact.
 See [desktop setup and builds](docs/DESKTOP.md) for prerequisites and source builds.
 
 ## Web and desktop capabilities
 
-| Capability                                      | Web                                               | Desktop (currently Windows)                                    |
-| ----------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
-| Rooms, private chat, file library and transfers | Supported                                         | Supported                                                      |
-| Camera and microphone                           | Browser device APIs                               | WebView device APIs                                            |
-| Screen sharing                                  | Browser capture, where supported                  | Native display/window capture and supported system audio       |
-| Remote control                                  | Control a compatible desktop host                 | Control another host or allow control of this computer         |
-| Picture-in-picture                              | Available browser PiP APIs                        | Resizable, always-on-top native window                         |
-| System integration                              | PWA installation and share target where supported | Tray, launch at login, close behavior and native notifications |
+| Capability                                      | Web                                                      | Desktop (currently Windows)                                    |
+| ----------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| Rooms, private chat, file library and transfers | Supported                                                | Supported                                                      |
+| File storage                                    | IndexedDB by default; directory mounting where supported | Local directory by default; IndexedDB also available           |
+| Camera and microphone                           | Browser device APIs                                      | WebView device APIs                                            |
+| Screen sharing                                  | Browser capture, where supported                         | Native display/window capture and supported system audio       |
+| Recording                                       | One local or remote source, with pause and resume        | Same controls, including native shared screens                 |
+| Remote control                                  | Control a compatible desktop host                        | Control another host or allow control of this computer         |
+| Picture-in-picture                              | Available browser PiP APIs                               | Resizable, always-on-top native window                         |
+| System integration                              | PWA installation and share target where supported        | Tray, launch at login, close behavior and native notifications |
 
 The supported desktop target is Windows 10 22H2 / Windows 11 on x64 with WebView2
 120 or newer. Native system audio and input features depend on OS capabilities.
@@ -103,10 +108,29 @@ on browser support and permissions; use HTTPS or localhost for browser capture.
   messages.
 - Room attachments are downloaded on request by default. Enable small-file
   automatic downloads per room with a shared size limit in Transfer settings.
+- Choose browser storage or a real directory in File storage settings. Web defaults
+  to IndexedDB; desktop defaults to a local directory. Supported browsers can mount
+  a directory after permission is granted, and directory changes synchronize with
+  the file library.
+- Automatically migrate old IndexedDB files and resumable chunks with progress
+  feedback. Old file databases are removed only after the new data is verified.
+- Preview files with cached video thumbnails. Save IndexedDB files to your device,
+  use Save As for directory files, or reveal a Windows file in Explorer.
+- Save a batch to one destination directory, resolve name collisions with
+  overwrite, skip or keep both, and apply a choice to all remaining conflicts.
+  Imports and saves show progress and cancellation controls and continue when
+  the file-cache dialog is closed.
 
 Importing or receiving a file does not automatically share it. Newly sent files
 are shared automatically; sharing can be turned off in the library. Peers can
 browse only complete, shared content when their file-list permission allows it.
+
+Changing the default storage affects new files; existing files, active transfers
+and recordings keep their original location. Unfinished directory files use a
+`.part` suffix and cannot be previewed or shared. If a browser rejects a filename,
+directory storage can add `.weblink` on disk while keeping the original name in
+Weblink and transfers. Browser directory access and batch saving depend on picker
+support and permission; reopening the page may require authorization again.
 
 ### Meetings and screen sharing
 
@@ -117,12 +141,40 @@ browse only complete, shared content when their file-list permission allows it.
 - On Windows, select displays or windows with previews, use DXGI or Windows
   Graphics Capture, and choose available software encoders or H.264/HEVC hardware
   encoding. High-refresh options follow connected displays.
+- Supported Windows hardware encoders receive GPU textures without a CPU frame
+  round trip. Automatic selection prefers the capture GPU's encoder, while
+  unsupported paths retain the memory-input fallback. Software and hardware
+  encoders share variable-frame-rate scheduling for static screens.
 - Inspect stream statistics, ICE routes and connection state, and run peer
   throughput tests from the application.
 
 HEVC requires a compatible hardware encoder and a receiver with H.265 support in
 WebRTC. Native screen streams currently use 8-bit SDR YUV 4:2:0. Capture and codec
 availability are reported by the application; see [native media details](docs/DESKTOP.md#native-screen-sharing).
+
+### Recording
+
+- Record one selected local or remote camera or shared screen, with only that
+  source's associated audio. Start from its video menu; pause, resume or stop and
+  save from the header status.
+- Pause and resume into one file. Closing a menu or the file-cache dialog does not
+  stop recording; source removal or leaving the meeting finishes the recording.
+- Save continuously to the storage selected at the start. An unfinished entry
+  remains in the file library until the recording is finalized with duration and
+  seek metadata. A completion notification can open Web preview or the desktop
+  system player, using the shared foreground/background notification settings.
+- Reuse supported encoded video and audio from the existing stream to avoid
+  encoding them again. Web and desktop share this path, with MediaRecorder and
+  native audio fallbacks when reuse is unavailable. Bounded recording queues keep
+  slow storage from blocking normal stream delivery.
+- Choose Automatic, MKV or MP4 in settings. Automatic uses MP4 for H.264/H.265 and
+  MKV for other supported video codecs. Reused G.722, PCMU or PCMA audio also uses
+  MKV to preserve the original audio.
+
+Recording availability depends on browser APIs and the source's codecs. External
+players must support the codecs inside the chosen container. Browser directories
+may need additional time to finalize a recording; unfinished recordings are not
+guaranteed to be playable or recoverable after a crash or forced shutdown.
 
 ### Remote control and clipboard
 
@@ -165,10 +217,10 @@ avatars are exchanged over WebRTC rather than published in signaling presence.
 The signaling service does not store chat history or files.
 
 Room messages reach currently connected members; there is no server-side offline
-message delivery. History, cached files, and preferences stay in the local browser
-or desktop WebView profile. Browser and desktop storage are separate and are not
-automatically synchronized. Access to a peer's shared files requires that peer to
-be connected.
+message delivery. History, file metadata and preferences stay in the local browser
+or desktop WebView profile. File contents live in IndexedDB or the selected local
+directories. Browser and desktop profiles are separate and are not automatically
+synchronized. Access to a peer's shared files requires that peer to be connected.
 
 ## Shared code and versions
 
@@ -178,7 +230,10 @@ in `packages/platform`, and native capture/input implementations in `crates`.
 
 Web and desktop use one application version from `apps/web/package.json`.
 About, copied version information, build metadata, and desktop installers all use
-this version. Desktop updates currently require installing a newer package.
+this version. Stable Windows builds offer manual update checks in Settings → About
+and optional automatic checks at startup and hourly. Installed builds support
+signed, user-confirmed updates; portable builds link to the matching ZIP for
+manual replacement. Checks never download or install automatically.
 
 ## Self-hosting
 
