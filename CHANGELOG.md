@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-10-18
 
-Weblink 1.2 introduces local and remote video recording, a unified file library backed by browser storage or real directories, and more efficient Windows screen encoding. This section is the release draft; the release date will be set when 1.2.0 is published.
+Weblink 1.2 introduces local and remote video recording, a unified file library backed by browser storage or real directories, and more efficient Windows screen encoding.
 
 ### File storage and transfers
 

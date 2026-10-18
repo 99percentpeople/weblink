@@ -29,7 +29,7 @@
     },
     "apps/web": {
       "name": "@weblink/web",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "dependencies": {
         "@corvu/drawer": "^0.2.4",
         "@corvu/resizable": "^0.2.5",
