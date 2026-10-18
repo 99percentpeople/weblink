@@ -474,6 +474,16 @@ may select concrete infrastructure implementations.
     validated keyframe through the same muxer/demuxer, without creating a decoder.
     Keyframe configuration changes stop the recording before mixing incompatible
     samples; pauses resume on a keyframe with the original configuration.
+    The native recording core in `crates/desktop-capture/src/media/recording/`
+    owns input selection, session lifetimes, pause segments and the stable binary
+    IPC format. Its ports borrow video keyframe/connection controls, encoded-audio
+    copy controls and a PCM tap; it imports neither Windows, libwebrtc nor Tauri.
+    Backends supply audio/video timestamps normalized to one monotonic clock.
+    The reusable SDK adapter in `media/webrtc/` supplies sender audio observations
+    and that SDK clock; it is currently enabled with the Windows SDK dependency.
+    Windows adapters retain Media Foundation encoder selection and WASAPI capture.
+    Closing a recording releases its subscriptions before another can open, even
+    if a pending read retains the old source. Teardown never closes borrowed media.
     Native Windows recording first subscribes directly to a connected hardware
     H.264/H.265 sender. It creates neither another native encoder nor a local peer.
     The original transport receives each access unit before the recording tap;

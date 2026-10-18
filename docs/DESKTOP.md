@@ -218,10 +218,16 @@ upgrade needs a later, higher-version signed release for Windows verification.
   buffers. Notifications use the Windows backend for permission queries, presentation
   and actions. Only Windows is a supported desktop target; other platforms retain
   unavailable implementations for host compilation and shared-logic tests.
-- Native capture and media still share `desktop-capture`; D3D frames, encoding,
-  source enumeration and physical desktop geometry currently target Windows.
-  Extracting shared control orchestration does not make these media/input contracts
-  portable or provide macOS/Linux capture support.
+- Native capture and media still share `desktop-capture`. Its `media/recording`
+  core owns borrowed input ports, codec validation, recording lifetimes, pause
+  segments, bounded queues and binary IPC without an OS, WebRTC or Tauri dependency.
+  `media/webrtc` adapts the SDK's sender audio observer and capture clock; Windows
+  binds the video port to Media Foundation and supplies WASAPI PCM as the fallback.
+  The core consumes a single backend-normalized monotonic clock and never closes
+  the original sender. Its lifecycle and binary-contract tests use test inputs
+  without a GPU or WebView.
+  D3D frames, source enumeration, device capture and physical desktop geometry
+  still target Windows.
 - `apps/web/package.json` is the single application version source for Web and
   desktop. Vite uses it for About, copied version information and `version.json`;
   Tauri reads the same file for native runtime metadata, executable resources and
