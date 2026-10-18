@@ -4,6 +4,7 @@ use libwebrtc::video_frame::{I420Buffer, VideoRotation};
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
+mod gpu;
 mod latency_probe;
 mod recording;
 mod vfr;
@@ -43,7 +44,8 @@ fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches
 // Production awaits GPU completion events without waiting in a graphics call.
 impl MediaSession {
     pub(super) fn flush(self: &Arc<Self>) -> Result<()> {
-        let _preview = self.subscribe_preview(true, |_| true)?;
+        let preview = self.subscribe_preview(true, |_| true)?;
+        preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut work = self.capture_step(true)?;
         while work.pending.is_some() || work.dirty {
@@ -51,6 +53,7 @@ impl MediaSession {
                 return Err("Synthetic readback did not complete".into());
             }
             std::thread::sleep(Duration::from_millis(1));
+            preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
             work = self.capture_step(true)?;
         }
         Ok(())
@@ -98,6 +101,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     connection: pc,
                     gathering: gathering.clone(),
                     preview: false,
+                    raw_video: true,
                     control: None,
                     recording: None,
                     recording_audio: None,

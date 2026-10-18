@@ -1,4 +1,5 @@
 //! Borrowed GPU frames, independent of WebRTC, encoding and Tauri.
+pub(crate) mod gpu;
 pub(crate) mod readback;
 mod scale;
 pub(crate) mod thumbnail;

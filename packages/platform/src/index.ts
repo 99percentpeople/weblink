@@ -460,6 +460,10 @@ export interface NativeVideoStats {
   captureFrames?: number;
   replacedInputs?: number;
   rateLimitedInputs?: number;
+  /** Hardware input path counters and the reason for CPU fallback, if any. */
+  gpuInputs?: number;
+  cpuInputs?: number;
+  gpuFallback?: string;
   encoderQueueSeconds?: number;
   captureToEncodeSeconds?: number;
   freshFrames?: number;

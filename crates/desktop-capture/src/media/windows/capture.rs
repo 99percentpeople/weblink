@@ -18,7 +18,7 @@ mod tests;
 
 const READBACK_TIMEOUT: Duration = Duration::from_secs(2);
 // Refresh late viewers and decoder recovery without a backend-specific FPS loop.
-const STATIC_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
+pub(super) const STATIC_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Default)]
 pub(super) struct Conversion {
@@ -51,7 +51,7 @@ pub(super) struct Work {
 }
 
 impl Work {
-    fn wait(&self, cadence: &CaptureCadence, now: Instant) -> Option<Duration> {
+    pub(super) fn wait(&self, cadence: &CaptureCadence, now: Instant) -> Option<Duration> {
         let scheduled = if self.dirty && self.has_capacity {
             Some(cadence.remaining(now))
         } else if self.pending.is_none() {
@@ -87,7 +87,7 @@ impl MediaSession {
                 if session.closed.load(Ordering::Acquire) {
                     break;
                 }
-                if !session.has_consumers() {
+                if !session.has_cpu_consumers() {
                     // Keep only the latest GPU source so resuming a static screen works.
                     session.pause_conversion(
                         &mut session.conversion.lock().unwrap_or_else(|e| e.into_inner()),
@@ -136,7 +136,7 @@ impl MediaSession {
             *conversion = Conversion::default();
             return Ok(Work::default());
         }
-        if !self.has_consumers() {
+        if !self.has_cpu_consumers() {
             self.pause_conversion(&mut conversion);
             return Ok(Work::default());
         }
@@ -237,6 +237,9 @@ impl MediaSession {
 
         let mut timing = Clock::new();
         let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
+        if self.readback_requested.swap(false, Ordering::AcqRel) {
+            readback.dirty = true;
+        }
         timing.mark(0);
         if admit && readback.dirty && conversion.pending.len() < self.readback_buffers {
             let options = self
@@ -250,7 +253,7 @@ impl MediaSession {
             } else {
                 original_size
             };
-            let captured_at = readback.captured_at.take();
+            let captured_at = readback.captured_at;
             let capture_wait = captured_at.map(|at| at.elapsed());
             let admitted_at = Instant::now();
             let gpu = readback.submit_notifying(

@@ -19,6 +19,9 @@ pub struct CodecControl {
 pub struct EncoderPipelineStats {
     pub peer: String,
     pub frames: u64,
+    pub gpu_inputs: u64,
+    pub cpu_inputs: u64,
+    pub gpu_fallback: Option<String>,
     pub fresh_frames: u64,
     pub replaced_inputs: u64,
     pub rate_limited_inputs: u64,

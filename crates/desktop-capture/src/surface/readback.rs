@@ -27,6 +27,7 @@ pub(crate) struct Readback {
     context: Option<ID3D11DeviceContext>,
     pub size: (u32, u32),
     pub dirty: bool,
+    pub generation: u64,
     pub rotation: Rotation,
     pub cursor: Option<Cursor>,
 }
@@ -39,6 +40,12 @@ impl Readback {
             rotation: self.rotation,
             cursor: self.cursor.as_ref(),
         })
+    }
+
+    pub fn invalidate(&mut self) {
+        self.captured_at = None;
+        self.dirty = true;
+        self.generation = self.generation.wrapping_add(1);
     }
 
     pub fn copy(&mut self, frame: &TextureFrame<'_>) -> Result<()> {
@@ -94,9 +101,9 @@ impl Readback {
             frame.context.CopyResource(texture, frame.texture);
         }
         self.rotation = frame.rotation;
-        self.captured_at = Some(captured_at);
         self.cursor = frame.cursor.cloned();
-        self.dirty = true;
+        self.invalidate();
+        self.captured_at = Some(captured_at);
         self.prepared = false;
         Ok(())
     }

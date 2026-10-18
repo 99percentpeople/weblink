@@ -3,6 +3,7 @@ mod audio;
 mod capture;
 mod compose;
 mod control;
+mod gpu_capture;
 mod ice;
 mod mf;
 mod pixels;
@@ -68,6 +69,9 @@ pub struct MediaSession {
     readback: Mutex<Readback>,
     // Worker-owned bounded readbacks; capture only touches the retained source.
     conversion: Mutex<capture::Conversion>,
+    gpu_capture: Mutex<gpu_capture::State>,
+    gpu_notify: Arc<tokio::sync::Notify>,
+    readback_requested: Arc<AtomicBool>,
     readback_buffers: usize,
     options: Mutex<MediaOptions>,
     notify: Arc<tokio::sync::Notify>,
@@ -87,6 +91,7 @@ struct MediaPeer {
     connection: PeerConnection,
     gathering: Arc<ice::Gathering>,
     preview: bool,
+    raw_video: bool,
     control: Option<control::Connection>,
     recording: Option<recording::RecordingRelay>,
     recording_audio: Option<Arc<SenderAudioRecording>>,
@@ -116,8 +121,8 @@ impl MediaSession {
             let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
             // Recompose even a stationary desktop, preserving its cursor metadata.
             if readback.cursor.is_some() {
-                readback.dirty = true;
-                self.notify.notify_one();
+                readback.invalidate();
+                self.wake_capture();
             }
         }
     }
@@ -274,6 +279,9 @@ impl MediaSession {
             last_sent: Mutex::new(Instant::now()),
             readback: Mutex::new(Readback::default()),
             conversion: Mutex::new(Default::default()),
+            gpu_capture: Mutex::new(Default::default()),
+            gpu_notify: Arc::new(tokio::sync::Notify::new()),
+            readback_requested: Arc::new(AtomicBool::new(false)),
             readback_buffers: options.readback_buffers as usize,
             options: Mutex::new(options),
             notify: Arc::new(tokio::sync::Notify::new()),
@@ -286,6 +294,7 @@ impl MediaSession {
             peer_errors: Mutex::new(Default::default()),
         });
         Self::start_capture_worker(&session);
+        Self::start_gpu_worker(&session);
         Ok(session)
     }
 
@@ -334,10 +343,10 @@ impl MediaSession {
             // is static. Scaling the old output would lose detail on an increase.
             let mut readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
             if readback.size.0 > 0 && readback.size.1 > 0 {
-                readback.dirty = true;
+                readback.invalidate();
             }
         }
-        self.notify.notify_one();
+        self.wake_capture();
         Ok(())
     }
 
@@ -499,7 +508,9 @@ impl MediaSession {
 
     #[cfg(test)]
     fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
-        self.publish_frame_at(frame, Some(Instant::now()));
+        self.source.capture_frame(frame);
+        self.preview_source.capture_frame(frame);
+        self.publish_hardware_cpu(frame, Some(Instant::now()), true);
     }
 
     fn publish_frame_at<T: AsRef<dyn VideoBuffer>>(
@@ -511,15 +522,33 @@ impl MediaSession {
         // BGRA conversion still happen only once per frame.
         self.source.capture_frame(frame);
         self.preview_source.capture_frame(frame);
-        let hardware = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
-        if !hardware.is_empty() {
-            let Some(buffer) = frame.buffer.as_ref().as_i420() else {
-                return;
-            };
-            let frame = Arc::new(mf::Frame::from_i420(buffer, captured_at));
-            for encoder in hardware.values() {
-                encoder.submit(frame.clone());
-            }
+        self.publish_hardware_cpu(frame, captured_at, false);
+    }
+    fn publish_hardware_cpu<T: AsRef<dyn VideoBuffer>>(
+        &self,
+        frame: &VideoFrame<T>,
+        captured_at: Option<Instant>,
+        force: bool,
+    ) {
+        let hardware: Vec<_> = self
+            .hardware
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .filter(|encoder| force || encoder.needs_readback())
+            .cloned()
+            .collect();
+        if hardware.is_empty() {
+            return;
+        }
+        let Some(buffer) = frame.buffer.as_ref().as_i420() else {
+            return;
+        };
+        // Conversion must not hold the encoder registry lock: a CPU fallback peer
+        // cannot delay admission to independent GPU peers.
+        let frame = Arc::new(mf::Frame::from_i420(buffer, captured_at));
+        for encoder in hardware {
+            encoder.submit(frame.clone());
         }
     }
 
@@ -832,7 +861,20 @@ impl MediaSession {
             let hardware = encoder_id
                 .as_ref()
                 .filter(|_| recording.is_none())
-                .map(|id| mf::Encoder::new(id.clone(), options.clone(), preview).map(Arc::new))
+                .map(|id| {
+                    let requested = self.readback_requested.clone();
+                    let notify = self.notify.clone();
+                    mf::Encoder::with_fallback(
+                        id.clone(),
+                        options.clone(),
+                        preview,
+                        Arc::new(move || {
+                            requested.store(true, Ordering::Release);
+                            notify.notify_one();
+                        }),
+                    )
+                    .map(Arc::new)
+                })
                 .transpose()?;
             let recording = recording
                 .map(|reuse| recording::RecordingRelay::new(reuse, pc.clone(), &options))
@@ -965,6 +1007,7 @@ impl MediaSession {
                         connection: pc.clone(),
                         gathering: gathering.clone(),
                         preview,
+                        raw_video: !pre_encoded,
                         control,
                         recording,
                         recording_audio,
@@ -978,7 +1021,7 @@ impl MediaSession {
                 }
             }
         }
-        self.notify.notify_one();
+        self.wake_capture();
         let result = async {
             let offer = pc
                 .create_offer(OfferOptions::default())
@@ -1083,7 +1126,7 @@ impl MediaSession {
         if let Some(encoder) = encoder {
             encoder.close();
         }
-        self.notify.notify_one();
+        self.wake_capture();
     }
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
@@ -1092,7 +1135,7 @@ impl MediaSession {
         if let Some(audio) = &self.audio {
             audio.close();
         }
-        self.notify.notify_one();
+        self.wake_capture();
         let peers = std::mem::take(&mut *self.peers.lock().unwrap_or_else(|e| e.into_inner()));
         for (_, peer) in peers {
             peer.close();
@@ -1104,6 +1147,7 @@ impl MediaSession {
         }
         self.latest.lock().unwrap_or_else(|e| e.into_inner()).take();
         *self.conversion.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
+        *self.gpu_capture.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
     }
 }
 impl Drop for MediaSession {
@@ -1123,7 +1167,7 @@ impl FrameSink for MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .copy_at(&frame, captured_at)?;
         if self.has_consumers() {
-            self.notify.notify_one();
+            self.wake_capture();
         }
         Ok(())
     }

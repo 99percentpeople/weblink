@@ -128,6 +128,7 @@ impl Scaler {
         }
     }
     pub fn run(&self) -> Result<&ID3D11Texture2D> {
+        let _guard = super::gpu::ContextLock::enter(&self.context)?;
         unsafe {
             self.context.IASetInputLayout(None);
             self.context

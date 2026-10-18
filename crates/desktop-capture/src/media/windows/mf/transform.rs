@@ -5,6 +5,7 @@ use std::{mem::ManuallyDrop, ptr, sync::Arc};
 use windows::{
     core::{Interface, PWSTR},
     Win32::{
+        Graphics::Direct3D11::ID3D11Device,
         Media::MediaFoundation::*,
         System::{
             Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED},
@@ -170,6 +171,7 @@ pub fn detect() -> crate::Result<Vec<EncoderInfo>> {
                     color: crate::media::MediaOptions::default().color_space(),
                 },
                 Arc::new(|| {}),
+                None,
             )
             .is_ok()
             {
@@ -199,6 +201,8 @@ pub struct Transform {
     ready: u32,
     configuration: Vec<CodecControl>,
     color: crate::media::color::ColorDescription,
+    pub device: Option<ID3D11Device>,
+    _manager: Option<IMFDXGIDeviceManager>,
 }
 impl Transform {
     pub fn open(
@@ -210,6 +214,7 @@ impl Transform {
         bitrate_limit: u32,
         color: crate::media::color::ColorDescription,
         wake: Arc<dyn Fn() + Send + Sync>,
+        device: Option<&ID3D11Device>,
     ) -> crate::Result<Self> {
         let codec = if id.ends_with(":h265") {
             Codec::Hevc
@@ -233,6 +238,7 @@ impl Transform {
                 color,
             },
             wake,
+            device,
         )
         .map_err(|e| format!("Hardware encoder initialization failed: {e}"))
     }
@@ -240,6 +246,7 @@ impl Transform {
         activation: IMFActivate,
         configuration: Configuration,
         wake: Arc<dyn Fn() + Send + Sync>,
+        device: Option<&ID3D11Device>,
     ) -> Result<Self> {
         let Configuration {
             codec,
@@ -256,6 +263,21 @@ impl Transform {
             let configure = || -> Result<Self> {
                 let attributes = transform.GetAttributes()?;
                 attributes.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1)?;
+                let manager = if let Some(device) = device {
+                    if attributes.GetUINT32(&MF_SA_D3D11_AWARE).unwrap_or(0) == 0 {
+                        return Err(windows::Win32::Foundation::E_NOINTERFACE.into());
+                    }
+                    let mut token = 0;
+                    let mut manager = None;
+                    MFCreateDXGIDeviceManager(&mut token, &mut manager)?;
+                    let manager = manager.unwrap();
+                    manager.ResetDevice(device, token)?;
+                    transform
+                        .ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, manager.as_raw() as usize)?;
+                    Some(manager)
+                } else {
+                    None
+                };
                 let low_latency = attributes.SetUINT32(&MF_LOW_LATENCY, 1);
                 let mut configuration = vec![CodecControl {
                     name: "pipelineLowLatency".into(),
@@ -364,6 +386,8 @@ impl Transform {
                     ready: 0,
                     configuration,
                     color,
+                    device: device.cloned(),
+                    _manager: manager,
                 })
             };
             let result = configure();
@@ -451,6 +475,20 @@ impl Transform {
             self.transform.ProcessInput(self.input, &sample, 0)?;
             self.ready = self.ready.saturating_sub(1);
         }
+        Ok(())
+    }
+    pub fn input_gpu(
+        &mut self,
+        surface: Arc<crate::surface::gpu::Lease<super::gpu::Surface>>,
+        timestamp_us: i64,
+    ) -> Result<()> {
+        let sample = super::sample::tracked(surface)?;
+        unsafe {
+            sample.SetSampleTime(timestamp_us * 10)?;
+            sample.SetSampleDuration(10_000_000 / i64::from(self.fps))?;
+            self.transform.ProcessInput(self.input, &sample, 0)?;
+        }
+        self.ready = self.ready.saturating_sub(1);
         Ok(())
     }
     pub fn poll(&mut self) -> Result<Vec<Packet>> {

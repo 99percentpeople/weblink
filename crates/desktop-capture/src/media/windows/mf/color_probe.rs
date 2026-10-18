@@ -42,6 +42,7 @@ fn hardware_color_bitstreams() {
                     25_000_000,
                     color,
                     Arc::new(|| {}),
+                    None,
                 )
                 .unwrap();
                 let mut bytes = Vec::new();
@@ -53,7 +54,10 @@ fn hardware_color_bitstreams() {
                         outputs += 1;
                     }
                     if inputs < 3 && encoder.ready() {
-                        encoder.input(&frame.bytes, inputs * 33_333).unwrap();
+                        let super::Input::Memory(bytes) = &frame.input else {
+                            unreachable!()
+                        };
+                        encoder.input(bytes, inputs * 33_333).unwrap();
                         inputs += 1;
                     }
                     thread::sleep(Duration::from_millis(1));

@@ -3,6 +3,10 @@ mod bitstream_color;
 #[cfg(test)]
 mod color_probe;
 mod events;
+pub(super) mod gpu;
+#[cfg(test)]
+mod gpu_tests;
+mod sample;
 mod transform;
 use super::super::{
     bitrate::{BitrateController, FrameBudget},
@@ -19,20 +23,48 @@ use libwebrtc::{
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, Condvar, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 pub use transform::detect;
 
 pub struct Frame {
-    bytes: Vec<u8>,
+    input: Input,
     width: u32,
     height: u32,
     captured_at: Option<Instant>,
     ready_at: Instant,
 }
+enum Input {
+    Memory(Vec<u8>),
+    Texture(Arc<gpu::Captured>),
+}
 impl Frame {
+    pub fn from_gpu(
+        frame: Arc<gpu::Captured>,
+        options: &MediaOptions,
+        captured_at: Option<Instant>,
+    ) -> Self {
+        let (width, height) = frame.size();
+        let (width, height) = options.dimensions(width, height);
+        Self {
+            input: Input::Texture(frame),
+            width,
+            height,
+            captured_at,
+            ready_at: Instant::now(),
+        }
+    }
+    fn device(&self) -> Option<&windows::Win32::Graphics::Direct3D11::ID3D11Device> {
+        match &self.input {
+            Input::Texture(frame) => Some(&frame.device),
+            Input::Memory(_) => None,
+        }
+    }
     pub fn from_i420(buffer: &I420Buffer, captured_at: Option<Instant>) -> Self {
         let (width, height) = (buffer.width() as usize, buffer.height() as usize);
         // MediaOptions::dimensions normalizes capture output for NV12.
@@ -58,7 +90,7 @@ impl Frame {
             height as i32,
         );
         Self {
-            bytes,
+            input: Input::Memory(bytes),
             width: width as u32,
             height: height as u32,
             captured_at,
@@ -82,11 +114,30 @@ pub struct Encoder {
     worker: Mutex<Option<JoinHandle<()>>>,
     statistics: Arc<Mutex<EncodeStatistics>>,
     pub recording: Arc<EncodedRecordingTap>,
+    fallback: Arc<Fallback>,
+}
+
+struct Fallback {
+    cpu: AtomicBool,
+    wake: crate::surface::gpu::Wake,
+}
+impl Fallback {
+    fn activate(&self, reason: String, statistics: &Mutex<EncodeStatistics>) {
+        statistics
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .gpu_fallback = Some(reason);
+        self.cpu.store(true, Ordering::Release);
+        (self.wake)();
+    }
 }
 
 #[derive(Clone, Default)]
 pub struct EncodeStatistics {
     pub frames: u64,
+    pub gpu_inputs: u64,
+    pub cpu_inputs: u64,
+    pub gpu_fallback: Option<String>,
     pub seconds: f64,
     pub bitrate: Option<u32>,
     pub queue: Distribution,
@@ -104,6 +155,9 @@ impl EncodeStatistics {
         EncoderPipelineStats {
             peer,
             frames: self.frames,
+            gpu_inputs: self.gpu_inputs,
+            cpu_inputs: self.cpu_inputs,
+            gpu_fallback: self.gpu_fallback.clone(),
             fresh_frames: self.capture_to_encode.count,
             replaced_inputs: self.replaced_inputs,
             rate_limited_inputs: self.rate_limited_inputs,
@@ -132,7 +186,16 @@ impl Drop for RateControlSubscription {
     }
 }
 impl Encoder {
+    #[cfg(test)]
     pub fn new(id: String, options: MediaOptions, preview: bool) -> Result<Self> {
+        Self::with_fallback(id, options, preview, Arc::new(|| {}))
+    }
+    pub fn with_fallback(
+        id: String,
+        options: MediaOptions,
+        preview: bool,
+        wake: crate::surface::gpu::Wake,
+    ) -> Result<Self> {
         let source = NativeVideoSource::new_encoded(VideoResolution::default());
         if !source.set_color_space(Some(options.color_space().rtc())) {
             return Err("Invalid hardware video color space".into());
@@ -146,10 +209,24 @@ impl Encoder {
         let measured = statistics.clone();
         let recording = Arc::new(EncodedRecordingTap::default());
         let tap = recording.clone();
+        let fallback = Arc::new(Fallback {
+            cpu: AtomicBool::new(false),
+            wake,
+        });
+        let input_mode = fallback.clone();
         let worker = thread::Builder::new()
             .name("weblink-hardware-encoder".into())
             .spawn(move || {
-                if let Err(error) = run(id, options, preview, output, work, measured, &tap) {
+                if let Err(error) = run(
+                    id,
+                    options,
+                    preview,
+                    output,
+                    work,
+                    measured,
+                    &tap,
+                    &input_mode,
+                ) {
                     *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
                 }
                 tap.end();
@@ -162,7 +239,14 @@ impl Encoder {
             worker: Mutex::new(Some(worker)),
             statistics,
             recording,
+            fallback,
         })
+    }
+    pub fn needs_readback(&self) -> bool {
+        self.fallback.cpu.load(Ordering::Acquire)
+    }
+    pub fn use_readback(&self, reason: String) {
+        self.fallback.activate(reason, &self.statistics);
     }
     pub fn statistics(&self) -> EncodeStatistics {
         self.statistics
@@ -226,9 +310,11 @@ fn run(
     work: Arc<(Mutex<Pending>, Condvar)>,
     statistics: Arc<Mutex<EncodeStatistics>>,
     recording: &EncodedRecordingTap,
+    fallback: &Fallback,
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut encoder: Option<transform::Transform> = None;
+    let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
     let started = Instant::now();
     let recording_origin = clock_us();
@@ -283,7 +369,9 @@ fn run(
                 }
                 options = next;
             }
-            if let Some(frame) = next_input {
+            if let Some(frame) = next_input
+                .filter(|frame| frame.device().is_none() || !fallback.cpu.load(Ordering::Acquire))
+            {
                 if latest.replace(frame).is_some() {
                     statistics
                         .lock()
@@ -312,20 +400,49 @@ fn run(
         if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
             if encoder.as_ref().is_none_or(|encoder| {
                 (encoder.width, encoder.height) != (frame.width, frame.height)
+                    || encoder.device.as_ref() != frame.device()
             }) {
                 // Driver transforms are recreated on resolution changes; no old packets survive.
                 drop(encoder.take());
                 in_flight.clear();
-                encoder = Some(transform::Transform::open(
-                    &id,
-                    frame.width,
-                    frame.height,
-                    options.frame_rate,
-                    rate_control.current(),
-                    options.max_bitrate as u32,
-                    options.color_space(),
-                    wake.clone(),
-                )?);
+                let opened = (|| -> Result<transform::Transform> {
+                    if let Input::Texture(texture) = &frame.input {
+                        if converter
+                            .as_ref()
+                            .is_none_or(|c| !c.matches(texture, (frame.width, frame.height)))
+                        {
+                            converter = Some(
+                                gpu::Converter::new(
+                                    &texture.device,
+                                    (frame.width, frame.height),
+                                    wake.clone(),
+                                )
+                                .map_err(|e| format!("GPU NV12 conversion unavailable: {e}"))?,
+                            );
+                        }
+                    }
+                    transform::Transform::open(
+                        &id,
+                        frame.width,
+                        frame.height,
+                        options.frame_rate,
+                        rate_control.current(),
+                        options.max_bitrate as u32,
+                        options.color_space(),
+                        wake.clone(),
+                        frame.device(),
+                    )
+                })();
+                match opened {
+                    Ok(transform) => encoder = Some(transform),
+                    Err(error) if frame.device().is_some() => {
+                        fallback.activate(error, &statistics);
+                        converter = None;
+                        latest = None;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
                 let controls = encoder.as_ref().unwrap().control_status();
                 let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
                 stats.bitrate = Some(rate_control.current());
@@ -333,11 +450,21 @@ fn run(
                 keyframe = true;
             }
         }
-        if let Some(encoder) = &mut encoder {
-            for packet in encoder
-                .poll()
-                .map_err(|e| format!("Hardware encoder output failed: {e}"))?
-            {
+        let packets = match encoder.as_mut().map(|encoder| encoder.poll()).transpose() {
+            Ok(packets) => packets.unwrap_or_default(),
+            Err(error) if encoder.as_ref().is_some_and(|e| e.device.is_some()) => {
+                fallback.activate(format!("GPU encoder output failed: {error}"), &statistics);
+                encoder = None;
+                converter = None;
+                latest = None;
+                in_flight.clear();
+                keyframe = true;
+                continue;
+            }
+            Err(error) => return Err(format!("Hardware encoder output failed: {error}")),
+        };
+        if let Some(active) = &mut encoder {
+            for packet in packets {
                 if !packet.bytes.is_empty() {
                     frame_budget.record_output(packet.bytes.len(), started.elapsed());
                     statistics
@@ -360,7 +487,7 @@ fn run(
                         stats.in_flight = in_flight.len();
                     }
                     output.capture_encoded_frame(&EncodedVideoFrame {
-                        codec: encoder.codec,
+                        codec: active.codec,
                         payload: &packet.bytes,
                         timestamp_us: packet.timestamp_us,
                         frame_type: if packet.keyframe {
@@ -369,8 +496,8 @@ fn run(
                             EncodedFrameType::Delta
                         },
                         resolution: VideoResolution {
-                            width: encoder.width,
-                            height: encoder.height,
+                            width: active.width,
+                            height: active.height,
                         },
                         frame_metadata: None,
                     });
@@ -381,19 +508,19 @@ fn run(
                         timestamp_us: recording_origin + packet.timestamp_us,
                         keyframe: packet.keyframe,
                         kind: PacketKind::Video {
-                            codec: match encoder.codec {
+                            codec: match active.codec {
                                 libwebrtc::video_frame::EncodedVideoCodec::H264 => 1,
                                 libwebrtc::video_frame::EncodedVideoCodec::H265 => 2,
                                 _ => 0, // A future codec must negotiate its own recording adapter.
                             },
-                            width: encoder.width,
-                            height: encoder.height,
+                            width: active.width,
+                            height: active.height,
                         },
                         segment: 0,
                     });
                 }
             }
-            if encoder.ready() {
+            if active.ready() {
                 if let Some(frame) = latest.take() {
                     // MF drivers can exceed their accepted bitrate target. Skip raw
                     // inputs before encoding so the emitted reference chain stays intact.
@@ -405,14 +532,48 @@ fn run(
                         continue;
                     }
                     if keyframe {
-                        encoder.request_keyframe()?;
+                        active.request_keyframe()?;
                         keyframe = false;
                     }
                     let timestamp = started.elapsed().as_micros() as i64;
                     let input_at = Instant::now();
-                    encoder
-                        .input(&frame.bytes, timestamp)
-                        .map_err(|e| format!("Hardware encoder input failed: {e}"))?;
+                    let input = match &frame.input {
+                        Input::Memory(bytes) => active.input(bytes, timestamp),
+                        Input::Texture(texture) => {
+                            match converter.as_mut().unwrap().convert(texture, &options) {
+                                Ok(Some(surface)) => active.input_gpu(surface, timestamp),
+                                Ok(None) => {
+                                    // All surfaces are still owned by MF. Keep only the newest
+                                    // input and wait for an output or final sample-release wake.
+                                    latest = Some(frame);
+                                    continue_wait(&work, &rate_control, started);
+                                    continue;
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                    };
+                    if let Err(error) = input {
+                        if frame.device().is_none() {
+                            return Err(format!("Hardware encoder input failed: {error}"));
+                        }
+                        fallback
+                            .activate(format!("GPU encoder input failed: {error}"), &statistics);
+                        encoder = None;
+                        converter = None;
+                        latest = None;
+                        in_flight.clear();
+                        keyframe = true;
+                        continue;
+                    }
+                    {
+                        let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                        if frame.device().is_some() {
+                            stats.gpu_inputs += 1;
+                        } else {
+                            stats.cpu_inputs += 1;
+                        }
+                    }
                     // A driver may discard input without output; never retain an
                     // unbounded diagnostic history in a long-running share.
                     if in_flight.len() >= 256 {
@@ -438,28 +599,36 @@ fn run(
                 }
             }
         }
-        // Synchronize the predicate with every producer, including the MFT
-        // callback: a notification between poll() and wait() cannot be lost.
-        let pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
-        if pending.stopped
-            || pending.wake
-            || pending.keyframe
-            || pending.frame.is_some()
-            || pending.options.is_some()
-        {
-            continue;
-        }
-        if let Some(delay) = rate_control.next_update_in(started.elapsed()) {
-            drop(
-                work.1
-                    .wait_timeout(pending, delay)
-                    .unwrap_or_else(|e| e.into_inner()),
-            );
-        } else {
-            drop(work.1.wait(pending).unwrap_or_else(|e| e.into_inner()));
-        }
+        continue_wait(&work, &rate_control, started);
     }
     Ok(())
+}
+
+fn continue_wait(
+    work: &Arc<(Mutex<Pending>, Condvar)>,
+    rate_control: &BitrateController,
+    started: Instant,
+) {
+    // Synchronize the predicate with every producer, including the MFT
+    // callback: a notification between poll() and wait() cannot be lost.
+    let pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
+    if pending.stopped
+        || pending.wake
+        || pending.keyframe
+        || pending.frame.is_some()
+        || pending.options.is_some()
+    {
+        return;
+    }
+    if let Some(delay) = rate_control.next_update_in(started.elapsed()) {
+        drop(
+            work.1
+                .wait_timeout(pending, delay)
+                .unwrap_or_else(|e| e.into_inner()),
+        );
+    } else {
+        drop(work.1.wait(pending).unwrap_or_else(|e| e.into_inner()));
+    }
 }
 
 #[cfg(test)]
@@ -577,6 +746,9 @@ mod tests {
         v.copy_from_slice(&[20, 21, 99, 99]);
         let frame = Frame::from_i420(&buffer, None);
         assert_eq!((frame.width, frame.height), (4, 2));
-        assert_eq!(frame.bytes, [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 11, 21]);
+        let Input::Memory(bytes) = frame.input else {
+            panic!("expected memory input")
+        };
+        assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 11, 21]);
     }
 }

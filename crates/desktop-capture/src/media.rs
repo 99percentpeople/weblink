@@ -256,6 +256,12 @@ pub struct VideoStats {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limited_inputs: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_inputs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_inputs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_fallback: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub encoder_queue_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capture_to_encode_seconds: Option<f64>,

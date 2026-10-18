@@ -88,6 +88,9 @@ impl MediaSession {
                         .load(std::sync::atomic::Ordering::Relaxed),
                     replaced_inputs: hardware.as_ref().map(|s| s.replaced_inputs),
                     rate_limited_inputs: hardware.as_ref().map(|s| s.rate_limited_inputs),
+                    gpu_inputs: hardware.as_ref().map(|s| s.gpu_inputs),
+                    cpu_inputs: hardware.as_ref().map(|s| s.cpu_inputs),
+                    gpu_fallback: hardware.as_ref().and_then(|s| s.gpu_fallback.clone()),
                     encoder_queue_seconds: hardware.as_ref().map(|s| s.queue.seconds),
                     capture_to_encode_seconds: hardware
                         .as_ref()

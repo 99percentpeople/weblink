@@ -637,13 +637,37 @@ preserve timing variation that average FPS hides. Compare interval deltas while
 the source is moving; a static desktop can legitimately send fewer frames than
 the configured FPS.
 
-Native capture retains the original GPU texture and reuses its staging resources.
+Native capture retains the original GPU texture. H.264 and H.265 hardware encoders
+share a D3D11 texture input path: GPU shaders scale, rotate, composite the DXGI
+cursor and convert SDR BGRA to NV12 with the selected matrix/range. The MFT must
+advertise D3D11 support and accept the capture device through an
+`IMFDXGIDeviceManager`. Inputs wrap NV12 textures with `MFCreateDXGISurfaceBuffer`;
+raw desktop pixels are not mapped or uploaded again. This eliminates the
+GPU-to-CPU-to-GPU round trip, while retaining GPU copies needed for capture
+ownership and format conversion. Compressed output still passes through CPU memory.
+
+GPU admission and CPU conversion have separate workers, notifications and bounded
+pools. Hardware peers share immutable BGRA snapshots (up to four); each encoder
+uses up to eight NV12 surfaces. Tracked MF samples retain their surface lease until
+the MFT releases its last sample reference. A full pool coalesces pending input and
+wakes on release instead of blocking the capture or recording producer. Shader
+command batches hold the D3D multithread lock so preview scaling and encoder
+conversion cannot interleave context bindings. Static refreshes reuse the cached
+NV12 surface. Size/device changes replace pools without reusing outstanding leases.
+GPU setup, conversion or texture input/output failures select memory input for
+that encoder, retain the same WebRTC sender and recording tap, and request CPU
+readback plus a new
+keyframe. This fallback is retained until the peer's encoder is recreated.
+
+CPU readback is requested only by a software sender, a hardware encoder using
+memory fallback, or a visible preview waiting for its next frame. An outstanding
+preview notification suppresses further preview-only readbacks until acknowledged.
 For unrotated sources, a D3D11 shader scales to the selected dimensions before CPU
 readback and color conversion. DXGI cursor coordinates and pixels follow that scale.
 Unsupported GPU processing falls back to CPU scaling; rotated displays retain the
 existing rotation path. The original texture preserves detail when increasing live
 resolution while the screen is static. Capture coalesces new content into one
-retained GPU source. A single conversion worker admits copies at the selected
+retained GPU source. The CPU conversion worker admits copies at the selected
 frame rate into one, two (default), or three reusable staging slots, selected by
 **GPU readback buffers** in the native capture settings for the next share.
 More slots allow overlapping work but consume more graphics memory and can add
@@ -740,9 +764,10 @@ stream and shared buffer. Native visibility notifications also cover tray hiding
 and automatic hiding after control approval; a visible, unfocused PiP keeps its
 preview running. Capture, remote publication, system audio and control ownership
 remain active while local presentation is paused. When there are no remote peers
-and no visible local previews, the conversion worker sleeps and releases pending
-CPU readbacks. It retains the latest GPU source, including an unpublished final
-update, so a static screen can resume without another capture arrival.
+requiring CPU pixels and no visible previews awaiting a frame, the CPU conversion
+worker sleeps and releases pending readbacks; GPU hardware senders keep running.
+Capture retains the latest GPU source, including an unpublished final update,
+so a static screen can resume without another capture arrival.
 The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
 only its available dimensions and preview-submission counters (including static
 refresh submissions) are shown. The overlay separates submitted/encoded/decoded
@@ -761,6 +786,9 @@ GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
 input/readback dimensions, GPU fallback reason and active peer/encoder counts.
 It also reports capture wait, per-peer hardware input wait, input-to-output and
 capture-to-encoded distributions, replaced input counts and in-flight samples.
+Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` distinguish actual texture
+submission from memory input and identify a fallback reason. CPU pipeline frame
+counts can remain zero while a hardware-only stream is encoding normally.
 Hardware controls include the requested value, setter result and driver readback;
 an accepted setter alone does not establish that a low-latency/CBR/buffer request
 was honored. Unsupported optional controls remain diagnostic and do not silently
@@ -797,9 +825,11 @@ handoff ends capture without accessing an unowned surface.
 The API cannot cancel an outstanding wait, so this bound is retained. DXGI handles display
 rotation and its separate color/monochrome cursor. Display
 mode changes, disconnection or access loss end the capture and require selecting
-the source again. Native frames still pass through CPU readback/conversion before
-software or hardware encoding; hardware input uses libyuv's native I420-to-NV12
-conversion. GPU zero-copy remains separate work. Browser screen sharing and microphone/camera behavior are retained.
+the source again. Software and unsupported GPU encoders retain CPU readback and
+libyuv conversion; supported H.264/H.265 encoders use the shared texture path above.
+Recording continues to subscribe to already encoded packets after transport
+publication, with its own bounded queue. Browser screen sharing and
+microphone/camera behavior are retained.
 
 The native source picker defaults “Share audio” on for each new selection.
 It captures system playback for both display and window shares, excluding the
@@ -947,6 +977,18 @@ peers. Ordinary tests skip it because an SSH or CI session has no interactive de
 
 ```sh
 cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
+```
+
+The GPU input checks also run in an unlocked desktop session with supported
+D3D11/NV12 hardware encoders. They cover both capture backends, color/rotation/cursor
+parity, tracked surface lifetime, preview/software demand, VFR, memory fallback
+and recording pause/resume with bounded consumers. H.264 uses a local WebRTC
+decoder; H.265 checks encoded packets. `WEBLINK_GPU_PROBE_DIR` optionally saves
+short captured elementary streams for an external decoder check; it is unset
+by default. No test sends pixels to external peers.
+
+```sh
+cargo test -p weblink-desktop-capture --lib gpu_ -- --include-ignored --nocapture --test-threads=1
 ```
 
 The ignored `native_dxgi_final_frame_survives_stop_and_readback_device_is_reusable`

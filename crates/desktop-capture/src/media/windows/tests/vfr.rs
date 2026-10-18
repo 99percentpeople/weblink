@@ -3,13 +3,13 @@
 use super::*;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 
-struct Frames {
+pub(super) struct Frames {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
     textures: Vec<ID3D11Texture2D>,
 }
 impl Frames {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
         let textures = (0..4)
             .map(|phase| {
@@ -52,20 +52,28 @@ impl Frames {
             textures,
         }
     }
-    fn send(&self, media: &MediaSession, index: usize) {
+    pub(super) fn send(&self, media: &MediaSession, index: usize) {
+        self.send_with_cursor(media, index, None);
+    }
+    pub(super) fn send_with_cursor(
+        &self,
+        media: &MediaSession,
+        index: usize,
+        cursor: Option<&crate::surface::Cursor>,
+    ) {
         media
             .frame(TextureFrame {
                 device: &self.device,
                 context: &self.context,
                 texture: &self.textures[index % self.textures.len()],
                 rotation: Rotation::Identity,
-                cursor: None,
+                cursor,
             })
             .unwrap();
     }
 }
 
-async fn wait_for_video(receiver: &Receiver) {
+pub(super) async fn wait_for_video(receiver: &Receiver) {
     let before = decoded(receiver).await;
     tokio::time::timeout(Duration::from_secs(8), async {
         while decoded(receiver).await < before + 2 {
@@ -86,7 +94,7 @@ async fn encoded(media: &MediaSession, id: &str) -> u64 {
         .sum()
 }
 
-async fn static_frames(media: &MediaSession, id: &str) -> u64 {
+pub(super) async fn static_frames(media: &MediaSession, id: &str) -> u64 {
     let captures = media.latest_sequence.load(Ordering::Acquire);
     let before = encoded(media, id).await;
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -103,7 +111,11 @@ async fn static_frames(media: &MediaSession, id: &str) -> u64 {
     frames
 }
 
-async fn motion(frames: &Frames, media: &MediaSession, receiver: &Receiver) -> (u32, Duration) {
+pub(super) async fn motion(
+    frames: &Frames,
+    media: &MediaSession,
+    receiver: &Receiver,
+) -> (u32, Duration) {
     let before = decoded(receiver).await;
     let start = Instant::now();
     let mut first = None;

@@ -121,8 +121,8 @@ impl PreviewSubscription {
             watch.notified = false;
             if !watch.notify(media.latest_sequence.load(Ordering::Acquire)) {
                 watches.remove(&self.id);
-                media.notify.notify_one();
             }
+            media.notify.notify_one();
         }
     }
 }
@@ -166,6 +166,25 @@ impl MediaSession {
             media: Arc::downgrade(self),
             id,
         })
+    }
+    pub(super) fn has_cpu_consumers(&self) -> bool {
+        self.peers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .any(|peer| peer.raw_video)
+            || self
+                .hardware
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .values()
+                .any(|encoder| encoder.needs_readback())
+            || self
+                .previews
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .values()
+                .any(|watch| watch.visible && !watch.notified)
     }
     pub(super) fn has_consumers(&self) -> bool {
         !self
