@@ -49,6 +49,66 @@ const announce = (
   screen.pc.dispatchEvent(event);
   return track;
 };
+it("verifies decoded video before accepting a reused native sender", async () => {
+  vi.useFakeTimers();
+  const screen = new ScreenReceiver({}, vi.fn(), vi.fn());
+  const stats = vi.fn(
+    async () =>
+      new Map([
+        [
+          "video",
+          {
+            type: "inbound-rtp",
+            kind: "video",
+            framesDecoded: 0,
+          },
+        ],
+      ]),
+  );
+  Object.assign(screen.pc, { getStats: stats });
+  const pending = screen.decoded(1000);
+  await vi.advanceTimersByTimeAsync(100);
+  stats.mockResolvedValue(
+    new Map([
+      [
+        "video",
+        {
+          type: "inbound-rtp",
+          kind: "video",
+          framesDecoded: 1,
+        },
+      ],
+    ]),
+  );
+  await vi.advanceTimersByTimeAsync(50);
+  await pending;
+  screen.close();
+  expect(vi.getTimerCount()).toBe(0);
+});
+it.each(["timeout", "close"])(
+  "settles the recording decode probe on %s",
+  async (reason) => {
+    vi.useFakeTimers();
+    const screen = new ScreenReceiver({}, vi.fn(), vi.fn());
+    Object.assign(screen.pc, {
+      getStats: vi.fn(async () => new Map()),
+    });
+    const pending = screen
+      .decoded(100)
+      .catch((error) => error);
+    await vi.advanceTimersByTimeAsync(50);
+    if (reason === "close") screen.close();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await pending).toMatchObject({
+      name:
+        reason === "close"
+          ? "AbortError"
+          : "ScreenDecodeError",
+    });
+    screen.close();
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
 it("requests low playout delay for both native video and its synchronized system audio", () => {
   const changed = vi.fn(),
     failed = vi.fn();

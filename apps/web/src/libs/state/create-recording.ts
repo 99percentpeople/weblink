@@ -14,6 +14,7 @@ import { getNativeScreenPublication } from "@/libs/application/native-screen-ser
 import { getMeetingAudioSource } from "@/libs/application/meeting-media-service";
 import { getRemoteAudioVideoTrackId } from "@/routes/home/components/meeting-audio-sources";
 import { createCacheManager } from "@/libs/application/cache-service";
+import { sessionService } from "@/libs/application/session-service";
 import { localFileErrorDetail } from "@/libs/utils/local-file-error";
 import { appState } from "./app-state";
 import type { AppStateContextProps } from "./app-state-context";
@@ -137,6 +138,19 @@ export function createRecording(app: AppStateContextProps) {
           local: options.local,
           video: options.video,
           audio,
+          encodedVideoSources: () => {
+            if (open) {
+              const source =
+                publication?.getRecordingSource?.();
+              return source ? [source] : [];
+            }
+            return (
+              sessionService?.getRecordingVideoSources(
+                options.video,
+                audio,
+              ) ?? []
+            );
+          },
           available: () =>
             options.video.readyState === "live" &&
             [options.video, ...audio].every((track) =>

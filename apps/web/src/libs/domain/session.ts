@@ -23,6 +23,7 @@ import {
   type PeerSessionMediaOptions,
 } from "./session-media";
 import { PeerSessionChannelController } from "./session-channels";
+import type { EncodedVideoSource } from "./encoded-video";
 import { catchError } from "@/libs/catch";
 import {
   PEER_SESSION_CONNECTION_TIMEOUT_MS,
@@ -574,6 +575,21 @@ export class PeerSession {
 
   setStream(stream: MediaStream | null) {
     this.media.setStream(stream);
+  }
+
+  getEncodedVideo(
+    track: MediaStreamTrack,
+  ): EncodedVideoSource | undefined {
+    return this.media.getEncodedVideo(track);
+  }
+  getRecordingMediaSources(
+    track: MediaStreamTrack,
+    audio: readonly MediaStreamTrack[],
+  ): EncodedVideoSource[] {
+    return this.media.getRecordingMediaSources(
+      track,
+      audio,
+    );
   }
 
   refreshMediaCodecs(): void {

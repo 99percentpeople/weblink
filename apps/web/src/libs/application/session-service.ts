@@ -1,4 +1,5 @@
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
+import type { EncodedVideoSource } from "@/libs/domain/encoded-video";
 import {
   browserCodecs,
   commonCodecs,
@@ -158,6 +159,22 @@ export class SessionService {
           this.clientViewData[session.clientId]?.name ??
           session.clientId,
       })),
+    );
+  }
+
+  getRecordingVideoSources(
+    track: MediaStreamTrack,
+    audio: readonly MediaStreamTrack[] = [],
+  ): EncodedVideoSource[] {
+    return Object.values(this.sessions).flatMap(
+      (session) => {
+        return [
+          ...session.getRecordingMediaSources(track, audio),
+          ...(this.nativeScreens
+            .get(session)
+            ?.getRecordingMediaSources(track, audio) ?? []),
+        ];
+      },
     );
   }
 

@@ -2,6 +2,12 @@ import type {
   StreamAudioSource,
   StreamVideoSource,
 } from "./protocol/messages";
+import {
+  RtpEncodedMediaTrack,
+  RtpEncodedMediaWorkers,
+} from "./rtp-encoded-media";
+import type { EncodedVideoSource } from "./encoded-video";
+import { recordingMediaSources } from "./recording-media-sources";
 
 export interface SessionMediaCodecOptions {
   preferredVideoCodec: string | null;
@@ -57,6 +63,37 @@ export class PeerSessionMediaController {
     MediaStreamTrack,
     RTCRtpSender
   >();
+  private readonly encodedVideo = new Map<
+    RTCRtpSender,
+    RtpEncodedMediaTrack
+  >();
+  private readonly encodedWorkers =
+    new RtpEncodedMediaWorkers();
+  private readonly encodedReceivers = new Map<
+    RTCRtpReceiver,
+    RtpEncodedMediaTrack
+  >();
+
+  getEncodedVideo(
+    track: MediaStreamTrack,
+  ): EncodedVideoSource | undefined {
+    const sender = this.senders.get(track);
+    if (sender) return this.encodedVideo.get(sender);
+    const receiver =
+      this.remoteTracks.get(track)?.transceiver.receiver;
+    return receiver
+      ? this.encodedReceivers.get(receiver)
+      : undefined;
+  }
+  getRecordingMediaSources(
+    track: MediaStreamTrack,
+    audio: readonly MediaStreamTrack[],
+  ) {
+    return recordingMediaSources(
+      this.getEncodedVideo(track),
+      audio.map((track) => this.getEncodedVideo(track)),
+    );
+  }
   private readonly remoteTracks = new Map<
     MediaStreamTrack,
     {
@@ -298,6 +335,15 @@ export class PeerSessionMediaController {
     )
       return;
     const receiver = event.receiver;
+    if (!this.encodedReceivers.has(receiver)) {
+      const tap = RtpEncodedMediaTrack.install(
+        receiver,
+        this.options.getPeerConnection()!,
+        this.encodedWorkers,
+        "receive",
+      );
+      if (tap) this.encodedReceivers.set(receiver, tap);
+    }
     if ("jitterBufferTarget" in receiver) {
       (receiver as any).jitterBufferTarget = 0;
     }
@@ -575,6 +621,7 @@ export class PeerSessionMediaController {
     let changed = false;
     for (const [track, sender] of this.senders) {
       if (tracks.has(track)) continue;
+      this.encodedVideo.get(sender)?.end();
       pc.removeTrack(sender);
       this.senders.delete(track);
       changed = true;
@@ -582,7 +629,17 @@ export class PeerSessionMediaController {
     if (stream)
       for (const track of tracks) {
         if (this.senders.has(track)) continue;
-        this.senders.set(track, pc.addTrack(track, stream));
+        const sender = pc.addTrack(track, stream);
+        this.senders.set(track, sender);
+        if (!this.encodedVideo.has(sender)) {
+          const encoded = RtpEncodedMediaTrack.install(
+            sender,
+            pc,
+            this.encodedWorkers,
+          );
+          if (encoded)
+            this.encodedVideo.set(sender, encoded);
+        }
         changed = true;
       }
     // addTrack/removeTrack request native negotiationneeded. Do not also
@@ -594,6 +651,12 @@ export class PeerSessionMediaController {
   }
 
   resetConnection(): void {
+    for (const encoded of this.encodedReceivers.values())
+      encoded.dispose();
+    this.encodedReceivers.clear();
+    for (const encoded of this.encodedVideo.values())
+      encoded.dispose();
+    this.encodedVideo.clear();
     this.streamStateNotified = false;
     this.connectionListeners?.abort();
     this.connectionListeners = null;

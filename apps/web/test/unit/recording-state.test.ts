@@ -16,12 +16,16 @@ const f = vi.hoisted(() => ({
   stop: vi.fn(async () => {}),
   pause: vi.fn(),
   resume: vi.fn(),
+  sources: vi.fn(() => []),
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: { session: { clientViewData: f.clients } },
 }));
 vi.mock("@/libs/application/cache-service", () => ({
   createCacheManager: () => ({ storage: {} }),
+}));
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: { getRecordingVideoSources: f.sources },
 }));
 vi.mock("@/libs/application/native-screen-service", () => ({
   getNativeScreenPublication: () => undefined,
@@ -131,6 +135,11 @@ it.each(["camera", "screen"])(
       kind === "camera" ? microphone : screenAudio,
     ]);
     expect(f.source?.local).toBe(false);
+    f.source?.encodedVideoSources?.();
+    expect(f.sources).toHaveBeenCalledWith(
+      kind === "camera" ? camera : display,
+      [kind === "camera" ? microphone : screenAudio],
+    );
     expect(f.source?.available()).toBe(true);
     expect(recording.state()).toMatchObject({
       participantName: "Alice",

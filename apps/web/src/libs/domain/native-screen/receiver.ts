@@ -1,5 +1,10 @@
 import type { RemotePointer } from "../remote-control/pointer";
 import { ScreenDecodeError } from "./errors";
+import {
+  RtpEncodedMediaTrack,
+  RtpEncodedMediaWorkers,
+} from "../rtp-encoded-media";
+import { recordingMediaSources } from "../recording-media-sources";
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
@@ -10,6 +15,21 @@ export class ScreenReceiver {
   private remoteReady = false;
   private candidates: RTCIceCandidateInit[] = [];
   private decodeTimer?: ReturnType<typeof setTimeout>;
+  private readonly encoded = new Map<
+    MediaStreamTrack,
+    RtpEncodedMediaTrack
+  >();
+  private readonly encodedWorkers =
+    new RtpEncodedMediaWorkers();
+  getRecordingMediaSources(
+    track: MediaStreamTrack,
+    audio: readonly MediaStreamTrack[],
+  ) {
+    return recordingMediaSources(
+      this.encoded.get(track),
+      audio.map((track) => this.encoded.get(track)),
+    );
+  }
   constructor(
     configuration: RTCConfiguration,
     private readonly changed: (
@@ -78,6 +98,13 @@ export class ScreenReceiver {
             // Older WebViews can expose an unsupported experimental setter.
           }
         }
+        const tap = RtpEncodedMediaTrack.install(
+          event.receiver,
+          this.pc,
+          this.encodedWorkers,
+          "receive",
+        );
+        if (tap) this.encoded.set(event.track, tap);
         this.stream.addTrack(event.track);
         event.track.addEventListener(
           "ended",
@@ -157,6 +184,43 @@ export class ScreenReceiver {
     return this.pc.localDescription!.sdp;
   }
   /** Receiving RTP is not proof that the advertised decoder actually works. */
+  async decoded(timeout: number): Promise<void> {
+    const deadline = Date.now() + timeout;
+    while (!this.lifetime.signal.aborted) {
+      const stats = await this.pc.getStats();
+      let decoded = false;
+      stats.forEach((stat) => {
+        if (
+          stat.type === "inbound-rtp" &&
+          (stat.kind ?? stat.mediaType) === "video" &&
+          stat.framesDecoded > 0
+        )
+          decoded = true;
+      });
+      this.lifetime.signal.throwIfAborted();
+      if (decoded) return;
+      if (Date.now() >= deadline)
+        throw new ScreenDecodeError();
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          this.lifetime.signal.removeEventListener(
+            "abort",
+            done,
+          );
+          resolve();
+        };
+        const timer = setTimeout(done, 50);
+        this.lifetime.signal.addEventListener(
+          "abort",
+          done,
+          { once: true },
+        );
+      });
+    }
+    this.lifetime.signal.throwIfAborted();
+  }
+
   monitorDecode(healthy: () => void): void {
     let lastFrames = 0;
     let stalledSince: number | undefined;
@@ -297,6 +361,8 @@ export class ScreenReceiver {
   }
   close(): void {
     if (this.lifetime.signal.aborted) return;
+    for (const tap of this.encoded.values()) tap.dispose();
+    this.encoded.clear();
     this.control?.close();
     this.lifetime.abort();
     this.candidates = [];

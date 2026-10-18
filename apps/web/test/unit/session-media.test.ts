@@ -11,6 +11,7 @@ import {
   PeerSessionMediaController,
   type PeerSessionMediaOptions,
 } from "@/libs/domain/session-media";
+import { RtpEncodedMediaTrack } from "@/libs/domain/rtp-encoded-media";
 
 class Track extends EventTarget {
   readyState: MediaStreamTrackState = "live";
@@ -189,6 +190,94 @@ beforeEach(() => {
   vi.stubGlobal("RTCRtpSender", undefined);
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it("installs encoded recording with the sender and keeps forwarding resources until connection disposal", () => {
+  const encoded = {
+    end: vi.fn(),
+    dispose: vi.fn(),
+    subscribe: vi.fn(),
+  };
+  const install = vi
+    .spyOn(RtpEncodedMediaTrack, "install")
+    .mockReturnValue(
+      encoded as unknown as RtpEncodedMediaTrack,
+    );
+  try {
+    const { controller, bind } = setup();
+    const track = new Track("video", "camera");
+    controller.setStream(asStream(media(track)));
+    const { pc } = bind();
+    expect(install).toHaveBeenCalledWith(
+      pc.senders[0],
+      pc,
+      expect.anything(),
+    );
+    expect(controller.getEncodedVideo(asTrack(track))).toBe(
+      encoded,
+    );
+    controller.setStream(null);
+    expect(encoded.end).toHaveBeenCalledOnce();
+    expect(encoded.dispose).not.toHaveBeenCalled();
+    expect(
+      controller.getEncodedVideo(asTrack(track)),
+    ).toBeUndefined();
+    controller.dispose();
+    expect(encoded.dispose).toHaveBeenCalledOnce();
+    expect(track.stop).not.toHaveBeenCalled();
+  } finally {
+    install.mockRestore();
+  }
+});
+
+it("exposes paired receiver audio/video and releases only recording subscriptions until connection disposal", () => {
+  const taps: {
+    dispose: ReturnType<typeof vi.fn>;
+    end: ReturnType<typeof vi.fn>;
+  }[] = [];
+  const install = vi
+    .spyOn(RtpEncodedMediaTrack, "install")
+    .mockImplementation(() => {
+      const tap = {
+        dispose: vi.fn(),
+        end: vi.fn(),
+        subscribe: vi.fn(),
+      };
+      taps.push(tap);
+      return tap as unknown as RtpEncodedMediaTrack;
+    });
+  try {
+    const { controller, bind } = setup();
+    const { pc } = bind();
+    const video = new Track("video", "remote-camera"),
+      audio = new Track("audio", "remote-mic");
+    pc.receive(video);
+    pc.receive(audio);
+    expect(install).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ track: video }),
+      pc,
+      expect.anything(),
+      "receive",
+    );
+    const sources = controller.getRecordingMediaSources(
+      asTrack(video),
+      [asTrack(audio)],
+    );
+    expect(sources).toHaveLength(2);
+    expect(sources[0].encodedAudio).toBe(true);
+    expect(sources[1]).toBe(taps[0]);
+    expect(
+      controller.getRecordingMediaSources(asTrack(video), [
+        asTrack(new Track("audio", "another-peer")),
+      ]),
+    ).toEqual([taps[0]]);
+    controller.resetConnection();
+    for (const tap of taps)
+      expect(tap.dispose).toHaveBeenCalledOnce();
+  } finally {
+    install.mockRestore();
+  }
+});
 
 it("applies common codecs to live senders and suspends only incompatible media without stopping capture", () => {
   const capabilities = {
