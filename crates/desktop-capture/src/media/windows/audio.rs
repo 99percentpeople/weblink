@@ -1,7 +1,8 @@
 //! WASAPI PCM stays on a native worker and is fed directly to WebRTC.
 mod activation;
 mod events;
-use crate::media::recording::{clock_us, EncodedRecordingTap, Packet, PacketKind};
+use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
+use crate::media::webrtc::clock_us;
 use crate::media::{AudioCaptureFormat, AUDIO_CHANNEL_COUNTS, AUDIO_SAMPLE_RATES};
 use crate::Result;
 use libwebrtc::{

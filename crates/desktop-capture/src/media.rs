@@ -9,6 +9,9 @@ pub mod preview;
 #[cfg(any(windows, test))]
 mod recording;
 
+#[cfg(windows)]
+mod webrtc;
+
 /// Local recording may only borrow a sender whose codec the WebView can receive.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

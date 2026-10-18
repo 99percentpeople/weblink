@@ -9,7 +9,8 @@ use super::super::{
     MediaOptions,
 };
 use crate::media::latency::{CodecControl, Distribution, EncoderPipelineStats};
-use crate::media::recording::{clock_us, EncodedRecordingTap, Packet, PacketKind};
+use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
+use crate::media::webrtc::clock_us;
 use crate::Result;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,

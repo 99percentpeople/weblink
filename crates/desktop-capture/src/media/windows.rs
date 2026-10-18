@@ -10,11 +10,12 @@ mod presentation;
 use pixels::from_bgra;
 pub use presentation::PreviewSubscription;
 mod recording;
-mod recording_audio;
+use super::webrtc::SenderAudioRecording;
 mod recording_source;
 mod statistics;
 #[cfg(test)]
 mod tests;
+use super::recording::RecordingSessions;
 use crate::surface::readback::Readback;
 use crate::surface::{FrameSink, TextureFrame};
 use crate::Result;
@@ -57,7 +58,7 @@ pub struct MediaSession {
     audio: Option<audio::Loopback>,
     peers: Mutex<HashMap<String, MediaPeer>>,
     hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
-    recordings: Mutex<HashMap<String, Arc<recording_source::RecordingSource>>>,
+    recordings: RecordingSessions,
     encoder_id: Option<String>,
     encoders: Vec<EncoderInfo>,
     latest: Mutex<Option<Arc<VideoFrame<libwebrtc::video_frame::I420Buffer>>>>,
@@ -89,7 +90,7 @@ struct MediaPeer {
     preview: bool,
     control: Option<control::Connection>,
     recording: Option<recording::RecordingRelay>,
-    recording_audio: Option<Arc<recording_audio::SenderAudioRecording>>,
+    recording_audio: Option<Arc<SenderAudioRecording>>,
 }
 impl MediaPeer {
     fn close(&self) {
@@ -264,7 +265,7 @@ impl MediaSession {
                 .transpose()?,
             peers: Mutex::new(HashMap::new()),
             hardware: Mutex::new(HashMap::new()),
-            recordings: Mutex::new(HashMap::new()),
+            recordings: RecordingSessions::default(),
             encoder_id,
             encoders,
             latest: Mutex::new(None),
@@ -615,63 +616,45 @@ impl MediaSession {
         if self.closed.load(Ordering::Acquire) {
             return Ok(None);
         }
-        let mut recordings = self.recordings.lock().unwrap_or_else(|e| e.into_inner());
-        if recordings.contains_key(&id) || !recordings.is_empty() {
-            return Err("A native recording is already active".into());
-        }
-        let selected = {
-            let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
-            let encoders = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
-            peers.iter().find_map(|(id, peer)| {
-                if peer.preview
-                    || !matches!(
-                        peer.encoding.codec.as_deref(),
-                        Some("video/h264" | "video/h265")
-                    )
-                    || peer.connection.connection_state()
-                        != libwebrtc::peer_connection::PeerConnectionState::Connected
-                {
-                    return None;
-                }
-                let encoder = encoders.get(id)?;
-                if encoder.error().is_some() {
-                    return None;
-                }
-                Some((
-                    encoder.clone(),
-                    peer.connection.clone(),
-                    peer.recording_audio.clone().filter(|_| encoded_audio),
-                ))
-            })
-        };
-        let Some((encoder, sender, audio)) = selected else {
-            return Ok(None);
-        };
-        let recording =
-            recording_source::RecordingSource::new(&encoder, sender, self.audio.as_ref(), audio)?;
-        let info = recording.info.clone();
-        recordings.insert(id, Arc::new(recording));
-        Ok(Some(info))
-    }
-    fn recording(&self, id: &str) -> Result<Arc<recording_source::RecordingSource>> {
-        self.recordings
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(id)
-            .cloned()
-            .ok_or_else(|| "Native recording has ended".into())
+        self.recordings.open(id, encoded_audio, || {
+            let selected = {
+                let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+                let encoders = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
+                peers.iter().find_map(|(id, peer)| {
+                    if peer.preview
+                        || !matches!(
+                            peer.encoding.codec.as_deref(),
+                            Some("video/h264" | "video/h265")
+                        )
+                        || peer.connection.connection_state()
+                            != libwebrtc::peer_connection::PeerConnectionState::Connected
+                    {
+                        return None;
+                    }
+                    let encoder = encoders.get(id)?;
+                    if encoder.error().is_some() {
+                        return None;
+                    }
+                    Some((
+                        encoder.clone(),
+                        peer.connection.clone(),
+                        peer.recording_audio.clone(),
+                    ))
+                })
+            };
+            Ok(selected.map(|(encoder, sender, audio)| {
+                recording_source::inputs(&encoder, sender, self.audio.as_ref(), audio)
+            }))
+        })
     }
     pub fn read_recording(&self, id: &str) -> Result<Vec<u8>> {
-        Ok(self.recording(id)?.read())
+        self.recordings.read(id)
     }
     pub fn control_recording(&self, id: &str, active: bool, segment: u32) -> Result<()> {
-        self.recording(id)?.control(active, segment)
+        self.recordings.control(id, active, segment)
     }
     pub fn close_recording(&self, id: &str) {
-        self.recordings
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(id);
+        self.recordings.close(id);
     }
 
     /// Reuse only an already connected remote hardware H.264 sender. Software
@@ -920,8 +903,7 @@ impl MediaSession {
                             .map_err(|e| e.to_string())?;
                     }
                     if !preview && hardware.is_some() {
-                        recording_audio =
-                            recording_audio::SenderAudioRecording::new(audio_transceiver.sender());
+                        recording_audio = SenderAudioRecording::new(audio_transceiver.sender());
                     }
                 }
                 {
@@ -1111,10 +1093,7 @@ impl MediaSession {
     }
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
-        self.recordings
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
+        self.recordings.shutdown();
         self.end_previews();
         if let Some(audio) = &self.audio {
             audio.close();

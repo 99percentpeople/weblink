@@ -28,7 +28,7 @@ fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_st
                 }).collect();
                 audio::deliver(&capture.source, &capture.recording, &AudioFrame {
                     data: Cow::Borrowed(&samples), sample_rate: rate, num_channels: channels, samples_per_channel: rate / 100,
-                }, crate::media::recording::clock_us()).unwrap();
+                }, crate::media::webrtc::clock_us()).unwrap();
                 if n % 3 == 0 {
                     let mut frame = I420Buffer::new_black(640, 360);
                     frame.data_mut().0.fill(40 + (n % 160) as u8);

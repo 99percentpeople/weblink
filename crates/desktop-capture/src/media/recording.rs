@@ -1,24 +1,20 @@
 //! A bounded side channel for recording copies. The sender never waits for a
 //! recorder, a local transport, IPC, or storage to consume a packet.
+pub(crate) mod audio;
+mod sessions;
+mod source;
+mod wire;
+pub(crate) use sessions::RecordingSessions;
+pub(crate) use source::{
+    EncodedAudioSource, PcmAudioSource, RecordingAudioInputs, RecordingInputs, VideoSource,
+};
+
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError},
     Arc, Mutex,
 };
 use std::time::Duration;
-#[cfg(not(windows))]
-use std::{sync::OnceLock, time::Instant};
-
-/// Shared monotonic clock for encoded video and captured audio.
-pub(crate) fn clock_us() -> i64 {
-    #[cfg(windows)]
-    return libwebrtc::audio_source::native::NativeAudioSource::capture_clock_us();
-    #[cfg(not(windows))]
-    {
-        static ORIGIN: OnceLock<Instant> = OnceLock::new();
-        ORIGIN.get_or_init(Instant::now).elapsed().as_micros() as i64
-    }
-}
 
 const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKETS: usize = 32;
@@ -81,6 +77,8 @@ pub(crate) enum PacketKind {
 }
 pub(crate) struct Packet {
     pub bytes: Vec<u8>,
+    /// Backend-normalized monotonic microseconds, shared by this session's video
+    /// and audio. The common recorder never substitutes an arrival-time clock.
     pub timestamp_us: i64,
     pub keyframe: bool,
     pub kind: PacketKind,

@@ -1,300 +1,51 @@
-//! Pull-based binary recording delivery. IPC and muxer backpressure never run on
-//! the encoder/audio threads; stalled consumers exhaust only their bounded taps.
-use super::{audio, mf, recording_audio::SenderAudioRecording};
-use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind, Subscription};
-use crate::media::RecordingInfo;
-use crate::Result;
+//! Windows adapters for the portable recording inputs. Selection stays with the
+//! media session; recording lifetime and binary delivery stay in the common core.
+use super::{audio, mf};
+use crate::media::recording::{
+    EncodedAudioSource, EncodedRecordingTap, PcmAudioSource, RecordingAudioInputs, RecordingInputs,
+    VideoSource,
+};
+use crate::media::webrtc::SenderAudioRecording;
 use libwebrtc::peer_connection::{PeerConnection, PeerConnectionState};
-use std::sync::{mpsc::RecvTimeoutError, Arc, Mutex, Weak};
-use std::time::Duration;
+use std::sync::{Arc, Weak};
 
-struct Input {
-    tap: Arc<EncodedRecordingTap>,
-    subscription: Subscription,
-    encoded: Option<Arc<SenderAudioRecording>>,
-}
-impl Input {
-    fn new(tap: Arc<EncodedRecordingTap>) -> Result<Self> {
-        let subscription = tap.subscribe()?;
-        tap.set_active(&subscription, false, 0);
-        Ok(Self {
-            tap,
-            subscription,
-            encoded: None,
-        })
-    }
-    fn encoded(source: Arc<SenderAudioRecording>) -> Result<Self> {
-        let mut input = Self::new(source.tap.clone())?;
-        input.encoded = Some(source);
-        Ok(input)
-    }
-    fn set_active(&self, active: bool, segment: u32) {
-        self.tap.set_active(&self.subscription, active, segment);
-        if let Some(encoded) = &self.encoded {
-            encoded.set_active(active);
-        }
-    }
-}
-impl Drop for Input {
-    fn drop(&mut self) {
-        if let Some(encoded) = &self.encoded {
-            encoded.set_active(false);
-        }
-        self.tap.unsubscribe(&self.subscription);
-    }
-}
-struct State {
-    video: Input,
-    audio: Option<Input>,
-    active: bool,
-    segment: u32,
-    ended: bool,
-    closing: bool,
-}
-pub(super) struct RecordingSource {
+struct SenderVideo {
     encoder: Weak<mf::Encoder>,
+    tap: Arc<EncodedRecordingTap>,
     sender: PeerConnection,
-    state: Mutex<State>,
-    pub info: RecordingInfo,
 }
-impl RecordingSource {
-    pub fn new(
-        encoder: &Arc<mf::Encoder>,
-        sender: PeerConnection,
-        audio: Option<&audio::Loopback>,
-        encoded_audio: Option<Arc<SenderAudioRecording>>,
-    ) -> Result<Self> {
-        let encoded_audio = encoded_audio.filter(|source| audio.is_some() && source.available());
-        let encoded = encoded_audio.is_some();
-        let audio_input = if let Some(source) = encoded_audio {
-            Some(Input::encoded(source)?)
-        } else {
-            audio
-                .map(|audio| Input::new(audio.recording.clone()))
-                .transpose()?
-        };
-        Ok(Self {
+impl VideoSource for SenderVideo {
+    fn tap(&self) -> Arc<EncodedRecordingTap> {
+        self.tap.clone()
+    }
+    fn is_connected(&self) -> bool {
+        self.sender.connection_state() == PeerConnectionState::Connected
+    }
+    fn request_keyframe(&self) {
+        if let Some(encoder) = self.encoder.upgrade() {
+            encoder.request_recording_keyframe();
+        }
+    }
+}
+
+pub(super) fn inputs(
+    encoder: &Arc<mf::Encoder>,
+    sender: PeerConnection,
+    audio: Option<&audio::Loopback>,
+    encoded: Option<Arc<SenderAudioRecording>>,
+) -> RecordingInputs {
+    RecordingInputs {
+        video: Arc::new(SenderVideo {
             encoder: Arc::downgrade(encoder),
+            tap: encoder.recording.clone(),
             sender,
-            info: RecordingInfo {
-                audio: if encoded {
-                    None
-                } else {
-                    audio.map(|audio| audio.format.clone())
-                },
-                encoded_audio: encoded,
+        }),
+        audio: audio.map(|audio| RecordingAudioInputs {
+            pcm: PcmAudioSource {
+                tap: audio.recording.clone(),
+                format: audio.format.clone(),
             },
-            state: Mutex::new(State {
-                video: Input::new(encoder.recording.clone())?,
-                audio: audio_input,
-                active: false,
-                segment: 0,
-                ended: false,
-                closing: false,
-            }),
-        })
-    }
-    pub fn control(&self, active: bool, segment: u32) -> Result<()> {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if state.ended {
-            return Ok(());
-        }
-        if segment < state.segment {
-            return Err("Outdated recording segment".into());
-        }
-        if active == state.active && segment == state.segment {
-            return Ok(());
-        }
-        state.active = active;
-        state.segment = segment;
-        state.video.set_active(active, segment);
-        if let Some(audio) = &state.audio {
-            audio.set_active(active, segment);
-        }
-        drop(state);
-        if active {
-            if let Some(encoder) = self.encoder.upgrade() {
-                encoder.request_recording_keyframe();
-            }
-        }
-        Ok(())
-    }
-    pub fn read(&self) -> Vec<u8> {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let mut bytes = Vec::new();
-        if state.ended {
-            terminal(&mut bytes, None);
-            return bytes;
-        }
-        let disconnected = self.sender.connection_state() != PeerConnectionState::Connected;
-        let input_error = state.video.subscription.error().or_else(|| {
-            state
-                .audio
-                .as_ref()
-                .and_then(|audio| audio.subscription.error())
-        });
-        state.closing |= disconnected || input_error.is_some();
-        if state.closing {
-            state.video.tap.unsubscribe(&state.video.subscription);
-            if let Some(audio) = &state.audio {
-                audio.tap.unsubscribe(&audio.subscription);
-            }
-        }
-        let mut video_done = false;
-        let mut audio_done = state.audio.is_none();
-        let mut error = input_error;
-        // One IPC response remains bounded even at high bitrates. Send video
-        // before audio so the muxer can establish a keyframe's common clock first.
-        for index in 0..32 {
-            match state.video.subscription.receive(if index == 0 {
-                Duration::from_millis(40)
-            } else {
-                Duration::ZERO
-            }) {
-                Ok(packet) => {
-                    encode(&mut bytes, packet);
-                    if bytes.len() >= 1024 * 1024 {
-                        break;
-                    }
-                }
-                Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => {
-                    video_done = true;
-                    error = error.or_else(|| state.video.subscription.error());
-                    break;
-                }
-            }
-        }
-        if video_done {
-            state.closing = true;
-            if let Some(audio) = &state.audio {
-                audio.tap.unsubscribe(&audio.subscription);
-            }
-        }
-        if let Some(audio) = &state.audio {
-            for _ in 0..32 {
-                match audio.subscription.receive(Duration::ZERO) {
-                    Ok(packet) => encode(&mut bytes, packet),
-                    Err(RecvTimeoutError::Timeout) => break,
-                    Err(RecvTimeoutError::Disconnected) => {
-                        audio_done = true;
-                        error = error.or_else(|| audio.subscription.error());
-                        break;
-                    }
-                }
-            }
-        }
-        if audio_done && state.audio.is_some() {
-            state.closing = true;
-            state.video.tap.unsubscribe(&state.video.subscription);
-        }
-        if video_done && audio_done {
-            state.ended = true;
-            state.video.tap.unsubscribe(&state.video.subscription);
-            if let Some(audio) = &state.audio {
-                audio.tap.unsubscribe(&audio.subscription);
-            }
-            terminal(&mut bytes, error.as_deref());
-        }
-        bytes
-    }
-}
-
-// Fixed 36-byte LE header followed by payload. No JSON/base64 copies of media.
-fn encode(output: &mut Vec<u8>, packet: Packet) {
-    let (kind, codec, width, height, rate, channels) = match packet.kind {
-        PacketKind::Video {
-            codec,
-            width,
-            height,
-        } => (0u8, codec, width, height, 0, 0),
-        PacketKind::Audio {
-            sample_rate,
-            channels,
-        } => (1, 0, 0, 0, sample_rate, channels),
-        PacketKind::EncodedAudio {
-            codec,
-            sample_rate,
-            channels,
-            timestamp,
-            ssrc,
-        } => (3, codec as u8, timestamp, ssrc, sample_rate, channels),
-    };
-    output.extend_from_slice(&(packet.bytes.len() as u32).to_le_bytes());
-    output.extend_from_slice(&packet.segment.to_le_bytes());
-    output.extend_from_slice(&packet.timestamp_us.to_le_bytes());
-    for value in [width, height, rate, channels] {
-        output.extend_from_slice(&value.to_le_bytes());
-    }
-    output.extend_from_slice(&[kind, codec, u8::from(packet.keyframe), 0]);
-    output.extend_from_slice(&packet.bytes);
-}
-fn terminal(output: &mut Vec<u8>, error: Option<&str>) {
-    let text = error.unwrap_or("").as_bytes();
-    output.extend_from_slice(&(text.len() as u32).to_le_bytes());
-    output.extend_from_slice(&[0; 28]);
-    output.extend_from_slice(&[2, 0, 0, 0]);
-    output.extend_from_slice(text);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn native_recording_binary_keeps_opus_payload_rtp_identity_and_capture_clock() {
-        let mut data = Vec::new();
-        encode(
-            &mut data,
-            Packet {
-                bytes: vec![0xf8, 0xff, 0xfe],
-                timestamp_us: 987654321,
-                keyframe: true,
-                segment: 2,
-                kind: PacketKind::EncodedAudio {
-                    codec: crate::media::recording::EncodedAudioCodec::Opus,
-                    sample_rate: 48000,
-                    channels: 2,
-                    timestamp: u32::MAX - 960,
-                    ssrc: 42,
-                },
-            },
-        );
-        assert_eq!(data.len(), 39);
-        assert_eq!(
-            i64::from_le_bytes(data[8..16].try_into().unwrap()),
-            987654321
-        );
-        assert_eq!(
-            u32::from_le_bytes(data[16..20].try_into().unwrap()),
-            u32::MAX - 960
-        );
-        assert_eq!(u32::from_le_bytes(data[20..24].try_into().unwrap()), 42);
-        assert_eq!(u32::from_le_bytes(data[4..8].try_into().unwrap()), 2);
-        assert_eq!(&data[32..34], &[3, 1]);
-        assert_eq!(&data[36..], &[0xf8, 0xff, 0xfe]);
-    }
-    #[test]
-    fn native_recording_binary_keeps_audio_clock_format_and_terminal_reason() {
-        let mut data = Vec::new();
-        encode(
-            &mut data,
-            Packet {
-                bytes: vec![1, 2, 3, 4],
-                timestamp_us: 1234567,
-                keyframe: true,
-                kind: PacketKind::Audio {
-                    sample_rate: 48000,
-                    channels: 2,
-                },
-                segment: 3,
-            },
-        );
-        assert_eq!(data.len(), 40);
-        assert_eq!(i64::from_le_bytes(data[8..16].try_into().unwrap()), 1234567);
-        assert_eq!(u32::from_le_bytes(data[24..28].try_into().unwrap()), 48000);
-        assert_eq!(data[32], 1);
-        terminal(&mut data, Some("storage failed"));
-        assert_eq!(data[72], 2);
-        assert_eq!(&data[76..], b"storage failed");
+            encoded: encoded.map(|source| source as Arc<dyn EncodedAudioSource>),
+        }),
     }
 }
