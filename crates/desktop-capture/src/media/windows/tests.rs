@@ -6,6 +6,7 @@ use libwebrtc::{
 };
 mod latency_probe;
 mod recording;
+mod vfr;
 
 #[test]
 fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches() {
@@ -93,7 +94,6 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                 "pending".into(),
                 MediaPeer {
                     _factory: media.factory.clone(),
-                    software: true,
                     encoding: media.options.lock().unwrap().clone(),
                     connection: pc,
                     gathering: gathering.clone(),
@@ -373,9 +373,6 @@ fn negotiated_formats_switch_transports_without_replacing_the_media_source() {
                     .any(|sample| sample.codec.eq_ignore_ascii_case(codec)),
                 "Wrong codec: {stats:?}"
             );
-            if codec == "video/vp8" {
-                assert!(media.needs_steady_input());
-            }
             assert_eq!(
                 serde_json::to_value(media.options.lock().unwrap().color_space()).unwrap(),
                 original_color
@@ -959,103 +956,6 @@ fn cursor_visibility_recomposes_a_static_frame_without_losing_its_shape() {
             "cursor was not restored on the retained desktop frame"
         );
         media.close();
-    });
-}
-
-// Exercise the cached-frame path, not direct publish_frame calls: its cadence
-// determines the software encoder's initial per-frame budget after a static scene.
-#[test]
-fn software_cached_frames_keep_cadence_and_follow_live_fps() {
-    use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
-
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let media = MediaSession::new(MediaOptions {
-            encoder: "software".into(),
-            codec: Some("video/h264".into()),
-            frame_rate: 20,
-            max_width: 640,
-            max_height: 480,
-            max_bitrate: 1_000_000,
-            ..Default::default()
-        })
-        .unwrap();
-        let receiver = connect(&media, "cached", true).await.unwrap();
-        // Seed one real capture arrival. Writing `latest` directly skips the
-        // publication sequence and wakeup that arm cached-frame scheduling.
-        let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
-        let pixels = [0u8, 0, 0, 255].repeat(640 * 480);
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: 640,
-            Height: 480,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
-            Usage: D3D11_USAGE_DEFAULT,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            ..Default::default()
-        };
-        let data = D3D11_SUBRESOURCE_DATA {
-            pSysMem: pixels.as_ptr().cast(),
-            SysMemPitch: 640 * 4,
-            SysMemSlicePitch: 0,
-        };
-        let mut texture = None;
-        unsafe { device.CreateTexture2D(&desc, Some(&data), Some(&mut texture)) }.unwrap();
-        media
-            .frame(TextureFrame {
-                device: &device,
-                context: &context,
-                texture: &texture.unwrap(),
-                rotation: Rotation::Identity,
-                cursor: None,
-            })
-            .unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while decoded(&receiver).await < 5 {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .unwrap();
-        assert_eq!(media.latest_sequence.load(Ordering::Acquire), 1);
-        let before = decoded(&receiver).await;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        let fast = decoded(&receiver).await - before;
-        let stats = media.stats("cached").await.unwrap();
-        assert_eq!(stats.len(), 1);
-        assert!(stats[0].codec.eq_ignore_ascii_case("video/h264"));
-        assert!(stats[0].encode_frames > 0 && stats[0].encode_seconds > 0.0);
-        assert!(
-            fast >= 20,
-            "Static encoder input fell below its selected cadence: {fast}"
-        );
-        media
-            .update_video_settings(VideoSettings {
-                max_width: 640,
-                max_height: 480,
-                frame_rate: 5,
-                max_bitrate: 500_000,
-                degradation_preference: "maintain-resolution".into(),
-            })
-            .unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let before = decoded(&receiver).await;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        let slow = decoded(&receiver).await - before;
-        assert!(
-            (6..=13).contains(&slow),
-            "Cached frames ignored the live FPS limit: {slow}"
-        );
-        // Both cadence measurements reused the same captured frame, including
-        // after the settings update; no new arrival kept the worker awake.
-        assert_eq!(media.latest_sequence.load(Ordering::Acquire), 1);
-        assert_eq!(media.peers.lock().unwrap().len(), 1);
-        media.close();
-        assert!(media.latest.lock().unwrap().is_none());
     });
 }
 

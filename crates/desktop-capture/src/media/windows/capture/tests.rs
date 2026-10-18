@@ -15,18 +15,18 @@ fn pending_gpu_work_waits_for_an_event_or_its_watchdog() {
         dirty: true,
         // A full queue must not retry at an already elapsed frame deadline.
         has_capacity: false,
-        repeat: true,
+        repeat: Some(now),
         ..Default::default()
     };
-    assert_eq!(work.wait(&cadence, now, true), Some(READBACK_TIMEOUT));
+    assert_eq!(work.wait(&cadence, now), Some(READBACK_TIMEOUT));
     assert_eq!(
-        work.wait(&cadence, now + READBACK_TIMEOUT, true),
+        work.wait(&cadence, now + READBACK_TIMEOUT),
         Some(Duration::ZERO)
     );
     work.dirty = false;
     work.has_capacity = true;
-    assert_eq!(work.wait(&cadence, now, true), Some(READBACK_TIMEOUT));
-    assert_eq!(Work::default().wait(&cadence, now, true), None);
+    assert_eq!(work.wait(&cadence, now), Some(READBACK_TIMEOUT));
+    assert_eq!(Work::default().wait(&cadence, now), None);
 }
 
 #[test]
@@ -41,19 +41,49 @@ fn pending_gpu_work_preserves_the_next_frame_deadline() {
         has_capacity: true,
         ..Default::default()
     };
-    assert_eq!(work.wait(&cadence, now, false), Some(interval));
+    assert_eq!(work.wait(&cadence, now), Some(interval));
     work.pending = Some(now + Duration::from_millis(1));
-    assert_eq!(
-        work.wait(&cadence, now, false),
-        Some(Duration::from_millis(1))
-    );
+    assert_eq!(work.wait(&cadence, now), Some(Duration::from_millis(1)));
     work.pending = None;
     work.dirty = false;
-    work.repeat = true;
-    assert_eq!(work.wait(&cadence, now, true), Some(interval));
+    work.repeat = Some(now + STATIC_REFRESH_INTERVAL);
+    assert_eq!(work.wait(&cadence, now), Some(STATIC_REFRESH_INTERVAL));
+}
+
+#[test]
+fn static_refresh_deadline_survives_wakeups_and_respects_low_fps() {
+    let now = Instant::now();
+    let mut cadence = CaptureCadence::new(Duration::from_millis(10), now);
+    cadence.complete(Some(now));
+    let work = Work {
+        repeat: Some(now + STATIC_REFRESH_INTERVAL),
+        ..Default::default()
+    };
+    // Settings/preview notifications neither repeat early nor postpone refresh.
     assert_eq!(
-        work.wait(&cadence, now, false),
+        work.wait(&cadence, now + Duration::from_millis(400)),
+        Some(Duration::from_millis(100))
+    );
+    assert_eq!(
+        work.wait(&cadence, now + STATIC_REFRESH_INTERVAL),
+        Some(Duration::ZERO)
+    );
+    cadence.set_interval(Duration::from_secs(1), now);
+    cadence.complete(Some(now));
+    assert_eq!(
+        work.wait(&cadence, now + STATIC_REFRESH_INTERVAL),
         Some(Duration::from_millis(500))
+    );
+    // A real update uses the FPS cap, not the slower retained-frame deadline.
+    cadence.set_interval(Duration::from_millis(10), now);
+    let changed = Work {
+        dirty: true,
+        has_capacity: true,
+        ..work
+    };
+    assert_eq!(
+        changed.wait(&cadence, now + Duration::from_millis(20)),
+        Some(Duration::ZERO)
     );
 }
 

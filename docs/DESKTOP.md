@@ -658,9 +658,9 @@ and preserves the latest
 source when all slots are busy, including the final update before a static scene.
 Readback timing includes asynchronous GPU wait; overlapped stage times are not a
 throughput estimate. Source size/device changes preserve in-flight ownership,
-and stopping releases pending slots without publishing late frames. Software
-input follows an absolute cadence; hardware input skips missed deadlines and
-starts promptly after idle.
+and stopping releases pending slots without publishing late frames. Software and
+hardware share variable-frame-rate scheduling: the selected FPS caps new content,
+missed deadlines do not accumulate a burst, and new content starts promptly after idle.
 Hardware MFT input/output readiness wakes its worker through
 Media Foundation events; there is no second encoder FPS gate or output polling
 timer. Each encoder keeps only its latest pending input. Reconfiguration and
@@ -669,12 +669,17 @@ WGC's minimum update interval, capture requests updates at a 1 ms minimum interv
 and the worker enforces the selected output rate; older Windows versions retain
 the OS default. The worker preserves the latest pending frame without
 losing the final update when a screen becomes static. GPU mapping/conversion runs
-outside the async executor. Hardware encoding repeats static content at most twice
-per second. Software encoding reuses the latest converted pixels at the selected
-cadence: sparse input otherwise inflates its per-frame budget when motion resumes.
-This does not repeat GPU readback or pixel conversion. Software H.264 uses the
-real-time rate-control preset. Its single-stream OpenH264 encoder delegates frame
-dropping to WebRTC rather than also skipping consecutive frames inside the codec
+outside the async executor. Both encoding paths refresh static content at most
+twice per second, also respecting lower FPS limits. The shared refresh deadline
+survives settings and preview notifications; a newly attached viewer receives
+retained pixels without waiting for the desktop to change. Refreshing does not
+repeat GPU readback or pixel conversion. The shared WebRTC encoder adapter keeps
+the configured FPS for per-frame budgets during sparse input for H.264, VP8,
+VP9 and AV1. Live FPS changes update that budget before the next encode without
+resetting the encoder, raising bitrate allocations or disabling transport and
+encoder frame limits. Software H.264 uses the real-time rate-control preset. Its
+single-stream OpenH264 encoder delegates frame dropping to WebRTC rather than
+also skipping consecutive frames inside the codec
 after large scene changes. OpenH264 still controls quantization; WebRTC retains
 its frame dropper, bitrate adjustment, congestion control and pacing. Limited
 bandwidth can still reduce frame rate or quality according to the selected

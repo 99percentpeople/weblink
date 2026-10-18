@@ -17,6 +17,8 @@ use std::{
 mod tests;
 
 const READBACK_TIMEOUT: Duration = Duration::from_secs(2);
+// Refresh late viewers and decoder recovery without a backend-specific FPS loop.
+const STATIC_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Default)]
 pub(super) struct Conversion {
@@ -45,18 +47,18 @@ pub(super) struct Work {
     pub dirty: bool,
     pub has_capacity: bool,
     pub submitted_at: Option<Instant>,
-    pub repeat: bool,
+    pub repeat: Option<Instant>,
 }
 
 impl Work {
-    fn wait(&self, cadence: &CaptureCadence, now: Instant, steady_input: bool) -> Option<Duration> {
+    fn wait(&self, cadence: &CaptureCadence, now: Instant) -> Option<Duration> {
         let scheduled = if self.dirty && self.has_capacity {
             Some(cadence.remaining(now))
-        } else if self.pending.is_none() && self.repeat {
-            Some(if steady_input {
-                cadence.remaining(now)
-            } else {
-                Duration::from_millis(500)
+        } else if self.pending.is_none() {
+            self.repeat.map(|deadline| {
+                deadline
+                    .saturating_duration_since(now)
+                    .max(cadence.remaining(now))
             })
         } else {
             None
@@ -97,7 +99,6 @@ impl MediaSession {
                     continue;
                 }
                 let now = Instant::now();
-                let steady_input = session.needs_steady_input();
                 cadence.set_interval(session.frame_interval(), now);
                 let admit = cadence.ready(now);
                 // One worker operation at a time. GPU events never wait in Map;
@@ -119,7 +120,7 @@ impl MediaSession {
                     }
                 };
                 cadence.complete(work.submitted_at);
-                if let Some(wait) = work.wait(&cadence, Instant::now(), steady_input) {
+                if let Some(wait) = work.wait(&cadence, Instant::now()) {
                     let _ = tokio::time::timeout(wait, notify.notified()).await;
                 } else {
                     notify.notified().await;
@@ -284,7 +285,9 @@ impl MediaSession {
             dirty: readback.dirty,
             has_capacity: conversion.pending.len() < self.readback_buffers,
             submitted_at,
-            repeat: self.latest_sequence.load(Ordering::Acquire) > 0,
+            repeat: (self.latest_sequence.load(Ordering::Acquire) > 0).then(|| {
+                *self.last_sent.lock().unwrap_or_else(|e| e.into_inner()) + STATIC_REFRESH_INTERVAL
+            }),
         };
         drop(readback);
         if admit && !published && work.pending.is_none() && !work.dirty {
@@ -294,13 +297,12 @@ impl MediaSession {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone();
             let mut sent = self.last_sent.lock().unwrap_or_else(|e| e.into_inner());
-            if !self.closed.load(Ordering::Acquire)
-                && (self.needs_steady_input() || sent.elapsed() >= Duration::from_millis(500))
-            {
+            if !self.closed.load(Ordering::Acquire) && sent.elapsed() >= STATIC_REFRESH_INTERVAL {
                 if let Some(frame) = latest.as_ref() {
                     work.submitted_at = Some(Instant::now());
                     self.publish_frame_at(frame, None);
                     *sent = Instant::now();
+                    work.repeat = Some(*sent + STATIC_REFRESH_INTERVAL);
                 }
             }
         }

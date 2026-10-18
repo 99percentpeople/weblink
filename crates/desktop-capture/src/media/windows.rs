@@ -83,7 +83,6 @@ pub struct MediaSession {
 struct MediaPeer {
     // Keep the factory that supplied this peer's codec implementation alive.
     _factory: PeerConnectionFactory,
-    software: bool,
     encoding: MediaOptions,
     connection: PeerConnection,
     gathering: Arc<ice::Gathering>,
@@ -234,6 +233,7 @@ impl MediaSession {
             encoder_id.is_some() && options.codec.as_deref() == Some("video/h265"),
         )
         .map_err(|e| e.to_string())?;
+        super::webrtc::configure_software_vfr(&factory, options.frame_rate)?;
         // Bundled OpenH264's screen-content preset can overshoot the short-term
         // budget on scene cuts. Its real-time preset responds to rate control;
         // resolution/degradation and screen identity are still set explicitly.
@@ -322,6 +322,10 @@ impl MediaSession {
             }
         }
         let resize = (current.max_width, current.max_height) != (next.max_width, next.max_height);
+        super::webrtc::configure_software_vfr(&self.factory, next.frame_rate)?;
+        for peer in peers.values() {
+            super::webrtc::configure_software_vfr(&peer._factory, next.frame_rate)?;
+        }
         *current = next;
         drop(peers);
         drop(current);
@@ -711,16 +715,6 @@ impl MediaSession {
         .map(Some)
     }
 
-    fn needs_steady_input(&self) -> bool {
-        self.encoder_id.is_none()
-            || self
-                .peers
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .values()
-                .any(|peer| peer.software)
-    }
-
     #[allow(clippy::too_many_arguments)]
     async fn create_offer(
         &self,
@@ -831,6 +825,7 @@ impl MediaSession {
                 degradation_preference: current.degradation_preference.clone(),
             }
             .apply(&options)?;
+            super::webrtc::configure_software_vfr(&factory, options.frame_rate)?;
             // Preview keeps its own congestion feedback and encoder, at the selected
             // resolution. Use the selected hardware encoder locally too; forcing a
             // software preview can trigger CPU adaptation to tiny frame dimensions.
@@ -966,7 +961,6 @@ impl MediaSession {
                     id.clone(),
                     MediaPeer {
                         _factory: factory.clone(),
-                        software: !pre_encoded,
                         encoding: options.clone(),
                         connection: pc.clone(),
                         gathering: gathering.clone(),
