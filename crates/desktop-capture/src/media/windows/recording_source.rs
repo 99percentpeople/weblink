@@ -1,6 +1,6 @@
 //! Pull-based binary recording delivery. IPC and muxer backpressure never run on
 //! the encoder/audio threads; stalled consumers exhaust only their bounded taps.
-use super::{audio, mf};
+use super::{audio, mf, recording_audio::SenderAudioRecording};
 use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind, Subscription};
 use crate::media::RecordingInfo;
 use crate::Result;
@@ -11,16 +11,35 @@ use std::time::Duration;
 struct Input {
     tap: Arc<EncodedRecordingTap>,
     subscription: Subscription,
+    encoded: Option<Arc<SenderAudioRecording>>,
 }
 impl Input {
     fn new(tap: Arc<EncodedRecordingTap>) -> Result<Self> {
         let subscription = tap.subscribe()?;
         tap.set_active(&subscription, false, 0);
-        Ok(Self { tap, subscription })
+        Ok(Self {
+            tap,
+            subscription,
+            encoded: None,
+        })
+    }
+    fn encoded(source: Arc<SenderAudioRecording>) -> Result<Self> {
+        let mut input = Self::new(source.tap.clone())?;
+        input.encoded = Some(source);
+        Ok(input)
+    }
+    fn set_active(&self, active: bool, segment: u32) {
+        self.tap.set_active(&self.subscription, active, segment);
+        if let Some(encoded) = &self.encoded {
+            encoded.set_active(active);
+        }
     }
 }
 impl Drop for Input {
     fn drop(&mut self) {
+        if let Some(encoded) = &self.encoded {
+            encoded.set_active(false);
+        }
         self.tap.unsubscribe(&self.subscription);
     }
 }
@@ -43,18 +62,31 @@ impl RecordingSource {
         encoder: &Arc<mf::Encoder>,
         sender: PeerConnection,
         audio: Option<&audio::Loopback>,
+        encoded_audio: Option<Arc<SenderAudioRecording>>,
     ) -> Result<Self> {
+        let encoded_audio = encoded_audio.filter(|source| audio.is_some() && source.available());
+        let encoded = encoded_audio.is_some();
+        let audio_input = if let Some(source) = encoded_audio {
+            Some(Input::encoded(source)?)
+        } else {
+            audio
+                .map(|audio| Input::new(audio.recording.clone()))
+                .transpose()?
+        };
         Ok(Self {
             encoder: Arc::downgrade(encoder),
             sender,
             info: RecordingInfo {
-                audio: audio.map(|audio| audio.format.clone()),
+                audio: if encoded {
+                    None
+                } else {
+                    audio.map(|audio| audio.format.clone())
+                },
+                encoded_audio: encoded,
             },
             state: Mutex::new(State {
                 video: Input::new(encoder.recording.clone())?,
-                audio: audio
-                    .map(|audio| Input::new(audio.recording.clone()))
-                    .transpose()?,
+                audio: audio_input,
                 active: false,
                 segment: 0,
                 ended: false,
@@ -75,12 +107,9 @@ impl RecordingSource {
         }
         state.active = active;
         state.segment = segment;
-        state
-            .video
-            .tap
-            .set_active(&state.video.subscription, active, segment);
+        state.video.set_active(active, segment);
         if let Some(audio) = &state.audio {
-            audio.tap.set_active(&audio.subscription, active, segment);
+            audio.set_active(active, segment);
         }
         drop(state);
         if active {
@@ -115,7 +144,7 @@ impl RecordingSource {
         let mut audio_done = state.audio.is_none();
         let mut error = input_error;
         // One IPC response remains bounded even at high bitrates. Send video
-        // before PCM so the muxer can establish a keyframe's common clock first.
+        // before audio so the muxer can establish a keyframe's common clock first.
         for index in 0..32 {
             match state.video.subscription.receive(if index == 0 {
                 Duration::from_millis(40)
@@ -183,6 +212,13 @@ fn encode(output: &mut Vec<u8>, packet: Packet) {
             sample_rate,
             channels,
         } => (1, 0, 0, 0, sample_rate, channels),
+        PacketKind::EncodedAudio {
+            codec,
+            sample_rate,
+            channels,
+            timestamp,
+            ssrc,
+        } => (3, codec as u8, timestamp, ssrc, sample_rate, channels),
     };
     output.extend_from_slice(&(packet.bytes.len() as u32).to_le_bytes());
     output.extend_from_slice(&packet.segment.to_le_bytes());
@@ -204,6 +240,39 @@ fn terminal(output: &mut Vec<u8>, error: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_recording_binary_keeps_opus_payload_rtp_identity_and_capture_clock() {
+        let mut data = Vec::new();
+        encode(
+            &mut data,
+            Packet {
+                bytes: vec![0xf8, 0xff, 0xfe],
+                timestamp_us: 987654321,
+                keyframe: true,
+                segment: 2,
+                kind: PacketKind::EncodedAudio {
+                    codec: crate::media::recording::EncodedAudioCodec::Opus,
+                    sample_rate: 48000,
+                    channels: 2,
+                    timestamp: u32::MAX - 960,
+                    ssrc: 42,
+                },
+            },
+        );
+        assert_eq!(data.len(), 39);
+        assert_eq!(
+            i64::from_le_bytes(data[8..16].try_into().unwrap()),
+            987654321
+        );
+        assert_eq!(
+            u32::from_le_bytes(data[16..20].try_into().unwrap()),
+            u32::MAX - 960
+        );
+        assert_eq!(u32::from_le_bytes(data[20..24].try_into().unwrap()), 42);
+        assert_eq!(u32::from_le_bytes(data[4..8].try_into().unwrap()), 2);
+        assert_eq!(&data[32..34], &[3, 1]);
+        assert_eq!(&data[36..], &[0xf8, 0xff, 0xfe]);
+    }
     #[test]
     fn native_recording_binary_keeps_audio_clock_format_and_terminal_reason() {
         let mut data = Vec::new();

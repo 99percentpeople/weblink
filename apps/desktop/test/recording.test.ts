@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { RECORDING_AUDIO_CODECS } from "@weblink/platform";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { subscribeNativeRecording } from "../src/recording";
 function deferred<T>() {
@@ -26,13 +27,16 @@ function packet(kind: number, segment = 1, codec = 2) {
   view.setUint8(34, 1);
   return data;
 }
-function fixture() {
+function fixture(encodedAudio = false) {
   const reads: ReturnType<typeof deferred<ArrayBuffer>>[] =
     [];
   const ipc = vi.fn((command: string) => {
     if (command === "capture_recording_open")
       return {
-        audio: { sampleRate: 48000, channelCount: 2 },
+        audio: encodedAudio
+          ? null
+          : { sampleRate: 48000, channelCount: 2 },
+        encodedAudio,
       };
     if (command === "capture_recording_read") {
       const read = deferred<ArrayBuffer>();
@@ -97,6 +101,86 @@ it("delivers native HEVC and PCM on one clock with only one binary read in fligh
         command === "capture_close_peer",
     ),
   ).toBe(false);
+});
+it.each(RECORDING_AUDIO_CODECS)(
+  "copies sender $codec with the video clock, isolates pause and drains the final packet",
+  async (format) => {
+    const sound = (segment = 1) => {
+      const data = packet(3, segment, format.id);
+      const view = new DataView(data);
+      view.setUint32(24, format.sampleRate, true);
+      view.setUint32(28, format.channels, true);
+      return data;
+    };
+    const f = fixture(true);
+    const frame = vi.fn(),
+      encodedAudio = vi.fn(),
+      audio = vi.fn(),
+      ended = vi.fn();
+    const subscription = (await subscribeNativeRecording(
+      "source",
+      { frame, encodedAudio, audio, ended },
+    ))!;
+    expect(subscription.encodedAudio).toBe(true);
+    expect(subscription.audioFormat).toBeUndefined();
+    subscription.resume();
+    await flush();
+    const batch = new Uint8Array(80);
+    batch.set(new Uint8Array(packet(0)));
+    batch.set(new Uint8Array(sound()), 40);
+    f.reads[0].resolve(batch.buffer);
+    await flush();
+    expect(frame).toHaveBeenCalledWith(
+      expect.objectContaining({ clockTime: 1234.567 }),
+    );
+    expect(encodedAudio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clockTime: 1234.567,
+        timestamp: 640,
+        ssrc: 360,
+        mimeType: format.mimeType,
+        sampleRate: format.sampleRate,
+        clockRate: format.clockRate,
+        channelCount: format.channels,
+        segment: 1,
+      }),
+    );
+    subscription.pause();
+    await flush();
+    f.reads[1].resolve(sound());
+    await flush();
+    expect(encodedAudio).toHaveBeenCalledOnce();
+    subscription.resume();
+    await flush();
+    const stopping = subscription.stop();
+    expect(subscription.stop()).toBe(stopping);
+    f.reads[2].resolve(sound(2));
+    await stopping;
+    expect(encodedAudio).toHaveBeenCalledTimes(2);
+    expect(audio).not.toHaveBeenCalled();
+    expect(ended).not.toHaveBeenCalled();
+    expect(f.ipc.mock.calls.at(-1)?.[0]).toBe(
+      "capture_recording_close",
+    );
+  },
+);
+it("can explicitly reopen PCM after an encoded preparation failure", async () => {
+  const f = fixture();
+  const subscription = (await subscribeNativeRecording(
+    "source",
+    { frame() {}, ended() {} },
+    undefined,
+    { encodedAudio: false },
+  ))!;
+  expect(f.ipc).toHaveBeenCalledWith(
+    "capture_recording_open",
+    expect.objectContaining({ encodedAudio: false }),
+  );
+  expect(subscription.encodedAudio).toBe(false);
+  expect(subscription.audioFormat?.sampleRate).toBe(48000);
+  const stopping = subscription.stop();
+  f.reads[0]?.resolve(new ArrayBuffer(0));
+  await stopping;
 });
 it("ignores stale pause/resume segments and drains an accepted callback before closing", async () => {
   const f = fixture();

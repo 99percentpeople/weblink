@@ -428,7 +428,7 @@ may select concrete infrastructure implementations.
   - `recording-service.ts`: owns one recorder and a continuous VFS writer whose
     mount is fixed when the draft is created. Browser sender/receiver transforms and native
     recording adapters implement the same `EncodedMediaSource` contract in
-    `@weblink/platform`: encoded video access units, optional encoded Opus or captured PCM audio,
+    `@weblink/platform`: encoded video access units, optional encoded Opus/G.722/PCMU/PCMA or captured PCM audio,
     pause/resume segments and subscription-only cleanup. Browser transforms stay
     installed for the RTP endpoint lifetime; stopping recording only stops copying.
     Ordinary meeting and native-screen receive connections expose selected tracks
@@ -437,17 +437,23 @@ may select concrete infrastructure implementations.
     receiver keyframe metadata omits dimensions, existing inbound decode statistics
     provide them; recording never opens a decoder to discover the size.
     Copies are bounded by bytes and packet count independently of network forwarding.
-    A single selected Opus track can be muxed without an audio encoder. Separate
+    A single selected Opus, G.722, PCMU or PCMA track can be muxed without an audio encoder. Separate
     audio/video RTP origins are aligned with a shared capture clock or the receiver's
-    RTP/delivery-time mapping, pinned for each pause/resume segment. Missing clock
-    information, unsupported audio codecs, or multiple tracks retain the audio-mix
+    RTP/delivery-time mapping, pinned for each pause/resume segment. G.722 has
+    an 8 kHz RTP clock but 16 kHz decoded samples; both rates cross the shared
+    boundary explicitly. The pinned Mediabunny patch adds Matroska A_MS/ACM
+    muxing/demuxing for these legacy codecs without adding an encoder/decoder.
+    Preparation waits within its existing deadline for the first valid receiver
+    audio delivery clock. Missing clock information, unsupported audio codecs,
+    or multiple tracks retain the audio-mix
     fallback; no audio track is silently omitted. Only matching tracks from the
     same connection are paired. Receiver keyframe requests never alter sender rate control.
     Preparation keeps a bounded prefix beginning with the validated keyframe;
     starting consumes it without a second PLI that could be rate-limited by WebRTC.
     `recording-encoded.ts` muxes existing VP8, VP9, AV1, H.264 and H.265 video with
-    the selected source's audio. Automatic output uses MP4 for AVC/HEVC and MKV
-    for other supported codecs, with parameter-set validation and Annex B
+    the selected source's audio. Automatic output uses MKV for G.722/PCMU/PCMA
+    to preserve their original payloads; otherwise AVC/HEVC uses MP4 and other
+    supported video uses MKV, with parameter-set validation and Annex B
     conversion delegated to the muxer. No second video encoder or
     decoder is required by this path. Unsupported bitstreams, missing keyframes,
     spatial layers, unavailable APIs and unavailable audio encoders fall back
@@ -457,8 +463,9 @@ may select concrete infrastructure implementations.
     supporting browsers can pass through encoded frames. The actual output sets
     the final extension and receives duration/seek metadata.
     The recording container preference defaults to automatic and is fixed at start.
-    Automatic and explicit MKV/MP4 selections preserve codecs: sender frames go directly to the
-    selected muxer, while MediaRecorder chunks pass through bounded streaming
+    Sender frames go directly to the selected muxer. Explicit MP4 with G.722/PCMU/PCMA
+    retries the existing audio-encoding fallback while retaining video reuse.
+    MediaRecorder chunks pass through bounded streaming
     remuxing. Conversion must copy all tracks without introducing a decoder or
     encoder; an unsupported track fails rather than silently losing audio.
     MKV's AVC/HEVC configuration is derived from one keyframe using the common
@@ -471,15 +478,20 @@ may select concrete infrastructure implementations.
     H.264/H.265 sender. It creates neither another native encoder nor a local peer.
     The original transport receives each access unit before the recording tap;
     capture and encoder threads never perform recording IPC, muxing or file I/O.
-    The existing selected system-audio capture supplies muted-or-live PCM after
-    delivery to WebRTC. Its WASAPI timestamp and video timestamps map onto one
-    monotonic clock. Audio is encoded separately as Opus by the shared muxer path.
+    Audio first copies supported encoded payloads from that same sender, after encoding and before RTP
+    packetization. Its pass-through observer is installed before negotiation;
+    recording pause/stop only disables copies. WASAPI capture timestamps survive
+    audio encoding and share WebRTC's monotonic clock with native video.
+    Unsupported audio or unavailable capture clocks during preparation release
+    the subscription and retry with the existing muted-or-live PCM tap. Only
+    that fallback encodes audio as Opus through the shared muxer path.
     One binary read may be in flight; queue overflow terminates recording without
     changing the original sender. Unsupported native sources retain the local
     receiver/MediaRecorder fallback, including real source audio.
     Each resume waits for a keyframe and removes paused time from both tracks.
-    Sender disconnect or codec/configuration changes finish the current file;
-    incompatible streams are never spliced together. Stop drains accepted packets
+    Sender disconnect or video configuration changes finish the current file;
+    incompatible audio formats or missing clocks stop recording with an error.
+    Incompatible streams are never spliced together. Stop drains accepted packets
     and final muxer writes, then applies bounded metadata patches through VFS close.
     Recording never stops the meeting's borrowed video/audio tracks.
   - `ice-server-diagnostics.ts`: coordinates STUN/TURN availability probes behind

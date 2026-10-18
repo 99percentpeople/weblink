@@ -1,5 +1,114 @@
 use super::*;
 
+#[test]
+#[ignore = "Requires a Windows H.264 hardware encoder; run on a desktop GPU"]
+fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_streams() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let hardware = mf::detect().unwrap().into_iter()
+            .find(|encoder| encoder.codecs.contains(&"video/h264".into()))
+            .expect("This integration test requires a Windows H.264 hardware encoder");
+        for audio_codec in ["audio/opus", "audio/g722", "audio/pcmu", "audio/pcma"] {
+        let media = MediaSession::with_audio_factory(MediaOptions {
+            encoder: hardware.id.clone(), codec: Some("video/h264".into()),
+            audio: true, audio_codec: Some(audio_codec.into()),
+            frame_rate: 30, max_width: 640, max_height: 360, max_bitrate: 2_000_000,
+            ..Default::default()
+        }, |rate, channels, _| audio::Loopback::synthetic(rate, channels)).unwrap();
+        let remote = connect(&media, "remote", false).await.unwrap();
+        async fn pump(media: &MediaSession, count: u32) {
+            use libwebrtc::audio_frame::AudioFrame;
+            use std::borrow::Cow;
+            let capture = media.audio.as_ref().unwrap();
+            let rate = capture.format.sample_rate;
+            let channels = capture.format.channel_count;
+            for n in 0..count {
+                let samples: Vec<_> = (0..rate / 100).flat_map(|i| {
+                    let value = ((f64::from(n * rate / 100 + i) * 440.0 * std::f64::consts::TAU / rate as f64).sin() * 10000.0) as i16;
+                    std::iter::repeat_n(value, channels as usize)
+                }).collect();
+                audio::deliver(&capture.source, &capture.recording, &AudioFrame {
+                    data: Cow::Borrowed(&samples), sample_rate: rate, num_channels: channels, samples_per_channel: rate / 100,
+                }, crate::media::recording::clock_us()).unwrap();
+                if n % 3 == 0 {
+                    let mut frame = I420Buffer::new_black(640, 360);
+                    frame.data_mut().0.fill(40 + (n % 160) as u8);
+                    media.publish_frame(&VideoFrame::new(VideoRotation::VideoRotation0, frame));
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        async fn drain(media: Arc<MediaSession>) -> Vec<u8> {
+            let start = Instant::now();
+            let mut result = Vec::new();
+            while start.elapsed() < Duration::from_millis(1250) {
+                let media = media.clone();
+                result.extend(tokio::task::spawn_blocking(move || media.read_recording("audio").unwrap()).await.unwrap());
+            }
+            result
+        }
+        fn packets(data: &[u8], kind: u8, segment: u32, codec: crate::media::recording::EncodedAudioCodec) -> usize {
+            let mut at = 0;
+            let mut count = 0;
+            while at < data.len() {
+                let size = u32::from_le_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+                assert_ne!(data[at + 32], 2, "Unexpected source termination: {}", String::from_utf8_lossy(&data[at + 36..at + 36 + size]));
+                assert_eq!(u32::from_le_bytes(data[at + 4..at + 8].try_into().unwrap()), segment);
+                if data[at + 32] == kind {
+                    if kind == 3 {
+                        assert_eq!(data[at + 33], codec as u8);
+                        assert_eq!(u32::from_le_bytes(data[at + 24..at + 28].try_into().unwrap()), codec.sample_rate());
+                    }
+                    count += 1;
+                }
+                at += 36 + size;
+            }
+            count
+        }
+        async fn sound_received(remote: &Receiver) -> u64 {
+            remote.pc.get_stats().await.unwrap().into_iter().filter_map(|stat| match stat {
+                RtcStats::InboundRtp(s) => Some(s.inbound.total_samples_received), _ => None,
+            }).sum()
+        }
+        let format = crate::media::recording::EncodedAudioCodec::from_rtp(audio_codec, if audio_codec == "audio/opus" {48000} else {8000}, 1).unwrap();
+        pump(&media, 80).await;
+        for encoded in [true, false, true] {
+            let info = media.open_recording("audio".into(), encoded).unwrap().unwrap();
+            assert_eq!(info.encoded_audio, encoded, "Sender audio should be usable: {audio_codec}");
+            assert_eq!(info.audio.is_some(), !encoded);
+            let before = decoded(&remote).await;
+            let sound_before = sound_received(&remote).await;
+            media.control_recording("audio", true, 1).unwrap();
+            let (_, first) = tokio::join!(pump(&media, 110), drain(media.clone()));
+            let kind = if encoded { 3 } else { 1 };
+            let count = packets(&first, kind, 1, format);
+            assert!(count > 10, "Missing audio packets: {count}");
+            assert!(decoded(&remote).await > before + 10);
+            assert!(sound_received(&remote).await > sound_before + 1000);
+            media.control_recording("audio", false, 1).unwrap();
+            pump(&media, 80).await;
+            assert!(media.read_recording("audio").unwrap().is_empty());
+            media.control_recording("audio", true, 2).unwrap();
+            let (_, resumed) = tokio::join!(pump(&media, 110), drain(media.clone()));
+            assert!(packets(&resumed, kind, 2, format) > 10);
+            assert_eq!(media.peers.lock().unwrap().len(), 1);
+            assert_eq!(media.hardware.lock().unwrap().len(), 1);
+            // A stalled recording must not stall either original media track.
+            let sound_before = sound_received(&remote).await;
+            let before = decoded(&remote).await;
+            pump(&media, 100).await;
+            assert!(sound_received(&remote).await > sound_before + 1000);
+            assert!(decoded(&remote).await > before + 10);
+            media.close_recording("audio");
+            assert!(!media.audio.as_ref().unwrap().recording.has_subscriber());
+            assert!(!media.peers.lock().unwrap()["remote"].recording_audio.as_ref().unwrap().tap.has_subscriber());
+            pump(&media, 20).await;
+            eprintln!("Native {audio_codec} reuse={encoded}: {count} first-segment packets; original video/audio kept receiving through pause and stalled recording");
+        }
+        media.close();
+        }
+    });
+}
+
 async fn frames(media: &MediaSession, count: u32) {
     let mut cadence = tokio::time::interval(Duration::from_millis(33));
     cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -157,7 +266,10 @@ fn native_recording_direct_packets_keep_the_original_sender_and_pause_queue_isol
         let remote = connect(&media, "remote", false).await.unwrap();
         frames(&media, 45).await;
         let before = decoded(&remote).await;
-        assert!(media.open_recording("direct".into()).unwrap().is_some());
+        assert!(media
+            .open_recording("direct".into(), true)
+            .unwrap()
+            .is_some());
         media.control_recording("direct", true, 1).unwrap();
         async fn drain(media: Arc<MediaSession>, duration: Duration) -> Vec<u8> {
             let start = Instant::now();

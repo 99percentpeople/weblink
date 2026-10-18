@@ -3,23 +3,81 @@
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError},
-    Arc, Mutex, OnceLock,
+    Arc, Mutex,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(not(windows))]
+use std::{sync::OnceLock, time::Instant};
 
 /// Shared monotonic clock for encoded video and captured audio.
 pub(crate) fn clock_us() -> i64 {
-    static ORIGIN: OnceLock<Instant> = OnceLock::new();
-    ORIGIN.get_or_init(Instant::now).elapsed().as_micros() as i64
+    #[cfg(windows)]
+    return libwebrtc::audio_source::native::NativeAudioSource::capture_clock_us();
+    #[cfg(not(windows))]
+    {
+        static ORIGIN: OnceLock<Instant> = OnceLock::new();
+        ORIGIN.get_or_init(Instant::now).elapsed().as_micros() as i64
+    }
 }
 
 const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKETS: usize = 32;
 
+/// Stable codec IDs in the native recording IPC header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum EncodedAudioCodec {
+    Opus = 1,
+    G722 = 2,
+    Pcmu = 3,
+    Pcma = 4,
+}
+impl EncodedAudioCodec {
+    pub fn mime_type(self) -> &'static str {
+        match self {
+            Self::Opus => "audio/opus",
+            Self::G722 => "audio/g722",
+            Self::Pcmu => "audio/pcmu",
+            Self::Pcma => "audio/pcma",
+        }
+    }
+    pub fn sample_rate(self) -> u32 {
+        match self {
+            Self::Opus => 48000,
+            Self::G722 => 16000,
+            Self::Pcmu | Self::Pcma => 8000,
+        }
+    }
+    pub fn from_rtp(mime: &str, clock_rate: u64, channels: u32) -> Option<Self> {
+        [Self::Opus, Self::G722, Self::Pcmu, Self::Pcma]
+            .into_iter()
+            .find(|codec| {
+                let opus = *codec == Self::Opus;
+                mime.eq_ignore_ascii_case(codec.mime_type())
+                    && clock_rate == if opus { 48000 } else { 8000 }
+                    && (channels == 1 || (opus && channels == 2))
+            })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PacketKind {
-    Video { codec: u8, width: u32, height: u32 },
-    Audio { sample_rate: u32, channels: u32 },
+    Video {
+        codec: u8,
+        width: u32,
+        height: u32,
+    },
+    Audio {
+        sample_rate: u32,
+        channels: u32,
+    },
+    EncodedAudio {
+        codec: EncodedAudioCodec,
+        sample_rate: u32,
+        channels: u32,
+        timestamp: u32,
+        ssrc: u32,
+    },
 }
 pub(crate) struct Packet {
     pub bytes: Vec<u8>,
@@ -143,6 +201,16 @@ impl EncodedRecordingTap {
         sender.take();
     }
 
+    pub fn fail(&self, reason: &str) {
+        if let Some(sender) = self.sender.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            *sender
+                .shared
+                .error
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(reason.into());
+        }
+    }
+
     pub fn unsubscribe(&self, subscription: &Subscription) {
         let mut slot = self.sender.lock().unwrap_or_else(|e| e.into_inner());
         if slot
@@ -178,6 +246,39 @@ impl Subscription {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn audio_codecs_preserve_sample_rates_and_validate_rtp_clocks() {
+        for (mime, clock, rate, id) in [
+            ("audio/opus", 48000, 48000, 1),
+            ("audio/G722", 8000, 16000, 2),
+            ("audio/PCMU", 8000, 8000, 3),
+            ("audio/PCMA", 8000, 8000, 4),
+        ] {
+            let codec = EncodedAudioCodec::from_rtp(mime, clock, 1).unwrap();
+            assert_eq!(codec.sample_rate(), rate);
+            assert_eq!(codec as u8, id);
+            assert!(EncodedAudioCodec::from_rtp(mime, 90000, 1).is_none());
+            assert!(EncodedAudioCodec::from_rtp(mime, clock, 0).is_none());
+            assert!(EncodedAudioCodec::from_rtp(mime, clock, 3).is_none());
+        }
+        assert!(EncodedAudioCodec::from_rtp("audio/g722", 16000, 1).is_none());
+        assert!(EncodedAudioCodec::from_rtp("audio/red", 48000, 2).is_none());
+    }
+    #[test]
+    fn failed_audio_probe_releases_only_its_subscription_and_can_reopen() {
+        let tap = EncodedRecordingTap::default();
+        let first = tap.subscribe().unwrap();
+        tap.fail("Sender audio capture clock is unavailable");
+        assert!(first.error().unwrap().contains("capture clock"));
+        assert!(!tap.has_subscriber());
+        let second = tap.subscribe().unwrap();
+        // Late teardown of a failed probe cannot remove a later subscription.
+        tap.unsubscribe(&first);
+        tap.publish(packet(1, true, 3));
+        assert!(second.receive(Duration::ZERO).is_ok());
+        tap.unsubscribe(&second);
+        assert!(!tap.has_subscriber());
+    }
     fn packet(timestamp_us: i64, keyframe: bool, bytes: usize) -> Packet {
         Packet {
             bytes: vec![0; bytes],

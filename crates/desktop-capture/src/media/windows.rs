@@ -10,6 +10,7 @@ mod presentation;
 use pixels::from_bgra;
 pub use presentation::PreviewSubscription;
 mod recording;
+mod recording_audio;
 mod recording_source;
 mod statistics;
 #[cfg(test)]
@@ -88,9 +89,13 @@ struct MediaPeer {
     preview: bool,
     control: Option<control::Connection>,
     recording: Option<recording::RecordingRelay>,
+    recording_audio: Option<Arc<recording_audio::SenderAudioRecording>>,
 }
 impl MediaPeer {
     fn close(&self) {
+        if let Some(audio) = &self.recording_audio {
+            audio.close();
+        }
         if let Some(recording) = &self.recording {
             recording.stop();
         }
@@ -178,7 +183,18 @@ impl MediaSession {
         codecs
     }
 
-    pub fn new(mut options: MediaOptions) -> Result<Arc<Self>> {
+    pub fn new(options: MediaOptions) -> Result<Arc<Self>> {
+        Self::with_audio_factory(options, audio::Loopback::start)
+    }
+
+    fn with_audio_factory(
+        mut options: MediaOptions,
+        start_audio: impl FnOnce(
+            u32,
+            u32,
+            Arc<crate::lifecycle::Subscription>,
+        ) -> Result<audio::Loopback>,
+    ) -> Result<Arc<Self>> {
         options.validate()?;
         // Automatic format selection may later use VP8. Resolve the shared
         // conversion before choosing the initial preview encoder; all formats
@@ -239,7 +255,7 @@ impl MediaSession {
             audio: options
                 .audio
                 .then(|| {
-                    audio::Loopback::start(
+                    start_audio(
                         options.audio_sample_rate,
                         options.audio_channel_count,
                         changed.clone(),
@@ -591,7 +607,11 @@ impl MediaSession {
     }
 
     /// Borrow encoded access units without creating a peer or requiring WebView decode support.
-    pub fn open_recording(&self, id: String) -> Result<Option<super::RecordingInfo>> {
+    pub fn open_recording(
+        &self,
+        id: String,
+        encoded_audio: bool,
+    ) -> Result<Option<super::RecordingInfo>> {
         if self.closed.load(Ordering::Acquire) {
             return Ok(None);
         }
@@ -617,14 +637,18 @@ impl MediaSession {
                 if encoder.error().is_some() {
                     return None;
                 }
-                Some((encoder.clone(), peer.connection.clone()))
+                Some((
+                    encoder.clone(),
+                    peer.connection.clone(),
+                    peer.recording_audio.clone().filter(|_| encoded_audio),
+                ))
             })
         };
-        let Some((encoder, sender)) = selected else {
+        let Some((encoder, sender, audio)) = selected else {
             return Ok(None);
         };
         let recording =
-            recording_source::RecordingSource::new(&encoder, sender, self.audio.as_ref())?;
+            recording_source::RecordingSource::new(&encoder, sender, self.audio.as_ref(), audio)?;
         let info = recording.info.clone();
         recordings.insert(id, Arc::new(recording));
         Ok(Some(info))
@@ -866,6 +890,7 @@ impl MediaSession {
                     pc.close();
                     e.to_string()
                 })?;
+            let mut recording_audio = None;
             let configured = (|| {
                 if let Some(audio) = &self.audio {
                     let track = factory
@@ -893,6 +918,10 @@ impl MediaSession {
                         audio_transceiver
                             .set_codec_preferences(codecs)
                             .map_err(|e| e.to_string())?;
+                    }
+                    if !preview && hardware.is_some() {
+                        recording_audio =
+                            recording_audio::SenderAudioRecording::new(audio_transceiver.sender());
                     }
                 }
                 {
@@ -962,6 +991,7 @@ impl MediaSession {
                         preview,
                         control,
                         recording,
+                        recording_audio,
                     },
                 );
                 if let Some(encoder) = hardware {

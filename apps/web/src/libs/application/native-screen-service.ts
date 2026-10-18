@@ -188,17 +188,21 @@ export async function createNativeScreenStream(
     );
     if (closed) throw new Error("Native screen closed");
     const publication: NativeScreenPublication = {
-      getRecordingSource: () =>
+      getRecordingSources: () =>
         closed || !share.subscribeRecording
-          ? undefined
-          : {
-              subscribe: (consumer, signal) =>
-                share.subscribeRecording!(
-                  id,
-                  consumer,
-                  signal,
-                ),
-            },
+          ? []
+          : (options?.audio ? [true, false] : [false]).map(
+              (encodedAudio) => ({
+                encodedAudio,
+                subscribe: (consumer, signal) =>
+                  share.subscribeRecording!(
+                    id,
+                    consumer,
+                    signal,
+                    { encodedAudio },
+                  ),
+              }),
+            ),
       openRecording: (signal, ended) => {
         if (closed)
           return Promise.reject(

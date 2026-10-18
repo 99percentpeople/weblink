@@ -100,6 +100,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     preview: false,
                     control: None,
                     recording: None,
+                    recording_audio: None,
                 },
             );
             let mut waiting = Box::pin(gathering.wait());
@@ -168,6 +169,7 @@ fn sender_timing_rejects_invalid_rtp_ranges_and_pacing_before_native_startup() {
 struct Receiver {
     pc: PeerConnection,
     _sinks: Arc<Mutex<Vec<NativeVideoStream>>>,
+    _audio_sinks: Arc<Mutex<Vec<libwebrtc::audio_stream::native::NativeAudioStream>>>,
 }
 
 impl Drop for Receiver {
@@ -202,15 +204,22 @@ async fn connect_with_recording(
         .map_err(|e| e.to_string())?;
     let sinks = Arc::new(Mutex::new(Vec::new()));
     let receiving = sinks.clone();
-    pc.on_track(Some(Box::new(move |event| {
-        if let MediaStreamTrack::Video(track) = event.track {
-            receiving
-                .lock()
-                .unwrap()
-                .push(NativeVideoStream::new(track));
-        }
+    let audio_sinks = Arc::new(Mutex::new(Vec::new()));
+    let audio_receiving = audio_sinks.clone();
+    pc.on_track(Some(Box::new(move |event| match event.track {
+        MediaStreamTrack::Video(track) => receiving
+            .lock()
+            .unwrap()
+            .push(NativeVideoStream::new(track)),
+        MediaStreamTrack::Audio(track) => audio_receiving.lock().unwrap().push(
+            libwebrtc::audio_stream::native::NativeAudioStream::new(track, 48000, 2),
+        ),
     })));
-    let receiver = Receiver { pc, _sinks: sinks };
+    let receiver = Receiver {
+        pc,
+        _sinks: sinks,
+        _audio_sinks: audio_sinks,
+    };
     let candidates = Arc::new(Mutex::new(Vec::new()));
     let gathered = candidates.clone();
     receiver
@@ -636,7 +645,7 @@ fn unreachable_stun_does_not_block_trickle_video() {
                 receiving.lock().unwrap().push(NativeVideoStream::new(track));
             }
         })));
-        let receiver = Receiver { pc, _sinks: sinks };
+        let receiver = Receiver { pc, _sinks: sinks, _audio_sinks: Default::default() };
         let (native_tx, mut native_rx) = tokio::sync::mpsc::unbounded_channel();
         let (browser_tx, mut browser_rx) = tokio::sync::mpsc::unbounded_channel();
         receiver.pc.on_ice_candidate(Some(Box::new(move |candidate| {

@@ -140,9 +140,9 @@ export function createRecording(app: AppStateContextProps) {
           audio,
           encodedVideoSources: () => {
             if (open) {
-              const source =
-                publication?.getRecordingSource?.();
-              return source ? [source] : [];
+              return (
+                publication?.getRecordingSources?.() ?? []
+              );
             }
             return (
               sessionService?.getRecordingVideoSources(

@@ -124,6 +124,56 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("native preview ownership", () => {
+  it("offers sender audio reuse before PCM without opening or stopping a viewing peer", async () => {
+    const { capture, share } = setup();
+    share.subscribeRecording = vi.fn(async () => null);
+    const stream = await createNativeScreenStream(
+      capture,
+      share,
+      "source",
+      undefined,
+      {
+        audio: true,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        frameRate: 60,
+        maxBitrate: 8000000,
+        codec: "video/h264",
+        degradationPreference: "balanced",
+      },
+    );
+    const sources = getNativeScreenPublication(
+      stream.getVideoTracks()[0],
+    )!.getRecordingSources!();
+    expect(
+      sources.map((source) => source.encodedAudio),
+    ).toEqual([true, false]);
+    const consumer = { frame() {}, ended() {} };
+    const offers = vi.mocked(share.offer).mock.calls.length;
+    for (const source of sources)
+      await source.subscribe(consumer);
+    expect(
+      share.subscribeRecording,
+    ).toHaveBeenNthCalledWith(
+      1,
+      "owned",
+      consumer,
+      undefined,
+      { encodedAudio: true },
+    );
+    expect(
+      share.subscribeRecording,
+    ).toHaveBeenNthCalledWith(
+      2,
+      "owned",
+      consumer,
+      undefined,
+      { encodedAudio: false },
+    );
+    expect(share.offer).toHaveBeenCalledTimes(offers);
+    expect(share.closePeer).not.toHaveBeenCalled();
+    stream.getVideoTracks()[0].stop();
+  });
   it("allows independent offers concurrently when no encoder is retiring", async () => {
     const { capture, share } = setup();
     const stream = await createNativeScreenStream(

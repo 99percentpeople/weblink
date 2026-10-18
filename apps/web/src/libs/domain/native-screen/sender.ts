@@ -11,9 +11,7 @@ import type { ScreenSignal } from "./signaling";
 import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 
 export interface NativeScreenPublication {
-  getRecordingSource?():
-    | import("../encoded-video").EncodedMediaSource
-    | undefined;
+  getRecordingSources?(): readonly import("../encoded-video").EncodedMediaSource[];
   openRecording?(
     signal: AbortSignal,
     ended: (error?: Error) => void,

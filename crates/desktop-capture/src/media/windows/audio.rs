@@ -34,6 +34,21 @@ pub(super) struct Loopback {
 }
 
 impl Loopback {
+    #[cfg(test)]
+    pub fn synthetic(rate: u32, channels: u32) -> Result<Self> {
+        Ok(Self {
+            source: NativeAudioSource::new(AudioSourceOptions::default(), rate, channels, 0),
+            recording: Arc::new(EncodedRecordingTap::default()),
+            format: AudioCaptureFormat {
+                sample_rate: rate,
+                channel_count: channels,
+            },
+            events: Arc::new(events::Events::new()?),
+            enabled: Arc::new(AtomicBool::new(true)),
+            error: Arc::new(Mutex::new(None)),
+            worker: Mutex::new(None),
+        })
+    }
     pub fn start(
         rate: u32,
         channels: u32,
@@ -45,7 +60,6 @@ impl Loopback {
         let worker_enabled = enabled.clone();
         let error = Arc::new(Mutex::new(None));
         let (ready, rx) = mpsc::sync_channel(1);
-        let runtime = tokio::runtime::Handle::current();
         let worker_source = source.clone();
         let worker_events = events.clone();
         let worker_error = error.clone();
@@ -58,7 +72,6 @@ impl Loopback {
                     &worker_source,
                     &worker_events,
                     &worker_enabled,
-                    &runtime,
                     &ready,
                     rate,
                     channels,
@@ -179,7 +192,6 @@ fn run(
     source: &NativeAudioSource,
     events: &events::Events,
     enabled: &AtomicBool,
-    runtime: &tokio::runtime::Handle,
     ready: &mpsc::SyncSender<Result<()>>,
     rate: u32,
     channels: u32,
@@ -235,32 +247,49 @@ fn run(
                 if !enabled.load(Ordering::Acquire) {
                     samples.fill(0);
                 }
-                runtime
-                    .block_on(source.capture_frame(&AudioFrame {
+                deliver(
+                    source,
+                    recording,
+                    &AudioFrame {
                         data: Cow::Borrowed(&samples),
                         sample_rate: rate,
                         num_channels: channels,
                         samples_per_channel: rate / 100,
-                    }))
-                    .map_err(|e| e.to_string())?;
-                if recording.has_subscriber() {
-                    recording.publish(Packet {
-                        bytes: samples
-                            .iter()
-                            .flat_map(|sample| sample.to_le_bytes())
-                            .collect(),
-                        timestamp_us: queue_time,
-                        keyframe: true,
-                        kind: PacketKind::Audio {
-                            sample_rate: rate,
-                            channels,
-                        },
-                        segment: 0,
-                    });
-                }
+                    },
+                    queue_time,
+                )?;
                 queue_time += 10_000;
             }
         }
+    }
+    Ok(())
+}
+
+/// Deliver capture to the real sender first, then optionally copy PCM for fallback.
+pub(super) fn deliver(
+    source: &NativeAudioSource,
+    recording: &EncodedRecordingTap,
+    frame: &AudioFrame<'_>,
+    timestamp_us: i64,
+) -> Result<()> {
+    source
+        .capture_frame_at(frame, timestamp_us)
+        .map_err(|e| e.to_string())?;
+    if recording.has_subscriber() {
+        recording.publish(Packet {
+            bytes: frame
+                .data
+                .iter()
+                .flat_map(|sample| sample.to_le_bytes())
+                .collect(),
+            timestamp_us,
+            keyframe: true,
+            kind: PacketKind::Audio {
+                sample_rate: frame.sample_rate,
+                channels: frame.num_channels,
+            },
+            segment: 0,
+        });
     }
     Ok(())
 }

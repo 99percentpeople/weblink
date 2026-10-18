@@ -20,6 +20,7 @@ pub struct RecordingCodecs {
 #[serde(rename_all = "camelCase")]
 pub struct RecordingInfo {
     pub audio: Option<AudioCaptureFormat>,
+    pub encoded_audio: bool,
 }
 
 pub type RecordingEnded = Box<dyn Fn(Option<String>) + Send + Sync>;
@@ -358,7 +359,7 @@ pub use windows::{MediaSession, PreviewSubscription};
 pub struct MediaSession;
 #[cfg(not(windows))]
 impl MediaSession {
-    pub fn open_recording(&self, _: String) -> crate::Result<Option<RecordingInfo>> {
+    pub fn open_recording(&self, _: String, _: bool) -> crate::Result<Option<RecordingInfo>> {
         Ok(None)
     }
     pub fn read_recording(&self, _: &str) -> crate::Result<Vec<u8>> {

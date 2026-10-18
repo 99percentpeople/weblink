@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { RECORDING_AUDIO_CODECS } from "@weblink/platform";
 import type {
   EncodedMediaConsumer,
   EncodedMediaSubscription,
@@ -10,6 +11,7 @@ export async function subscribeNativeRecording(
   sessionId: string,
   consumer: EncodedMediaConsumer,
   signal?: AbortSignal,
+  options?: { encodedAudio?: boolean },
 ): Promise<EncodedMediaSubscription | null> {
   signal?.throwIfAborted();
   const recordingId = crypto.randomUUID();
@@ -49,9 +51,15 @@ export async function subscribeNativeRecording(
   signal?.addEventListener("abort", aborted, {
     once: true,
   });
-  let info: { audio: RecordingAudioFormat | null } | null;
+  let info: {
+    audio: RecordingAudioFormat | null;
+    encodedAudio?: boolean;
+  } | null;
   try {
-    info = await invoke("capture_recording_open", args);
+    info = await invoke("capture_recording_open", {
+      ...args,
+      encodedAudio: options?.encodedAudio ?? true,
+    });
     if (stopped || signal?.aborted) {
       await close();
       signal?.throwIfAborted();
@@ -130,6 +138,7 @@ export async function subscribeNativeRecording(
                 data: bytes,
                 timestamp,
                 timestampScale: 1000000,
+                clockTime: timestamp / 1000,
                 mimeType:
                   codec === 1 ? "video/h264" : "video/h265",
                 type: view.getUint8(at + 34)
@@ -149,6 +158,26 @@ export async function subscribeNativeRecording(
                 sampleRate: view.getUint32(at + 24, true),
                 channelCount: view.getUint32(at + 28, true),
               });
+            } else if (kind === 3) {
+              const format = RECORDING_AUDIO_CODECS.find(
+                (codec) =>
+                  codec.id === view.getUint8(at + 33),
+              );
+              if (!info.encodedAudio || !format)
+                throw new Error(
+                  "Unsupported native recording audio codec",
+                );
+              await consumer.encodedAudio?.({
+                data: bytes,
+                timestamp: view.getUint32(at + 16, true),
+                clockTime: timestamp / 1000,
+                mimeType: format.mimeType,
+                clockRate: format.clockRate,
+                ssrc: view.getUint32(at + 20, true),
+                sampleRate: view.getUint32(at + 24, true),
+                channelCount: view.getUint32(at + 28, true),
+                segment: packetSegment,
+              });
             } else
               throw new Error(
                 "Unsupported native recording packet",
@@ -163,6 +192,7 @@ export async function subscribeNativeRecording(
   })();
   return {
     audioFormat: info.audio ?? undefined,
+    encodedAudio: info.encodedAudio ?? false,
     pause: () => control(false),
     resume: () => control(true),
     stop,
