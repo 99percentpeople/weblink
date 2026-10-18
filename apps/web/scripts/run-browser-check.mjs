@@ -151,6 +151,8 @@ async function main() {
       );
     if (process.env.RECORDING_TEST_NATIVE_PACKETS_ONLY)
       recordingQuery.set("nativePacketsOnly", "1");
+    if (process.env.RECORDING_TEST_AUDIO_CODECS_ONLY)
+      recordingQuery.set("audioCodecsOnly", "1");
     if (process.env.RECORDING_TEST_ENCODED_ONLY)
       recordingQuery.set("encodedOnly", "1");
     if (process.env.RECORDING_TEST_DURATION_MS)

@@ -1,4 +1,5 @@
 import { checkNativeRecordingPackets } from "./recording-native-packets";
+import { checkRtpRecordingAudio } from "./recording-rtp-audio";
 import { checkRecordingAudioSync } from "./recording-audio-sync";
 import {
   RecordingService,
@@ -219,6 +220,17 @@ async function run() {
     "granted";
   window.showDirectoryPicker = async () => handle;
   try {
+    if (
+      new URL(location.href).searchParams.has(
+        "audioCodecsOnly",
+      )
+    ) {
+      window.__SPEED_TEST_REPORT__ = {
+        ok: true,
+        measurements: await checkRtpRecordingAudio(source),
+      };
+      return;
+    }
     for (const kind of [
       "indexeddb",
       "directory",
@@ -1032,7 +1044,7 @@ async function run() {
       )),
     );
     passed.push(
-      "native H.264/H.265 packets and PCM share muxing/VFS, keep pause/resume duration and audio, and never create a video encoder/local receiver",
+      "native H.264/H.265 with sender Opus or PCM fallback shares muxing/VFS, keeps pause/resume duration and audio, and never creates a video encoder/local receiver",
     );
     window.__SPEED_TEST_REPORT__ = {
       ok: true,
