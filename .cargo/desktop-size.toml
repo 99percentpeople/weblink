@@ -1,0 +1,29 @@
+# Opt-in Windows release profile. Use scripts/desktop-size.mjs so the
+# toolchain, target and standard-library build stay consistent.
+[unstable]
+build-std = ["std", "panic_unwind"]
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+lto = true
+debug = 0
+strip = true
+# Remote input cleanup catches panics to release the remaining owned inputs.
+panic = "unwind"
+
+# Keep capture, encoding and input paths optimized for execution speed.
+[profile.release.package.weblink-desktop-capture]
+opt-level = 3
+
+[profile.release.package.weblink-desktop-input]
+opt-level = 3
+
+[profile.release.package.windows-capture]
+opt-level = 3
+
+[profile.release.package.libwebrtc]
+opt-level = 3
+
+[profile.release.package.webrtc-sys]
+opt-level = 3

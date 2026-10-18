@@ -54,6 +54,33 @@ LTO and uses 16 codegen units to reduce compilation and cache overhead.
 Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
 machine needs WebView2 installed. Only `public` builds save this dependency cache.
 
+For an opt-in Windows x64 build optimized for size, install the pinned nightly
+toolchain and its standard-library sources, then use the size build command:
+
+```sh
+rustup toolchain install nightly-2026-10-17 --profile minimal --component rust-src
+bun run build:desktop:size --no-bundle
+# Or generate the NSIS installer:
+bun run build:desktop:size --bundles nsis
+```
+
+This command applies `.cargo/desktop-size.toml` and rebuilds `std` with
+[Cargo's nightly `build-std`](https://doc.rust-lang.org/cargo/reference/unstable.html#build-std).
+It uses size optimization, full LTO, one codegen unit and symbol stripping;
+capture, WebRTC and remote input retain `opt-level = 3`. Panic unwinding and
+debug formatting remain available: input cleanup relies on `catch_unwind` to
+release other owned inputs after a device operation panics. The static MSVC
+runtime required by WebRTC is preserved. Nightly is pinned independently of the
+normal stable toolchain, and the existing development and release CI profiles
+remain unchanged. Validate streaming performance before adopting this preset for
+production; a successful build and smaller executable do not establish latency.
+
+The command forwards Tauri options and optional Cargo arguments after `--`, and
+overrides the dev CI environment's release optimization settings with this preset.
+Its default output directory is `target/desktop-size/x86_64-pc-windows-msvc/release`
+(including `bundle/nsis` for installers); an explicit `CARGO_TARGET_DIR` is
+respected. This separate cache also contains the rebuilt standard library.
+
 Stable `vX.Y.Z` web release tags instead call `desktop-production.yml`, using the
 workspace's full release optimizations. A single Tauri build produces both the
 executable and the NSIS installer, with the same application version as the Web

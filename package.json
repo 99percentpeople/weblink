@@ -54,6 +54,7 @@
     "test:worker": "bun run --cwd servers/weblink-ws-worker test",
     "build:server": "bun run --cwd servers/weblink-ws-server build",
     "build:desktop": "bun run --cwd apps/desktop build",
+    "build:desktop:size": "bun scripts/desktop-size.mjs",
     "check:desktop": "bun run --cwd apps/desktop lint && bun run --cwd apps/desktop check",
     "sync": "bun --env-file=.env scripts/sync.mjs",
     "sync:watch": "bun --env-file=.env scripts/sync.mjs --watch",
