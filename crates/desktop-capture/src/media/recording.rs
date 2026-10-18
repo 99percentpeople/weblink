@@ -1,6 +1,8 @@
 //! A bounded side channel for recording copies. The sender never waits for a
 //! recorder, a local transport, IPC, or storage to consume a packet.
 pub(crate) mod audio;
+#[cfg(test)]
+mod fixtures;
 mod sessions;
 mod source;
 mod wire;

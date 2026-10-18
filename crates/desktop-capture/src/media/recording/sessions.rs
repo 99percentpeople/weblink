@@ -4,6 +4,10 @@ use crate::media::RecordingInfo;
 use crate::Result;
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+#[path = "sessions_tests.rs"]
+mod tests;
+
 #[derive(Default)]
 struct State {
     active: Option<(String, Arc<RecordingSource>)>,

@@ -7,6 +7,10 @@ use crate::Result;
 use std::sync::{mpsc::RecvTimeoutError, Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(test)]
+#[path = "source_tests.rs"]
+mod tests;
+
 /// Borrows an existing sender; implementations must never start or stop streaming.
 pub(crate) trait VideoSource: Send + Sync {
     fn tap(&self) -> Arc<EncodedRecordingTap>;

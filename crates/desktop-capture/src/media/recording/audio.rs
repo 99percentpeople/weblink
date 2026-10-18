@@ -2,6 +2,10 @@
 use super::{EncodedAudioCodec, EncodedRecordingTap, Packet, PacketKind};
 use std::sync::Mutex;
 
+#[cfg(test)]
+#[path = "audio_tests.rs"]
+mod tests;
+
 pub(crate) struct NegotiatedAudioFormat {
     pub payload_type: u8,
     pub mime_type: String,
