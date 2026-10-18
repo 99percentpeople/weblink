@@ -269,7 +269,10 @@ export function createMeetingMediaController(
       const audio = captured.getAudioTracks().filter(live);
       captured
         .getTracks()
-        .filter((track) => !audio.includes(track))
+        .filter(
+          (track) =>
+            !audio.some((entry) => entry === track),
+        )
         .forEach((track) => track.stop());
       audio.forEach((track) => {
         track.contentHint = "speech";
@@ -468,7 +471,8 @@ export function createMeetingMediaController(
         .getTracks()
         .filter(
           (track) =>
-            track !== video && !audio.includes(track),
+            track !== video &&
+            !audio.some((entry) => entry === track),
         )
         .forEach((track) => track.stop());
       screenTracks.add(video);

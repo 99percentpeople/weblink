@@ -18,7 +18,7 @@ class Track extends EventTarget {
   stop = vi.fn();
 }
 class Stream {
-  constructor(private tracks: Track[]) {}
+  constructor(private tracks: Track[] = []) {}
   getTracks() {
     return this.tracks;
   }
@@ -116,6 +116,17 @@ function fixture() {
     abort: vi.fn(async () => {}),
   };
   const port = {
+    container: vi.fn<() => "auto" | "mkv" | "mp4">(
+      () => "auto",
+    ),
+    // Muxer byte/codec behavior is covered by recording-remux.test.ts. This
+    // fixture exercises service ownership with synthetic chunk contents.
+    remuxRecorder: vi.fn(
+      (raw) => raw,
+    ) as typeof import("@/libs/application/recording-remux").remuxRecording,
+    encodedRecorder: undefined as
+      | typeof import("@/libs/application/recording-encoded").createEncodedRecording
+      | undefined,
     recorder: Recorder as unknown as typeof MediaRecorder,
     storage: {
       authorizeDefault: vi.fn(async () => {}),
@@ -156,6 +167,176 @@ function fixture() {
     recorder: () => Recorder.instances[0],
   };
 }
+it("prefers the existing local sender encoding and keeps pause/resume in the same VFS file", async () => {
+  const f = fixture();
+  f.source.local = true;
+  const source = { subscribe: vi.fn() };
+  f.source.encodedVideoSources = () => [source];
+  const encoded = new Recorder(new Stream([]), {
+    mimeType: "video/webm",
+  });
+  const dispose = vi.fn(async () => {});
+  Object.assign(encoded, { dispose });
+  const patches = [
+    { offset: 0, data: new Uint8Array([0]) },
+  ];
+  Object.assign(encoded, { getPatches: () => patches });
+  f.port.encodedRecorder = vi.fn(
+    async () => encoded as unknown as MediaRecorder,
+  );
+  Recorder.instances = [];
+  await f.service.start(f.source);
+  expect(Recorder.instances).toHaveLength(0);
+  expect(f.port.encodedRecorder).toHaveBeenCalledWith(
+    [source],
+    expect.any(Stream),
+    expect.any(AbortSignal),
+    "auto",
+  );
+  encoded.data("before");
+  f.service.pause();
+  f.service.resume();
+  encoded.data("after");
+  await Promise.all([f.service.stop(), f.service.stop()]);
+  expect(encoded.pause).toHaveBeenCalledOnce();
+  expect(encoded.resume).toHaveBeenCalledOnce();
+  expect(encoded.stop).toHaveBeenCalledOnce();
+  expect(f.data.join("")).toBe("beforeafterlast");
+  expect(
+    f.port.storage.createWritableFile,
+  ).toHaveBeenCalledOnce();
+  expect(f.writer.finish).toHaveBeenCalledOnce();
+  expect(f.writer.finish).toHaveBeenCalledWith(
+    patches,
+    expect.objectContaining({ type: "video/webm" }),
+  );
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(f.video.stop).not.toHaveBeenCalled();
+});
+
+it("fixes the chosen container before asynchronous preparation and keeps it through pause/resume", async () => {
+  const f = fixture();
+  f.source.local = true;
+  const sender = { subscribe: vi.fn() };
+  f.source.encodedVideoSources = () => [sender];
+  f.port.container.mockReturnValue("mkv");
+  let authorize!: () => void;
+  f.port.storage.authorizeDefault.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        authorize = resolve;
+      }),
+  );
+  const encoded = new Recorder(new Stream([]), {
+    mimeType: "video/x-matroska",
+  });
+  Object.assign(encoded, { getPatches: () => [] });
+  f.port.encodedRecorder = vi.fn(
+    async () => encoded as unknown as MediaRecorder,
+  );
+  const started = f.service.start(f.source);
+  f.port.container.mockReturnValue("mp4");
+  authorize();
+  await started;
+  expect(f.port.encodedRecorder).toHaveBeenCalledWith(
+    [sender],
+    expect.any(Stream),
+    expect.any(AbortSignal),
+    "mkv",
+  );
+  f.service.pause();
+  f.service.resume();
+  await f.service.stop();
+  expect(f.port.container).toHaveBeenCalledOnce();
+  expect(f.writer.finish).toHaveBeenCalledWith(
+    [],
+    expect.objectContaining({
+      name: expect.stringMatching(/\.mkv$/),
+    }),
+  );
+});
+
+it.each(["auto", "mkv", "mp4"] as const)(
+  "wraps fallback output for %s without forcing the received-video encoder",
+  async (container) => {
+    const f = fixture();
+    f.port.container.mockReturnValue(container);
+    f.port.remuxRecorder = vi.fn((raw) =>
+      Object.assign(raw, {
+        mimeType:
+          container !== "mp4"
+            ? "video/x-matroska"
+            : "video/mp4",
+        getPatches: () => [],
+      }),
+    );
+    await f.service.start(f.source);
+    expect(f.recorder().options.mimeType).toBeUndefined();
+    expect(f.port.remuxRecorder).toHaveBeenCalledWith(
+      f.recorder(),
+      container,
+    );
+    await f.service.stop();
+    expect(f.writer.finish).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({
+        name: expect.stringMatching(
+          new RegExp(
+            `\\.${container === "auto" ? "mkv" : container}$`,
+          ),
+        ),
+      }),
+    );
+  },
+);
+
+it.each(["unavailable", "rejected"])(
+  "falls back before creating output when encoded recording is %s",
+  async (reason) => {
+    const f = fixture();
+    f.source.local = true;
+    f.source.encodedVideoSources = () => [
+      { subscribe: vi.fn() },
+    ];
+    f.port.encodedRecorder = vi.fn(async () => {
+      if (reason === "rejected")
+        throw new Error("Unsupported encoded source");
+      return undefined;
+    });
+    await f.service.start(f.source);
+    expect(Recorder.instances).toHaveLength(1);
+    expect(f.recorder().options.mimeType).toBe(
+      "video/x-matroska",
+    );
+    await f.service.stop();
+    expect(f.port.failed).not.toHaveBeenCalled();
+    expect(
+      f.port.storage.createWritableFile,
+    ).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([false, true])(
+  "tries native or received encoded media before falling back (native=%s)",
+  async (native) => {
+    const f = fixture();
+    f.source.local = native;
+    if (native)
+      f.source.open = async () => ({
+        stream: new Stream([
+          f.video,
+          f.audio,
+        ]) as unknown as MediaStream,
+        close() {},
+      });
+    f.source.encodedVideoSources = () => [
+      { subscribe: vi.fn() },
+    ];
+    f.port.encodedRecorder = vi.fn();
+    await f.service.start(f.source);
+    expect(f.port.encodedRecorder).toHaveBeenCalledTimes(1);
+  },
+);
 it("drains the final event and queued writes before publishing, and stops only once", async () => {
   const f = fixture();
   await f.service.start(f.source);
@@ -544,6 +725,50 @@ it("uses a dedicated native input and releases it without stopping the capture",
   expect(close).toHaveBeenCalledOnce();
   expect(f.video.stop).not.toHaveBeenCalled();
 });
+it("saves a paused native reuse recording on sender end after draining slow writes and the final blob", async () => {
+  const f = fixture();
+  let ended!: (error?: Error) => void;
+  let release!: () => void;
+  const close = vi.fn();
+  const track = new Track();
+  f.source.open = async (_, onEnded) => {
+    ended = onEnded;
+    return {
+      stream: new Stream([track]) as unknown as MediaStream,
+      close,
+    };
+  };
+  f.writer.write.mockImplementationOnce(async (bytes) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.data.push(new TextDecoder().decode(bytes));
+  });
+  await f.service.start(f.source);
+  f.recorder().data("before");
+  await vi.waitFor(() =>
+    expect(release).toBeTypeOf("function"),
+  );
+  f.service.pause();
+  f.service.resume();
+  f.recorder().data("after");
+  f.service.pause();
+  ended();
+  const finished = f.service.stop();
+  expect(close).not.toHaveBeenCalled();
+  expect(f.writer.finish).not.toHaveBeenCalled();
+  release();
+  await finished;
+  expect(f.data.join("")).toBe("beforeafterlast");
+  expect(f.writer.finish).toHaveBeenCalledOnce();
+  expect(
+    f.port.storage.createWritableFile,
+  ).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledOnce();
+  expect(f.port.failed).not.toHaveBeenCalled();
+  expect(f.video.stop).not.toHaveBeenCalled();
+  expect(f.audio.stop).not.toHaveBeenCalled();
+});
 it("falls back to MP4 and matches stored metadata", async () => {
   const f = fixture();
   Recorder.isTypeSupported.mockImplementation(
@@ -674,4 +899,38 @@ it("cancels audio preparation even if browser autoplay leaves resume pending", a
   expect(f.video.stop).not.toHaveBeenCalled();
   expect(f.audio.stop).not.toHaveBeenCalled();
   expect(f.port.failed).not.toHaveBeenCalled();
+});
+
+it("records native packets without opening a local receiver and publishes the same VFS writer", async () => {
+  const f = fixture();
+  f.source.local = true;
+  f.source.open = vi.fn();
+  f.source.encodedVideoSources = () => [
+    { subscribe: vi.fn() },
+  ];
+  const encoded = new Recorder(new Stream(), {
+    mimeType: "video/mp4",
+  });
+  Object.assign(encoded, {
+    getPatches: () => [],
+    dispose: vi.fn(async () => {}),
+  });
+  f.port.encodedRecorder = vi.fn(
+    async () => encoded as unknown as MediaRecorder,
+  );
+  Recorder.instances = [];
+  await f.service.start(f.source);
+  expect(f.source.open).not.toHaveBeenCalled();
+  expect(Recorder.instances).toHaveLength(0);
+  f.service.pause();
+  f.service.resume();
+  encoded.data("native");
+  await f.service.stop();
+  expect(f.writer.finish).toHaveBeenCalledOnce();
+  expect(f.writer.finish).toHaveBeenCalledWith(
+    [],
+    expect.objectContaining({ type: "video/mp4" }),
+  );
+  expect(f.video.stop).not.toHaveBeenCalled();
+  expect(f.audio.stop).not.toHaveBeenCalled();
 });

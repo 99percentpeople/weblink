@@ -1,3 +1,4 @@
+export * from "./recording";
 import type { InputDeviceSnapshot } from "./input";
 import type {
   BinarySource,
@@ -531,6 +532,14 @@ export interface NativeSendCodecs {
   audio: string;
 }
 export interface NativeScreenShare {
+  /** Direct encoded video plus the selected capture's PCM audio; no local peer. */
+  subscribeRecording?(
+    sessionId: string,
+    consumer: import("./recording").EncodedMediaConsumer,
+    signal?: AbortSignal,
+  ): Promise<
+    import("./recording").EncodedMediaSubscription | null
+  >;
   /** Raw local presentation. Remote publication remains native WebRTC. */
   preview?(
     sessionId: string,
@@ -569,6 +578,14 @@ export interface NativeScreenShare {
     control?: NativeControlContext,
     codecs?: NativeSendCodecs,
   ): Promise<string>;
+  /** Borrow an active native sender's encoding; null requests the ordinary fallback. */
+  offerRecording?(
+    sessionId: string,
+    peerId: string,
+    codecs: { video: string[]; audio: string },
+    onCandidate: (candidate: RTCIceCandidateInit) => void,
+    onEnded: (error: string | null) => void,
+  ): Promise<string | null>;
   addIceCandidate(
     sessionId: string,
     peerId: string,

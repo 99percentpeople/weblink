@@ -142,7 +142,7 @@ export function createMeetingSources(
             "participant"
           >;
         }> = video.map((track) => {
-          if (nativeTracks.includes(track))
+          if (nativeTracks.some((entry) => entry === track))
             return { track, kind: "screen" };
           if (participant.local)
             return {

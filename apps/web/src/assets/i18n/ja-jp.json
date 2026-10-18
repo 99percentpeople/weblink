@@ -1472,6 +1472,10 @@
     "error_details": "エラーの詳細"
   },
   "recording": {
+    "settings_title": "録画",
+    "container_title": "録画の保存形式",
+    "container_auto": "自動",
+    "container_description": "自動では H.264/H.265 は MP4、その他のコーデックは MKV で保存します。次の録画から適用され、元のコーデックを保持します。再生できるかどうかはプレーヤーによって異なります。",
     "pause": "録画を一時停止",
     "resume": "録画を再開",
     "paused": "録画を一時停止中",

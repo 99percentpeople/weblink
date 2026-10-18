@@ -17,6 +17,7 @@ import AudioSettings from "./audio-settings";
 import BrowserEncodingSettings from "./browser-encoding-settings";
 import VideoCaptureSettings from "./video-capture-settings";
 import NativeMediaSettings from "./native-media-settings";
+import type { RecordingContainer } from "@/libs/application/recording-options";
 
 export default function MeetingSettings() {
   const capabilities = useAppState().mediaCapabilities;
@@ -83,6 +84,27 @@ export default function MeetingSettings() {
       <Show when={native() !== null}>
         <NativeMediaSettings available={native()!} />
       </Show>
+      <SettingHeading id="recording">
+        {t("recording.settings_title")}
+      </SettingHeading>
+      <SettingSelect<RecordingContainer>
+        modal
+        value={appState.options.recordingContainer}
+        options={["auto", "mkv", "mp4"]}
+        label={t("recording.container_title")}
+        description={t("recording.container_description")}
+        optionLabel={(option) =>
+          option === "auto"
+            ? t("recording.container_auto")
+            : option.toUpperCase()
+        }
+        onChange={(value) =>
+          setAppOptions(
+            "recordingContainer",
+            value ?? "auto",
+          )
+        }
+      />
     </SettingSection>
   );
 }

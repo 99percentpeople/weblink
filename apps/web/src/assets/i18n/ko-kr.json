@@ -1472,6 +1472,10 @@
     "error_details": "오류 세부 정보"
   },
   "recording": {
+    "settings_title": "녹화",
+    "container_title": "녹화 저장 형식",
+    "container_auto": "자동",
+    "container_description": "자동은 H.264/H.265에 MP4를, 다른 코덱에 MKV를 사용합니다. 다음 녹화부터 적용되며 원래 코덱을 유지합니다. 재생 호환성은 플레이어에 따라 다릅니다.",
     "pause": "녹화 일시 중지",
     "resume": "녹화 재개",
     "paused": "녹화 일시 중지됨",

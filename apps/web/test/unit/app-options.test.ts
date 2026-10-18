@@ -9,8 +9,32 @@ import {
   resolveRoomConfig,
   getRoomAutoDownloadLimit,
 } from "@/libs/state/app-options";
+import { resolveStoredAppOptions } from "@/libs/state/stored-app-options";
 
 describe("app options", () => {
+  it("defaults recording to auto and preserves only supported stored containers", () => {
+    expect(getDefaultAppOptions().recordingContainer).toBe(
+      "auto",
+    );
+    for (const container of ["auto", "mkv", "mp4"])
+      expect(
+        resolveStoredAppOptions({
+          recordingContainer: container,
+        }).recordingContainer,
+      ).toBe(container);
+    for (const value of [
+      undefined,
+      null,
+      "webm",
+      "invalid",
+      1,
+    ])
+      expect(
+        resolveStoredAppOptions({
+          recordingContainer: value,
+        }).recordingContainer,
+      ).toBe("auto");
+  });
   it("defaults the shared remote file budget and normalizes invalid persisted limits", () => {
     expect(getDefaultAppOptions().remoteFileMaxSize).toBe(
       64 * 1024 * 1024,

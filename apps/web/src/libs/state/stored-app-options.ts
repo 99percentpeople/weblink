@@ -1,4 +1,5 @@
 import { resolveAudioSampling } from "../application/meeting-audio-settings";
+import { resolveRecordingContainer } from "../application/recording-options";
 import { normalizeTransferConcurrency } from "../application/transfer/transfer-queue";
 import { resolveApplicationOptions } from "../domain/application-options";
 import { sanitizeTurnServers } from "../domain/ice-server";
@@ -63,6 +64,9 @@ export function resolveStoredAppOptions(
 
   options.locale = normalizeLocalePreference(
     options.locale,
+  );
+  options.recordingContainer = resolveRecordingContainer(
+    options.recordingContainer,
   );
   Object.assign(options, resolveAudioSampling(options));
   options.application = resolveApplicationOptions(

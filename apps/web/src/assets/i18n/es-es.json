@@ -1472,6 +1472,10 @@
     "error_details": "Detalles del error"
   },
   "recording": {
+    "settings_title": "Grabación",
+    "container_title": "Formato de grabación",
+    "container_auto": "Automático",
+    "container_description": "Automático usa MP4 para H.264/H.265 y MKV para otros códecs. Se aplica a la próxima grabación y conserva los códecs originales; la compatibilidad depende del reproductor.",
     "pause": "Pausar grabación",
     "resume": "Reanudar grabación",
     "paused": "Grabación en pausa",

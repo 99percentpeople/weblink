@@ -3,11 +3,15 @@ import type {
   WritableStoredFile,
 } from "@/libs/domain/file-storage";
 import type { StoredFile } from "@weblink/platform";
+import type { EncodedVideoSource } from "@/libs/domain/encoded-video";
+import type { RecordingEngine } from "./recording-engine";
 import { createRecordingAudio } from "./recording-audio";
 import { WebmRecordingMetadata } from "./recording-webm";
 import {
   recordingFormat,
   recordingVideoBitrate,
+  resolveRecordingContainer,
+  type RecordingContainer,
 } from "./recording-options";
 
 export interface RecordingInput {
@@ -21,6 +25,7 @@ export interface RecordingSource {
   video: MediaStreamTrack;
   audio: readonly MediaStreamTrack[];
   available(): boolean;
+  encodedVideoSources?(): readonly EncodedVideoSource[];
   open?(
     signal: AbortSignal,
     ended: (error?: Error) => void,
@@ -41,7 +46,7 @@ interface Session {
   writer?: WritableStoredFile;
   input?: RecordingInput;
   audio?: ReturnType<typeof createRecordingAudio>;
-  recorder?: MediaRecorder;
+  recorder?: RecordingEngine;
   webm?: WebmRecordingMetadata;
   output?: { name: string; type: string };
   timer?: ReturnType<typeof setInterval>;
@@ -74,6 +79,9 @@ export class RecordingService {
       }): Promise<void>;
       failed(error: unknown): void;
       recorder?: typeof MediaRecorder;
+      encodedRecorder?: typeof import("./recording-encoded").createEncodedRecording;
+      remuxRecorder?: typeof import("./recording-remux").remuxRecording;
+      container?(): RecordingContainer;
     },
   ) {}
   get supported(): boolean {
@@ -144,6 +152,9 @@ export class RecordingService {
       resolve: () => resolve(),
     };
     this.session = session;
+    const container = resolveRecordingContainer(
+      this.port.container?.(),
+    );
     this.update(session);
     const fail = (error: unknown) => {
       session.error ??= error;
@@ -165,21 +176,48 @@ export class RecordingService {
         refresh: false,
       });
       session.controller.signal.throwIfAborted();
-      session.input = source.open
-        ? await source.open(
-            session.controller.signal,
-            (error) => {
-              if (error) fail(error);
-              else void this.stop();
-            },
-          )
-        : {
-            stream: new MediaStream([
-              source.video,
-              ...source.audio,
-            ]),
-            close() {},
-          };
+      // Native sources supply encoded video and PCM directly. Try that before
+      // opening the fallback local WebRTC receiver or touching preview audio.
+      if (
+        source.local &&
+        source.open &&
+        source.encodedVideoSources
+      ) {
+        const sources = source.encodedVideoSources();
+        if (sources.length) {
+          const create =
+            this.port.encodedRecorder ??
+            (await import("./recording-encoded"))
+              .createEncodedRecording;
+          try {
+            session.recorder = await create(
+              sources,
+              new MediaStream(),
+              session.controller.signal,
+              container,
+            );
+          } catch {
+            session.controller.signal.throwIfAborted();
+          }
+        }
+      }
+      session.input = session.recorder
+        ? { stream: new MediaStream(), close() {} }
+        : source.open
+          ? await source.open(
+              session.controller.signal,
+              (error) => {
+                if (error) fail(error);
+                else void this.stop();
+              },
+            )
+          : {
+              stream: new MediaStream([
+                source.video,
+                ...source.audio,
+              ]),
+              close() {},
+            };
       session.controller.signal.throwIfAborted();
       if (!source.available())
         throw new Error(
@@ -198,6 +236,27 @@ export class RecordingService {
       const stream = session.audio
         ? await session.audio.stream(session.input.stream)
         : session.input.stream;
+      session.controller.signal.throwIfAborted();
+      if (!source.open && source.encodedVideoSources) {
+        const sources = source.encodedVideoSources();
+        if (sources.length) {
+          try {
+            const create =
+              this.port.encodedRecorder ??
+              (await import("./recording-encoded"))
+                .createEncodedRecording;
+            session.recorder = await create(
+              sources,
+              stream,
+              session.controller.signal,
+              container,
+            );
+          } catch {
+            // Capability, worker and format failures before output fall back.
+            session.controller.signal.throwIfAborted();
+          }
+        }
+      }
       session.controller.signal.throwIfAborted();
       const Constructor =
         this.port.recorder ?? MediaRecorder;
@@ -226,6 +285,7 @@ export class RecordingService {
         "video/webm",
         "video/mp4",
       ]) {
+        if (session.recorder) break;
         if (
           mimeType &&
           !Constructor.isTypeSupported(mimeType)
@@ -241,8 +301,19 @@ export class RecordingService {
           cause = error;
         }
       }
+      if (!session.recorder) throw cause;
+      if (!session.recorder.getPatches) {
+        const remux =
+          this.port.remuxRecorder ??
+          (await import("./recording-remux"))
+            .remuxRecording;
+        session.controller.signal.throwIfAborted();
+        session.recorder = remux(
+          session.recorder,
+          container,
+        );
+      }
       const recorder = session.recorder;
-      if (!recorder) throw cause;
       // Automatic recording may not report its actual container until data arrives.
       // Reserve a draft now so permissions, the target mount and write failures
       // are settled before capture starts; publish under the actual format later.
@@ -267,7 +338,7 @@ export class RecordingService {
       recorder.addEventListener(
         "dataavailable",
         (event) => {
-          const blob = event.data;
+          const blob = (event as BlobEvent).data;
           if (!blob.size || session.error) return;
           if (!formatKnown) {
             try {
@@ -278,7 +349,10 @@ export class RecordingService {
                 name: `${basename}.${format.extension}`,
                 type: format.type,
               };
-              if (format.extension !== "mp4")
+              if (
+                format.extension !== "mp4" &&
+                !recorder.getPatches
+              )
                 session.webm = new WebmRecordingMetadata();
               formatKnown = true;
             } catch (error) {
@@ -457,7 +531,8 @@ export class RecordingService {
         }
         await this.port.complete(
           await session.writer.finish(
-            metadata?.patches,
+            session.recorder?.getPatches?.() ??
+              metadata?.patches,
             session.output,
           ),
         );
@@ -467,6 +542,11 @@ export class RecordingService {
       await session.writer?.abort().catch(() => {});
     } finally {
       session.listeners.abort();
+      try {
+        await session.recorder?.dispose?.();
+      } catch (error) {
+        session.error ??= error;
+      }
       for (const resource of [
         session.audio,
         session.input,

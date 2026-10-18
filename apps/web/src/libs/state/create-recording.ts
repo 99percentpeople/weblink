@@ -41,6 +41,7 @@ export function createRecording(app: AppStateContextProps) {
     });
   const service = new RecordingService({
     storage: manager.storage,
+    container: () => appState.options.recordingContainer,
     changed: (value) =>
       setState(
         value ? { ...value, ...presentation } : null,

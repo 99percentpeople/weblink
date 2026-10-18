@@ -58,7 +58,7 @@ export function createLiveVideoSettings(port: {
       options: MeetingVideoSettings,
     ) {
       if (disposed) return;
-      const tracks = new Set(
+      const tracks = new Set<MediaStreamTrack>(
         stream
           ?.getVideoTracks()
           .filter((track) => track.readyState === "live") ??

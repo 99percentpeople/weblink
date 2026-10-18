@@ -1472,6 +1472,10 @@
     "error_details": "Détails de l’erreur"
   },
   "recording": {
+    "settings_title": "Enregistrement",
+    "container_title": "Format d’enregistrement",
+    "container_auto": "Automatique",
+    "container_description": "Le mode automatique utilise MP4 pour H.264/H.265 et MKV pour les autres codecs. S’applique au prochain enregistrement en conservant les codecs d’origine ; la compatibilité dépend du lecteur.",
     "pause": "Suspendre l’enregistrement",
     "resume": "Reprendre l’enregistrement",
     "paused": "Enregistrement en pause",

@@ -1472,6 +1472,10 @@
     "error_details": "Fehlerdetails"
   },
   "recording": {
+    "settings_title": "Aufnahme",
+    "container_title": "Aufnahmeformat",
+    "container_auto": "Automatisch",
+    "container_description": "Automatisch verwendet MP4 für H.264/H.265 und MKV für andere Codecs. Gilt ab der nächsten Aufnahme und behält die ursprünglichen Codecs bei; die Wiedergabe hängt vom Player ab.",
     "pause": "Aufnahme pausieren",
     "resume": "Aufnahme fortsetzen",
     "paused": "Aufnahme pausiert",

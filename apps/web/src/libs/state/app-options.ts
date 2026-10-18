@@ -172,6 +172,7 @@ export type AppOption = {
   preferredAudioCodec: string | null;
   audioSampleRate: number;
   audioChannelCount: 1 | 2;
+  recordingContainer: import("../application/recording-options").RecordingContainer;
 };
 
 export function parseTurnServers(
@@ -289,5 +290,6 @@ export const getDefaultAppOptions = (): AppOption => {
     preferredAudioCodec: null,
     audioSampleRate: 48000,
     audioChannelCount: 2,
+    recordingContainer: "auto",
   } satisfies AppOption;
 };

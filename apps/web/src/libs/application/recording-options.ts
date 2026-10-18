@@ -53,3 +53,24 @@ export function recordingFormat(type: string): {
       );
   }
 }
+export type RecordingContainer = "auto" | "mkv" | "mp4";
+
+/** Select from the actual video codec, independently of capture or storage. */
+export function recordingContainerForCodec(
+  preference: RecordingContainer,
+  codec: string,
+): "mkv" | "mp4" {
+  return preference === "auto"
+    ? codec === "avc" || codec === "hevc"
+      ? "mp4"
+      : "mkv"
+    : preference;
+}
+
+export function resolveRecordingContainer(
+  value: unknown,
+): RecordingContainer {
+  return value === "mkv" || value === "mp4"
+    ? value
+    : "auto";
+}

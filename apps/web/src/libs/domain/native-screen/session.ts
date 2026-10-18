@@ -106,7 +106,11 @@ export class NativeScreenSession {
 
   decodeFailed(track: MediaStreamTrack): void {
     for (const entry of this.incoming.values())
-      if (entry.stream?.getVideoTracks().includes(track))
+      if (
+        entry.stream
+          ?.getVideoTracks()
+          .some((entry) => entry === track)
+      )
         entry.receiver?.decodeFailed();
   }
 
@@ -116,7 +120,7 @@ export class NativeScreenSession {
     return [...this.incoming.values()].find((entry) =>
       entry.receiver?.stream
         .getVideoTracks()
-        .includes(track),
+        .some((entry) => entry === track),
     )?.control;
   }
   async getVideoStats(
@@ -124,7 +128,11 @@ export class NativeScreenSession {
     publication?: NativeScreenPublication,
   ): Promise<VideoStatsBatch[]> {
     for (const { receiver } of this.incoming.values()) {
-      if (receiver?.stream.getVideoTracks().includes(track))
+      if (
+        receiver?.stream
+          .getVideoTracks()
+          .some((entry) => entry === track)
+      )
         return [
           {
             key: receiver.pc,
