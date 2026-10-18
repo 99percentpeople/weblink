@@ -118,6 +118,30 @@ pub async fn capture_share_start(
 }
 
 #[tauri::command]
+pub async fn capture_recording_offer(
+    service: State<'_, Service>,
+    session_id: String,
+    peer_id: String,
+    codecs: weblink_desktop_capture::media::RecordingCodecs,
+    candidates: tauri::ipc::Channel<weblink_desktop_capture::media::IceCandidate>,
+    ended: tauri::ipc::Channel<Option<String>>,
+) -> Result<Option<String>, String> {
+    let media = run(service, move |s| s.media(session_id)).await?;
+    media
+        .offer_recording(
+            peer_id,
+            codecs,
+            Box::new(move |candidate| {
+                let _ = candidates.send(candidate);
+            }),
+            Box::new(move |error| {
+                let _ = ended.send(error);
+            }),
+        )
+        .await
+}
+
+#[tauri::command]
 // Webview and service are injected; preserve the existing IPC argument contract.
 #[allow(clippy::too_many_arguments)]
 pub async fn capture_offer(

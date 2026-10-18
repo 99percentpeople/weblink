@@ -5,6 +5,7 @@ use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
 mod latency_probe;
+mod recording;
 
 #[test]
 fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches() {
@@ -98,6 +99,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     gathering: gathering.clone(),
                     preview: false,
                     control: None,
+                    recording: None,
                 },
             );
             let mut waiting = Box::pin(gathering.wait());
@@ -183,6 +185,15 @@ async fn connect_with_codecs(
     preview: bool,
     codecs: Option<super::super::SendCodecs>,
 ) -> Result<Receiver> {
+    connect_with_recording(media, id, preview, codecs, None).await
+}
+async fn connect_with_recording(
+    media: &MediaSession,
+    id: &str,
+    preview: bool,
+    codecs: Option<super::super::SendCodecs>,
+    recording: Option<crate::media::RecordingEnded>,
+) -> Result<Receiver> {
     let factory = PeerConnectionFactory::default();
     let mut config = RtcConfiguration::default();
     config.continual_gathering_policy = ContinualGatheringPolicy::GatherOnce;
@@ -207,9 +218,36 @@ async fn connect_with_codecs(
         .on_ice_candidate(Some(Box::new(move |candidate| {
             gathered.lock().unwrap().push(candidate.to_string());
         })));
-    let offer = media
-        .offer_configured(id.into(), vec![], false, preview, None, None, codecs)
-        .await?;
+    let offer = if let Some(ended) = recording {
+        let candidates = Arc::new(Mutex::new(Vec::new()));
+        let gathered = candidates.clone();
+        let offer = media
+            .offer_recording(
+                id.into(),
+                crate::media::RecordingCodecs {
+                    video: vec!["video/h264".into()],
+                    audio: "audio/opus".into(),
+                },
+                Box::new(move |candidate| gathered.lock().unwrap().push(candidate)),
+                ended,
+            )
+            .await?
+            .ok_or("No reusable native sender")?;
+        let connection = media.peers.lock().unwrap()[id].connection.clone();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while connection.ice_gathering_state() != IceGatheringState::Complete {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let gathered = crate::media::gathered_sdp(&offer, &candidates.lock().unwrap());
+        gathered
+    } else {
+        media
+            .offer_configured(id.into(), vec![], false, preview, None, None, codecs)
+            .await?
+    };
     receiver
         .pc
         .set_remote_description(

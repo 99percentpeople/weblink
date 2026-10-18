@@ -1,6 +1,7 @@
 //! WASAPI PCM stays on a native worker and is fed directly to WebRTC.
 mod activation;
 mod events;
+use crate::media::recording::{clock_us, EncodedRecordingTap, Packet, PacketKind};
 use crate::media::{AudioCaptureFormat, AUDIO_CHANNEL_COUNTS, AUDIO_SAMPLE_RATES};
 use crate::Result;
 use libwebrtc::{
@@ -24,6 +25,8 @@ use windows::Win32::{
 
 pub(super) struct Loopback {
     pub source: NativeAudioSource,
+    pub recording: Arc<EncodedRecordingTap>,
+    pub format: AudioCaptureFormat,
     events: Arc<events::Events>,
     enabled: Arc<AtomicBool>,
     error: Arc<Mutex<Option<String>>>,
@@ -46,6 +49,8 @@ impl Loopback {
         let worker_source = source.clone();
         let worker_events = events.clone();
         let worker_error = error.clone();
+        let recording = Arc::new(EncodedRecordingTap::default());
+        let tap = recording.clone();
         let worker = thread::Builder::new()
             .name("screen-audio".into())
             .spawn(move || {
@@ -57,7 +62,9 @@ impl Loopback {
                     &ready,
                     rate,
                     channels,
+                    &tap,
                 );
+                tap.end();
                 if let Err(error) = result {
                     let _ = ready.try_send(Err(error.clone()));
                     if !worker_events.stopped() {
@@ -69,6 +76,11 @@ impl Loopback {
             .map_err(|e| e.to_string())?;
         let capture = Self {
             source,
+            recording,
+            format: AudioCaptureFormat {
+                sample_rate: rate,
+                channel_count: channels,
+            },
             events,
             enabled,
             error,
@@ -85,6 +97,7 @@ impl Loopback {
         self.error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
     pub fn close(&self) {
+        self.recording.end();
         self.events.stop();
         if let Some(worker) = self.worker.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = worker.join();
@@ -170,6 +183,7 @@ fn run(
     ready: &mpsc::SyncSender<Result<()>>,
     rate: u32,
     channels: u32,
+    recording: &EncodedRecordingTap,
 ) -> Result<()> {
     let frame_samples = (rate / 100 * channels) as usize;
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
@@ -186,15 +200,33 @@ fn run(
     ready.send(Ok(())).map_err(|e| e.to_string())?;
     let mut queue = VecDeque::with_capacity(frame_samples * 4);
     let mut samples = vec![0i16; frame_samples];
+    let mut queue_time = 0i64;
+    let mut frequency = 0i64;
+    let mut counter = 0i64;
+    unsafe {
+        windows::Win32::System::Performance::QueryPerformanceFrequency(&mut frequency)
+            .map_err(|e| e.to_string())?;
+        windows::Win32::System::Performance::QueryPerformanceCounter(&mut counter)
+            .map_err(|e| e.to_string())?;
+    }
+    let qpc_offset = clock_us() - (counter as i128 * 1_000_000 / frequency as i128) as i64;
     while events.wait()? {
         while !events.stopped()
             && unsafe { capture.GetNextPacketSize() }.map_err(|e| e.to_string())? > 0
         {
-            read_packet(&capture, &mut queue, rate, channels)?;
+            read_packet(
+                &capture,
+                &mut queue,
+                rate,
+                channels,
+                &mut queue_time,
+                qpc_offset,
+            )?;
             // Bound latency after suspension or a stalled callback to 100 ms.
             if queue.len() > frame_samples * 10 {
                 let excess = (queue.len() - frame_samples * 10) / frame_samples * frame_samples;
                 queue.drain(..excess);
+                queue_time += excess as i64 * 1_000_000 / channels as i64 / rate as i64;
             }
             while queue.len() >= frame_samples && !events.stopped() {
                 for sample in &mut samples {
@@ -211,6 +243,22 @@ fn run(
                         samples_per_channel: rate / 100,
                     }))
                     .map_err(|e| e.to_string())?;
+                if recording.has_subscriber() {
+                    recording.publish(Packet {
+                        bytes: samples
+                            .iter()
+                            .flat_map(|sample| sample.to_le_bytes())
+                            .collect(),
+                        timestamp_us: queue_time,
+                        keyframe: true,
+                        kind: PacketKind::Audio {
+                            sample_rate: rate,
+                            channels,
+                        },
+                        segment: 0,
+                    });
+                }
+                queue_time += 10_000;
             }
         }
     }
@@ -222,11 +270,14 @@ fn read_packet(
     queue: &mut VecDeque<i16>,
     rate: u32,
     channels: u32,
+    queue_time: &mut i64,
+    qpc_offset: i64,
 ) -> Result<()> {
     let mut data = std::ptr::null_mut();
     let mut frames = 0;
     let mut flags = 0;
-    unsafe { capture.GetBuffer(&mut data, &mut frames, &mut flags, None, None) }
+    let mut qpc = 0u64;
+    unsafe { capture.GetBuffer(&mut data, &mut frames, &mut flags, None, Some(&mut qpc)) }
         .map_err(|e| e.to_string())?;
     let result = (|| {
         if frames > rate {
@@ -234,6 +285,13 @@ fn read_packet(
         }
         if flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 != 0 {
             queue.clear();
+        }
+        if queue.is_empty() {
+            *queue_time = if qpc > 0 && flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 == 0 {
+                qpc_offset + (qpc / 10) as i64
+            } else {
+                clock_us() - frames as i64 * 1_000_000 / rate as i64
+            };
         }
         let count = frames as usize * channels as usize;
         // Silent WASAPI buffers may be null. Never dereference them.

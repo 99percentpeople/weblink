@@ -270,6 +270,41 @@ describe("desktop platform boundary", () => {
     );
   });
 
+  it("keeps native recording reuse and end notifications scoped to its own peer", async () => {
+    ipc.mockResolvedValue(null);
+    const candidate = vi.fn();
+    const ended = vi.fn();
+    const codecs = {
+      video: ["video/h264"],
+      audio: "audio/opus",
+    };
+    expect(
+      await platform.screenShare!.offerRecording!(
+        "capture",
+        "recording",
+        codecs,
+        candidate,
+        ended,
+      ),
+    ).toBeNull();
+    const [command, args] = ipc.mock.calls[0];
+    expect(command).toBe("capture_recording_offer");
+    expect(args).toMatchObject({
+      sessionId: "capture",
+      peerId: "recording",
+      codecs,
+    });
+    args.candidates.onmessage({
+      candidate: "candidate:local",
+    });
+    args.ended.onmessage(null);
+    expect(candidate).toHaveBeenCalledWith({
+      candidate: "candidate:local",
+    });
+    expect(ended).toHaveBeenCalledWith(null);
+    expect(ipc).toHaveBeenCalledOnce();
+  });
+
   it("reads video counters for only the selected native session and peer", async () => {
     ipc.mockResolvedValue([{ id: "video", bytes: 1000 }]);
     expect(

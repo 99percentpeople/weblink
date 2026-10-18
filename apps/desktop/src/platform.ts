@@ -1,3 +1,4 @@
+import { subscribeNativeRecording } from "./recording";
 import { nativeNotifications } from "./notifications";
 import { nativeFileSystem } from "./filesystem";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -205,6 +206,21 @@ export const platform: PlatformRuntime = {
           username: server.username ?? "",
           credential: server.credential ?? "",
         })),
+      }),
+    subscribeRecording: subscribeNativeRecording,
+    offerRecording: (
+      sessionId,
+      peerId,
+      codecs,
+      onCandidate,
+      onEnded,
+    ) =>
+      invoke<string | null>("capture_recording_offer", {
+        sessionId,
+        peerId,
+        codecs,
+        candidates: new Channel(onCandidate),
+        ended: new Channel(onEnded),
       }),
     addIceCandidate: (sessionId, peerId, candidate) =>
       invoke<void>("capture_add_ice_candidate", {

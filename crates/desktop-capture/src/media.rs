@@ -7,6 +7,24 @@ pub mod pipeline;
 pub mod preview;
 
 #[cfg(any(windows, test))]
+mod recording;
+
+/// Local recording may only borrow a sender whose codec the WebView can receive.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RecordingCodecs {
+    pub video: Vec<String>,
+    pub audio: String,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingInfo {
+    pub audio: Option<AudioCaptureFormat>,
+}
+
+pub type RecordingEnded = Box<dyn Fn(Option<String>) + Send + Sync>;
+
+#[cfg(any(windows, test))]
 mod bitrate;
 
 #[cfg(any(windows, test))]
@@ -340,6 +358,25 @@ pub use windows::{MediaSession, PreviewSubscription};
 pub struct MediaSession;
 #[cfg(not(windows))]
 impl MediaSession {
+    pub fn open_recording(&self, _: String) -> crate::Result<Option<RecordingInfo>> {
+        Ok(None)
+    }
+    pub fn read_recording(&self, _: &str) -> crate::Result<Vec<u8>> {
+        Err("Native recording unavailable".into())
+    }
+    pub fn control_recording(&self, _: &str, _: bool, _: u32) -> crate::Result<()> {
+        Ok(())
+    }
+    pub fn close_recording(&self, _: &str) {}
+    pub async fn offer_recording(
+        &self,
+        _: String,
+        _: RecordingCodecs,
+        _: CandidateHandler,
+        _: RecordingEnded,
+    ) -> crate::Result<Option<String>> {
+        Ok(None)
+    }
     #[allow(clippy::too_many_arguments)]
     pub async fn offer_configured(
         &self,

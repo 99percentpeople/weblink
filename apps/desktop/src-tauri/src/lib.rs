@@ -6,6 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 mod application;
 mod capabilities;
 mod capture;
+mod capture_recording;
 mod clipboard;
 mod file_drop;
 mod file_save;
@@ -196,6 +197,11 @@ pub fn run() {
             preview::capture_preview_visible,
             preview::capture_preview_close,
             capture::capture_offer,
+            capture::capture_recording_offer,
+            capture_recording::capture_recording_open,
+            capture_recording::capture_recording_read,
+            capture_recording::capture_recording_control,
+            capture_recording::capture_recording_close,
             capture::capture_answer,
             capture::capture_add_ice_candidate,
             capture::capture_close_peer

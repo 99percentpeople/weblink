@@ -9,6 +9,7 @@ use super::super::{
     MediaOptions,
 };
 use crate::media::latency::{CodecControl, Distribution, EncoderPipelineStats};
+use crate::media::recording::{clock_us, EncodedRecordingTap, Packet, PacketKind};
 use crate::Result;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,
@@ -71,6 +72,7 @@ struct Pending {
     options: Option<MediaOptions>,
     stopped: bool,
     wake: bool,
+    keyframe: bool,
 }
 pub struct Encoder {
     pub source: NativeVideoSource,
@@ -78,6 +80,7 @@ pub struct Encoder {
     error: Arc<Mutex<Option<String>>>,
     worker: Mutex<Option<JoinHandle<()>>>,
     statistics: Arc<Mutex<EncodeStatistics>>,
+    pub recording: Arc<EncodedRecordingTap>,
 }
 
 #[derive(Clone, Default)]
@@ -140,12 +143,15 @@ impl Encoder {
         let failure = error.clone();
         let statistics = Arc::new(Mutex::new(EncodeStatistics::default()));
         let measured = statistics.clone();
+        let recording = Arc::new(EncodedRecordingTap::default());
+        let tap = recording.clone();
         let worker = thread::Builder::new()
             .name("weblink-hardware-encoder".into())
             .spawn(move || {
-                if let Err(error) = run(id, options, preview, output, work, measured) {
+                if let Err(error) = run(id, options, preview, output, work, measured, &tap) {
                     *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
                 }
+                tap.end();
             })
             .map_err(|e| e.to_string())?;
         Ok(Self {
@@ -154,6 +160,7 @@ impl Encoder {
             error,
             worker: Mutex::new(Some(worker)),
             statistics,
+            recording,
         })
     }
     pub fn statistics(&self) -> EncodeStatistics {
@@ -178,6 +185,13 @@ impl Encoder {
     pub fn error(&self) -> Option<String> {
         self.error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
+    pub fn request_recording_keyframe(&self) {
+        let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !pending.stopped {
+            pending.keyframe = true;
+            self.pending.1.notify_one();
+        }
+    }
     pub fn update_options(&self, options: MediaOptions) {
         let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
         if !pending.stopped {
@@ -186,6 +200,7 @@ impl Encoder {
         }
     }
     pub fn close(&self) {
+        self.recording.end();
         {
             let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
             pending.stopped = true;
@@ -209,11 +224,13 @@ fn run(
     output: NativeVideoSource,
     work: Arc<(Mutex<Pending>, Condvar)>,
     statistics: Arc<Mutex<EncodeStatistics>>,
+    recording: &EncodedRecordingTap,
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut encoder: Option<transform::Transform> = None;
     let mut latest: Option<Arc<Frame>> = None;
     let started = Instant::now();
+    let recording_origin = clock_us();
     let mut rate_control = if preview {
         BitrateController::with_start(options.max_bitrate as u32, options.max_bitrate as u32)
     } else {
@@ -242,6 +259,7 @@ fn run(
             if pending.stopped {
                 break;
             }
+            keyframe |= std::mem::take(&mut pending.keyframe);
             (pending.options.take(), pending.frame.take())
         };
         // Shutdown may wait for an MFT callback, which also signals this work
@@ -355,6 +373,23 @@ fn run(
                         },
                         frame_metadata: None,
                     });
+                    // Publish to the original transport first. Move the existing
+                    // packet allocation into a bounded, non-waiting recording queue.
+                    recording.publish(Packet {
+                        bytes: packet.bytes,
+                        timestamp_us: recording_origin + packet.timestamp_us,
+                        keyframe: packet.keyframe,
+                        kind: PacketKind::Video {
+                            codec: match encoder.codec {
+                                libwebrtc::video_frame::EncodedVideoCodec::H264 => 1,
+                                libwebrtc::video_frame::EncodedVideoCodec::H265 => 2,
+                                _ => 0, // A future codec must negotiate its own recording adapter.
+                            },
+                            width: encoder.width,
+                            height: encoder.height,
+                        },
+                        segment: 0,
+                    });
                 }
             }
             if encoder.ready() {
@@ -405,7 +440,12 @@ fn run(
         // Synchronize the predicate with every producer, including the MFT
         // callback: a notification between poll() and wait() cannot be lost.
         let pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
-        if pending.stopped || pending.wake || pending.frame.is_some() || pending.options.is_some() {
+        if pending.stopped
+            || pending.wake
+            || pending.keyframe
+            || pending.frame.is_some()
+            || pending.options.is_some()
+        {
             continue;
         }
         if let Some(delay) = rate_control.next_update_in(started.elapsed()) {

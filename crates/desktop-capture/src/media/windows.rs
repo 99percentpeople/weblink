@@ -9,6 +9,8 @@ mod pixels;
 mod presentation;
 use pixels::from_bgra;
 pub use presentation::PreviewSubscription;
+mod recording;
+mod recording_source;
 mod statistics;
 #[cfg(test)]
 mod tests;
@@ -42,8 +44,9 @@ use std::{
 
 const AUDIO_BITRATE_BPS: u64 = 128_000;
 
-// Capture is single-source; every peer has its own congestion-controlled encoder/transport.
-// Production preview reads raw frames; legacy/test receivers still use independent peers.
+// Capture is single-source; remote peers have independent encoders/transports.
+// Recording may borrow an encoder through an isolated local source. Production
+// preview reads raw frames; legacy/test receivers still use independent peers.
 pub struct MediaSession {
     factory: PeerConnectionFactory,
     source: NativeVideoSource,
@@ -53,6 +56,7 @@ pub struct MediaSession {
     audio: Option<audio::Loopback>,
     peers: Mutex<HashMap<String, MediaPeer>>,
     hardware: Mutex<HashMap<String, Arc<mf::Encoder>>>,
+    recordings: Mutex<HashMap<String, Arc<recording_source::RecordingSource>>>,
     encoder_id: Option<String>,
     encoders: Vec<EncoderInfo>,
     latest: Mutex<Option<Arc<VideoFrame<libwebrtc::video_frame::I420Buffer>>>>,
@@ -83,9 +87,13 @@ struct MediaPeer {
     gathering: Arc<ice::Gathering>,
     preview: bool,
     control: Option<control::Connection>,
+    recording: Option<recording::RecordingRelay>,
 }
 impl MediaPeer {
     fn close(&self) {
+        if let Some(recording) = &self.recording {
+            recording.stop();
+        }
         // Wake pending offers before detaching callbacks or closing native state.
         self.gathering.close();
         if let Some(control) = &self.control {
@@ -240,6 +248,7 @@ impl MediaSession {
                 .transpose()?,
             peers: Mutex::new(HashMap::new()),
             hardware: Mutex::new(HashMap::new()),
+            recordings: Mutex::new(HashMap::new()),
             encoder_id,
             encoders,
             latest: Mutex::new(None),
@@ -500,7 +509,7 @@ impl MediaSession {
         relay: bool,
         preview: bool,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, None, None, None)
+        self.create_offer(id, servers, relay, preview, None, None, None, None)
             .await
     }
 
@@ -512,8 +521,17 @@ impl MediaSession {
         preview: bool,
         candidates: CandidateHandler,
     ) -> Result<String> {
-        self.create_offer(id, servers, relay, preview, Some(candidates), None, None)
-            .await
+        self.create_offer(
+            id,
+            servers,
+            relay,
+            preview,
+            Some(candidates),
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     pub async fn offer_control(
@@ -532,6 +550,7 @@ impl MediaSession {
                 false,
                 candidates,
                 Some(port.clone()),
+                None,
                 None,
             )
             .await;
@@ -560,6 +579,7 @@ impl MediaSession {
                 candidates,
                 port.clone(),
                 codecs,
+                None,
             )
             .await;
         if result.is_err() {
@@ -568,6 +588,120 @@ impl MediaSession {
             }
         }
         result
+    }
+
+    /// Borrow encoded access units without creating a peer or requiring WebView decode support.
+    pub fn open_recording(&self, id: String) -> Result<Option<super::RecordingInfo>> {
+        if self.closed.load(Ordering::Acquire) {
+            return Ok(None);
+        }
+        let mut recordings = self.recordings.lock().unwrap_or_else(|e| e.into_inner());
+        if recordings.contains_key(&id) || !recordings.is_empty() {
+            return Err("A native recording is already active".into());
+        }
+        let selected = {
+            let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+            let encoders = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
+            peers.iter().find_map(|(id, peer)| {
+                if peer.preview
+                    || !matches!(
+                        peer.encoding.codec.as_deref(),
+                        Some("video/h264" | "video/h265")
+                    )
+                    || peer.connection.connection_state()
+                        != libwebrtc::peer_connection::PeerConnectionState::Connected
+                {
+                    return None;
+                }
+                let encoder = encoders.get(id)?;
+                if encoder.error().is_some() {
+                    return None;
+                }
+                Some((encoder.clone(), peer.connection.clone()))
+            })
+        };
+        let Some((encoder, sender)) = selected else {
+            return Ok(None);
+        };
+        let recording =
+            recording_source::RecordingSource::new(&encoder, sender, self.audio.as_ref())?;
+        let info = recording.info.clone();
+        recordings.insert(id, Arc::new(recording));
+        Ok(Some(info))
+    }
+    fn recording(&self, id: &str) -> Result<Arc<recording_source::RecordingSource>> {
+        self.recordings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "Native recording has ended".into())
+    }
+    pub fn read_recording(&self, id: &str) -> Result<Vec<u8>> {
+        Ok(self.recording(id)?.read())
+    }
+    pub fn control_recording(&self, id: &str, active: bool, segment: u32) -> Result<()> {
+        self.recording(id)?.control(active, segment)
+    }
+    pub fn close_recording(&self, id: &str) {
+        self.recordings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+    }
+
+    /// Reuse only an already connected remote hardware H.264 sender. Software
+    /// encoders and unsupported receiver codecs keep the existing fallback path.
+    pub async fn offer_recording(
+        &self,
+        id: String,
+        codecs: super::RecordingCodecs,
+        candidates: CandidateHandler,
+        ended: super::RecordingEnded,
+    ) -> Result<Option<String>> {
+        if !codecs.video.iter().any(|codec| codec == "video/h264") {
+            return Ok(None);
+        }
+        let selected = {
+            let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+            let encoders = self.hardware.lock().unwrap_or_else(|e| e.into_inner());
+            peers.iter().find_map(|(id, peer)| {
+                if peer.preview
+                    || peer.encoding.codec.as_deref() != Some("video/h264")
+                    || peer.connection.connection_state()
+                        != libwebrtc::peer_connection::PeerConnectionState::Connected
+                {
+                    return None;
+                }
+                let encoder = encoders.get(id)?;
+                if encoder.error().is_some() {
+                    return None;
+                }
+                Some((encoder.clone(), peer.connection.clone()))
+            })
+        };
+        let Some((encoder, sender)) = selected else {
+            return Ok(None);
+        };
+        self.create_offer(
+            id,
+            vec![],
+            false,
+            true,
+            Some(candidates),
+            None,
+            Some(super::SendCodecs {
+                video: "video/h264".into(),
+                audio: codecs.audio,
+            }),
+            Some(recording::Reuse {
+                encoder,
+                sender,
+                ended,
+            }),
+        )
+        .await
+        .map(Some)
     }
 
     fn needs_steady_input(&self) -> bool {
@@ -590,6 +724,7 @@ impl MediaSession {
         on_candidate: Option<CandidateHandler>,
         control_port: Option<Arc<dyn super::control::Port>>,
         codecs: Option<super::SendCodecs>,
+        recording: Option<recording::Reuse>,
     ) -> Result<String> {
         if id.is_empty() || id.len() > 128 {
             return Err("Invalid media peer identifier".into());
@@ -694,9 +829,19 @@ impl MediaSession {
             // software preview can trigger CPU adaptation to tiny frame dimensions.
             let hardware = encoder_id
                 .as_ref()
+                .filter(|_| recording.is_none())
                 .map(|id| mf::Encoder::new(id.clone(), options.clone(), preview).map(Arc::new))
                 .transpose()?;
-            let source = if let Some(encoder) = &hardware {
+            let recording = recording
+                .map(|reuse| recording::RecordingRelay::new(reuse, pc.clone(), &options))
+                .transpose()
+                .inspect_err(|_| {
+                    pc.close();
+                })?;
+            let pre_encoded = hardware.is_some() || recording.is_some();
+            let source = if let Some(recording) = &recording {
+                &recording.source
+            } else if let Some(encoder) = &hardware {
                 &encoder.source
             } else if preview {
                 &self.preview_source
@@ -762,7 +907,7 @@ impl MediaSession {
                                 .is_none_or(|codec| c.mime_type.eq_ignore_ascii_case(codec))
                                 && (options.vp8_color_compatible()
                                     || !c.mime_type.eq_ignore_ascii_case("video/vp8"))
-                                && (hardware.is_none()
+                                && (!pre_encoded
                                     || options.codec.as_deref() != Some("video/h264")
                                     || c.sdp_fmtp_line
                                         .as_deref()
@@ -778,7 +923,7 @@ impl MediaSession {
                         .map_err(|e| e.to_string())?;
                 }
                 let sender = transceiver.sender();
-                sender.set_video_encoder_backend(if hardware.is_some() {
+                sender.set_video_encoder_backend(if pre_encoded {
                     VideoEncoderBackend::PreEncoded
                 } else {
                     VideoEncoderBackend::Software
@@ -810,12 +955,13 @@ impl MediaSession {
                     id.clone(),
                     MediaPeer {
                         _factory: factory.clone(),
-                        software: hardware.is_none(),
+                        software: !pre_encoded,
                         encoding: options.clone(),
                         connection: pc.clone(),
                         gathering: gathering.clone(),
                         preview,
                         control,
+                        recording,
                     },
                 );
                 if let Some(encoder) = hardware {
@@ -935,6 +1081,10 @@ impl MediaSession {
     }
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
+        self.recordings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.end_previews();
         if let Some(audio) = &self.audio {
             audio.close();
