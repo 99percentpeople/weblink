@@ -1,6 +1,7 @@
 import { createBLAKE3 } from "hash-wasm";
 import type { BinarySource } from "@weblink/platform";
 import { expectedChunkSize } from "@/libs/domain/file-chunks";
+import { createUuid } from "@/libs/domain/ids";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
 import type { VfsVolume } from "@/libs/domain/vfs";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
@@ -87,7 +88,7 @@ async function migrateFile(
         );
       const existing = !!record;
       if (!record) {
-        staging = `${prefix}${crypto.randomUUID()}`;
+        staging = `${prefix}${createUuid()}`;
         const stat = await volume.commit(
           staging,
           [],

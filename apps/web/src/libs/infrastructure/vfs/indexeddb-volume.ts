@@ -11,6 +11,7 @@ import type {
   VfsFileMetadata,
 } from "@weblink/platform";
 import { vfsPath } from "@/libs/domain/vfs";
+import { createUuid } from "@/libs/domain/ids";
 import {
   requestResult,
   transactionDone,
@@ -217,7 +218,7 @@ export class IndexedDbVolume implements VfsVolume {
         kind: "file",
         size: length,
         modified: Date.now(),
-        revision: crypto.randomUUID(),
+        revision: createUuid(),
       };
       nodes.put(node, path);
       await done;
@@ -261,7 +262,7 @@ export class IndexedDbVolume implements VfsVolume {
       kind: "file",
       size: 0,
       modified: Date.now(),
-      revision: crypto.randomUUID(),
+      revision: createUuid(),
     };
     tx.objectStore("nodes").add({ ...stat, path }, path);
     await done;

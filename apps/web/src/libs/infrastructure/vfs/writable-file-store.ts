@@ -5,6 +5,7 @@ import type {
   VfsWrite,
 } from "@weblink/platform";
 import type { WritableStoredFile } from "@/libs/domain/file-storage";
+import { createUuid } from "@/libs/domain/ids";
 import { storageFilename } from "@/libs/domain/vfs";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
 import {
@@ -58,7 +59,7 @@ export class WritableFileStore {
     if (!volume.openWriter)
       throw new Error("This storage cannot record files");
     let name = storageFilename(options.name);
-    const uuid = crypto.randomUUID();
+    const uuid = createUuid();
     const indexed = volume.kind === "indexeddb";
     const path = indexed
       ? `recordings/${uuid}`

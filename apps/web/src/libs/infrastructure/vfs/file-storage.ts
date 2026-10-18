@@ -6,6 +6,7 @@ import type {
   StorageAuthorizationOptions,
 } from "@/libs/domain/file-storage";
 import type { ChunkCache } from "@/libs/domain/file";
+import { createUuid } from "@/libs/domain/ids";
 import {
   StorageUnavailableError,
   type StoredFile,
@@ -258,7 +259,7 @@ export class FileStorageService implements FileStorage {
           return existing.id;
         }
       }
-      const id = `directory-${crypto.randomUUID()}`;
+      const id = `directory-${createUuid()}`;
       volume = new DirectoryVolume(id, result.name, result);
       await this.database.put("mounts", id, {
         id,
