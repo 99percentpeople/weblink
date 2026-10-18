@@ -1,9 +1,6 @@
-import {
-  mkdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { loadReleaseMetadata } from "./release-metadata.mjs";
 
 const [tag, outputPath] = process.argv.slice(2);
 if (
@@ -17,31 +14,7 @@ if (
   );
 }
 
-const root = new URL("../", import.meta.url);
-const { version } = JSON.parse(
-  await readFile(
-    new URL("apps/web/package.json", root),
-    "utf8",
-  ),
-);
-if (tag !== `v${version}`) {
-  throw new Error(
-    "The release tag must match apps/web/package.json",
-  );
-}
-
-const changelog = await readFile(
-  new URL("CHANGELOG.md", root),
-  "utf8",
-);
-const section = changelog
-  .split(/^## /m)
-  .find((entry) => entry.startsWith(`[${version}] - `));
-const [, ...changeLines] = section?.split(/\r?\n/) ?? [];
-const changes = changeLines.join("\n").trim();
-if (!changes) {
-  throw new Error(`Missing changelog content for ${tag}`);
-}
+const { changes } = await loadReleaseMetadata(tag);
 
 const repository =
   process.env.GITHUB_REPOSITORY ??

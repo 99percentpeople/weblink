@@ -145,6 +145,11 @@ support and permission; reopening the page may require authorization again.
   round trip. Automatic selection prefers the capture GPU's encoder, while
   unsupported paths retain the memory-input fallback. Software and hardware
   encoders share variable-frame-rate scheduling for static screens.
+- On compatible NVIDIA devices, prefer native NVENC for H.264/HEVC, with Media
+  Foundation fallback if it is unavailable or fails. Intel and AMD use their
+  available Media Foundation encoders. Statistics identify the active encoder.
+- Local preview reuses readback buffers and follows new-frame notifications.
+  Hiding it pauses local presentation while remote streaming continues.
 - Inspect stream statistics, ICE routes and connection state, and run peer
   throughput tests from the application.
 
@@ -303,6 +308,8 @@ for the repository layout and [testing](docs/TESTING.md) for focused checks.
 - [File-transfer protocol](docs/FILE_TRANSFERS.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Changelog](CHANGELOG.md)
+- Media dependency notices: [Mediabunny](apps/web/public/licenses/mediabunny.txt)
+  and [NVENC interface](apps/web/public/licenses/nvcodec.txt)
 
 ---
 

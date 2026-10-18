@@ -43,19 +43,7 @@ jobs:
 
       - name: Verify release version and notes
         if: github.ref_type == 'tag'
-        run: |
-          bun -e '
-            const { version } = await Bun.file("apps/web/package.json").json();
-            const tag = process.env.GITHUB_REF_NAME;
-            if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag ?? "") ||
-                tag !== `v${version}`) {
-              throw new Error("The release tag must match the stable version in apps/web/package.json");
-            }
-            const notes = await Bun.file("CHANGELOG.md").text();
-            if (!notes.includes(`## [${version}] - `)) {
-              throw new Error("Add dated release notes to CHANGELOG.md before deploying");
-            }
-          '
+        run: bun scripts/release-metadata.mjs "$GITHUB_REF_NAME"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

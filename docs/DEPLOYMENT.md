@@ -255,16 +255,20 @@ and [Direct Upload from CI](https://developers.cloudflare.com/pages/how-to/use-d
 
 #### Publish a release
 
-Commit the version bump and changelog, and ensure the release commit includes the
-Pages workflow. After completing the setup above:
+Set the application version in `apps/web/package.json`, replace the matching
+changelog entry's `Unreleased` date with its actual `YYYY-MM-DD` release date, and
+commit both. The shared release validator rejects draft dates, invalid calendar
+dates, empty notes and tag/version mismatches before any production deployment.
+After completing the setup above (replace the example version as needed):
 
 ```sh
+bun scripts/release-metadata.mjs v1.2.0
 git push origin public
-git tag -a v1.0.0 -m "Weblink 1.0.0"
-git push origin v1.0.0
+git tag -a v1.2.0 -m "Weblink 1.2.0"
+git push origin v1.2.0
 ```
 
-For subsequent releases, replace `v1.0.0` with the matching version. Inspect the
+For subsequent releases, replace `v1.2.0` with the matching version. Inspect the
 tag-triggered **CI** Actions run and its **Deploy production release** job before
 treating the release as deployed. A failed `Checks` job prevents the production
 build and upload. A failed deployment can be retried through the existing Actions
@@ -273,7 +277,8 @@ previous successful production deployment in the Pages dashboard.
 
 For desktop downloads, create a GitHub Release for the same tag after the
 desktop production job succeeds. Extract its Actions artifacts, attach
-`Weblink-windows-x64-setup.exe` and `Weblink-windows-x64-portable.zip`, and use
+`Weblink-windows-x64-setup.exe`, `Weblink-windows-x64-setup.exe.sig`,
+`Weblink-windows-x64-portable.zip` and `latest.json` together, and use
 `release-notes.md` from the `weblink-release-notes` artifact as the description.
 It includes the tag's changelog and version-specific download links for both
 packages. Mark the stable release as Latest so the marketing site's download

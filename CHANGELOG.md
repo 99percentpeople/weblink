@@ -37,9 +37,11 @@ Weblink 1.2 introduces local and remote video recording, a unified file library 
 
 ### Windows capture and encoding
 
-- **GPU texture input:** H.264 and H.265 share the D3D11 texture path from DXGI or Windows Graphics Capture through GPU color conversion and scaling into Media Foundation. Supported paths avoid the GPU-to-CPU-to-GPU frame round trip. Preview, diagnostics and software encoders read back only when needed; incompatible devices or drivers retain the memory-input fallback.
+- **GPU texture input:** H.264 and H.265 share the D3D11 texture path from DXGI or Windows Graphics Capture through GPU color conversion and scaling into NVENC or Media Foundation. Supported paths avoid the GPU-to-CPU-to-GPU frame round trip. Preview, diagnostics and software encoders read back only when needed; incompatible devices or drivers retain the memory-input fallback.
+- **Native NVIDIA encoding:** probe H.264/H.265 NVENC sessions on the capture adapter and prefer them when supported. Missing or incompatible drivers and initialization or runtime failures retain the Media Foundation fallback. Intel and AMD continue using their available Media Foundation encoders. Stream statistics report the active implementation, including changes after fallback.
 - **Match the capture adapter:** automatic hardware selection prefers an encoder on the GPU that produced the captured texture, for the negotiated codec. Include encoders on secondary adapters during discovery, retain explicit encoder choices, and report the actual adapter selection and fallback reason. Matching occurs during initialization or reconfiguration, not for every frame.
 - **Shared variable frame rate:** software and hardware screen encoders use the same change-driven scheduling and bounded refresh behavior for static content. Keep frame-rate limits, live settings, keyframe requests and recording subscriptions working across the GPU and memory paths.
+- **Smoother local preview:** reuse readback and cursor-composition buffers while waiting for the page to consume a frame, avoid redundant full-frame initialization, and submit notified frames without an additional animation-frame wait. Hidden previews still release their buffers and resume from the latest content; GPU streaming continues independently.
 - **Reusable native media core:** separate recording lifetime, pause/resume, codec validation and encoded-audio observation from the Windows capture adapters. This prepares the interfaces for future platforms; native Linux and macOS capture backends are not included in this release.
 
 ### Interface and updates
@@ -50,7 +52,7 @@ Weblink 1.2 introduces local and remote video recording, a unified file library 
 
 ### Compatibility and storage notes
 
-- Windows desktop remains Windows 10 22H2 / Windows 11 x64 with WebView2 120 or newer. GPU input and adapter selection depend on the available driver, capture device and Media Foundation encoder; they do not guarantee hardware support on every Intel, AMD, NVIDIA or multi-GPU configuration.
+- Windows desktop remains Windows 10 22H2 / Windows 11 x64 with WebView2 120 or newer. GPU input and adapter selection depend on the available driver, capture device and NVENC or Media Foundation encoder; they do not guarantee hardware support on every Intel, AMD, NVIDIA or multi-GPU configuration.
 - Directory mounting in Web requires browser support and explicit permission. Files remain local to the selected storage; browser and desktop profiles do not synchronize automatically. Batch directory saving also depends on the available picker APIs.
 - Recording supports one source at a time. Container choice does not make unsupported codecs playable in every external player. Browser-directory finalization can still require a streaming copy; an unfinished recording is not guaranteed to be playable or recoverable after a crash or forced shutdown.
 

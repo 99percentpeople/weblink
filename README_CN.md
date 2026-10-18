@@ -116,6 +116,10 @@ Web 版无需安装原生客户端。桌面版复用相同的界面与应用代�
 - 受支持的 Windows 硬件编码器直接接收 GPU 纹理，避免帧数据经 CPU 回读后再次上传。
   自动选择优先匹配捕获显卡上的编码器，不支持时保留内存输入回退；
   软件与硬件编码共用静止画面的可变帧率调度。
+- 兼容的 NVIDIA 显卡优先使用原生 NVENC 进行 H.264/HEVC 编码，
+  不可用或运行失败时回退到 Media Foundation；Intel、AMD 使用各自可用的
+  Media Foundation 编码器。串流统计显示实际使用的编码实现。
+- 本地预览复用读回缓冲区，按新帧通知更新；隐藏预览时暂停本地呈现，远端串流继续运行。
 - 在应用内查看媒体流统计、ICE 路由与连接状态，并进行对端吞吐测速。
 
 HEVC 需要兼容的硬件编码器及在 WebRTC 中支持 H.265 的接收端。
@@ -249,6 +253,8 @@ NSIS 安装包须在 Windows 上构建。仓库结构见[工作区文档](docs/W
 - [文件传输协议](docs/FILE_TRANSFERS.md)
 - [部署说明](docs/DEPLOYMENT.md)
 - [更新日志](CHANGELOG.md)
+- 媒体依赖说明：[Mediabunny](apps/web/public/licenses/mediabunny.txt) 和
+  [NVENC 接口](apps/web/public/licenses/nvcodec.txt)
 
 使用过程中如有问题，也可以加入 QQ 群反馈：
 [762463759](https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=5MRpXPQN4vGtiLnTzCUb-NlAK9txeEoE&authKey=Gm3OmhI6g3ccmNx8rXVcPsbmEzsoBcj%2FpF%2FOlq7edcbMxTlhPLipZ6i9fwsPCsLt&noverify=0&group_code=762463759)。
