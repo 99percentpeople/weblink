@@ -13,6 +13,7 @@ export function createVideoPlaybackRecovery(options: {
   resume(
     video: HTMLVideoElement,
     track: MediaStreamTrack,
+    restartPending: boolean,
   ): void;
 }): void {
   createEffect(
@@ -54,7 +55,7 @@ export function createVideoPlaybackRecovery(options: {
             !force)
         )
           return;
-        options.resume(video, track);
+        options.resume(video, track, revealed || force);
       };
       const recover = () => resume();
       const presentationChanged = () =>
@@ -85,6 +86,14 @@ export function createVideoPlaybackRecovery(options: {
         recover,
         listener,
       );
+      target.addEventListener(
+        "freeze",
+        () => {
+          wasVisible = false;
+        },
+        listener,
+      );
+      target.addEventListener("resume", recover, listener);
       target.defaultView?.addEventListener(
         "pageshow",
         recover,

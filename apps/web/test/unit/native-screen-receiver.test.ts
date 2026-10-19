@@ -259,35 +259,91 @@ it.each(["H264", "H265"])(
   },
 );
 
-it("detects sustained incoming video without decoded frames and stops polling on failure", async () => {
+it.each([0, 100])(
+  "requests recovery for stalled video after %i decoded frames and stops polling",
+  async (framesDecoded) => {
+    vi.useFakeTimers();
+    const failed = vi.fn();
+    const screen = new ScreenReceiver({}, vi.fn(), failed);
+    let bytes = 0;
+    const stats = vi.fn(
+      async () =>
+        new Map([
+          [
+            "video",
+            {
+              type: "inbound-rtp",
+              kind: "video",
+              framesDecoded,
+              bytesReceived: ++bytes * 1000,
+            },
+          ],
+        ]),
+    );
+    Object.assign(screen.pc, { getStats: stats });
+    screen.monitorDecode(vi.fn());
+    await vi.advanceTimersByTimeAsync(14000);
+    expect(failed).toHaveBeenCalledOnce();
+    expect(failed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          "Native screen video decoding stalled while receiving data",
+      }),
+    );
+    expect(failed.mock.calls[0][0]).not.toBeInstanceOf(
+      ScreenDecodeError,
+    );
+    const reads = stats.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(stats).toHaveBeenCalledTimes(reads);
+  },
+);
+
+it("preserves audio through background suspension and gives video a new recovery window", async () => {
   vi.useFakeTimers();
+  const page = Object.assign(new EventTarget(), {
+    visibilityState: "visible",
+  });
+  vi.stubGlobal("document", page);
   const failed = vi.fn();
   const screen = new ScreenReceiver({}, vi.fn(), failed);
-  let bytes = 0;
-  const stats = vi.fn(
-    async () =>
-      new Map([
-        [
-          "video",
-          {
-            type: "inbound-rtp",
-            kind: "video",
-            framesDecoded: 0,
-            bytesReceived: ++bytes * 1000,
-          },
-        ],
-      ]),
-  );
-  Object.assign(screen.pc, { getStats: stats });
+  const video = announce(screen, "video", {});
+  const audio = announce(screen, "audio", {});
+  let frames = 100,
+    bytes = 1000;
+  Object.assign(screen.pc, {
+    getStats: vi.fn(
+      async () =>
+        new Map([
+          [
+            "video",
+            {
+              type: "inbound-rtp",
+              kind: "video",
+              framesDecoded: frames,
+              bytesReceived: (bytes += 1000),
+            },
+          ],
+        ]),
+    ),
+  });
   screen.monitorDecode(vi.fn());
-  await vi.advanceTimersByTimeAsync(14000);
-  expect(failed).toHaveBeenCalledOnce();
-  expect(failed).toHaveBeenCalledWith(
-    expect.any(ScreenDecodeError),
-  );
-  const reads = stats.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  page.visibilityState = "hidden";
+  page.dispatchEvent(new Event("visibilitychange"));
   await vi.advanceTimersByTimeAsync(60000);
-  expect(stats).toHaveBeenCalledTimes(reads);
+  page.visibilityState = "visible";
+  page.dispatchEvent(new Event("visibilitychange"));
+  await vi.advanceTimersByTimeAsync(12000);
+  expect(failed).not.toHaveBeenCalled();
+  expect(audio.stop).not.toHaveBeenCalled();
+  expect(video.stop).not.toHaveBeenCalled();
+  frames++;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(failed).not.toHaveBeenCalled();
+  screen.close();
+  expect(audio.stop).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("requires decoded progress for stable success, never treats a silent network as codec failure", async () => {

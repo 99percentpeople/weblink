@@ -82,12 +82,15 @@ export class PeerSessionLifecycleController {
       () => this.options.close(),
       { signal },
     );
-    // Focus/tab switches are not evidence of renewed network availability.
-    // Only a real page suspension/resume, network-online or signaling event
-    // can request another attempt after failure.
+    // Mobile browsers can suspend networking without delivering freeze.
+    // A hidden-to-visible transition may retry a failed connection, while
+    // duplicate visibility/focus events must not create a retry loop.
+    let foregroundPending =
+      document.visibilityState !== "visible";
     const resumePage = () => {
       if (!this.suspended) return;
       this.suspended = false;
+      foregroundPending = false;
       this.resume("resume");
     };
     document.addEventListener("resume", resumePage, {
@@ -99,8 +102,13 @@ export class PeerSessionLifecycleController {
     document.addEventListener(
       "visibilitychange",
       () => {
-        if (document.visibilityState === "visible")
-          resumePage();
+        const visible =
+          document.visibilityState === "visible";
+        const revealed = visible && foregroundPending;
+        foregroundPending = !visible;
+        if (!visible) return;
+        if (this.suspended) resumePage();
+        else if (revealed) this.resume("visible");
       },
       { signal },
     );
@@ -252,11 +260,24 @@ export class PeerSessionLifecycleController {
       reason,
     });
     try {
-      // Automatic recovery keeps one deterministic offer owner. The impolite
-      // peer initiates; the polite peer rebuilds and waits for that offer.
-      await this.options.reconnect({
-        initiate: !this.options.polite,
-      });
+      try {
+        // Keep one initial offer owner when both endpoints recover together.
+        await this.options.reconnect({
+          initiate: !this.options.polite,
+        });
+      } catch (error) {
+        if (
+          !this.options.polite ||
+          controller.signal.aborted ||
+          this.recoveryController !== controller ||
+          this.options.sender.status !== "connected"
+        )
+          throw error;
+        // The remote may still consider its old transport healthy and never
+        // send an offer. One active fallback bounds the passive wait without
+        // relying on a new signaling event or starting a retry loop.
+        await this.options.reconnect({ initiate: true });
+      }
     } catch (error) {
       if (
         controller.signal.aborted ||

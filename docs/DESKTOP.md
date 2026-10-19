@@ -561,7 +561,11 @@ with a compatible-format suggestion, without waiting for ICE or silently switchi
 formats. Native AV1 hardware publication is not implemented.
 
 Negotiation alone does not prove decoding. Receivers observe decoded-frame progress
-while video RTP is arriving, and report terminal codec/playback failures inside the
+while video RTP is arriving. A sustained stall uses the bounded transport retry
+path; missing decoded frames alone do not establish an unsupported codec. Hidden
+or frozen pages, interrupted sampling and reset RTP counters start a fresh
+observation window, so background time cannot exhaust the video recovery window.
+Explicit codec/playback rejection remains terminal and is shown inside the
 existing source card. Cards use publication identity across media reconnection.
 Terminal failures do not automatically switch codecs or retry; restarting sharing
 creates a new publication. Transport retries remain bounded, with their budget reset

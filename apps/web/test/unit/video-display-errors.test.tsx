@@ -209,6 +209,73 @@ describe("VideoDisplay playback error notifications", () => {
     expect(notification.error).not.toHaveBeenCalled();
   });
 
+  it.each(["visibility", "freeze", "stage"])(
+    "replaces a pending play on %s recovery and ignores its late failure",
+    async (event) => {
+      let rejectOld!: (error: Error) => void;
+      let resolveCurrent!: () => void;
+      play.mockReturnValueOnce(
+        new Promise<void>((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+      );
+      play.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveCurrent = resolve;
+        }),
+      );
+      const { video, source, setActive } = await setup();
+      const attached = video.srcObject;
+      let visibility = "visible";
+      vi.spyOn(
+        document,
+        "visibilityState",
+        "get",
+      ).mockImplementation(
+        () => visibility as DocumentVisibilityState,
+      );
+      fireEvent.canPlay(video);
+      expect(play).toHaveBeenCalledOnce();
+      if (event === "visibility") {
+        visibility = "hidden";
+        document.dispatchEvent(
+          new Event("visibilitychange"),
+        );
+        visibility = "visible";
+        document.dispatchEvent(
+          new Event("visibilitychange"),
+        );
+      } else if (event === "freeze") {
+        document.dispatchEvent(new Event("freeze"));
+        document.dispatchEvent(new Event("resume"));
+      } else {
+        setActive(false);
+        setActive(true);
+      }
+      await flush();
+      expect(play).toHaveBeenCalledTimes(2);
+      expect(
+        HTMLMediaElement.prototype.pause,
+      ).toHaveBeenCalled();
+      expect(video.srcObject).toBe(attached);
+      rejectOld(
+        new DOMException(
+          "Old request failed",
+          "NotSupportedError",
+        ),
+      );
+      await flush();
+      fireEvent.canPlay(video);
+      expect(play).toHaveBeenCalledTimes(2);
+      expect(notification.error).not.toHaveBeenCalled();
+      resolveCurrent();
+      await flush();
+      source.dispatchEvent(new Event("unmute"));
+      expect(play).toHaveBeenCalledTimes(3);
+      expect(source.stop).not.toHaveBeenCalled();
+    },
+  );
+
   it("shows one retryable toast and an in-card error while retaining normal loading indicators", async () => {
     const { video } = await setup();
     expect(

@@ -232,7 +232,7 @@ export const VideoDisplay = (
     video: videoRef,
     track: videoTrack,
     active: () => props.playbackActive !== false,
-    resume: (video, track) => {
+    resume: (video, track, restartPending) => {
       const currentStream = videoStream();
       if (
         !currentStream ||
@@ -243,6 +243,13 @@ export const VideoDisplay = (
         return;
       if (video.srcObject !== currentStream)
         video.srcObject = currentStream;
+      if (playPending && restartPending) {
+        // A backgrounded play() can remain pending. Invalidate it before pause
+        // aborts it; late rejection must not overwrite the resumed playback.
+        ++playbackAttempt;
+        playPending = false;
+        video.pause();
+      }
       if (!playPending) play(video, track);
     },
   });

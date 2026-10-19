@@ -127,21 +127,84 @@ describe("event-driven peer recovery", () => {
     });
   });
 
-  it("uses the negotiation role to choose the automatic offer owner", async () => {
-    const polite = harness(false, true, true);
-    polite.signal("connected");
+  it("initiates automatic recovery without waiting for the remote peer to detect failure", async () => {
+    const h = harness(true);
+    h.signal("connected");
     await flush();
-    expect(polite.reconnect).toHaveBeenCalledWith({
-      initiate: false,
-    });
-
-    const impolite = harness();
-    impolite.signal("connected");
+    await h.controller.handleDisconnection("local-failure");
     await flush();
-    expect(impolite.reconnect).toHaveBeenCalledWith({
+    expect(h.reconnect).toHaveBeenCalledOnce();
+    expect(h.reconnect).toHaveBeenCalledWith({
       initiate: true,
     });
   });
+
+  it("lets the polite peer initiate after its passive recovery times out without a new availability event", async () => {
+    const h = harness(true, true, true);
+    h.signal("connected");
+    await flush();
+    h.reconnect.mockRejectedValueOnce(
+      new Error("wait connected timeout"),
+    );
+    await h.controller.handleDisconnection("local-failure");
+    expect(h.reconnect.mock.calls).toEqual([
+      [{ initiate: false }],
+      [{ initiate: true }],
+    ]);
+    expect(h.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("keeps the passive offer owner when the other peer responds", async () => {
+    const h = harness(false, true, true);
+    h.signal("connected");
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledOnce();
+    expect(h.reconnect).toHaveBeenCalledWith({
+      initiate: false,
+    });
+  });
+
+  it("stops after one failed active fallback until new availability", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = harness(false, true, true);
+    h.reconnect.mockRejectedValue(
+      new Error("unreachable peer"),
+    );
+    h.signal("connected");
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(h.reconnect).toHaveBeenCalledTimes(2);
+    expect(h.disconnect).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    "signaling-disconnected",
+    "remote-restart",
+    "disposed",
+  ])(
+    "does not initiate a fallback after %s interrupts the passive attempt",
+    async (interruption) => {
+      const h = harness(false, true, true);
+      let reject!: (error: Error) => void;
+      h.reconnect.mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, fail) => {
+            reject = fail;
+          }),
+      );
+      h.signal("connected");
+      await flush();
+      if (interruption === "signaling-disconnected")
+        h.signal("disconnected");
+      else if (interruption === "remote-restart")
+        h.controller.stopRecovery();
+      else h.controller.dispose();
+      reject(new Error("interrupted"));
+      await flush();
+      expect(h.reconnect).toHaveBeenCalledOnce();
+    },
+  );
 
   it("does not poll after a failed attempt; peer-online allows one new attempt", async () => {
     vi.useFakeTimers();
@@ -191,6 +254,77 @@ describe("event-driven peer recovery", () => {
     await flush();
     expect(h.reconnect).not.toHaveBeenCalled();
     expect(h.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed connection on a real foreground return without freeze or signaling changes", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    let visibility: DocumentVisibilityState = "visible";
+    vi.spyOn(
+      document,
+      "visibilityState",
+      "get",
+    ).mockImplementation(() => visibility);
+    const h = harness();
+    h.reconnect.mockRejectedValueOnce(
+      new Error("unreachable peer"),
+    );
+    h.reconnect.mockRejectedValueOnce(
+      new Error("still unreachable"),
+    );
+    h.signal("connected");
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledOnce();
+
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledOnce();
+
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 3; i++) {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("pageshow"));
+      window.dispatchEvent(new Event("focus"));
+    }
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a healthy connection on a foreground return", async () => {
+    let visibility: DocumentVisibilityState = "hidden";
+    vi.spyOn(
+      document,
+      "visibilityState",
+      "get",
+    ).mockImplementation(() => visibility);
+    const h = harness(true);
+    h.signal("connected");
+    await flush();
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush();
+    expect(h.reconnect).not.toHaveBeenCalled();
+    expect(h.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("keeps waiting for signaling when a disconnected page returns to the foreground", async () => {
+    let visibility: DocumentVisibilityState = "hidden";
+    vi.spyOn(
+      document,
+      "visibilityState",
+      "get",
+    ).mockImplementation(() => visibility);
+    const h = harness();
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush();
+    expect(h.reconnect).not.toHaveBeenCalled();
+    h.signal("connected");
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledOnce();
   });
 
   it("recovers a pure RTC failure once even when signaling never disconnected", async () => {
@@ -276,6 +410,32 @@ describe("event-driven peer recovery", () => {
     expect(h.reconnect).not.toHaveBeenCalled();
     document.dispatchEvent(new Event("resume"));
     document.dispatchEvent(new Event("resume"));
+    await flush();
+    expect(h.reconnect).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry twice when resume precedes the visible event after freezing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    let visibility: DocumentVisibilityState = "visible";
+    vi.spyOn(
+      document,
+      "visibilityState",
+      "get",
+    ).mockImplementation(() => visibility);
+    const h = harness(true);
+    h.signal("connected");
+    await flush();
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("freeze"));
+    h.reconnect.mockRejectedValueOnce(
+      new Error("unreachable peer"),
+    );
+    document.dispatchEvent(new Event("resume"));
+    await flush();
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("pageshow"));
     await flush();
     expect(h.reconnect).toHaveBeenCalledOnce();
   });

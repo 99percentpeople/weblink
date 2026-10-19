@@ -1,4 +1,5 @@
 import { PeerSession } from "../../../src/libs/domain/session";
+import { createSessionMessage } from "../../../src/libs/domain/protocol/messages";
 import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
 import type {
   RawSignal,
@@ -22,7 +23,7 @@ function assert(
 const trace: string[] = [];
 const record = (message: string) => {
   trace.push(message);
-  if (trace.length > 60) trace.shift();
+  if (trace.length > 100) trace.shift();
 };
 async function until(
   check: () => boolean | Promise<boolean>,
@@ -63,6 +64,12 @@ class Sender implements SignalingService {
     this.events.dispatchEvent("statuschange", status);
   }
   async sendSignal(signal: RawSignal) {
+    if (signal.type === "candidate") {
+      const data = JSON.parse(signal.data);
+      record(
+        `${this.clientId} candidate ${data.generation}: ${JSON.stringify(data.candidate)}`,
+      );
+    }
     if (signal.type !== "candidate")
       record(
         `${this.clientId} sends ${signal.type}: ${JSON.parse(
@@ -211,6 +218,13 @@ async function main() {
               `${session.clientId} pc ${pc.connectionState}`,
             ),
           );
+          pc.addEventListener(
+            "iceconnectionstatechange",
+            () =>
+              record(
+                `${session.clientId} ice ${pc.iceConnectionState}`,
+              ),
+          );
         },
       );
     }
@@ -253,6 +267,45 @@ async function main() {
       },
     );
     return decodedVideos >= videos && receivedAudio >= 1;
+  };
+  const verifyMessages = async (label: string) => {
+    const controller = new AbortController();
+    const received = new Set<string>();
+    const id = crypto.randomUUID();
+    try {
+      for (const session of [a, b]) {
+        session.addEventListener(
+          "message",
+          ({ detail }) => {
+            if (
+              detail.id === id &&
+              detail.type === "send-text" &&
+              detail.data === label
+            )
+              received.add(session.clientId);
+          },
+          { signal: controller.signal },
+        );
+      }
+      await Promise.all(
+        [a, b].map((session) =>
+          session.sendMessage(
+            createSessionMessage(
+              session,
+              "send-text",
+              { data: label },
+              { id },
+            ),
+          ),
+        ),
+      );
+      await until(
+        () => received.size === 2,
+        `bidirectional messages ${label}`,
+      );
+    } finally {
+      controller.abort();
+    }
   };
   const exerciseMediaChanges = async (label: string) => {
     const oldA = a.peerConnection!,
@@ -519,11 +572,148 @@ async function main() {
     );
     await exerciseMediaChanges("after rollback recovery");
 
-    // A fresh offer is a new PC session, not a renegotiation of the remote's
-    // old SDP layout. Exercise both initiator roles and then change media.
+    // Only the detecting endpoint gets a state event. Its recovery must send
+    // an offer even when it is polite and the remote still has its old PC.
     for (const initiator of [b, a]) {
       const oldA = a.peerConnection!,
         oldB = b.peerConnection!;
+      const sender = initiator === a ? sa : sb;
+      const remotePC = initiator === a ? oldB : oldA;
+      // Model a stale remote connection state explicitly. A normal local
+      // close can otherwise wake the remote before the passive timeout.
+      Object.defineProperty(remotePC, "connectionState", {
+        configurable: true,
+        value: "connected",
+      });
+      try {
+        sa.holdOffers = sb.holdOffers = true;
+        const broken = initiator.peerConnection!;
+        broken.close();
+        broken.dispatchEvent(
+          new Event("connectionstatechange"),
+        );
+        await until(
+          () => !!sa.heldOffer || !!sb.heldOffer,
+          `automatic recovery offer ${initiator.clientId}`,
+        );
+        assert(
+          sender.heldOffer &&
+            (initiator === a
+              ? b.peerConnection === oldB
+              : a.peerConnection === oldA),
+          "the detecting peer initiates before the remote rebuilds",
+        );
+        sa.releaseOffer();
+        sb.releaseOffer();
+        await until(
+          () => mediaReady(),
+          `automatic one-sided recovery ${initiator.clientId}`,
+        );
+      } finally {
+        Reflect.deleteProperty(remotePC, "connectionState");
+      }
+      assert(
+        a.peerConnection !== oldA &&
+          b.peerConnection !== oldB,
+        "automatic one-sided recovery replaces both peer connections",
+      );
+      await verifyMessages(
+        `after automatic recovery ${initiator.clientId}`,
+      );
+      await exerciseMediaChanges(
+        `after automatic recovery ${initiator.clientId}`,
+      );
+    }
+
+    // A failed attempt leaves the member present but disconnected. Ordinary
+    // foreground return (without freeze or socket events) must wake it.
+    sb.interruptOffer = () => {
+      throw new Error(
+        "Test interrupted automatic recovery",
+      );
+    };
+    const offlineController = new AbortController();
+    let offline = false;
+    b.addEventListener(
+      "statuschange",
+      ({ detail }) => {
+        offline = detail === "disconnected";
+      },
+      { signal: offlineController.signal },
+    );
+    try {
+      const failure = await b
+        .reconnect({ initiate: true })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      assert(
+        failure instanceof Error &&
+          failure.message ===
+            "Test interrupted automatic recovery",
+        "the interrupted offer fails the recovery attempt",
+      );
+      await until(
+        () => b.peerConnection === null && offline,
+        "failed recovery leaves the member offline",
+      );
+    } finally {
+      offlineController.abort();
+    }
+    const visibilityDescriptor =
+      Object.getOwnPropertyDescriptor(
+        document,
+        "visibilityState",
+      );
+    let visibility: DocumentVisibilityState = "hidden";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      assert(
+        b.peerConnection !== null,
+        "foreground return starts recovery before remote detection or signaling events",
+      );
+      await until(
+        () => mediaReady(),
+        "foreground return recovers the offline member",
+      );
+      await verifyMessages("after foreground recovery");
+      const healthyA = a.peerConnection,
+        healthyB = b.peerConnection;
+      visibility = "hidden";
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 100),
+      );
+      assert(
+        a.peerConnection === healthyA &&
+          b.peerConnection === healthyB,
+        "foreground return preserves healthy connections",
+      );
+    } finally {
+      if (visibilityDescriptor)
+        Object.defineProperty(
+          document,
+          "visibilityState",
+          visibilityDescriptor,
+        );
+      else
+        Reflect.deleteProperty(document, "visibilityState");
+    }
+
+    // A fresh offer is a new PC session, not a renegotiation of the remote's
+    // old SDP layout. Exercise both initiator roles and then change media.
+    for (const initiator of [b, a]) {
+      const oldA: RTCPeerConnection = a.peerConnection!,
+        oldB: RTCPeerConnection = b.peerConnection!;
       await initiator.reconnect({ initiate: true });
       await until(
         () => mediaReady(),
@@ -572,6 +762,10 @@ async function main() {
       mediaChangesAfterRecovery: true,
       mediaChangesWhileAwaitingAnswer: true,
       oneSidedRecoveryBothRoles: true,
+      automaticOneSidedRecoveryBothRoles: true,
+      bidirectionalMessagesAfterRecovery: true,
+      foregroundRecoveryWithoutFreeze: true,
+      foregroundReturnPreservedHealthyConnections: true,
       serverNotifiedRecoveryWithLocalSignalingUnchanged: true,
       initialInterruptedJoinRecovered: true,
       signalingOnlyOutagePreservedMedia: true,

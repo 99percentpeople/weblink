@@ -251,6 +251,55 @@ it("retains a failed codec card without retry until the publisher explicitly sto
   session.reset();
 });
 
+it("requests a replacement after a runtime video stall and accepts its audio/video without a codec ban", async () => {
+  const { session, channel, port } = setup();
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
+  });
+  channel.receive({
+    type: "offer",
+    id: "old",
+    sourceId: "screen",
+    sdp: "offer",
+  });
+  await flush();
+  receivers[0].changed(mediaStream("old"));
+  receivers[0].failed(
+    new Error(
+      "Native screen video decoding stalled while receiving data",
+    ),
+  );
+  expect(channel.sent.at(-1)).toEqual({
+    type: "retry",
+    id: "old",
+  });
+  expect(
+    channel.sent.some((s) => s.state === "unsupported"),
+  ).toBe(false);
+  channel.receive({
+    type: "offer",
+    id: "new",
+    sourceId: "screen",
+    sdp: "offer",
+  });
+  await flush();
+  const restored = mediaStream("restored");
+  receivers[1].changed(restored);
+  expect(port.changed).toHaveBeenLastCalledWith(restored);
+  expect(port.viewsChanged).toHaveBeenLastCalledWith([
+    { sourceId: "screen", stream: restored },
+  ]);
+  receivers[0].failed(new ScreenDecodeError());
+  expect(
+    channel.sent.some((s) => s.state === "unsupported"),
+  ).toBe(false);
+  session.dispose();
+});
+
 it("does not retry a retired receiver when intentional replacement aborts pending connection work", async () => {
   const { session, channel, port } = setup();
   const servers = deferred<RTCIceServer[]>();
@@ -394,6 +443,39 @@ it("restores the retry budget after stable decoding and stops a terminal codec f
   session.setPublication();
   expect(channel.sent.at(-1)).toEqual({ type: "stop", id });
   session.reset();
+});
+
+it("bounds repeated video-stall retries without sustained decoded progress", async () => {
+  const { session, channel, port } = setup();
+  const pub = publication();
+  session.setPublication(pub);
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
+  });
+  await flush();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const id = channel.sent
+      .filter((s) => s.type === "offer")
+      .at(-1).id;
+    channel.receive({ type: "answer", id, sdp: "answer" });
+    await flush();
+    channel.receive({ type: "retry", id });
+    await vi.advanceTimersByTimeAsync(1000 * (attempt + 1));
+  }
+  await vi.advanceTimersByTimeAsync(180000);
+  expect(pub.offer).toHaveBeenCalledTimes(4);
+  expect(port.error).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message:
+        "Native screen could not connect; restart sharing to retry",
+    }),
+  );
+  session.dispose();
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it.each([true, false])(

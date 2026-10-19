@@ -159,6 +159,21 @@ describe("live video playback recovery", () => {
     expect(f.resume).toHaveBeenCalledOnce();
   });
 
+  it("resumes an explicitly frozen presentation even if the element still reports playing", () => {
+    const f = setup();
+    observers[0].visible(f.video, true);
+    document.dispatchEvent(new Event("freeze"));
+    document.dispatchEvent(new Event("resume"));
+    expect(f.resume).toHaveBeenCalledTimes(2);
+    expect(f.resume).toHaveBeenLastCalledWith(
+      f.video,
+      f.track,
+      true,
+    );
+    f.video.dispatchEvent(new Event("canplay"));
+    expect(f.resume).toHaveBeenCalledTimes(2);
+  });
+
   it("refreshes a revealed inline presentation even if WebKit still reports playing", async () => {
     const f = setup();
     observers[0].visible(f.video, true);

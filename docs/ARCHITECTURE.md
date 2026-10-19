@@ -192,7 +192,9 @@ Application source paths in the sections below are relative to `apps/web/`.
     canvas/thumbnail visibility explicitly because CSS visibility changes need
     not change intersection. Recovery retries paused live video and refreshes
     inline playback on reveal, decoded-size changes and native PiP/fullscreen
-    presentation events, even if the browser still reports playing. Hiding a
+    presentation events, even if the browser still reports playing. A pending
+    play request can be superseded on recovery; its late result cannot change
+    the current playback state. Hiding a
     bound view retains its source for PiP; recovery never replaces a healthy
     stream or stops borrowed tracks. Autoplay denial keeps a translated
     toast action available for a user-initiated play request; browser policies
@@ -637,12 +639,20 @@ may select concrete infrastructure implementations.
     remotely shared settings.
   - `session.ts`, `peer-negotiation.ts`, `signaling.ts`: WebRTC session and
     signaling service contracts.
+    `session-lifecycle.ts` retains one initial offer owner for simultaneous
+    recovery. If the polite endpoint's passive attempt fails while signaling
+    remains available, it makes one active attempt so recovery does not depend
+    on the other endpoint detecting the failure. A return from hidden to visible
+    can retry a failed session even without a `freeze` event.
+    Availability events preserve healthy connections, and failed attempts wait
+    for fresh availability instead of running a polling loop.
   - `native-screen/session.ts`: authenticated native-media channel, capability
     negotiation, incoming streams and view identity. `native-screen/sender.ts`
     owns each outgoing publication's offers, ICE, retry budget and cleanup;
     its retained receiver identity survives a closed or pending transport.
     `native-screen/signaling.ts` owns the additive wire messages and parser,
-    while `native-screen/receiver.ts` owns receive-only RTC and decode monitoring.
+    while `native-screen/receiver.ts` owns receive-only RTC and
+    `native-screen/decode-monitor.ts` observes foreground decode progress.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
     presence, routed-peer messages, join acknowledgment, deployed version and
     limits for cross-client implementations.

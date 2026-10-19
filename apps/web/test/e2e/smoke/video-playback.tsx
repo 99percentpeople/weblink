@@ -212,6 +212,59 @@ async function main() {
       video.srcObject === attached,
       "recovery must not replace the source",
     );
+
+    // Model a play request suspended by backgrounding, then exercise the real
+    // media element and RTP after visibility recovery. This is not an OS suspend.
+    video.pause();
+    const beforePending = plays;
+    let rejectSuspended!: (error: Error) => void;
+    HTMLMediaElement.prototype.play = function () {
+      plays++;
+      if (plays === beforePending + 1)
+        return new Promise<void>((_resolve, reject) => {
+          rejectSuspended = reject;
+        });
+      return originalPlay.call(this);
+    };
+    video.dispatchEvent(new Event("canplay"));
+    await until(
+      () => plays === beforePending + 1,
+      "suspended playback request started",
+    );
+    let visibility = "hidden";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    const framesBeforeResume =
+      video.getVideoPlaybackQuality().totalVideoFrames;
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await until(
+      () =>
+        !video.paused &&
+        video.getVideoPlaybackQuality().totalVideoFrames >
+          framesBeforeResume,
+      "foreground recovery presents new RTP frames despite a pending play",
+    );
+    rejectSuspended(
+      new DOMException(
+        "Obsolete playback failed",
+        "NotSupportedError",
+      ),
+    );
+    await paint();
+    assert(
+      !host.querySelector('[role="status"]'),
+      "obsolete playback failure cannot replace the recovered video with an error",
+    );
+    assert(
+      video.srcObject === attached &&
+        track.readyState === "live",
+      "pending-play recovery retains the borrowed track and stream",
+    );
+    Reflect.deleteProperty(document, "visibilityState");
     const report = await receiver.getStats();
     let framesDecoded = 0;
     report.forEach((item) => {
@@ -238,12 +291,14 @@ async function main() {
       hiddenSourceDeferred: true,
       initialAbortRecovered: true,
       visibilityRecovered: true,
+      pendingPlayRecovered: true,
       presentationEventRecovered: true,
       sameBorrowedTrack: true,
     };
   } finally {
     dispose();
     HTMLMediaElement.prototype.play = originalPlay;
+    Reflect.deleteProperty(document, "visibilityState");
     lifetime.abort();
     sending.dispose();
     receiving.dispose();
