@@ -1,3 +1,8 @@
+import {
+  applicationChannel,
+  bootstrapMessage,
+} from "./device-identity/access";
+import { combineAbortSignals } from "../utils/abort-signals";
 import type {
   ClientSignal,
   SignalingService,
@@ -46,6 +51,8 @@ const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
   };
 
 export interface PeerSessionOptions {
+  acceptsContent?: () => boolean;
+  allowsApplication?: () => boolean;
   /** Silently discard incoming messages before handlers or protocol errors can respond. */
   acceptMessage?: (message: SessionMessage) => boolean;
   authorizeMessage?: (
@@ -66,6 +73,7 @@ export interface PeerSessionOptions {
 
 export type PeerSessionEventMap = {
   channel: RTCDataChannel;
+  accesschange: boolean;
   message: SessionMessage;
   error: Error;
   messagechannelchange: "ready" | "closed";
@@ -94,6 +102,10 @@ export class PeerSession {
   private listenController: AbortController | null = null;
   private readonly getRuntimeOptions: () => PeerSessionRuntimeOptions;
   private readonly authorizeMessage: PeerSessionOptions["authorizeMessage"];
+  private readonly acceptsContent: () => boolean;
+  private readonly allowsApplication: () => boolean;
+  private accessLifetime = new AbortController();
+  private accessAllowed = true;
   private readonly acceptMessage: PeerSessionOptions["acceptMessage"];
 
   constructor(
@@ -109,11 +121,15 @@ export class PeerSession {
       getAudioSource,
       authorizeMessage,
       acceptMessage,
+      acceptsContent = () => true,
+      allowsApplication = () => true,
     }: PeerSessionOptions = {},
   ) {
     this.sender = sender;
     this.authorizeMessage = authorizeMessage;
     this.acceptMessage = acceptMessage;
+    this.acceptsContent = acceptsContent;
+    this.allowsApplication = allowsApplication;
     this.polite = polite;
     this.iceServers = iceServers ?? [];
     this.relayOnly = relayOnly;
@@ -149,6 +165,9 @@ export class PeerSession {
       getStatus: () => this.status,
       getPeerConnection: () => this.peerConnection,
       getSessionSignal: () => this.controller?.signal,
+      acceptsChannel: (label, protocol) =>
+        !applicationChannel(label, protocol) ||
+        (this.allowsApplication() && this.acceptsContent()),
       ordered: () => this.getRuntimeOptions().ordered,
       createChannel: (label, protocol) =>
         this.createChannel(label, protocol),
@@ -160,6 +179,7 @@ export class PeerSession {
     });
     this.media = new PeerSessionMediaController({
       targetClientId: () => this.targetClientId,
+      acceptsContent: () => this.acceptsContent(),
       getPeerConnection: () => this.peerConnection,
       getCodecOptions: () => {
         return this.getRuntimeOptions();
@@ -610,14 +630,28 @@ export class PeerSession {
       this.acceptMessage?.(message) === false
     )
       return;
-    const signal = this.controller?.signal;
-    const approval = this.authorizeMessage?.(
-      this,
-      message,
-      signal,
-    );
+    const combined = combineAbortSignals([
+      this.controller?.signal,
+      bootstrapMessage(message.type)
+        ? undefined
+        : this.accessLifetime.signal,
+    ]);
+    const signal = combined.signal;
+    let approval: void | Promise<void>;
+    try {
+      signal.throwIfAborted();
+      approval = this.authorizeMessage?.(
+        this,
+        message,
+        signal,
+      );
+    } catch (error) {
+      approval = Promise.reject(error);
+    }
     if (!approval) {
-      this.dispatchEvent("message", message);
+      if (!signal.aborted)
+        this.dispatchEvent("message", message);
+      combined.dispose();
       return;
     }
     void approval
@@ -650,19 +684,56 @@ export class PeerSession {
               { signal },
             )
             .catch(() => {});
-      });
+      })
+      .finally(() => combined.dispose());
   }
 
   async sendMessage(
     message: SessionMessage,
     options: MessageSendOptions = {},
   ): Promise<void> {
-    await this.authorizeMessage?.(
-      this,
-      message,
-      options.signal ?? this.controller?.signal,
-    );
-    return this.dataChannels.sendMessage(message, options);
+    const combined = combineAbortSignals([
+      options.signal,
+      this.controller?.signal,
+      bootstrapMessage(message.type)
+        ? undefined
+        : this.accessLifetime.signal,
+    ]);
+    try {
+      await this.authorizeMessage?.(
+        this,
+        message,
+        combined.signal,
+      );
+      combined.signal.throwIfAborted();
+      if (
+        !bootstrapMessage(message.type) &&
+        !this.allowsApplication()
+      )
+        throw new Error("DEVICE_UNTRUSTED");
+      return await this.dataChannels.sendMessage(message, {
+        ...options,
+        signal: combined.signal,
+      });
+    } finally {
+      combined.dispose();
+    }
+  }
+
+  refreshAccess(): void {
+    this.dataChannels.refreshAccess();
+    this.media.refreshAccess();
+    const allowed =
+      this.allowsApplication() && this.acceptsContent();
+    if (allowed === this.accessAllowed) return;
+    this.accessAllowed = allowed;
+    if (!allowed) {
+      this.accessLifetime.abort(
+        new Error("DEVICE_PERMISSION_REVOKED"),
+      );
+      this.accessLifetime = new AbortController();
+    }
+    this.dispatchEvent("accesschange", allowed);
   }
 
   async reconnect(options: { initiate?: boolean } = {}) {

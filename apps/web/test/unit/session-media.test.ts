@@ -150,7 +150,10 @@ function setup(
     preferredAudioCodec: null,
   }),
 ) {
-  const state = { pc: null as PeerConnection | null };
+  const state = {
+    pc: null as PeerConnection | null,
+    allowed: true,
+  };
   const remote =
     vi.fn<(stream: MediaStream | null) => void>();
   const remoteBindings = vi.fn();
@@ -158,6 +161,7 @@ function setup(
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
     targetClientId: () => "peer",
+    acceptsContent: () => state.allowed,
     getPeerConnection: () =>
       state.pc ? asPc(state.pc) : null,
     getCodecOptions,
@@ -196,6 +200,7 @@ it("installs encoded recording with the sender and keeps forwarding resources un
     end: vi.fn(),
     dispose: vi.fn(),
     subscribe: vi.fn(),
+    setEnabled: vi.fn(),
   };
   const install = vi
     .spyOn(RtpEncodedMediaTrack, "install")
@@ -241,6 +246,7 @@ it("exposes paired receiver audio/video and releases only recording subscription
         dispose: vi.fn(),
         end: vi.fn(),
         subscribe: vi.fn(),
+        setEnabled: vi.fn(),
       };
       taps.push(tap);
       return tap as unknown as RtpEncodedMediaTrack;
@@ -770,4 +776,37 @@ describe("multiple video sources in a peer session", () => {
     expect(camera.stop).not.toHaveBeenCalled();
     controller.dispose();
   });
+});
+
+it("revokes all received audio/video immediately and restores the same live receivers only on permission", () => {
+  const h = setup();
+  const { pc } = h.bind();
+  const video = new Track("video", "remote-video"),
+    audio = new Track("audio", "remote-audio");
+  pc.receive(video);
+  pc.receive(audio);
+  expect(
+    h.remote.mock.lastCall?.[0]?.getTracks(),
+  ).toHaveLength(2);
+  h.state.allowed = false;
+  h.controller.refreshAccess();
+  expect(h.remote).toHaveBeenLastCalledWith(null);
+  expect(h.remoteBindings).toHaveBeenLastCalledWith([]);
+  expect(h.remoteAudioBindings).toHaveBeenLastCalledWith(
+    [],
+  );
+  expect(asTrack(video).enabled).toBe(false);
+  expect(asTrack(audio).enabled).toBe(false);
+  const denied = new Track("video", "blocked-arrival");
+  pc.receive(denied);
+  expect(h.remote).toHaveBeenLastCalledWith(null);
+  expect(asTrack(denied).enabled).toBe(false);
+  h.state.allowed = true;
+  h.controller.refreshAccess();
+  expect(
+    h.remote.mock.lastCall?.[0]?.getTracks(),
+  ).toHaveLength(3);
+  expect(asTrack(video).enabled).toBe(true);
+  expect(video.stop).not.toHaveBeenCalled();
+  h.controller.dispose();
 });

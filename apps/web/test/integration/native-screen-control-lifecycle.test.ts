@@ -102,6 +102,17 @@ async function setup(expectControl = true) {
   const service = new SessionService({
     loadIceServers: async () => [],
   });
+  // This fixture supplies native publications directly and exercises control
+  // consent after device pairing. Device gates have their own integration tests.
+  vi.spyOn(service.trust, "bind").mockReturnValue(() => {});
+  vi.spyOn(service, "canReceive").mockReturnValue(true);
+  vi.spyOn(service, "canShareScreen").mockReturnValue(true);
+  vi.spyOn(
+    service as unknown as {
+      applySessionStream(session: PeerSession): void;
+    },
+    "applySessionStream",
+  ).mockImplementation(() => {});
   const clientService: ClientService = {
     info: {
       clientId: "local",

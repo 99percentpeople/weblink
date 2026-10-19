@@ -88,3 +88,38 @@ describe("message channels across peer recovery", () => {
     h.dispose();
   });
 });
+
+it("rechecks permission after an asynchronously opened application channel", async () => {
+  let allowed = true;
+  const data = channel(7);
+  Object.assign(data, {
+    label: "file",
+    protocol: "file",
+    readyState: "connecting",
+  });
+  const controller = new PeerSessionChannelController({
+    polite: false,
+    acceptsChannel: () => allowed,
+    getStatus: () => "connected",
+    getPeerConnection: () =>
+      ({
+        createDataChannel: () => data,
+      }) as unknown as RTCPeerConnection,
+    getSessionSignal: () => undefined,
+    ordered: () => true,
+    createChannel: async () => data,
+    onChannel: vi.fn(),
+    onMessage: vi.fn(),
+    onMessageChannelChange: vi.fn(),
+  });
+  const opening = controller.createChannel("file", "file");
+  const rejected = expect(opening).rejects.toThrow(
+    "DEVICE_PERMISSION_DENIED",
+  );
+  allowed = false;
+  Object.assign(data, { readyState: "open" });
+  data.dispatchEvent(new Event("open"));
+  await rejected;
+  expect(data.close).toHaveBeenCalled();
+  controller.close();
+});

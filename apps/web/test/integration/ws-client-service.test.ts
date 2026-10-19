@@ -563,6 +563,138 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     },
   );
 
+  it.each(["error-frame", "close-only"])(
+    "waits out initial duplicate-ID rejection via %s and joins after ownership is released",
+    async (mode) => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, "random").mockReturnValue(0);
+      FakeWebSocket.acknowledgeJoins = false;
+      const service = createService(),
+        joined = vi.fn();
+      const connecting = service
+        .createClient()
+        .then(joined);
+      await flushMicrotasks();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const socket = FakeWebSocket.instances[attempt];
+        socket.accept();
+        await flushMicrotasks();
+        expect(
+          socket
+            .parsedMessages()
+            .filter((m) => m.type === "join"),
+        ).toHaveLength(1);
+        if (mode === "error-frame")
+          socket.receive({
+            type: "error",
+            data: "DUPLICATE_DEVICE_ID",
+          });
+        socket.serverClose(1008, "Duplicate device ID");
+        await flushMicrotasks(20);
+        expect(joined).not.toHaveBeenCalled();
+        expect(
+          socket
+            .parsedMessages()
+            .some((m) => m.type === "leave"),
+        ).toBe(false);
+        const delay = 250 * 2 ** attempt;
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        expect(FakeWebSocket.instances).toHaveLength(
+          attempt + 1,
+        );
+        await vi.advanceTimersByTimeAsync(1);
+        expect(FakeWebSocket.instances).toHaveLength(
+          attempt + 2,
+        );
+      }
+      FakeWebSocket.acknowledgeJoins = true;
+      FakeWebSocket.instances[3].accept();
+      await connecting;
+      expect(joined).toHaveBeenCalledOnce();
+      expect(service.createSender("remote")?.status).toBe(
+        "connected",
+      );
+      expect(notice).not.toHaveBeenCalledWith(
+        "session-replaced",
+      );
+    },
+  );
+
+  it("keeps retrying duplicate IDs during resume while the existing sender remains suspended", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const service = createService(),
+      first = await connectService(service);
+    const sender = service.createSender("remote")!;
+    FakeWebSocket.acknowledgeJoins = false;
+    first.serverClose();
+    await flushMicrotasks();
+    const denied = FakeWebSocket.instances[1];
+    denied.accept();
+    await flushMicrotasks();
+    denied.serverClose(1008, "Duplicate device ID");
+    await flushMicrotasks(20);
+    expect(sender.status).toBe("disconnected");
+    await vi.advanceTimersByTimeAsync(250);
+    FakeWebSocket.acknowledgeJoins = true;
+    FakeWebSocket.instances[2].accept();
+    await flushMicrotasks(20);
+    expect(sender.status).toBe("connected");
+    expect(notice).not.toHaveBeenCalledWith(
+      "session-replaced",
+    );
+  });
+
+  it("cancels an initial duplicate-ID wait when the user leaves", async () => {
+    vi.useFakeTimers();
+    FakeWebSocket.acknowledgeJoins = false;
+    const service = createService();
+    const connecting = service.createClient();
+    const rejected = expect(connecting).rejects.toThrow(
+      "connection aborted",
+    );
+    await flushMicrotasks();
+    const denied = FakeWebSocket.instances[0];
+    denied.accept();
+    await flushMicrotasks();
+    denied.serverClose(1008, "Duplicate device ID");
+    await flushMicrotasks(20);
+    service.close();
+    await rejected;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(
+      denied
+        .parsedMessages()
+        .some((m) => m.type === "leave"),
+    ).toBe(false);
+  });
+  it("continues the initial ownership wait across a transient connection failure", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    FakeWebSocket.acknowledgeJoins = false;
+    const service = createService(),
+      connecting = service.createClient();
+    await flushMicrotasks();
+    FakeWebSocket.instances[0].accept();
+    await flushMicrotasks();
+    FakeWebSocket.instances[0].serverClose(
+      1008,
+      "Duplicate device ID",
+    );
+    await flushMicrotasks(20);
+    await vi.advanceTimersByTimeAsync(250);
+    FakeWebSocket.instances[1].serverClose();
+    await flushMicrotasks(20);
+    await vi.advanceTimersByTimeAsync(500);
+    FakeWebSocket.acknowledgeJoins = true;
+    FakeWebSocket.instances[2].accept();
+    await connecting;
+    expect(service.createSender("remote")?.status).toBe(
+      "connected",
+    );
+  });
+
   it("installs the replacement socket before notifying connected listeners", async () => {
     const service = createService();
     const first = await connectService(service);

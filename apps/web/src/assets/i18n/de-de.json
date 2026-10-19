@@ -474,7 +474,8 @@
       "remove": "Berechtigungsverlauf für {{name}} löschen",
       "remove_title": "Berechtigungsverlauf löschen?",
       "remove_description": "Die gespeicherten Berechtigungen für „{{name}}“ löschen und diesen Eintrag entfernen? Der Chatverlauf wird gespeichert.",
-      "delete_requires_disconnect": "Trennen Sie die Verbindung zu diesem Client, bevor Sie seinen Berechtigungsverlauf löschen."
+      "delete_requires_disconnect": "Trennen Sie die Verbindung zu diesem Client, bevor Sie seinen Berechtigungsverlauf löschen.",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "Aufnahme wird gespeichert",
     "saved": "Aufnahme gespeichert",
     "failed": "Aufnahme fehlgeschlagen"
+  },
+  "device_trust": {
+    "verifying": "Gerät wird überprüft",
+    "unpaired": "Nicht gekoppeltes Gerät",
+    "untrusted": "Nicht vertrauenswürdiges Gerät",
+    "trusted": "Überprüftes Gerät",
+    "offline": "Gerät offline; Identität nicht verfügbar",
+    "blocked_description": "Die Verbindung bleibt bestehen, aber alle Berechtigungen sind deaktiviert. Vergleiche die Codes und kopple erneut, um Berechtigungen einzustellen. Frühere Berechtigungen werden nicht automatisch wiederhergestellt.",
+    "pairing_code": "Kopplungscode",
+    "confirm_code": "Ich habe über einen vertrauenswürdigen Kanal geprüft, dass beide Codes übereinstimmen",
+    "repair": "Erneut koppeln",
+    "proof_required": "Warten auf einen gültigen Nachweis des Geräteschlüssels. Beide Geräte benötigen eine kompatible Version und eine sichere Verbindung. Bei fehlgeschlagener Prüfung werden keine Berechtigungen wiederhergestellt.",
+    "receive_content": "Inhalte empfangen",
+    "receive_description": "Steuert Nachrichten, Dateien, Zwischenablage sowie Audio und Video von diesem Gerät. Beim Ausschalten stoppt der Empfang; die Verbindung bleibt bestehen.",
+    "share_screen": "Bildschirm teilen",
+    "share_description": "Erlaubt lokale Bild- und Tonübertragung an dieses Gerät, einschließlich laufender Freigaben. Die Freigabe muss weiterhin lokal gestartet werden."
   }
 }

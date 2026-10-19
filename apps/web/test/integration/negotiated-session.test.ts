@@ -45,6 +45,10 @@ afterEach(() =>
 
 function setup(
   acceptMessage?: PeerSessionOptions["acceptMessage"],
+  access: Pick<
+    PeerSessionOptions,
+    "acceptsContent" | "allowsApplication"
+  > = {},
 ) {
   const events =
     new MultiEventEmitter<SignalingServiceEventMap>();
@@ -63,6 +67,7 @@ function setup(
     files: { content: true, shared: true },
   }));
   const session = new PeerSession(sender, {
+    ...access,
     acceptMessage,
     authorizeMessage: (peer, message, signal) => {
       const features = requiredMessageFeatures(
@@ -290,4 +295,51 @@ it("suppresses even an unsupported-protocol reply if control is hidden while dis
       (message) => message.id === request.id,
     ),
   ).toBe(false);
+});
+
+it("never releases queued business messages after a permission revoke and re-enable", async () => {
+  let allowed = true;
+  const s = setup(
+    (m) => m.type === "peer-capabilities" || allowed,
+    {
+      acceptsContent: () => allowed,
+      allowsApplication: () => allowed,
+    },
+  );
+  const sending = s.session.sendMessage(
+    createSessionMessage(s.session, "send-text", {
+      data: "old-outgoing",
+    }),
+  );
+  const rejected = expect(sending).rejects.toThrow();
+  s.channel.receive(
+    createSessionMessage(s.remote, "send-text", {
+      data: "old-incoming",
+    }),
+  );
+  await flushRtc();
+  allowed = false;
+  s.session.refreshAccess();
+  allowed = true;
+  s.session.refreshAccess();
+  s.announce();
+  await rejected;
+  await flushRtc();
+  expect(
+    s.channel.sent.some((m) => m.type === "send-text"),
+  ).toBe(false);
+  expect(
+    s.received.some((m) => m.type === "send-text"),
+  ).toBe(false);
+  await s.session.sendMessage(
+    createSessionMessage(s.session, "send-text", {
+      data: "fresh",
+    }),
+  );
+  expect(s.channel.sent).toContainEqual(
+    expect.objectContaining({
+      type: "send-text",
+      data: "fresh",
+    }),
+  );
 });

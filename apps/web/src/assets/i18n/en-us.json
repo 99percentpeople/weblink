@@ -1,4 +1,20 @@
 {
+  "device_trust": {
+    "verifying": "Verifying device",
+    "unpaired": "Unpaired device",
+    "untrusted": "Untrusted device",
+    "trusted": "Verified device",
+    "offline": "Device offline; identity unavailable",
+    "blocked_description": "The connection remains open, but all application permissions are off. Compare the pairing codes and pair again to edit permissions. Previous permissions are not restored automatically.",
+    "pairing_code": "Pairing code",
+    "confirm_code": "I verified through a trusted channel that both pairing codes match",
+    "repair": "Pair again",
+    "proof_required": "Waiting for valid proof of the device key. Both devices need a pairing-capable version and a secure context. Failed verification cannot restore permissions.",
+    "receive_content": "Receive content",
+    "receive_description": "Controls messages, files, clipboard and audio/video from this device. Turning it off stops active reception and keeps the connection open.",
+    "share_screen": "Share screen",
+    "share_description": "Allow local video and audio to be sent to this device, including active sharing. Sharing must still be started locally."
+  },
   "tasks": {
     "error_details": "Error details",
     "pause": "Pause",
@@ -450,6 +466,7 @@
       }
     },
     "permissions": {
+      "allow_permanently": "Always allow",
       "description": "Manage client and room permissions. Delete history from this list, or open settings to edit or reset permissions. Leave an active room before deleting its history.",
       "clients": "Clients",
       "rooms": "Rooms",

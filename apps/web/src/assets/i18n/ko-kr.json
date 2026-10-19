@@ -474,7 +474,8 @@
       "remove": "{{name}}에 대한 권한 기록 삭제",
       "remove_title": "권한 기록을 삭제하시겠습니까?",
       "remove_description": "“{{name}}”에 대해 저장된 권한을 삭제하고 이 항목을 제거하시겠습니까? 채팅 기록이 유지됩니다.",
-      "delete_requires_disconnect": "권한 기록을 삭제하기 전에 이 클라이언트와의 연결을 끊으세요."
+      "delete_requires_disconnect": "권한 기록을 삭제하기 전에 이 클라이언트와의 연결을 끊으세요.",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "녹화 저장 중",
     "saved": "녹화가 저장되었습니다",
     "failed": "녹화 실패"
+  },
+  "device_trust": {
+    "verifying": "기기 확인 중",
+    "unpaired": "페어링되지 않은 기기",
+    "untrusted": "신뢰할 수 없는 기기",
+    "trusted": "확인된 기기",
+    "offline": "기기가 오프라인이므로 신원을 확인할 수 없습니다",
+    "blocked_description": "연결은 유지되지만 모든 작업 권한이 꺼집니다. 양쪽 코드를 확인하고 다시 페어링하면 권한을 설정할 수 있습니다. 이전 권한은 자동으로 복원되지 않습니다.",
+    "pairing_code": "페어링 코드",
+    "confirm_code": "신뢰할 수 있는 방법으로 양쪽 코드가 일치함을 확인했습니다",
+    "repair": "다시 페어링",
+    "proof_required": "유효한 기기 키 증명을 기다리는 중입니다. 양쪽 기기에서 페어링 지원 버전과 보안 연결이 필요합니다. 확인에 실패하면 권한을 복원할 수 없습니다.",
+    "receive_content": "콘텐츠 수신",
+    "receive_description": "이 기기에서 받는 메시지, 파일, 클립보드, 오디오 및 비디오를 한 번에 관리합니다. 끄면 수신이 중지되고 연결은 유지됩니다.",
+    "share_screen": "화면 공유",
+    "share_description": "현재 공유 중인 콘텐츠를 포함하여 로컬 영상과 오디오를 이 기기로 전송하도록 허용합니다. 공유는 로컬에서 시작해야 합니다."
   }
 }

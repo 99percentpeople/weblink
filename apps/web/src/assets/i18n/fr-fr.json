@@ -474,7 +474,8 @@
       "remove": "Supprimer l'historique des autorisations pour {{name}}",
       "remove_title": "Supprimer l'historique des autorisations ?",
       "remove_description": "Supprimer les autorisations enregistrées pour « {{name}} » et supprimer cette entrée ? L'historique des discussions sera conservé.",
-      "delete_requires_disconnect": "Déconnectez-vous de ce client avant de supprimer son historique d'autorisations."
+      "delete_requires_disconnect": "Déconnectez-vous de ce client avant de supprimer son historique d'autorisations.",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "Sauvegarde de l’enregistrement",
     "saved": "Enregistrement sauvegardé",
     "failed": "Échec de l’enregistrement"
+  },
+  "device_trust": {
+    "verifying": "Vérification de l’appareil",
+    "unpaired": "Appareil non appairé",
+    "untrusted": "Appareil non fiable",
+    "trusted": "Appareil vérifié",
+    "offline": "Appareil hors ligne ; identité indisponible",
+    "blocked_description": "La connexion reste ouverte, mais toutes les autorisations sont désactivées. Comparez les codes et recommencez l’appairage pour modifier les autorisations. Les anciennes autorisations ne sont pas rétablies automatiquement.",
+    "pairing_code": "Code d’appairage",
+    "confirm_code": "J’ai vérifié par un canal fiable que les deux codes correspondent",
+    "repair": "Appairer à nouveau",
+    "proof_required": "En attente d’une preuve valide de la clé de l’appareil. Les deux appareils doivent utiliser une version compatible et une connexion sécurisée. Une vérification échouée ne permet pas de rétablir les autorisations.",
+    "receive_content": "Recevoir du contenu",
+    "receive_description": "Contrôle les messages, fichiers, presse-papiers et contenus audio/vidéo de cet appareil. La désactivation arrête la réception et maintient la connexion.",
+    "share_screen": "Partager l’écran",
+    "share_description": "Autorise l’envoi de la vidéo et du son locaux à cet appareil, y compris les partages en cours. Le partage doit toujours être démarré localement."
   }
 }

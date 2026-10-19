@@ -7,7 +7,9 @@ import {
   it,
   vi,
 } from "vitest";
-import { createRoot } from "solid-js";
+import { createRoot, createSignal } from "solid-js";
+import { setClientConfig } from "@/options";
+import type { PeerTrust } from "@/libs/application/peer-trust";
 import { reconcile } from "solid-js/store";
 import { SessionService } from "@/libs/application/session-service";
 import type { ClientService } from "@/libs/domain/client";
@@ -110,6 +112,7 @@ class PeerConnection extends EventTarget {
         track,
         streams: [source],
         receiver: {},
+        transceiver: { mid: track.id, receiver: { track } },
       }),
     );
   }
@@ -146,6 +149,9 @@ describe("remote media presentation across peer recovery", () => {
       const service = new SessionService({
         loadIceServers: async () => [],
       });
+      // This fixture tests media recovery after authorization; pairing itself
+      // is covered by peer-trust and the real WebRTC device-trust fixture.
+      vi.spyOn(service, "canReceive").mockReturnValue(true);
       service.setClientService({
         info: { clientId: "local", createdAt: 1 },
         createSender: () => sender,
@@ -281,4 +287,90 @@ describe("remote media presentation across peer recovery", () => {
       }
     },
   );
+});
+
+it("enforces device trust, the single receive gate and outgoing screen permission in SessionService", async () => {
+  const [trust, setTrust] = createSignal<PeerTrust>({
+    state: "untrusted",
+  });
+  const service = new SessionService({
+    loadIceServers: async () => [],
+  });
+  vi.spyOn(service.trust, "get").mockImplementation(() =>
+    trust(),
+  );
+  vi.spyOn(service.capabilities, "get").mockReturnValue({
+    identity: { receiveContent: true },
+  });
+  const sender = {
+    clientId: "local",
+    targetClientId: "policy-peer",
+    status: "connected",
+    sendSignal: vi.fn(async () => {}),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+  } satisfies SignalingService;
+  service.setClientService({
+    info: { clientId: "local", createdAt: 1 },
+    createSender: () => sender,
+    removeSender: vi.fn(),
+    addEventListener: vi.fn(),
+    close: vi.fn(),
+  } as unknown as ClientService);
+  const session = await service.addClient({
+    clientId: "policy-peer",
+    createdAt: 2,
+    name: "Peer",
+    avatar: null,
+  });
+  const outgoing = vi
+    .spyOn(session, "setStream")
+    .mockImplementation(() => {});
+  try {
+    setClientConfig("policy-peer", {
+      shareScreen: true,
+      receiveContent: true,
+    });
+    const local = stream(
+      new Track("local-video", "video"),
+    ) as unknown as MediaStream;
+    service.setSessionStream(session, local);
+    expect(outgoing).toHaveBeenLastCalledWith(null);
+    expect(service.canReceive("policy-peer")).toBe(false);
+    setTrust({ state: "trusted" });
+    expect(service.canReceive("policy-peer")).toBe(true);
+    expect(outgoing).toHaveBeenLastCalledWith(local);
+    await session.listen();
+    const pc =
+      session.peerConnection as unknown as PeerConnection;
+    const track = new Track("policy-video", "video");
+    pc.receive(track, stream(track));
+    expect(
+      appState.session.clientViewData[
+        "policy-peer"
+      ].stream?.getTracks(),
+    ).toHaveLength(1);
+    setClientConfig("policy-peer", {
+      receiveContent: false,
+    });
+    expect(track.enabled).toBe(false);
+    expect(
+      appState.session.clientViewData["policy-peer"].stream,
+    ).toBeUndefined();
+    expect(session.peerConnection).toBe(pc);
+    setClientConfig("policy-peer", {
+      receiveContent: true,
+    });
+    expect(track.enabled).toBe(true);
+    setClientConfig("policy-peer", { shareScreen: false });
+    expect(outgoing).toHaveBeenLastCalledWith(null);
+    setClientConfig("policy-peer", { shareScreen: true });
+    expect(outgoing).toHaveBeenLastCalledWith(local);
+    setTrust({ state: "untrusted" });
+    expect(outgoing).toHaveBeenLastCalledWith(null);
+    expect(track.enabled).toBe(false);
+  } finally {
+    service.destoryAllSession();
+  }
 });

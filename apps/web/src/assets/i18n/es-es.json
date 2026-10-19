@@ -474,7 +474,8 @@
       "remove": "Eliminar historial de permisos de {{name}}",
       "remove_title": "¿Eliminar historial de permisos?",
       "remove_description": "¿Eliminar los permisos guardados de «{{name}}» y esta entrada? Se conservará el historial de chat.",
-      "delete_requires_disconnect": "Desconecta de este cliente antes de eliminar su historial de permisos."
+      "delete_requires_disconnect": "Desconecta de este cliente antes de eliminar su historial de permisos.",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "Guardando grabación",
     "saved": "Grabación guardada",
     "failed": "Error de grabación"
+  },
+  "device_trust": {
+    "verifying": "Verificando dispositivo",
+    "unpaired": "Dispositivo sin emparejar",
+    "untrusted": "Dispositivo no confiable",
+    "trusted": "Dispositivo verificado",
+    "offline": "Dispositivo desconectado; identidad no disponible",
+    "blocked_description": "La conexión se mantiene, pero todos los permisos están desactivados. Compara los códigos y vuelve a emparejar para configurar los permisos. Los permisos anteriores no se restauran automáticamente.",
+    "pairing_code": "Código de emparejamiento",
+    "confirm_code": "He verificado por un canal de confianza que ambos códigos coinciden",
+    "repair": "Volver a emparejar",
+    "proof_required": "Esperando una prueba válida de la clave del dispositivo. Ambos dispositivos necesitan una versión compatible y una conexión segura. Una verificación fallida no permite restaurar permisos.",
+    "receive_content": "Recibir contenido",
+    "receive_description": "Controla mensajes, archivos, portapapeles y audio/vídeo de este dispositivo. Al desactivarlo, se detiene la recepción y se mantiene la conexión.",
+    "share_screen": "Compartir pantalla",
+    "share_description": "Permite enviar vídeo y audio locales a este dispositivo, incluido el contenido compartido actualmente. Debes iniciar la sesión de pantalla compartida en este equipo."
   }
 }

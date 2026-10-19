@@ -49,6 +49,10 @@ Weblink uses WebSocket signaling for all builds. Configure the endpoint with
 
 ### WebSocket
 
+Device pairing and duplicate-ID protection require coordinated frontend and
+signaling updates. See [device trust](DEVICE_TRUST.md#duplicate-ids-and-signaling-deployment)
+for compatibility and Redis reconnect constraints.
+
 Recommended configuration:
 
 ```env

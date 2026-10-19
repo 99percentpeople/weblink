@@ -34,6 +34,11 @@ import { roomConversationId } from "@/libs/domain/conversation";
 import { createMessageRepository } from "../support/message-repository";
 import { summarizeConversations } from "@/libs/application/messaging/conversation-query";
 
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    trust: { get: () => ({ state: "trusted" }) },
+  },
+}));
 const fixture = vi.hoisted(() => ({
   store: undefined as MessageStores | undefined,
 }));
@@ -253,8 +258,8 @@ it("edits client and room permissions through selects and preserves the other en
   const clientDialog = await screen.findByRole("dialog");
   expect(clientDialog).toHaveTextContent("Alice");
   expect(
-    within(clientDialog).queryByRole("switch"),
-  ).toBeNull();
+    within(clientDialog).getAllByRole("switch"),
+  ).toHaveLength(2);
   const choose = async (
     label: string,
     decision: string,
@@ -266,7 +271,7 @@ it("edits client and room permissions through selects and preserves the other en
     );
     await userEvent.click(
       await screen.findByRole("option", {
-        name: `setting.permissions.${decision}`,
+        name: `setting.permissions.${decision === "allow" ? "allow_permanently" : decision}`,
       }),
     );
   };

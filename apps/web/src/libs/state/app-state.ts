@@ -46,6 +46,11 @@ export type RoomStatus = {
 };
 
 export interface ClientInfo extends TransferClient {
+  trust?:
+    | "verifying"
+    | "unpaired"
+    | "untrusted"
+    | "trusted";
   candidateType?: string;
   onlineStatus:
     | "offline"

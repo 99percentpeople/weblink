@@ -232,7 +232,7 @@ describe("tabbed client information", () => {
         name: "common.client_info_dialog.tabs.settings",
       }),
     ).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("switch")).toHaveLength(2);
+    expect(screen.getAllByRole("switch")).toHaveLength(3);
     expect(
       screen.getByText("client.config.redirect.title"),
     ).toBeInTheDocument();

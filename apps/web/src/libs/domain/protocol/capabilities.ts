@@ -27,6 +27,7 @@ export interface ControlCapability {
 
 /** Negotiated descriptors for consumers. Only implemented entries are exposed. */
 export interface PeerCapabilities {
+  identity?: { receiveContent: boolean };
   [service: string]: unknown;
   messaging?: Record<string, never>;
   fileDrop?: { hover?: boolean; hoverUpdates?: boolean };
@@ -92,6 +93,7 @@ const validators: Record<
   string,
   (value: unknown) => boolean
 > = {
+  identity: (v) => flags(v, ["receiveContent"]),
   messaging: (v) => record(v),
   fileDrop: (v) =>
     record(v) &&

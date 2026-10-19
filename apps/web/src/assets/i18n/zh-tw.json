@@ -469,7 +469,8 @@
       "remove": "刪除 {{name}} 的權限記錄",
       "remove_title": "刪除權限記錄？",
       "remove_description": "刪除「{{name}}」儲存的權限並從清單移除？聊天記錄會保留。",
-      "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。"
+      "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "正在儲存錄影",
     "saved": "錄影已儲存",
     "failed": "錄影失敗"
+  },
+  "device_trust": {
+    "verifying": "正在驗證裝置",
+    "unpaired": "尚未配對的裝置",
+    "untrusted": "不受信任的裝置",
+    "trusted": "已驗證裝置",
+    "offline": "裝置離線，無法驗證身分",
+    "blocked_description": "連線會保留，但所有業務權限已關閉。核對兩端配對碼並重新配對後，才能設定權限；原有授權不會自動恢復。",
+    "pairing_code": "配對碼",
+    "confirm_code": "已透過可信方式核對兩端配對碼一致",
+    "repair": "重新配對",
+    "proof_required": "等待對方提供有效的裝置金鑰證明。雙方需要支援配對的版本及安全連線；驗證失敗時無法恢復權限。",
+    "receive_content": "接收內容",
+    "receive_description": "統一控制接收此裝置的訊息、檔案、剪貼簿及音訊與視訊。關閉後停止接收，連線仍會保留。",
+    "share_screen": "分享畫面",
+    "share_description": "允許向此裝置傳送本機畫面及音訊，包括目前分享的內容。仍需先在本機開始分享。"
   }
 }

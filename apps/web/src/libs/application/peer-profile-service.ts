@@ -95,6 +95,13 @@ export class PeerProfileService {
       { signal: controller.signal },
     );
     session.addEventListener(
+      "accesschange",
+      ({ detail }) => {
+        if (detail) this.sendProfile(session);
+      },
+      { signal: controller.signal },
+    );
+    session.addEventListener(
       "statuschange",
       (event) => {
         if (event.detail !== "closed") return;

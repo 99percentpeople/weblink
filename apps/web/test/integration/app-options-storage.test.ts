@@ -195,6 +195,8 @@ it("round-trips current settings while discarding unknown fields at every settin
       name: "Peer",
       remoteControl: "deny",
       provideFileList: false,
+      shareScreen: false,
+      receiveContent: false,
     },
   });
   expect(current.roomConfigs).toEqual({

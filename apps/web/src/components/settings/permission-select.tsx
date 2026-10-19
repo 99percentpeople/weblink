@@ -2,6 +2,7 @@ import { SettingSelect } from "./setting-controls";
 
 export function PermissionSelect<T extends string>(props: {
   label: string;
+  disabled?: boolean;
   description?: string;
   options: T[];
   value: T;
@@ -10,6 +11,7 @@ export function PermissionSelect<T extends string>(props: {
 }) {
   return (
     <SettingSelect<T>
+      disabled={props.disabled}
       modal
       disallowEmptySelection
       label={props.label}

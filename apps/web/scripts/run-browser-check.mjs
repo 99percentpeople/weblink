@@ -72,15 +72,17 @@ const defaultEntry = notificationsTest
                         : transferTest
                           ? "test/e2e/smoke/transfer-workflow.html"
                           : "test/e2e/smoke/speed-test.html";
-const entry = recordingTest
-  ? "test/e2e/smoke/recording.html"
-  : process.argv.includes("--vfs")
-    ? "test/e2e/smoke/vfs.html"
-    : clipboardTest
-      ? "test/e2e/smoke/clipboard.html"
-      : clipboardCacheTest
-        ? "test/e2e/smoke/clipboard-cache.html"
-        : defaultEntry;
+const entry = process.argv.includes("--device-trust")
+  ? "test/e2e/smoke/device-trust.html"
+  : recordingTest
+    ? "test/e2e/smoke/recording.html"
+    : process.argv.includes("--vfs")
+      ? "test/e2e/smoke/vfs.html"
+      : clipboardTest
+        ? "test/e2e/smoke/clipboard.html"
+        : clipboardCacheTest
+          ? "test/e2e/smoke/clipboard-cache.html"
+          : defaultEntry;
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 

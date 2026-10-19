@@ -474,7 +474,8 @@
       "remove": "{{name}} の権限履歴を削除",
       "remove_title": "権限履歴を削除しますか？",
       "remove_description": "「{{name}}」の保存済み権限とこの項目を削除しますか？チャット履歴は保持されます。",
-      "delete_requires_disconnect": "権限履歴を削除する前に、このクライアントとの接続を切断してください。"
+      "delete_requires_disconnect": "権限履歴を削除する前に、このクライアントとの接続を切断してください。",
+      "allow_permanently": "Always allow"
     },
     "application": {
       "wake_lock": {
@@ -1487,5 +1488,21 @@
     "saving": "録画を保存中",
     "saved": "録画を保存しました",
     "failed": "録画に失敗しました"
+  },
+  "device_trust": {
+    "verifying": "デバイスを確認中",
+    "unpaired": "未ペアリングのデバイス",
+    "untrusted": "信頼されていないデバイス",
+    "trusted": "確認済みのデバイス",
+    "offline": "デバイスがオフラインのため確認できません",
+    "blocked_description": "接続は維持されますが、すべての操作権限は無効です。両端のコードを照合して再ペアリングすると、権限を設定できます。以前の権限は自動復元されません。",
+    "pairing_code": "ペアリングコード",
+    "confirm_code": "信頼できる方法で両端のコードが一致することを確認しました",
+    "repair": "再ペアリング",
+    "proof_required": "有効なデバイス鍵の証明を待っています。両端で対応バージョンと安全な接続が必要です。検証に失敗すると権限を復元できません。",
+    "receive_content": "コンテンツを受信",
+    "receive_description": "このデバイスからのメッセージ、ファイル、クリップボード、音声・映像を一括管理します。無効にすると受信が停止し、接続は維持されます。",
+    "share_screen": "画面を共有",
+    "share_description": "共有中のものを含め、このデバイスにローカルの映像と音声を送信できます。共有はこの端末で開始する必要があります。"
   }
 }

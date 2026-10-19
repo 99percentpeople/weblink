@@ -22,6 +22,7 @@ export type RemoteMediaTrackBinding = {
 };
 
 export interface PeerSessionMediaOptions {
+  acceptsContent?(): boolean;
   targetClientId(): string;
   getPeerConnection(): RTCPeerConnection | null;
   getCodecOptions(): SessionMediaCodecOptions;
@@ -79,6 +80,7 @@ export class PeerSessionMediaController {
   ): EncodedVideoSource | undefined {
     const sender = this.senders.get(track);
     if (sender) return this.encodedVideo.get(sender);
+    if (this.options.acceptsContent?.() === false) return;
     const receiver =
       this.remoteTracks.get(track)?.transceiver.receiver;
     return receiver
@@ -334,6 +336,9 @@ export class PeerSessionMediaController {
       event.track.readyState === "ended"
     )
       return;
+    const allowed =
+      this.options.acceptsContent?.() !== false;
+    event.track.enabled = allowed;
     const receiver = event.receiver;
     if (!this.encodedReceivers.has(receiver)) {
       const tap = RtpEncodedMediaTrack.install(
@@ -342,7 +347,10 @@ export class PeerSessionMediaController {
         this.encodedWorkers,
         "receive",
       );
-      if (tap) this.encodedReceivers.set(receiver, tap);
+      if (tap) {
+        tap.setEnabled(allowed);
+        this.encodedReceivers.set(receiver, tap);
+      }
     }
     if ("jitterBufferTarget" in receiver) {
       (receiver as any).jitterBufferTarget = 0;
@@ -445,9 +453,26 @@ export class PeerSessionMediaController {
     this.remoteTracks.delete(track);
   }
 
+  private contentAllowed = true;
+  refreshAccess(): void {
+    const allowed =
+      this.options.acceptsContent?.() !== false;
+    if (this.contentAllowed === allowed) return;
+    this.contentAllowed = allowed;
+    // Keep receiver identities reusable when permission returns. Disabled tracks
+    // produce silence/black frames and are removed from all application views.
+    for (const track of this.remoteTracks.keys())
+      track.enabled = allowed;
+    for (const tap of this.encodedReceivers.values())
+      tap.setEnabled(allowed);
+    this.publishRemoteStream();
+  }
+
   private publishRemoteStream(): void {
     const entries = [...this.remoteTracks.entries()].filter(
-      ([track]) => track.readyState !== "ended",
+      ([track]) =>
+        this.options.acceptsContent?.() !== false &&
+        track.readyState !== "ended",
     );
     const tracks = entries.map(([track]) => track);
     // MediaStream.addTrack/removeTrack called by application code do not emit

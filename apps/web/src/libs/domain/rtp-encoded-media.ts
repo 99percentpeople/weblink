@@ -46,6 +46,13 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
   private sequence = 0;
   private consumer?: Subscription;
   private disposed = false;
+  private enabled = true;
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    if (!enabled)
+      this.end(new Error("DEVICE_PERMISSION_DENIED"));
+  }
   private receiverClock?: RecordingReceiverClock;
   private readonly trackEnded = () => this.end();
   private readonly track: MediaStreamTrack | null;
@@ -115,6 +122,15 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
     this.channel.port1.onmessage = ({ data }) => {
       const consumer = this.consumer;
       if (!consumer || data.id !== consumer.id) return;
+      if (!this.enabled) {
+        if (data.packet)
+          this.send(
+            "ack",
+            consumer.id,
+            data.packet.data.byteLength,
+          );
+        return;
+      }
       if (data.packet) {
         const packet = data.packet as
           | EncodedVideoPacket
@@ -130,13 +146,15 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
         const bytes = packet.data.byteLength;
         consumer.queue = consumer.queue
           .then(async () => {
+            if (!this.enabled) return;
             if (this.sender.track?.kind === "audio")
               return consumer.callbacks.encodedAudio?.(
                 packet as EncodedAudioPacket,
               );
             const video = packet as EncodedVideoPacket;
             await this.describeVideo(video);
-            return consumer.callbacks.frame(video);
+            if (this.enabled)
+              return consumer.callbacks.frame(video);
           })
           .catch((error) =>
             this.end(
@@ -266,6 +284,7 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
 
   subscribe(callbacks: Consumer) {
     if (
+      !this.enabled ||
       this.disposed ||
       this.consumer ||
       this.pc.connectionState !== "connected" ||

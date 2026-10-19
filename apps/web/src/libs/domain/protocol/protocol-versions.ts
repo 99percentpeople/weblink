@@ -10,6 +10,7 @@ export const CAPABILITY_SYNC_VERSION = 1 as const;
 
 /** Only implemented handlers may be registered here. No legacy fallbacks. */
 export const CURRENT_PROTOCOL_VERSIONS = {
+  identity: 1,
   messaging: 1,
   files: 1,
   room: 1,

@@ -65,6 +65,15 @@ export class RtcService implements RtcProtocolTransport<PeerSession> {
       { signal: controller.signal },
     );
     session.addEventListener(
+      "accesschange",
+      ({ detail }) => {
+        if (!detail)
+          for (const handler of this.closedHandlers)
+            this.runHandler(() => handler(session));
+      },
+      { signal: controller.signal },
+    );
+    session.addEventListener(
       "statuschange",
       (event) => {
         if (event.detail === "closed") controller.abort();

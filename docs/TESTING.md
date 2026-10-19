@@ -408,3 +408,24 @@ IndexedDB, Workers or browser-only UI behavior.
 
 Protocol or transfer changes should run their focused E2E smoke check before
 merge. Benchmarks are only required when making or validating performance claims.
+
+## Device trust
+
+Run `bun run --cwd apps/web test:e2e:device-trust` for real Chromium WebRTC
+pairing, persistent key storage, changed-key isolation, manual repair, content
+revocation, media restoration, normal disconnects, automatic recovery from a
+surviving peer-issued key and renewal of expired keys without resetting permissions.
+Focused identity, pairing-key and peer-trust tests cover replay, DTLS binding,
+stale asynchronous decisions, issuer-only renewal, lost acknowledgements,
+storage failures, concurrent persistence, interrupted first exchanges, atomic
+pairing commits, pre-verification disconnects/timeouts, and mandatory manual
+repair when no shared key survives. Client signaling tests cover duplicate-ID
+backoff during both initial join and resume, cancellation, and transient network
+failures while waiting for ownership to clear.
+
+Both signaling repositories test repeated wrong-key, unsigned and replayed duplicate
+joins while the original owner continues forwarding, and admission of a regenerated
+identity after the owner leaves. To include atomic Redis leases and the two-node signaling test, supply
+`WEBLINK_TEST_REDIS_URL` pointing at a disposable Redis instance when running
+`bun run --cwd servers/weblink-ws-server test`. The test never reads the
+application's Redis configuration.

@@ -9,6 +9,7 @@ export const SIGNALING_MAX_CACHED_SIGNALS = 256;
 export interface SignalingEnvelope<T = unknown> {
   type: string;
   data: T;
+  identityChallenge?: string;
 }
 
 export interface SignalingClientPresence {
@@ -85,6 +86,11 @@ export function parseSignalingEnvelope(
   return {
     type: value.type,
     data: value.data,
+    ...(value.type === "connected" &&
+    typeof value.identityChallenge === "string" &&
+    value.identityChallenge.length <= 128
+      ? { identityChallenge: value.identityChallenge }
+      : {}),
   };
 }
 

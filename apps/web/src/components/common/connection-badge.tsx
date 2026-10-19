@@ -13,7 +13,12 @@ export const ConnectionBadge: Component<{
         fallback={t("common.status.leave")}
       >
         {(status) => (
-          <span>{t(`common.status.${status()}`)}</span>
+          <span>
+            {props.client?.trust &&
+            props.client.trust !== "trusted"
+              ? t(`device_trust.${props.client.trust}`)
+              : t(`common.status.${status()}`)}
+          </span>
         )}
       </Show>
     </Badge>

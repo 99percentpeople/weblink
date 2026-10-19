@@ -1,3 +1,4 @@
+import { IDENTITY_CHANNEL } from "./device-identity/crypto";
 import { catchError, catchErrorSync } from "@/libs/catch";
 import type { SessionMessage } from "./protocol/messages";
 import {
@@ -11,6 +12,7 @@ import type { PeerSessionStatus } from "./session-lifecycle";
 
 export interface PeerSessionChannelOptions {
   polite: boolean;
+  acceptsChannel?(label: string, protocol: string): boolean;
   getStatus(): PeerSessionStatus;
   getPeerConnection(): RTCPeerConnection | null;
   getSessionSignal(): AbortSignal | undefined;
@@ -50,6 +52,15 @@ export class PeerSessionChannelController {
   }
 
   acceptIncomingChannel(channel: RTCDataChannel): void {
+    if (
+      this.options.acceptsChannel?.(
+        channel.label,
+        channel.protocol,
+      ) === false
+    ) {
+      channel.close();
+      return;
+    }
     this.trackChannel(channel);
 
     if (channel.protocol === "message") {
@@ -57,6 +68,17 @@ export class PeerSessionChannelController {
     }
 
     this.options.onChannel(channel);
+  }
+
+  refreshAccess(): void {
+    for (const channel of [...this.channels])
+      if (
+        this.options.acceptsChannel?.(
+          channel.label,
+          channel.protocol,
+        ) === false
+      )
+        channel.close();
   }
 
   private trackChannel(channel: RTCDataChannel): void {
@@ -245,6 +267,21 @@ export class PeerSessionChannelController {
     label: string,
     protocol: string,
   ): Promise<RTCDataChannel> {
+    if (
+      this.options.acceptsChannel?.(label, protocol) ===
+      false
+    )
+      throw new Error("DEVICE_PERMISSION_DENIED");
+    const permitted = (channel: RTCDataChannel) => {
+      if (
+        this.options.acceptsChannel?.(label, protocol) ===
+        false
+      ) {
+        channel.close();
+        throw new Error("DEVICE_PERMISSION_DENIED");
+      }
+      return channel;
+    };
     const pc = this.options.getPeerConnection();
     if (!pc) {
       throw new Error(
@@ -277,7 +314,7 @@ export class PeerSessionChannelController {
       const [waitError] = await catchError(
         waitChannel(preferred),
       );
-      if (!waitError) return preferred;
+      if (!waitError) return permitted(preferred);
     }
 
     const openChannel = matches.find(
@@ -307,11 +344,14 @@ export class PeerSessionChannelController {
       const [waitError] = await catchError(
         waitChannel(connectingChannel),
       );
-      if (!waitError) return connectingChannel;
+      if (!waitError) return permitted(connectingChannel);
     }
 
     const channel = pc.createDataChannel(label, {
-      ordered: this.options.ordered(),
+      ordered:
+        protocol === IDENTITY_CHANNEL
+          ? true
+          : this.options.ordered(),
       protocol,
     });
     this.trackChannel(channel);
@@ -321,7 +361,7 @@ export class PeerSessionChannelController {
     }
 
     await waitChannel(channel);
-    return channel;
+    return permitted(channel);
   }
 
   private setupMessageChannel(

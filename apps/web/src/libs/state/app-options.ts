@@ -47,6 +47,8 @@ export type ClientConfig = {
   /** Local permission record; identity follows the existing persistent client ID. */
   name?: string;
   remoteControl?: "allow" | "deny";
+  shareScreen?: boolean;
+  receiveContent?: boolean;
   /** Whether this peer may enumerate completed local cache entries. */
   provideFileList: boolean;
 };

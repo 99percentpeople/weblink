@@ -1,3 +1,5 @@
+import { PeerTrustService } from "./peer-trust";
+import { bootstrapMessage } from "../domain/device-identity/access";
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
 import type { EncodedVideoSource } from "@/libs/domain/encoded-video";
 import {
@@ -38,6 +40,7 @@ import {
   createRoot,
   createSignal,
   on,
+  untrack,
 } from "solid-js";
 import { setClientConfig } from "@/libs/state/permission-options";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
@@ -58,9 +61,40 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
+  readonly trust = new PeerTrustService((id) =>
+    setClientConfig(id, {
+      remoteControl: "deny",
+      provideFileList: false,
+      shareScreen: false,
+      receiveContent: false,
+    }),
+  );
+  canReceive(id: string): boolean {
+    return (
+      this.trust.trusted(id) &&
+      appState.options.clientConfigs[id]?.receiveContent ===
+        true
+    );
+  }
+  canShareScreen(id: string): boolean {
+    return (
+      this.trust.trusted(id) &&
+      appState.options.clientConfigs[id]?.shareScreen ===
+        true
+    );
+  }
+  private requestedStreams = new Map<
+    PeerSession,
+    MediaStream | null
+  >();
   private readonly speedBusy = createSignal(false);
   readonly capabilities = new PeerCapabilitiesService(
     (session) => ({
+      identity: {
+        receiveContent: this.canReceive(
+          session.targetClientId,
+        ),
+      },
       messaging: {},
       fileDrop: platform.fileDrop?.hover
         ? { hover: true, hoverUpdates: true }
@@ -92,7 +126,10 @@ export class SessionService {
       whitelistOnly: () =>
         appState.options.remoteControlWhitelistOnly,
       decision: (id) =>
-        appState.options.clientConfigs[id]?.remoteControl,
+        this.canReceive(id) && this.canShareScreen(id)
+          ? appState.options.clientConfigs[id]
+              ?.remoteControl
+          : "deny",
       remember: (id, remoteControl) =>
         setClientConfig(id, {
           name: this.clientViewData[id]?.name ?? id,
@@ -188,12 +225,24 @@ export class SessionService {
     session: PeerSession,
     stream: MediaStream | null,
   ) {
+    this.requestedStreams.set(session, stream);
+    this.applySessionStream(session);
+  }
+  private applySessionStream(session: PeerSession) {
+    const stream =
+      this.canShareScreen(session.targetClientId) &&
+      this.capabilities.get(session)?.identity
+        ?.receiveContent === true
+        ? this.requestedStreams.get(session)
+        : null;
     const tracks = stream?.getTracks() ?? [];
     const publications = tracks.flatMap((track) => {
       const publication = getNativeScreenPublication(track);
       return publication ? [publication] : [];
     });
-    const browserStream = browserMediaStream(stream);
+    const browserStream = browserMediaStream(
+      stream ?? null,
+    );
     this.publications.set(session, publications);
     for (const publication of publications)
       publication.setReceivers?.(
@@ -378,11 +427,23 @@ export class SessionService {
     }
 
     const session = new PeerSession(sender, {
+      acceptsContent: () =>
+        this.canReceive(client.clientId),
+      allowsApplication: () =>
+        this.trust.trusted(client.clientId),
       acceptMessage: (message) =>
-        !requiredMessageFeatures(message.type).includes(
-          "control",
-        ) || this.remoteControl.exposes(client.clientId),
-      authorizeMessage: (peer, message, signal) => {
+        bootstrapMessage(message.type) ||
+        (this.canReceive(client.clientId) &&
+          (!requiredMessageFeatures(message.type).includes(
+            "control",
+          ) ||
+            this.remoteControl.exposes(client.clientId))),
+      authorizeMessage: async (peer, message, signal) => {
+        if (
+          !bootstrapMessage(message.type) &&
+          !this.trust.trusted(client.clientId)
+        )
+          throw new Error("DEVICE_UNTRUSTED");
         const features = requiredMessageFeatures(
           message.type,
         );
@@ -489,18 +550,46 @@ export class SessionService {
         console.error("Native screen connection", error),
     });
     this.nativeScreens.set(session, native);
+    const disposeTrust = this.trust.bind(session);
     const disposeCapabilities = this.capabilities.bind(
       session,
       (services) => {
         native.setRemoteCapabilities(services);
         // Binding can publish before openNative is initialized.
-        queueMicrotask(() => openNative());
+        queueMicrotask(() => {
+          this.applySessionStream(session);
+          openNative();
+          session.refreshAccess();
+        });
       },
     );
     const disposePolicy = createRoot((dispose) => {
       createEffect(() =>
         this.capabilities.refresh(session),
       );
+      createEffect(() => {
+        const trust = this.trust.get(client.clientId);
+        const exists =
+          !!this.clientViewData[client.clientId];
+        this.canReceive(client.clientId);
+        this.canShareScreen(client.clientId);
+        this.capabilities.get(session);
+        untrack(() => {
+          if (exists)
+            setAppState(
+              "session",
+              "clientViewData",
+              client.clientId,
+              "trust",
+              trust?.state,
+            );
+          this.applySessionStream(session);
+          session.refreshAccess();
+          if (!this.canReceive(client.clientId))
+            native.reset();
+          else queueMicrotask(() => openNative());
+        });
+      });
       createEffect(
         on(
           [
@@ -521,6 +610,8 @@ export class SessionService {
             this.remoteControl.revision,
             () =>
               appState.options.remoteControlWhitelistOnly,
+            () => this.canReceive(client.clientId),
+            () => this.canShareScreen(client.clientId),
           ],
           ([, ownerRevision], previous) => {
             const ownerChanged =
@@ -554,6 +645,7 @@ export class SessionService {
         !session.polite ||
         controller.signal.aborted ||
         !mainChannelReady ||
+        !this.canReceive(client.clientId) ||
         !this.capabilities.get(session)?.screen ||
         opening ||
         !session.peerConnection
@@ -636,6 +728,8 @@ export class SessionService {
         clearTimeout(nativeReopenTimer);
         disposePolicy();
         disposeCapabilities();
+        disposeTrust();
+        this.requestedStreams.delete(session);
         mainChannelReady = false;
         this.publications.delete(session);
         if (this.codecPeers.delete(client.clientId))
@@ -655,6 +749,7 @@ export class SessionService {
         ...client,
         onlineStatus: "offline",
         messageChannel: false,
+        trust: "verifying",
       } satisfies ClientInfo,
     );
     setAppState(

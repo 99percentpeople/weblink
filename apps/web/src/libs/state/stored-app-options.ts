@@ -98,6 +98,8 @@ export function resolveStoredAppOptions(
           ? entry.name
           : undefined,
       provideFileList: entry.provideFileList !== false,
+      shareScreen: entry.shareScreen === true,
+      receiveContent: entry.receiveContent === true,
       remoteControl:
         entry.remoteControl === "allow" ||
         entry.remoteControl === "deny"

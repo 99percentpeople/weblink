@@ -1,4 +1,20 @@
 {
+  "device_trust": {
+    "verifying": "正在验证设备",
+    "unpaired": "未配对设备",
+    "untrusted": "不可信设备",
+    "trusted": "已验证设备",
+    "offline": "设备离线，无法验证",
+    "blocked_description": "连接保留，所有业务权限已关闭。核对两端配对码并重新配对后，才能设置权限；原有授权不会自动恢复。",
+    "pairing_code": "配对码",
+    "confirm_code": "已通过可信方式核对两端配对码一致",
+    "repair": "重新配对",
+    "proof_required": "等待对方提供有效的设备密钥证明。双方需使用支持配对的版本及安全连接；密钥验证失败时不能恢复权限。",
+    "receive_content": "接收内容",
+    "receive_description": "统一控制接收此设备的消息、文件、剪贴板和音视频。关闭时停止正在接收的内容，连接继续保留。",
+    "share_screen": "分享画面",
+    "share_description": "允许向此设备发送本地画面及音频，包括正在分享的内容。仍需先在本机开始共享。"
+  },
   "tasks": {
     "error_details": "错误详情",
     "pause": "暂停",
@@ -450,6 +466,7 @@
       }
     },
     "permissions": {
+      "allow_permanently": "永久允许",
       "description": "管理客户端与房间的权限。列表可删除历史记录；已加入的房间需先退出。点击设置可修改或重置权限。",
       "clients": "客户端",
       "rooms": "房间",

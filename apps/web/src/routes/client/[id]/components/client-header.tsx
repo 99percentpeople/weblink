@@ -68,13 +68,17 @@ export const ClientHeader: Component<{
       data-slot="client-header"
       title={name()}
       avatar={client()?.avatar}
-      subtitle={t(
-        `common.status.${props.info?.onlineStatus ?? "leave"}`,
-      )}
+      subtitle={
+        props.info?.trust && props.info.trust !== "trusted"
+          ? t(`device_trust.${props.info.trust}`)
+          : t(
+              `common.status.${props.info?.onlineStatus ?? "leave"}`,
+            )
+      }
       embedded={props.embedded}
       onBack={props.onBack}
       class={cn(
-        "sticky top-(--mobile-header-height) z-10 md:top-0",
+        "top-(--mobile-header-height) sticky z-10 md:top-0",
         props.class,
       )}
       actions={

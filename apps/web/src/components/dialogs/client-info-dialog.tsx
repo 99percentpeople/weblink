@@ -1,3 +1,4 @@
+import { ClientPermissions } from "../settings/client-permissions";
 import {
   createEffect,
   createMemo,
@@ -393,23 +394,11 @@ export function ClientInfoPanel(props: {
                 );
               }}
             />
-            <SettingSwitch
-              label={t(
-                "client.config.provide_file_list.title",
+            <Show when={props.clientId}>
+              {(id) => (
+                <ClientPermissions clientId={id()} />
               )}
-              description={t(
-                "client.config.provide_file_list.description",
-              )}
-              checked={
-                clientConfig()?.provideFileList ?? true
-              }
-              onChange={(checked) => {
-                if (!props.clientId) return;
-                setClientConfig(props.clientId, {
-                  provideFileList: checked,
-                });
-              }}
-            />
+            </Show>
             <SettingBlock separated>
               <SettingHeading>
                 {t("client.config.actions")}

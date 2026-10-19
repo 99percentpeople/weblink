@@ -398,6 +398,7 @@ export function createAppState(
     });
 
   const canShareFiles = (session: PeerSession) =>
+    sessionService.canReceive(session.targetClientId) &&
     sessionService.sessions[session.targetClientId] ===
       session &&
     session.isMessageChannelReady &&
@@ -788,6 +789,13 @@ export function createAppState(
           error,
         );
       });
+    for (const peer of Object.values(
+      sessionService.sessions,
+    )) {
+      sessionService.trust.get(peer.targetClientId);
+      sessionService.capabilities.get(peer)?.identity
+        ?.receiveContent;
+    }
     peerProfiles.broadcast();
 
     if (appState.roomStatus.profile) {

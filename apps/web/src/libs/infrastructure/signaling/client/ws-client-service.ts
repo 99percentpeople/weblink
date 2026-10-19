@@ -1,3 +1,5 @@
+import { deviceIdentityStore } from "../../identity/device-identity-store";
+import { joinTranscript } from "@/libs/domain/device-identity/crypto";
 import {
   EventHandler,
   MultiEventEmitter,
@@ -54,6 +56,12 @@ const MAX_BUFFERED_SIGNALS = SIGNALING_MAX_CACHED_SIGNALS;
 interface JoinedSocket {
   socket: WebSocket;
   resumed?: boolean;
+}
+class SignalingTransportError extends Error {}
+class DuplicateDeviceIdError extends SignalingTransportError {
+  constructor() {
+    super("DUPLICATE_DEVICE_ID");
+  }
 }
 
 function abortError(message: string): Error {
@@ -517,6 +525,15 @@ export class WebSocketClientService implements ClientService {
     }
 
     if (
+      event.code === 1008 &&
+      event.reason === "Duplicate device ID" &&
+      !this.hasConnected
+    ) {
+      // The initial join owns its retry loop and room lock. Let connectSocket
+      // reject; never send a leave or attempt to replace the admitted owner.
+      return;
+    }
+    if (
       (event.code === 1000 || event.code === 1008) &&
       [
         "Session resumed elsewhere",
@@ -646,7 +663,7 @@ export class WebSocketClientService implements ClientService {
       > | null = null;
       const connectionTimer = setTimeout(() => {
         fail(
-          new Error(
+          new SignalingTransportError(
             "[WebSocketClientService] connection timeout",
           ),
         );
@@ -687,7 +704,7 @@ export class WebSocketClientService implements ClientService {
         "error",
         () => {
           fail(
-            new Error(
+            new SignalingTransportError(
               "[WebSocketClientService] socket connection error",
             ),
           );
@@ -698,9 +715,12 @@ export class WebSocketClientService implements ClientService {
         "close",
         (event) => {
           fail(
-            new Error(
-              `[WebSocketClientService] socket closed ${event.code} ${event.reason}`,
-            ),
+            event.code === 1008 &&
+              event.reason === "Duplicate device ID"
+              ? new DuplicateDeviceIdError()
+              : new SignalingTransportError(
+                  `[WebSocketClientService] socket closed ${event.code} ${event.reason}`,
+                ),
           );
         },
         { once: true, signal },
@@ -718,7 +738,11 @@ export class WebSocketClientService implements ClientService {
             return;
           }
           if (message.type === "error") {
-            fail(new Error(String(message.data)));
+            fail(
+              message.data === "DUPLICATE_DEVICE_ID"
+                ? new DuplicateDeviceIdError()
+                : new Error(String(message.data)),
+            );
             return;
           }
           if (message.type === "joined") {
@@ -763,12 +787,38 @@ export class WebSocketClientService implements ClientService {
               );
             }
 
+            let identityProof:
+              | { publicKey: string; signature: string }
+              | undefined;
+            if (message.identityChallenge) {
+              try {
+                const identity =
+                  await deviceIdentityStore.identity();
+                identityProof = {
+                  publicKey: identity.publicKey,
+                  signature: await identity.sign(
+                    joinTranscript(
+                      message.identityChallenge,
+                      this.client.clientId,
+                      this.client.createdAt,
+                    ),
+                  ),
+                };
+              } catch {
+                /* A new unpaired connection may stay online without authority. */
+              }
+            }
+            if (
+              signal.aborted ||
+              !this.isCurrentConnection(socket, generation)
+            )
+              throw abortError("Stale identity handshake");
             this.activateSocket(socket, generation);
             joinStarted = true;
             clearTimeout(connectionTimer);
             joinAckTimer = setTimeout(() => {
               fail(
-                new Error(
+                new SignalingTransportError(
                   "[WebSocketClientService] join acknowledgement timeout",
                 ),
               );
@@ -776,10 +826,15 @@ export class WebSocketClientService implements ClientService {
             socket.send(
               encodeSignalingEnvelope({
                 type: "join",
-                data: createClientPresence(
-                  this.client,
-                  resume,
-                ),
+                data: {
+                  ...createClientPresence(
+                    this.client,
+                    resume,
+                  ),
+                  ...(identityProof
+                    ? { identityProof }
+                    : {}),
+                },
               }),
             );
           } catch (error) {
@@ -1051,7 +1106,32 @@ export class WebSocketClientService implements ClientService {
               },
             );
         }
-        await this.initialize();
+        let attempts = 0;
+        while (!this.closed) {
+          try {
+            await this.initialize();
+            return;
+          } catch (error) {
+            if (
+              !(
+                error instanceof DuplicateDeviceIdError ||
+                (attempts > 0 &&
+                  error instanceof SignalingTransportError)
+              ) ||
+              this.closed
+            )
+              throw error;
+            // Waiting changes no ownership. Each fresh join must still pass
+            // the server's key/lease checks; a real live owner is never evicted.
+            await waitForReconnect(
+              getReconnectDelayMs(++attempts),
+              this.lifecycleController.signal,
+            );
+          }
+        }
+        throw abortError(
+          "[WebSocketClientService] connection aborted",
+        );
       } catch (error) {
         this.releaseRoomLock?.();
         this.releaseRoomLock = null;

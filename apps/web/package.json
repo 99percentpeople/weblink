@@ -41,7 +41,8 @@
     "build:desktop": "vite build --mode desktop",
     "test:e2e:notifications": "bun scripts/run-browser-check.mjs --notifications",
     "test:e2e:hmr": "node scripts/run-hmr-check.mjs",
-    "test:e2e:recording": "node scripts/run-browser-check.mjs --recording"
+    "test:e2e:recording": "node scripts/run-browser-check.mjs --recording",
+    "test:e2e:device-trust": "bun scripts/run-browser-check.mjs --device-trust"
   },
   "dependencies": {
     "@corvu/drawer": "^0.2.4",
