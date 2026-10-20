@@ -186,6 +186,24 @@ check actual libwebrtc trickle ICE and isolation of preview frame-rate adaptatio
 It also checks stream-statistics routing and overlay polling/toggle lifetimes
 against decoded browser RTP. Windows tests verify software and MF encoder counters;
 MF processing time must come from the transform rather than the RTP passthrough.
+Windows `encoding_pool::tests` cover concurrent sharing, bitrate split/merge,
+stable output ports, recording ownership, live settings and stale lease cleanup.
+`shared_encoder_survives_viewer_churn_and_recording_owns_the_last_lease` is an
+explicitly ignored hardware test: run it with `--ignored --nocapture --test-threads=1`
+on Windows with an H.264 encoder. It uses synthetic frames and local WebRTC
+receivers to verify shared encoding, continued decoding and recording after every
+viewer leaves, and a returning viewer. The capture-audio recording test separately
+checks audio continuity after the viewer exits. These do not prove all GPU drivers.
+The opt-in `late_join_headers_and_fresh_decoders` test requires FFmpeg and
+`WEBLINK_LATE_JOIN_PROBE_DIR`. It checks late keyframe parameter sets and fresh
+decoding for AVC/HEVC, including memory fallback. AVC additionally uses local RTP
+receivers to check static startup, delayed answers and live settings. HEVC checks
+do not establish browser RTP playback. `static_join_timeline` writes encoder,
+sender and receiver events to `WEBLINK_STARTUP_PROBE_DIR`; `WEBLINK_STARTUP_LOG=1`
+also enables filtered WebRTC startup logs for diagnosing which stage is delayed.
+It checks direct pass-through startup and a keyframe in the first transmitted
+video frames. Static joins must reuse both capture pixels and converted buffers;
+keyframe demand remains subject to the configured FPS limit.
 The Windows `media_self_test` example accepts `--scene-burst` to exercise a
 moving texture in its own window, controlled by the exchange directory's `motion`
 file. Use native capture and decoded browser RTP together when checking scene-cut
@@ -193,7 +211,11 @@ bitrate recovery; publication smoke tests do not measure native encoder performa
 
 `test:e2e:playback` uses Node 22+ and Chromium with the actual video component
 and received RTP. It checks deferred source attachment, interrupted playback,
-visibility/presentation recovery and borrowed-track cleanup. Native PiP return
+visibility/presentation recovery, borrowed-track cleanup, and continuous playback
+in grid and pinned meeting views while unrelated participants join, update and leave.
+The codec lifecycle integration checks cover per-receiver format selection, mixed
+H.265/H.264 viewers and delayed native encoder retirement without restarting other peers.
+Native PiP return
 events are simulated; it does not establish iPhone Safari rendering correctness.
 
 `test:e2e:protocol` also covers three independent room-chat protocol instances

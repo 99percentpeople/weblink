@@ -433,6 +433,11 @@ may select concrete infrastructure implementations.
     `@weblink/platform`: encoded video access units, optional encoded Opus/G.722/PCMU/PCMA or captured PCM audio,
     pause/resume segments and subscription-only cleanup. Browser transforms stay
     installed for the RTP endpoint lifetime; stopping recording only stops copying.
+    Local native recording owns a capture-scoped encoder-pool lease and uses the
+    shared codec preference constrained to AVC/HEVC. Matching native hardware
+    viewers reuse the same worker but keep independent RTP feedback/output ports.
+    Recording pins its worker and uses capture PCM audio; viewer departure cannot
+    end either recording track. Software/browser encoding remains WebRTC-owned.
     Ordinary meeting and native-screen receive connections expose selected tracks
     through the same source interface in Web and Tauri. Video dimensions absent on
     received delta frames inherit the last known dimensions for that SSRC. When
@@ -478,7 +483,7 @@ may select concrete infrastructure implementations.
     samples; pauses resume on a keyframe with the original configuration.
     The native recording core in `crates/desktop-capture/src/media/recording/`
     owns input selection, session lifetimes, pause segments and the stable binary
-    IPC format. Its ports borrow video keyframe/connection controls, encoded-audio
+    IPC format. Its ports provide video keyframe/lifetime controls, encoded-audio
     copy controls and a PCM tap; it imports neither Windows, libwebrtc nor Tauri.
     Backends supply audio/video timestamps normalized to one monotonic clock.
     The reusable SDK adapter in `media/webrtc/` supplies sender audio observations
@@ -489,23 +494,22 @@ may select concrete infrastructure implementations.
     same-codec MF fallback. NVIDIA's driver API is loaded at runtime through a
     narrow C++ shim. WASAPI capture remains in the Windows adapter.
     Closing a recording releases its subscriptions before another can open, even
-    if a pending read retains the old source. Teardown never closes borrowed media.
-    Native Windows recording first subscribes directly to a connected hardware
-    H.264/H.265 sender. It creates neither another native encoder nor a local peer.
-    The original transport receives each access unit before the recording tap;
+    if a pending read retains the old source. Teardown releases its encoder lease
+    without closing other consumers.
+    Native Windows packet recording subscribes directly to its pooled H.264/H.265
+    worker, sharing an existing matching worker or creating one. It creates no local peer.
+    Connected viewer transports receive each access unit before the recording tap;
     capture and encoder threads never perform recording IPC, muxing or file I/O.
-    Audio first copies supported encoded payloads from that same sender, after encoding and before RTP
-    packetization. Its pass-through observer is installed before negotiation;
-    recording pause/stop only disables copies. WASAPI capture timestamps survive
-    audio encoding and share WebRTC's monotonic clock with native video.
-    Unsupported audio or unavailable capture clocks during preparation release
-    the subscription and retry with the existing muted-or-live PCM tap. Only
-    that fallback encodes audio as Opus through the shared muxer path.
+    Local recording uses the muted-or-live WASAPI PCM tap, encoded through the
+    shared muxer path. Audio and video share WebRTC's monotonic clock and are
+    independent of viewer transports. Encoded-audio ports remain available to
+    browser sender/receiver recording adapters.
     One binary read may be in flight; queue overflow terminates recording without
     changing the original sender. Unsupported native sources retain the local
     receiver/MediaRecorder fallback, including real source audio.
     Each resume waits for a keyframe and removes paused time from both tracks.
-    Sender disconnect or video configuration changes finish the current file;
+    Capture shutdown, a borrowed remote source disconnect or video configuration
+    changes finish the current file; a viewer leaving local packet recording does not.
     incompatible audio formats or missing clocks stop recording with an error.
     Incompatible streams are never spliced together. Stop drains accepted packets
     and final muxer writes, then applies bounded metadata patches through VFS close.

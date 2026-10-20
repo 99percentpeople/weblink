@@ -7,14 +7,10 @@ import { commonCodecs } from "../domain/media-codecs";
 import type { MediaDecodeCapabilities } from "../domain/protocol/media-codecs";
 
 interface NativeCodecSelection {
-  setReceivers(
-    receivers: readonly (
-      | MediaDecodeCapabilities
-      | undefined
-    )[],
-  ): void;
-  onCodecsChanged(changed: () => void): () => void;
-  selected(): NativeSendCodecs | undefined;
+  select(
+    receiver?: MediaDecodeCapabilities,
+  ): NativeSendCodecs;
+  recording(): NativeSendCodecs | undefined;
 }
 type NativeCodecPreferences = Partial<
   Pick<
@@ -28,7 +24,7 @@ type NativeCodecPreferences = Partial<
   >
 >;
 
-/** One choice belongs to a capture publication, shared by all of its senders. */
+/** Probe a capture once, then choose independently for each receiver. */
 export async function createNativeCodecSelection(
   share: NativeScreenShare,
   options?: NativeCodecPreferences,
@@ -66,60 +62,53 @@ export async function createNativeCodecSelection(
   const hardware = available
     .filter((encoder) => encoder.hardware)
     .flatMap((encoder) => encoder.codecs);
-  const listeners = new Set<() => void>();
-  let selected: NativeSendCodecs | undefined;
-  let initialized = false;
-  let key: string | undefined;
+  const select = (
+    receiver?: MediaDecodeCapabilities,
+  ): NativeSendCodecs => {
+    const receivers = [receiver];
+    const next = {
+      video:
+        options?.codec ??
+        commonCodecs(
+          "video",
+          video,
+          receivers,
+          hardware,
+        )[0] ??
+        "",
+      audio:
+        options?.audioCodec ??
+        (options?.audio
+          ? commonCodecs("audio", audio, receivers)[0]
+          : "audio/opus") ??
+        "",
+    };
+    if (!next.video || (options?.audio && !next.audio))
+      throw new Error(
+        "No common native media codec for this receiver",
+      );
+    return next;
+  };
   return {
-    setReceivers(
-      receivers: readonly (
-        | MediaDecodeCapabilities
-        | undefined
-      )[],
-    ) {
-      const next = {
-        video:
-          options?.codec ??
-          commonCodecs(
-            "video",
-            video,
-            receivers,
-            hardware,
-          )[0] ??
-          "",
-        audio:
-          options?.audioCodec ??
-          (options?.audio
-            ? commonCodecs("audio", audio, receivers)[0]
-            : "audio/opus") ??
-          "",
-      };
-      const nextKey = JSON.stringify(next);
-      initialized = true;
-      if (key === nextKey) return;
-      key = nextKey;
-      selected = next;
-      for (const changed of listeners) changed();
-    },
-    onCodecsChanged(changed: () => void) {
-      listeners.add(changed);
-      return () => {
-        listeners.delete(changed);
-      };
-    },
-    selected(): NativeSendCodecs | undefined {
-      if (!initialized) return;
+    select,
+    recording() {
+      // The packet recorder currently accepts AVC/HEVC. Use the same hardware
+      // preference and codec ordering as streaming, constrained by its own sink.
       if (
-        !selected?.video ||
-        (options?.audio && !selected.audio)
+        options?.codec &&
+        !["video/h264", "video/h265"].includes(
+          options.codec,
+        )
       )
-        throw new Error(
-          "No common native media codec for all connected receivers",
-        );
-      return {
-        video: selected.video,
-        audio: selected.audio || "audio/opus",
-      };
+        return;
+      try {
+        return select({
+          video: ["video/h264", "video/h265"],
+          audio,
+        });
+      } catch {
+        return;
+      }
     },
   };
 }

@@ -91,8 +91,7 @@ async function openConnection(
           audioCodec: undefined,
         },
       );
-      codecs.setReceivers([capabilities]);
-      fallbackCodecs = codecs.selected();
+      fallbackCodecs = codecs.select(capabilities);
     }
     signal.throwIfAborted();
     receiver = new ScreenReceiver(

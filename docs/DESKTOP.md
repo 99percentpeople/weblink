@@ -501,9 +501,9 @@ come from optional NVIDIA NVENC session initialization and Media Foundation
 hardware-transform enumeration followed by activation and input/output type negotiation,
 not GPU model names. Automatic encoding exchanges
 browser/WebView decoder MIME capabilities in the existing authenticated media hello.
-The application owns the connected-peer set, including peers whose capabilities are
-still unknown. It intersects local encoding formats with every connected receiver;
-unknown/legacy receivers use H.264/VP8 and Opus/PCMU/PCMA compatibility baselines.
+Each connection intersects local encoding formats with its own receiver's capabilities.
+Unknown/legacy receivers use H.264/VP8 and Opus/PCMU/PCMA compatibility baselines,
+without restricting other receivers.
 Native selection prefers available hardware, then AV1, HEVC, VP9, H.264 and VP8;
 browser selection uses this format order. Audio prefers Opus, then G.722, PCMU and
 PCMA. This is a deterministic preference policy, not a device performance benchmark;
@@ -513,17 +513,26 @@ without ending local capture. Manual browser choices retain WebRTC fallback orde
 manual native video formats remain fixed; manual audio choices remain preferences.
 Neither rewrites saved user preferences.
 
-Joining, leaving, or a changed capability report reevaluates automatic choices.
-Browser senders renegotiate on their existing connections; native publications notify
-all of their transports only when the resolved format changes, replacing those media
-connections while retaining capture and raw preview. Input channels bound to replaced
+Joining or leaving does not change the formats or restart the streams of existing peers.
+A changed capability report reevaluates only that receiver's choices. Browser senders
+renegotiate on their existing connections; native senders replace only the affected
+receiver's media connection when its resolved format changes, retaining capture and
+raw preview. Each pending offer carries its own selected formats. Input channels bound to replaced
 native media connections also reconnect. Each replacement uses the negotiated format's
 hardware/software backend and a scoped factory; capture pixel conversion is shared.
 Settings combines encoder and format into one selector with Auto and detected
 hardware/software format combinations. Stored settings accept fully automatic encoding or a concrete encoder/format pair.
 Other combinations use the automatic default; unavailable saved concrete pairs
-are marked instead of silently replaced. Each remote peer owns its hardware transform and
-encoded-frame source, with independent bitrate and keyframe feedback. A selected
+are marked instead of silently replaced. Each remote peer owns its encoded-frame
+source and RTP connection, with independent bitrate and keyframe feedback. Native
+H.264/H.265 hardware workers are pooled within a capture: the backend, codec,
+size/FPS limits, colour settings, preview mode and bandwidth bucket must match.
+Consumers in the same group receive copies of one encoded access unit. Allocations
+use geometric 1.5× buckets rounded down, including the configured ceiling.
+A budget change can split or merge only the affected viewer; it retains its RTP
+connection, rejects stale group output, and resumes on a keyframe with a common
+monotonic timestamp. A sole viewer changes bitrate in place. Browser and native
+software encoders remain managed by WebRTC and are not part of this pool. A selected
 codec restricts negotiation to that format: incompatible receivers fail instead
 of silently switching codecs. Driver/session limits and accepted resolution/rate
 combinations still apply. The Windows local preview does not create an encoder or
@@ -600,9 +609,10 @@ Hardware encoding keeps the selected frame cadence independent of WebRTC's
 observed input frame rate, so motion can resume after static content. Remote peers
 start conservatively and apply bandwidth reductions immediately. Upward updates
 are coalesced over 50 ms and then follow the latest allocation directly, without
-an additional multiplicative recovery ramp. Targets are quantized down in 16 kbps
+an additional multiplicative recovery ramp. Shared workers first use the bandwidth
+bucket described above; the hardware controller then quantizes down in 16 kbps
 steps, preserving smaller positive allocations.
-The encoder target stays within the peer's latest bandwidth allocation
+The encoder target stays within its members' latest bandwidth allocations
 and configured bitrate cap; WebRTC retains congestion control and pacing. These
 limits govern the target rate, not the size of individual keyframe bursts. Where
 the driver supports it, the hardware encoder requests a one-frame HRD/VBV budget
@@ -785,12 +795,14 @@ WGC's minimum update interval, capture requests updates at a 1 ms minimum interv
 and the worker enforces the selected output rate; older Windows versions retain
 the OS default. The worker preserves the latest pending frame without
 losing the final update when a screen becomes static. GPU mapping/conversion runs
-outside the async executor. Both encoding paths refresh static content at most
-twice per second, also respecting lower FPS limits. The shared refresh deadline
-survives settings and preview notifications; a newly attached viewer receives
-retained pixels without waiting for the desktop to change. Refreshing does not
-repeat GPU readback or pixel conversion. The shared WebRTC encoder adapter keeps
-the configured FPS for per-frame budgets during sparse input for H.264, VP8,
+outside the async executor. Both encoding paths periodically refresh static content
+twice per second, also respecting lower FPS limits. A hardware keyframe request
+additionally schedules retained pixels at the next permitted frame, without
+waiting for this refresh deadline. Joining, transport readiness and decoder
+requests use the same path; demand survives worker wakeups until pixels are
+submitted. Refreshing does not
+repeat GPU readback or the shared BGRA-to-I420 conversion. The shared WebRTC encoder
+adapter keeps the configured FPS for per-frame budgets during sparse input for H.264, VP8,
 VP9 and AV1. Live FPS changes update that budget before the next encode without
 resetting the encoder, raising bitrate allocations or disabling transport and
 encoder frame limits. Software H.264 uses the real-time rate-control preset. Its
@@ -801,7 +813,15 @@ its frame dropper, bitrate adjustment, congestion control and pacing. Limited
 bandwidth can still reduce frame rate or quality according to the selected
 degradation preference. This policy is scoped to the native screen factory's
 software H.264 backend. Hardware pass-through disables the encoder-input rate
-dropper because its inputs are already compressed reference frames. Hardware
+dropper because its inputs are already compressed reference frames. Pre-encoded
+RTP senders also disable raw-frame resolution/FPS adaptation from creation through
+live settings updates. Otherwise WebRTC's initial quality scaler can discard the
+startup IDR before the pass-through encoder is active, delaying a static viewer.
+Factories for external encoders start on pass-through immediately, including
+H.264, without waiting for the sender's backend selector to switch a software
+encoder. Software factories retain their own startup policy.
+Capture settings and the shared encoder pool own adaptation before encoding;
+transport bitrate feedback, congestion control and pacing remain enabled. Hardware
 workers apply transport bitrate feedback to the active backend and account for actual encoded
 bytes with a bounded 50 ms burst allowance. When a driver overshoots its accepted
 target, raw inputs are skipped before encoding; completed encoded references are
@@ -878,8 +898,13 @@ updates are observed after the source repaints at its new size.
 `capture_pipeline_stats` exposes bounded rolling mean/P95/max timings for lock wait,
 GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
 input/readback dimensions, GPU fallback reason and active peer/encoder counts.
-It also reports capture wait, per-peer hardware input wait, input-to-output and
+It also reports capture wait, per-group hardware input wait, input-to-output and
 capture-to-encoded distributions, replaced input counts and in-flight samples.
+`hardwareEncoders` counts unique workers. Each entry has a stable `groupId` and
+current `consumers` (peer IDs or `recording:<id>`), so membership changes do not
+look like encoder restarts.
+Per-peer statistics start a new sampling baseline when that peer changes groups,
+preventing counters from different workers from producing spurious rate/latency spikes.
 Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` distinguish actual texture
 submission from memory input and identify a fallback reason. CPU pipeline frame
 counts can remain zero while a hardware-only stream is encoding normally.
@@ -922,7 +947,17 @@ mode changes, disconnection or access loss end the capture and require selecting
 the source again. Software and unsupported GPU encoders retain CPU readback and
 libyuv conversion; supported H.264/H.265 encoders use the shared texture path above.
 Recording continues to subscribe to already encoded packets after transport
-publication, with its own bounded queue. Browser screen sharing and
+publication, with its own bounded queue. Local native recording selects AVC/HEVC
+through the same hardware-first codec priority as streaming, constrained by the
+packet recorder's supported formats and the user's explicit codec choice. It
+holds its own encoder lease in the configured ceiling's bandwidth bucket, sharing a matching
+worker when possible and creating one otherwise, even without viewers.
+Viewer joins, departures and bandwidth changes cannot retire the recorder's worker.
+Live recording bitrate changes reconfigure that worker in place; changes to the
+bitstream configuration retain the muxer's existing validation rules. Stopping a
+recording releases only its lease; the final consumer releases the worker.
+Recording audio uses capture PCM on the same clock and the muxer's audio encoder,
+so it also survives the departure of every viewer. Browser screen sharing and
 microphone/camera behavior are retained.
 
 The native source picker defaults “Share audio” on for each new selection.
@@ -931,7 +966,7 @@ Weblink process tree so received meeting audio is not sent back. Windows process
 loopback requires Windows build 20348 or newer; disabling audio keeps video-only
 capture available. Startup failures are reported instead of silently omitting
 requested audio. PCM is captured on a dedicated WASAPI worker and sent directly
-to native WebRTC/Opus; it never crosses Tauri IPC. Audio capture ends with the
+to native WebRTC/Opus; PCM crosses Tauri IPC only for local recording. Audio capture ends with the
 screen session. The worker waits on packet-ready and explicit stop events, with
 no periodic stop check; stopping also wakes a silent audio device. Preview audio
 is excluded from browser re-publication and local

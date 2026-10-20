@@ -100,7 +100,9 @@ function setup() {
     updateVideoSettings: vi.fn(async () => {}),
     encoders: vi.fn(),
     setAudioEnabled: vi.fn(async () => {}),
-    codecs: vi.fn(async () => ["video/vp8"]),
+    codecs: vi.fn(async (kind) =>
+      kind === "audio" ? ["audio/opus"] : ["video/vp8"],
+    ),
     start: vi.fn(async () => status),
     offer: vi.fn(async () => "offer"),
     answer: vi.fn(async () => {}),
@@ -124,7 +126,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("native preview ownership", () => {
-  it("offers sender audio reuse before PCM without opening or stopping a viewing peer", async () => {
+  it("selects recording video independently and uses capture audio without opening or stopping a viewing peer", async () => {
     const { capture, share } = setup();
     share.subscribeRecording = vi.fn(async () => null);
     const stream = await createNativeScreenStream(
@@ -147,7 +149,7 @@ describe("native preview ownership", () => {
     )!.getRecordingSources!();
     expect(
       sources.map((source) => source.encodedAudio),
-    ).toEqual([true, false]);
+    ).toEqual([false]);
     const consumer = { frame() {}, ended() {} };
     const offers = vi.mocked(share.offer).mock.calls.length;
     for (const source of sources)
@@ -159,16 +161,7 @@ describe("native preview ownership", () => {
       "owned",
       consumer,
       undefined,
-      { encodedAudio: true },
-    );
-    expect(
-      share.subscribeRecording,
-    ).toHaveBeenNthCalledWith(
-      2,
-      "owned",
-      consumer,
-      undefined,
-      { encodedAudio: false },
+      { encodedAudio: false, videoCodec: "video/h264" },
     );
     expect(share.offer).toHaveBeenCalledTimes(offers);
     expect(share.closePeer).not.toHaveBeenCalled();
@@ -214,17 +207,49 @@ describe("native preview ownership", () => {
       () => new Promise((r) => (finishClose = r)),
     );
     const closing = publication.closePeer("first");
+    const modern = {
+      video: "video/h265",
+      audio: "audio/opus",
+    };
+    const legacy = {
+      video: "video/h264",
+      audio: "audio/pcma",
+    };
     const replacement = publication.offer(
       "replacement",
       [],
       false,
+      undefined,
+      undefined,
+      modern,
     );
-    const joining = publication.offer("joining", [], false);
+    const joining = publication.offer(
+      "joining",
+      [],
+      false,
+      undefined,
+      undefined,
+      legacy,
+    );
     await flush();
     expect(share.offer).toHaveBeenCalledTimes(2);
     finishClose();
     await Promise.all([closing, replacement, joining]);
     expect(share.offer).toHaveBeenCalledTimes(4);
+    for (const [peer, codecs] of [
+      ["replacement", modern],
+      ["joining", legacy],
+    ])
+      expect(share.offer).toHaveBeenCalledWith(
+        "owned",
+        peer,
+        [],
+        false,
+        false,
+        undefined,
+        undefined,
+        codecs,
+      );
     stream.getVideoTracks()[0].stop();
   });
 

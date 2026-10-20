@@ -172,39 +172,65 @@ it("does not create a media receiver for an incompatible screen protocol", async
   session.dispose();
 });
 
-it("replaces all senders of a publication on a codec change and releases callbacks on removal", async () => {
+it("replaces only the receiver whose resolved codec changes and retains peers on leave", async () => {
   const first = setup(),
     second = setup();
-  const listeners = new Set<() => void>();
   const source = {
     ...publication(),
-    onCodecsChanged: (changed: () => void) => {
-      listeners.add(changed);
-      return () => {
-        listeners.delete(changed);
-      };
-    },
+    selectCodecs: (decode?: {
+      video: string[] | null;
+    }) => ({
+      video: decode?.video?.includes("video/h265")
+        ? "video/h265"
+        : "video/h264",
+      audio: "audio/opus",
+    }),
   };
-  for (const { session, channel } of [first, second]) {
-    session.setPublication(source);
-    session.setRemoteCapabilities({
-      screen: {
-        decode: { video: null, audio: null },
-        trickleIce: false,
-        multiScreen: false,
+  const capabilities = (hevc: boolean) => ({
+    screen: {
+      decode: {
+        video: hevc
+          ? ["video/h265", "video/h264"]
+          : ["video/h264"],
+        audio: ["audio/opus"],
       },
-    });
-  }
+      trickleIce: false,
+      multiScreen: false,
+    },
+  });
+  first.session.setPublication(source);
+  first.session.setRemoteCapabilities(capabilities(true));
+  await flush();
+  const firstId = first.channel.sent.find(
+    (s) => s.type === "offer",
+  ).id;
+  second.session.setPublication(source);
+  second.session.setRemoteCapabilities(capabilities(false));
   await flush();
   expect(source.offer).toHaveBeenCalledTimes(2);
-  for (const changed of listeners) changed();
+  expect(source.closePeer).not.toHaveBeenCalled();
+  second.session.setRemoteCapabilities(capabilities(false));
   await flush();
-  expect(source.closePeer).toHaveBeenCalledTimes(2);
-  expect(source.offer).toHaveBeenCalledTimes(4);
-  first.session.setPublication();
-  expect(listeners.size).toBe(1);
+  expect(source.offer).toHaveBeenCalledTimes(2);
+  second.session.setRemoteCapabilities(capabilities(true));
+  await flush();
+  expect(source.closePeer).toHaveBeenCalledOnce();
+  expect(source.closePeer).not.toHaveBeenCalledWith(
+    firstId,
+  );
+  expect(source.offer).toHaveBeenCalledTimes(3);
   second.session.dispose();
-  expect(listeners.size).toBe(0);
+  await flush();
+  expect(source.offer).toHaveBeenCalledTimes(3);
+  expect(source.closePeer).not.toHaveBeenCalledWith(
+    firstId,
+  );
+  expect(
+    first.channel.sent.filter((s) => s.type === "offer"),
+  ).toHaveLength(1);
+  expect(
+    first.channel.sent.some((s) => s.type === "stop"),
+  ).toBe(false);
   first.session.dispose();
 });
 beforeEach(() => {

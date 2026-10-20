@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { VideoDisplay } from "@/routes/home/components/video-display";
 import { PeerSessionMediaController } from "@/libs/domain/session-media";
+import { checkMeetingPlaybackMembership } from "./meeting-playback-membership";
 import "@/global.css";
 
 declare global {
@@ -284,6 +285,10 @@ async function main() {
       track.readyState === "live",
       "renderer cleanup must not stop received tracks",
     );
+    HTMLMediaElement.prototype.play = originalPlay;
+    const membership = await checkMeetingPlaybackMembership(
+      remote!,
+    );
     return {
       ok: true,
       realRtp: true,
@@ -294,6 +299,7 @@ async function main() {
       pendingPlayRecovered: true,
       presentationEventRecovered: true,
       sameBorrowedTrack: true,
+      membership,
     };
   } finally {
     dispose();

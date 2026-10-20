@@ -8,7 +8,6 @@ import {
 import {
   browserDecodeCapabilities,
   commonCodecs,
-  MediaCodecPeers,
 } from "@/libs/domain/media-codecs";
 import {
   parseMediaDecodeCapabilities,
@@ -78,25 +77,22 @@ describe("common media codecs", () => {
       }),
     ).toEqual({ video: [], audio: [] });
   });
-  it("downgrades for joining/unknown peers, upgrades on leave and deduplicates repeat reports", () => {
-    const peers = new MediaCodecPeers();
+  it("selects formats independently for modern, legacy and unsupported receivers", () => {
     const local = ["video/h265", "video/h264", "video/vp8"];
-    const selected = () =>
-      commonCodecs("video", local, peers.receivers());
-    expect(selected()[0]).toBe("video/h264");
-    const modern = receiver("video/h265", "video/h264");
-    expect(peers.set("modern", modern)).toBe(true);
-    expect(selected()).toEqual([
-      "video/h265",
-      "video/h264",
-    ]);
-    expect(peers.set("modern", modern)).toBe(false);
-    peers.set("old");
-    expect(selected()).toEqual(["video/h264"]);
-    peers.set("old", receiver("video/vp8"));
-    expect(selected()).toEqual([]);
-    peers.delete("old");
-    expect(selected()[0]).toBe("video/h265");
+    expect(
+      commonCodecs("video", local, [
+        receiver("video/h265", "video/h264"),
+      ]),
+    ).toEqual(["video/h265", "video/h264"]);
+    expect(
+      commonCodecs("video", local, [undefined]),
+    ).toEqual(["video/h264", "video/vp8"]);
+    expect(
+      commonCodecs("video", local, [receiver("video/vp8")]),
+    ).toEqual(["video/vp8"]);
+    expect(
+      commonCodecs("video", local, [receiver()]),
+    ).toEqual([]);
   });
   it("prefers native hardware before compression efficiency and chooses common audio", () => {
     const local = ["video/av1", "video/h265", "video/h264"];
@@ -149,65 +145,79 @@ const share = () =>
   }) as unknown as NativeScreenShare;
 
 describe("native publication selection", () => {
-  it("changes every subscribed sender only when the resolved format changes and releases subscriptions", async () => {
+  it("uses the streaming priority for recording without depending on viewer order", async () => {
+    const selection =
+      await createNativeCodecSelection(share());
+    expect(selection.recording()?.video).toBe("video/h265");
+    selection.select(receiver("video/h264"));
+    selection.select(receiver("video/vp8"));
+    expect(selection.recording()?.video).toBe("video/h265");
+    const manual = await createNativeCodecSelection(
+      share(),
+      { codec: "video/h264" },
+    );
+    expect(manual.recording()?.video).toBe("video/h264");
+    const unsupported = await createNativeCodecSelection(
+      share(),
+      { codec: "video/vp8" },
+    );
+    expect(unsupported.recording()).toBeUndefined();
+    const software = await createNativeCodecSelection(
+      share(),
+      { encoder: "software" },
+    );
+    expect(software.recording()).toBeUndefined();
+  });
+  it("selects independently without changing a previous receiver's format", async () => {
     const selection = await createNativeCodecSelection(
       share(),
       { audio: true },
     );
-    const first = vi.fn(),
-      second = vi.fn();
-    selection.setReceivers([
-      receiver("video/h265", "video/h264"),
-    ]);
-    const unsubscribe = selection.onCodecsChanged(first);
-    selection.onCodecsChanged(second);
-    expect(selection.selected()).toEqual({
+    const modern = receiver("video/h265", "video/h264");
+    const first = selection.select(modern);
+    expect(first).toEqual({
       video: "video/h265",
       audio: "audio/opus",
     });
-    selection.setReceivers([
-      receiver("video/h265", "video/h264"),
-      receiver("video/h264"),
-    ]);
-    expect(selection.selected()?.video).toBe("video/h264");
-    selection.setReceivers([receiver("video/h264")]);
-    expect(first).toHaveBeenCalledTimes(1);
-    unsubscribe();
-    selection.setReceivers([
-      receiver("video/h265", "video/h264"),
-    ]);
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(second).toHaveBeenCalledTimes(2);
-    selection.setReceivers([receiver("video/vp8")]);
-    expect(selection.selected()?.video).toBe("video/vp8");
-    selection.setReceivers([receiver()]);
-    expect(() => selection.selected()).toThrow("No common");
+    expect(
+      selection.select(receiver("video/h264")).video,
+    ).toBe("video/h264");
+    expect(
+      selection.select(receiver("video/vp8")).video,
+    ).toBe("video/vp8");
+    expect(() => selection.select(receiver())).toThrow(
+      "No common",
+    );
+    expect(first).toEqual(selection.select(modern));
+    expect(selection.select().video).toBe("video/h264");
+    expect(selection.select(modern)).toEqual(first);
   });
   it("preserves manual choices and does not reconnect video-only capture for audio changes", async () => {
     const selection = await createNativeCodecSelection(
       share(),
       { codec: "video/h264", audioCodec: "audio/opus" },
     );
-    selection.setReceivers([receiver("video/h265")]);
-    const changed = vi.fn();
-    selection.onCodecsChanged(changed);
-    selection.setReceivers([{ video: [], audio: [] }]);
-    expect(selection.selected()).toEqual({
+    const chosen = selection.select(receiver("video/h265"));
+    expect(chosen).toEqual({
       video: "video/h264",
       audio: "audio/opus",
     });
-    expect(changed).not.toHaveBeenCalled();
+    expect(
+      selection.select({ video: [], audio: [] }),
+    ).toEqual(chosen);
   });
   it("respects an explicitly selected encoder and capture colour constraints", async () => {
     const selection = await createNativeCodecSelection(
       share(),
       { encoder: "software", colorMatrix: "bt709" },
     );
-    selection.setReceivers([
-      receiver("video/h264", "video/vp8", "video/av1"),
-    ]);
-    expect(selection.selected()?.video).toBe("video/av1");
-    selection.setReceivers([receiver("video/vp8")]);
-    expect(() => selection.selected()).toThrow("No common");
+    expect(
+      selection.select(
+        receiver("video/h264", "video/vp8", "video/av1"),
+      ).video,
+    ).toBe("video/av1");
+    expect(() =>
+      selection.select(receiver("video/vp8")),
+    ).toThrow("No common");
   });
 });

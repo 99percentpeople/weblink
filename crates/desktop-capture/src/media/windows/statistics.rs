@@ -12,12 +12,9 @@ impl MediaSession {
             .map(|peer| peer.connection.clone())
             .ok_or("Media peer is no longer active")?;
         let report = pc.get_stats().await.map_err(|e| e.to_string())?;
-        let hardware = self
-            .hardware
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(id)
-            .map(|encoder| encoder.statistics());
+        let encoder = self.hardware.encoder(id);
+        let group_id = encoder.as_ref().map(|encoder| encoder.group_id);
+        let hardware = encoder.map(|encoder| encoder.statistics());
         let timestamp = self.started.elapsed().as_secs_f64() * 1000.0;
         let options = self
             .options
@@ -69,7 +66,12 @@ impl MediaSession {
                     _ => None,
                 });
                 Some(VideoStats {
-                    id: s.rtc.id.clone(),
+                    // A migration changes the hardware counter origin, even
+                    // though the RTP transport stays alive. Reset rate baselines.
+                    id: group_id.map_or_else(
+                        || s.rtc.id.clone(),
+                        |group| format!("{}:encoder-{group}", s.rtc.id),
+                    ),
                     timestamp,
                     codec,
                     implementation,

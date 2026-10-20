@@ -16,6 +16,7 @@ import type { ClientService } from "@/libs/domain/client";
 import type {
   PeerSession,
   PeerSessionEventMap,
+  PeerSessionRuntimeOptions,
 } from "@/libs/domain/session";
 import {
   NativeScreenSession,
@@ -217,6 +218,130 @@ async function setup(expectControl = true) {
     },
   };
 }
+
+it("isolates browser codec choices from unrelated peer joins, capability updates and departures", async () => {
+  const f = await setup();
+  const options = (session: PeerSession) =>
+    (
+      session as unknown as {
+        getRuntimeOptions(): PeerSessionRuntimeOptions;
+      }
+    ).getRuntimeOptions();
+  const events = (session: PeerSession) =>
+    session as unknown as Pick<
+      MultiEventEmitter<PeerSessionEventMap>,
+      "dispatchEvent"
+    >;
+  const announce = (
+    session: PeerSession,
+    revision: number,
+    video: string[],
+    audio: string[],
+  ) => {
+    events(session).dispatchEvent(
+      "message",
+      createSessionMessage(
+        {
+          clientId: session.targetClientId,
+          targetClientId: session.clientId,
+        },
+        "peer-capabilities",
+        {
+          update: {
+            kind: "snapshot",
+            generation: "remote-connection",
+            revision,
+            services: {
+              "screen/1": {
+                decode: { video, audio },
+                trickleIce: true,
+                multiScreen: true,
+              },
+            },
+          },
+        },
+      ),
+    );
+  };
+  try {
+    // The fixture supplies known sender capabilities independently of jsdom.
+    Object.assign(
+      (
+        f.service as unknown as {
+          browserEncoders: {
+            video: string[] | null;
+            audio: string[] | null;
+          };
+        }
+      ).browserEncoders,
+      {
+        video: ["video/h265", "video/h264"],
+        audio: ["audio/opus", "audio/pcma"],
+      },
+    );
+    events(f.session).dispatchEvent(
+      "messagechannelchange",
+      "ready",
+    );
+    announce(
+      f.session,
+      2,
+      ["video/h265", "video/h264"],
+      ["audio/opus"],
+    );
+    await flush();
+    const original = options(f.session);
+    expect(original.automaticVideoCodecs).toEqual([
+      "video/h265",
+      "video/h264",
+    ]);
+    expect(original.automaticAudioCodecs).toEqual([
+      "audio/opus",
+    ]);
+    const refresh = vi.spyOn(
+      f.session,
+      "refreshMediaCodecs",
+    );
+    const other = await f.service.addClient({
+      clientId: "other",
+      name: "Other",
+      createdAt: 3,
+      avatar: null,
+    });
+    events(other).dispatchEvent(
+      "messagechannelchange",
+      "ready",
+    );
+    await flush();
+    expect(options(other).automaticVideoCodecs).toEqual([
+      "video/h264",
+    ]);
+    expect(options(f.session)).toEqual(original);
+    expect(refresh).not.toHaveBeenCalled();
+    announce(other, 1, ["video/h264"], ["audio/pcma"]);
+    await flush();
+    expect(options(other).automaticAudioCodecs).toEqual([
+      "audio/pcma",
+    ]);
+    expect(options(f.session)).toEqual(original);
+    expect(refresh).not.toHaveBeenCalled();
+    announce(other, 2, [], []);
+    await flush();
+    expect(options(other).automaticVideoCodecs).toEqual([]);
+    expect(options(f.session)).toEqual(original);
+    expect(refresh).not.toHaveBeenCalled();
+    events(other).dispatchEvent(
+      "messagechannelchange",
+      "closed",
+    );
+    other.close();
+    await flush();
+    expect(options(f.session)).toEqual(original);
+    expect(refresh).not.toHaveBeenCalled();
+  } finally {
+    f.close();
+  }
+});
 
 it.each([false, true])(
   "preserves the approved connection when remembering consent=%s",

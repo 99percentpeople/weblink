@@ -18,7 +18,7 @@ fn hardware_preview_delivers_motion_and_final_frame() {
                 ..Default::default()
             }).unwrap();
             media.offer("preview-check".into(), vec![], false, false).await.unwrap();
-            let encoder = media.hardware.lock().unwrap()["preview-check"].clone();
+            let encoder = media.hardware.encoder("preview-check").unwrap();
             let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
             let preview = media.subscribe_preview(true, move |event| {
                 !matches!(event, PreviewEvent::Frame) || send.send(()).is_ok()
@@ -83,7 +83,7 @@ fn gpu_real_desktop_backends_deliver_both_codecs_without_readback() {
                 let remote = if codec == "video/h264" { Some(connect(&media, "desktop", false).await.unwrap()) } else {
                     media.offer("desktop".into(), vec![], false, false).await.unwrap(); None
                 };
-                let encoder = media.hardware.lock().unwrap()["desktop"].clone();
+                let encoder = media.hardware.encoder("desktop").unwrap();
                 let tap = encoder.recording.subscribe().unwrap();
                 encoder.request_recording_keyframe();
                 let status = service.start_media_with_options(screen.id.clone(), media.clone(), CaptureOptions { backend }).unwrap();
@@ -114,7 +114,7 @@ fn gpu_real_desktop_backends_deliver_both_codecs_without_readback() {
                 }
                 eprintln!("Actual desktop {backend:?} {codec}: GPU={}, CPU={}, readbacks={}, packets={packets}, bytes={}", metrics.gpu_inputs, metrics.cpu_inputs, media.pipeline_stats().frames, bytes.len());
                 service.stop(status.session_id.unwrap()).unwrap();
-                assert!(media.hardware.lock().unwrap().is_empty());
+                assert!(media.hardware.active().is_empty());
             }
         }
         service.shutdown();
@@ -131,7 +131,7 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         frames.send(&media, 0);
         let remote = connect(&media, "gpu", false).await.unwrap();
         wait_for_video(&remote).await;
-        let encoder = media.hardware.lock().unwrap()["gpu"].clone();
+        let encoder = media.hardware.encoder("gpu").unwrap();
         let idle = static_frames(&media, "gpu").await;
         let (moving, latency) = motion(&frames, &media, &remote).await;
         assert!(moving > 15, "Motion stalled: {moving}");
@@ -185,7 +185,7 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
             }).await.expect("NVENC failure did not recover on retained static content");
             assert!(!encoder.needs_readback());
             assert_eq!(encoder.statistics().cpu_inputs, 0);
-            assert!(Arc::ptr_eq(&encoder, &media.hardware.lock().unwrap()["gpu"]));
+            assert!(Arc::ptr_eq(&encoder, &media.hardware.encoder("gpu").unwrap()));
             wait_for_video(&remote).await;
             let report = media.stats("gpu").await.unwrap();
             assert!(!report.is_empty());
@@ -202,7 +202,7 @@ fn gpu_capture_keeps_vfr_preview_software_demand_and_fallback_isolated() {
         assert!(encoder.statistics().cpu_inputs > 0);
         assert!(encoder.statistics().gpu_fallback.is_some());
         assert_eq!(encoder.statistics().selection.unwrap().encoder_adapter, selection.encoder_adapter);
-        assert!(Arc::ptr_eq(&encoder, &media.hardware.lock().unwrap()["gpu"]));
+        assert!(Arc::ptr_eq(&encoder, &media.hardware.encoder("gpu").unwrap()));
         assert!(media.error().is_none());
         eprintln!("GPU H264: idle={idle}/2s, moving={moving}/2s, first motion={latency:?}, blocked preview={during_blocked_preview}/2s, 5FPS={limited}/2s, fallback={:?}", encoder.statistics().gpu_fallback);
         media.close();
@@ -225,7 +225,7 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
             };
             let frames = Frames::new();
             frames.send(&media, 0);
-            let encoder = media.hardware.lock().unwrap()["sender"].clone();
+            let encoder = media.hardware.encoder("sender").unwrap();
             tokio::time::timeout(Duration::from_secs(5), async {
                 while encoder.statistics().frames == 0 { tokio::time::sleep(Duration::from_millis(10)).await; }
             }).await.unwrap();
@@ -261,7 +261,7 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
                 media.close();
                 continue;
             }
-            assert!(media.open_recording("gpu".into(), true).unwrap().is_some());
+            assert!(media.open_recording("gpu".into(), true, None).unwrap().is_some());
             for segment in [1, 2] {
                 media.control_recording("gpu", true, segment).unwrap();
                 let before = encoder.statistics().frames;
@@ -293,7 +293,7 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
             assert!(slow.error().is_some(), "Stalled recording should detach");
             encoder.recording.unsubscribe(&slow);
             if let Some(remote) = remote { assert!(decoded(&remote).await > 10); }
-            assert_eq!(media.hardware.lock().unwrap().len(), 1);
+            assert_eq!(media.hardware.active().len(), 1);
             assert_eq!(encoder.statistics().cpu_inputs, 0, "{:?}", encoder.statistics().gpu_fallback);
             assert_eq!(media.pipeline_stats().frames, 0);
             eprintln!("GPU {codec} recording: {} inputs, pause/resume/keyframes and slow-sink isolation passed", encoder.statistics().gpu_inputs);

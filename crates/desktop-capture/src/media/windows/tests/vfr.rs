@@ -189,7 +189,7 @@ fn software_vfr(codec: &str) {
         let idle_after = static_frames(&media, "vfr").await;
         let stats = media.stats("vfr").await.unwrap();
         assert!(stats.iter().any(|s| s.codec.eq_ignore_ascii_case(codec)));
-        assert!(media.hardware.lock().unwrap().is_empty());
+        assert!(media.hardware.active().is_empty());
 
         // No capture arrival is needed after all consumers have gone away.
         media.close_peer("vfr");

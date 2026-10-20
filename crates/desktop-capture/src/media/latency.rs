@@ -30,6 +30,8 @@ pub struct HardwareEncoderSelection {
 #[serde(rename_all = "camelCase")]
 pub struct EncoderPipelineStats {
     pub peer: String,
+    pub group_id: u64,
+    pub consumers: Vec<String>,
     pub frames: u64,
     pub gpu_inputs: u64,
     pub cpu_inputs: u64,

@@ -175,10 +175,9 @@ impl MediaSession {
             .any(|peer| peer.raw_video)
             || self
                 .hardware
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .values()
-                .any(|encoder| encoder.needs_readback())
+                .active()
+                .iter()
+                .any(|(_, encoder)| encoder.needs_readback())
             || self
                 .previews
                 .lock()
@@ -192,6 +191,7 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .is_empty()
+            || !self.hardware.active().is_empty()
             || self.has_visible_previews()
     }
     pub(super) fn has_visible_previews(&self) -> bool {

@@ -17,6 +17,16 @@ pub(super) struct State {
     sent: Option<Instant>,
 }
 impl MediaSession {
+    pub(super) fn encoding_wake(&self) -> crate::surface::gpu::Wake {
+        let cpu = self.notify.clone();
+        let gpu = self.gpu_notify.clone();
+        let requested = self.readback_requested.clone();
+        Arc::new(move || {
+            requested.store(true, Ordering::Release);
+            cpu.notify_one();
+            gpu.notify_one();
+        })
+    }
     pub(super) fn wake_capture(&self) {
         self.notify.notify_one();
         self.gpu_notify.notify_one();
@@ -55,26 +65,27 @@ impl MediaSession {
         });
     }
     fn fallback_gpu(&self, reason: String) {
-        for encoder in self
-            .hardware
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
-        {
+        for (_, encoder) in self.hardware.active() {
             if !encoder.needs_readback() {
                 encoder.use_readback(reason.clone());
             }
         }
     }
     fn gpu_step(&self, admit: bool) -> Work {
+        if let Err(error) = self.hardware.reconcile(self.encoding_wake()) {
+            let mut errors = self.peer_errors.lock().unwrap_or_else(|e| e.into_inner());
+            if errors.len() >= 16 {
+                errors.pop_front();
+            }
+            errors.push_back(error);
+        }
         self.reap_failed_encoders();
         let encoders: Vec<_> = self
             .hardware
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
+            .active()
+            .into_iter()
+            .map(|(_, encoder)| encoder)
             .filter(|e| !e.needs_readback())
-            .cloned()
             .collect();
         let mut state = self.gpu_capture.lock().unwrap_or_else(|e| e.into_inner());
         if self.closed.load(Ordering::Acquire) || encoders.is_empty() {
@@ -91,7 +102,14 @@ impl MediaSession {
             return Work::default();
         };
         let dirty = state.latest.is_none() || state.generation != readback.generation;
-        let repeat = state.sent.map(|at| at + STATIC_REFRESH_INTERVAL);
+        let keyframe = encoders
+            .iter()
+            .any(|encoder| encoder.needs_keyframe_input());
+        let repeat = if keyframe {
+            Some(Instant::now())
+        } else {
+            state.sent.map(|at| at + STATIC_REFRESH_INTERVAL)
+        };
         if !admit || (!dirty && repeat.is_some_and(|at| at > Instant::now())) {
             return Work {
                 dirty,

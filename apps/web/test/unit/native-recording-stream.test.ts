@@ -20,8 +20,7 @@ vi.mock(
   "@/libs/application/native-codec-selection",
   () => ({
     createNativeCodecSelection: vi.fn(async () => ({
-      setReceivers() {},
-      selected: () => ({
+      select: () => ({
         video: "video/h264",
         audio: "audio/opus",
       }),

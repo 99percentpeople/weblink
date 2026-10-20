@@ -5,8 +5,11 @@ use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
 mod gpu;
+mod late_join_probe;
 mod latency_probe;
 mod recording;
+mod shared_encoding;
+mod startup_probe;
 mod vfr;
 
 #[test]
@@ -96,6 +99,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
             media.peers.lock().unwrap().insert(
                 "pending".into(),
                 MediaPeer {
+                    encoded: None,
                     _factory: media.factory.clone(),
                     encoding: media.options.lock().unwrap().clone(),
                     connection: pc,
@@ -200,6 +204,16 @@ async fn connect_with_recording(
     codecs: Option<super::super::SendCodecs>,
     recording: Option<crate::media::RecordingEnded>,
 ) -> Result<Receiver> {
+    connect_with_recording_and_delay(media, id, preview, codecs, recording, Duration::ZERO).await
+}
+async fn connect_with_recording_and_delay(
+    media: &MediaSession,
+    id: &str,
+    preview: bool,
+    codecs: Option<super::super::SendCodecs>,
+    recording: Option<crate::media::RecordingEnded>,
+    answer_delay: Duration,
+) -> Result<Receiver> {
     let factory = PeerConnectionFactory::default();
     let mut config = RtcConfiguration::default();
     config.continual_gathering_policy = ContinualGatheringPolicy::GatherOnce;
@@ -290,6 +304,7 @@ async fn connect_with_recording(
         sdp.push_str(&format!("a={}\r\n", candidate.trim()));
     }
     sdp.push_str("a=end-of-candidates\r\n");
+    tokio::time::sleep(answer_delay).await;
     media.answer(id, &sdp).await?;
     Ok(receiver)
 }
@@ -383,7 +398,7 @@ fn negotiated_formats_switch_transports_without_replacing_the_media_source() {
             );
             media.close_peer(&id);
             assert!(media.peers.lock().unwrap().is_empty());
-            assert!(media.hardware.lock().unwrap().is_empty());
+            assert!(media.hardware.active().is_empty());
             assert!(!media.closed.load(Ordering::Acquire));
         }
         if MediaSession::codecs()
@@ -569,7 +584,7 @@ fn preview_keeps_1440p_with_software_and_available_hardware_encoding() {
             .await
             .expect("Full-resolution preview did not decode");
             if media.encoder_id.is_some() {
-                assert!(media.hardware.lock().unwrap().contains_key("full-preview"));
+                assert!(media.hardware.encoder("full-preview").is_some());
             }
             media.close();
         }
@@ -732,7 +747,7 @@ fn hardware_h264_reaches_receiver_and_releases_peer_encoder() {
         );
         media.close_peer("hardware");
         assert!(media.stats("hardware").await.is_err());
-        assert!(media.hardware.lock().unwrap().is_empty());
+        assert!(media.hardware.active().is_empty());
         media.close();
         assert!(frames >= 20, "Hardware stream did not decode: {frames}");
     });
@@ -875,7 +890,7 @@ fn dxgi_readback_reaches_preview_and_remote_after_restart() {
                 let stopped = service.stop(id).unwrap();
                 assert_eq!(stopped.state, CaptureState::Stopped, "{stopped:?}");
                 assert!(media.peers.lock().unwrap().is_empty());
-                assert!(media.hardware.lock().unwrap().is_empty());
+                assert!(media.hardware.active().is_empty());
             }
         }
         service.shutdown();

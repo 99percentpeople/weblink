@@ -2,6 +2,8 @@
 use serde::{Deserialize, Serialize};
 pub mod color;
 pub mod control;
+#[cfg(any(windows, test))]
+mod encoding;
 pub mod latency;
 pub mod pipeline;
 pub mod preview;
@@ -369,7 +371,12 @@ pub use windows::{MediaSession, PreviewSubscription};
 pub struct MediaSession;
 #[cfg(not(windows))]
 impl MediaSession {
-    pub fn open_recording(&self, _: String, _: bool) -> crate::Result<Option<RecordingInfo>> {
+    pub fn open_recording(
+        &self,
+        _: String,
+        _: bool,
+        _: Option<String>,
+    ) -> crate::Result<Option<RecordingInfo>> {
         Ok(None)
     }
     pub fn read_recording(&self, _: &str) -> crate::Result<Vec<u8>> {

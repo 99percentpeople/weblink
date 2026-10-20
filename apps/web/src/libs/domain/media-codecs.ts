@@ -73,30 +73,3 @@ export function commonCodecs(
         Number(hardware.includes(a)),
     );
 }
-
-/** The application owns membership; views and individual transports never do. */
-export class MediaCodecPeers {
-  private readonly peers = new Map<
-    string,
-    MediaDecodeCapabilities | undefined
-  >();
-  set(
-    id: string,
-    capabilities?: MediaDecodeCapabilities,
-  ): boolean {
-    if (
-      this.peers.has(id) &&
-      JSON.stringify(this.peers.get(id)) ===
-        JSON.stringify(capabilities)
-    )
-      return false;
-    this.peers.set(id, capabilities);
-    return true;
-  }
-  delete(id: string): boolean {
-    return this.peers.delete(id);
-  }
-  receivers(): (MediaDecodeCapabilities | undefined)[] {
-    return [...this.peers.values()];
-  }
-}

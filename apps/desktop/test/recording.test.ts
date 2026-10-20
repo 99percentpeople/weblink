@@ -164,17 +164,20 @@ it.each(RECORDING_AUDIO_CODECS)(
     );
   },
 );
-it("can explicitly reopen PCM after an encoded preparation failure", async () => {
+it("passes the selected recording video codec and PCM preference to native", async () => {
   const f = fixture();
   const subscription = (await subscribeNativeRecording(
     "source",
     { frame() {}, ended() {} },
     undefined,
-    { encodedAudio: false },
+    { encodedAudio: false, videoCodec: "video/h265" },
   ))!;
   expect(f.ipc).toHaveBeenCalledWith(
     "capture_recording_open",
-    expect.objectContaining({ encodedAudio: false }),
+    expect.objectContaining({
+      encodedAudio: false,
+      videoCodec: "video/h265",
+    }),
   );
   expect(subscription.encodedAudio).toBe(false);
   expect(subscription.audioFormat?.sampleRate).toBe(48000);

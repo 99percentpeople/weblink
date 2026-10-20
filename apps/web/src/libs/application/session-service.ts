@@ -6,7 +6,6 @@ import type { EncodedVideoSource } from "@/libs/domain/encoded-video";
 import {
   browserCodecs,
   commonCodecs,
-  MediaCodecPeers,
 } from "../domain/media-codecs";
 import { platform } from "@/libs/platform/runtime";
 import { RemoteControlHost } from "./remote-control-host";
@@ -175,26 +174,10 @@ export class SessionService {
     PeerSession,
     NativeScreenSession
   >();
-  private readonly codecPeers = new MediaCodecPeers();
   private readonly browserEncoders = {
     video: browserCodecs("send", "video"),
     audio: browserCodecs("send", "audio"),
   };
-  private readonly publications = new Map<
-    PeerSession,
-    ReturnType<typeof getNativeScreenPublication>[]
-  >();
-
-  private refreshMediaCodecs(): void {
-    const receivers = this.codecPeers.receivers();
-    for (const publication of new Set(
-      [...this.publications.values()].flat(),
-    ))
-      publication?.setReceivers?.(receivers);
-    for (const session of Object.values(this.sessions))
-      session.refreshMediaCodecs();
-  }
-
   getVideoStats(
     track: MediaStreamTrack,
   ): Promise<VideoStatsBatch[]> {
@@ -254,11 +237,6 @@ export class SessionService {
     const browserStream = browserMediaStream(
       stream ?? null,
     );
-    this.publications.set(session, publications);
-    for (const publication of publications)
-      publication.setReceivers?.(
-        this.codecPeers.receivers(),
-      );
     session.setStream(browserStream);
     this.nativeScreens
       .get(session)
@@ -437,7 +415,7 @@ export class SessionService {
       );
     }
 
-    const session = new PeerSession(sender, {
+    const session: PeerSession = new PeerSession(sender, {
       acceptsContent: () =>
         this.canReceive(client.clientId),
       allowsApplication: () =>
@@ -478,12 +456,12 @@ export class SessionService {
         automaticVideoCodecs: commonCodecs(
           "video",
           this.browserEncoders.video,
-          this.codecPeers.receivers(),
+          [this.capabilities.get(session)?.screen?.decode],
         ),
         automaticAudioCodecs: commonCodecs(
           "audio",
           this.browserEncoders.audio,
-          this.codecPeers.receivers(),
+          [this.capabilities.get(session)?.screen?.decode],
         ),
       }),
       getVideoSourceKind: getMeetingVideoSourceKind,
@@ -495,13 +473,6 @@ export class SessionService {
     let mainChannelReady = false;
     const native = new NativeScreenSession({
       clientId: session.clientId,
-      remoteDecodeChanged: (capabilities) => {
-        if (
-          mainChannelReady &&
-          this.codecPeers.set(client.clientId, capabilities)
-        )
-          this.refreshMediaCodecs();
-      },
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),
       acceptsControlRequests: () =>
@@ -566,6 +537,7 @@ export class SessionService {
       session,
       (services) => {
         native.setRemoteCapabilities(services);
+        session.refreshMediaCodecs();
         // Binding can publish before openNative is initialized.
         queueMicrotask(() => {
           this.applySessionStream(session);
@@ -699,8 +671,6 @@ export class SessionService {
       () => {
         opening = false;
         mainChannelReady = false;
-        if (this.codecPeers.delete(client.clientId))
-          this.refreshMediaCodecs();
         clearTimeout(nativeReopenTimer);
         native.reset();
         controlGeneration = createUuid();
@@ -710,19 +680,7 @@ export class SessionService {
     session.addEventListener(
       "messagechannelchange",
       ({ detail }) => {
-        const wasReady = mainChannelReady;
         mainChannelReady = detail === "ready";
-        if (
-          mainChannelReady
-            ? !wasReady &&
-              this.codecPeers.set(
-                client.clientId,
-                this.capabilities.get(session)?.screen
-                  ?.decode,
-              )
-            : this.codecPeers.delete(client.clientId)
-        )
-          this.refreshMediaCodecs();
         if (detail === "ready") void openNative();
         else {
           opening = false;
@@ -742,9 +700,6 @@ export class SessionService {
         disposeTrust();
         this.requestedStreams.delete(session);
         mainChannelReady = false;
-        this.publications.delete(session);
-        if (this.codecPeers.delete(client.clientId))
-          this.refreshMediaCodecs();
         native.dispose();
         controlGeneration = createUuid();
         this.nativeScreens.delete(session);

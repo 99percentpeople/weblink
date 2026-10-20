@@ -11,7 +11,7 @@ export async function subscribeNativeRecording(
   sessionId: string,
   consumer: EncodedMediaConsumer,
   signal?: AbortSignal,
-  options?: { encodedAudio?: boolean },
+  options?: { encodedAudio?: boolean; videoCodec?: string },
 ): Promise<EncodedMediaSubscription | null> {
   signal?.throwIfAborted();
   const recordingId = crypto.randomUUID();
@@ -59,6 +59,7 @@ export async function subscribeNativeRecording(
     info = await invoke("capture_recording_open", {
       ...args,
       encodedAudio: options?.encodedAudio ?? true,
+      videoCodec: options?.videoCodec,
     });
     if (stopped || signal?.aborted) {
       await close();

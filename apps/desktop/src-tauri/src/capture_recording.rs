@@ -7,11 +7,15 @@ pub async fn capture_recording_open(
     session_id: String,
     recording_id: String,
     encoded_audio: Option<bool>,
+    video_codec: Option<String>,
 ) -> Result<Option<weblink_desktop_capture::media::RecordingInfo>, String> {
     uuid::Uuid::parse_str(&recording_id).map_err(|_| "Invalid recording identifier")?;
     run(service, move |s| {
-        s.media(session_id)?
-            .open_recording(recording_id, encoded_audio.unwrap_or(true))
+        s.media(session_id)?.open_recording(
+            recording_id,
+            encoded_audio.unwrap_or(true),
+            video_codec,
+        )
     })
     .await
 }

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 #[ignore = "Requires a Windows H.264 hardware encoder; run on a desktop GPU"]
-fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_streams() {
+fn native_recording_uses_capture_audio_independently_of_viewer_codec_and_lifetime() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let hardware = mf::detect().unwrap().into_iter()
             .find(|encoder| encoder.codecs.contains(&"video/h264".into()))
@@ -72,14 +72,14 @@ fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_st
         let format = crate::media::recording::EncodedAudioCodec::from_rtp(audio_codec, if audio_codec == "audio/opus" {48000} else {8000}, 1).unwrap();
         pump(&media, 80).await;
         for encoded in [true, false, true] {
-            let info = media.open_recording("audio".into(), encoded).unwrap().unwrap();
-            assert_eq!(info.encoded_audio, encoded, "Sender audio should be usable: {audio_codec}");
-            assert_eq!(info.audio.is_some(), !encoded);
+            let info = media.open_recording("audio".into(), encoded, None).unwrap().unwrap();
+            assert!(!info.encoded_audio);
+            assert!(info.audio.is_some());
             let before = decoded(&remote).await;
             let sound_before = sound_received(&remote).await;
             media.control_recording("audio", true, 1).unwrap();
             let (_, first) = tokio::join!(pump(&media, 110), drain(media.clone()));
-            let kind = if encoded { 3 } else { 1 };
+            let kind = 1;
             let count = packets(&first, kind, 1, format);
             assert!(count > 10, "Missing audio packets: {count}");
             assert!(decoded(&remote).await > before + 10);
@@ -91,7 +91,7 @@ fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_st
             let (_, resumed) = tokio::join!(pump(&media, 110), drain(media.clone()));
             assert!(packets(&resumed, kind, 2, format) > 10);
             assert_eq!(media.peers.lock().unwrap().len(), 1);
-            assert_eq!(media.hardware.lock().unwrap().len(), 1);
+            assert!(media.hardware.active().len() <= 2);
             // A stalled recording must not stall either original media track.
             let sound_before = sound_received(&remote).await;
             let before = decoded(&remote).await;
@@ -102,18 +102,27 @@ fn native_recording_reuses_sender_audio_and_pcm_fallback_without_interrupting_st
             assert!(!media.audio.as_ref().unwrap().recording.has_subscriber());
             assert!(!media.peers.lock().unwrap()["remote"].recording_audio.as_ref().unwrap().tap.has_subscriber());
             pump(&media, 20).await;
-            eprintln!("Native {audio_codec} reuse={encoded}: {count} first-segment packets; original video/audio kept receiving through pause and stalled recording");
+            eprintln!("Native {audio_codec} prefer_encoded={encoded}: {count} PCM packets; original video/audio kept receiving through pause and stalled recording");
         }
+        media.open_recording("audio".into(), true, None).unwrap().unwrap();
+        media.control_recording("audio", true, 1).unwrap();
+        media.close_peer("remote");
+        let (_, independent) = tokio::join!(pump(&media, 110), drain(media.clone()));
+        assert!(packets(&independent, 1, 1, format) > 10);
+        assert!(packets(&independent, 0, 1, format) > 10);
+        media.close_recording("audio");
+        assert!(media.hardware.active().is_empty());
         media.close();
         }
     });
 }
 
-async fn frames(media: &MediaSession, count: u32) {
+pub(super) async fn frames(media: &MediaSession, count: u32) {
     let mut cadence = tokio::time::interval(Duration::from_millis(33));
     cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     for index in 0..count {
         cadence.tick().await;
+        media.hardware.reconcile(media.encoding_wake()).unwrap();
         let mut buffer = I420Buffer::new_black(640, 360);
         buffer.data_mut().0.fill(40 + (index % 160) as u8);
         media.publish_frame(&VideoFrame::new(VideoRotation::VideoRotation0, buffer));
@@ -144,7 +153,7 @@ fn native_recording_declines_missing_and_unsupported_senders_without_creating_pe
                 .unwrap();
             assert!(result.is_none());
             assert!(media.peers.lock().unwrap().is_empty());
-            assert!(media.hardware.lock().unwrap().is_empty());
+            assert!(media.hardware.active().is_empty());
         }
         media.close();
     });
@@ -192,7 +201,7 @@ fn native_recording_reuses_hardware_sender_and_isolates_slow_consumers_and_clean
         .unwrap();
         frames(&media, 90).await;
         assert_eq!(
-            media.hardware.lock().unwrap().len(),
+            media.hardware.active().len(),
             1,
             "Recording must not create another encoder"
         );
@@ -209,10 +218,10 @@ fn native_recording_reuses_hardware_sender_and_isolates_slow_consumers_and_clean
             receive.try_recv().is_err(),
             "User cleanup must not emit source-ended"
         );
-        assert_eq!(media.hardware.lock().unwrap().len(), 1);
+        assert_eq!(media.hardware.active().len(), 1);
 
         // Stop consuming the side channel while the actual WebRTC sender keeps running.
-        let encoder = media.hardware.lock().unwrap()["remote"].clone();
+        let encoder = media.hardware.encoder("remote").unwrap();
         let slow = encoder.recording.subscribe().unwrap();
         encoder.request_recording_keyframe();
         let before_slow = decoded(&remote).await;
@@ -238,7 +247,7 @@ fn native_recording_reuses_hardware_sender_and_isolates_slow_consumers_and_clean
         media.close_peer("remote");
         assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap(), None);
         media.close_peer("repeated");
-        assert!(media.hardware.lock().unwrap().is_empty());
+        assert!(media.hardware.active().is_empty());
         media.close();
     });
 }
@@ -259,7 +268,7 @@ fn native_recording_direct_packets_keep_the_original_sender_and_pause_queue_isol
             frame_rate: 30,
             max_width: 640,
             max_height: 360,
-            max_bitrate: 2_000_000,
+            max_bitrate: 300_000,
             ..Default::default()
         })
         .unwrap();
@@ -267,7 +276,7 @@ fn native_recording_direct_packets_keep_the_original_sender_and_pause_queue_isol
         frames(&media, 45).await;
         let before = decoded(&remote).await;
         assert!(media
-            .open_recording("direct".into(), true)
+            .open_recording("direct".into(), true, None)
             .unwrap()
             .is_some());
         media.control_recording("direct", true, 1).unwrap();
@@ -298,11 +307,7 @@ fn native_recording_direct_packets_keep_the_original_sender_and_pause_queue_isol
             1,
             "No local WebRTC recording peer"
         );
-        assert_eq!(
-            media.hardware.lock().unwrap().len(),
-            1,
-            "No second video encoder"
-        );
+        assert_eq!(media.hardware.active().len(), 1, "No second video encoder");
         assert!(decoded(&remote).await > before + 10);
         media.control_recording("direct", false, 1).unwrap();
         frames(&media, 45).await;
@@ -339,7 +344,7 @@ fn native_recording_direct_packets_keep_the_original_sender_and_pause_queue_isol
         }
         assert!(ended, "Slow consumer must end only its recording");
         media.close_recording("direct");
-        assert_eq!(media.hardware.lock().unwrap().len(), 1);
+        assert_eq!(media.hardware.active().len(), 1);
         let before_close = decoded(&remote).await;
         frames(&media, 20).await;
         assert!(decoded(&remote).await > before_close);

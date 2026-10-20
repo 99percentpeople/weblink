@@ -188,21 +188,29 @@ export async function createNativeScreenStream(
     );
     if (closed) throw new Error("Native screen closed");
     const publication: NativeScreenPublication = {
-      getRecordingSources: () =>
-        closed || !share.subscribeRecording
+      getRecordingSources: () => {
+        const recording = codecs.recording();
+        return closed ||
+          !share.subscribeRecording ||
+          !recording
           ? []
-          : (options?.audio ? [true, false] : [false]).map(
-              (encodedAudio) => ({
-                encodedAudio,
+          : [
+              {
+                // Local capture audio must outlive any individual viewer.
+                encodedAudio: false,
                 subscribe: (consumer, signal) =>
                   share.subscribeRecording!(
                     id,
                     consumer,
                     signal,
-                    { encodedAudio },
+                    {
+                      encodedAudio: false,
+                      videoCodec: recording.video,
+                    },
                   ),
-              }),
-            ),
+              },
+            ];
+      },
       openRecording: (signal, ended) => {
         if (closed)
           return Promise.reject(
@@ -218,8 +226,7 @@ export async function createNativeScreenStream(
       },
       sourceId: createUuid(),
       controlEligible: status.source?.kind === "monitor",
-      setReceivers: codecs.setReceivers,
-      onCodecsChanged: codecs.onCodecsChanged,
+      selectCodecs: codecs.select,
       getSenderStats: (
         peer = rawPreview ? undefined : peerId,
       ) =>
@@ -277,11 +284,17 @@ export async function createNativeScreenStream(
           throw error;
         });
       },
-      offer: (peer, servers, relay, onCandidate, control) =>
+      offer: (
+        peer,
+        servers,
+        relay,
+        onCandidate,
+        control,
+        selected,
+      ) =>
         peers.offer(peer, () => {
           if (closed)
             throw new Error("Native screen closed");
-          const selected = codecs.selected();
           return selected
             ? share.offer(
                 id,

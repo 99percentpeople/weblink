@@ -1,6 +1,5 @@
 import { ScreenControlRequest } from "./control-request";
 import type { PeerCapabilities } from "../protocol/capabilities";
-import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
@@ -33,9 +32,6 @@ export {
 
 interface ScreenSessionPort {
   clientId?: string;
-  remoteDecodeChanged?(
-    capabilities?: MediaDecodeCapabilities,
-  ): void;
   requestScreen?(
     signal: AbortSignal,
   ): Promise<string | undefined>;
@@ -380,6 +376,8 @@ export class NativeScreenSession {
           !!this.remote?.screen,
         selected: () => this.selected(sender),
         trickleIce: () => this.trickleIce,
+        decodeCapabilities: () =>
+          this.remote?.screen?.decode,
         loadIceServers: () => this.port.loadIceServers(),
         relayOnly: () => this.port.relayOnly(),
         controlContext: async () => {
@@ -442,9 +440,6 @@ export class NativeScreenSession {
       this.screenRequest = undefined;
       this.port.cancelScreenRequest?.();
     }
-    this.port.remoteDecodeChanged?.(
-      services?.screen?.decode,
-    );
     if (couldHost !== this.canHostControl())
       this.restartControlSenders();
     this.applyRemoteCapabilities();
@@ -473,6 +468,8 @@ export class NativeScreenSession {
           this.port.clientId ?? "",
         );
     }
+    for (const sender of this.publications.values())
+      sender.refreshCodecs();
     this.publishSelected();
     if (this.ready && this.remote) {
       const pending = this.deferred.splice(0);

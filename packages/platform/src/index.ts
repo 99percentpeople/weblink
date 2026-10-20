@@ -556,12 +556,15 @@ export interface NativeScreenShare {
   pipelineStats?(
     sessionId: string,
   ): Promise<NativePipelineStats>;
-  /** Direct sender frames, with PCM audio fallback; no local peer. */
+  /** Shared encoder frames with an independent recording lifetime; no local peer. */
   subscribeRecording?(
     sessionId: string,
     consumer: import("./recording").EncodedMediaConsumer,
     signal?: AbortSignal,
-    options?: { encodedAudio?: boolean },
+    options?: {
+      encodedAudio?: boolean;
+      videoCodec?: string;
+    },
   ): Promise<
     import("./recording").EncodedMediaSubscription | null
   >;

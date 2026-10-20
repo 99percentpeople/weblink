@@ -74,6 +74,15 @@ fn native_channels_deliver_a_burst_and_close_without_retry_polling() {
         let remote = factory.create_peer_connection(config()).unwrap();
         let port = Arc::new(TestPort::default());
         let channels = Channels::connect(&local, port.clone()).unwrap();
+        let connected = Arc::new(AtomicUsize::new(0));
+        let signal = connected.clone();
+        Channels::observe_connection(
+            &local,
+            Some(&channels),
+            Some(Arc::new(move || {
+                signal.fetch_add(1, Ordering::AcqRel);
+            })),
+        );
         let received = Arc::new(AtomicUsize::new(0));
         let delivered = Arc::new(Notify::new());
         let incoming = Arc::new(Mutex::new(Vec::new()));
@@ -114,6 +123,7 @@ fn native_channels_deliver_a_burst_and_close_without_retry_polling() {
         })
         .await
         .unwrap();
+        assert_eq!(connected.load(Ordering::Acquire), 1);
         let payload = vec![b'x'; MAX_OUTBOUND_BYTES];
         let mut blocked = 0;
         tokio::time::timeout(Duration::from_secs(15), async {
@@ -147,6 +157,9 @@ fn native_channels_deliver_a_burst_and_close_without_retry_polling() {
             channel.on_message(None);
             channel.close();
         }
+        local.on_connection_state_change(None);
+        drop(channels);
+        assert_eq!(Arc::strong_count(&connected), 1);
         local.close();
         remote.close();
     });

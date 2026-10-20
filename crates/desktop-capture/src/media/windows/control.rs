@@ -103,19 +103,32 @@ impl Channels {
                     }
                 }
             })));
-        let weak = Arc::downgrade(&this);
+        let connection = Connection(this);
+        Self::observe_connection(pc, Some(&connection), None);
+        connection.0.ready();
+        Ok(connection)
+    }
+    pub fn observe_connection(
+        pc: &PeerConnection,
+        control: Option<&Connection>,
+        connected: Option<crate::surface::gpu::Wake>,
+    ) {
+        let weak = control.map(|control| Arc::downgrade(&control.0));
         pc.on_connection_state_change(Some(Box::new(move |state| {
+            if state == PeerConnectionState::Connected {
+                if let Some(connected) = &connected {
+                    connected();
+                }
+            }
             if matches!(
                 state,
                 PeerConnectionState::Failed | PeerConnectionState::Closed
             ) {
-                if let Some(this) = weak.upgrade() {
+                if let Some(this) = weak.as_ref().and_then(std::sync::Weak::upgrade) {
                     this.terminate();
                 }
             }
         })));
-        this.ready();
-        Ok(Connection(this))
     }
     fn ready(self: &Arc<Self>) {
         if !self.closed.load(Ordering::Acquire)

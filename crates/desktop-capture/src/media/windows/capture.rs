@@ -294,6 +294,16 @@ impl MediaSession {
             }),
         };
         drop(readback);
+        let keyframe = self
+            .hardware
+            .active()
+            .iter()
+            .any(|(_, encoder)| encoder.needs_readback() && encoder.needs_keyframe_input());
+        if keyframe && work.repeat.is_some() {
+            // Reuse converted pixels; a keyframe request must not invalidate the
+            // retained texture or perform another GPU readback on a static screen.
+            work.repeat = Some(Instant::now());
+        }
         if admit && !published && work.pending.is_none() && !work.dirty {
             let latest = self
                 .latest
@@ -301,7 +311,9 @@ impl MediaSession {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone();
             let mut sent = self.last_sent.lock().unwrap_or_else(|e| e.into_inner());
-            if !self.closed.load(Ordering::Acquire) && sent.elapsed() >= STATIC_REFRESH_INTERVAL {
+            if !self.closed.load(Ordering::Acquire)
+                && (keyframe || sent.elapsed() >= STATIC_REFRESH_INTERVAL)
+            {
                 if let Some(frame) = latest.as_ref() {
                     work.submitted_at = Some(Instant::now());
                     self.publish_frame_at(frame, None);

@@ -24,7 +24,7 @@ use libwebrtc::{
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Condvar, Mutex,
     },
     thread::{self, JoinHandle},
@@ -109,11 +109,16 @@ struct Pending {
     stopped: bool,
     wake: bool,
     keyframe: bool,
+    // The worker can consume the keyframe bit before capture supplies pixels.
+    // Keep admission demand until submit(), under the same producer lock.
+    keyframe_input: bool,
+    bitrate: Option<u32>,
     #[cfg(test)]
     fail_nvenc: bool,
 }
 impl Pending {
     fn replace_frame(&mut self, frame: Arc<Frame>) -> bool {
+        self.keyframe_input = false;
         if self
             .frame
             .as_ref()
@@ -129,13 +134,15 @@ impl Pending {
     }
 }
 pub struct Encoder {
-    pub source: NativeVideoSource,
+    pub group_id: u64,
     pending: Arc<(Mutex<Pending>, Condvar)>,
     error: Arc<Mutex<Option<String>>>,
     worker: Mutex<Option<JoinHandle<()>>>,
     statistics: Arc<Mutex<EncodeStatistics>>,
     pub recording: Arc<EncodedRecordingTap>,
     fallback: Arc<Fallback>,
+    outputs: Arc<Mutex<HashMap<u64, (Arc<super::encoding_output::Output>, u64)>>>,
+    input_wake: crate::surface::gpu::Wake,
 }
 
 struct Fallback {
@@ -177,6 +184,8 @@ impl EncodeStatistics {
     pub fn snapshot(&self, peer: String) -> EncoderPipelineStats {
         EncoderPipelineStats {
             peer,
+            group_id: 0,
+            consumers: Vec::new(),
             frames: self.frames,
             gpu_inputs: self.gpu_inputs,
             cpu_inputs: self.cpu_inputs,
@@ -214,11 +223,31 @@ impl Encoder {
     pub fn new(id: String, options: MediaOptions, preview: bool) -> Result<Self> {
         Self::with_fallback(id, options, preview, Arc::new(|| {}))
     }
+    #[cfg(test)]
     pub fn with_fallback(
         id: String,
         options: MediaOptions,
         preview: bool,
         wake: crate::surface::gpu::Wake,
+    ) -> Result<Self> {
+        Self::create(id, options, preview, wake, Arc::new(|| {}), None)
+    }
+    pub fn shared(
+        id: String,
+        options: MediaOptions,
+        wake: crate::surface::gpu::Wake,
+        input_wake: crate::surface::gpu::Wake,
+        bitrate: u32,
+    ) -> Result<Self> {
+        Self::create(id, options, false, wake, input_wake, Some(bitrate))
+    }
+    fn create(
+        id: String,
+        options: MediaOptions,
+        preview: bool,
+        wake: crate::surface::gpu::Wake,
+        input_wake: crate::surface::gpu::Wake,
+        bitrate: Option<u32>,
     ) -> Result<Self> {
         let source = NativeVideoSource::new_encoded(VideoResolution::default());
         if !source.set_color_space(Some(options.color_space().rtc())) {
@@ -238,6 +267,8 @@ impl Encoder {
             wake,
         });
         let input_mode = fallback.clone();
+        let outputs = Arc::new(Mutex::new(HashMap::new()));
+        let consumers = outputs.clone();
         let worker = thread::Builder::new()
             .name("weblink-hardware-encoder".into())
             .spawn(move || {
@@ -250,6 +281,8 @@ impl Encoder {
                     measured,
                     &tap,
                     &input_mode,
+                    bitrate,
+                    consumers,
                 ) {
                     *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
                 }
@@ -257,14 +290,40 @@ impl Encoder {
             })
             .map_err(|e| e.to_string())?;
         Ok(Self {
-            source,
+            group_id: {
+                static NEXT_GROUP: AtomicU64 = AtomicU64::new(1);
+                NEXT_GROUP.fetch_add(1, Ordering::Relaxed)
+            },
             pending,
             error,
             worker: Mutex::new(Some(worker)),
             statistics,
             recording,
             fallback,
+            outputs,
+            input_wake,
         })
+    }
+    pub fn attach(&self, id: u64, output: Arc<super::encoding_output::Output>, generation: u64) {
+        self.outputs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, (output, generation));
+        self.request_recording_keyframe();
+    }
+    pub fn detach(&self, id: u64) {
+        self.outputs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&id);
+    }
+    pub fn set_bitrate(&self, bitrate: u32) {
+        self.pending
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .bitrate = Some(bitrate);
+        self.pending.1.notify_one();
     }
     pub fn needs_readback(&self) -> bool {
         self.fallback.cpu.load(Ordering::Acquire)
@@ -298,8 +357,15 @@ impl Encoder {
         let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
         if !pending.stopped {
             pending.keyframe = true;
+            pending.keyframe_input = true;
             self.pending.1.notify_one();
+            drop(pending);
+            (self.input_wake)();
         }
+    }
+    pub fn needs_keyframe_input(&self) -> bool {
+        let pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
+        !pending.stopped && pending.keyframe_input
     }
     #[cfg(test)]
     pub fn fail_nvenc_output(&self) {
@@ -342,6 +408,8 @@ fn run(
     statistics: Arc<Mutex<EncodeStatistics>>,
     recording: &EncodedRecordingTap,
     fallback: &Fallback,
+    bitrate: Option<u32>,
+    outputs: Arc<Mutex<HashMap<u64, (Arc<super::encoding_output::Output>, u64)>>>,
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
@@ -353,7 +421,9 @@ fn run(
     let mut damage = Damage::default();
     let started = Instant::now();
     let recording_origin = clock_us();
-    let mut rate_control = if preview {
+    let mut rate_control = if let Some(bitrate) = bitrate {
+        BitrateController::with_start(options.max_bitrate as u32, bitrate)
+    } else if preview {
         BitrateController::with_start(options.max_bitrate as u32, options.max_bitrate as u32)
     } else {
         BitrateController::new(options.max_bitrate as u32)
@@ -375,7 +445,7 @@ fn run(
     // discards outstanding frames; cumulative completed-frame counters survive it.
     let mut in_flight = HashMap::<i64, InputTiming>::new();
     loop {
-        let (next_options, next_input, next_damage) = {
+        let (next_options, next_input, next_damage, next_bitrate) = {
             let mut pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
             pending.wake = false;
             if pending.stopped {
@@ -387,7 +457,12 @@ fn run(
             }
             keyframe |= std::mem::take(&mut pending.keyframe);
             let (frame, damage) = pending.take_input();
-            (pending.options.take(), frame, damage)
+            (
+                pending.options.take(),
+                frame,
+                damage,
+                pending.bitrate.take(),
+            )
         };
         // Shutdown may wait for an MFT callback, which also signals this work
         // mutex. Never drop a transform while holding the producer lock.
@@ -430,7 +505,12 @@ fn run(
         }
         keyframe |= output.take_keyframe_request();
         if let Some(rate) = output.take_rate_control_request() {
-            rate_control.observe(rate.target_bitrate_bps);
+            if bitrate.is_none() {
+                rate_control.observe(rate.target_bitrate_bps);
+            }
+        }
+        if let Some(rate) = next_bitrate {
+            rate_control.observe(u64::from(rate));
         }
         if let Some(bitrate) = rate_control.poll(started.elapsed()) {
             frame_budget.set_bitrate(bitrate, started.elapsed());
@@ -572,6 +652,34 @@ fn run(
                         },
                         frame_metadata: None,
                     });
+                    // Each output owns its own feedback state and RTP transport.
+                    // Use one absolute clock across encoder-group migrations.
+                    let consumers: Vec<_> = outputs
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .values()
+                        .cloned()
+                        .collect();
+                    for (consumer, generation) in consumers {
+                        consumer.deliver(
+                            generation,
+                            &EncodedVideoFrame {
+                                codec: active.codec,
+                                payload: &packet.bytes,
+                                timestamp_us: recording_origin + packet.timestamp_us,
+                                frame_type: if packet.keyframe {
+                                    EncodedFrameType::Key
+                                } else {
+                                    EncodedFrameType::Delta
+                                },
+                                resolution: VideoResolution {
+                                    width: active.width,
+                                    height: active.height,
+                                },
+                                frame_metadata: None,
+                            },
+                        );
+                    }
                     // Publish to the original transport first. Move the existing
                     // packet allocation into a bounded, non-waiting recording queue.
                     recording.publish(Packet {
@@ -722,6 +830,7 @@ fn continue_wait(
         || pending.keyframe
         || pending.frame.is_some()
         || pending.options.is_some()
+        || pending.bitrate.is_some()
     {
         return;
     }
@@ -744,6 +853,56 @@ fn continue_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyframe_admission_survives_worker_polling_until_pixels_are_submitted() {
+        let mut pending = Pending {
+            keyframe: true,
+            keyframe_input: true,
+            ..Default::default()
+        };
+        assert!(std::mem::take(&mut pending.keyframe));
+        assert!(pending.keyframe_input);
+        let buffer = I420Buffer::new_black(16, 16);
+        let frame = Arc::new(Frame::from_i420(&buffer, None));
+        pending.replace_frame(frame.clone());
+        assert!(!pending.keyframe_input);
+        // A request arriving after admission remains pending even if the worker
+        // takes the previous frame before capture runs again.
+        pending.keyframe = true;
+        pending.keyframe_input = true;
+        pending.take_input();
+        assert!(pending.keyframe_input);
+        pending.replace_frame(frame);
+        assert!(!pending.keyframe_input);
+        assert!(pending.keyframe);
+    }
+
+    #[test]
+    fn bitrate_update_before_wait_is_not_lost_without_a_new_frame() {
+        let work = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+        work.0.lock().unwrap().bitrate = Some(150_000);
+        let worker_work = work.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            continue_wait(
+                &worker_work,
+                &BitrateController::new(300_000),
+                Instant::now(),
+                None,
+            );
+            send.send(()).unwrap();
+        });
+        let result = receive.recv_timeout(Duration::from_secs(1));
+        // Always join, even when a regression puts the worker to sleep.
+        work.0.lock().unwrap().stopped = true;
+        work.1.notify_one();
+        worker.join().unwrap();
+        assert!(
+            result.is_ok(),
+            "A rate update queued before wait must be consumed immediately"
+        );
+    }
 
     #[test]
     fn latest_input_replacement_keeps_damage_until_a_receiver_accepts_it() {
@@ -801,21 +960,36 @@ mod tests {
             for cycle in 0..4 {
                 // No frames or real capture: inject a worker failure before a
                 // transform is opened, then exercise the production recovery path.
-                let failed =
-                    Arc::new(Encoder::new("test".into(), MediaOptions::default(), false).unwrap());
-                let retained =
-                    Arc::new(Encoder::new("test".into(), MediaOptions::default(), false).unwrap());
+                let failed_owner = media
+                    .hardware
+                    .acquire(
+                        "failed".into(),
+                        "test-bad".into(),
+                        MediaOptions::default(),
+                        false,
+                        false,
+                        media.encoding_wake(),
+                    )
+                    .unwrap();
+                let retained_owner = media
+                    .hardware
+                    .acquire(
+                        "retained".into(),
+                        "test-good".into(),
+                        MediaOptions::default(),
+                        false,
+                        false,
+                        media.encoding_wake(),
+                    )
+                    .unwrap();
+                let failed = failed_owner.encoder().unwrap();
+                let retained = retained_owner.encoder().unwrap();
                 *failed.error.lock().unwrap() = Some(format!("controlled encoder failure {cycle}"));
-                {
-                    let mut encoders = media.hardware.lock().unwrap();
-                    encoders.insert("failed".into(), failed.clone());
-                    encoders.insert("retained".into(), retained.clone());
-                }
                 media.reap_failed_encoders();
                 assert!(media.error().is_none());
                 assert!(!media.closed.load(std::sync::atomic::Ordering::Acquire));
-                assert!(!media.hardware.lock().unwrap().contains_key("failed"));
-                assert!(media.hardware.lock().unwrap().contains_key("retained"));
+                assert!(media.hardware.encoder("failed").is_none());
+                assert!(media.hardware.encoder("retained").is_some());
                 assert!(failed.worker.lock().unwrap().is_none());
                 assert!(retained.worker.lock().unwrap().is_some());
                 media.close_peer("retained");

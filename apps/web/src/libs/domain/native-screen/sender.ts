@@ -1,6 +1,7 @@
 import { createUuid } from "../ids";
 import type {
   NativeControlContext,
+  NativeSendCodecs,
   NativeVideoSettings,
 } from "@weblink/platform";
 import type {
@@ -18,13 +19,9 @@ export interface NativeScreenPublication {
   ): Promise<{ stream: MediaStream; close(): void }>;
   readonly sourceId: string;
   readonly controlEligible?: boolean;
-  setReceivers?(
-    receivers: readonly (
-      | MediaDecodeCapabilities
-      | undefined
-    )[],
-  ): void;
-  onCodecsChanged?(changed: () => void): () => void;
+  selectCodecs?(
+    receiver?: MediaDecodeCapabilities,
+  ): NativeSendCodecs;
   getSenderStats?(
     peerId?: string,
   ): Promise<VideoStatsSample[]>;
@@ -39,6 +36,7 @@ export interface NativeScreenPublication {
     relay: boolean,
     onCandidate?: (candidate: RTCIceCandidateInit) => void,
     control?: NativeControlContext,
+    codecs?: NativeSendCodecs,
   ): Promise<string>;
   answer(peerId: string, sdp: string): Promise<void>;
   addIceCandidate?(
@@ -52,6 +50,9 @@ interface ScreenSenderPort {
   ready(): boolean;
   selected(): boolean;
   trickleIce(): boolean;
+  decodeCapabilities?():
+    | MediaDecodeCapabilities
+    | undefined;
   controlContext(): Promise<
     NativeControlContext | undefined
   >;
@@ -86,24 +87,35 @@ export class NativeScreenSender {
   private retries = 0;
   private unsupported = false;
   private timer?: ReturnType<typeof setTimeout>;
-  private readonly unsubscribeCodecs?: () => void;
+  private codecKey?: string;
 
   constructor(
     readonly publication: NativeScreenPublication,
     private readonly port: ScreenSenderPort,
-  ) {
-    this.unsubscribeCodecs = publication.onCodecsChanged?.(
-      () => {
-        this.stop(true);
-        this.retries = 0;
-        this.unsupported = false;
-        void this.publish();
-      },
-    );
+  ) {}
+
+  /** Only this receiver's selected format can replace its native connection. */
+  refreshCodecs(): void {
+    if (!this.publication.selectCodecs) return;
+    let key: string;
+    try {
+      key = JSON.stringify(
+        this.publication.selectCodecs(
+          this.port.decodeCapabilities?.(),
+        ),
+      );
+    } catch {
+      key = "unsupported";
+    }
+    if (key === this.codecKey) return;
+    this.codecKey = key;
+    this.stop(true);
+    this.retries = 0;
+    this.unsupported = false;
+    void this.publish();
   }
 
   dispose(): void {
-    this.unsubscribeCodecs?.();
     this.stop();
   }
 
@@ -189,6 +201,16 @@ export class NativeScreenSender {
     };
     this.outgoing = outgoing;
     try {
+      let codecs: NativeSendCodecs | undefined;
+      try {
+        codecs = this.publication.selectCodecs?.(
+          this.port.decodeCapabilities?.(),
+        );
+        this.codecKey = JSON.stringify(codecs);
+      } catch (error) {
+        this.codecKey = "unsupported";
+        throw error;
+      }
       const servers = await this.port.loadIceServers();
       if (!this.current(outgoing)) return;
       const trickle =
@@ -216,18 +238,25 @@ export class NativeScreenSender {
       ] as const;
       const control = await this.port.controlContext();
       if (!this.current(outgoing)) return;
-      const sdp = control
+      const sdp = codecs
         ? await this.publication.offer(
             ...args,
             trickle ? onCandidate : undefined,
             control,
+            codecs,
           )
-        : trickle
+        : control
           ? await this.publication.offer(
               ...args,
-              onCandidate,
+              trickle ? onCandidate : undefined,
+              control,
             )
-          : await this.publication.offer(...args);
+          : trickle
+            ? await this.publication.offer(
+                ...args,
+                onCandidate,
+              )
+            : await this.publication.offer(...args);
       if (!this.current(outgoing)) {
         await this.publication
           .closePeer(outgoing.id)

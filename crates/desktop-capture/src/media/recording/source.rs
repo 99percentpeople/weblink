@@ -11,11 +11,12 @@ use std::time::Duration;
 #[path = "source_tests.rs"]
 mod tests;
 
-/// Borrows an existing sender; implementations must never start or stop streaming.
+/// A recording input may own an encoder lease; it never owns viewer transports.
 pub(crate) trait VideoSource: Send + Sync {
     fn tap(&self) -> Arc<EncodedRecordingTap>;
     fn is_connected(&self) -> bool;
     fn request_keyframe(&self);
+    fn release(&self) {}
 }
 
 /// Controls recording copies only; disabling this port must still forward audio.
@@ -244,6 +245,8 @@ impl RecordingSource {
         if let Some(audio) = &mut state.audio {
             audio.release();
         }
+        drop(state);
+        self.video.release();
     }
 }
 impl Drop for RecordingSource {

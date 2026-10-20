@@ -1,7 +1,7 @@
 //! SDR desktop pixels use sRGB primaries/transfer; YUV matrix and range are explicit.
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ColorMatrix {
     #[default]
@@ -10,7 +10,7 @@ pub enum ColorMatrix {
     Bt709,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ColorRange {
     #[default]

@@ -87,6 +87,29 @@ fn static_refresh_deadline_survives_wakeups_and_respects_low_fps() {
     );
 }
 
+#[test]
+fn requested_static_refresh_waits_only_for_fps_and_pending_readback() {
+    let now = Instant::now();
+    let mut cadence = CaptureCadence::new(Duration::from_millis(50), now);
+    cadence.complete(Some(now));
+    let mut work = Work {
+        repeat: Some(now),
+        ..Default::default()
+    };
+    assert_eq!(work.wait(&cadence, now), Some(Duration::from_millis(50)));
+    assert_eq!(
+        work.wait(&cadence, now + Duration::from_millis(50)),
+        Some(Duration::ZERO)
+    );
+    work.pending = Some(now + READBACK_TIMEOUT);
+    assert_eq!(work.wait(&cadence, now), Some(READBACK_TIMEOUT));
+    // One FPS is still one FPS, even while several viewers request a keyframe.
+    work.pending = None;
+    cadence.set_interval(Duration::from_secs(1), now);
+    cadence.complete(Some(now));
+    assert_eq!(work.wait(&cadence, now), Some(Duration::from_secs(1)));
+}
+
 fn texture(device: &ID3D11Device, size: (u32, u32), value: u8) -> ID3D11Texture2D {
     let pixels = [value, value, value, 255].repeat((size.0 * size.1) as usize);
     let desc = D3D11_TEXTURE2D_DESC {

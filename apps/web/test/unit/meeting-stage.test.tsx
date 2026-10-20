@@ -193,6 +193,41 @@ function setup(pinned: boolean, compact = true) {
 
 describe("meeting source exit ownership", () => {
   it.each([false, true])(
+    "keeps existing media attached when unrelated sources join, update and leave (featured=%s)",
+    (featured) => {
+      const f = setup(featured);
+      const parent = f.peerTile.parentElement!;
+      const selfTile = f.tile("self")!;
+      const selfParent = selfTile.parentElement!;
+      const check = () => {
+        expect(f.tile("peer")).toBe(f.peerTile);
+        expect(f.peerTile.parentElement).toBe(parent);
+        expect(parent.isConnected).toBe(true);
+        expect(selfTile.parentElement).toBe(selfParent);
+        expect(selfParent.isConnected).toBe(true);
+      };
+      f.setSources([
+        { ...f.self },
+        { ...f.peer, name: "Updated peer" },
+      ]);
+      check();
+      const other = source("other");
+      f.setSources([{ ...f.self }, { ...f.peer }, other]);
+      commitLayout();
+      check();
+      f.setSources([
+        { ...f.self },
+        { ...f.peer },
+        { ...other, name: "Connected" },
+      ]);
+      check();
+      f.setSources([{ ...f.self }, { ...f.peer }]);
+      commitLayout();
+      check();
+    },
+  );
+
+  it.each([false, true])(
     "disposes full tile actions after departure and supports rejoin (reduced motion=%s)",
     async (reduced) => {
       vi.stubGlobal("matchMedia", () => ({
