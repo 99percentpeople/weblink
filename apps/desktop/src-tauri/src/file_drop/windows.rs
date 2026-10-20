@@ -62,7 +62,6 @@ impl Drop for Dpi {
 #[derive(Clone)]
 pub struct Destination {
     point: (i32, i32),
-    window: usize,
     root: usize,
     process: u32,
     thread: u32,
@@ -86,7 +85,6 @@ impl Destination {
             let thread = GetWindowThreadProcessId(root, Some(&mut process));
             Ok(Self {
                 point,
-                window: hwnd.0 as usize,
                 root: root.0 as usize,
                 process,
                 thread,
@@ -524,7 +522,7 @@ mod tests {
             .into();
             RegisterDragDrop(hwnd, &target).unwrap();
             let destination = Destination::capture((180, 160)).unwrap();
-            assert_eq!(destination.window, hwnd.0 as usize);
+            assert_eq!(destination.root, hwnd.0 as usize);
             let clipboard = GetClipboardSequenceNumber();
             let child = CreateWindowExW(
                 Default::default(),
@@ -541,10 +539,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert_ne!(
-                Destination::capture((180, 160)).unwrap().window,
-                destination.window
-            );
+            assert_eq!(WindowFromPoint(POINT { x: 180, y: 160 }), child);
             assert!(
                 destination.current(),
                 "A child drop overlay must not change the pinned application window"
