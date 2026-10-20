@@ -344,7 +344,7 @@ mod windows_tree {
 mod tests {
     use super::*;
     async fn ended(jobs: &Jobs, id: &str) -> Value {
-        tokio::time::timeout(Duration::from_secs(10), async {
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let status = jobs
                     .access("owner", "grant", "commands.status", &json!({"jobId":id}))
@@ -355,8 +355,12 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })
-        .await
-        .unwrap()
+        .await;
+        result.unwrap_or_else(|_| {
+            let output = jobs.access("owner", "grant", "commands.read", &json!({"jobId":id}));
+            jobs.stop();
+            panic!("Job did not finish within 10 seconds: {output:?}");
+        })
     }
 
     #[tokio::test]
@@ -555,12 +559,14 @@ mod tests {
     #[tokio::test]
     async fn output_owner_and_cancellation() {
         let jobs = Jobs::default();
+        #[cfg(unix)]
+        let script = "printf 'automation-output\\n'";
+        // Exercise pipe capture without echo/Write-Output's implicit cmdlet
+        // loading and output formatting on a cold Windows PowerShell process.
+        #[cfg(windows)]
+        let script = "[Console]::Out.WriteLine('automation-output')";
         let result = jobs
-            .start(
-                "owner",
-                "grant",
-                &json!({"script":"echo automation-output"}),
-            )
+            .start("owner", "grant", &json!({"script":script}))
             .unwrap();
         let id = result["jobId"].as_str().unwrap();
         assert_eq!(ended(&jobs, id).await["exitCode"], 0);
