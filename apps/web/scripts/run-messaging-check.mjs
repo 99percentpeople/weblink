@@ -248,6 +248,15 @@ try {
       localStorage.setItem('starter_message_sent','true');
       localStorage.setItem('profile',${JSON.stringify(JSON.stringify(user))});
       window.__downloadFiles = {};
+      window.__messagingErrors = [];
+      const recordError = (...args) => {
+        window.__messagingErrors.push(args.map(value => String(value?.stack ?? value)).join(' ').slice(0, 2000));
+        window.__messagingErrors = window.__messagingErrors.slice(-20);
+      };
+      const logError = console.error.bind(console);
+      console.error = (...args) => { recordError(...args); logError(...args); };
+      window.addEventListener('error', event => recordError(event.error ?? event.message));
+      window.addEventListener('unhandledrejection', event => recordError(event.reason));
       const blobs = new Map();
       const create = URL.createObjectURL.bind(URL);
       URL.createObjectURL = function(blob) {
@@ -487,6 +496,7 @@ try {
         const title = [...document.querySelectorAll('[data-slot="file-attachment-bubble"] [title]')].find(e => e.title === name);
         const download = title?.closest('[data-slot="file-attachment-bubble"]')?.querySelector('button[aria-label="Save to device"]');
         if (!download) throw new Error('Received file download unavailable');
+        window.__lastMessagingSave = { name, connected: download.isConnected, disabled: download.disabled };
         download.click();
       })()`,
       );
@@ -498,6 +508,8 @@ try {
           evaluate(
             clients[i],
             `(async () => {
+          const failure = window.__messagingErrors.find(error => error.includes('Could not save file'));
+          if (failure) throw new Error(failure);
           const file = window.__downloadFiles['messaging-${round}-${1 - i}.txt'];
           return file ? { matches: (await file.text()) === 'messaging-bytes-${round}-${1 - i}|'.repeat(8192) } : null;
         })()`,
@@ -520,10 +532,15 @@ try {
       console.error(
         await evaluate(
           client,
-          `JSON.stringify({
+          `(async () => {
+        const { appState } = await import('/src/libs/state/app-state.ts');
+        return JSON.stringify({
         downloads: Object.entries(window.__downloadFiles ?? {}).map(([name, file]) => ({name, size: file?.size})),
         errors: [...document.querySelectorAll('[data-sonner-toast][data-type="error"]')].map(e => e.innerText),
-      })`,
+        browserErrors: window.__messagingErrors,
+        lastSave: window.__lastMessagingSave,
+        caches: Object.entries(appState.cache.cacheInfo).map(([id, cache]) => ({id, name: cache.fileName, isComplete: cache.isComplete, isMerging: cache.isMerging, file: cache.file && {name: cache.file.name, size: cache.file.size}, capabilities: cache.capabilities, storageUnavailable: cache.storageUnavailable, storageMissing: cache.storageMissing})),
+      }); })()`,
         ),
       );
     } catch {

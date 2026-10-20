@@ -95,10 +95,8 @@ export class FileLibraryService {
     string,
     ReferenceChunkCache
   >();
-  private readonly storageOwners = new Map<
-    string,
-    string
-  >();
+  private storageOwners = new Map<string, string>();
+  private storageOwnershipRevision = 0;
   private readonly changes = new Set<() => void>();
   private readonly removals = new Set<
     (ids: string[]) => void
@@ -131,7 +129,7 @@ export class FileLibraryService {
   async initialize(): Promise<void> {
     const contents = await this.repository.contents();
     for (const record of contents)
-      this.storageOwners.set(record.storageId, record.key);
+      this.updateStorageOwner(record.storageId, record.key);
     await this.refresh();
     if (typeof BroadcastChannel !== "undefined") {
       this.channel?.close();
@@ -177,14 +175,24 @@ export class FileLibraryService {
         }
       }
       for (const ref of records) await this.publish(ref);
-      this.storageOwners.clear();
-      for (const record of await this.repository.contents())
-        this.storageOwners.set(
+      // Receive cleanup consults ownership while this read is pending. Publish
+      // the snapshot atomically, and never overwrite an intervening acquisition
+      // or removal with an older database snapshot.
+      let contents: ContentRecord[];
+      for (;;) {
+        const revision = this.storageOwnershipRevision;
+        contents = await this.repository.contents();
+        if (revision === this.storageOwnershipRevision)
+          break;
+      }
+      this.storageOwners = new Map(
+        contents.map((record) => [
           record.storageId,
           record.key,
-        );
+        ]),
+      );
       const shared = new Set(
-        (await this.repository.contents())
+        contents
           .filter(
             (record) =>
               record.isShared && record.sharedReferenceId,
@@ -229,6 +237,12 @@ export class FileLibraryService {
   }
   ownsStorage(id: string): boolean {
     return this.storageOwners.has(id);
+  }
+  private updateStorageOwner(id: string, key?: string) {
+    if (this.storageOwners.get(id) === key) return;
+    if (key === undefined) this.storageOwners.delete(id);
+    else this.storageOwners.set(id, key);
+    this.storageOwnershipRevision++;
   }
 
   private async fingerprintFile(
@@ -588,8 +602,8 @@ export class FileLibraryService {
           .catch(() => {});
       throw error;
     }
-    this.storageOwners.delete(record.storageId);
-    this.storageOwners.set(restored.storageId, record.key);
+    this.updateStorageOwner(record.storageId);
+    this.updateStorageOwner(restored.storageId, record.key);
     return restored;
   }
 
@@ -712,7 +726,7 @@ export class FileLibraryService {
         };
         if (!(await this.repository.claim(record)))
           return null;
-        this.storageOwners.set(record.storageId, key);
+        this.updateStorageOwner(record.storageId, key);
         const allocatedStorage = record.storageId;
         try {
           const cache = await this.options.storage(
@@ -736,15 +750,15 @@ export class FileLibraryService {
           record.storageId =
             (await cache.storageIdentity?.()) ??
             record.storageId;
-          this.storageOwners.set(record.storageId, key);
+          this.updateStorageOwner(record.storageId, key);
           record.state = "ready";
           await this.repository.commit(record, reference);
           if (allocatedStorage !== record.storageId)
-            this.storageOwners.delete(allocatedStorage);
+            this.updateStorageOwner(allocatedStorage);
         } catch (error) {
           await this.repository.removeContent(key);
-          this.storageOwners.delete(allocatedStorage);
-          this.storageOwners.delete(record.storageId);
+          this.updateStorageOwner(allocatedStorage);
+          this.updateStorageOwner(record.storageId);
           if (!borrowedStorage)
             await (
               await this.options.storage(record.storageId)
@@ -1128,7 +1142,7 @@ export class FileLibraryService {
       this.references.get(ref.id)?.invalidate();
       this.references.delete(ref.id);
     }
-    this.storageOwners.delete(record.storageId);
+    this.updateStorageOwner(record.storageId);
     await storage.cleanup({ deleteSource });
   }
   referenceCount(id: string): Promise<number> {

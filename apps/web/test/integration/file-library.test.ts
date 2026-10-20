@@ -17,6 +17,117 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared file library", () => {
+  it("keeps retained storage owned while a refresh reads its snapshot", async () => {
+    const f = setup();
+    await f.library.importFile(
+      new File(["kept"], "keep.txt"),
+    );
+    const contents = await f.repository.contents();
+    const reading = Promise.withResolvers<void>();
+    const snapshot =
+      Promise.withResolvers<typeof contents>();
+    vi.spyOn(
+      f.repository,
+      "contents",
+    ).mockImplementationOnce(() => {
+      reading.resolve();
+      return snapshot.promise;
+    });
+    const refresh = f.library.refresh();
+    await reading.promise;
+    try {
+      // Receive cleanup uses this guard while metadata reads are in flight.
+      expect(
+        f.library.ownsStorage(contents[0].storageId),
+      ).toBe(true);
+    } finally {
+      snapshot.resolve(contents);
+      await refresh;
+    }
+  });
+
+  it("keeps retained storage owned if refreshing contents fails", async () => {
+    const f = setup();
+    const imported = await f.library.importFile(
+      new File(["kept"], "keep.txt"),
+    );
+    const [content] = await f.repository.contents();
+    const error = new Error("Snapshot read failed");
+    vi.spyOn(
+      f.repository,
+      "contents",
+    ).mockRejectedValueOnce(error);
+    await expect(f.library.refresh()).rejects.toBe(error);
+    expect(f.library.ownsStorage(content.storageId)).toBe(
+      true,
+    );
+    expect(
+      await (await imported.cache.getFile())!.text(),
+    ).toBe("kept");
+  });
+
+  it("keeps newly acquired storage owned when a refresh snapshot is stale", async () => {
+    const f = setup();
+    await f.library.importFile(
+      new File(["first"], "first.txt"),
+    );
+    const contents = await f.repository.contents();
+    const reading = Promise.withResolvers<void>();
+    const snapshot =
+      Promise.withResolvers<typeof contents>();
+    vi.spyOn(
+      f.repository,
+      "contents",
+    ).mockImplementationOnce(() => {
+      reading.resolve();
+      return snapshot.promise;
+    });
+    const refresh = f.library.refresh();
+    await reading.promise;
+    try {
+      await f.library.importFile(
+        new File(["received"], "received.txt"),
+      );
+    } finally {
+      snapshot.resolve(contents);
+      await refresh;
+    }
+    for (const content of await f.repository.contents())
+      expect(f.library.ownsStorage(content.storageId)).toBe(
+        true,
+      );
+  });
+
+  it("does not restore ownership removed during a refresh", async () => {
+    const f = setup();
+    const imported = await f.library.importFile(
+      new File(["removed"], "removed.txt"),
+    );
+    const contents = await f.repository.contents();
+    const reading = Promise.withResolvers<void>();
+    const snapshot =
+      Promise.withResolvers<typeof contents>();
+    vi.spyOn(
+      f.repository,
+      "contents",
+    ).mockImplementationOnce(() => {
+      reading.resolve();
+      return snapshot.promise;
+    });
+    const refresh = f.library.refresh();
+    await reading.promise;
+    try {
+      await f.library.removeFile(imported.cache.id);
+    } finally {
+      snapshot.resolve(contents);
+      await refresh;
+    }
+    expect(
+      f.library.ownsStorage(contents[0].storageId),
+    ).toBe(false);
+    expect(await f.repository.contents()).toEqual([]);
+  });
+
   it("preserves references and bytes when a mounted directory needs reconnection", async () => {
     const f = setup();
     const result = await f.library.importFile(
