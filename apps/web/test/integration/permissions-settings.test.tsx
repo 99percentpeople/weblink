@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createPeerTrustMock } from "../support/peer-trust";
 import "@testing-library/jest-dom/vitest";
 import {
   afterEach,
@@ -36,10 +37,9 @@ import { summarizeConversations } from "@/libs/application/messaging/conversatio
 
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
-    trust: {
+    trust: createPeerTrustMock({
       get: () => ({ state: "trusted" }),
-      pairing: () => undefined,
-    },
+    }),
   },
 }));
 const fixture = vi.hoisted(() => ({

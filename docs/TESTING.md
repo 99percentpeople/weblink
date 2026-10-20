@@ -68,6 +68,9 @@ bun run test:integration
 ```
 
 Shared test fakes live in `test/support/`.
+Device permission and pairing UI tests use `createPeerTrustMock` from
+`test/support/peer-trust.ts`. It implements the public service contract so API
+changes fail type-checking instead of leaving incomplete, untyped UI doubles.
 Message-store tests use `createMessageRepository` from
 `test/support/message-repository.ts`. Its default writes serialize and clone
 records, and reads return independent values. Override methods only for deliberate
@@ -94,6 +97,16 @@ runs on `public` pushes, desktop development also validates pull requests, and
 production runs on stable version tags. Windows runs Rust formatting and tests
 once in the same profile as its executable or installer build.
 
+For local iteration, run the affected tests first and use CI for the complete
+cross-platform checks. Re-run unchanged layers only when failures or changes
+justify it. The updater's loopback HTTP fixture is a standard-library-only Rust
+module at `apps/desktop/src-tauri/src/updates/test_http.rs` (repository-relative).
+It can run with `rustc --test` without compiling Tauri or the media crates.
+Windows CI checks it before the native build; Cargo also includes it in the
+normal suite. Socket tests explicitly control blocking mode, handle fragmented
+requests, and use bounded I/O. HTTP clients for local fixtures disable proxies
+without mutating process-wide proxy settings.
+
 ### Browser E2E smoke tests
 
 Location: `test/e2e/smoke/`
@@ -113,7 +126,7 @@ covers a high-value end-to-end subsystem path with a small number of scenarios.
 
 `node apps/web/scripts/run-messaging-check.mjs` (from the repository root) launches
 the real app and Bun signaling server on temporary local ports, plus two isolated
-Chromium contexts. It verifies automatic first pairing, matching pairing codes
+Chromium contexts. It verifies automatic first pairing, trusted ready channels
 and default content reception through the application service. It checks private text/file
 sending with empty history and again after reloading persisted history, including
 automatic trust/permission restoration, room membership, receipts, draft clearing

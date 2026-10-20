@@ -1,3 +1,4 @@
+import { createPeerTrustMock } from "../support/peer-trust";
 import userEvent from "@testing-library/user-event";
 import {
   AppStateContext,
@@ -45,7 +46,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
-    trust: {
+    trust: createPeerTrustMock({
       get: () => fixture.get?.(),
       pairing: () => fixture.pairing?.(),
       requestPairing: (...args: unknown[]) =>
@@ -54,7 +55,7 @@ vi.mock("@/libs/application/session-service", () => ({
         fixture.respond(...args),
       cancelPairing: (...args: unknown[]) =>
         fixture.cancel(...args),
-    },
+    }),
   },
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));

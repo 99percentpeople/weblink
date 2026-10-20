@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createPeerTrustMock } from "../support/peer-trust";
 import {
   afterEach,
   beforeEach,
@@ -36,11 +37,11 @@ vi.mock("solid-sonner", () => ({
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
-    trust: {
+    trust: createPeerTrustMock({
       pairing: () => fixture.request?.(),
       respondPairing: (...args: unknown[]) =>
         fixture.respond(...args),
-    },
+    }),
   },
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));

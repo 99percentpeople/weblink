@@ -72,7 +72,7 @@ impl Release {
     }
 }
 
-fn client(current: &Version) -> Result<Client, String> {
+fn client_builder(current: &Version) -> reqwest::ClientBuilder {
     // Share the updater plugin's TLS provider without enabling a second crypto backend.
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -80,6 +80,10 @@ fn client(current: &Version) -> Result<Client, String> {
     Client::builder()
         .user_agent(format!("Weblink/{current}"))
         .timeout(Duration::from_secs(30))
+}
+
+fn client(current: &Version) -> Result<Client, String> {
+    client_builder(current)
         .build()
         .map_err(|error| error.to_string())
 }
@@ -119,14 +123,21 @@ async fn check_endpoint(
 }
 
 #[cfg(test)]
+#[path = "test_http.rs"]
+mod test_http;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        io::{Read, Write},
-        net::TcpListener,
-        thread::{self, JoinHandle},
-        time::Instant,
-    };
+    use test_http::mock_response;
+
+    fn local_client(current: &Version) -> Client {
+        client_builder(current)
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap()
+    }
 
     fn release(tag: &str) -> Release {
         Release {
@@ -213,43 +224,6 @@ mod tests {
         assert!(mismatched.into_update(&current, true).is_err());
     }
 
-    // Serve exactly one request; following any attachment during discovery would fail the test.
-    fn mock_response(status: u16, body: &str) -> (String, JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let endpoint = format!("http://{}/releases/latest", listener.local_addr().unwrap());
-        let body = body.to_owned();
-        let handle = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(5);
-            let mut stream = loop {
-                match listener.accept() {
-                    Ok((stream, _)) => break stream,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "No release API request received");
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Err(error) => panic!("{error}"),
-                }
-            };
-            stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            stream
-                .set_write_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            let mut request = Vec::new();
-            let mut buffer = [0; 1024];
-            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
-                let count = stream.read(&mut buffer).unwrap();
-                assert!(count > 0 && request.len() < 16384);
-                request.extend_from_slice(&buffer[..count]);
-            }
-            write!(stream, "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
-            String::from_utf8(request).unwrap()
-        });
-        (endpoint, handle)
-    }
-
     #[test]
     fn check_only_requests_the_release_api_and_uses_its_metadata() {
         let body = serde_json::json!({
@@ -262,7 +236,7 @@ mod tests {
         let (endpoint, server) = mock_response(200, &body.to_string());
         let current = Version::parse("1.1.0").unwrap();
         let update = tauri::async_runtime::block_on(check_endpoint(
-            &client(&current).unwrap(),
+            &local_client(&current),
             &endpoint,
             &current,
             true,
@@ -271,7 +245,7 @@ mod tests {
         .unwrap();
         assert_eq!(update.version, "1.2.0");
         assert_eq!(update.notes.as_deref(), Some("API release notes"));
-        let request = server.join().unwrap().to_ascii_lowercase();
+        let request = server.join().unwrap().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("get /releases/latest http/1.1\r\n"));
         assert!(request.contains("user-agent: weblink/1.1.0\r\n"));
         assert!(request.contains("accept: application/vnd.github+json\r\n"));
@@ -292,12 +266,12 @@ mod tests {
         ] {
             let (endpoint, server) = mock_response(status, body);
             let result = tauri::async_runtime::block_on(check_endpoint(
-                &client(&current).unwrap(),
+                &local_client(&current),
                 &endpoint,
                 &current,
                 true,
             ));
-            server.join().unwrap();
+            server.join().unwrap().unwrap();
             if status == 404 {
                 assert!(result.unwrap().is_none());
             } else {
