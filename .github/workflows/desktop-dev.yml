@@ -32,6 +32,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Check native test runner
+        run: bun test ./scripts/test/desktop-tests.test.mjs
       - name: Install Rust
         run: rustup toolchain install
       # Exercise the socket fixture before paying for the Tauri/native build.
@@ -53,10 +55,15 @@ jobs:
       # Production-mode tests embed the frontend and use the CLI's Cargo features.
       - name: Build desktop frontend
         run: bun run --cwd apps/web build:desktop
-      - run: cargo test --workspace --locked --release --features tauri/custom-protocol
+      - name: Run native tests
+        id: native-tests
+        run: bun scripts/desktop-tests.mjs
       - name: Verify native file hover and drop lifecycle
-        # Keep the same dependency features and reuse the workspace test binaries.
-        run: cargo test --workspace --locked --release --features tauri/custom-protocol file_drop::windows::tests::real_ole_drop_delivers_files_without_clipboard_changes -- --ignored --test-threads=1
+        working-directory: apps/desktop/src-tauri
+        env:
+          DESKTOP_TEST_BINARY: ${{ steps.native-tests.outputs.desktop-test-binary }}
+        # Run the exact artifact above without invoking Cargo/build scripts again.
+        run: "& $env:DESKTOP_TEST_BINARY file_drop::windows::tests::real_ole_drop_delivers_files_without_clipboard_changes --exact --ignored --test-threads=1"
       - name: Build Windows executable
         run: bun run build:desktop --no-bundle --config src-tauri/tauri.ci.conf.json
       - uses: actions/upload-artifact@v7

@@ -96,6 +96,8 @@ that job. `web-dev.yml`, `web-production.yml`, `desktop-dev.yml`, and
 runs on `public` pushes, desktop development also validates pull requests, and
 production runs on stable version tags. Windows runs Rust formatting and tests
 once in the same profile as its executable or installer build.
+The development drag/drop check runs the exact test executable reported by
+Cargo's build metadata, without starting another Cargo build.
 
 For local iteration, run the affected tests first and use CI for the complete
 cross-platform checks. Re-run unchanged layers only when failures or changes
