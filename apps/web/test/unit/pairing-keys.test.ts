@@ -10,6 +10,7 @@ import { webcrypto } from "node:crypto";
 import { PeerTrustService } from "@/libs/application/peer-trust";
 import {
   deviceIdentity,
+  fingerprint,
   type DeviceIdentity,
 } from "@/libs/domain/device-identity/crypto";
 import {
@@ -412,6 +413,76 @@ it("does not use a remembered public pin to bypass missing pairing keys", async 
       (f) => f.kind === "credential-offer",
     ),
   ).toBe(false);
+});
+it.each(["a", "b"] as const)(
+  "requires repair on both devices when %s loses all pairing records",
+  async (side) => {
+    const { a, b, h } = await paired();
+    h.close();
+    const lost = side === "a" ? a : b;
+    lost.pin = undefined;
+    lost.keys = {};
+    const again = await connect(a, b);
+    expect(again.trustA.get("b")?.state).toBe("untrusted");
+    expect(again.trustB.get("a")?.state).toBe("untrusted");
+    expect(again.pairedA).not.toHaveBeenCalled();
+    expect(again.pairedB).not.toHaveBeenCalled();
+    expect(a.keys.blocked).toBe(true);
+    expect(b.keys.blocked).toBe(true);
+    expect(
+      [...again.left.frames, ...again.right.frames].some(
+        (frame) => frame.kind.startsWith("credential-"),
+      ),
+    ).toBe(false);
+    // An explicit review on each side can restore defaults and exchange fresh keys.
+    const proofA = again.trustA.get("b")!;
+    const proofB = again.trustB.get("a")!;
+    await Promise.all([
+      again.trustA.pair(
+        "b",
+        proofA.fingerprint!,
+        proofA.code!,
+      ),
+      again.trustB.pair(
+        "a",
+        proofB.fingerprint!,
+        proofB.code!,
+      ),
+    ]);
+    await settled(a, b);
+    expect(again.pairedA).toHaveBeenCalledOnce();
+    expect(again.pairedB).toHaveBeenCalledOnce();
+  },
+);
+
+it("does not automatically pair a fresh profile with a quarantined peer that has no keys", async () => {
+  const a = await endpoint(),
+    b = await endpoint();
+  b.keys = { blocked: true };
+  const h = await connect(a, b);
+  expect(h.trustA.get("b")?.state).toBe("untrusted");
+  expect(h.trustB.get("a")?.state).toBe("untrusted");
+  expect(h.pairedA).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
+});
+
+it("finishes first pairing after interruption between the two initial pin commits", async () => {
+  const a = await endpoint(),
+    b = await endpoint();
+  b.pin = {
+    fingerprint: await fingerprint(
+      (await a.store.identity()).publicKey,
+    ),
+    blocked: false,
+  };
+  const h = await connect(a, b);
+  await settled(a, b);
+  expect(h.trustA.trusted("b")).toBe(true);
+  expect(h.trustB.trusted("a")).toBe(true);
+  expect(h.pairedA).toHaveBeenCalledOnce();
+  expect(h.pairedB).not.toHaveBeenCalled();
+  expect(h.resetA).not.toHaveBeenCalled();
+  expect(h.resetB).not.toHaveBeenCalled();
 });
 it("rejects a credential proof replayed into a new connection even with a valid device signature", async () => {
   const { a, b, h } = await paired();

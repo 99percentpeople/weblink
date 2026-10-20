@@ -17,12 +17,15 @@ type Hello = {
   key: string;
   transport: string;
   credentials?: true;
+  pairingKnown?: boolean;
 };
 export interface IdentityProof {
   fingerprint: string;
   code: string;
   /** Omitted for legacy peers; empty means no shared pairing key was proved. */
   credentialIds?: string[];
+  /** Signed peer history, when both endpoints support this extension. */
+  remotePairingKnown?: boolean;
 }
 /** Binds both fresh challenges and both DTLS certificates; replay/relay cannot authenticate another connection. */
 export class DeviceHandshake {
@@ -45,6 +48,7 @@ export class DeviceHandshake {
       remoteTransport: string;
       identity: Promise<DeviceIdentity>;
       credentials?: CredentialStore;
+      pairingKnown?(): Promise<boolean>;
       verified(proof: IdentityProof): void;
       failed(error?: unknown): void;
       interrupted?(): void;
@@ -118,6 +122,7 @@ export class DeviceHandshake {
       key: identity.publicKey,
       transport: this.options.localTransport,
       credentials: this.credentials ? true : undefined,
+      pairingKnown: await this.options.pairingKnown?.(),
     };
   }
   private helloSent = false;
@@ -142,6 +147,17 @@ export class DeviceHandshake {
       ...(this.local?.credentials &&
       this.remote?.credentials
         ? ["pairing-credentials/1"]
+        : []),
+      ...(this.local?.pairingKnown !== undefined &&
+      this.remote?.pairingKnown !== undefined
+        ? [
+            "pairing-history",
+            ...[this.local, this.remote]
+              .sort((a, b) =>
+                a.client < b.client ? -1 : 1,
+              )
+              .map((h) => h.pairingKnown),
+          ]
         : []),
     ]);
   }
@@ -174,6 +190,8 @@ export class DeviceHandshake {
         typeof frame.key !== "string" ||
         frame.key.length !== 88 ||
         typeof frame.nonce !== "string" ||
+        (frame.pairingKnown !== undefined &&
+          typeof frame.pairingKnown !== "boolean") ||
         !/^[a-f0-9-]{36}$/.test(frame.nonce)
       )
         throw new InvalidIdentityProof(
@@ -188,6 +206,7 @@ export class DeviceHandshake {
         transport: frame.transport,
         credentials:
           frame.credentials === true ? true : undefined,
+        pairingKnown: frame.pairingKnown,
       };
       const identity = await this.options.identity;
       const signature = await identity.sign(
@@ -259,6 +278,10 @@ export class DeviceHandshake {
         ...(this.local?.credentials &&
         this.remote.credentials
           ? { credentialIds }
+          : {}),
+        ...(this.local?.pairingKnown !== undefined &&
+        this.remote.pairingKnown !== undefined
+          ? { remotePairingKnown: this.remote.pairingKnown }
           : {}),
       });
     } else if (

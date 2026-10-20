@@ -1492,6 +1492,9 @@
     "failed": "録画に失敗しました"
   },
   "device_trust": {
+    "connection_warning": "デバイスの確認に失敗：{{name}}",
+    "permissions_disabled": "接続は維持され、すべての権限は無効です。",
+    "open_permissions": "権限を開く",
     "verifying": "デバイスを確認中",
     "unpaired": "未ペアリングのデバイス",
     "untrusted": "信頼されていないデバイス",

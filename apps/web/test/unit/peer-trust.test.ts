@@ -86,6 +86,7 @@ function setup(pin?: DevicePin) {
 const proof = {
   fingerprint: "new-key",
   code: "1234567890abcdef",
+  remotePairingKnown: false,
 };
 it("automatically pairs a new device only after verification and durable storage", async () => {
   const h = setup();

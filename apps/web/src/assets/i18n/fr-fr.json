@@ -1492,6 +1492,9 @@
     "failed": "Échec de l’enregistrement"
   },
   "device_trust": {
+    "connection_warning": "Échec de vérification : {{name}}",
+    "permissions_disabled": "La connexion reste ouverte. Toutes les autorisations sont désactivées.",
+    "open_permissions": "Voir les autorisations",
     "verifying": "Vérification de l’appareil",
     "unpaired": "Appareil non appairé",
     "untrusted": "Appareil non fiable",

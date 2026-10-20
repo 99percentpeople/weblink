@@ -529,18 +529,29 @@ async function main() {
   } finally {
     recovered.close();
   }
+  // The replacement has lost every record; the remembered peer must not be
+  // mistaken for a new connection just because this side has an empty store.
+  const replacementKeys = new Map<
+    string,
+    PairingCredentials
+  >();
   const changed = await connection(
     recoveredIdentity,
     await newIdentity(),
     pinsA,
-    pinsB,
-    keysA,
     new Map(),
+    keysA,
+    replacementKeys,
   );
   try {
     assert(
       changed.trustA.get("b")?.state === "untrusted",
       "changed key quarantined",
+    );
+    assert(
+      changed.trustB.get("a")?.state === "untrusted" &&
+        !changed.receiveB[0](),
+      "empty profile does not auto-pair with a remembered peer",
     );
     assert(
       changed.sessionA.isMessageChannelReady,
@@ -551,14 +562,32 @@ async function main() {
       "changed key revokes permissions",
     );
     const proof = changed.trustA.get("b")!;
-    await changed.trustA.pair(
-      "b",
-      proof.fingerprint!,
-      proof.code!,
-    );
+    const replacementProof = changed.trustB.get("a")!;
+    await Promise.all([
+      changed.trustA.pair(
+        "b",
+        proof.fingerprint!,
+        proof.code!,
+      ),
+      changed.trustB.pair(
+        "a",
+        replacementProof.fingerprint!,
+        replacementProof.code!,
+      ),
+    ]);
     assert(
       changed.trustA.trusted("b") && changed.receiveA[0](),
       "repair restores default permissions",
+    );
+    await until(
+      () =>
+        !!keysA.get("b")?.issued &&
+        !!replacementKeys.get("a")?.issued &&
+        keysA.get("b")?.received?.id ===
+          replacementKeys.get("a")?.issued?.id &&
+        replacementKeys.get("a")?.received?.id ===
+          keysA.get("b")?.issued?.id,
+      "repaired devices exchange fresh keys",
     );
   } finally {
     changed.close();
@@ -568,6 +597,7 @@ async function main() {
     transport: "Chromium real WebRTC",
     persistentPrivateKey: true,
     automaticFirstPairing: true,
+    bothSidesRejectLostRecords: true,
     pairingRestoresDefaults: true,
     keyMismatchQuarantine: true,
     manualRepair: true,

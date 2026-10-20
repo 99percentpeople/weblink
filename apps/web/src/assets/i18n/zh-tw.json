@@ -1492,6 +1492,9 @@
     "failed": "錄影失敗"
   },
   "device_trust": {
+    "connection_warning": "裝置驗證異常：{{name}}",
+    "permissions_disabled": "連線已保留，所有權限已關閉。",
+    "open_permissions": "查看權限",
     "verifying": "正在驗證裝置",
     "unpaired": "尚未配對的裝置",
     "untrusted": "不受信任的裝置",

@@ -1,5 +1,8 @@
 {
   "device_trust": {
+    "connection_warning": "设备验证异常：{{name}}",
+    "permissions_disabled": "连接已保留，所有权限已关闭。",
+    "open_permissions": "查看权限",
     "verifying": "正在验证设备",
     "unpaired": "未配对设备",
     "untrusted": "不可信设备",

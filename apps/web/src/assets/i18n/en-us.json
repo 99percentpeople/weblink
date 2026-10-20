@@ -1,5 +1,8 @@
 {
   "device_trust": {
+    "connection_warning": "Device verification failed: {{name}}",
+    "permissions_disabled": "The connection remains open. All permissions are disabled.",
+    "open_permissions": "Open permissions",
     "verifying": "Verifying device",
     "unpaired": "Unpaired device",
     "untrusted": "Untrusted device",

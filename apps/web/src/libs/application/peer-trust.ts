@@ -155,6 +155,23 @@ export class PeerTrustService {
           ),
           identity: this.store.identity(),
           credentials: this.store.credentials?.(id),
+          pairingKnown: () =>
+            this.serialize(id, async () => {
+              const pin = await this.store.pin(id);
+              const keys = await this.store
+                .credentials?.(id)
+                .read();
+              // A pin alone can precede the initial shared-key exchange.
+              // Lost keys and quarantine must never advertise a fresh start.
+              return !!(
+                pin?.credentialRequired ||
+                pin?.blocked ||
+                keys?.issued ||
+                keys?.pending ||
+                keys?.received ||
+                keys?.blocked
+              );
+            }),
           verified: (proof) =>
             void this.serialize(id, async () => {
               const pin = await this.store.pin(id);
@@ -206,7 +223,10 @@ export class PeerTrustService {
                   keys?.received ||
                   keys?.blocked
                 );
-                if (!remembered) {
+                if (
+                  !remembered &&
+                  proof.remotePairingKnown !== true
+                ) {
                   await this.commitPair(
                     id,
                     b,

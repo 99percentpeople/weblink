@@ -15,7 +15,14 @@ exchanged pairing key against the same fresh transcript. Names, client IDs and
 knowledge of public keys alone never grant authority.
 On first use, a device with no saved pin, pairing keys or quarantine record is
 automatically paired after its fresh signed proof is verified and its pin is
-stored. This trusts the first verified key encountered, without an out-of-band
+stored. Updated peers include their pairing-history state in the signed
+transcript. If either side remembers a shared-key exchange or quarantine,
+a side without any local records cannot treat this as first use: both sides
+need a surviving common key or explicit repair. A matching pin saved before
+the initial key exchange can still resume that interrupted exchange.
+Peers without the history extension retain the existing transcript and local
+first-use policy; saved keys and quarantine still prevent downgrade.
+This trusts the first verified key encountered, without an out-of-band
 identity check. Later connections must prove continuity with that saved identity.
 The UI still displays a fresh 16-hex-digit pairing code on both devices. Compare
 it through a trusted channel or directly on both screens before manually repairing
@@ -26,7 +33,10 @@ a mismatching identity or invalid remote proof leaves the device **untrusted**. 
 RTC connections remain available for discovery and pairing. All application
 permissions are denied; current transfers, clipboard activity, input and peer
 automation are cancelled. Existing permission choices are reset when a device
-is quarantined. A remembered key that has been quarantined cannot automatically
+is quarantined. A persistent in-app warning opens that device's permission
+settings; it never grants permissions itself. Repeated state updates do not
+repeat the warning, and repair or disconnection dismisses it.
+A remembered key that has been quarantined cannot automatically
 restore trust on a later reconnect. Explicit pairing replaces the pin and
 restores the default permissions, as does automatic first pairing: receive content,
 share screen and provide file list are on; remote control and automation ask for

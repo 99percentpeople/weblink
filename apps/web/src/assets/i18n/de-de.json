@@ -1492,6 +1492,9 @@
     "failed": "Aufnahme fehlgeschlagen"
   },
   "device_trust": {
+    "connection_warning": "Geräteprüfung fehlgeschlagen: {{name}}",
+    "permissions_disabled": "Die Verbindung bleibt bestehen. Alle Berechtigungen sind deaktiviert.",
+    "open_permissions": "Berechtigungen öffnen",
     "verifying": "Gerät wird überprüft",
     "unpaired": "Nicht gekoppeltes Gerät",
     "untrusted": "Nicht vertrauenswürdiges Gerät",

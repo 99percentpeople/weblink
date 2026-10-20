@@ -1492,6 +1492,9 @@
     "failed": "녹화 실패"
   },
   "device_trust": {
+    "connection_warning": "기기 인증 실패: {{name}}",
+    "permissions_disabled": "연결은 유지되며 모든 권한이 비활성화됩니다.",
+    "open_permissions": "권한 보기",
     "verifying": "기기 확인 중",
     "unpaired": "페어링되지 않은 기기",
     "untrusted": "신뢰할 수 없는 기기",

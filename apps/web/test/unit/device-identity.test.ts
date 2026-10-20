@@ -57,6 +57,7 @@ function connect(
   b: DeviceIdentity,
   transform?: (raw: string) => string,
   remoteTransport = "b-cert",
+  history?: [boolean | undefined, boolean | undefined],
 ) {
   const left = new Channel(),
     right = new Channel();
@@ -77,6 +78,10 @@ function connect(
       localTransport: "a-cert",
       remoteTransport,
       identity: Promise.resolve(a),
+      pairingKnown:
+        history?.[0] === undefined
+          ? undefined
+          : async () => history[0]!,
       verified: verifiedA,
       failed: failedA,
       interrupted: interruptedA,
@@ -90,6 +95,10 @@ function connect(
       localTransport: "b-cert",
       remoteTransport: "a-cert",
       identity: Promise.resolve(b),
+      pairingKnown:
+        history?.[1] === undefined
+          ? undefined
+          : async () => history[1]!,
       verified: verifiedB,
       failed: failedB,
       interrupted: interruptedB,
@@ -232,6 +241,90 @@ it("requires an SDP SHA256 transport certificate", () => {
     ),
   ).toBe(cert.toLowerCase());
 });
+
+it.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+] as const)(
+  "authenticates the pairing history of both endpoints (%s, %s)",
+  async (a, b) => {
+    const h = connect(
+      await identity(),
+      await identity(),
+      undefined,
+      "b-cert",
+      [a, b],
+    );
+    await vi.waitFor(() => {
+      expect(h.verifiedA).toHaveBeenCalledOnce();
+      expect(h.verifiedB).toHaveBeenCalledOnce();
+    });
+    expect(
+      h.verifiedA.mock.calls[0][0].remotePairingKnown,
+    ).toBe(b);
+    expect(
+      h.verifiedB.mock.calls[0][0].remotePairingKnown,
+    ).toBe(a);
+    expect(h.verifiedA.mock.calls[0][0].code).toBe(
+      h.verifiedB.mock.calls[0][0].code,
+    );
+  },
+);
+
+it.each(["change", "remove", "invalid"] as const)(
+  "rejects a pairing history %s before publishing verification",
+  async (mode) => {
+    const h = connect(
+      await identity(),
+      await identity(),
+      (raw) => {
+        const frame = JSON.parse(raw);
+        if (frame.kind === "hello")
+          frame.pairingKnown =
+            mode === "change"
+              ? false
+              : mode === "remove"
+                ? undefined
+                : "false";
+        return JSON.stringify(frame);
+      },
+      "b-cert",
+      [false, true],
+    );
+    await vi.waitFor(() =>
+      expect(h.failedA).toHaveBeenCalledOnce(),
+    );
+    expect(h.verifiedA).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  [false, undefined],
+  [undefined, true],
+] as const)(
+  "retains the existing transcript with peers that omit pairing history (%s, %s)",
+  async (a, b) => {
+    const h = connect(
+      await identity(),
+      await identity(),
+      undefined,
+      "b-cert",
+      [a, b],
+    );
+    await vi.waitFor(() => {
+      expect(h.verifiedA).toHaveBeenCalledOnce();
+      expect(h.verifiedB).toHaveBeenCalledOnce();
+    });
+    expect(
+      h.verifiedA.mock.calls[0][0].remotePairingKnown,
+    ).toBeUndefined();
+    expect(
+      h.verifiedB.mock.calls[0][0].remotePairingKnown,
+    ).toBeUndefined();
+  },
+);
 
 it("waits for the initiator before sending a responder hello, even if the responder channel opens first", async () => {
   const a = await identity(),

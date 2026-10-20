@@ -1492,6 +1492,9 @@
     "failed": "Error de grabación"
   },
   "device_trust": {
+    "connection_warning": "Error de verificación: {{name}}",
+    "permissions_disabled": "La conexión se mantiene. Todos los permisos están desactivados.",
+    "open_permissions": "Ver permisos",
     "verifying": "Verificando dispositivo",
     "unpaired": "Dispositivo sin emparejar",
     "untrusted": "Dispositivo no confiable",
