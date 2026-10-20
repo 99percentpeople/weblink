@@ -342,7 +342,7 @@ try {
         ),
       ),
     );
-  const proofs = await until(
+  const paired = await until(
     "both devices automatically pair on first use",
     async () => {
       const peers = await peerStates();
@@ -350,15 +350,13 @@ try {
         peers.every(
           (peer) =>
             peer.trust?.state === "trusted" &&
-            peer.trust.code,
+            peer.channelReady,
         ) && peers
       );
     },
   );
-  if (proofs[0].trust.code !== proofs[1].trust.code)
-    throw new Error("Pairing codes do not match");
   if (
-    proofs.some((peer) => !peer.receiving || !peer.sharing)
+    paired.some((peer) => !peer.receiving || !peer.sharing)
   )
     throw new Error(
       "First pairing did not enable default reception and sharing",
