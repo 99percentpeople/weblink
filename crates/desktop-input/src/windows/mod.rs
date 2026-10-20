@@ -3,6 +3,7 @@ mod device;
 mod environment;
 mod gamepad;
 mod hotkey;
+pub mod window;
 use crate::shortcut::Shortcut;
 mod pan;
 mod pointer_observer;
@@ -86,6 +87,7 @@ impl Worker {
         let exclusive = Exclusive;
         let queue = Arc::new(Mailbox::default());
         let status = Arc::new(Mutex::new(Status {
+            window_bound: false,
             devices: Default::default(),
             input_suspended: false,
             pan_supported: false,

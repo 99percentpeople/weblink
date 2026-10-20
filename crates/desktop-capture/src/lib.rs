@@ -40,6 +40,13 @@ pub struct CaptureSource {
     pub height: u32,
 }
 
+/// A snapshot and its physical desktop mapping from the same serialized capture request.
+pub struct CaptureSnapshot {
+    pub image: Vec<u8>,
+    pub bounds: geometry::PixelRect,
+    pub layout: geometry::DisplayLayout,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SourceKind {
@@ -193,6 +200,12 @@ trait Backend {
     fn displays(&self) -> Result<Vec<geometry::DisplayGeometry>> {
         Err("Display geometry is unavailable on this platform".into())
     }
+    fn window_bounds(&self, _: &CaptureSource) -> Result<geometry::PixelRect> {
+        Err("Window geometry is unavailable on this platform".into())
+    }
+    fn snapshot(&self, _: &CaptureSource, _: &geometry::PixelRect) -> Result<Vec<u8>> {
+        Err("Mapped snapshots are unavailable on this platform".into())
+    }
     #[cfg(windows)]
     fn thumbnail(&self, _: &CaptureSource) -> Result<Vec<u8>> {
         Err("This backend does not provide source snapshots".into())
@@ -290,6 +303,39 @@ impl<B: Backend> Engine<B> {
             return Err("Captured display disconnected".into());
         }
         Ok(layout)
+    }
+
+    fn snapshot(&mut self, source_id: &str) -> Result<CaptureSnapshot> {
+        let source = self
+            .backend
+            .sources()?
+            .into_iter()
+            .find(|s| s.id == source_id)
+            .ok_or("SOURCE_UNAVAILABLE")?;
+        let layout = self.display_layout()?;
+        let bounds_for = |layout: &geometry::DisplayLayout| match source.kind {
+            SourceKind::Monitor => layout
+                .displays
+                .iter()
+                .find(|d| d.source_id == source.id)
+                .map(|d| d.bounds.clone())
+                .ok_or_else(|| "SOURCE_UNAVAILABLE".to_string()),
+            SourceKind::Window => self.backend.window_bounds(&source),
+        };
+        let bounds = bounds_for(&layout)?;
+        bounds.edges()?;
+        let image = self.backend.snapshot(&source, &bounds)?;
+        // A moved/resized window or changed display layout cannot produce a valid mapping.
+        let after_bounds = bounds_for(&layout)?;
+        let after = self.display_layout()?;
+        if after.revision != layout.revision || after_bounds != bounds {
+            return Err("GEOMETRY_CHANGED".into());
+        }
+        Ok(CaptureSnapshot {
+            image,
+            bounds,
+            layout,
+        })
     }
 
     #[cfg(test)]
@@ -576,6 +622,7 @@ enum Command {
     DisplayRefreshRates(mpsc::Sender<Vec<u32>>),
     Sources(mpsc::Sender<Result<Vec<CaptureSource>>>),
     Thumbnail(String, CaptureOptions, mpsc::Sender<Result<Vec<u8>>>),
+    Snapshot(String, mpsc::Sender<Result<CaptureSnapshot>>),
     Start(
         String,
         CaptureOptions,
@@ -674,6 +721,9 @@ impl CaptureService {
                         Ok(Command::Thumbnail(id, options, reply)) => {
                             let _ = reply.send(engine.thumbnail(&id, options));
                         }
+                        Ok(Command::Snapshot(id, reply)) => {
+                            let _ = reply.send(engine.snapshot(&id));
+                        }
                         Ok(Command::Start(id, options, sink, reply)) => {
                             let result =
                                 engine.start_media(&id, Instant::now(), None, options, sink);
@@ -752,6 +802,9 @@ impl CaptureService {
     /// One PNG snapshot, at most 640x360, without changing an active capture.
     pub fn thumbnail(&self, source_id: String, options: CaptureOptions) -> Result<Vec<u8>> {
         self.request(|r| Command::Thumbnail(source_id, options, r))?
+    }
+    pub fn snapshot(&self, source_id: String) -> Result<CaptureSnapshot> {
+        self.request(|r| Command::Snapshot(source_id, r))?
     }
     pub fn start(&self, source_id: String) -> Result<CaptureStatus> {
         self.start_with_options(source_id, CaptureOptions::default())

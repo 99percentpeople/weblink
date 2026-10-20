@@ -1,3 +1,4 @@
+import { readAutomationPolicy } from "@weblink/automation";
 import { resolveAudioSampling } from "../application/meeting-audio-settings";
 import { resolveRecordingContainer } from "../application/recording-options";
 import { normalizeTransferConcurrency } from "../application/transfer/transfer-queue";
@@ -97,6 +98,10 @@ export function resolveStoredAppOptions(
         typeof entry.name === "string"
           ? entry.name
           : undefined,
+      automation:
+        entry.automation === undefined
+          ? undefined
+          : readAutomationPolicy(entry.automation),
       provideFileList: entry.provideFileList !== false,
       shareScreen: entry.shareScreen === true,
       receiveContent: entry.receiveContent === true,

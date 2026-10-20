@@ -38,6 +38,28 @@ impl Geometry {
     pub fn valid(self) -> bool {
         self.desktop.contains(self.display)
     }
+    /// Convert physical desktop pixels to the display-local wire contract.
+    /// Bounds are already oriented; OS DPI scaling must not be applied again.
+    pub fn normalized(self, position: Position) -> Option<Position> {
+        if !self.valid() {
+            return None;
+        }
+        let axis = |value: f64, origin: i32, span: u32| {
+            let pixel = value - f64::from(origin);
+            if !pixel.is_finite() || pixel < 0.0 || pixel >= f64::from(span) {
+                return None;
+            }
+            Some(if span == 1 {
+                0.0
+            } else {
+                pixel.round().min(f64::from(span - 1)) / f64::from(span - 1)
+            })
+        };
+        Some(Position {
+            x: axis(position.x, self.display.left, self.display.width)?,
+            y: axis(position.y, self.display.top, self.display.height)?,
+        })
+    }
     pub fn pixels(self, position: Position) -> Option<(i32, i32)> {
         if !self.valid()
             || !position.x.is_finite()
@@ -178,6 +200,9 @@ impl Held {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
+    WindowUnavailable,
+    WindowFocusLost,
+    WindowPointOutside,
     Invalid,
     Unavailable,
     Unauthorized,

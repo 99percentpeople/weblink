@@ -12,6 +12,7 @@ export const CAPABILITY_SYNC_VERSION = 1 as const;
 export const CURRENT_PROTOCOL_VERSIONS = {
   identity: 1,
   messaging: 1,
+  automation: 1,
   files: 1,
   room: 1,
   screen: 1,

@@ -1,3 +1,5 @@
+import { useContext } from "solid-js";
+import { PresentationDiagnosticsContext } from "@/libs/state/presentation-diagnostics-context";
 import { useViewScopes } from "@/libs/state/view-scopes";
 import { Motion } from "@/components/ui/motion";
 import { layoutOverlay } from "@/components/ui/motion-layout";
@@ -113,6 +115,15 @@ export const VideoDisplay = (
   const [videoRef, setVideoRef] =
     createSignal<HTMLVideoElement | null>(null);
 
+  const presentation = useContext(
+    PresentationDiagnosticsContext,
+  );
+  createEffect(() => {
+    const track = videoTrack(),
+      video = videoRef();
+    if (track && video && presentation)
+      onCleanup(presentation.watch(track, video));
+  });
   let playbackAttempt = 0;
   let playPending = false;
   let errorReported = false;

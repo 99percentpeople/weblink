@@ -645,12 +645,20 @@ describe("room dialog and shared meeting device ownership", () => {
         name: "room_dialog.settings",
       }),
     );
-    const toggle = within(dialog).getByRole("switch", {
-      name: "room_dialog.auto_download.title",
+    const permission = within(dialog).getByRole("button", {
+      name: (name) =>
+        name.startsWith("room_dialog.auto_download.title"),
     });
-    expect(toggle).not.toBeChecked();
+    expect(permission).toHaveTextContent(
+      "setting.permissions.disallowed",
+    );
     const limit = appState.options.autoDownloadMaxSize;
-    fireEvent.click(toggle);
+    await userEvent.click(permission);
+    await userEvent.click(
+      screen.getByRole("option", {
+        name: "setting.permissions.allowed",
+      }),
+    );
     expect(
       resolveRoomConfig(appState.options, "current"),
     ).toEqual({

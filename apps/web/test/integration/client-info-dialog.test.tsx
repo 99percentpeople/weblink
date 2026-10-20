@@ -23,12 +23,19 @@ import {
 import { createDialog } from "@/components/dialogs/dialog";
 import { useAppState } from "@/libs/state/app-state-context";
 import { appState } from "@/libs/state/app-state";
+import { resetClientConfig } from "@/options";
 import type { SpeedTestState } from "@/libs/application/speed-test-service";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
-vi.mock("@/libs/state/app-state-context", () => ({
-  useAppState: vi.fn(),
-}));
+vi.mock(
+  "@/libs/state/app-state-context",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/libs/state/app-state-context")
+    >()),
+    useAppState: vi.fn(),
+  }),
+);
 vi.mock("@/components/dialogs/dialog", () => ({
   createDialog: vi.fn(),
 }));
@@ -51,16 +58,12 @@ vi.mock(
   }),
 );
 vi.mock("@/options", () => ({
-  getClientConfig: vi.fn(() => ({
-    provideFileList: true,
-  })),
-  setAppOptions: vi.fn(),
+  resetClientConfig: vi.fn(),
   setClientConfig: vi.fn(),
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
     options: {
-      redirectToClient: undefined,
       clientConfigs: {},
     },
     session: {
@@ -232,10 +235,10 @@ describe("tabbed client information", () => {
         name: "common.client_info_dialog.tabs.settings",
       }),
     ).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("switch")).toHaveLength(3);
+    expect(screen.queryAllByRole("switch")).toHaveLength(0);
     expect(
-      screen.getByText("client.config.redirect.title"),
-    ).toBeInTheDocument();
+      screen.queryByText("client.config.redirect.title"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "client.config.provide_file_list.title",
@@ -246,6 +249,26 @@ describe("tabbed client information", () => {
         name: "client.menu.connection_status",
       }),
     ).toBeNull();
+  });
+
+  it("resets permissions for the currently displayed client, including when offline", () => {
+    const view = mount("settings");
+    const reset = () =>
+      screen.getByRole("button", {
+        name: "setting.permissions.reset_action",
+      });
+    fireEvent.click(reset());
+    expect(resetClientConfig).toHaveBeenCalledOnce();
+    expect(resetClientConfig).toHaveBeenCalledWith("peer");
+
+    delete appState.session.clientViewData.other;
+    view.setId("other");
+    expect(reset()).toBeEnabled();
+    fireEvent.click(reset());
+    expect(resetClientConfig).toHaveBeenCalledTimes(2);
+    expect(resetClientConfig).toHaveBeenLastCalledWith(
+      "other",
+    );
   });
 
   it("announces when the speed-test tab becomes visible", async () => {

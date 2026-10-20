@@ -5,7 +5,8 @@ export function PermissionSelect<T extends string>(props: {
   disabled?: boolean;
   description?: string;
   options: T[];
-  value: T;
+  value: T | null;
+  placeholder?: string;
   optionLabel(value: T): string;
   onChange(value: T): void;
 }) {
@@ -18,6 +19,7 @@ export function PermissionSelect<T extends string>(props: {
       description={props.description}
       options={props.options}
       value={props.value}
+      placeholder={props.placeholder}
       optionLabel={props.optionLabel}
       onChange={(value) => {
         if (value !== null) props.onChange(value);

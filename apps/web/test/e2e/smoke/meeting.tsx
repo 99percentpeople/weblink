@@ -836,7 +836,6 @@ async function main() {
   setAppState("profile", "clientId", "self");
   setAppState("profile", "name", "Alex Chen");
   setAppState("options", "locale", "en-us");
-  setAppState("options", "redirectToClient", undefined);
   setAppState("roomStatus", { roomId, profile: null });
   setAppState(
     "session",

@@ -1,0 +1,13 @@
+{
+  "read": [
+    "diagnostics.read",
+    "screen.read",
+    "accessibility.read"
+  ],
+  "control": [
+    "screen.manage",
+    "screen.configure",
+    "input.control"
+  ],
+  "terminal": ["shell.execute"]
+}

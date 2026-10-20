@@ -317,3 +317,7 @@ for the repository layout and [testing](docs/TESTING.md) for focused checks.
   <strong>Weblink</strong><br />
   Control your desktop and share files from your browser.
 </div>
+
+## Automation
+
+WebMCP in supporting browsers and a local standard MCP server on desktop share a tool catalog for controlled input, Shell tasks and streaming diagnostics. Enable it in Settings → Automation. See [automation and permissions](docs/AUTOMATION.md).

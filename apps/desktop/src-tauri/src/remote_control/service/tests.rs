@@ -116,6 +116,16 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn bind_window(
+        &self,
+        grant: Grant,
+        window: weblink_desktop_input::window::BoundWindow,
+    ) -> Result<(), Error> {
+        self.engine
+            .lock()
+            .unwrap()
+            .bind_window(&grant, window, Instant::now())
+    }
     fn gamepad_feedback(&self) -> Vec<weblink_desktop_input::gamepad::Feedback> {
         self.engine.lock().unwrap().gamepad_feedback(Instant::now())
     }
@@ -1467,4 +1477,305 @@ fn choosing_a_concurrent_request_grants_one_peer_and_sends_busy_to_the_other() {
         .any(|m| m["type"] == "deny" && m["requestId"] == "request" && m["reason"] == "busy"));
     drop(messages);
     rig.service.end(&rig.owner);
+}
+
+#[test]
+fn automation_buttons_persist_and_stale_cleanup_cannot_release_reacquired_control() {
+    use weblink_desktop_input::input::{Button, Position};
+    let rig = Rig::new();
+    let first = rig.approve();
+    let button = |button, down| Event::Button {
+        position: Position { x: 0.5, y: 0.5 },
+        button,
+        down,
+    };
+    rig.service
+        .automation_input("client", &first, vec![button(Button::Left, true)])
+        .unwrap();
+    let before = rig.submitted();
+    assert!(rig
+        .service
+        .automation_input(
+            "other",
+            &first,
+            vec![Event::Move(Position { x: 1., y: 1. })]
+        )
+        .is_err());
+    assert!(rig
+        .service
+        .automation_input("client", "old", vec![button(Button::Left, false)])
+        .is_err());
+    assert_eq!(before, rig.submitted());
+    rig.service
+        .automation_input(
+            "client",
+            &first,
+            vec![Event::Move(Position { x: 0.75, y: 0.75 })],
+        )
+        .unwrap();
+    assert!(!rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Button {
+            button: Button::Left,
+            down: false
+        })));
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Button {
+            button: Button::Left,
+            down: false
+        })));
+    rig.send(json!({"type":"request","requestId":"request-next","target":target(&rig.owner,"capture","media").binding.target}));
+    let consent = rig.service.status(&rig.owner).unwrap().pending[0]
+        .consent_id
+        .clone();
+    rig.service.approve(&rig.owner, &consent, true).unwrap();
+    let second = rig.service.automation_lease("client").unwrap();
+    assert_ne!(first, second);
+    rig.service
+        .automation_input("client", &second, vec![button(Button::Right, true)])
+        .unwrap();
+    let before = rig.submitted();
+    rig.service.automation_revoke_lease("client", &first);
+    assert_eq!(before, rig.submitted());
+    assert!(rig.service.automation_matches("client", &second));
+    assert!(rig
+        .service
+        .automation_input("client", &first, vec![button(Button::Right, false)])
+        .is_err());
+    rig.service.automation_revoke_lease("client", &second);
+    assert!(!rig.service.automation_matches("client", &second));
+    assert_eq!(
+        rig.state
+            .observations
+            .lock()
+            .unwrap()
+            .iter()
+            .rfind(|v| matches!(v, Observation::Input(_))),
+        Some(&Observation::Input(Action::Button {
+            button: Button::Right,
+            down: false
+        }))
+    );
+}
+
+#[test]
+fn interrupted_native_input_is_not_an_active_automation_lease() {
+    use weblink_desktop_input::input::{Button, Position};
+    let rig = Rig::new();
+    let grant = rig.approve();
+    rig.service
+        .automation_input(
+            "client",
+            &grant,
+            vec![Event::Button {
+                position: Position { x: 0.5, y: 0.5 },
+                button: Button::Left,
+                down: true,
+            }],
+        )
+        .unwrap();
+    let owner = rig.service.owner(&rig.owner).unwrap();
+    owner.host.lock().unwrap().worker.interrupt().unwrap();
+    assert!(!rig.service.automation_active("client"));
+    assert!(!rig.service.automation_matches("client", &grant));
+    assert!(rig.service.automation_lease("client").is_err());
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Button {
+            button: Button::Left,
+            down: false
+        })));
+}
+
+#[test]
+fn automation_modifier_and_mouse_hold_are_released_together_without_touching_a_new_lease() {
+    use weblink_desktop_input::input::{Button, Position};
+    let rig = Rig::new();
+    let first = rig.approve();
+    let shift = ScanCode::new(0x2a, false).unwrap();
+    rig.service
+        .automation_input(
+            "client",
+            &first,
+            vec![
+                Event::Key {
+                    key: shift,
+                    down: true,
+                },
+                Event::Button {
+                    position: Position { x: 0.5, y: 0.5 },
+                    button: Button::Left,
+                    down: true,
+                },
+                Event::Move(Position { x: 0.8, y: 0.8 }),
+            ],
+        )
+        .unwrap();
+    let release_key = Observation::Input(Action::Key {
+        key: shift,
+        down: false,
+    });
+    let release_button = Observation::Input(Action::Button {
+        button: Button::Left,
+        down: false,
+    });
+    assert!(!rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&release_key));
+    assert!(!rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&release_button));
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&release_key));
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&release_button));
+    rig.send(json!({"type":"request","requestId":"next-keyboard","target":target(&rig.owner,"capture","media").binding.target}));
+    let consent = rig.service.status(&rig.owner).unwrap().pending[0]
+        .consent_id
+        .clone();
+    rig.service.approve(&rig.owner, &consent, true).unwrap();
+    let second = rig.service.automation_lease("client").unwrap();
+    rig.service
+        .automation_input(
+            "client",
+            &second,
+            vec![Event::Key {
+                key: shift,
+                down: true,
+            }],
+        )
+        .unwrap();
+    let before = rig.submitted();
+    rig.service.automation_revoke_lease("client", &first);
+    assert!(rig
+        .service
+        .automation_input(
+            "client",
+            &first,
+            vec![Event::Key {
+                key: shift,
+                down: false
+            }]
+        )
+        .is_err());
+    assert_eq!(rig.submitted(), before);
+    assert!(rig.service.automation_matches("client", &second));
+    rig.service.automation_revoke_lease("client", &second);
+    assert_eq!(
+        rig.state
+            .observations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| **e == release_key)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn automation_window_binding_is_exact_and_focus_loss_interrupts_idle_input() {
+    use weblink_desktop_input::window::WindowGuard;
+    struct Window(Arc<AtomicBool>);
+    impl WindowGuard for Window {
+        fn check(&self, _: Option<(i32, i32)>) -> Result<(), Error> {
+            if self.0.load(Ordering::Acquire) {
+                Ok(())
+            } else {
+                Err(Error::WindowFocusLost)
+            }
+        }
+        fn activate(&self) -> Result<(), Error> {
+            self.check(None)
+        }
+    }
+    let rig = Rig::new();
+    let grant = rig.approve();
+    let focused = Arc::new(AtomicBool::new(true));
+    let window = Arc::new(Window(focused.clone()));
+    assert!(!rig
+        .service
+        .automation_window_bound("client", &grant)
+        .unwrap());
+    assert!(rig
+        .service
+        .automation_bind_window("other", &grant, window.clone())
+        .is_err());
+    assert!(rig
+        .service
+        .automation_bind_window("client", "old", window.clone())
+        .is_err());
+    rig.service
+        .automation_bind_window("client", &grant, window.clone())
+        .unwrap();
+    assert!(rig
+        .service
+        .automation_window_bound("client", &grant)
+        .unwrap());
+    assert_eq!(
+        rig.service
+            .automation_bind_window("client", &grant, window)
+            .unwrap_err(),
+        "WINDOW_ALREADY_BOUND"
+    );
+    let shift = ScanCode::new(0x2a, false).unwrap();
+    rig.service
+        .automation_input(
+            "client",
+            &grant,
+            vec![Event::Key {
+                key: shift,
+                down: true,
+            }],
+        )
+        .unwrap();
+    focused.store(false, Ordering::Release);
+    assert!(!rig.service.automation_matches("client", &grant));
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Key {
+            key: shift,
+            down: false
+        })));
+    assert!(rig
+        .service
+        .automation_input(
+            "client",
+            &grant,
+            vec![Event::Key {
+                key: shift,
+                down: true
+            }]
+        )
+        .is_err());
+    rig.service.automation_revoke_lease("client", &grant);
 }

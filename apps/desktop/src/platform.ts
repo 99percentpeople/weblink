@@ -1,3 +1,4 @@
+import { nativeAutomation } from "./automation";
 import { subscribeNativeRecording } from "./recording";
 import { nativeNotifications } from "./notifications";
 import { nativeFileSystem } from "./filesystem";
@@ -90,6 +91,7 @@ export const platform: PlatformRuntime = {
   updates: nativeUpdates,
   keyboard: nativeKeyboard,
   kind: "desktop",
+  automation: nativeAutomation,
   mediaPermissionPolicy: "automatic",
   supportsServiceWorker: false,
   remoteControl: {
@@ -149,6 +151,8 @@ export const platform: PlatformRuntime = {
       invoke<CaptureStatus>("capture_stop", { sessionId }),
   },
   screenShare: {
+    pipelineStats: (sessionId) =>
+      invoke("capture_pipeline_stats", { sessionId }),
     preview: createRawPreview,
     stats: (sessionId, peerId) =>
       invoke<

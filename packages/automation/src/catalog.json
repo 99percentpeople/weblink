@@ -1,0 +1,1966 @@
+[
+  {
+    "name": "devices.list",
+    "description": "List this device and directly connected devices. Use target=\"local\".",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "sessions.list",
+    "description": "List active streams and connection state on the explicit target.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "screen.sources",
+    "description": "List available native capture sources.",
+    "scope": "screen.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "screen.start",
+    "description": "Share a chosen native screen source with connected peers; audio is off.",
+    "scope": "screen.manage",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "sourceId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "screen.stop",
+    "description": "Stop exactly the specified local shared video track.",
+    "scope": "screen.manage",
+    "native": false,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "trackId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "screen.configure",
+    "description": "Update a running stream; does not change persistent preferences.",
+    "scope": "screen.configure",
+    "native": false,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxWidth": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 16384
+        },
+        "maxHeight": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 16384
+        },
+        "frameRate": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "maxBitrate": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 1000000000
+        }
+      },
+      "required": [
+        "target",
+        "trackId",
+        "maxWidth",
+        "maxHeight",
+        "frameRate",
+        "maxBitrate"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.acquire",
+    "description": "Acquire exclusive control of a live native monitor stream. Returns its sourceId, physical bounds and geometryRevision for pointer operations.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "trackId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.bindWindow",
+    "description": "Bind keyboard, text and pointer input to a top-level windowId returned as elementId by accessibility.windows. Requires acquired control and all keys/buttons released. Attempts foreground activation once; subsequent focus loss/window destruction stops input. Pointer points must belong to the visible bound window and acquired monitor. Bind once per control lease; release/acquire to change or remove binding. UIA semantic actions retain their explicit element targets.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "windowId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "windowId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.release",
+    "description": "Release this caller's exclusive input control.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.screenshot",
+    "description": "Capture a bounded PNG with image dimensions, physical desktop bounds, geometryRevision and imageToDesktop transform. Coordinates match UIA desktopPhysicalPixels; never apply DPI scale again. Refresh after display/window movement.",
+    "scope": "screen.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "sourceId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.pointer",
+    "description": "Mouse actions in desktopPhysicalPixels, bound to sourceId and geometryRevision from control.acquire. action is required: move jumps to x/y, or follows path from x/y; drag presses at x/y, follows path then releases. path has 1..128 waypoints; durationMs defaults to 500 (16..10000). down/up maintain button state across calls, with a 30-second hold limit. click supports clickCount 1..2, holdMs (default 30) and intervalMs (default 100). scroll requires scrollX and scrollY (120 units per detent, use 0 for the unused axis). Input actions execute serially. Cancellation, stale geometry or lost authority releases the affected control lease.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "coordinateSpace": {
+          "type": "string",
+          "enum": ["desktopPhysicalPixels"]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "geometryRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "move",
+            "down",
+            "up",
+            "click",
+            "scroll",
+            "drag"
+          ]
+        },
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": ["x", "y"],
+            "additionalProperties": false
+          }
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 10000
+        },
+        "button": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "middle",
+            "back",
+            "forward"
+          ]
+        },
+        "clickCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "intervalMs": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 1000
+        },
+        "holdMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "scrollX": {
+          "type": "integer",
+          "minimum": -1200,
+          "maximum": 1200
+        },
+        "scrollY": {
+          "type": "integer",
+          "minimum": -1200,
+          "maximum": 1200
+        }
+      },
+      "required": [
+        "target",
+        "coordinateSpace",
+        "sourceId",
+        "geometryRevision",
+        "x",
+        "y",
+        "action"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["move"]
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["move"]
+            },
+            "path": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["drag"]
+            },
+            "path": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 10000
+            },
+            "button": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "middle",
+                "back",
+                "forward"
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["down", "up"]
+            },
+            "button": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "middle",
+                "back",
+                "forward"
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["click"]
+            },
+            "button": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "middle",
+                "back",
+                "forward"
+              ]
+            },
+            "clickCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2
+            },
+            "intervalMs": {
+              "type": "integer",
+              "minimum": 40,
+              "maximum": 1000
+            },
+            "holdMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "coordinateSpace": {
+              "type": "string",
+              "enum": ["desktopPhysicalPixels"]
+            },
+            "sourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "geometryRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["scroll"]
+            },
+            "scrollX": {
+              "type": "integer",
+              "minimum": -1200,
+              "maximum": 1200
+            },
+            "scrollY": {
+              "type": "integer",
+              "minimum": -1200,
+              "maximum": 1200
+            }
+          },
+          "required": [
+            "target",
+            "coordinateSpace",
+            "sourceId",
+            "geometryRevision",
+            "x",
+            "y",
+            "action",
+            "scrollX",
+            "scrollY"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.key",
+    "description": "Operate named physical keys: press, down, up or ordered chord (reverse release). Timed actions default to holdMs=30, repeat=1, intervalMs=100; total scheduled duration <=10 seconds. Names are physical positions, not text. Held keys can combine with mouse actions; overlapping presses are rejected.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "action": {
+          "type": "string",
+          "enum": ["press", "down", "up", "chord"]
+        },
+        "key": {
+          "type": "string",
+          "enum": [
+            "Escape",
+            "Digit1",
+            "Digit2",
+            "Digit3",
+            "Digit4",
+            "Digit5",
+            "Digit6",
+            "Digit7",
+            "Digit8",
+            "Digit9",
+            "Digit0",
+            "Minus",
+            "Equal",
+            "Backspace",
+            "Tab",
+            "KeyQ",
+            "KeyW",
+            "KeyE",
+            "KeyR",
+            "KeyT",
+            "KeyY",
+            "KeyU",
+            "KeyI",
+            "KeyO",
+            "KeyP",
+            "BracketLeft",
+            "BracketRight",
+            "Enter",
+            "ControlLeft",
+            "KeyA",
+            "KeyS",
+            "KeyD",
+            "KeyF",
+            "KeyG",
+            "KeyH",
+            "KeyJ",
+            "KeyK",
+            "KeyL",
+            "Semicolon",
+            "Quote",
+            "Backquote",
+            "ShiftLeft",
+            "Backslash",
+            "KeyZ",
+            "KeyX",
+            "KeyC",
+            "KeyV",
+            "KeyB",
+            "KeyN",
+            "KeyM",
+            "Comma",
+            "Period",
+            "Slash",
+            "ShiftRight",
+            "NumpadMultiply",
+            "AltLeft",
+            "Space",
+            "CapsLock",
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "NumLock",
+            "ScrollLock",
+            "Numpad7",
+            "Numpad8",
+            "Numpad9",
+            "NumpadSubtract",
+            "Numpad4",
+            "Numpad5",
+            "Numpad6",
+            "NumpadAdd",
+            "Numpad1",
+            "Numpad2",
+            "Numpad3",
+            "Numpad0",
+            "NumpadDecimal",
+            "IntlBackslash",
+            "F11",
+            "F12",
+            "NumpadEnter",
+            "ControlRight",
+            "NumpadDivide",
+            "AltRight",
+            "Home",
+            "ArrowUp",
+            "PageUp",
+            "ArrowLeft",
+            "ArrowRight",
+            "End",
+            "ArrowDown",
+            "PageDown",
+            "Insert",
+            "Delete",
+            "MetaLeft",
+            "MetaRight",
+            "ContextMenu"
+          ]
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Escape",
+              "Digit1",
+              "Digit2",
+              "Digit3",
+              "Digit4",
+              "Digit5",
+              "Digit6",
+              "Digit7",
+              "Digit8",
+              "Digit9",
+              "Digit0",
+              "Minus",
+              "Equal",
+              "Backspace",
+              "Tab",
+              "KeyQ",
+              "KeyW",
+              "KeyE",
+              "KeyR",
+              "KeyT",
+              "KeyY",
+              "KeyU",
+              "KeyI",
+              "KeyO",
+              "KeyP",
+              "BracketLeft",
+              "BracketRight",
+              "Enter",
+              "ControlLeft",
+              "KeyA",
+              "KeyS",
+              "KeyD",
+              "KeyF",
+              "KeyG",
+              "KeyH",
+              "KeyJ",
+              "KeyK",
+              "KeyL",
+              "Semicolon",
+              "Quote",
+              "Backquote",
+              "ShiftLeft",
+              "Backslash",
+              "KeyZ",
+              "KeyX",
+              "KeyC",
+              "KeyV",
+              "KeyB",
+              "KeyN",
+              "KeyM",
+              "Comma",
+              "Period",
+              "Slash",
+              "ShiftRight",
+              "NumpadMultiply",
+              "AltLeft",
+              "Space",
+              "CapsLock",
+              "F1",
+              "F2",
+              "F3",
+              "F4",
+              "F5",
+              "F6",
+              "F7",
+              "F8",
+              "F9",
+              "F10",
+              "NumLock",
+              "ScrollLock",
+              "Numpad7",
+              "Numpad8",
+              "Numpad9",
+              "NumpadSubtract",
+              "Numpad4",
+              "Numpad5",
+              "Numpad6",
+              "NumpadAdd",
+              "Numpad1",
+              "Numpad2",
+              "Numpad3",
+              "Numpad0",
+              "NumpadDecimal",
+              "IntlBackslash",
+              "F11",
+              "F12",
+              "NumpadEnter",
+              "ControlRight",
+              "NumpadDivide",
+              "AltRight",
+              "Home",
+              "ArrowUp",
+              "PageUp",
+              "ArrowLeft",
+              "ArrowRight",
+              "End",
+              "ArrowDown",
+              "PageDown",
+              "Insert",
+              "Delete",
+              "MetaLeft",
+              "MetaRight",
+              "ContextMenu"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 8,
+          "uniqueItems": true
+        },
+        "holdMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "repeat": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "intervalMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        }
+      },
+      "required": ["target", "action"],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "action": {
+              "type": "string",
+              "enum": ["down", "up"]
+            },
+            "key": {
+              "type": "string",
+              "enum": [
+                "Escape",
+                "Digit1",
+                "Digit2",
+                "Digit3",
+                "Digit4",
+                "Digit5",
+                "Digit6",
+                "Digit7",
+                "Digit8",
+                "Digit9",
+                "Digit0",
+                "Minus",
+                "Equal",
+                "Backspace",
+                "Tab",
+                "KeyQ",
+                "KeyW",
+                "KeyE",
+                "KeyR",
+                "KeyT",
+                "KeyY",
+                "KeyU",
+                "KeyI",
+                "KeyO",
+                "KeyP",
+                "BracketLeft",
+                "BracketRight",
+                "Enter",
+                "ControlLeft",
+                "KeyA",
+                "KeyS",
+                "KeyD",
+                "KeyF",
+                "KeyG",
+                "KeyH",
+                "KeyJ",
+                "KeyK",
+                "KeyL",
+                "Semicolon",
+                "Quote",
+                "Backquote",
+                "ShiftLeft",
+                "Backslash",
+                "KeyZ",
+                "KeyX",
+                "KeyC",
+                "KeyV",
+                "KeyB",
+                "KeyN",
+                "KeyM",
+                "Comma",
+                "Period",
+                "Slash",
+                "ShiftRight",
+                "NumpadMultiply",
+                "AltLeft",
+                "Space",
+                "CapsLock",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "NumLock",
+                "ScrollLock",
+                "Numpad7",
+                "Numpad8",
+                "Numpad9",
+                "NumpadSubtract",
+                "Numpad4",
+                "Numpad5",
+                "Numpad6",
+                "NumpadAdd",
+                "Numpad1",
+                "Numpad2",
+                "Numpad3",
+                "Numpad0",
+                "NumpadDecimal",
+                "IntlBackslash",
+                "F11",
+                "F12",
+                "NumpadEnter",
+                "ControlRight",
+                "NumpadDivide",
+                "AltRight",
+                "Home",
+                "ArrowUp",
+                "PageUp",
+                "ArrowLeft",
+                "ArrowRight",
+                "End",
+                "ArrowDown",
+                "PageDown",
+                "Insert",
+                "Delete",
+                "MetaLeft",
+                "MetaRight",
+                "ContextMenu"
+              ]
+            }
+          },
+          "required": ["target", "action", "key"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "action": {
+              "type": "string",
+              "enum": ["press"]
+            },
+            "key": {
+              "type": "string",
+              "enum": [
+                "Escape",
+                "Digit1",
+                "Digit2",
+                "Digit3",
+                "Digit4",
+                "Digit5",
+                "Digit6",
+                "Digit7",
+                "Digit8",
+                "Digit9",
+                "Digit0",
+                "Minus",
+                "Equal",
+                "Backspace",
+                "Tab",
+                "KeyQ",
+                "KeyW",
+                "KeyE",
+                "KeyR",
+                "KeyT",
+                "KeyY",
+                "KeyU",
+                "KeyI",
+                "KeyO",
+                "KeyP",
+                "BracketLeft",
+                "BracketRight",
+                "Enter",
+                "ControlLeft",
+                "KeyA",
+                "KeyS",
+                "KeyD",
+                "KeyF",
+                "KeyG",
+                "KeyH",
+                "KeyJ",
+                "KeyK",
+                "KeyL",
+                "Semicolon",
+                "Quote",
+                "Backquote",
+                "ShiftLeft",
+                "Backslash",
+                "KeyZ",
+                "KeyX",
+                "KeyC",
+                "KeyV",
+                "KeyB",
+                "KeyN",
+                "KeyM",
+                "Comma",
+                "Period",
+                "Slash",
+                "ShiftRight",
+                "NumpadMultiply",
+                "AltLeft",
+                "Space",
+                "CapsLock",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "NumLock",
+                "ScrollLock",
+                "Numpad7",
+                "Numpad8",
+                "Numpad9",
+                "NumpadSubtract",
+                "Numpad4",
+                "Numpad5",
+                "Numpad6",
+                "NumpadAdd",
+                "Numpad1",
+                "Numpad2",
+                "Numpad3",
+                "Numpad0",
+                "NumpadDecimal",
+                "IntlBackslash",
+                "F11",
+                "F12",
+                "NumpadEnter",
+                "ControlRight",
+                "NumpadDivide",
+                "AltRight",
+                "Home",
+                "ArrowUp",
+                "PageUp",
+                "ArrowLeft",
+                "ArrowRight",
+                "End",
+                "ArrowDown",
+                "PageDown",
+                "Insert",
+                "Delete",
+                "MetaLeft",
+                "MetaRight",
+                "ContextMenu"
+              ]
+            },
+            "holdMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "repeat": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "intervalMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          },
+          "required": ["target", "action", "key"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "action": {
+              "type": "string",
+              "enum": ["chord"]
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Escape",
+                  "Digit1",
+                  "Digit2",
+                  "Digit3",
+                  "Digit4",
+                  "Digit5",
+                  "Digit6",
+                  "Digit7",
+                  "Digit8",
+                  "Digit9",
+                  "Digit0",
+                  "Minus",
+                  "Equal",
+                  "Backspace",
+                  "Tab",
+                  "KeyQ",
+                  "KeyW",
+                  "KeyE",
+                  "KeyR",
+                  "KeyT",
+                  "KeyY",
+                  "KeyU",
+                  "KeyI",
+                  "KeyO",
+                  "KeyP",
+                  "BracketLeft",
+                  "BracketRight",
+                  "Enter",
+                  "ControlLeft",
+                  "KeyA",
+                  "KeyS",
+                  "KeyD",
+                  "KeyF",
+                  "KeyG",
+                  "KeyH",
+                  "KeyJ",
+                  "KeyK",
+                  "KeyL",
+                  "Semicolon",
+                  "Quote",
+                  "Backquote",
+                  "ShiftLeft",
+                  "Backslash",
+                  "KeyZ",
+                  "KeyX",
+                  "KeyC",
+                  "KeyV",
+                  "KeyB",
+                  "KeyN",
+                  "KeyM",
+                  "Comma",
+                  "Period",
+                  "Slash",
+                  "ShiftRight",
+                  "NumpadMultiply",
+                  "AltLeft",
+                  "Space",
+                  "CapsLock",
+                  "F1",
+                  "F2",
+                  "F3",
+                  "F4",
+                  "F5",
+                  "F6",
+                  "F7",
+                  "F8",
+                  "F9",
+                  "F10",
+                  "NumLock",
+                  "ScrollLock",
+                  "Numpad7",
+                  "Numpad8",
+                  "Numpad9",
+                  "NumpadSubtract",
+                  "Numpad4",
+                  "Numpad5",
+                  "Numpad6",
+                  "NumpadAdd",
+                  "Numpad1",
+                  "Numpad2",
+                  "Numpad3",
+                  "Numpad0",
+                  "NumpadDecimal",
+                  "IntlBackslash",
+                  "F11",
+                  "F12",
+                  "NumpadEnter",
+                  "ControlRight",
+                  "NumpadDivide",
+                  "AltRight",
+                  "Home",
+                  "ArrowUp",
+                  "PageUp",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "End",
+                  "ArrowDown",
+                  "PageDown",
+                  "Insert",
+                  "Delete",
+                  "MetaLeft",
+                  "MetaRight",
+                  "ContextMenu"
+                ]
+              },
+              "minItems": 2,
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "holdMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "repeat": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "intervalMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          },
+          "required": ["target", "action", "keys"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "control.text",
+    "description": "Type committed Unicode text into the focused application. Controls (including newline/Tab) require control.key. All held keys/buttons must first be released. Cancellable chunks preserve Unicode characters; intervalMs optionally spaces characters, with <=10 seconds of scheduled gaps.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "intervalMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        }
+      },
+      "required": ["target", "text"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "accessibility.capabilities",
+    "description": "Read desktop accessibility backend availability, supported semantic actions and limits.",
+    "scope": "diagnostics.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "accessibility.windows",
+    "description": "List accessible top-level windows with opaque element references valid for up to 60 seconds. Excludes Weblink itself. Window names are sensitive.",
+    "scope": "accessibility.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "accessibility.snapshot",
+    "description": "Read a bounded, flat accessibility subtree from an elementId. Names may contain sensitive UI text; password controls are redacted. truncated means more nodes exist.",
+    "scope": "accessibility.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "elementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "maxNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        }
+      },
+      "required": ["target", "elementId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "accessibility.action",
+    "description": "Perform a supported semantic action on an elementId. Requires control.acquire and its active exclusive input lease. setValue requires value (empty clears); other actions forbid value. This can operate any application and is not limited to the acquired monitor. All caller element references expire after an action attempt; refresh windows/snapshot before further actions. No keyboard fallback.",
+    "scope": "input.control",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "elementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "focus",
+            "invoke",
+            "setValue",
+            "toggle",
+            "select",
+            "expand",
+            "collapse",
+            "scrollIntoView"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": ["target", "elementId", "action"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "commands.run",
+    "description": "Run a noninteractive shell command and wait up to waitMs (default 10000, maximum 60000). Returns jobId, status, exitCode and the latest 16384 output bytes (chunks/startCursor/nextCursor), prioritizing final results/errors. If still running, background=true; continue commands.read with nextCursor. Use commands.read(cursor=0) for retained earlier output. timeoutMs independently limits process lifetime. Cancelling the call before handoff cancels the job.",
+    "scope": "shell.execute",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "script": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 600000
+        },
+        "waitMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        }
+      },
+      "required": ["target", "script"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "commands.start",
+    "description": "Start a noninteractive shell job in the background and return jobId immediately. Use commands.read(target,jobId) for the latest 16384 bytes, or tailLines/tailBytes for a smaller tail. Follow new output by passing nextCursor as cursor; poll until status is not running and hasMore=false. timeoutMs defaults to 60000, maximum 600000. stdout/stderr share one absolute byte cursor. Oldest output is evicted to retain the latest 4 MiB/8192 stream segments.",
+    "scope": "shell.execute",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "script": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 600000
+        }
+      },
+      "required": ["target", "script"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "commands.status",
+    "description": "Read job status (running/completed/cancelled/timed_out), exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated (old output evicted), and outputIncomplete (pipe read failed or draining timed out). Does not return output; use commands.read for the latest output or incremental reads.",
+    "scope": "shell.execute",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "jobId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "commands.read",
+    "description": "Read the latest 16384 output bytes by default. Select only one of: tailBytes (1-16384), tailLines (1-1000 LF-delimited lines, still capped at 16384 bytes; tailLimited marks this cap), or cursor (absolute byte offset for incremental reads; 0 requests earliest retained output). Returns stdout/stderr chunks with display data and exact dataBase64, startCursor, nextCursor, hasMore, status, exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated, cursorExpired, tailLimited and outputIncomplete (pipe read failed or draining timed out). Retain latest 4 MiB/8192 stream segments; old output is evicted. An expired cursor resumes at earliestCursor with cursorExpired=true. Follow with nextCursor; hasMore=false means caught up now, keep polling while running. Access requires the original caller and shell grant.",
+    "scope": "shell.execute",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "cursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "tailBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "tailLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": ["target", "jobId"],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "cursor": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["cursor"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "tailBytes": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["tailBytes"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "tailLines": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["tailLines"]
+        }
+      ]
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "commands.cancel",
+    "description": "Terminate your job and its process tree.",
+    "scope": "shell.execute",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target", "jobId"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "diagnostics.snapshot",
+    "description": "Read latest redacted stream statistics and sample availability.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "diagnostics.history",
+    "description": "Read up to 30 samples after a cursor from the last five minutes.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "diagnostics.start",
+    "description": "Start a bounded detailed diagnostic capture without screen contents.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "diagnostics.stop",
+    "description": "Stop the detailed diagnostic capture.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "diagnostics.export",
+    "description": "Export a paginated redacted diagnostic report; no SDP, IPs, credentials or screen contents.",
+    "scope": "diagnostics.read",
+    "native": false,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    }
+  }
+]

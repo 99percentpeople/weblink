@@ -9,7 +9,14 @@ use std::{
 pub(crate) fn capture(
     start: impl FnOnce(Arc<Mutex<Frames>>) -> Result<Box<dyn Session>>,
 ) -> Result<Vec<u8>> {
-    let (sink, image) = collector();
+    capture_sized(start, None)
+}
+
+pub(crate) fn capture_sized(
+    start: impl FnOnce(Arc<Mutex<Frames>>) -> Result<Box<dyn Session>>,
+    expected: Option<(u32, u32)>,
+) -> Result<Vec<u8>> {
+    let (sink, image) = collector(expected);
     let session = start(Arc::new(Mutex::new(Frames {
         sink: Some(sink),
         thumbnail: true,
@@ -25,12 +32,20 @@ pub(crate) fn capture(
     Ok(bytes)
 }
 
-fn collector() -> (Arc<dyn FrameSink>, mpsc::Receiver<Result<Vec<u8>>>) {
+fn collector(
+    expected: Option<(u32, u32)>,
+) -> (Arc<dyn FrameSink>, mpsc::Receiver<Result<Vec<u8>>>) {
     let (sender, receiver) = mpsc::sync_channel(1);
-    (Arc::new(Snapshot(Mutex::new(Some(sender)))), receiver)
+    (
+        Arc::new(Snapshot(Mutex::new(Some(sender)), expected)),
+        receiver,
+    )
 }
 
-struct Snapshot(Mutex<Option<mpsc::SyncSender<Result<Vec<u8>>>>>);
+struct Snapshot(
+    Mutex<Option<mpsc::SyncSender<Result<Vec<u8>>>>>,
+    Option<(u32, u32)>,
+);
 impl FrameSink for Snapshot {
     fn frame(&self, frame: TextureFrame<'_>) -> Result<()> {
         // Claim once, before mapping: later frames never allocate or queue pixels.
@@ -40,6 +55,13 @@ impl FrameSink for Snapshot {
                 let mut readback = Readback::default();
                 readback.copy(&frame)?;
                 let (width, height) = readback.size;
+                let oriented = match frame.rotation {
+                    Rotation::Clockwise90 | Rotation::Clockwise270 => (height, width),
+                    _ => (width, height),
+                };
+                if self.1.is_some_and(|size| size != oriented) {
+                    return Err("CAPTURE_BOUNDS_MISMATCH".into());
+                }
                 let mapped = readback.map()?;
                 encode(
                     mapped.bytes(),

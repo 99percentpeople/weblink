@@ -1,6 +1,7 @@
 //! Trusted local composition: capture identity + room lifetime + attended native input.
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+mod automation;
 mod binding;
 mod commands;
 mod cursor;
@@ -45,5 +46,11 @@ pub type Observer = Arc<dyn Fn(ControlEvent) + Send + Sync>;
 pub type Shared = Arc<Service>;
 
 fn input_error(error: weblink_desktop_input::input::Error) -> String {
-    format!("Native input: {error:?}")
+    use weblink_desktop_input::input::Error;
+    match error {
+        Error::WindowUnavailable => "WINDOW_UNAVAILABLE".into(),
+        Error::WindowFocusLost => "WINDOW_FOCUS_LOST".into(),
+        Error::WindowPointOutside => "WINDOW_POINT_OUTSIDE".into(),
+        _ => format!("Native input: {error:?}"),
+    }
 }

@@ -152,13 +152,15 @@ it("round-trips current settings while discarding unknown fields at every settin
     websocketUrl: "wss://obsolete.test",
     permissionHistoryImported: true,
   });
-  await boot();
+  const { appState } = await boot();
   const current = saved();
+  expect(appState.options).not.toHaveProperty(
+    "redirectToClient",
+  );
   expect(current).toMatchObject({
     maxConcurrentTransfers: 7,
     backgroundImage: "wallpaper",
     backgroundPreset: "aurora",
-    redirectToClient: "peer",
     bufferedAmountLowThreshold: 128 * 1024,
     bufferedAmountHighWaterMark: 512 * 1024,
     autoDownloadMaxSize: 10 * 1024 * 1024,
@@ -203,6 +205,7 @@ it("round-trips current settings while discarding unknown fields at every settin
     room: { name: "Room", autoDownloadFiles: true },
   });
   for (const key of [
+    "redirectToClient",
     "channelsNumber",
     "showStreamStats",
     "nativeColorFormat",
@@ -367,5 +370,44 @@ it.each([true, false, "true", null])(
     expect(saved().remoteControlWhitelistOnly).toBe(
       value === true,
     );
+  },
+);
+
+it("restores the automation switch and only valid per-device scope decisions", async () => {
+  store({
+    automationEnabled: true,
+    clientConfigs: {
+      peer: {
+        automation: {
+          "shell.execute": "allow",
+          "screen.read": "deny",
+          "input.control": "ask",
+          "accessibility.read": true,
+          "unknown.scope": "allow",
+        },
+      },
+    },
+  });
+  const { appState } = await boot();
+  expect(appState.options.automationEnabled).toBe(true);
+  expect(
+    appState.options.clientConfigs.peer?.automation,
+  ).toEqual({
+    "shell.execute": "allow",
+    "screen.read": "deny",
+    "input.control": "ask",
+  });
+  const current = saved();
+  for (const dispose of disposers.splice(0)) dispose();
+  vi.resetModules();
+  await boot();
+  expect(saved()).toEqual(current);
+});
+it.each([undefined, "true", null, 1])(
+  "does not enable automation for malformed preferences (%j)",
+  async (automationEnabled) => {
+    store({ automationEnabled });
+    const { appState } = await boot();
+    expect(appState.options.automationEnabled).toBe(false);
   },
 );

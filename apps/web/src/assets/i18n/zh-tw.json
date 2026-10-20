@@ -470,7 +470,12 @@
       "remove_title": "刪除權限記錄？",
       "remove_description": "刪除「{{name}}」儲存的權限並從清單移除？聊天記錄會保留。",
       "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。",
-      "allow_permanently": "Always allow"
+      "allow_permanently": "Always allow",
+      "groups": {
+        "identity": "裝置驗證與配對",
+        "content": "內容與檔案",
+        "sharing": "畫面與遠端控制"
+      }
     },
     "application": {
       "wake_lock": {
@@ -596,10 +601,6 @@
       "open": "客戶端設定",
       "preferences": "客戶端設定",
       "preferences_description": "這些設定只套用到目前客戶端。",
-      "redirect": {
-        "title": "連接後自動跳轉",
-        "description": "此客戶端連線成功後，自動開啟它的聊天視窗。一次只能選擇一個自動跳轉目標。"
-      },
       "provide_file_list": {
         "title": "提供檔案列表",
         "description": "允許這個客戶端查看本機已完成快取檔案的列表。關閉後，檔案列表請求會回傳空列表；聊天、直接傳送檔案及既有傳輸不受影響。"
@@ -1205,7 +1206,8 @@
     "settings_remote_control": "遠端控制",
     "settings_permissions": "用戶端與房間",
     "settings_application": "應用",
-    "settings_notifications": "通知"
+    "settings_notifications": "通知",
+    "settings_automation": "Automation"
   },
   "file_library": {
     "search": "搜尋檔案…",
@@ -1504,5 +1506,108 @@
     "receive_description": "統一控制接收此裝置的訊息、檔案、剪貼簿及音訊與視訊。關閉後停止接收，連線仍會保留。",
     "share_screen": "分享畫面",
     "share_description": "允許向此裝置傳送本機畫面及音訊，包括目前分享的內容。仍需先在本機開始分享。"
+  },
+  "automation": {
+    "no_tokens": "No local MCP tokens.",
+    "token_once": "Copy this configuration now. The full token is shown only once; only its hash is stored. Tool permissions still require desktop approval.",
+    "edit_token": "Edit token",
+    "expired": "Expired",
+    "created_at": "Created at",
+    "expires_at": "Expires at",
+    "permanent": "Never expires",
+    "custom_expiry": "Custom expiration",
+    "days": "days",
+    "token_lifetime": "Token validity",
+    "title": "Automation",
+    "policies_paused": "Always-allow policies are paused. Turn automation off and on to resume, or approve individual timed requests.",
+    "device_permissions_description": "自動化權限會自動儲存，並在重新連線後保留。僅對通過配對驗證的裝置生效，仍受接收內容和分享畫面權限限制。",
+    "description": "Connect AI tools to Weblink with separate permissions. The automation switch remembers its last state.",
+    "enable": "Enable automation",
+    "desktop": "Standard MCP runs on this desktop. Weblink peers connect over P2P.",
+    "browser": "WebMCP controls connected desktops. Permissions are checked on the destination desktop.",
+    "unsupported": "This browser does not support WebMCP. Use a supporting browser as the controller.",
+    "stop": "Stop all automation",
+    "export": "Export diagnostics",
+    "requests": "Approval requests",
+    "no_requests": "No pending requests.",
+    "target": "Target",
+    "compare": "Compare this code on the requesting device",
+    "verified": "The codes match",
+    "shell_warning": "This grants arbitrary Shell execution as your OS account for the selected duration. Commands can change files and system state; revocation cannot undo completed changes.",
+    "duration": "Duration",
+    "minutes": "minutes",
+    "allow": "Allow session",
+    "deny": "Deny",
+    "grants": "Active permissions",
+    "revoke": "Revoke",
+    "pair_description": "Manage remote automation in each device’s permission settings. Temporary grants end on disconnect; always-allow policies apply after device verification.",
+    "peers": "Connected devices",
+    "credentials_description": "Tokens authenticate MCP clients independently of remote device permissions. Create and manage them even when automation is off; they persist across restarts.",
+    "clients": "Local MCP tokens",
+    "client_name": "Token name",
+    "create_client": "Create token",
+    "hide": "Hide credential",
+    "jobs": "Command tasks",
+    "audit": "Recent calls",
+    "scopes": {
+      "diagnostics_read": "Read diagnostics",
+      "screen_read": "Read screens and screenshots",
+      "screen_manage": "Start and stop sharing",
+      "screen_configure": "Change streaming parameters",
+      "input_control": "Control keyboard, mouse and application UI",
+      "shell_execute": "Execute Shell commands",
+      "accessibility_read": "Read application accessibility trees"
+    },
+    "reported_source": "Reported entrypoint (device identity is verified separately)",
+    "input_warning": "Desktop control can operate terminals and applications, including through accessibility actions across the desktop. This is not a Shell sandbox.",
+    "accessibility_warning": "Window names and control labels may contain private information. Password controls are redacted.",
+    "session_control": "Session control",
+    "stop_description": "Cancel tasks and revoke automation grants while keeping the service running. Always-allow policies pause until automation is turned off and on again.",
+    "diagnostics": "Diagnostics",
+    "export_description": "Export stream statistics and a redacted diagnostic report.",
+    "peer": "Remote device",
+    "arguments": "Request arguments",
+    "no_grants": "No active permissions.",
+    "no_peers": "No connected automation devices.",
+    "no_jobs": "No command tasks.",
+    "no_audit": "No recent calls.",
+    "server": "MCP server",
+    "server_description": "Streamable HTTP for MCP clients. Settings are saved automatically; changing the listening address takes effect the next time automation is enabled. Existing tokens remain valid.",
+    "server_status": "Service status",
+    "server_active": "Running",
+    "server_inactive": "Stopped",
+    "endpoint": "MCP connection URL",
+    "server_host": "Host",
+    "server_port": "Port",
+    "server_host_description": "Use localhost or an IPv4 / IPv6 address. 127.0.0.1 limits access to this computer; 0.0.0.0 or :: listens on all interfaces. Other computers must use this desktop’s actual IP address.",
+    "server_port_description": "Default port: 32100. Use a value from 1 to 65535.",
+    "server_invalid_host": "Enter localhost or a valid IPv4 / IPv6 address, without a scheme, path or port.",
+    "server_invalid_port": "Enter a port from 1 to 65535. The default is 32100.",
+    "token_created": "Token created",
+    "server_apply_description": "Listening settings apply on the next start. Current connections and running tasks remain active.",
+    "server_pending": "Listening settings have changed. The current connection URL remains active until automation is turned off and on again.",
+    "settings_auto_description": "Text fields save when you leave them; selections save immediately.",
+    "saving": "Saving…",
+    "settings_saved": "Saved automatically.",
+    "token_invalid": "Enter a token name and a future expiration date, or choose Never expires.",
+    "token_endpoint_pending": "The connection URL is currently unavailable. Copy the token now and check the URL in MCP server settings.",
+    "server_reset": "Restore default host and port",
+    "token_reset": "Restore default validity (30 days)",
+    "permissions": {
+      "read": {
+        "title": "讀取與診斷",
+        "description": "讀取裝置和串流狀態、螢幕截圖及應用程式介面內容，可能包含敏感資訊。"
+      },
+      "control": {
+        "title": "分享與操控",
+        "description": "管理螢幕分享及串流參數，透過鍵鼠和輔助功能操控應用程式。"
+      },
+      "terminal": {
+        "title": "終端機與命令",
+        "description": "執行 Shell 命令、讀取輸出和管理工作。命令以目前系統帳戶權限執行。"
+      }
+    },
+    "mixed_permissions": "保留原有分項設定",
+    "review_request": "檢視授權請求"
   }
 }

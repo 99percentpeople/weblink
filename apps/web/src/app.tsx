@@ -67,6 +67,7 @@ import { AppWakeLock } from "./components/app/wakelock";
 import { ApplicationCloseDialog } from "./components/app/application-close-dialog";
 import { appState } from "@/libs/state/app-state";
 import { ModalProvider } from "@/components/dialogs/base";
+import { AutomationApprovalToasts } from "@/components/app/automation-approval-toasts";
 
 const InnerApp = (props: ParentProps) => {
   const { conversationHistory } = useAppState();
@@ -238,6 +239,7 @@ const InnerApp = (props: ParentProps) => {
   }
   return (
     <>
+      <AutomationApprovalToasts />
       <Show when={platform.application}>
         {(application) => (
           <ApplicationCloseDialog

@@ -1,3 +1,4 @@
+import AutomationSettings from "./automation-settings";
 import NotificationSettings from "./notification-settings";
 import { For, Match, Switch } from "solid-js";
 import {
@@ -27,6 +28,7 @@ export const settingsSections = [
   "meeting",
   "remote_control",
   "permissions",
+  "automation",
   "advanced",
   "about",
 ] as const;
@@ -95,6 +97,9 @@ export default function SettingsContent(props: {
               </Match>
               <Match when={section === "permissions"}>
                 <PermissionsSettings />
+              </Match>
+              <Match when={section === "automation"}>
+                <AutomationSettings />
               </Match>
               <Match when={section === "advanced"}>
                 <AdvancedSettings />

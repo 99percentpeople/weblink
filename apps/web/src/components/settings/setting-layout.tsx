@@ -60,6 +60,26 @@ export function SettingHeading(
   );
 }
 
+export function SettingGroup(
+  props: ParentProps<{
+    title: JSX.Element;
+    description?: JSX.Element;
+  }>,
+) {
+  const id = createUniqueId();
+  return (
+    <section class="setting-group" aria-labelledby={id}>
+      <SettingHeading
+        id={id}
+        description={props.description}
+      >
+        {props.title}
+      </SettingHeading>
+      {props.children}
+    </section>
+  );
+}
+
 /** Shared spacing for custom content such as previews, actions and maintenance groups. */
 export function SettingBlock(
   props: ParentProps<{ separated?: boolean }>,

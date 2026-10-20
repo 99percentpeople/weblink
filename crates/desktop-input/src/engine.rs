@@ -82,6 +82,7 @@ struct InputState<D: Device> {
     targets: HashMap<String, TrustedTarget>,
     invalidated: HashMap<String, Arc<AtomicBool>>,
     held: Vec<Held>,
+    window: Option<crate::window::BoundWindow>,
     touches: crate::touch::Contacts,
     panning: bool,
     interrupted: bool,
@@ -124,7 +125,20 @@ impl<D: Device> InputState<D> {
         self.device.suspend();
         ok
     }
+    fn check_window(&self, point: Option<(i32, i32)>) -> Result<(), Error> {
+        self.window
+            .as_ref()
+            .map_or(Ok(()), |window| window.check(point))
+    }
     fn apply(&mut self, grant: &Grant, event: Event, now: Instant) -> Result<(), Error> {
+        if self.window.is_some()
+            && matches!(
+                event,
+                Event::Gamepad(_) | Event::Touch(_) | Event::Trackpad(_)
+            )
+        {
+            return Err(Error::Invalid);
+        }
         if let Event::Gamepad(event) = event {
             return self.device.gamepad(event, now);
         }
@@ -198,6 +212,15 @@ impl<D: Device> InputState<D> {
             self.cursor = Default::default();
             event
         };
+        let point = match &event {
+            Event::Move(p)
+            | Event::Button { position: p, .. }
+            | Event::Wheel { position: p, .. } => Some(geometry.pixels(*p).ok_or(Error::Invalid)?),
+            _ => None,
+        };
+        if !matches!(event, Event::ReleaseAll) {
+            self.check_window(point)?;
+        }
         let mut actions = Vec::with_capacity(3);
         let mut transition = None;
         let move_to = |p| {
@@ -262,6 +285,7 @@ impl<D: Device> InputState<D> {
                     if started.elapsed() > MAX_INPUT_AGE {
                         return Err(Error::Stale);
                     }
+                    self.check_window(None)?;
                     self.unicode = Some(unit); // also covers a partially inserted pair
                     self.device.backend.submit(&[
                         Action::Unicode { unit, down: true },
@@ -296,6 +320,7 @@ impl<D: Device> InputState<D> {
                 actions.push(held.up());
             }
         }
+        self.check_window(point)?;
         self.device.backend.submit(&actions)?;
         if let Some((held, false)) = transition {
             self.held.retain(|h| *h != held);
@@ -319,6 +344,7 @@ impl<D: Device> Backend for InputState<D> {
     fn release(&mut self, _: &Grant) -> bool {
         self.interrupted = true;
         let released = self.release_all();
+        self.window = None;
         let unmounted = self.device.unmount_all();
         if !unmounted {
             self.failure = Some(Error::Release);
@@ -328,6 +354,7 @@ impl<D: Device> Backend for InputState<D> {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Status {
+    pub window_bound: bool,
     pub devices: devices::Snapshot,
     pub input_suspended: bool,
     pub pan_supported: bool,
@@ -371,6 +398,7 @@ impl<D: Device> Engine<D> {
                 targets: HashMap::new(),
                 invalidated: HashMap::new(),
                 held: vec![],
+                window: None,
                 touches: Default::default(),
                 panning: false,
                 interrupted: false,
@@ -468,6 +496,30 @@ impl<D: Device> Engine<D> {
                 .remove(&binding.target.media_id);
         }
     }
+    pub fn bind_window(
+        &mut self,
+        grant: &Grant,
+        window: crate::window::BoundWindow,
+        now: Instant,
+    ) -> Result<(), Error> {
+        if !self.authority.permits(&grant.binding, &grant.id, now) {
+            return Err(Error::Unauthorized);
+        }
+        let state = self.authority.backend_mut();
+        if state.window.is_some()
+            || state.interrupted
+            || !state.held.is_empty()
+            || state.unicode.is_some()
+            || state.panning
+            || !state.touches.is_empty()
+        {
+            return Err(Error::Invalid);
+        }
+        window.activate()?;
+        window.check(None)?;
+        state.window = Some(window);
+        Ok(())
+    }
     pub fn input(&mut self, grant: &Grant, event: Event, now: Instant) -> Result<(), Error> {
         self.queued_input(grant, event, now, now)
     }
@@ -498,6 +550,13 @@ impl<D: Device> Engine<D> {
             self.authority.backend_mut().interrupted = false;
         }
         if let Err(error) = result {
+            if matches!(
+                error,
+                Error::WindowUnavailable | Error::WindowFocusLost | Error::WindowPointOutside
+            ) {
+                self.interrupt();
+                return Err(error);
+            }
             if error != Error::Unavailable || !gamepad {
                 self.fail(error);
             }
@@ -506,12 +565,24 @@ impl<D: Device> Engine<D> {
     }
     pub fn tick(&mut self, now: Instant) {
         self.authority.tick(now);
+        let state = self.authority.backend_mut();
+        if !state.interrupted && state.window.is_some() && state.check_window(None).is_err() {
+            self.interrupt();
+        }
         if !self.authority.backend_mut().device.expire_gamepads(now) {
             self.fail(Error::Release);
         }
     }
-    pub(crate) fn wait_duration(&self, now: Instant) -> Option<Duration> {
-        self.authority.wait_duration(now)
+    pub(crate) fn wait_duration(&mut self, now: Instant) -> Option<Duration> {
+        let wait = self.authority.wait_duration(now);
+        if self.authority.backend_mut().window.is_some() {
+            Some(
+                wait.unwrap_or(Duration::from_millis(50))
+                    .min(Duration::from_millis(50)),
+            )
+        } else {
+            wait
+        }
     }
     /// Release interrupted gestures while retaining this connection's local consent.
     /// A fresh activation barrier is required before accepting further input.
@@ -538,6 +609,7 @@ impl<D: Device> Engine<D> {
         let pending_consents = self.authority.pending_consents();
         let state = self.authority.backend_mut();
         Status {
+            window_bound: state.window.is_some(),
             devices: state.device.snapshot(),
             input_suspended: state.interrupted,
             pan_supported: state.device.backend.pan_supported(),

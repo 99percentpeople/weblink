@@ -36,7 +36,6 @@ const clamp = (
 
 export default function Home(props: RouteSectionProps) {
   const isMobile = createIsMobile();
-  const navigate = useNavigate();
   const matches = useCurrentMatches();
   const [sidebarWidth, setSidebarWidth] = makePersisted(
     createSignal(DEFAULT_SIDEBAR_WIDTH),
@@ -147,19 +146,6 @@ export default function Home(props: RouteSectionProps) {
   };
 
   onCleanup(() => resizeObserver?.disconnect());
-
-  createEffect(() => {
-    const clientId = appState.options.redirectToClient;
-    if (!clientId) return;
-
-    const clientInfo =
-      appState.session.clientViewData[clientId];
-    if (clientInfo) {
-      navigate(`/client/${clientId}/chat`, {
-        replace: true,
-      });
-    }
-  });
 
   return (
     <Resizable

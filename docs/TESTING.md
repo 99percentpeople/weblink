@@ -409,6 +409,30 @@ IndexedDB, Workers or browser-only UI behavior.
 Protocol or transfer changes should run their focused E2E smoke check before
 merge. Benchmarks are only required when making or validating performance claims.
 
+## Automation
+
+Run `bun run test:e2e:automation` for real Chromium DataChannel consent,
+revocation and bounded result transport. Its report states whether the installed
+browser exposes WebMCP; absence does not simulate browser Agent integration.
+Focused TS tests cover the registry, authorization, replay, cancellation and
+settings approval. Native tests run with
+`cargo test --locked -p weblink-desktop automation --lib` and cover authenticated
+HTTP MCP discovery, native grants, Shell ownership and process cleanup.
+
+### Desktop accessibility
+
+`cargo test --locked -p weblink-desktop-accessibility` covers reference ownership,
+read-grant revocation, expiry, protected controls, bounded traversal and action
+invalidation. From an interactive Windows desktop, run
+`cargo test --locked -p weblink-desktop-accessibility --test windows_provider -- --ignored`
+to launch an owned disposable WinForms fixture and verify real UIA discovery,
+password redaction, Unicode value setting and button invocation. This test is
+ignored by default because SSH/service Session 0 has no accessible interactive
+desktop. It does not operate existing user application windows.
+`cargo test --locked -p weblink-desktop --lib automation` checks the native
+permission bridge and catalog. Browser/desktop consent and emergency release
+still need end-to-end acceptance with the actual client and remote device.
+
 ## Device trust
 
 Run `bun run --cwd apps/web test:e2e:device-trust` for real Chromium WebRTC

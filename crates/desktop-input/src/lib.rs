@@ -15,6 +15,7 @@ pub mod shortcut;
 mod shortcut_observer;
 pub mod touch;
 pub mod trackpad;
+pub mod window;
 #[cfg(target_os = "windows")]
 pub mod windows;
 pub mod wire;

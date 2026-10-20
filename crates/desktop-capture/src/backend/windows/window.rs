@@ -45,3 +45,39 @@ pub(super) fn start(
         .ok_or("Window closed")?;
     super::wgc::start(window, frames)
 }
+
+/// DWM exposes the visible frame in physical desktop pixels (no DPI virtualization).
+/// Mapped capture additionally verifies that WGC's frame has precisely this extent.
+pub(super) fn bounds(source: &CaptureSource) -> Result<crate::geometry::PixelRect> {
+    use windows::Win32::{
+        Foundation::{HWND, RECT},
+        Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS},
+    };
+    let window = Window::enumerate()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|w| id(*w).as_deref() == Some(&source.id))
+        .ok_or("Window closed")?;
+    let mut rect = RECT::default();
+    unsafe {
+        DwmGetWindowAttribute(
+            HWND(window.as_raw_hwnd()),
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut rect as *mut RECT).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    let bounds = crate::geometry::PixelRect {
+        left: rect.left,
+        top: rect.top,
+        width: (i64::from(rect.right) - i64::from(rect.left))
+            .try_into()
+            .map_err(|_| "Invalid window width")?,
+        height: (i64::from(rect.bottom) - i64::from(rect.top))
+            .try_into()
+            .map_err(|_| "Invalid window height")?,
+    };
+    bounds.edges()?;
+    Ok(bounds)
+}

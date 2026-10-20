@@ -18,6 +18,9 @@ pub struct PointerActivity {
 /// Operations are serialized by the backend. Only locally resolved capture targets
 /// may be registered. Network handlers cannot bypass the authorization engine.
 pub trait Session: Send {
+    fn bind_window(&self, _grant: Grant, _window: crate::window::BoundWindow) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
     fn gamepad_feedback(&self) -> Vec<crate::gamepad::Feedback> {
         vec![]
     }

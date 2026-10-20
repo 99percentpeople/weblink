@@ -298,7 +298,6 @@ async function main() {
   });
   setAppState("profile", "clientId", "self");
   setAppState("options", "locale", "en-us");
-  setAppState("options", "redirectToClient", undefined);
   setAppState("message", "clients", [
     { clientId: "peer", name: "Peer", avatar: null },
     { clientId: "other", name: "Other", avatar: null },

@@ -16,7 +16,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { SettingSwitch } from "@/components/settings/setting-controls";
 import {
   SettingBlock,
   SettingHeading,
@@ -49,11 +48,8 @@ import {
 import { appState } from "@/libs/state/app-state";
 import { createSessionDiagnostics } from "@/libs/hooks/session-diagnostics";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
-import {
-  getClientConfig,
-  setAppOptions,
-  setClientConfig,
-} from "@/options";
+import { resetClientConfig } from "@/options";
+import { RotateCcw } from "lucide-solid";
 import { toast } from "solid-sonner";
 
 export type ClientInfoTab = ClientInfoDialogTab;
@@ -101,10 +97,6 @@ export function ClientInfoPanel(props: {
   );
   const { open: openClipboardHistoryDialog } =
     createClipboardHistoryDialog();
-  const clientConfig = () =>
-    props.clientId
-      ? getClientConfig(props.clientId)
-      : undefined;
   const [copyState, setCopyState] = createSignal<
     "idle" | "copied" | "error"
   >("idle");
@@ -376,24 +368,6 @@ export function ClientInfoPanel(props: {
             >
               {t("client.config.preferences")}
             </SettingHeading>
-            <SettingSwitch
-              label={t("client.config.redirect.title")}
-              description={t(
-                "client.config.redirect.description",
-              )}
-              checked={
-                !!props.clientId &&
-                appState.options.redirectToClient ===
-                  props.clientId
-              }
-              onChange={(checked) => {
-                if (!props.clientId) return;
-                setAppOptions(
-                  "redirectToClient",
-                  checked ? props.clientId : undefined,
-                );
-              }}
-            />
             <Show when={props.clientId}>
               {(id) => (
                 <ClientPermissions clientId={id()} />
@@ -404,6 +378,24 @@ export function ClientInfoPanel(props: {
                 {t("client.config.actions")}
               </SettingHeading>
               <div class="flex min-w-0 flex-col items-start gap-2">
+                <Show when={props.clientId}>
+                  {(id) => (
+                    <Button
+                      wrap
+                      type="button"
+                      variant="outline"
+                      class="justify-start gap-2"
+                      onClick={() =>
+                        resetClientConfig(id())
+                      }
+                    >
+                      <RotateCcw class="size-4" />
+                      {t(
+                        "setting.permissions.reset_action",
+                      )}
+                    </Button>
+                  )}
+                </Show>
                 <Show when={info()?.clipboard}>
                   {(clipboard) => (
                     <Button

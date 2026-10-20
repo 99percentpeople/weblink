@@ -30,6 +30,7 @@ export interface PeerCapabilities {
   identity?: { receiveContent: boolean };
   [service: string]: unknown;
   messaging?: Record<string, never>;
+  automation?: Record<string, never>;
   fileDrop?: { hover?: boolean; hoverUpdates?: boolean };
   files?: {
     content: boolean;
@@ -95,6 +96,7 @@ const validators: Record<
 > = {
   identity: (v) => flags(v, ["receiveContent"]),
   messaging: (v) => record(v),
+  automation: (v) => record(v),
   fileDrop: (v) =>
     record(v) &&
     (v.hover === undefined ||

@@ -1,3 +1,4 @@
+import type { AutomationPolicy } from "@weblink/automation";
 import {
   defaultNotificationOptions,
   type NotificationOptions,
@@ -47,6 +48,7 @@ export type ClientConfig = {
   /** Local permission record; identity follows the existing persistent client ID. */
   name?: string;
   remoteControl?: "allow" | "deny";
+  automation?: AutomationPolicy;
   shareScreen?: boolean;
   receiveContent?: boolean;
   /** Whether this peer may enumerate completed local cache entries. */
@@ -104,6 +106,7 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  automationEnabled: boolean;
   maxConcurrentTransfers: number;
   autoCheckUpdates: boolean;
   notifications: NotificationOptions;
@@ -144,7 +147,6 @@ export type AppOption = {
   backgroundImage?: FileID;
   backgroundPreset?: WallpaperPresetId;
   backgroundImageOpacity: number;
-  redirectToClient?: ClientID;
 
   // Per-client privacy / behavior
   clientConfigs: Record<ClientID, ClientConfig | undefined>;
@@ -233,6 +235,7 @@ export const signalingWebSocketUrl =
 export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
+    automationEnabled: false,
     maxConcurrentTransfers:
       DEFAULT_MAX_CONCURRENT_TRANSFERS,
     chunkSize: 512 * 1024,
@@ -261,7 +264,6 @@ export const getDefaultAppOptions = (): AppOption => {
     backgroundImageOpacity: 0.5,
     backgroundImage: undefined,
     backgroundPreset: undefined,
-    redirectToClient: undefined,
     automaticDownload: false,
     autoDownloadMaxSize: defaultAutoDownloadMaxSize,
     clientConfigs: {},

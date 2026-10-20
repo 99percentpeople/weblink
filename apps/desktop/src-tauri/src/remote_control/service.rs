@@ -17,10 +17,10 @@ use weblink_desktop_input::{
     protocol::{self, Signal},
     wire::Sequencer,
 };
-struct Owner {
-    id: String,
+pub(super) struct Owner {
+    pub(super) id: String,
     alive: AtomicBool,
-    host: Mutex<Host>,
+    pub(super) host: Mutex<Host>,
     thread: Mutex<Option<JoinHandle<()>>>,
     watch: Mutex<Option<StatusWatch>>,
 }
@@ -31,7 +31,7 @@ struct StatusWatch {
 }
 impl Owner {
     // Called under the host lock, keeping snapshots and initial delivery ordered.
-    fn publish(&self, status: Snapshot) {
+    pub(super) fn publish(&self, status: Snapshot) {
         let mut slot = self.watch.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(watch) = slot.as_mut() {
             if watch.previous != status {
@@ -42,7 +42,7 @@ impl Owner {
             }
         }
     }
-    fn live(&self) -> bool {
+    pub(super) fn live(&self) -> bool {
         self.alive.load(Ordering::Acquire)
     }
     fn shutdown(&self) {
@@ -56,7 +56,7 @@ impl Owner {
 #[derive(Default)]
 pub struct Service {
     shortcut: Mutex<weblink_desktop_input::shortcut::Shortcut>,
-    owner: Mutex<Option<Arc<Owner>>>,
+    pub(super) owner: Mutex<Option<Arc<Owner>>>,
     observer: Mutex<Option<Observer>>,
 }
 impl Service {
@@ -187,7 +187,7 @@ impl Service {
         }
         owner.publish(host.snapshot());
     }
-    fn owner(&self, id: &str) -> Result<Arc<Owner>, String> {
+    pub(super) fn owner(&self, id: &str) -> Result<Arc<Owner>, String> {
         self.owner
             .lock()
             .unwrap_or_else(|e| e.into_inner())

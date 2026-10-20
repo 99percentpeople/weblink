@@ -1,6 +1,9 @@
 use super::*;
 
 impl crate::session::Session for Worker {
+    fn bind_window(&self, grant: Grant, window: crate::window::BoundWindow) -> Result<(), Error> {
+        self.call(move |engine| engine.bind_window(&grant, window, Instant::now()))?
+    }
     fn gamepad_feedback(&self) -> Vec<crate::gamepad::Feedback> {
         self.call(|engine| engine.gamepad_feedback(Instant::now()))
             .unwrap_or_default()

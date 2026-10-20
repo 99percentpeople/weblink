@@ -1,0 +1,92 @@
+import { AutomationError } from "@weblink/automation";
+import {
+  Channel,
+  invoke as tauriInvoke,
+} from "@tauri-apps/api/core";
+import type {
+  NativeAutomation,
+  NativeAutomationEvent,
+} from "@weblink/platform";
+const invoke = async <T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> => {
+  try {
+    return await tauriInvoke<T>(command, args);
+  } catch (error) {
+    const message = String(error);
+    throw new AutomationError(
+      /^[A-Z][A-Z0-9_]{1,64}$/.test(message)
+        ? message
+        : "EXECUTION_FAILED",
+      message,
+    );
+  }
+};
+export const nativeAutomation: NativeAutomation = {
+  open: (onRequest) => {
+    const channel = new Channel<NativeAutomationEvent>();
+    channel.onmessage = onRequest;
+    return invoke("automation_open", { channel });
+  },
+  heartbeat: (epoch) =>
+    invoke("automation_heartbeat", { epoch }),
+  close: (epoch) => invoke("automation_close", { epoch }),
+  configure: (epoch, enabled) =>
+    invoke("automation_configure", { epoch, enabled }),
+  configureServer: (epoch, config) =>
+    invoke("automation_server_configure", {
+      epoch,
+      config,
+    }),
+  snapshot: (epoch) =>
+    invoke("automation_snapshot", { epoch }),
+  client: (epoch, label, expiresAt) =>
+    invoke("automation_client", {
+      epoch,
+      label,
+      expiresAt,
+    }),
+  updateClient: (epoch, id, label, expiresAt) =>
+    invoke("automation_client_update", {
+      epoch,
+      id,
+      label,
+      expiresAt,
+    }),
+  removeClient: (epoch, id) =>
+    invoke("automation_client_remove", { epoch, id }),
+  decide: (epoch, id, minutes) =>
+    invoke("automation_decide", { epoch, id, minutes }),
+  revoke: (epoch, id) =>
+    invoke("automation_revoke", { epoch, id }),
+  peer: (epoch, label, fingerprint) =>
+    invoke("automation_peer", {
+      epoch,
+      label,
+      fingerprint,
+    }),
+  peerPolicy: (epoch, principal, policy) =>
+    invoke("automation_peer_policy", {
+      epoch,
+      principal,
+      policy,
+    }),
+  disconnect: (epoch, principal) =>
+    invoke("automation_disconnect", { epoch, principal }),
+  call: (epoch, principal, id, call) =>
+    invoke("automation_call", {
+      epoch,
+      principal,
+      id,
+      call,
+    }),
+  cancel: (epoch, id) =>
+    invoke("automation_cancel", { epoch, id }),
+  check: (epoch, id) =>
+    invoke("automation_check", { epoch, id }),
+  action: (epoch, id, binding) =>
+    invoke("automation_action", { epoch, id, binding }),
+  finish: (epoch, id, result) =>
+    invoke("automation_finish", { epoch, id, result }),
+};

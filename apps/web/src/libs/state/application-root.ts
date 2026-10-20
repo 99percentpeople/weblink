@@ -1,3 +1,5 @@
+import { PresentationDiagnosticsContext } from "./presentation-diagnostics-context";
+import { createAutomation } from "./create-automation";
 import { createComponent, lazy, onCleanup } from "solid-js";
 import {
   useLocation,
@@ -67,79 +69,88 @@ export function createApplicationRoot(
     createSpeedTestApproval(),
     permissions,
   );
+  state.automation = createAutomation(state);
   return provideContext(
-    ViewScopesContext,
-    defaultViewScopes,
+    PresentationDiagnosticsContext,
+    state.automation.presentation,
     () =>
-      provideContext(AppStateContext, state, () => {
-        return provideContext(
-          AudioPlayerContext,
-          audio.value,
-          () => {
-            const media = createMeetingMedia({
-              state,
-              recording: createRecording(state),
-              audio: audio.value,
-              nativePicker:
-                platform.capture && platform.screenShare
-                  ? createNativeScreenDialog(
-                      platform.capture,
-                      state.mediaCapabilities
-                        .captureBackends,
-                    )
-                  : undefined,
-            });
+      provideContext(
+        ViewScopesContext,
+        defaultViewScopes,
+        () =>
+          provideContext(AppStateContext, state, () => {
             return provideContext(
-              MeetingMediaContext,
-              media,
+              AudioPlayerContext,
+              audio.value,
               () => {
-                const actions = createRoomActions({
+                const media = createMeetingMedia({
                   state,
-                  dialog: createRoomDialog(),
-                  history: messageStores,
-                  namespace: getRoomNamespace(),
+                  recording: createRecording(state),
+                  audio: audio.value,
+                  nativePicker:
+                    platform.capture && platform.screenShare
+                      ? createNativeScreenDialog(
+                          platform.capture,
+                          state.mediaCapabilities
+                            .captureBackends,
+                        )
+                      : undefined,
                 });
                 return provideContext(
-                  RoomActionsContext,
-                  actions,
+                  MeetingMediaContext,
+                  media,
                   () => {
-                    const confirmation =
-                      createMeetingMainViewConfirmation();
-                    const meeting = createMeetingSession({
+                    const actions = createRoomActions({
                       state,
-                      media,
-                      location: useLocation(),
-                      navigate: useNavigate(),
-                      confirmation,
+                      dialog: createRoomDialog(),
+                      history: messageStores,
+                      namespace: getRoomNamespace(),
                     });
                     return provideContext(
-                      MeetingSessionContext,
-                      meeting,
+                      RoomActionsContext,
+                      actions,
                       () => {
-                        const dialogs = createAppDialogs();
+                        const confirmation =
+                          createMeetingMainViewConfirmation();
+                        const meeting =
+                          createMeetingSession({
+                            state,
+                            media,
+                            location: useLocation(),
+                            navigate: useNavigate(),
+                            confirmation,
+                          });
                         return provideContext(
-                          AppDialogsContext,
-                          dialogs,
-                          () =>
-                            createComponent(App, {
-                              runtime: {
-                                audio,
-                                meeting,
-                                confirmation,
-                              },
-                              get children() {
-                                return props.children;
-                              },
-                              get params() {
-                                return props.params;
-                              },
-                              get location() {
-                                return props.location;
-                              },
-                              get data() {
-                                return props.data;
-                              },
-                            }),
+                          MeetingSessionContext,
+                          meeting,
+                          () => {
+                            const dialogs =
+                              createAppDialogs();
+                            return provideContext(
+                              AppDialogsContext,
+                              dialogs,
+                              () =>
+                                createComponent(App, {
+                                  runtime: {
+                                    audio,
+                                    meeting,
+                                    confirmation,
+                                  },
+                                  get children() {
+                                    return props.children;
+                                  },
+                                  get params() {
+                                    return props.params;
+                                  },
+                                  get location() {
+                                    return props.location;
+                                  },
+                                  get data() {
+                                    return props.data;
+                                  },
+                                }),
+                            );
+                          },
                         );
                       },
                     );
@@ -147,8 +158,7 @@ export function createApplicationRoot(
                 );
               },
             );
-          },
-        );
-      }),
+          }),
+      ),
   );
 }

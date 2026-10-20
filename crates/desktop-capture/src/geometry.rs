@@ -11,7 +11,7 @@ pub struct PixelRect {
     pub height: u32,
 }
 impl PixelRect {
-    fn edges(&self) -> Result<(i32, i32)> {
+    pub(crate) fn edges(&self) -> Result<(i32, i32)> {
         if self.width == 0 || self.height == 0 {
             return Err("Display has no physical area".into());
         }

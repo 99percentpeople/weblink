@@ -54,8 +54,6 @@ export const resetClientConfig = (clientId: string) => {
         appState.options.clientConfigs[clientId]?.name,
     }),
   );
-  if (appState.options.redirectToClient === clientId)
-    setAppState("options", "redirectToClient", undefined);
 };
 
 export const resetRoomConfig = (conversationId: string) => {
@@ -82,8 +80,6 @@ export const forgetClientConfig = (clientId: string) => {
     clientId,
     undefined,
   );
-  if (appState.options.redirectToClient === clientId)
-    setAppState("options", "redirectToClient", undefined);
 };
 
 export const forgetRoomConfig = (

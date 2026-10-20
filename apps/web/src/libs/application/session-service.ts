@@ -1,3 +1,4 @@
+import { scopes } from "@weblink/automation";
 import { PeerTrustService } from "./peer-trust";
 import { bootstrapMessage } from "../domain/device-identity/access";
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
@@ -64,6 +65,9 @@ export class SessionService {
   readonly trust = new PeerTrustService((id) =>
     setClientConfig(id, {
       remoteControl: "deny",
+      automation: Object.fromEntries(
+        scopes.map((scope) => [scope, "deny" as const]),
+      ),
       provideFileList: false,
       shareScreen: false,
       receiveContent: false,
@@ -88,6 +92,10 @@ export class SessionService {
     MediaStream | null
   >();
   private readonly speedBusy = createSignal(false);
+  private readonly automationEnabled = createSignal(false);
+  setAutomationEnabled(enabled: boolean): void {
+    this.automationEnabled[1](enabled);
+  }
   readonly capabilities = new PeerCapabilitiesService(
     (session) => ({
       identity: {
@@ -96,6 +104,9 @@ export class SessionService {
         ),
       },
       messaging: {},
+      ...(this.automationEnabled[0]()
+        ? { automation: {} }
+        : {}),
       fileDrop: platform.fileDrop?.hover
         ? { hover: true, hoverUpdates: true }
         : {},

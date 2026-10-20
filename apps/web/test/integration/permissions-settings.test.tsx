@@ -61,12 +61,18 @@ vi.mock("@/i18n", () => ({
   t: (key: string, values?: { name: string }) =>
     values ? `${key}: ${values.name}` : key,
 }));
-vi.mock("@/libs/state/app-state-context", () => ({
-  useAppState: () => ({
-    activeRoomConversationId: () =>
-      appState.roomStatus.roomId,
+vi.mock(
+  "@/libs/state/app-state-context",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/libs/state/app-state-context")
+    >()),
+    useAppState: () => ({
+      activeRoomConversationId: () =>
+        appState.roomStatus.roomId,
+    }),
   }),
-}));
+);
 vi.mock(
   "@/components/conversations/conversation-actions",
   () => ({ ConversationActions: () => null }),
@@ -258,8 +264,8 @@ it("edits client and room permissions through selects and preserves the other en
   const clientDialog = await screen.findByRole("dialog");
   expect(clientDialog).toHaveTextContent("Alice");
   expect(
-    within(clientDialog).getAllByRole("switch"),
-  ).toHaveLength(2);
+    within(clientDialog).queryByRole("switch"),
+  ).toBeNull();
   const choose = async (
     label: string,
     decision: string,
@@ -275,6 +281,19 @@ it("edits client and room permissions through selects and preserves the other en
       }),
     );
   };
+  for (const [label, key] of [
+    ["device_trust.receive_content", "receiveContent"],
+    ["device_trust.share_screen", "shareScreen"],
+  ] as const) {
+    await choose(label, "allowed");
+    expect(
+      appState.options.clientConfigs.alice?.[key],
+    ).toBe(true);
+    await choose(label, "disallowed");
+    expect(
+      appState.options.clientConfigs.alice?.[key],
+    ).toBe(false);
+  }
   for (const decision of [
     "deny",
     "ask",

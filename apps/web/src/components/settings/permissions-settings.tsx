@@ -313,7 +313,7 @@ export default function PermissionsSettings() {
           if (!open) setSelected(undefined);
         }}
       >
-        <DialogContent>
+        <DialogContent class="flex flex-col">
           <Show when={selected()}>
             {(entry) => (
               <>
@@ -323,13 +323,12 @@ export default function PermissionsSettings() {
                     {entry().id}
                   </DialogDescription>
                 </DialogHeader>
-                <DialogBody>
+                <DialogBody class="flex-1">
                   <Show
                     when={entry().kind === "client"}
                     fallback={
                       <RoomPermissions
                         conversationId={entry().id}
-                        control="select"
                       />
                     }
                   >
@@ -338,7 +337,7 @@ export default function PermissionsSettings() {
                     />
                   </Show>
                 </DialogBody>
-                <p class="text-muted-foreground text-xs">
+                <p class="text-muted-foreground shrink-0 text-xs">
                   {t(
                     "setting.permissions.reset_description",
                   )}

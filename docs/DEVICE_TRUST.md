@@ -4,8 +4,8 @@ Each local browser profile or desktop WebView profile owns a non-extractable
 ECDSA P-256 private key in IndexedDB for signaling ownership and connection
 binding. Paired devices also issue a pairing key to each other. These are the
 credentials used directly for peer authentication, not separate recovery tokens.
-Device identity is independent of account identity. There is no SSO or
-account-wide trust propagation.
+Device identity is independent of account identity, local MCP bearer tokens, and
+temporary automation scope grants. There is no SSO or account-wide trust propagation.
 
 The dedicated ordered `weblink-device-identity/1` RTC channel exchanges public
 keys and proves possession by signing both device IDs, fresh challenges and
@@ -20,8 +20,8 @@ or directly on both screens before confirming pairing on each unpaired side.
 A new device starts **unpaired**. Without a surviving verifiable pairing key,
 a mismatching identity or invalid remote proof leaves the device **untrusted**. The signaling and
 RTC connections remain available for discovery and pairing. All application
-permissions are denied; current transfers, clipboard activity and input
-are cancelled. Existing permission choices are reset when a device
+permissions are denied; current transfers, clipboard activity, input and peer
+automation are cancelled. Existing permission choices are reset when a device
 is quarantined. A remembered key that has been quarantined cannot automatically
 restore trust on a later reconnect. Explicit pairing replaces the pin and
 unlocks settings, with all permissions still off. Key storage must succeed
@@ -79,7 +79,7 @@ The per-device settings are:
 
 - **Receive content:** one switch gates all incoming application content:
   messages, profiles, files, file lists, clipboard, audio/video, speed tests,
-  remote operations. Only transport, capability discovery and
+  remote operations and automation. Only transport, capability discovery and
   identity/pairing traffic remain available when it is off. Turning it off
   closes application channels and cancels pending requests. Media disappears
   immediately from application views and recording sources. Receiver tracks are
@@ -87,7 +87,9 @@ The per-device settings are:
   withdraws its media after the reception capability update. This cannot prevent
   a malicious peer from sending packets to an established network transport.
 - **Share screen:** controls publication of local screen/camera and audio to this
-  device, including native screen publications.
+  device, including native screen publications. Remote screen/control automation
+  also requires this permission. Closing it interrupts peer automation so an
+  already approved screen operation cannot retain its old grant.
 - **Remote control:** ask, permanently allow, or deny. Receive content and share
   screen must both be enabled. The stored policy is usable only for a device
   that has proved its paired identity.
@@ -96,7 +98,8 @@ The per-device settings are:
 
 File transfers, control, clipboard and native streaming use duplex protocols;
 turning reception off also interrupts these exchanges when this device was the
-initiator.
+initiator. Local MCP tokens remain usable according to their own rules and are
+not issued, changed or revoked by remote-device pairing.
 
 ## Duplicate IDs and signaling deployment
 

@@ -1,0 +1,806 @@
+import { appState, setAppState } from "./app-state";
+import { readAutomationPolicy } from "@weblink/automation";
+import { createUuid } from "@/libs/domain/ids";
+import { combineAbortSignals } from "@/libs/utils/abort-signals";
+import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
+import {
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from "solid-js";
+import {
+  AutomationError,
+  failure,
+  parseCall,
+  tools,
+  type Approval,
+  type Audit,
+  type Grant,
+  type Principal,
+  type ToolCall,
+  type ToolResult,
+} from "@weblink/automation";
+import {
+  webMcpContext,
+  registerWebMcp,
+} from "@weblink/automation/webmcp";
+import { platform } from "@/libs/platform/runtime";
+import { DEFAULT_MCP_SERVER } from "@weblink/platform";
+import type {
+  NativeAutomationRequest,
+  McpTokenSummary,
+  McpServerConfig,
+} from "@weblink/platform";
+import type { PeerSession } from "@/libs/domain/session";
+import { sessionService } from "@/libs/application/session-service";
+import { AutomationPermissions } from "@/libs/application/automation/permissions";
+import { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
+import {
+  automationHandlers,
+  diagnosticSources,
+} from "@/libs/application/automation/handlers";
+import { AutomationPeerLink } from "@/libs/application/automation/peer-link";
+import type { AppStateContextProps } from "./app-state-context";
+interface NativeSnapshot {
+  enabled: boolean;
+  endpoint: string;
+  endpoints: string[];
+  server: McpServerConfig;
+  serverPending: boolean;
+  policiesSuspended?: boolean;
+  clients: McpTokenSummary[];
+  grants: Grant[];
+  pending: Approval[];
+  audit: Audit[];
+  jobs: {
+    id: string;
+    principal: string;
+    status: string;
+    exitCode: number | null;
+    truncated: boolean;
+  }[];
+  activeCalls?: string[];
+}
+const empty: NativeSnapshot = {
+  enabled: false,
+  endpoint: "",
+  endpoints: [],
+  server: { ...DEFAULT_MCP_SERVER },
+  serverPending: false,
+  clients: [],
+  grants: [],
+  pending: [],
+  audit: [],
+  jobs: [],
+};
+export type AutomationRuntime = ReturnType<
+  typeof createAutomation
+>;
+const CHANNEL = "weblink-automation/1";
+export function createAutomation(
+  state: AppStateContextProps,
+) {
+  const [enabled, setEnabled] = createSignal(false);
+  const [revision, setRevision] = createSignal(0);
+  const [nativeState, setNativeState] =
+    createSignal<NativeSnapshot>(empty);
+  const [error, setError] = createSignal("");
+  const [ready, setReady] = createSignal(false);
+  const changed = () => setRevision((v) => v + 1);
+  const permissions = new AutomationPermissions(changed);
+  const presentation = new PresentationDiagnostics();
+  const diagnostics = new AutomationDiagnostics(() =>
+    diagnosticSources(state, presentation, platform),
+  );
+  const handle = automationHandlers(
+    state,
+    platform,
+    diagnostics,
+  );
+  const life = new AbortController();
+  const webPrincipal: Principal = {
+    id: createUuid(),
+    label: "WebMCP · current page",
+    kind: "webmcp",
+  };
+  const links = new Map<PeerSession, AutomationPeerLink>();
+  const peerPrincipals = new Map<
+    AutomationPeerLink,
+    Promise<Principal>
+  >();
+  const bindings = new Map<
+    PeerSession,
+    {
+      abort: AbortController;
+      opening: boolean;
+      pc: RTCPeerConnection | null;
+      share: boolean;
+    }
+  >();
+  const authorities = new Map<
+    AutomationPeerLink,
+    {
+      id: string;
+      session: PeerSession;
+      policy: string;
+      pending: Promise<void>;
+    }
+  >();
+  const policyFor = (session: PeerSession) =>
+    readAutomationPolicy(
+      appState.options.clientConfigs[session.targetClientId]
+        ?.automation,
+    );
+  const syncPolicy = (link: AutomationPeerLink) => {
+    const authority = authorities.get(link);
+    if (!authority || !native) return Promise.resolve();
+    const policy = policyFor(authority.session);
+    const key = JSON.stringify(policy);
+    if (key !== authority.policy) {
+      authority.policy = key;
+      authority.pending = authority.pending.then(
+        async () => {
+          link.lifetime.signal.throwIfAborted();
+          if (
+            sessionService.sessions[
+              authority.session.targetClientId
+            ] !== authority.session ||
+            !sessionService.canReceive(
+              authority.session.targetClientId,
+            )
+          ) {
+            throw new AutomationError(
+              "TARGET_DISCONNECTED",
+            );
+          }
+          await native.peerPolicy(
+            epoch,
+            authority.id,
+            policy,
+          );
+        },
+      );
+      void authority.pending.catch((e) => {
+        if (
+          !life.signal.aborted &&
+          !link.lifetime.signal.aborted &&
+          !(
+            e instanceof AutomationError &&
+            e.code === "TARGET_DISCONNECTED"
+          )
+        )
+          setError(String(e));
+        link.close();
+      });
+    }
+    return authority.pending;
+  };
+  const calls = new Map<string, AbortController>();
+  let epoch = "",
+    timer: ReturnType<typeof setTimeout> | undefined,
+    unregister: (() => void) | undefined;
+  const native = platform.automation;
+  let snapshotSequence = 0;
+  const readNativeSnapshot = async () => {
+    const sequence = ++snapshotSequence;
+    const snapshot = (await native!.snapshot(
+      epoch,
+    )) as NativeSnapshot;
+    if (
+      sequence !== snapshotSequence ||
+      life.signal.aborted
+    )
+      return;
+    setNativeState(snapshot);
+    return snapshot;
+  };
+
+  const principal = async (
+    link: AutomationPeerLink,
+    session: PeerSession,
+  ): Promise<Principal> => {
+    const peerId = session.targetClientId;
+    await link.ready;
+    link.lifetime.signal.throwIfAborted();
+    if (
+      sessionService.sessions[peerId] !== session ||
+      !sessionService.canReceive(peerId)
+    )
+      throw new AutomationError("TARGET_DISCONNECTED");
+    let promise = peerPrincipals.get(link);
+    if (!promise) {
+      promise = (async () => {
+        const p: Principal = {
+          id: native
+            ? await native.peer(
+                epoch,
+                sessionService.clientViewData[peerId]
+                  ?.name ?? peerId,
+                link.fingerprint,
+              )
+            : createUuid(),
+          label:
+            sessionService.clientViewData[peerId]?.name ??
+            peerId,
+          kind: "peer" as const,
+          fingerprint: link.fingerprint,
+        };
+        if (native) {
+          authorities.set(link, {
+            id: p.id,
+            session,
+            policy: "",
+            pending: Promise.resolve(),
+          });
+          try {
+            await syncPolicy(link);
+          } catch (e) {
+            authorities.delete(link);
+            await native
+              .disconnect(epoch, p.id)
+              .catch(() => {});
+            throw e;
+          }
+          changed();
+        }
+        return p;
+      })();
+      peerPrincipals.set(link, promise);
+    }
+    const p = await promise;
+    // A setting can change while the preceding native write is in flight.
+    // Wait for the latest policy before admitting another tool call.
+    let pending: Promise<void>;
+    do {
+      pending = syncPolicy(link);
+      await pending;
+    } while (
+      authorities.get(link)?.pending &&
+      authorities.get(link)!.pending !== pending
+    );
+    if (
+      link.lifetime.signal.aborted ||
+      sessionService.sessions[peerId] !== session ||
+      !sessionService.canReceive(peerId)
+    ) {
+      if (native)
+        void native.disconnect(epoch, p.id).catch(() => {});
+      throw new AutomationError("TARGET_DISCONNECTED");
+    }
+    return p;
+  };
+  const route = async (
+    call: ToolCall,
+    signal: AbortSignal,
+    ticket?: string,
+  ): Promise<Record<string, unknown>> => {
+    const check = async () => {
+      signal.throwIfAborted();
+      if (native && ticket)
+        await native.check(epoch, ticket);
+      signal.throwIfAborted();
+    };
+    if (call.arguments.target !== "local") {
+      await check();
+      const session =
+          sessionService.sessions[
+            String(call.arguments.target)
+          ],
+        link = links.get(session);
+      if (!link)
+        throw new AutomationError("TARGET_DISCONNECTED");
+      const result = await link.call(
+        {
+          ...call,
+          arguments: { ...call.arguments, target: "local" },
+        },
+        signal,
+      );
+      if (!result.ok)
+        throw new AutomationError(
+          result.error.code,
+          result.error.message,
+        );
+      return result.data;
+    }
+    return handle(
+      call,
+      signal,
+      native && ticket
+        ? (binding) => native.action(epoch, ticket, binding)
+        : undefined,
+      check,
+    );
+  };
+  const invoke = async (
+    p: Principal,
+    call: ToolCall,
+    signal: AbortSignal = life.signal,
+  ): Promise<ToolResult> => {
+    const operation = combineAbortSignals([
+      signal,
+      life.signal,
+    ]);
+    const cleanups = [operation.dispose];
+    const deadline = new AbortController();
+    const timeout = setTimeout(
+      () => deadline.abort(new AutomationError("TIMEOUT")),
+      270000,
+    );
+    try {
+      if (!enabled()) throw new AutomationError("DISABLED");
+      if (p.kind === "webmcp")
+        call = {
+          ...call,
+          source: { kind: "webmcp", label: p.label },
+        };
+      parseCall(call);
+      const bounded = combineAbortSignals([
+        operation.signal,
+        deadline.signal,
+      ]);
+      cleanups.push(bounded.dispose);
+      signal = bounded.signal;
+      signal.throwIfAborted();
+      if (native && p.kind === "peer") {
+        const id = createUuid();
+        const cancel = () =>
+          void native.cancel(epoch, id).catch(() => {});
+        signal.addEventListener("abort", cancel, {
+          once: true,
+        });
+        try {
+          return (await native.call(
+            epoch,
+            p.id,
+            id,
+            call,
+          )) as ToolResult;
+        } finally {
+          signal.removeEventListener("abort", cancel);
+        }
+      }
+      // WebMCP is a controller. Authority is enforced by the destination desktop.
+      // A browser never accepts incoming peer automation calls.
+      if (p.kind !== "webmcp" || native)
+        throw new AutomationError("UNSUPPORTED");
+      signal.throwIfAborted();
+      const data = await route(call, signal);
+      signal.throwIfAborted();
+      permissions.record(p, call, "ok");
+      return { ok: true, data };
+    } catch (e) {
+      permissions.record(
+        p,
+        call,
+        e instanceof AutomationError ? e.code : "error",
+      );
+      return failure(e);
+    } finally {
+      clearTimeout(timeout);
+      cleanups.forEach((dispose) => dispose());
+    }
+  };
+  const receiveNative = async (
+    request: NativeAutomationRequest,
+  ) => {
+    const controller = new AbortController();
+    calls.set(request.id, controller);
+    const combined = combineAbortSignals([
+      controller.signal,
+      life.signal,
+    ]);
+    const signal = combined.signal;
+    const timeout = setTimeout(
+      () => controller.abort(),
+      150000,
+    );
+    let result: ToolResult;
+    try {
+      if (!enabled()) throw new AutomationError("DISABLED");
+      parseCall(request.call);
+      result = {
+        ok: true,
+        data: await route(request.call, signal, request.id),
+      };
+      signal.throwIfAborted();
+    } catch (e) {
+      result = failure(e);
+    }
+    clearTimeout(timeout);
+    combined.dispose();
+    calls.delete(request.id);
+    await native!
+      .finish(epoch, request.id, result)
+      .catch(() => {});
+  };
+  const bind = (
+    session: PeerSession,
+    channel: RTCDataChannel,
+  ) => {
+    if (
+      !enabled() ||
+      sessionService.sessions[session.targetClientId] !==
+        session ||
+      !sessionService.canReceive(session.targetClientId) ||
+      links.has(session) ||
+      !sessionService.capabilities.get(session)?.automation
+    ) {
+      channel.close();
+      return;
+    }
+    const link: AutomationPeerLink = new AutomationPeerLink(
+      channel,
+      async (call, signal) => {
+        if (
+          !sessionService.canReceive(session.targetClientId)
+        )
+          return failure(
+            new AutomationError("PERMISSION_DENIED"),
+          );
+        if (
+          (call.name.startsWith("screen.") ||
+            call.name.startsWith("control.")) &&
+          !sessionService.canShareScreen(
+            session.targetClientId,
+          )
+        )
+          return failure(
+            new AutomationError("PERMISSION_DENIED"),
+          );
+        return invoke(
+          await principal(link, session),
+          call,
+          signal,
+        );
+      },
+      changed,
+      () => {
+        if (links.get(session) === link)
+          links.delete(session);
+        const promise = peerPrincipals.get(link);
+        peerPrincipals.delete(link);
+        authorities.delete(link);
+        changed();
+        if (promise)
+          void promise
+            .then((p) => {
+              permissions.disconnect(p.id);
+              if (native)
+                return native.disconnect(epoch, p.id);
+            })
+            .catch(() => {});
+      },
+    );
+    links.set(session, link);
+    changed();
+  };
+  const sync = () => {
+    const sessions = Object.values(sessionService.sessions);
+    for (const [session, b] of bindings)
+      if (!enabled() || !sessions.includes(session)) {
+        b.abort.abort();
+        bindings.delete(session);
+        links.get(session)?.close();
+      }
+    if (!enabled()) return;
+    for (const session of sessions) {
+      let b = bindings.get(session);
+      if (!b) {
+        b = {
+          abort: new AbortController(),
+          opening: false,
+          pc: session.peerConnection,
+          share: sessionService.canShareScreen(
+            session.targetClientId,
+          ),
+        };
+        bindings.set(session, b);
+        session.addEventListener(
+          "channel",
+          ({ detail }) => {
+            if (detail.label === CHANNEL) {
+              if (detail.protocol === CHANNEL)
+                bind(session, detail);
+              else detail.close();
+            }
+          },
+          { signal: b.abort.signal },
+        );
+        session.addEventListener(
+          "messagechannelchange",
+          ({ detail }) => {
+            if (detail === "closed")
+              links.get(session)?.close();
+          },
+          { signal: b.abort.signal },
+        );
+      }
+      const currentLink = links.get(session);
+      if (currentLink)
+        void syncPolicy(currentLink).catch(() => {});
+      const share = sessionService.canShareScreen(
+        session.targetClientId,
+      );
+      if (b.share && !share) links.get(session)?.close();
+      b.share = share;
+      if (b.pc !== session.peerConnection) {
+        links.get(session)?.close();
+        b.pc = session.peerConnection;
+      }
+      const capable =
+        sessionService.canReceive(session.targetClientId) &&
+        !!sessionService.capabilities.get(session)
+          ?.automation;
+      if (!capable) {
+        links.get(session)?.close();
+        continue;
+      }
+      if (
+        session.isMessageChannelReady &&
+        session.clientId < session.targetClientId &&
+        !links.has(session) &&
+        !b.opening
+      ) {
+        b.opening = true;
+        const binding = b;
+        void session
+          .createChannel(CHANNEL, CHANNEL)
+          .then((channel) => {
+            if (binding.abort.signal.aborted)
+              channel.close();
+            else bind(session, channel);
+          })
+          .catch(() => {})
+          .finally(() => (binding.opening = false));
+      }
+    }
+  };
+  const refresh = async () => {
+    permissions.expire();
+    untrack(sync);
+    if (native && epoch)
+      try {
+        await native.heartbeat(epoch);
+        const snapshot = await readNativeSnapshot();
+        for (const [id, c] of calls)
+          if (
+            snapshot?.activeCalls &&
+            !snapshot.activeCalls.includes(id)
+          )
+            c.abort();
+      } catch (e) {
+        setError(String(e));
+        setEnabled(false);
+        sessionService.setAutomationEnabled(false);
+        for (const link of [...links.values()])
+          link.close();
+      }
+    if (!life.signal.aborted)
+      timer = setTimeout(() => void refresh(), 1000);
+  };
+  const configure = async (value: boolean) => {
+    setError("");
+    try {
+      if (value && !globalThis.crypto?.subtle)
+        throw new AutomationError(
+          "SECURE_CONTEXT_REQUIRED",
+          "Automation requires HTTPS or localhost",
+        );
+      if (native) {
+        await native.configure(epoch, value);
+        await readNativeSnapshot();
+      }
+      if (life.signal.aborted) {
+        if (native && epoch)
+          await native.close(epoch).catch(() => {});
+        return;
+      }
+      setEnabled(value);
+      sessionService.setAutomationEnabled(value);
+      unregister?.();
+      unregister = undefined;
+      if (value && !native) {
+        const context = webMcpContext(document);
+        if (context)
+          unregister = registerWebMcp(
+            context,
+            (call, signal) =>
+              invoke(webPrincipal, call, signal),
+          );
+      }
+      if (!value) {
+        permissions.stop();
+        for (const c of calls.values()) c.abort();
+        for (const link of [...links.values()])
+          link.close();
+        diagnostics.detail(0);
+      }
+      untrack(sync);
+      setAppState("options", "automationEnabled", value);
+      changed();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  };
+  createEffect(() => {
+    Object.values(sessionService.sessions).forEach((s) => {
+      sessionService.capabilities.get(s);
+      sessionService.canReceive(s.targetClientId);
+      sessionService.canShareScreen(s.targetClientId);
+      JSON.stringify(policyFor(s));
+    });
+    enabled();
+    untrack(sync);
+  });
+  onMount(() => {
+    diagnostics.start();
+    void (async () => {
+      if (native)
+        try {
+          epoch = await native.open((event) => {
+            if (event.kind === "cancel") {
+              calls
+                .get(event.id)
+                ?.abort(new AutomationError("CANCELLED"));
+            } else {
+              void receiveNative(event);
+            }
+          });
+          if (life.signal.aborted) {
+            await native.close(epoch);
+            return;
+          }
+          setNativeState(
+            (await native.snapshot(
+              epoch,
+            )) as NativeSnapshot,
+          );
+        } catch (e) {
+          setError(String(e));
+        }
+      if (life.signal.aborted) return;
+      if (
+        (!native || epoch) &&
+        appState.options.automationEnabled
+      ) {
+        try {
+          await configure(true);
+        } catch {
+          /* Keep the saved preference for the next startup. */
+        }
+      }
+      if (life.signal.aborted) return;
+      setReady(!native || !!epoch);
+      void refresh();
+    })();
+  });
+  onCleanup(() => {
+    life.abort();
+    clearTimeout(timer);
+    unregister?.();
+    permissions.stop();
+    diagnostics.dispose();
+    presentation.clear();
+    for (const b of bindings.values()) b.abort.abort();
+    for (const l of [...links.values()]) l.close();
+    sessionService.setAutomationEnabled(false);
+    if (native && epoch)
+      void native.close(epoch).catch(() => {});
+  });
+  return {
+    presentation,
+    enabled,
+    configuredEnabled: () =>
+      appState.options.automationEnabled,
+    ready,
+    error,
+    configure,
+    configureServer: async (config: McpServerConfig) => {
+      if (!native) throw new AutomationError("UNSUPPORTED");
+      await native.configureServer(epoch, config);
+      const snapshot = await readNativeSnapshot();
+      return snapshot?.server ?? config;
+    },
+    desktop: !!native,
+    webSupported: () => !!webMcpContext(document),
+    snapshot: () => {
+      revision();
+      return native
+        ? nativeState()
+        : {
+            ...empty,
+            enabled: enabled(),
+            grants: [],
+            pending: [],
+            audit: permissions.audit.slice(),
+          };
+    },
+    peers: () => {
+      revision();
+      return [...links].map(([s, l]) => ({
+        id: s.targetClientId,
+        name:
+          sessionService.clientViewData[s.targetClientId]
+            ?.name ?? s.targetClientId,
+        code:
+          l.fingerprint
+            .slice(0, 12)
+            .match(/.{1,4}/g)
+            ?.join("-") ?? "…",
+      }));
+    },
+    principalPeerId: (id: string) => {
+      revision();
+      return [...authorities.values()].find(
+        (authority) => authority.id === id,
+      )?.session.targetClientId;
+    },
+    decide: async (id: string, minutes: number) => {
+      if (native) await native.decide(epoch, id, minutes);
+      else permissions.decide(id, minutes);
+      if (native) await readNativeSnapshot();
+    },
+    revoke: async (id?: string) => {
+      if (native) await native.revoke(epoch, id);
+      else if (id) permissions.revoke(id);
+      else permissions.stop();
+      if (native) await readNativeSnapshot();
+    },
+    stop: async () => {
+      permissions.stop();
+      for (const c of calls.values()) c.abort();
+      for (const l of [...links.values()]) l.close();
+      if (native) await native.revoke(epoch);
+      diagnostics.detail(0);
+    },
+    client: async (
+      label: string,
+      expiresAt: number | null,
+    ) => {
+      const result = await native!.client(
+        epoch,
+        label,
+        expiresAt,
+      );
+      await readNativeSnapshot();
+      return result;
+    },
+    updateClient: async (
+      id: string,
+      label: string,
+      expiresAt: number | null,
+    ) => {
+      await native!.updateClient(
+        epoch,
+        id,
+        label,
+        expiresAt,
+      );
+      await readNativeSnapshot();
+    },
+    removeClient: async (id: string) => {
+      await native!.removeClient(epoch, id);
+      await readNativeSnapshot();
+    },
+    export: () => {
+      const samples: unknown[] = [];
+      let after = 0;
+      while (true) {
+        const page = diagnostics.read(after);
+        samples.push(...(page.samples as unknown[]));
+        if (!page.hasMore) break;
+        after = Number(page.nextCursor);
+      }
+      return {
+        format: "weblink-diagnostics/1",
+        ...diagnostics.snapshot(),
+        samples,
+      };
+    },
+    toolCount: tools.length,
+  };
+}

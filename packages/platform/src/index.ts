@@ -1,4 +1,7 @@
 export * from "./recording";
+export type * from "./automation";
+export { DEFAULT_MCP_SERVER } from "./automation";
+import type { NativeAutomation } from "./automation";
 export * from "./recording-audio-codec";
 import type { InputDeviceSnapshot } from "./input";
 import type {
@@ -60,6 +63,7 @@ export type FileConflictResolver = (
 ) => Promise<FileConflictAction | null>;
 
 export interface PlatformRuntime {
+  readonly automation?: NativeAutomation;
   readonly filesystem?: NativeFileSystem;
   /** Open local content with the system default application. */
   openFile?(file: StoredFile): Promise<void>;
@@ -536,7 +540,22 @@ export interface NativeSendCodecs {
   video: string;
   audio: string;
 }
+export interface NativePipelineStats {
+  frames: number;
+  inputSize: [number, number];
+  readbackSize: [number, number];
+  gpuScaled: boolean;
+  scaleFallback: string | null;
+  peers: number;
+  hardwareEncoders: number;
+  encoders: Record<string, unknown>[];
+  peerErrors: string[];
+  [stage: string]: unknown;
+}
 export interface NativeScreenShare {
+  pipelineStats?(
+    sessionId: string,
+  ): Promise<NativePipelineStats>;
   /** Direct sender frames, with PCM audio fallback; no local peer. */
   subscribeRecording?(
     sessionId: string,
@@ -607,3 +626,4 @@ export interface NativeScreenShare {
     peerId: string,
   ): Promise<void>;
 }
+export type * from "./accessibility";

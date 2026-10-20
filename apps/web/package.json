@@ -42,6 +42,7 @@
     "test:e2e:notifications": "bun scripts/run-browser-check.mjs --notifications",
     "test:e2e:hmr": "node scripts/run-hmr-check.mjs",
     "test:e2e:recording": "node scripts/run-browser-check.mjs --recording",
+    "test:e2e:automation": "bun scripts/run-browser-check.mjs --automation",
     "test:e2e:device-trust": "bun scripts/run-browser-check.mjs --device-trust"
   },
   "dependencies": {
@@ -83,7 +84,8 @@
     "uuid": "^11.1.0",
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",
-    "workbox-window": "^7.3.0"
+    "workbox-window": "^7.3.0",
+    "@weblink/automation": "workspace:*"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",

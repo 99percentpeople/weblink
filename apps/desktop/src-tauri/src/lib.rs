@@ -4,6 +4,7 @@ use tauri::{
 };
 use tauri_plugin_opener::OpenerExt;
 mod application;
+mod automation;
 mod capabilities;
 mod capture;
 mod capture_recording;
@@ -21,6 +22,7 @@ mod staged_files;
 mod updates;
 
 fn shutdown(app: &tauri::AppHandle) {
+    app.state::<automation::Shared>().shutdown();
     app.state::<file_save::Service>().clear();
     app.state::<filesystem::Service>().clear_page();
     clipboard::shutdown();
@@ -88,6 +90,7 @@ pub fn run() {
         .manage(std::sync::Arc::new(remote_control::Service::default()))
         .manage(std::sync::Arc::new(keyboard::Service::default()))
         .manage(application::Service::default())
+        .manage(std::sync::Arc::new(automation::Service::default()))
         .manage(picture_in_picture::Service::default())
         .plugin(tauri_plugin_autostart::Builder::new().args(["--autostart"]).build())
         .plugin(
@@ -97,6 +100,26 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             capabilities::runtime_capabilities,
+            automation::automation_open,
+            automation::automation_heartbeat,
+            automation::automation_close,
+            automation::automation_configure,
+            automation::automation_server_configure,
+            automation::automation_snapshot,
+            automation::automation_client,
+            automation::automation_client_update,
+            automation::automation_client_remove,
+            automation::automation_disconnect,
+            automation::automation_peer,
+            automation::automation_peer_policy,
+            automation::automation_decide,
+            automation::automation_revoke,
+            automation::automation_call,
+            automation::automation_cancel,
+            automation::automation_check,
+            automation::automation_finish,
+            automation::automation_action,
+
             filesystem::commands::vfs_volumes,
             filesystem::commands::vfs_pick_directory,
             filesystem::commands::vfs_open_directory,

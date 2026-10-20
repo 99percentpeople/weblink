@@ -77,6 +77,22 @@ impl Backend for NativeBackend {
             }),
         }
     }
+    fn window_bounds(&self, source: &CaptureSource) -> Result<crate::geometry::PixelRect> {
+        window::bounds(source)
+    }
+    fn snapshot(
+        &self,
+        source: &CaptureSource,
+        bounds: &crate::geometry::PixelRect,
+    ) -> Result<Vec<u8>> {
+        match source.kind {
+            SourceKind::Monitor => screen::thumbnail(source),
+            SourceKind::Window => crate::surface::thumbnail::capture_sized(
+                |frames| window::start(source, CaptureMethod::Wgc, frames),
+                Some((bounds.width, bounds.height)),
+            ),
+        }
+    }
     fn start(
         &self,
         source: &CaptureSource,

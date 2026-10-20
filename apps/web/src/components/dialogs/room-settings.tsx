@@ -1,7 +1,7 @@
-import { SettingSwitch } from "@/components/settings/setting-controls";
 import {
   SettingBlock,
   SettingHeading,
+  SettingGroup,
   SettingSection,
 } from "@/components/settings/setting-layout";
 import { ConversationActions } from "@/components/conversations/conversation-actions";
@@ -9,7 +9,6 @@ import { appState } from "@/libs/state/app-state";
 import { resolveRoomConfig } from "@/libs/state/app-options";
 import { setRoomConfig } from "@/options";
 import { t } from "@/i18n";
-import { Show } from "solid-js";
 import { PermissionSelect } from "@/components/settings/permission-select";
 
 export function RoomSettings(props: {
@@ -38,7 +37,6 @@ export function RoomSettings(props: {
 
 export function RoomPermissions(props: {
   conversationId: string;
-  control?: "switch" | "select";
 }) {
   const config = () =>
     resolveRoomConfig(
@@ -46,45 +44,31 @@ export function RoomPermissions(props: {
       props.conversationId,
     );
   return (
-    <div class="setting-group">
-      <Show
-        when={props.control !== "select"}
-        fallback={
-          <PermissionSelect<"allowed" | "disallowed">
-            label={t("room_dialog.auto_download.title")}
-            description={t(
-              "room_dialog.auto_download.description",
-            )}
-            options={["allowed", "disallowed"]}
-            value={
-              config().autoDownloadFiles
-                ? "allowed"
-                : "disallowed"
-            }
-            optionLabel={(decision) =>
-              t(`setting.permissions.${decision}`)
-            }
-            onChange={(decision) =>
-              setRoomConfig(props.conversationId, {
-                autoDownloadFiles: decision === "allowed",
-              })
-            }
-          />
-        }
+    <SettingSection>
+      <SettingGroup
+        title={t("setting.permissions.groups.content")}
       >
-        <SettingSwitch
+        <PermissionSelect<"allowed" | "disallowed">
           label={t("room_dialog.auto_download.title")}
           description={t(
             "room_dialog.auto_download.description",
           )}
-          checked={config().autoDownloadFiles}
-          onChange={(enabled) =>
+          options={["allowed", "disallowed"]}
+          value={
+            config().autoDownloadFiles
+              ? "allowed"
+              : "disallowed"
+          }
+          optionLabel={(decision) =>
+            t(`setting.permissions.${decision}`)
+          }
+          onChange={(decision) =>
             setRoomConfig(props.conversationId, {
-              autoDownloadFiles: enabled,
+              autoDownloadFiles: decision === "allowed",
             })
           }
         />
-      </Show>
-    </div>
+      </SettingGroup>
+    </SettingSection>
   );
 }

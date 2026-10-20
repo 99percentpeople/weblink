@@ -903,3 +903,140 @@ fn interrupted_input_requires_fresh_activation_without_another_approval() {
     assert!(e.status().grant.is_none());
     assert!(!e.renew(&g, now));
 }
+
+struct WindowCheck {
+    focused: std::sync::atomic::AtomicBool,
+    available: std::sync::atomic::AtomicBool,
+    outside: std::sync::atomic::AtomicBool,
+    checks: std::sync::atomic::AtomicUsize,
+    fail_after: std::sync::atomic::AtomicUsize,
+}
+impl WindowCheck {
+    fn new() -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            focused: true.into(),
+            available: true.into(),
+            outside: false.into(),
+            checks: 0.into(),
+            fail_after: usize::MAX.into(),
+        })
+    }
+}
+impl weblink_desktop_input::window::WindowGuard for WindowCheck {
+    fn check(&self, point: Option<(i32, i32)>) -> Result<(), Error> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if !self.available.load(SeqCst) {
+            return Err(Error::WindowUnavailable);
+        }
+        if !self.focused.load(SeqCst)
+            || self.checks.fetch_add(1, SeqCst) >= self.fail_after.load(SeqCst)
+        {
+            return Err(Error::WindowFocusLost);
+        }
+        if point.is_some() && self.outside.load(SeqCst) {
+            return Err(Error::WindowPointOutside);
+        }
+        Ok(())
+    }
+    fn activate(&self) -> Result<(), Error> {
+        self.check(None)
+    }
+}
+#[test]
+fn window_binding_rejects_held_input_and_rebinding_without_release() {
+    let (mut e, _, g, now) = setup();
+    let window = WindowCheck::new();
+    e.input(&g, key(true), now).unwrap();
+    assert_eq!(e.bind_window(&g, window.clone(), now), Err(Error::Invalid));
+    e.input(&g, key(false), now).unwrap();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    assert!(e.status().window_bound);
+    assert_eq!(e.bind_window(&g, window.clone(), now), Err(Error::Invalid));
+    e.revoke();
+    assert!(!e.status().window_bound);
+    assert_eq!(e.bind_window(&g, window, now), Err(Error::Unauthorized));
+}
+#[test]
+fn idle_window_focus_loss_releases_held_keys_and_blocks_queued_input() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut e, f, g, now) = setup();
+    let window = WindowCheck::new();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    e.input(&g, key(true), now).unwrap();
+    window.focused.store(false, SeqCst);
+    e.tick(now + Duration::from_millis(50));
+    assert!(e.status().input_suspended);
+    assert_eq!(f.0.borrow().actions.last(), Some(&key_held().up()));
+    let before = f.0.borrow().actions.len();
+    window.focused.store(true, SeqCst);
+    assert_eq!(e.input(&g, key(true), now), Err(Error::Unauthorized));
+    assert_eq!(f.0.borrow().actions.len(), before);
+    e.revoke();
+    let consent = pending(&mut e, "new-window-lease", now);
+    e.approve(&consent, now).unwrap();
+    let next = e.status().grant.unwrap();
+    assert!(!e.status().window_bound);
+    e.bind_window(&next, window, now).unwrap();
+    assert_eq!(e.input(&g, key(true), now), Err(Error::Unauthorized));
+    e.input(&next, key(true), now).unwrap();
+}
+#[test]
+fn destroyed_or_obscured_windows_stop_mouse_before_injection() {
+    use std::sync::atomic::Ordering::SeqCst;
+    for destroyed in [false, true] {
+        let (mut e, f, g, now) = setup();
+        let window = WindowCheck::new();
+        e.bind_window(&g, window.clone(), now).unwrap();
+        if destroyed {
+            window.available.store(false, SeqCst);
+        } else {
+            window.outside.store(true, SeqCst);
+        }
+        let before = f.0.borrow().actions.len();
+        assert_eq!(
+            e.input(
+                &g,
+                Event::Button {
+                    position: Position { x: 0.5, y: 0.5 },
+                    button: Button::Left,
+                    down: true
+                },
+                now
+            ),
+            Err(if destroyed {
+                Error::WindowUnavailable
+            } else {
+                Error::WindowPointOutside
+            })
+        );
+        assert_eq!(f.0.borrow().actions.len(), before);
+        assert!(e.status().input_suspended);
+    }
+}
+#[test]
+fn window_focus_is_checked_between_unicode_submissions() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut e, f, g, now) = setup();
+    let window = WindowCheck::new();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    window.checks.store(0, SeqCst);
+    window.fail_after.store(2, SeqCst); // event check, first character; stop before the second
+    assert_eq!(
+        e.input(&g, Event::Text("AB".into()), now),
+        Err(Error::WindowFocusLost)
+    );
+    assert_eq!(
+        f.0.borrow().actions,
+        vec![
+            Action::Unicode {
+                unit: 65,
+                down: true
+            },
+            Action::Unicode {
+                unit: 65,
+                down: false
+            }
+        ]
+    );
+    assert!(e.status().input_suspended);
+}

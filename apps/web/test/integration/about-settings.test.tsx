@@ -125,7 +125,6 @@ beforeEach(() => {
   setAppState("options", {
     backgroundImage: "wallpaper",
     backgroundPreset: "linen",
-    redirectToClient: "peer",
     clientConfigs: { peer: { provideFileList: false } },
     autoDownloadMaxSize: 1024,
     roomConfigs: {
@@ -223,7 +222,6 @@ it("only resets after confirmation and removes old optional and per-room values 
   expect(appState.options).toEqual(getDefaultAppOptions());
   expect(appState.options.backgroundImage).toBeUndefined();
   expect(appState.options.backgroundPreset).toBeUndefined();
-  expect(appState.options.redirectToClient).toBeUndefined();
   expect(appState.message.conversations).toHaveLength(1);
   expect(appState.cache.cacheInfo.file.fileName).toBe(
     "keep.txt",

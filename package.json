@@ -60,7 +60,8 @@
     "sync:watch": "bun --env-file=.env scripts/sync.mjs --watch",
     "test:e2e:notifications": "bun run --cwd apps/web test:e2e:notifications",
     "test:e2e:hmr": "bun run --cwd apps/web test:e2e:hmr",
-    "test:e2e:recording": "bun run --cwd apps/web test:e2e:recording"
+    "test:e2e:recording": "bun run --cwd apps/web test:e2e:recording",
+    "test:e2e:automation": "bun run --cwd apps/web test:e2e:automation"
   },
   "lint-staged": {
     "**/*.{js,jsx,mjs,ts,tsx,css,html,json,md,yml,yaml}": [

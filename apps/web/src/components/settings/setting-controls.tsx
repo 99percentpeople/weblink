@@ -38,11 +38,41 @@ import {
   SliderValueLabel,
 } from "@/components/ui/slider";
 import { ShortcutInput } from "@/components/ui/shortcut-input";
+import { Input } from "@/components/ui/input";
 import {
   SettingField,
   SettingRow,
   type SettingContent,
 } from "./setting-layout";
+
+export function SettingInput(
+  props: SettingContent & ComponentProps<typeof Input>,
+) {
+  const [local, control] = splitProps(props, [
+    "id",
+    "label",
+    "description",
+    "hint",
+  ]);
+  return (
+    <SettingField
+      id={local.id}
+      label={local.label}
+      description={local.description}
+      hint={local.hint}
+      disabled={control.disabled}
+    >
+      {(ids) => (
+        <Input
+          {...control}
+          id={ids.id}
+          aria-labelledby={ids.labelId}
+          aria-describedby={ids.descriptionId}
+        />
+      )}
+    </SettingField>
+  );
+}
 
 export function SettingSwitch(
   props: SettingContent & Omit<SwitchRootProps, "children">,

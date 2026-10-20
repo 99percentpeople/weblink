@@ -484,26 +484,6 @@ export default function Home() {
       { defer: true },
     ),
   );
-  createEffect(
-    on(
-      () => {
-        const id = appState.options.redirectToClient;
-        return id && appState.session.clientViewData[id]
-          ? id
-          : undefined;
-      },
-      (id) => {
-        if (id)
-          selectConversation(
-            directConversationId(
-              appState.profile.clientId,
-              id,
-            ),
-            { replace: true },
-          );
-      },
-    ),
-  );
   const mediaRoute = createMediaHashRoute(
     () => routeLocation.hash,
   );

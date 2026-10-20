@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/desktop/src-tauri", "crates/desktop-capture", "crates/desktop-input"]
+members = ["apps/desktop/src-tauri", "crates/desktop-capture", "crates/desktop-input", "crates/desktop-accessibility"]
 exclude = ["vender/rust-sdks"]
 resolver = "2"
 

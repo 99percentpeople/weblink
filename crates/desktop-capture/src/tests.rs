@@ -17,6 +17,9 @@ struct Fake {
     frame_events: Option<mpsc::Sender<Arc<Mutex<Frames>>>>,
     monitor: Rc<Cell<bool>>,
     displays: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
+    mapped_layout: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
+    mapped_window: Rc<RefCell<Option<geometry::PixelRect>>>,
+    window_rect: Rc<RefCell<Option<geometry::PixelRect>>>,
     #[cfg(windows)]
     snapshot: Rc<RefCell<Option<Vec<u8>>>>,
 }
@@ -67,6 +70,21 @@ impl Backend for Fake {
             .borrow()
             .clone()
             .ok_or_else(|| "Display query failed".into())
+    }
+    fn window_bounds(&self, _: &CaptureSource) -> Result<geometry::PixelRect> {
+        self.window_rect
+            .borrow()
+            .clone()
+            .ok_or_else(|| "no window".into())
+    }
+    fn snapshot(&self, _: &CaptureSource, _: &geometry::PixelRect) -> Result<Vec<u8>> {
+        if let Some(layout) = self.mapped_layout.borrow_mut().take() {
+            self.displays.replace(Some(layout));
+        }
+        if let Some(bounds) = self.mapped_window.borrow_mut().take() {
+            self.window_rect.replace(Some(bounds));
+        }
+        Ok(vec![1, 2, 3])
     }
     #[cfg(windows)]
     fn thumbnail(&self, source: &CaptureSource) -> Result<Vec<u8>> {
@@ -708,4 +726,46 @@ fn automatic_display_capture_can_fallback_but_explicit_choice_cannot() {
         .stop(&status.session_id.unwrap(), Instant::now())
         .unwrap();
     assert_eq!(fake.stops.get(), 1);
+}
+
+#[test]
+fn mapped_snapshot_rejects_changed_layout_and_window_bounds() {
+    let (mut engine, fake) = setup();
+    fake.monitor.set(true);
+    let bounds = geometry::PixelRect {
+        left: -1920,
+        top: 0,
+        width: 1920,
+        height: 1080,
+    };
+    let display = geometry::DisplayGeometry {
+        source_id: "selected".into(),
+        bounds: bounds.clone(),
+        rotation: 0,
+        scale_percent: Some(150),
+    };
+    fake.displays.replace(Some(vec![display.clone()]));
+    let shot = engine.snapshot("selected").unwrap();
+    assert_eq!(shot.bounds, bounds);
+    assert_eq!(shot.image, vec![1, 2, 3]);
+    assert_eq!(
+        shot.layout.revision,
+        engine.display_layout().unwrap().revision
+    );
+    assert!(engine.snapshot("arbitrary-handle").is_err());
+    let mut changed = display.clone();
+    changed.scale_percent = Some(200);
+    fake.mapped_layout.replace(Some(vec![changed]));
+    assert!(matches!(engine.snapshot("selected"),Err(e) if e=="GEOMETRY_CHANGED"));
+    fake.monitor.set(false);
+    fake.window_rect.replace(Some(bounds.clone()));
+    assert_eq!(engine.snapshot("selected").unwrap().bounds, bounds);
+    let mut moved = bounds.clone();
+    moved.left += 100;
+    fake.mapped_window.replace(Some(moved));
+    assert!(matches!(engine.snapshot("selected"),Err(e) if e=="GEOMETRY_CHANGED"));
+    let mut invalid = bounds;
+    invalid.width = 0;
+    fake.window_rect.replace(Some(invalid));
+    assert!(engine.snapshot("selected").is_err());
 }

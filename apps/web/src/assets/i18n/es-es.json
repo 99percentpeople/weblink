@@ -475,7 +475,12 @@
       "remove_title": "¿Eliminar historial de permisos?",
       "remove_description": "¿Eliminar los permisos guardados de «{{name}}» y esta entrada? Se conservará el historial de chat.",
       "delete_requires_disconnect": "Desconecta de este cliente antes de eliminar su historial de permisos.",
-      "allow_permanently": "Always allow"
+      "allow_permanently": "Always allow",
+      "groups": {
+        "identity": "Verificación y emparejamiento",
+        "content": "Contenido y archivos",
+        "sharing": "Pantalla y control remoto"
+      }
     },
     "application": {
       "wake_lock": {
@@ -596,10 +601,6 @@
       "open": "Configuración del cliente",
       "preferences": "Configuración del cliente",
       "preferences_description": "Esta configuración se aplica sólo a este cliente.",
-      "redirect": {
-        "title": "Redirigir después de la conexión",
-        "description": "Abra el chat de este cliente automáticamente después de que se conecte. Sólo un cliente puede ser el objetivo de redireccionamiento a la vez."
-      },
       "provide_file_list": {
         "title": "Proporcionar lista de archivos",
         "description": "Permita que este cliente enumere los archivos completados en el caché local. Cuando están deshabilitadas, las solicitudes de lista de archivos devuelven una lista vacía; el chat, los envíos directos de archivos y las transferencias existentes no se ven afectados."
@@ -1205,7 +1206,8 @@
     "settings_remote_control": "Control remoto",
     "settings_permissions": "Clientes y salas",
     "settings_application": "Aplicación",
-    "settings_notifications": "Notificaciones"
+    "settings_notifications": "Notificaciones",
+    "settings_automation": "Automation"
   },
   "file_library": {
     "search": "Buscar archivos…",
@@ -1504,5 +1506,108 @@
     "receive_description": "Controla mensajes, archivos, portapapeles y audio/vídeo de este dispositivo. Al desactivarlo, se detiene la recepción y se mantiene la conexión.",
     "share_screen": "Compartir pantalla",
     "share_description": "Permite enviar vídeo y audio locales a este dispositivo, incluido el contenido compartido actualmente. Debes iniciar la sesión de pantalla compartida en este equipo."
+  },
+  "automation": {
+    "no_tokens": "No local MCP tokens.",
+    "token_once": "Copy this configuration now. The full token is shown only once; only its hash is stored. Tool permissions still require desktop approval.",
+    "edit_token": "Edit token",
+    "expired": "Expired",
+    "created_at": "Created at",
+    "expires_at": "Expires at",
+    "permanent": "Never expires",
+    "custom_expiry": "Custom expiration",
+    "days": "days",
+    "token_lifetime": "Token validity",
+    "title": "Automation",
+    "policies_paused": "Always-allow policies are paused. Turn automation off and on to resume, or approve individual timed requests.",
+    "device_permissions_description": "Los permisos de automatización se guardan automáticamente y se conservan al reconectar. Solo se aplican tras verificar el emparejamiento y siguen sujetos a los permisos de recepción de contenido y de compartir pantalla.",
+    "description": "Connect AI tools to Weblink with separate permissions. The automation switch remembers its last state.",
+    "enable": "Enable automation",
+    "desktop": "Standard MCP runs on this desktop. Weblink peers connect over P2P.",
+    "browser": "WebMCP controls connected desktops. Permissions are checked on the destination desktop.",
+    "unsupported": "This browser does not support WebMCP. Use a supporting browser as the controller.",
+    "stop": "Stop all automation",
+    "export": "Export diagnostics",
+    "requests": "Approval requests",
+    "no_requests": "No pending requests.",
+    "target": "Target",
+    "compare": "Compare this code on the requesting device",
+    "verified": "The codes match",
+    "shell_warning": "This grants arbitrary Shell execution as your OS account for the selected duration. Commands can change files and system state; revocation cannot undo completed changes.",
+    "duration": "Duration",
+    "minutes": "minutes",
+    "allow": "Allow session",
+    "deny": "Deny",
+    "grants": "Active permissions",
+    "revoke": "Revoke",
+    "pair_description": "Manage remote automation in each device’s permission settings. Temporary grants end on disconnect; always-allow policies apply after device verification.",
+    "peers": "Connected devices",
+    "credentials_description": "Tokens authenticate MCP clients independently of remote device permissions. Create and manage them even when automation is off; they persist across restarts.",
+    "clients": "Local MCP tokens",
+    "client_name": "Token name",
+    "create_client": "Create token",
+    "hide": "Hide credential",
+    "jobs": "Command tasks",
+    "audit": "Recent calls",
+    "scopes": {
+      "diagnostics_read": "Read diagnostics",
+      "screen_read": "Read screens and screenshots",
+      "screen_manage": "Start and stop sharing",
+      "screen_configure": "Change streaming parameters",
+      "input_control": "Control keyboard, mouse and application UI",
+      "shell_execute": "Execute Shell commands",
+      "accessibility_read": "Read application accessibility trees"
+    },
+    "reported_source": "Reported entrypoint (device identity is verified separately)",
+    "input_warning": "Desktop control can operate terminals and applications, including through accessibility actions across the desktop. This is not a Shell sandbox.",
+    "accessibility_warning": "Window names and control labels may contain private information. Password controls are redacted.",
+    "session_control": "Session control",
+    "stop_description": "Cancel tasks and revoke automation grants while keeping the service running. Always-allow policies pause until automation is turned off and on again.",
+    "diagnostics": "Diagnostics",
+    "export_description": "Export stream statistics and a redacted diagnostic report.",
+    "peer": "Remote device",
+    "arguments": "Request arguments",
+    "no_grants": "No active permissions.",
+    "no_peers": "No connected automation devices.",
+    "no_jobs": "No command tasks.",
+    "no_audit": "No recent calls.",
+    "server": "MCP server",
+    "server_description": "Streamable HTTP for MCP clients. Settings are saved automatically; changing the listening address takes effect the next time automation is enabled. Existing tokens remain valid.",
+    "server_status": "Service status",
+    "server_active": "Running",
+    "server_inactive": "Stopped",
+    "endpoint": "MCP connection URL",
+    "server_host": "Host",
+    "server_port": "Port",
+    "server_host_description": "Use localhost or an IPv4 / IPv6 address. 127.0.0.1 limits access to this computer; 0.0.0.0 or :: listens on all interfaces. Other computers must use this desktop’s actual IP address.",
+    "server_port_description": "Default port: 32100. Use a value from 1 to 65535.",
+    "server_invalid_host": "Enter localhost or a valid IPv4 / IPv6 address, without a scheme, path or port.",
+    "server_invalid_port": "Enter a port from 1 to 65535. The default is 32100.",
+    "token_created": "Token created",
+    "server_apply_description": "Listening settings apply on the next start. Current connections and running tasks remain active.",
+    "server_pending": "Listening settings have changed. The current connection URL remains active until automation is turned off and on again.",
+    "settings_auto_description": "Text fields save when you leave them; selections save immediately.",
+    "saving": "Saving…",
+    "settings_saved": "Saved automatically.",
+    "token_invalid": "Enter a token name and a future expiration date, or choose Never expires.",
+    "token_endpoint_pending": "The connection URL is currently unavailable. Copy the token now and check the URL in MCP server settings.",
+    "server_reset": "Restore default host and port",
+    "token_reset": "Restore default validity (30 days)",
+    "permissions": {
+      "read": {
+        "title": "Lectura y diagnóstico",
+        "description": "Leer el estado de dispositivos y transmisiones, capturas de pantalla y contenido de aplicaciones, que pueden incluir información sensible."
+      },
+      "control": {
+        "title": "Compartir y controlar",
+        "description": "Gestionar la pantalla compartida y la transmisión, y controlar aplicaciones con teclado, ratón y acciones de accesibilidad."
+      },
+      "terminal": {
+        "title": "Terminal y comandos",
+        "description": "Ejecutar comandos de Shell, leer su salida y gestionar tareas con los privilegios de la cuenta actual del sistema."
+      }
+    },
+    "mixed_permissions": "Configuración individual existente",
+    "review_request": "Revisar solicitud"
   }
 }

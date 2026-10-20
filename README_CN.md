@@ -265,3 +265,7 @@ NSIS 安装包须在 Windows 上构建。仓库结构见[工作区文档](docs/W
   <strong>Weblink</strong><br />
   用浏览器控制桌面，分享文件与实时画面。
 </div>
+
+## 自动化
+
+支持 WebMCP 的浏览器与桌面端标准 MCP 服务共用工具目录，提供授权控制、Shell 任务和串流诊断。可在「设置 → 自动化」启用，详见[自动化与权限](docs/AUTOMATION.md)。
