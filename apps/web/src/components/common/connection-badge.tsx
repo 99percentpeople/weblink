@@ -1,26 +1,14 @@
-import { Component, Show } from "solid-js";
+import { Component } from "solid-js";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { Badge } from "@/components/ui/badge";
-import { t } from "@/i18n";
+import { clientStatusLabel } from "./client-status-label";
 
 export const ConnectionBadge: Component<{
   client?: ClientInfo;
 }> = (props) => {
   return (
     <Badge class="text-xs" variant="secondary">
-      <Show
-        when={props.client?.onlineStatus}
-        fallback={t("common.status.leave")}
-      >
-        {(status) => (
-          <span>
-            {props.client?.trust &&
-            props.client.trust !== "trusted"
-              ? t(`device_trust.${props.client.trust}`)
-              : t(`common.status.${status()}`)}
-          </span>
-        )}
-      </Show>
+      <span>{clientStatusLabel(props.client)}</span>
     </Badge>
   );
 };

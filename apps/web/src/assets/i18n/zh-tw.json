@@ -1308,6 +1308,8 @@
     "connection_timeout": "連線至房間伺服器逾時，請檢查網路後重試。",
     "connection_closed": "連線已中斷，請重新連線後重試。",
     "connection_config": "房間伺服器位址或設定無效，請檢查連線設定。",
+    "peer_connection_config": "瀏覽器無法套用連線設定，請重新整理頁面後再試。",
+    "peer_connection_failed": "無法連線至此裝置，請重試。",
     "unsupported_protocol": "此功能的通訊協定版本不相容，請更新雙方用戶端。",
     "connection_response": "伺服器回應異常，請檢查伺服器位址，或更新應用程式及伺服器後重試。",
     "password_required": "此房間需要密碼，請輸入密碼後重試。",

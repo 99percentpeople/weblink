@@ -151,10 +151,10 @@ describe("PeerSession lifecycle", () => {
       attachPeerConnection(session, pc);
       await sendOffer(session);
       expect(pc.setConfiguration).toHaveBeenCalledWith({
-        ...configuration,
         iceServers: credentials,
         iceTransportPolicy: "relay",
       });
+      expect(pc.getConfiguration).not.toHaveBeenCalled();
       expect(
         pc.setConfiguration.mock.invocationCallOrder[0],
       ).toBeLessThan(
@@ -163,6 +163,171 @@ describe("PeerSession lifecycle", () => {
       );
     }
     expect(loadIceServers).toHaveBeenCalledTimes(2);
+    session.close();
+  });
+
+  it.each(["offer", "answer"] as const)(
+    "does not rewrite unchanged ICE options before a local %s even when the browser rejects configuration writes",
+    async (type) => {
+      const servers: RTCIceServer[] = [
+        {
+          urls: "turn:relay",
+          username: "user",
+          credential: "credential",
+        },
+      ];
+      const session = new PeerSession(
+        makeSender("local", "remote"),
+        {
+          iceServers: servers,
+          loadIceServers: async () => [
+            {
+              credential: "credential",
+              username: "user",
+              urls: ["turn:relay"],
+            },
+          ],
+        },
+      );
+      const pc = Object.assign(
+        makePeerConnection(async () => ({
+          type,
+          sdp: "sdp",
+        })),
+        {
+          getConfiguration: vi.fn(() => ({
+            iceServers: servers,
+          })),
+          setConfiguration: vi.fn(() => {
+            throw new DOMException(
+              "Unsupported configuration modification",
+              "InvalidModificationError",
+            );
+          }),
+          setRemoteDescription: vi.fn(async () => {}),
+        },
+      );
+      attachPeerConnection(session, pc);
+      try {
+        if (type === "offer") await sendOffer(session);
+        else {
+          vi.stubGlobal(
+            "RTCSessionDescription",
+            class {
+              constructor(init: RTCSessionDescriptionInit) {
+                Object.assign(this, init);
+              }
+            },
+          );
+          await (session as any).negotiation.enqueueSignal({
+            type: "offer",
+            data: { sdp: "sdp", generation: "remote" },
+          });
+          expect(
+            pc.setRemoteDescription,
+          ).toHaveBeenCalledOnce();
+        }
+        expect(
+          pc.setLocalDescription,
+        ).toHaveBeenCalledOnce();
+        expect(pc.setConfiguration).not.toHaveBeenCalled();
+        expect(pc.getConfiguration).not.toHaveBeenCalled();
+      } finally {
+        session.close();
+      }
+    },
+  );
+
+  it("preserves the last applied ICE options and original cause when a credential refresh fails", async () => {
+    const servers: RTCIceServer[] = [
+      {
+        urls: "turn:relay",
+        username: "u",
+        credential: "old",
+      },
+    ];
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      {
+        iceServers: servers,
+        loadIceServers: async () => servers,
+      },
+    );
+    // Mutating a cached loader result must still be detected as a change.
+    servers[0].credential = "new";
+    const cause = new DOMException(
+      "Unsupported configuration modification",
+      "InvalidModificationError",
+    );
+    const pc = Object.assign(
+      makePeerConnection(async () => ({
+        type: "offer",
+        sdp: "sdp",
+      })),
+      {
+        setConfiguration: vi
+          .fn()
+          .mockImplementationOnce(() => {
+            throw cause;
+          }),
+      },
+    );
+    attachPeerConnection(session, pc);
+    try {
+      await expect(
+        sendOffer(session),
+      ).rejects.toMatchObject({
+        name: "PeerConnectionConfigurationError",
+        code: "peer-connection-config",
+        cause,
+      });
+      expect(pc.setLocalDescription).not.toHaveBeenCalled();
+      await sendOffer(session);
+      expect(pc.setConfiguration).toHaveBeenCalledTimes(2);
+      expect(pc.setConfiguration).toHaveBeenLastCalledWith({
+        iceServers: servers,
+        iceTransportPolicy: "all",
+      });
+      expect(pc.setLocalDescription).toHaveBeenCalledOnce();
+    } finally {
+      session.close();
+    }
+  });
+
+  it("ignores ICE credentials that finish loading after the connection was replaced", async () => {
+    let finish!: (servers: RTCIceServer[]) => void;
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      {
+        loadIceServers: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
+    );
+    const old = Object.assign(
+      makePeerConnection(async () => ({
+        type: "offer",
+        sdp: "old",
+      })),
+      { setConfiguration: vi.fn() },
+    );
+    attachPeerConnection(session, old);
+    const offer = sendOffer(session);
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    const current = Object.assign(
+      makePeerConnection(async () => ({
+        type: "offer",
+        sdp: "current",
+      })),
+      { setConfiguration: vi.fn() },
+    );
+    attachPeerConnection(session, current);
+    finish([{ urls: "stun:stale" }]);
+    await offer;
+    expect(old.setConfiguration).not.toHaveBeenCalled();
+    expect(current.setConfiguration).not.toHaveBeenCalled();
+    expect((session as any).iceServers).toEqual([]);
     session.close();
   });
 

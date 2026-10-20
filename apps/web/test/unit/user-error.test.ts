@@ -5,6 +5,7 @@ import tw from "@/assets/i18n/zh-tw.json";
 import { userErrorMessage } from "@/libs/user-error";
 import { P2PProtocolError } from "@/libs/domain/protocol/errors";
 import { DirectoryWriteError } from "@/libs/domain/vfs";
+import { PeerConnectionConfigurationError } from "@/libs/domain/ice-configuration";
 
 const language = vi.hoisted(() => ({ current: "zh-cn" }));
 const dictionaries = {
@@ -99,6 +100,21 @@ describe.each(Object.keys(dictionaries))(
       );
     });
     it.each([
+      [
+        new PeerConnectionConfigurationError(
+          new DOMException(
+            "Unsupported configuration modification",
+            "InvalidModificationError",
+          ),
+        ),
+        "peer_connection_config",
+      ],
+      [
+        new Error(
+          "[PeerSession] connect timeout: after 10000ms",
+        ),
+        "connection_timeout",
+      ],
       [
         new Error("Room is already open in another tab"),
         "room_in_use",

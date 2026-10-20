@@ -297,7 +297,7 @@ export function ClientInfoPanel(props: {
                   toast.error(
                     userErrorMessage(
                       error,
-                      "errors.member_offline",
+                      "errors.peer_connection_failed",
                     ),
                   );
               }}

@@ -1308,6 +1308,8 @@
     "connection_timeout": "Se agotó el tiempo de conexión al servidor de sala. Verifique su red e inténtelo nuevamente.",
     "connection_closed": "La conexión fue interrumpida. Vuelve a conectarte y vuelve a intentarlo.",
     "connection_config": "La dirección o configuración del servidor de sala no es válida. Verifique la configuración de conexión.",
+    "peer_connection_config": "El navegador no pudo aplicar la configuración de conexión. Recarga la página e inténtalo de nuevo.",
+    "peer_connection_failed": "No se pudo conectar con este dispositivo. Inténtalo de nuevo.",
     "unsupported_protocol": "Esta función no tiene una versión de protocolo compatible. Actualiza ambos clientes.",
     "connection_response": "El servidor devolvió una respuesta no válida. Verifique su dirección o actualice la aplicación y el servidor.",
     "password_required": "Esta sala requiere una contraseña. Introdúcela y vuelve a intentarlo.",

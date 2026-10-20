@@ -1308,6 +1308,8 @@
     "connection_timeout": "Zeitüberschreitung beim Herstellen der Verbindung zum Raumserver. Überprüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
     "connection_closed": "Die Verbindung wurde unterbrochen. Stellen Sie die Verbindung wieder her und versuchen Sie es erneut.",
     "connection_config": "Die Adresse oder Konfiguration des Raumservers ist ungültig. Überprüfen Sie die Verbindungseinstellungen.",
+    "peer_connection_config": "Der Browser konnte die Verbindungseinstellungen nicht anwenden. Lade die Seite neu und versuche es erneut.",
+    "peer_connection_failed": "Verbindung mit diesem Gerät fehlgeschlagen. Versuche es erneut.",
     "unsupported_protocol": "Für diese Funktion gibt es keine kompatible Protokollversion. Aktualisiere beide Clients.",
     "connection_response": "Der Server hat eine ungültige Antwort zurückgegeben. Überprüfen Sie die Adresse oder aktualisieren Sie die App und den Server.",
     "password_required": "Für diesen Raum ist ein Passwort erforderlich. Geben Sie es ein und versuchen Sie es erneut.",

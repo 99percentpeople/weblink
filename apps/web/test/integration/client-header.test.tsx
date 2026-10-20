@@ -27,6 +27,7 @@ import { createSignal, type JSX } from "solid-js";
 import { ClientHeader } from "@/routes/client/[id]/components/client-header";
 import clientInfoDialog from "@/components/dialogs/client-info-dialog";
 import type { Client } from "@/libs/domain/client";
+import type { ClientInfo } from "@/libs/state/app-state";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/components/dialogs/client-info-dialog", () => ({
@@ -62,6 +63,7 @@ function renderHeader(
   const [client, setClient] = createSignal<
     Client | undefined
   >(initialClient);
+  const [info, setInfo] = createSignal<ClientInfo>();
   const result = render(() => (
     <MemoryRouter history={history}>
       <Route
@@ -75,6 +77,7 @@ function renderHeader(
             <ClientHeader
               clientId={params.id}
               client={client()}
+              info={info()}
               view={
                 params.view === "chat" ? "chat" : "sync"
               }
@@ -84,8 +87,33 @@ function renderHeader(
       />
     </MemoryRouter>
   ));
-  return { ...result, history, setClient };
+  return { ...result, history, setClient, setInfo };
 }
+
+it("shows connection recovery instead of a verification label until the message channel is ready", () => {
+  const { setInfo } = renderHeader("chat");
+  setInfo({
+    ...peer,
+    createdAt: 1,
+    onlineStatus: "reconnecting",
+    messageChannel: false,
+    trust: "verifying",
+  });
+  expect(
+    screen.getByText("common.status.reconnecting"),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("device_trust.verifying"),
+  ).toBeNull();
+  setInfo((previous) => ({
+    ...previous!,
+    onlineStatus: "online",
+    messageChannel: true,
+  }));
+  expect(
+    screen.getByText("device_trust.verifying"),
+  ).toBeTruthy();
+});
 
 beforeEach(() => {
   vi.stubGlobal("scrollTo", vi.fn());

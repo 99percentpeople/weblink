@@ -1327,6 +1327,8 @@
     "connection_timeout": "连接房间服务器超时，请检查网络后重试。",
     "connection_closed": "连接已中断，请重新连接后重试。",
     "connection_config": "房间服务器地址或配置无效，请检查连接设置。",
+    "peer_connection_config": "浏览器无法应用连接配置，请刷新页面后重试。",
+    "peer_connection_failed": "无法连接到此设备，请重试。",
     "unsupported_protocol": "此功能的协议版本不兼容，请更新双方客户端。",
     "connection_response": "服务器响应异常，请检查服务器地址，或更新应用和服务器后重试。",
     "password_required": "此房间需要密码，请输入密码后重试。",

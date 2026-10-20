@@ -32,7 +32,7 @@ const messages: readonly [RegExp, ErrorKey][] = [
     "errors.incorrect_password",
   ],
   [
-    /^(connection|join acknowledgement) timeout$/i,
+    /^(?:(connection|join acknowledgement) timeout|connect timeout: after \d+ms)$/i,
     "errors.connection_timeout",
   ],
   [
@@ -200,6 +200,8 @@ export function userErrorMessage(
   );
   if (known) return t(known[1]);
   switch (value?.code) {
+    case "peer-connection-config":
+      return t("errors.peer_connection_config");
     case "timeout":
     case "send-timeout":
       return t("errors.request_timeout");

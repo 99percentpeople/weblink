@@ -1308,6 +1308,8 @@
     "connection_timeout": "채팅방 서버 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.",
     "connection_closed": "연결이 중단되었습니다. 다시 연결하고 다시 시도해 보세요.",
     "connection_config": "채팅방 서버 주소 또는 구성이 잘못되었습니다. 연결 설정을 확인하세요.",
+    "peer_connection_config": "브라우저가 연결 설정을 적용하지 못했습니다. 페이지를 새로 고침한 후 다시 시도하세요.",
+    "peer_connection_failed": "이 기기에 연결하지 못했습니다. 다시 시도하세요.",
     "unsupported_protocol": "이 기능과 호환되는 프로토콜 버전이 없습니다. 양쪽 클라이언트를 업데이트하세요.",
     "connection_response": "서버가 잘못된 응답을 반환했습니다. 주소를 확인하거나 앱과 서버를 업데이트하세요.",
     "password_required": "이 방에는 비밀번호가 필요합니다. 입력하고 다시 시도하세요.",

@@ -1327,6 +1327,8 @@
     "connection_timeout": "Connecting to the room server timed out. Check your network and try again.",
     "connection_closed": "The connection was interrupted. Reconnect and try again.",
     "connection_config": "The room server address or configuration is invalid. Check the connection settings.",
+    "peer_connection_config": "The browser could not apply the connection settings. Refresh the page and try again.",
+    "peer_connection_failed": "Could not connect to this device. Try again.",
     "unsupported_protocol": "This feature has no compatible protocol version. Update both clients.",
     "connection_response": "The server returned an invalid response. Check its address or update the app and server.",
     "password_required": "This room requires a password. Enter it and try again.",

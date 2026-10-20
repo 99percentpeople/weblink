@@ -28,6 +28,7 @@ import type { ClientID } from "@/libs/domain/ids";
 import type { ClientInfo } from "@/libs/state/app-state";
 import { cn } from "@/libs/cn";
 import { ConversationHeader } from "@/components/conversations/conversation-header";
+import { clientStatusLabel } from "@/components/common/client-status-label";
 
 const HeaderLink: Component<ComponentProps<typeof A>> = (
   props,
@@ -68,13 +69,7 @@ export const ClientHeader: Component<{
       data-slot="client-header"
       title={name()}
       avatar={client()?.avatar}
-      subtitle={
-        props.info?.trust && props.info.trust !== "trusted"
-          ? t(`device_trust.${props.info.trust}`)
-          : t(
-              `common.status.${props.info?.onlineStatus ?? "leave"}`,
-            )
-      }
+      subtitle={clientStatusLabel(props.info)}
       embedded={props.embedded}
       onBack={props.onBack}
       class={cn(

@@ -19,6 +19,10 @@ import {
 import type { MessageSendOptions } from "./protocol/errors";
 import { PeerNegotiationController } from "./peer-negotiation";
 import {
+  PeerConnectionConfigurationError,
+  sameIceServers,
+} from "./ice-configuration";
+import {
   PeerSessionLifecycleController,
   type PeerSessionStatus,
 } from "./session-lifecycle";
@@ -131,7 +135,7 @@ export class PeerSession {
     this.acceptsContent = acceptsContent;
     this.allowsApplication = allowsApplication;
     this.polite = polite;
-    this.iceServers = iceServers ?? [];
+    this.iceServers = structuredClone(iceServers ?? []);
     this.relayOnly = relayOnly;
     this.getRuntimeOptions = getRuntimeOptions;
     this.negotiation = new PeerNegotiationController({
@@ -149,14 +153,26 @@ export class PeerSession {
               this.status === "closed"
             )
               return;
-            this.iceServers = servers;
-            pc.setConfiguration({
-              ...pc.getConfiguration(),
-              iceServers: servers,
-              iceTransportPolicy: this.relayOnly
-                ? "relay"
-                : "all",
-            });
+            // Both construction and refresh use our requested ICE options.
+            // Browser-returned configuration can contain immutable/internal
+            // fields which cannot safely be round-tripped through this API.
+            if (sameIceServers(this.iceServers, servers))
+              return;
+            const next = structuredClone(servers);
+            try {
+              pc.setConfiguration({
+                iceServers: next,
+                iceTransportPolicy: this.relayOnly
+                  ? "relay"
+                  : "all",
+              });
+            } catch (error) {
+              throw new PeerConnectionConfigurationError(
+                error,
+              );
+            }
+            // Failed/stale refreshes must not poison replacement connections.
+            this.iceServers = next;
           }
         : undefined,
     });
