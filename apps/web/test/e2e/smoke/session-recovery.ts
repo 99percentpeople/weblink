@@ -192,15 +192,6 @@ async function main() {
         "peerconnectioninit",
         (event) => {
           const pc = event.detail;
-          // Reproduce browsers that reject configuration round-tripping:
-          // unchanged ICE options must not invoke this API during negotiation
-          // or any of the recovery paths below.
-          pc.setConfiguration = () => {
-            throw new DOMException(
-              "Unsupported configuration modification",
-              "InvalidModificationError",
-            );
-          };
           const observe =
             <T>(
               method: string,

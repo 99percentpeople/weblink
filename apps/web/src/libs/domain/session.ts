@@ -18,10 +18,7 @@ import {
 } from "@/libs/domain/protocol/messages";
 import type { MessageSendOptions } from "./protocol/errors";
 import { PeerNegotiationController } from "./peer-negotiation";
-import {
-  PeerConnectionConfigurationError,
-  sameIceServers,
-} from "./ice-configuration";
+import { PeerConnectionConfigurationError } from "./ice-configuration";
 import {
   PeerSessionLifecycleController,
   type PeerSessionStatus,
@@ -135,7 +132,7 @@ export class PeerSession {
     this.acceptsContent = acceptsContent;
     this.allowsApplication = allowsApplication;
     this.polite = polite;
-    this.iceServers = structuredClone(iceServers ?? []);
+    this.iceServers = iceServers ?? [];
     this.relayOnly = relayOnly;
     this.getRuntimeOptions = getRuntimeOptions;
     this.negotiation = new PeerNegotiationController({
@@ -153,15 +150,11 @@ export class PeerSession {
               this.status === "closed"
             )
               return;
-            // Both construction and refresh use our requested ICE options.
-            // Browser-returned configuration can contain immutable/internal
-            // fields which cannot safely be round-tripped through this API.
-            if (sameIceServers(this.iceServers, servers))
-              return;
-            const next = structuredClone(servers);
+            this.iceServers = servers;
             try {
               pc.setConfiguration({
-                iceServers: next,
+                ...pc.getConfiguration(),
+                iceServers: servers,
                 iceTransportPolicy: this.relayOnly
                   ? "relay"
                   : "all",
@@ -171,8 +164,6 @@ export class PeerSession {
                 error,
               );
             }
-            // Failed/stale refreshes must not poison replacement connections.
-            this.iceServers = next;
           }
         : undefined,
     });
