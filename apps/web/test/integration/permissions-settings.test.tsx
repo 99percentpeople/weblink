@@ -36,7 +36,10 @@ import { summarizeConversations } from "@/libs/application/messaging/conversatio
 
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
-    trust: { get: () => ({ state: "trusted" }) },
+    trust: {
+      get: () => ({ state: "trusted" }),
+      pairing: () => undefined,
+    },
   },
 }));
 const fixture = vi.hoisted(() => ({
