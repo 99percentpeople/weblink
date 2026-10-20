@@ -986,6 +986,14 @@ mod tests {
                 let retained = retained_owner.encoder().unwrap();
                 *failed.error.lock().unwrap() = Some(format!("controlled encoder failure {cycle}"));
                 media.reap_failed_encoders();
+                // A capture worker may have claimed this failure first. Wait
+                // for its cleanup, then require exactly one report per cycle.
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while media.pipeline_stats().peer_errors.len() <= cycle && Instant::now() < deadline
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                assert_eq!(media.pipeline_stats().peer_errors.len(), cycle + 1);
                 assert!(media.error().is_none());
                 assert!(!media.closed.load(std::sync::atomic::Ordering::Acquire));
                 assert!(media.hardware.encoder("failed").is_none());
@@ -995,6 +1003,139 @@ mod tests {
                 media.close_peer("retained");
             }
             assert_eq!(media.pipeline_stats().peer_errors.len(), 4);
+            media.close();
+        });
+    }
+
+    #[test]
+    fn concurrent_reaping_claims_each_failed_consumer_once_without_retiring_recordings() {
+        let pool = Arc::new(super::super::encoding_pool::Pool::default());
+        let acquire = |id: &str, backend: &str, recording| {
+            pool.acquire(
+                id.into(),
+                backend.into(),
+                MediaOptions {
+                    max_bitrate: 300_000,
+                    ..Default::default()
+                },
+                false,
+                recording,
+                Arc::new(|| {}),
+            )
+            .unwrap()
+        };
+        let first = acquire("first", "test-bad", false);
+        let second = acquire("second", "test-bad", false);
+        let recording = acquire("recording", "test-bad", true);
+        let retained = acquire("retained", "test-good", false);
+        let failed = first.encoder().unwrap();
+        assert!(Arc::ptr_eq(&failed, &second.encoder().unwrap()));
+        assert!(Arc::ptr_eq(&failed, &recording.encoder().unwrap()));
+        *failed.error.lock().unwrap() = Some("controlled failure".into());
+        let start = Arc::new(std::sync::Barrier::new(8));
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let pool = pool.clone();
+                let start = start.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    pool.take_failed_peers()
+                })
+            })
+            .collect();
+        let failures: Vec<_> = workers
+            .into_iter()
+            .flat_map(|worker| worker.join().unwrap())
+            .collect();
+        assert_eq!(failures.len(), 2);
+        assert_eq!(failures.iter().filter(|f| f.matches(&first)).count(), 1);
+        assert_eq!(failures.iter().filter(|f| f.matches(&second)).count(), 1);
+        assert!(failures.iter().all(|f| f.error == "controlled failure"));
+        assert!(pool.take_failed_peers().is_empty());
+        assert!(first.encoder().is_none());
+        assert!(second.encoder().is_none());
+        assert!(recording.encoder().is_some());
+        assert!(retained.encoder().is_some());
+        assert!(failed.worker.lock().unwrap().is_some());
+
+        let replacement = acquire("first", "test-bad", false);
+        assert!(failures.iter().all(|f| !f.matches(&replacement)));
+        first.close();
+        assert!(replacement.encoder().is_some());
+        assert!(!Arc::ptr_eq(&failed, &replacement.encoder().unwrap()));
+        recording.close();
+        assert!(failed.worker.lock().unwrap().is_none());
+        assert!(retained.encoder().is_some());
+        pool.close();
+    }
+
+    #[test]
+    fn stale_encoder_failure_cannot_close_a_replacement_peer_with_the_same_id() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            use super::super::{encoding_pool::Pool, ice, MediaPeer, MediaSession};
+            use libwebrtc::peer_connection_factory::RtcConfiguration;
+
+            let media = MediaSession::new(MediaOptions {
+                encoder: "software".into(),
+                ..Default::default()
+            })
+            .unwrap();
+            // Use an independent pool so the capture workers cannot consume the
+            // failure before this test delays its delivery to the media session.
+            let pool = Arc::new(Pool::default());
+            let acquire = || {
+                pool.acquire(
+                    "reconnecting".into(),
+                    "test".into(),
+                    MediaOptions::default(),
+                    false,
+                    false,
+                    Arc::new(|| {}),
+                )
+                .unwrap()
+            };
+            let old = acquire();
+            *old.encoder().unwrap().error.lock().unwrap() = Some("old failure".into());
+            let failure = pool.take_failed_peers().pop().unwrap();
+            let replacement = acquire();
+            let connection = media
+                .factory
+                .create_peer_connection(RtcConfiguration::default())
+                .unwrap();
+            let gathering = Arc::new(ice::Gathering::new());
+            media.peers.lock().unwrap().insert(
+                "reconnecting".into(),
+                MediaPeer {
+                    _factory: media.factory.clone(),
+                    encoding: MediaOptions::default(),
+                    connection: connection.clone(),
+                    gathering,
+                    preview: false,
+                    raw_video: false,
+                    control: None,
+                    recording: None,
+                    recording_audio: None,
+                    encoded: Some(replacement.clone()),
+                },
+            );
+            media.close_failed_encoder(&failure);
+            assert!(media.peers.lock().unwrap().contains_key("reconnecting"));
+            assert!(replacement.encoder().is_some());
+            assert_ne!(
+                connection.connection_state(),
+                libwebrtc::peer_connection::PeerConnectionState::Closed
+            );
+
+            // A matching failure still closes the owning transport.
+            *replacement.encoder().unwrap().error.lock().unwrap() = Some("new failure".into());
+            let current = pool.take_failed_peers().pop().unwrap();
+            media.close_failed_encoder(&current);
+            assert!(!media.peers.lock().unwrap().contains_key("reconnecting"));
+            assert_eq!(
+                connection.connection_state(),
+                libwebrtc::peer_connection::PeerConnectionState::Closed
+            );
             media.close();
         });
     }

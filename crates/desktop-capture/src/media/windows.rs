@@ -446,17 +446,38 @@ impl MediaSession {
     }
 
     fn reap_failed_encoders(&self) {
-        let failed = self.hardware.failed_peers();
-        for (id, error) in failed {
+        let failed = self.hardware.take_failed_peers();
+        for failure in failed {
             // One receiver's transform is not the capture's lifetime. Closing its
             // transport activates that receiver's bounded reconnection path.
-            self.close_peer(&id);
+            self.close_failed_encoder(&failure);
             let mut errors = self.peer_errors.lock().unwrap_or_else(|e| e.into_inner());
             if errors.len() >= 16 {
                 errors.pop_front();
             }
-            errors.push_back(error);
+            errors.push_back(failure.error);
         }
+    }
+
+    fn close_failed_encoder(&self, failure: &encoding_pool::FailedPeer) {
+        let peer = {
+            let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+            if peers
+                .get(&failure.id)
+                .and_then(|peer| peer.encoded.as_ref())
+                .is_some_and(|consumer| failure.matches(consumer))
+            {
+                peers.remove(&failure.id)
+            } else {
+                None
+            }
+        };
+        // A replacement can already use the same peer ID. Never release by ID
+        // here: the pool has retired only the failed consumer's unique token.
+        if let Some(peer) = peer {
+            peer.close();
+        }
+        self.wake_capture();
     }
 
     pub fn pipeline_stats(&self) -> super::pipeline::PipelineStats {

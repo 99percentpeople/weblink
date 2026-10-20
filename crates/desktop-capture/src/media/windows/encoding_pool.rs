@@ -33,6 +33,50 @@ struct State {
     slots: HashMap<u64, Slot>,
     groups: HashMap<Key, Weak<hardware::Encoder>>,
 }
+struct Retired {
+    token: u64,
+    slot: Slot,
+    last: bool,
+}
+impl State {
+    fn remove(&mut self, token: u64) -> Option<Retired> {
+        let slot = self.slots.remove(&token)?;
+        let last = !self
+            .slots
+            .values()
+            .any(|other| Arc::ptr_eq(&slot.encoder, &other.encoder));
+        if last {
+            self.groups.retain(|_, group| {
+                group
+                    .upgrade()
+                    .is_some_and(|group| !Arc::ptr_eq(&group, &slot.encoder))
+            });
+        }
+        Some(Retired { token, slot, last })
+    }
+}
+impl Retired {
+    fn close(self) {
+        self.slot.encoder.detach(self.token);
+        if let Some(output) = self.slot.output {
+            output.source.set_rate_control_wakeup(None);
+            output.replace(); // Reject a frame already copied out of the old group's list.
+        }
+        if self.last {
+            self.slot.encoder.close();
+        }
+    }
+}
+pub(super) struct FailedPeer {
+    pub id: String,
+    pub error: String,
+    token: u64,
+}
+impl FailedPeer {
+    pub fn matches(&self, consumer: &Consumer) -> bool {
+        self.token == consumer.token
+    }
+}
 #[derive(Default)]
 pub(super) struct Pool {
     state: Mutex<State>,
@@ -153,34 +197,13 @@ impl Pool {
         Ok(encoder)
     }
     fn release(&self, token: u64) {
-        let (slot, last) = {
-            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            let slot = state.slots.remove(&token);
-            let last = slot.as_ref().is_some_and(|slot| {
-                !state
-                    .slots
-                    .values()
-                    .any(|other| Arc::ptr_eq(&slot.encoder, &other.encoder))
-            });
-            if last {
-                let encoder = &slot.as_ref().unwrap().encoder;
-                state.groups.retain(|_, group| {
-                    group
-                        .upgrade()
-                        .is_some_and(|group| !Arc::ptr_eq(&group, encoder))
-                });
-            }
-            (slot, last)
-        };
-        if let Some(slot) = slot {
-            slot.encoder.detach(token);
-            if let Some(output) = slot.output {
-                output.source.set_rate_control_wakeup(None);
-                output.replace(); // Reject a frame already copied out of the old group's list.
-            }
-            if last {
-                slot.encoder.close();
-            }
+        let retired = self
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(token);
+        if let Some(retired) = retired {
+            retired.close();
         }
     }
     pub fn release_peer(&self, id: &str) {
@@ -216,15 +239,34 @@ impl Pool {
         }
         encoders
     }
-    pub fn failed_peers(&self) -> Vec<(String, String)> {
-        self.state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .slots
-            .values()
-            .filter(|s| !s.recording)
-            .filter_map(|s| s.encoder.error().map(|error| (s.id.clone(), error)))
-            .collect()
+    pub fn take_failed_peers(&self) -> Vec<FailedPeer> {
+        let (failed, retired) = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            let failed: Vec<_> = state
+                .slots
+                .iter()
+                .filter(|(_, slot)| !slot.recording)
+                .filter_map(|(token, slot)| {
+                    slot.encoder.error().map(|error| FailedPeer {
+                        id: slot.id.clone(),
+                        error,
+                        token: *token,
+                    })
+                })
+                .collect();
+            // CPU and GPU capture can observe the same failure concurrently.
+            // Claim the exact consumers before releasing the pool lock.
+            let retired: Vec<_> = failed
+                .iter()
+                .filter_map(|f| state.remove(f.token))
+                .collect();
+            (failed, retired)
+        };
+        // Native callbacks and worker joins must run outside the pool lock.
+        for retired in retired {
+            retired.close();
+        }
+        failed
     }
     pub fn statistics(&self) -> Vec<crate::media::latency::EncoderPipelineStats> {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
