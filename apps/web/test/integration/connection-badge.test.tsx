@@ -41,7 +41,8 @@ it("only reports identity verification after transport and message channel are r
   ).toBeInTheDocument();
   setClient({
     onlineStatus: "offline",
-    messageChannel: false,
+    // Offline wins even before the old message channel is marked closed.
+    messageChannel: true,
     trust: "verifying",
   });
   expect(

@@ -8,15 +8,28 @@
     "untrusted": "不可信设备",
     "trusted": "已验证设备",
     "offline": "设备离线，无法验证",
-    "blocked_description": "权限已关闭，核对配对码并重新配对后恢复默认权限。",
-    "pairing_code": "配对码",
-    "confirm_code": "已核对两端配对码一致",
+    "blocked_description": "权限已关闭，重新配对后恢复默认权限。",
     "repair": "重新配对",
-    "proof_required": "等待设备验证。请确认双方版本支持配对，并使用安全连接。",
     "receive_content": "接收内容",
     "receive_description": "接收此设备的消息、文件、剪贴板和音视频。关闭后立即停止接收。",
     "share_screen": "分享画面",
-    "share_description": "允许此设备接收本机画面和音频，仍需先开始共享。"
+    "share_description": "允许此设备接收本机画面和音频，仍需先开始共享。",
+    "pairing_request": "{{name}} 请求配对",
+    "incoming_request": "此设备请求重新配对。",
+    "confirm_description": "同意后信任当前连接，并恢复默认权限。",
+    "waiting_confirmation": "等待对方确认",
+    "saving_pairing": "正在保存配对",
+    "accept": "同意配对",
+    "reject": "拒绝",
+    "cancel": "取消",
+    "failure": {
+      "rejected": "对方已拒绝配对。",
+      "cancelled": "配对已取消。",
+      "timeout": "配对请求已超时，请重试。",
+      "disconnected": "连接不可用，请重新连接后重试。",
+      "invalid": "配对请求无效，请重试。",
+      "storage": "无法保存配对，请重试。"
+    }
   },
   "tasks": {
     "error_details": "错误详情",

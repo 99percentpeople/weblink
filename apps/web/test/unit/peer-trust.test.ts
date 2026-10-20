@@ -9,6 +9,31 @@ import type { PeerSession } from "@/libs/domain/session";
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { IdentityProof } from "@/libs/domain/device-identity/handshake";
 import type { PairingCredentials } from "@/libs/domain/device-identity/credentials";
+import type { PairingRequest } from "@/libs/domain/device-identity/manual-pairing";
+const manualHooks = vi.hoisted(
+  () =>
+    [] as {
+      changed(request: PairingRequest): void;
+      accepting(): void;
+      commit(fingerprint: string): Promise<void>;
+      paired(fingerprint: string): void;
+    }[],
+);
+vi.mock(
+  "@/libs/domain/device-identity/manual-pairing",
+  async (original) => ({
+    ...(await original<object>()),
+    ManualPairing: class {
+      constructor(
+        _channel: unknown,
+        options: (typeof manualHooks)[number],
+      ) {
+        manualHooks.push(options);
+      }
+      close() {}
+    },
+  }),
+);
 const hooks = vi.hoisted(
   () =>
     [] as {
@@ -20,12 +45,14 @@ const hooks = vi.hoisted(
 vi.mock("@/libs/domain/device-identity/handshake", () => ({
   DeviceHandshake: class {
     constructor(
-      _channel: unknown,
+      private readonly channel: RTCDataChannel,
       options: (typeof hooks)[number],
     ) {
       hooks.push(options);
     }
-    close() {}
+    close() {
+      this.channel.close();
+    }
     async trust() {}
   },
 }));
@@ -33,7 +60,75 @@ const cleanup: (() => void)[] = [];
 afterEach(() => {
   cleanup.splice(0).forEach((f) => f());
   hooks.length = 0;
+  manualHooks.length = 0;
   vi.useRealTimers();
+});
+
+it("ignores stale automatic verification/failure after an explicit manual approval", async () => {
+  const h = setup({
+    fingerprint: "old-key",
+    blocked: true,
+  });
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  h.events.dispatchEvent("channel", {
+    label: "weblink-device-pairing/1",
+    protocol: "weblink-device-pairing/1",
+    close() {},
+  });
+  const manual = manualHooks[0];
+  manual.changed({ id: "local-action", state: "incoming" });
+  manual.accepting();
+  let release!: () => void;
+  vi.mocked(h.store.pair).mockImplementationOnce(
+    async (id, value) => {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      h.pins.set(id, value);
+    },
+  );
+  const committed = manual.commit("confirmed-key");
+  await vi.waitFor(() => expect(release).toBeDefined());
+  hooks[0].failed();
+  hooks[0].verified(proof);
+  hooks[0].interrupted();
+  release();
+  await committed;
+  manual.paired("confirmed-key");
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.pins.get("b")).toEqual({
+    fingerprint: "confirmed-key",
+    blocked: false,
+  });
+  expect(h.reset).not.toHaveBeenCalled();
+  expect(h.paired).toHaveBeenCalledOnce();
+});
+
+it("does not apply a manual commit queued for a disconnected binding to its replacement", async () => {
+  const h = setup({
+    fingerprint: "old-key",
+    blocked: true,
+  });
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  h.events.dispatchEvent("channel", {
+    label: "weblink-device-pairing/1",
+    protocol: "weblink-device-pairing/1",
+    close() {},
+  });
+  const manual = manualHooks[0];
+  manual.accepting();
+  h.events.dispatchEvent(
+    "peerconnectioninit",
+    h.session.peerConnection,
+  );
+  await expect(manual.commit("stale-key")).rejects.toThrow(
+    "PAIRING_CONNECTION_CHANGED",
+  );
+  manual.paired("stale-key");
+  expect(h.service.trusted("b")).toBe(false);
+  expect(h.pins.get("b")?.fingerprint).toBe("old-key");
+  expect(h.store.pair).not.toHaveBeenCalled();
+  expect(h.paired).not.toHaveBeenCalled();
 });
 function setup(pin?: DevicePin) {
   const pins = new Map<string, DevicePin>();
@@ -68,7 +163,15 @@ function setup(pin?: DevicePin) {
       remoteDescription: { sdp },
     },
     addEventListener: events.addEventListener.bind(events),
-    createChannel: async () => ({ close() {} }),
+    createChannel: async (
+      _label: string,
+      _protocol: string,
+      available?: (channel: RTCDataChannel) => void,
+    ) => {
+      const channel = { close() {} } as RTCDataChannel;
+      available?.(channel);
+      return channel;
+    },
   } as unknown as PeerSession;
   const close = service.bind(session);
   cleanup.push(close);
@@ -85,7 +188,6 @@ function setup(pin?: DevicePin) {
 }
 const proof = {
   fingerprint: "new-key",
-  code: "1234567890abcdef",
   remotePairingKnown: false,
 };
 it("automatically pairs a new device only after verification and durable storage", async () => {
@@ -111,10 +213,8 @@ it("automatically pairs a new device only after verification and durable storage
     expect(h.service.trusted("b")).toBe(true),
   );
   await expect(
-    h.service.pair("b", proof.fingerprint, "stale-code"),
+    h.service.requestPairing("b"),
   ).rejects.toThrow("PAIRING_NOT_READY");
-  // A repeated UI/API request must not replace the newly exchanged keys.
-  await h.service.pair("b", proof.fingerprint, proof.code);
   expect(h.pins.get("b")).toEqual({
     fingerprint: proof.fingerprint,
     blocked: false,
@@ -144,17 +244,7 @@ it("quarantines a mismatching key persistently; even the old key needs re-pairin
   );
   expect(h.service.trusted("b")).toBe(false);
   expect(h.paired).not.toHaveBeenCalled();
-  await expect(
-    h.service.pair("b", "old-key", "stale-code"),
-  ).rejects.toThrow("PAIRING_NOT_READY");
-  await Promise.all([
-    h.service.pair("b", "old-key", proof.code),
-    h.service.pair("b", "old-key", proof.code),
-  ]);
-  expect(h.service.trusted("b")).toBe(true);
-  expect(h.store.pair).toHaveBeenCalledOnce();
-  expect(h.paired).toHaveBeenCalledOnce();
-  expect(h.paired).toHaveBeenCalledWith("b");
+  expect(h.store.pair).not.toHaveBeenCalled();
 });
 it("retains permissions for the remembered valid key and ignores a duplicate binding", async () => {
   const h = setup({
@@ -174,15 +264,8 @@ it("retains permissions for the remembered valid key and ignores a duplicate bin
   expect(h.service.trusted("b")).toBe(true);
 });
 it("cannot restore trust from an old verification or pairing completion", async () => {
-  const h = setup({
-    fingerprint: "old-key",
-    blocked: false,
-  });
+  const h = setup();
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
-  hooks[0].verified(proof);
-  await vi.waitFor(() =>
-    expect(h.service.get("b")?.state).toBe("untrusted"),
-  );
   let release!: () => void;
   vi.mocked(h.store.pair).mockImplementationOnce(
     async (id, value) => {
@@ -192,19 +275,14 @@ it("cannot restore trust from an old verification or pairing completion", async 
       h.pins.set(id, value);
     },
   );
-  const pairing = h.service.pair(
-    "b",
-    proof.fingerprint,
-    proof.code,
-  );
-  const rejected = expect(pairing).rejects.toThrow(
-    "PAIRING_CONNECTION_CHANGED",
-  );
+  hooks[0].verified(proof);
   await vi.waitFor(() => expect(release).toBeDefined());
   hooks[0].failed();
   hooks[0].verified(proof);
   release();
-  await rejected;
+  await vi.waitFor(() =>
+    expect(h.paired).toHaveBeenCalledOnce(),
+  );
   await vi.waitFor(() =>
     expect(h.pins.get("b")?.blocked).toBe(true),
   );
@@ -278,16 +356,46 @@ it("retries a stalled channel creation without clearing saved permissions", asyn
   await vi.advanceTimersByTimeAsync(0);
   expect(h.service.trusted("b")).toBe(true);
 });
-it("retains a valid pairing decision when transport closes during its storage commit", async () => {
+it("owns and closes a connecting identity channel before retrying verification", async () => {
+  vi.useFakeTimers();
   const h = setup({
-    fingerprint: "old-key",
+    fingerprint: proof.fingerprint,
     blocked: false,
   });
+  await vi.advanceTimersByTimeAsync(0);
+  const channel = {
+    readyState: "connecting",
+    close: vi.fn(),
+  } as unknown as RTCDataChannel;
+  const create = vi
+    .spyOn(h.session, "createChannel")
+    .mockImplementationOnce(
+      (_label, _protocol, available) => {
+        available?.(channel);
+        return new Promise(() => {});
+      },
+    );
+  hooks[0].interrupted();
+  await vi.advanceTimersByTimeAsync(1000);
+  // The handshake deadline must own this channel even though open never fires.
+  expect(hooks).toHaveLength(2);
+  hooks[1].interrupted();
+  expect(channel.close).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(hooks).toHaveLength(3);
+  hooks[1].verified(proof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.trusted("b")).toBe(false);
+  hooks[2].verified(proof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.reset).not.toHaveBeenCalled();
+  expect(h.pins.get("b")?.blocked).toBe(false);
+});
+it("retains a valid pairing decision when transport closes during its storage commit", async () => {
+  const h = setup();
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
-  hooks[0].verified(proof);
-  await vi.waitFor(() =>
-    expect(h.service.get("b")?.state).toBe("untrusted"),
-  );
   let release!: () => void;
   vi.mocked(h.store.pair).mockImplementationOnce(
     async (id, value) => {
@@ -297,18 +405,13 @@ it("retains a valid pairing decision when transport closes during its storage co
       h.pins.set(id, value);
     },
   );
-  const pairing = h.service.pair(
-    "b",
-    proof.fingerprint,
-    proof.code,
-  );
-  const rejected = expect(pairing).rejects.toThrow(
-    "PAIRING_CONNECTION_CHANGED",
-  );
+  hooks[0].verified(proof);
   await vi.waitFor(() => expect(release).toBeDefined());
   hooks[0].interrupted();
   release();
-  await rejected;
+  await vi.waitFor(() =>
+    expect(h.paired).toHaveBeenCalledOnce(),
+  );
   expect(h.pins.get("b")?.blocked).toBe(false);
   expect(h.paired).toHaveBeenCalledOnce();
   expect(h.service.trusted("b")).toBe(false);

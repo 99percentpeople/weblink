@@ -18,6 +18,7 @@ import {
   type PairingCredentials,
 } from "@/libs/domain/device-identity/credentials";
 import { bindCredential } from "@/libs/domain/device-identity/credential-binding";
+import { PAIRING_CHANNEL } from "@/libs/domain/device-identity/manual-pairing";
 import type {
   DeviceIdentityStore,
   DevicePin,
@@ -58,6 +59,7 @@ afterEach(() => {
   cleanup.splice(0).forEach((f) => f());
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 const newIdentity = async () =>
   deviceIdentity(
@@ -161,26 +163,52 @@ async function connect(
       remoteDescription: { sdp },
     },
   };
-  const offB = trustB.bind({
+  const channels: Channel[] = [left, right];
+  let initial = true;
+  const create =
+    (fromA: boolean) =>
+    async (
+      label: string,
+      protocol: string,
+      onAvailable?: (channel: RTCDataChannel) => void,
+    ) => {
+      const local = initial && fromA ? left : new Channel();
+      const remote =
+        initial && fromA ? right : new Channel();
+      if (!initial || !fromA) channels.push(local, remote);
+      initial = false;
+      local.other = remote;
+      remote.other = local;
+      local.label = remote.label = label;
+      local.protocol = remote.protocol = protocol;
+      local.filter =
+        (fromA ? filterA : filterB) ?? ((v) => v);
+      remote.filter =
+        (fromA ? filterB : filterA) ?? ((v) => v);
+      onAvailable?.(local as unknown as RTCDataChannel);
+      (fromA ? events : eventsA).dispatchEvent(
+        "channel",
+        remote as unknown as RTCDataChannel,
+      );
+      return local as unknown as RTCDataChannel;
+    };
+  const sessionB = {
     ...common,
     clientId: "b",
     targetClientId: "a",
     addEventListener: events.addEventListener.bind(events),
-  } as unknown as PeerSession);
-  const offA = trustA.bind({
+    createChannel: create(false),
+  } as unknown as PeerSession;
+  const sessionA = {
     ...common,
     clientId: "a",
     targetClientId: "b",
     addEventListener:
       eventsA.addEventListener.bind(eventsA),
-    createChannel: async () => {
-      events.dispatchEvent(
-        "channel",
-        right as unknown as RTCDataChannel,
-      );
-      return left;
-    },
-  } as unknown as PeerSession);
+    createChannel: create(true),
+  } as unknown as PeerSession;
+  const offB = trustB.bind(sessionB);
+  const offA = trustA.bind(sessionA);
   const close = () => {
     offA();
     offB();
@@ -194,6 +222,11 @@ async function connect(
   return {
     trustA,
     trustB,
+    sessionA,
+    sessionB,
+    eventsA,
+    eventsB: events,
+    channels,
     resetA,
     resetB,
     pairedA,
@@ -202,6 +235,25 @@ async function connect(
     right,
     close,
   };
+}
+async function repair(
+  h: Awaited<ReturnType<typeof connect>>,
+) {
+  await h.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.state).toBe("incoming"),
+  );
+  expect(
+    h.trustB.respondPairing(
+      "a",
+      h.trustB.pairing("a")!.id,
+      true,
+    ),
+  ).toBe(true);
+  await vi.waitFor(() => {
+    expect(h.trustA.trusted("b")).toBe(true);
+    expect(h.trustB.trusted("a")).toBe(true);
+  });
 }
 async function settled(a: Endpoint, b: Endpoint) {
   await vi.waitFor(() => {
@@ -526,12 +578,7 @@ it("cannot automatically restore explicitly quarantined keys", async () => {
   expect(again.trustA.get("b")?.state).toBe("untrusted");
   expect(a.keys.blocked).toBe(true);
   const old = a.keys.issued!.id;
-  const proof = again.trustA.get("b")!;
-  await again.trustA.pair(
-    "b",
-    proof.fingerprint!,
-    proof.code!,
-  );
+  await repair(again);
   await settled(a, b);
   expect(a.keys.issued!.id).not.toBe(old);
   expect(again.resetA).toHaveBeenCalledOnce();
@@ -711,20 +758,7 @@ it("does not treat invalid persisted credential bindings as missing keys or sile
       (f) => f.kind === "credential-offer",
     ),
   ).toBe(false);
-  const proofA = missing.trustA.get("b")!;
-  const proofB = missing.trustB.get("a")!;
-  await Promise.all([
-    missing.trustA.pair(
-      "b",
-      proofA.fingerprint!,
-      proofA.code!,
-    ),
-    missing.trustB.pair(
-      "a",
-      proofB.fingerprint!,
-      proofB.code!,
-    ),
-  ]);
+  await repair(missing);
   await settled(a, b);
   expect(missing.pairedA).toHaveBeenCalledOnce();
   expect(missing.pairedB).toHaveBeenCalledOnce();
@@ -803,4 +837,286 @@ it("checks that a received key actually matches its signed secret hash", async (
       (f) => f.kind === "credential-ack",
     ),
   ).toBe(false);
+});
+
+async function quarantined() {
+  const { a, b, h } = await paired();
+  h.close();
+  a.pin!.blocked = b.pin!.blocked = true;
+  return { a, b };
+}
+
+it("can manually repair after an invalid identity signature, then reconnect through normal authenticated recovery", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(
+    a,
+    b,
+    (f) =>
+      f.kind === "proof"
+        ? { ...f, signature: "invalid" }
+        : f,
+    undefined,
+    false,
+  );
+  expect(h.trustA.get("b")).toEqual({ state: "untrusted" });
+  await repair(h);
+  await settled(a, b);
+  expect(h.pairedA).toHaveBeenCalledOnce();
+  expect(h.pairedB).toHaveBeenCalledOnce();
+  h.close();
+  const again = await connect(a, b);
+  preserved(again);
+});
+
+it("supports initiation from either device and preserves permissions until the other device approves", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  const savedA = structuredClone(a.keys),
+    savedB = structuredClone(b.keys);
+  await h.trustB.requestPairing("a");
+  await vi.waitFor(() =>
+    expect(h.trustA.pairing("b")?.state).toBe("incoming"),
+  );
+  expect(a.keys).toEqual(savedA);
+  expect(b.keys).toEqual(savedB);
+  expect(h.pairedA).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
+  expect(
+    h.trustA.respondPairing(
+      "b",
+      h.trustA.pairing("b")!.id,
+      true,
+    ),
+  ).toBe(true);
+  await settled(a, b);
+  await vi.waitFor(() => {
+    expect(h.trustA.trusted("b")).toBe(true);
+    expect(h.trustB.trusted("a")).toBe(true);
+  });
+  expect(a.keys.issued?.id).not.toBe(savedA.issued?.id);
+});
+
+it("rejecting a request does not reset a still-trusted recipient's saved policy", async () => {
+  const { a, b, h: original } = await paired();
+  original.close();
+  a.pin!.blocked = true;
+  const h = await connect(a, b);
+  expect(h.trustB.trusted("a")).toBe(true);
+  const keys = structuredClone(b.keys);
+  await h.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.state).toBe("incoming"),
+  );
+  expect(
+    h.trustB.respondPairing(
+      "a",
+      h.trustB.pairing("a")!.id,
+      false,
+    ),
+  ).toBe(true);
+  await vi.waitFor(() =>
+    expect(h.trustA.pairing("b")?.reason).toBe("rejected"),
+  );
+  expect(h.trustB.trusted("a")).toBe(true);
+  expect(h.resetB).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
+  expect(b.keys).toEqual(keys);
+});
+
+it("disconnect removes approval actions and a duplicate ID cannot replace a real device", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  await h.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.state).toBe("incoming"),
+  );
+  const stale = h.trustB.pairing("a")!.id;
+  expect(() => h.trustB.bind(h.sessionB)).toThrow(
+    "DUPLICATE_DEVICE_ID",
+  );
+  expect(h.trustB.pairing("a")?.id).toBe(stale);
+  h.eventsB.dispatchEvent("messagechannelchange", "closed");
+  expect(h.trustB.pairing("a")).toBeUndefined();
+  expect(h.trustB.respondPairing("a", stale, true)).toBe(
+    false,
+  );
+  expect(h.pairedA).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
+  h.close();
+  const next = await connect(a, b);
+  await next.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(next.trustB.pairing("a")?.state).toBe(
+      "incoming",
+    ),
+  );
+  expect(next.trustB.respondPairing("a", stale, true)).toBe(
+    false,
+  );
+  expect(next.trustB.trusted("a")).toBe(false);
+});
+
+it("keeps a committed manual decision across disconnect without activating stale live authority", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  let release!: () => void;
+  const pair = b.store.pair;
+  vi.spyOn(b.store, "pair").mockImplementationOnce(
+    async (id, pin) => {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      await pair(id, pin);
+    },
+  );
+  await h.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.state).toBe("incoming"),
+  );
+  h.trustB.respondPairing(
+    "a",
+    h.trustB.pairing("a")!.id,
+    true,
+  );
+  await vi.waitFor(() => expect(release).toBeDefined());
+  h.close();
+  release();
+  await vi.waitFor(() =>
+    expect(h.pairedB).toHaveBeenCalledOnce(),
+  );
+  expect(b.pin?.blocked).toBe(false);
+  expect(h.trustB.trusted("a")).toBe(false);
+  expect(h.trustA.trusted("b")).toBe(false);
+  const again = await connect(a, b);
+  preserved(again);
+});
+
+it("a failed manual commit cannot grant live permissions or emit new credentials", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  b.failWrites = true;
+  await h.trustA.requestPairing("b");
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.state).toBe("incoming"),
+  );
+  h.trustB.respondPairing(
+    "a",
+    h.trustB.pairing("a")!.id,
+    true,
+  );
+  await vi.waitFor(() =>
+    expect(h.trustB.pairing("a")?.reason).toBe("storage"),
+  );
+  expect(h.trustA.trusted("b")).toBe(false);
+  expect(h.trustB.trusted("a")).toBe(false);
+  expect(h.pairedB).not.toHaveBeenCalled();
+  expect(
+    h.channels
+      .filter((c) => c.protocol === PAIRING_CHANNEL)
+      .flatMap((c) => c.frames)
+      .some((f) => f.kind === "credential-offer"),
+  ).toBe(false);
+});
+
+it("cancels a channel creation that stalls and rejects its late channel", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  let available!: (channel: RTCDataChannel) => void;
+  let release!: (channel: RTCDataChannel) => void;
+  vi.spyOn(
+    h.sessionA,
+    "createChannel",
+  ).mockImplementationOnce((_, __, callback) => {
+    available = callback!;
+    return new Promise((r) => {
+      release = r;
+    });
+  });
+  const request = h.trustA.requestPairing("b");
+  const id = h.trustA.pairing("b")!.id;
+  expect(h.trustA.cancelPairing("b", id)).toBe(true);
+  const channel = new Channel();
+  available(channel as unknown as RTCDataChannel);
+  release(channel as unknown as RTCDataChannel);
+  await request;
+  expect(channel.readyState).toBe("closed");
+  expect(h.trustA.pairing("b")?.reason).toBe("cancelled");
+  expect(h.pairedA).not.toHaveBeenCalled();
+});
+
+it("simultaneous requests cannot replace each other's pending approval or grant authority", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  const localA = new Channel(),
+    remoteB = new Channel();
+  const localB = new Channel(),
+    remoteA = new Channel();
+  localA.other = remoteB;
+  remoteB.other = localA;
+  localB.other = remoteA;
+  remoteA.other = localB;
+  for (const channel of [localA, remoteB, localB, remoteA])
+    channel.label = channel.protocol = PAIRING_CHANNEL;
+  const createA = vi
+    .spyOn(h.sessionA, "createChannel")
+    .mockImplementationOnce(async (_, __, available) => {
+      available?.(localA as unknown as RTCDataChannel);
+      return localA as unknown as RTCDataChannel;
+    });
+  const createB = vi
+    .spyOn(h.sessionB, "createChannel")
+    .mockImplementationOnce(async (_, __, available) => {
+      available?.(localB as unknown as RTCDataChannel);
+      return localB as unknown as RTCDataChannel;
+    });
+  await Promise.all([
+    h.trustA.requestPairing("b"),
+    h.trustB.requestPairing("a"),
+  ]);
+  const idA = h.trustA.pairing("b")!.id,
+    idB = h.trustB.pairing("a")!.id;
+  h.eventsA.dispatchEvent(
+    "channel",
+    remoteA as unknown as RTCDataChannel,
+  );
+  h.eventsB.dispatchEvent(
+    "channel",
+    remoteB as unknown as RTCDataChannel,
+  );
+  expect(remoteA.readyState).toBe("closed");
+  expect(remoteB.readyState).toBe("closed");
+  expect(h.trustA.pairing("b")?.id).toBe(idA);
+  expect(h.trustB.pairing("a")?.id).toBe(idB);
+  expect(h.trustA.respondPairing("b", idB, true)).toBe(
+    false,
+  );
+  expect(h.trustB.respondPairing("a", idA, true)).toBe(
+    false,
+  );
+  localA.dispatchEvent(new Event("close"));
+  localB.dispatchEvent(new Event("close"));
+  expect(h.pairedA).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
+  createA.mockRestore();
+  createB.mockRestore();
+  await repair(h);
+  await settled(a, b);
+});
+
+it("ignores an extra pairing channel after a successful confirmation without displacing the trusted connection", async () => {
+  const { a, b } = await quarantined();
+  const h = await connect(a, b);
+  await repair(h);
+  await settled(a, b);
+  const keys = structuredClone(a.keys);
+  const extra = new Channel();
+  extra.label = extra.protocol = PAIRING_CHANNEL;
+  h.eventsA.dispatchEvent(
+    "channel",
+    extra as unknown as RTCDataChannel,
+  );
+  expect(extra.readyState).toBe("closed");
+  expect(h.trustA.trusted("b")).toBe(true);
+  expect(h.trustA.pairing("b")).toBeUndefined();
+  expect(a.keys).toEqual(keys);
 });

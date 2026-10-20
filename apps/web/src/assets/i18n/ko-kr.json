@@ -1502,15 +1502,28 @@
     "untrusted": "신뢰할 수 없는 기기",
     "trusted": "확인된 기기",
     "offline": "기기가 오프라인이므로 신원을 확인할 수 없습니다",
-    "blocked_description": "권한이 꺼져 있습니다. 코드를 확인하고 다시 페어링하면 기본 권한으로 복원됩니다.",
-    "pairing_code": "페어링 코드",
-    "confirm_code": "신뢰할 수 있는 방법으로 양쪽 코드가 일치함을 확인했습니다",
+    "blocked_description": "권한이 꺼져 있습니다. 다시 페어링하면 기본 권한이 복원됩니다.",
     "repair": "다시 페어링",
-    "proof_required": "유효한 기기 키 증명을 기다리는 중입니다. 양쪽 기기에서 페어링 지원 버전과 보안 연결이 필요합니다. 확인에 실패하면 권한을 복원할 수 없습니다.",
     "receive_content": "콘텐츠 수신",
     "receive_description": "이 기기에서 받는 메시지, 파일, 클립보드, 오디오 및 비디오를 한 번에 관리합니다. 끄면 수신이 중지되고 연결은 유지됩니다.",
     "share_screen": "화면 공유",
-    "share_description": "현재 공유 중인 콘텐츠를 포함하여 로컬 영상과 오디오를 이 기기로 전송하도록 허용합니다. 공유는 로컬에서 시작해야 합니다."
+    "share_description": "현재 공유 중인 콘텐츠를 포함하여 로컬 영상과 오디오를 이 기기로 전송하도록 허용합니다. 공유는 로컬에서 시작해야 합니다.",
+    "pairing_request": "{{name}}의 페어링 요청",
+    "incoming_request": "이 기기가 다시 페어링을 요청합니다.",
+    "confirm_description": "수락하면 현재 연결을 신뢰하고 기본 권한을 복원합니다.",
+    "waiting_confirmation": "상대 기기의 확인 대기 중",
+    "saving_pairing": "페어링 저장 중",
+    "accept": "수락",
+    "reject": "거절",
+    "cancel": "취소",
+    "failure": {
+      "rejected": "페어링이 거절되었습니다.",
+      "cancelled": "페어링이 취소되었습니다.",
+      "timeout": "요청이 만료되었습니다. 다시 시도하세요.",
+      "disconnected": "연결할 수 없습니다. 다시 연결한 후 시도하세요.",
+      "invalid": "잘못된 요청입니다. 다시 시도하세요.",
+      "storage": "페어링을 저장하지 못했습니다. 다시 시도하세요."
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

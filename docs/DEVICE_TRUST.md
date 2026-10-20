@@ -12,7 +12,7 @@ keys and proves possession by signing both device IDs, fresh challenges and
 both connections' DTLS certificate fingerprints. Initial pairing records a
 SHA-256 public-key fingerprint; subsequent connections prove possession of an
 exchanged pairing key against the same fresh transcript. Names, client IDs and
-knowledge of public keys alone never grant authority.
+knowledge of public keys alone never grant automatic authority.
 On first use, a device with no saved pin, pairing keys or quarantine record is
 automatically paired after its fresh signed proof is verified and its pin is
 stored. Peers include their pairing-history state in the signed
@@ -22,11 +22,30 @@ need a surviving common key, verified identity recovery, or explicit repair.
 A matching pin saved before the initial key exchange can still resume that
 interrupted exchange. Pairing-key connections require the signed history and
 identity-recovery negotiation; missing negotiation fields never enable a fallback.
-This trusts the first verified key encountered, without an out-of-band
-identity check. Later connections must prove continuity with that saved identity.
-The UI still displays a fresh 16-hex-digit pairing code on both devices. Compare
-it through a trusted channel or directly on both screens before manually repairing
-an untrusted device.
+Initial admission relies on room access (including its password when configured)
+and trusts the first verified key encountered. Later automatic connections must
+prove continuity with that saved identity.
+
+Manual repair uses a separate ordered `weblink-device-pairing/1` RTC channel.
+One device requests pairing; the other explicitly accepts or rejects in a
+notification or the device's permission settings. There is no comparison code
+or private-key challenge before this approval, so a failed automatic identity
+handshake does not prevent manual repair. Acceptance replaces the saved identity
+decision for this connection; it is not automatic proof of the old identity.
+The public keys exchanged on that connection are pinned for subsequent recovery.
+Both devices must save the decision before live permissions are enabled, then
+the existing signed credential issuance and renewal flow starts.
+
+Requests are scoped to the current session and a random request ID, and expire
+after 60 seconds. Cancellation, rejection, timeout and disconnect invalidate the
+approval action. The recipient generates its own local action ID, so reusing a
+remote request ID cannot revive an old notification's approval button. A request
+alone never changes saved keys or permissions, even
+when its recipient is still trusted. Simultaneous or duplicate requests cannot
+replace an active request. Automatic proof callbacks from before an accepted
+manual repair cannot overwrite it. Reconnect and automatic recovery still require
+the existing fresh identity/shared-key proofs; manual confirmation adds no
+automatic fallback for an impostor.
 
 Without a surviving verifiable pairing key or verified identity recovery,
 a mismatching identity or invalid remote proof leaves the device **untrusted**. The signaling and

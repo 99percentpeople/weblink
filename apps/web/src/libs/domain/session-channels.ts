@@ -1,4 +1,5 @@
 import { IDENTITY_CHANNEL } from "./device-identity/crypto";
+import { PAIRING_CHANNEL } from "./device-identity/manual-pairing";
 import { catchError, catchErrorSync } from "@/libs/catch";
 import type { SessionMessage } from "./protocol/messages";
 import {
@@ -354,7 +355,8 @@ export class PeerSessionChannelController {
 
     const channel = pc.createDataChannel(label, {
       ordered:
-        protocol === IDENTITY_CHANNEL
+        protocol === IDENTITY_CHANNEL ||
+        protocol === PAIRING_CHANNEL
           ? true
           : this.options.ordered(),
       protocol,

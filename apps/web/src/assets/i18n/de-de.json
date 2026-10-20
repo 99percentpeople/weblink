@@ -1502,15 +1502,28 @@
     "untrusted": "Nicht vertrauenswürdiges Gerät",
     "trusted": "Überprüftes Gerät",
     "offline": "Gerät offline; Identität nicht verfügbar",
-    "blocked_description": "Berechtigungen sind deaktiviert. Prüfe die Codes und kopple erneut, um die Standardeinstellungen wiederherzustellen.",
-    "pairing_code": "Kopplungscode",
-    "confirm_code": "Ich habe über einen vertrauenswürdigen Kanal geprüft, dass beide Codes übereinstimmen",
+    "blocked_description": "Berechtigungen deaktiviert. Erneut koppeln, um die Standardwerte wiederherzustellen.",
     "repair": "Erneut koppeln",
-    "proof_required": "Warten auf einen gültigen Nachweis des Geräteschlüssels. Beide Geräte benötigen eine kompatible Version und eine sichere Verbindung. Bei fehlgeschlagener Prüfung werden keine Berechtigungen wiederhergestellt.",
     "receive_content": "Inhalte empfangen",
     "receive_description": "Steuert Nachrichten, Dateien, Zwischenablage sowie Audio und Video von diesem Gerät. Beim Ausschalten stoppt der Empfang; die Verbindung bleibt bestehen.",
     "share_screen": "Bildschirm teilen",
-    "share_description": "Erlaubt lokale Bild- und Tonübertragung an dieses Gerät, einschließlich laufender Freigaben. Die Freigabe muss weiterhin lokal gestartet werden."
+    "share_description": "Erlaubt lokale Bild- und Tonübertragung an dieses Gerät, einschließlich laufender Freigaben. Die Freigabe muss weiterhin lokal gestartet werden.",
+    "pairing_request": "Kopplungsanfrage von {{name}}",
+    "incoming_request": "Dieses Gerät möchte sich erneut koppeln.",
+    "confirm_description": "Bestätigen, um dieser Verbindung zu vertrauen und die Standardberechtigungen wiederherzustellen.",
+    "waiting_confirmation": "Warten auf das andere Gerät",
+    "saving_pairing": "Kopplung wird gespeichert",
+    "accept": "Annehmen",
+    "reject": "Ablehnen",
+    "cancel": "Abbrechen",
+    "failure": {
+      "rejected": "Kopplung abgelehnt.",
+      "cancelled": "Kopplung abgebrochen.",
+      "timeout": "Anfrage abgelaufen. Erneut versuchen.",
+      "disconnected": "Verbindung nicht verfügbar. Nach dem Verbinden erneut versuchen.",
+      "invalid": "Ungültige Anfrage. Erneut versuchen.",
+      "storage": "Kopplung konnte nicht gespeichert werden. Erneut versuchen."
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

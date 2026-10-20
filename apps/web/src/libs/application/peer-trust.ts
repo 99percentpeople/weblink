@@ -9,13 +9,18 @@ import {
   type IdentityProof,
 } from "../domain/device-identity/handshake";
 import {
+  ManualPairing,
+  PAIRING_CHANNEL,
+  PAIRING_TIMEOUT,
+  type PairingRequest,
+} from "../domain/device-identity/manual-pairing";
+import {
   deviceIdentityStore,
   type DeviceIdentityStore,
 } from "../infrastructure/identity/device-identity-store";
 export interface PeerTrust {
   state: "verifying" | "unpaired" | "untrusted" | "trusted";
   fingerprint?: string;
-  code?: string;
 }
 type Binding = {
   session: PeerSession;
@@ -26,6 +31,10 @@ type Binding = {
   timer?: ReturnType<typeof setTimeout>;
   state: PeerTrust;
   opening: boolean;
+  manual?: ManualPairing;
+  pairing?: PairingRequest;
+  requestPairing(): Promise<void>;
+  cancelPairing(request: string): boolean;
 };
 /** First use pins a verified key; remembered identities must prove continuity. */
 export class PeerTrustService {
@@ -64,6 +73,36 @@ export class PeerTrustService {
   trusted(id: string) {
     return this.get(id)?.state === "trusted";
   }
+  pairing(id: string): PairingRequest | undefined {
+    this.revision[0]();
+    return this.bindings.get(id)?.pairing;
+  }
+  async requestPairing(id: string): Promise<void> {
+    const b = this.bindings.get(id);
+    if (!b || b.life.signal.aborted)
+      throw new Error("PAIRING_NOT_READY");
+    await b.requestPairing();
+  }
+  respondPairing(
+    id: string,
+    request: string,
+    accept: boolean,
+  ): boolean {
+    if (
+      !this.bindings.get(id)?.session.isMessageChannelReady
+    )
+      return false;
+    return (
+      this.bindings
+        .get(id)
+        ?.manual?.respond(request, accept) ?? false
+    );
+  }
+  cancelPairing(id: string, request: string): boolean {
+    return (
+      this.bindings.get(id)?.cancelPairing(request) ?? false
+    );
+  }
   private publish(b: Binding, state: PeerTrust) {
     b.state = state;
     this.revision[1]((v) => v + 1);
@@ -79,22 +118,40 @@ export class PeerTrustService {
       generation: 0,
       state: { state: "verifying" },
       opening: false,
+      requestPairing: async () => {},
+      cancelPairing: () => false,
     };
     this.bindings.set(id, b);
     const current = (generation: number) =>
       !b.life.signal.aborted && b.generation === generation;
-    const reset = () => {
+    const stopIdentity = () => {
       ++b.generation;
       b.handshake?.close();
       b.handshake = undefined;
       b.proof = undefined;
       b.opening = false;
       clearTimeout(b.timer);
+    };
+    let manualAttempt: object | undefined;
+    let manualTimer:
+      | ReturnType<typeof setTimeout>
+      | undefined;
+    const closeManual = () => {
+      b.manual?.close();
+      b.manual = undefined;
+    };
+    const reset = () => {
+      stopIdentity();
+      manualAttempt = undefined;
+      clearTimeout(manualTimer);
+      closeManual();
+      b.pairing = undefined;
       this.publish(b, { state: "verifying" });
     };
     const interrupted = (generation: number) => {
       if (!current(generation)) return;
-      reset();
+      stopIdentity();
+      this.publish(b, { state: "verifying" });
       // Retry only from the channel initiator; the responder accepts its new
       // channel. Keep saved policy while every application gate stays closed.
       if (
@@ -137,7 +194,11 @@ export class PeerTrustService {
       }
     };
     const bind = (channel: RTCDataChannel) => {
-      if (b.handshake || b.life.signal.aborted) {
+      if (
+        b.handshake ||
+        b.life.signal.aborted ||
+        b.manual
+      ) {
         channel.close();
         return;
       }
@@ -291,7 +352,8 @@ export class PeerTrustService {
         b.life.signal.aborted ||
         !session.isMessageChannelReady ||
         b.handshake ||
-        b.opening
+        b.opening ||
+        b.manual
       )
         return;
       const generation = b.generation;
@@ -303,20 +365,219 @@ export class PeerTrustService {
       if (session.clientId > id) return;
       b.opening = true;
       void session
-        .createChannel(IDENTITY_CHANNEL, IDENTITY_CHANNEL)
-        .then((channel) => {
-          if (!current(generation)) channel.close();
-          else bind(channel);
-        })
+        .createChannel(
+          IDENTITY_CHANNEL,
+          IDENTITY_CHANNEL,
+          (channel) => {
+            // Own the channel before waiting for open. Otherwise a stalled
+            // connecting channel survives every retry and is reused forever.
+            if (!current(generation)) channel.close();
+            else bind(channel);
+          },
+        )
         .catch(() => interrupted(generation))
         .finally(() => {
           if (current(generation)) b.opening = false;
         });
     };
+    const bindPairing = (
+      channel: RTCDataChannel,
+      attempt: object,
+      outgoing?: string,
+      expiresAt?: number,
+    ) => {
+      if (
+        b.life.signal.aborted ||
+        b.manual ||
+        manualAttempt !== attempt
+      ) {
+        channel.close();
+        return;
+      }
+      clearTimeout(manualTimer);
+      const valid = () =>
+        !b.life.signal.aborted && manualAttempt === attempt;
+      let accepting = false;
+      try {
+        b.manual = new ManualPairing(channel, {
+          client: session.clientId,
+          target: id,
+          localTransport: transportFingerprint(
+            session.peerConnection?.localDescription?.sdp,
+          ),
+          remoteTransport: transportFingerprint(
+            session.peerConnection?.remoteDescription?.sdp,
+          ),
+          identity: this.store.identity(),
+          credentials: this.store.credentials?.(id),
+          outgoing,
+          expiresAt,
+          changed: (request) => {
+            if (!valid()) return;
+            b.pairing = request;
+            this.revision[1]((v) => v + 1);
+          },
+          accepting: () => {
+            if (!valid()) return;
+            accepting = true;
+            // Late automatic proof/failure callbacks cannot overwrite the
+            // explicit decision for this connection.
+            stopIdentity();
+            this.publish(b, { state: "verifying" });
+          },
+          commit: (fingerprint) =>
+            this.serialize(id, async () => {
+              if (!valid())
+                throw new Error(
+                  "PAIRING_CONNECTION_CHANGED",
+                );
+              await this.store.pair(id, {
+                fingerprint,
+                blocked: false,
+              });
+              // A decision already committed remains valid after disconnect.
+              // It must not activate a replacement/live connection.
+              this.permissions.paired(id);
+              if (!valid())
+                throw new Error(
+                  "PAIRING_CONNECTION_CHANGED",
+                );
+            }),
+          paired: (fingerprint) => {
+            if (!valid()) return;
+            b.pairing = undefined;
+            this.publish(b, {
+              state: "trusted",
+              fingerprint,
+            });
+          },
+          ended: (reason, complete) => {
+            if (!valid()) return;
+            manualAttempt = undefined;
+            b.manual = undefined;
+            if (b.pairing)
+              b.pairing = {
+                ...b.pairing,
+                state: "failed",
+                reason,
+              };
+            if (complete && reason === "invalid") {
+              void fail(b.generation);
+            } else if (complete) {
+              interrupted(b.generation);
+            } else {
+              if (accepting)
+                this.publish(b, { state: "untrusted" });
+              else this.revision[1]((v) => v + 1);
+              // Declining an incoming request must not revoke an existing
+              // trusted connection or alter saved permission choices.
+              if (
+                !accepting &&
+                b.state.state === "verifying"
+              )
+                open();
+            }
+          },
+        });
+      } catch (error) {
+        manualAttempt = undefined;
+        channel.close();
+        throw error;
+      }
+    };
+    b.requestPairing = async () => {
+      if (
+        !session.isMessageChannelReady ||
+        b.manual ||
+        manualAttempt ||
+        b.state.state === "trusted"
+      )
+        throw new Error("PAIRING_NOT_READY");
+      const attempt = {};
+      manualAttempt = attempt;
+      b.pairing = {
+        id: crypto.randomUUID(),
+        state: "outgoing",
+      };
+      this.revision[1]((v) => v + 1);
+      const request = b.pairing.id;
+      const expiresAt = Date.now() + PAIRING_TIMEOUT;
+      // Covers a data channel that never opens. Listener installation below
+      // precedes the creator's open event and any fast remote response.
+      manualTimer = setTimeout(() => {
+        if (manualAttempt !== attempt || b.manual) return;
+        manualAttempt = undefined;
+        b.pairing = {
+          id: request,
+          state: "failed",
+          reason: "timeout",
+        };
+        this.revision[1]((v) => v + 1);
+      }, PAIRING_TIMEOUT);
+      try {
+        await session.createChannel(
+          PAIRING_CHANNEL,
+          PAIRING_CHANNEL,
+          (channel) =>
+            bindPairing(
+              channel,
+              attempt,
+              request,
+              expiresAt,
+            ),
+        );
+      } catch (error) {
+        if (manualAttempt === attempt) {
+          manualAttempt = undefined;
+          clearTimeout(manualTimer);
+          closeManual();
+          b.pairing = {
+            id: request,
+            state: "failed",
+            reason: "disconnected",
+          };
+          this.revision[1]((v) => v + 1);
+        }
+        throw error;
+      }
+    };
+    b.cancelPairing = (request) => {
+      if (b.manual) return b.manual.cancel(request);
+      if (
+        !manualAttempt ||
+        b.pairing?.id !== request ||
+        b.pairing.state !== "outgoing"
+      )
+        return false;
+      manualAttempt = undefined;
+      clearTimeout(manualTimer);
+      b.pairing = {
+        id: request,
+        state: "failed",
+        reason: "cancelled",
+      };
+      this.revision[1]((v) => v + 1);
+      return true;
+    };
     session.addEventListener(
       "channel",
       ({ detail }) => {
         if (
+          detail.label === PAIRING_CHANNEL &&
+          detail.protocol === PAIRING_CHANNEL
+        ) {
+          if (manualAttempt || b.manual) {
+            detail.close();
+            return;
+          }
+          const attempt = {};
+          manualAttempt = attempt;
+          try {
+            bindPairing(detail, attempt);
+          } catch {
+            /* A closed/invalid transport cannot create a pairing request. */
+          }
+        } else if (
           detail.label === IDENTITY_CHANNEL &&
           detail.protocol === IDENTITY_CHANNEL
         )
@@ -369,26 +630,5 @@ export class PeerTrustService {
       throw new Error("PAIRING_CONNECTION_CHANGED");
     this.publish(b, { state: "trusted", ...proof });
     await b.handshake?.trust();
-  }
-  async pair(
-    id: string,
-    fingerprint: string,
-    code: string,
-  ): Promise<void> {
-    const b = this.bindings.get(id),
-      proof = b?.proof;
-    if (
-      !b ||
-      !proof ||
-      proof.fingerprint !== fingerprint ||
-      proof.code !== code ||
-      b.life.signal.aborted
-    )
-      throw new Error("PAIRING_NOT_READY");
-    if (b.state.state === "trusted") return;
-    const generation = b.generation;
-    await this.serialize(id, () =>
-      this.commitPair(id, b, proof, generation),
-    );
   }
 }

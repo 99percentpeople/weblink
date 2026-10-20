@@ -1,4 +1,5 @@
 import { IDENTITY_CHANNEL } from "./crypto";
+import { PAIRING_CHANNEL } from "./manual-pairing";
 /** Only the discovery contract is allowed before pairing or when content reception is off. */
 export const bootstrapMessage = (type: string) =>
   type === "peer-capabilities";
@@ -9,6 +10,8 @@ export function applicationChannel(
   return !(
     (label === "message" && protocol === "message") ||
     (label === IDENTITY_CHANNEL &&
-      protocol === IDENTITY_CHANNEL)
+      protocol === IDENTITY_CHANNEL) ||
+    (label === PAIRING_CHANNEL &&
+      protocol === PAIRING_CHANNEL)
   );
 }

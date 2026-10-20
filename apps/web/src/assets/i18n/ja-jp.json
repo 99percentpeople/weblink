@@ -1502,15 +1502,28 @@
     "untrusted": "信頼されていないデバイス",
     "trusted": "確認済みのデバイス",
     "offline": "デバイスがオフラインのため確認できません",
-    "blocked_description": "権限は無効です。コードを確認して再ペアリングすると、既定の権限に戻ります。",
-    "pairing_code": "ペアリングコード",
-    "confirm_code": "信頼できる方法で両端のコードが一致することを確認しました",
+    "blocked_description": "権限は無効です。再ペアリングすると初期設定に戻ります。",
     "repair": "再ペアリング",
-    "proof_required": "有効なデバイス鍵の証明を待っています。両端で対応バージョンと安全な接続が必要です。検証に失敗すると権限を復元できません。",
     "receive_content": "コンテンツを受信",
     "receive_description": "このデバイスからのメッセージ、ファイル、クリップボード、音声・映像を一括管理します。無効にすると受信が停止し、接続は維持されます。",
     "share_screen": "画面を共有",
-    "share_description": "共有中のものを含め、このデバイスにローカルの映像と音声を送信できます。共有はこの端末で開始する必要があります。"
+    "share_description": "共有中のものを含め、このデバイスにローカルの映像と音声を送信できます。共有はこの端末で開始する必要があります。",
+    "pairing_request": "{{name}} からのペアリング要求",
+    "incoming_request": "このデバイスが再ペアリングを要求しています。",
+    "confirm_description": "承認すると現在の接続を信頼し、権限を初期設定に戻します。",
+    "waiting_confirmation": "相手の確認を待っています",
+    "saving_pairing": "ペアリングを保存中",
+    "accept": "承認",
+    "reject": "拒否",
+    "cancel": "キャンセル",
+    "failure": {
+      "rejected": "ペアリングが拒否されました。",
+      "cancelled": "ペアリングをキャンセルしました。",
+      "timeout": "要求の有効期限が切れました。再試行してください。",
+      "disconnected": "接続できません。再接続後に再試行してください。",
+      "invalid": "無効な要求です。再試行してください。",
+      "storage": "ペアリングを保存できませんでした。再試行してください。"
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

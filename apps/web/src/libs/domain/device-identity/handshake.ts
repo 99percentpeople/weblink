@@ -23,7 +23,6 @@ type Hello = {
 };
 export interface IdentityProof {
   fingerprint: string;
-  code: string;
   /** Omitted for legacy peers; empty means no shared pairing key was proved. */
   credentialIds?: string[];
   /** Signed peer history, when both endpoints support this extension. */
@@ -354,25 +353,11 @@ export class DeviceHandshake {
           ? { identityBound }
           : undefined;
       const peer = await fingerprint(this.remote.key);
-      const code = [
-        ...new Uint8Array(
-          await crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(
-              this.transcript("pairing"),
-            ),
-          ),
-        ),
-      ]
-        .map((v) => v.toString(16).padStart(2, "0"))
-        .join("")
-        .slice(0, 16);
       if (this.abort.signal.aborted) return;
       this.complete = true;
       clearTimeout(this.timer);
       this.options.verified({
         fingerprint: peer,
-        code,
         ...(this.local?.credentials &&
         this.remote.credentials
           ? { credentialIds }

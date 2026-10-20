@@ -1502,15 +1502,28 @@
     "untrusted": "Appareil non fiable",
     "trusted": "Appareil vérifié",
     "offline": "Appareil hors ligne ; identité indisponible",
-    "blocked_description": "Autorisations désactivées. Vérifiez les codes et recommencez l’appairage pour rétablir les valeurs par défaut.",
-    "pairing_code": "Code d’appairage",
-    "confirm_code": "J’ai vérifié par un canal fiable que les deux codes correspondent",
+    "blocked_description": "Autorisations désactivées. Associez à nouveau pour rétablir les valeurs par défaut.",
     "repair": "Appairer à nouveau",
-    "proof_required": "En attente d’une preuve valide de la clé de l’appareil. Les deux appareils doivent utiliser une version compatible et une connexion sécurisée. Une vérification échouée ne permet pas de rétablir les autorisations.",
     "receive_content": "Recevoir du contenu",
     "receive_description": "Contrôle les messages, fichiers, presse-papiers et contenus audio/vidéo de cet appareil. La désactivation arrête la réception et maintient la connexion.",
     "share_screen": "Partager l’écran",
-    "share_description": "Autorise l’envoi de la vidéo et du son locaux à cet appareil, y compris les partages en cours. Le partage doit toujours être démarré localement."
+    "share_description": "Autorise l’envoi de la vidéo et du son locaux à cet appareil, y compris les partages en cours. Le partage doit toujours être démarré localement.",
+    "pairing_request": "Demande d’association de {{name}}",
+    "incoming_request": "Cet appareil souhaite être associé à nouveau.",
+    "confirm_description": "Confirmez pour approuver cette connexion et rétablir les autorisations par défaut.",
+    "waiting_confirmation": "En attente de l’autre appareil",
+    "saving_pairing": "Enregistrement de l’association",
+    "accept": "Accepter",
+    "reject": "Refuser",
+    "cancel": "Annuler",
+    "failure": {
+      "rejected": "Association refusée.",
+      "cancelled": "Association annulée.",
+      "timeout": "Demande expirée. Réessayez.",
+      "disconnected": "Connexion indisponible. Reconnectez-vous et réessayez.",
+      "invalid": "Demande invalide. Réessayez.",
+      "storage": "Impossible d’enregistrer l’association. Réessayez."
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

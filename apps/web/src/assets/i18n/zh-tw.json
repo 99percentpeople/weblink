@@ -1502,15 +1502,28 @@
     "untrusted": "不受信任的裝置",
     "trusted": "已驗證裝置",
     "offline": "裝置離線，無法驗證身分",
-    "blocked_description": "權限已關閉，核對配對碼並重新配對後恢復預設權限。",
-    "pairing_code": "配對碼",
-    "confirm_code": "已核對兩端配對碼一致",
+    "blocked_description": "權限已關閉，重新配對後恢復預設權限。",
     "repair": "重新配對",
-    "proof_required": "等待裝置驗證。請確認雙方版本支援配對，並使用安全連線。",
     "receive_content": "接收內容",
     "receive_description": "接收此裝置的訊息、檔案、剪貼簿和音訊視訊。關閉後立即停止接收。",
     "share_screen": "分享畫面",
-    "share_description": "允許此裝置接收本機畫面和音訊，仍需先開始分享。"
+    "share_description": "允許此裝置接收本機畫面和音訊，仍需先開始分享。",
+    "pairing_request": "{{name}} 請求配對",
+    "incoming_request": "此裝置請求重新配對。",
+    "confirm_description": "同意後信任目前連線，並恢復預設權限。",
+    "waiting_confirmation": "等待對方確認",
+    "saving_pairing": "正在儲存配對",
+    "accept": "同意配對",
+    "reject": "拒絕",
+    "cancel": "取消",
+    "failure": {
+      "rejected": "對方已拒絕配對。",
+      "cancelled": "配對已取消。",
+      "timeout": "配對請求已逾時，請重試。",
+      "disconnected": "連線無法使用，請重新連線後重試。",
+      "invalid": "配對請求無效，請重試。",
+      "storage": "無法儲存配對，請重試。"
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

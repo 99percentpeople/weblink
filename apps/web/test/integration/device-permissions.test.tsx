@@ -27,34 +27,55 @@ import {
 } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { ClientPermissions } from "@/components/settings/client-permissions";
-import { appState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
+import type { PairingRequest } from "@/libs/domain/device-identity/manual-pairing";
 import { setClientConfig } from "@/options";
 import type { PeerTrust } from "@/libs/application/peer-trust";
 const fixture = vi.hoisted(() => ({
   get: undefined as undefined | (() => PeerTrust),
-  pair: vi.fn(),
+  pairing: undefined as
+    | undefined
+    | (() => PairingRequest | undefined),
+  request: vi.fn(),
+  respond: vi.fn(),
+  cancel: vi.fn(),
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     trust: {
       get: () => fixture.get?.(),
-      pair: (...args: unknown[]) => fixture.pair(...args),
+      pairing: () => fixture.pairing?.(),
+      requestPairing: (...args: unknown[]) =>
+        fixture.request(...args),
+      respondPairing: (...args: unknown[]) =>
+        fixture.respond(...args),
+      cancelPairing: (...args: unknown[]) =>
+        fixture.cancel(...args),
     },
   },
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 beforeEach(() => {
+  vi.clearAllMocks();
+  fixture.pairing = undefined;
+  setAppState("session", "clientViewData", "peer", {
+    clientId: "peer",
+    messageChannel: true,
+    onlineStatus: "online",
+  } as any);
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-it("locks every permission for an untrusted device and restores defaults after code-confirmed repair", async () => {
+it("locks every permission for an untrusted device and restores defaults only after the other device confirms repair", async () => {
   const [trust, setTrust] = createSignal<PeerTrust>({
     state: "untrusted",
     fingerprint: "key",
-    code: "1234567890abcdef",
   });
   fixture.get = trust;
   setClientConfig("peer", {
@@ -63,9 +84,11 @@ it("locks every permission for an untrusted device and restores defaults after c
     provideFileList: true,
     remoteControl: "allow",
   });
-  fixture.pair.mockImplementation(async () => {
-    resetClientConfig("peer");
-    setTrust({ ...trust(), state: "trusted" });
+  const [pairing, setPairing] =
+    createSignal<PairingRequest>();
+  fixture.pairing = pairing;
+  fixture.request.mockImplementation(async () => {
+    setPairing({ id: "request", state: "outgoing" });
   });
   renderDevice();
   expect(
@@ -98,20 +121,21 @@ it("locks every permission for an untrusted device and restores defaults after c
   const repair = screen.getByRole("button", {
     name: "device_trust.repair",
   });
-  expect(repair).toBeDisabled();
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "device_trust.confirm_code",
-    }),
-  );
+  expect(repair).toBeEnabled();
+  expect(
+    screen.queryByRole("checkbox"),
+  ).not.toBeInTheDocument();
   fireEvent.click(repair);
   await waitFor(() =>
-    expect(fixture.pair).toHaveBeenCalledWith(
-      "peer",
-      "key",
-      "1234567890abcdef",
-    ),
+    expect(fixture.request).toHaveBeenCalledWith("peer"),
   );
+  expect(
+    screen.getByText("device_trust.waiting_confirmation"),
+  ).toBeInTheDocument();
+  expect(permission(binaryLabels[0])).toBeDisabled();
+  resetClientConfig("peer");
+  setPairing(undefined);
+  setTrust({ ...trust(), state: "trusted" });
   for (const label of binaryLabels) {
     expect(permission(label)).toBeEnabled();
     expect(permission(label)).toHaveTextContent(
@@ -149,7 +173,7 @@ it("locks every permission for an untrusted device and restores defaults after c
     screen.queryByRole("button", {
       name: "device_trust.repair",
     }),
-  ).not.toBeInTheDocument();
+  ).toBeEnabled();
 });
 
 function renderDevice(desktop = true) {
@@ -260,4 +284,119 @@ it("preserves mixed legacy permissions until a group is explicitly changed", asy
     expect(policy?.[scope]).toBe("ask");
   expect(policy?.["shell.execute"]).toBe("allow");
   expect(policy?.["input.control"]).toBeUndefined();
+});
+
+it("offers accept/reject even when the local side is still trusted", () => {
+  fixture.get = () => ({ state: "trusted" });
+  const [pairing, setPairing] =
+    createSignal<PairingRequest>({
+      id: "incoming",
+      state: "incoming",
+    });
+  fixture.pairing = pairing;
+  renderDevice();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "device_trust.reject",
+    }),
+  );
+  expect(fixture.respond).toHaveBeenCalledWith(
+    "peer",
+    "incoming",
+    false,
+  );
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "device_trust.accept",
+    }),
+  );
+  expect(fixture.respond).toHaveBeenCalledWith(
+    "peer",
+    "incoming",
+    true,
+  );
+  setPairing({ id: "incoming", state: "committing" });
+  expect(
+    screen.queryByRole("button", {
+      name: "device_trust.accept",
+    }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText("device_trust.saving_pairing"),
+  ).toBeInTheDocument();
+});
+
+it("supports cancellation, shows expiry, and disables requests offline", () => {
+  fixture.get = () => ({ state: "untrusted" });
+  const [pairing, setPairing] =
+    createSignal<PairingRequest>({
+      id: "request",
+      state: "outgoing",
+    });
+  fixture.pairing = pairing;
+  renderDevice();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "device_trust.cancel",
+    }),
+  );
+  expect(fixture.cancel).toHaveBeenCalledWith(
+    "peer",
+    "request",
+  );
+  setPairing({
+    id: "request",
+    state: "failed",
+    reason: "timeout",
+  });
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "device_trust.failure.timeout",
+  );
+  setAppState(
+    "session",
+    "clientViewData",
+    "peer",
+    "messageChannel",
+    false,
+  );
+  expect(
+    screen.getByRole("button", {
+      name: "device_trust.repair",
+    }),
+  ).toBeDisabled();
+});
+
+it("shows transport recovery before identity verification without enabling permissions", () => {
+  fixture.get = () => ({ state: "verifying" });
+  setAppState("session", "clientViewData", "peer", {
+    onlineStatus: "reconnecting",
+    messageChannel: false,
+  });
+  renderDevice();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "common.status.reconnecting",
+  );
+  expect(
+    screen.queryByText("device_trust.verifying"),
+  ).not.toBeInTheDocument();
+  setAppState("session", "clientViewData", "peer", {
+    onlineStatus: "online",
+    messageChannel: true,
+  });
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "device_trust.verifying",
+  );
+  setAppState("session", "clientViewData", "peer", {
+    onlineStatus: "offline",
+    // The connection status can arrive before the channel-close event.
+    messageChannel: true,
+  });
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "common.status.offline",
+  );
+  expect(
+    screen.getByRole("button", {
+      name: "device_trust.repair",
+    }),
+  ).toBeDisabled();
 });

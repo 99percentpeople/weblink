@@ -8,15 +8,28 @@
     "untrusted": "Untrusted device",
     "trusted": "Verified device",
     "offline": "Device offline; identity unavailable",
-    "blocked_description": "Permissions are off. Verify the codes and pair again to restore defaults.",
-    "pairing_code": "Pairing code",
-    "confirm_code": "I verified that both pairing codes match",
+    "blocked_description": "Permissions are off. Pair again to restore defaults.",
     "repair": "Pair again",
-    "proof_required": "Waiting for device verification. Both devices need a pairing-capable version and a secure connection.",
     "receive_content": "Receive content",
     "receive_description": "Receive messages, files, clipboard and audio/video from this device. Turning this off stops reception immediately.",
     "share_screen": "Share screen",
-    "share_description": "Allow this device to receive local video and audio once sharing starts."
+    "share_description": "Allow this device to receive local video and audio once sharing starts.",
+    "pairing_request": "Pairing request from {{name}}",
+    "incoming_request": "This device wants to pair again.",
+    "confirm_description": "Confirm to trust this connection and restore default permissions.",
+    "waiting_confirmation": "Waiting for the other device",
+    "saving_pairing": "Saving pairing",
+    "accept": "Accept",
+    "reject": "Reject",
+    "cancel": "Cancel",
+    "failure": {
+      "rejected": "Pairing was rejected.",
+      "cancelled": "Pairing was cancelled.",
+      "timeout": "Pairing request expired. Try again.",
+      "disconnected": "Connection unavailable. Try again after reconnecting.",
+      "invalid": "Invalid pairing request. Try again.",
+      "storage": "Could not save pairing. Try again."
+    }
   },
   "tasks": {
     "error_details": "Error details",

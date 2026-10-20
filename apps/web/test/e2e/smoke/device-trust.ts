@@ -93,6 +93,7 @@ async function connection(
   keysB: Map<string, PairingCredentials>,
   initialReceive = false,
   interruptKeyDelivery = false,
+  initiator: "impolite" | "polite" = "impolite",
 ) {
   const left = new Sender("a", "b"),
     right = new Sender("b", "a");
@@ -158,6 +159,7 @@ async function connection(
     allowedB = () => trustB.trusted("a") && receiveB[0]();
   const sessionA = new PeerSession(left, {
     polite: false,
+    loadIceServers: async () => [],
     allowsApplication: () => trustA.trusted("b"),
     acceptsContent: allowedA,
     acceptMessage: (m) =>
@@ -165,6 +167,7 @@ async function connection(
   });
   const sessionB = new PeerSession(right, {
     polite: true,
+    loadIceServers: async () => [],
     allowsApplication: () => trustB.trusted("a"),
     acceptsContent: allowedB,
     acceptMessage: (m) =>
@@ -205,11 +208,14 @@ async function connection(
     },
   );
   await Promise.all([sessionA.listen(), sessionB.listen()]);
-  await sessionA.connect();
   try {
+    await (
+      initiator === "polite" ? sessionB : sessionA
+    ).connect();
     await until(
       () =>
-        !!trustA.get("b")?.code && !!trustB.get("a")?.code,
+        trustA.get("b")?.state !== "verifying" &&
+        trustB.get("a")?.state !== "verifying",
       "device proofs",
     );
   } catch (error) {
@@ -298,6 +304,39 @@ async function checkInterruptedExchange(
     resumed.close();
   }
 }
+async function checkDataOnlyPairing(
+  a: DeviceIdentity,
+  b: DeviceIdentity,
+) {
+  const pair = await connection(
+    a,
+    b,
+    new Map(),
+    new Map(),
+    new Map(),
+    new Map(),
+    false,
+    false,
+    "polite",
+  );
+  try {
+    assert(
+      pair.trustA.trusted("b") && pair.trustB.trusted("a"),
+      "polite initiation pairs without media tracks",
+    );
+    await pair.sessionB.sendMessage(
+      createSessionMessage(pair.sessionB, "send-text", {
+        data: "data-only",
+      }),
+    );
+    await until(
+      () => pair.received.includes("data-only"),
+      "polite initiation delivers application messages",
+    );
+  } finally {
+    pair.close();
+  }
+}
 async function main() {
   const local = await deviceIdentityStore.identity();
   assert(
@@ -355,6 +394,7 @@ async function main() {
       keysA.get("b")?.received?.id &&
     !keysA.get("b")?.pending &&
     !keysB.get("a")?.pending;
+  await checkDataOnlyPairing(a, b);
   await checkInterruptedExchange(a, b);
   const first = await connection(
     a,
@@ -378,12 +418,6 @@ async function main() {
       first.trustA.trusted("b") &&
         first.trustB.trusted("a"),
       "new devices pair automatically after proof verification",
-    );
-    const proofA = first.trustA.get("b")!,
-      proofB = first.trustB.get("a")!;
-    assert(
-      proofA.code === proofB.code,
-      "pairing code agrees over actual DTLS",
     );
     await until(
       keysSettled,
@@ -621,20 +655,28 @@ async function main() {
       !changed.receiveA[0](),
       "changed key revokes permissions",
     );
-    const proof = changed.trustA.get("b")!;
-    const replacementProof = changed.trustB.get("a")!;
-    await Promise.all([
-      changed.trustA.pair(
-        "b",
-        proof.fingerprint!,
-        proof.code!,
-      ),
-      changed.trustB.pair(
-        "a",
-        replacementProof.fingerprint!,
-        replacementProof.code!,
-      ),
-    ]);
+    await changed.trustA.requestPairing("b");
+    await until(
+      () =>
+        changed.trustB.pairing("a")?.state === "incoming",
+      "incoming manual pairing request",
+    );
+    assert(
+      !changed.trustA.trusted("b") &&
+        !changed.trustB.trusted("a"),
+      "request alone cannot grant permissions",
+    );
+    changed.trustB.respondPairing(
+      "a",
+      changed.trustB.pairing("a")!.id,
+      true,
+    );
+    await until(
+      () =>
+        changed.trustA.trusted("b") &&
+        changed.trustB.trusted("a"),
+      "bilateral durable manual pairing",
+    );
     assert(
       changed.trustA.trusted("b") && changed.receiveA[0](),
       "repair restores default permissions",
@@ -657,6 +699,7 @@ async function main() {
     transport: "Chromium real WebRTC",
     persistentPrivateKey: true,
     automaticFirstPairing: true,
+    dataOnlyPoliteInitiation: true,
     bothSidesRejectLostIdentity: true,
     retainedIdentityRecoversAllPeerRecords: true,
     pairingRestoresDefaults: true,

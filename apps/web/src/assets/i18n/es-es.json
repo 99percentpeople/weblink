@@ -1502,15 +1502,28 @@
     "untrusted": "Dispositivo no confiable",
     "trusted": "Dispositivo verificado",
     "offline": "Dispositivo desconectado; identidad no disponible",
-    "blocked_description": "Los permisos están desactivados. Verifica los códigos y vuelve a emparejar para restaurar los valores predeterminados.",
-    "pairing_code": "Código de emparejamiento",
-    "confirm_code": "He verificado por un canal de confianza que ambos códigos coinciden",
+    "blocked_description": "Permisos desactivados. Vuelve a vincular para restaurar los valores predeterminados.",
     "repair": "Volver a emparejar",
-    "proof_required": "Esperando una prueba válida de la clave del dispositivo. Ambos dispositivos necesitan una versión compatible y una conexión segura. Una verificación fallida no permite restaurar permisos.",
     "receive_content": "Recibir contenido",
     "receive_description": "Controla mensajes, archivos, portapapeles y audio/vídeo de este dispositivo. Al desactivarlo, se detiene la recepción y se mantiene la conexión.",
     "share_screen": "Compartir pantalla",
-    "share_description": "Permite enviar vídeo y audio locales a este dispositivo, incluido el contenido compartido actualmente. Debes iniciar la sesión de pantalla compartida en este equipo."
+    "share_description": "Permite enviar vídeo y audio locales a este dispositivo, incluido el contenido compartido actualmente. Debes iniciar la sesión de pantalla compartida en este equipo.",
+    "pairing_request": "Solicitud de vinculación de {{name}}",
+    "incoming_request": "Este dispositivo solicita vincularse de nuevo.",
+    "confirm_description": "Confirma para confiar en esta conexión y restaurar los permisos predeterminados.",
+    "waiting_confirmation": "Esperando al otro dispositivo",
+    "saving_pairing": "Guardando vinculación",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "cancel": "Cancelar",
+    "failure": {
+      "rejected": "Vinculación rechazada.",
+      "cancelled": "Vinculación cancelada.",
+      "timeout": "La solicitud ha caducado. Inténtalo de nuevo.",
+      "disconnected": "Conexión no disponible. Vuelve a conectar e inténtalo de nuevo.",
+      "invalid": "Solicitud no válida. Inténtalo de nuevo.",
+      "storage": "No se pudo guardar la vinculación. Inténtalo de nuevo."
+    }
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",

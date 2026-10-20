@@ -52,6 +52,35 @@ const identity = async () =>
       ["sign", "verify"],
     ),
   );
+it("closes a channel that never opens without treating the timeout as a bad identity", async () => {
+  const local = await identity();
+  vi.useFakeTimers();
+  const channel = new Channel();
+  channel.readyState = "connecting";
+  const verified = vi.fn();
+  const failed = vi.fn();
+  const interrupted = vi.fn();
+  const handshake = new DeviceHandshake(
+    channel as unknown as RTCDataChannel,
+    {
+      client: "a",
+      target: "b",
+      localTransport: "a-cert",
+      remoteTransport: "b-cert",
+      identity: Promise.resolve(local),
+      verified,
+      failed,
+      interrupted,
+    },
+  );
+  cleanup.push(() => handshake.close());
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(channel.readyState).toBe("closed");
+  expect(channel.frames).toEqual([]);
+  expect(interrupted).toHaveBeenCalledOnce();
+  expect(failed).not.toHaveBeenCalled();
+  expect(verified).not.toHaveBeenCalled();
+});
 function connect(
   a: DeviceIdentity,
   b: DeviceIdentity,
@@ -157,7 +186,7 @@ it("treats a missing handshake response as an interruption rather than a wrong k
   expect(verified).not.toHaveBeenCalled();
   vi.useRealTimers();
 });
-it("proves both device keys and displays the same fresh pairing code", async () => {
+it("proves both device keys with fresh challenges without a pairing code", async () => {
   const a = await identity(),
     b = await identity();
   const h = connect(a, b);
@@ -170,15 +199,18 @@ it("proves both device keys and displays the same fresh pairing code", async () 
   expect(h.verifiedA.mock.calls[0][0].fingerprint).toBe(
     await fingerprint(b.publicKey),
   );
-  expect(h.verifiedA.mock.calls[0][0].code).toBe(
-    h.verifiedB.mock.calls[0][0].code,
+  expect(h.verifiedB.mock.calls[0][0].fingerprint).toBe(
+    await fingerprint(a.publicKey),
+  );
+  expect(h.verifiedA.mock.calls[0][0]).not.toHaveProperty(
+    "code",
   );
   const again = connect(a, b);
   await vi.waitFor(() =>
     expect(again.verifiedA).toHaveBeenCalledOnce(),
   );
-  expect(again.verifiedA.mock.calls[0][0].code).not.toBe(
-    h.verifiedA.mock.calls[0][0].code,
+  expect(again.verifiedA.mock.calls[0][0].fingerprint).toBe(
+    h.verifiedA.mock.calls[0][0].fingerprint,
   );
 });
 it("rejects a replayed proof and leaves the new connection unauthenticated", async () => {
@@ -267,9 +299,6 @@ it.each([
     expect(
       h.verifiedB.mock.calls[0][0].remotePairingKnown,
     ).toBe(a);
-    expect(h.verifiedA.mock.calls[0][0].code).toBe(
-      h.verifiedB.mock.calls[0][0].code,
-    );
   },
 );
 

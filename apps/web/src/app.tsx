@@ -69,6 +69,7 @@ import { appState } from "@/libs/state/app-state";
 import { ModalProvider } from "@/components/dialogs/base";
 import { AutomationApprovalToasts } from "@/components/app/automation-approval-toasts";
 import { DeviceTrustToasts } from "@/components/app/device-trust-toasts";
+import { DevicePairingToasts } from "@/components/app/device-pairing-toasts";
 
 const InnerApp = (props: ParentProps) => {
   const { conversationHistory } = useAppState();
@@ -242,6 +243,7 @@ const InnerApp = (props: ParentProps) => {
     <>
       <AutomationApprovalToasts />
       <DeviceTrustToasts />
+      <DevicePairingToasts />
       <Show when={platform.application}>
         {(application) => (
           <ApplicationCloseDialog
