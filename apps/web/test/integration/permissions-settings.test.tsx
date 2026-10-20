@@ -224,6 +224,8 @@ it("forgets offline entries but resets visible clients and the current room to d
   expect(appState.options.clientConfigs.online).toEqual({
     name: "Alice",
     provideFileList: true,
+    receiveContent: true,
+    shareScreen: true,
   });
   forgetClientConfig("offline");
   expect(
@@ -630,6 +632,8 @@ it("keeps an offline client's entry when its permissions are reset in the settin
   expect(appState.options.clientConfigs.peer).toEqual({
     name: "Peer",
     provideFileList: true,
+    receiveContent: true,
+    shareScreen: true,
   });
   expect(dialog).toBeInTheDocument();
 });

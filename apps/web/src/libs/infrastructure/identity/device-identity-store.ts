@@ -17,7 +17,7 @@ export interface DeviceIdentityStore {
   identity(): Promise<DeviceIdentity>;
   pin(peer: string): Promise<DevicePin | undefined>;
   save(peer: string, value: DevicePin): Promise<void>;
-  /** Commits explicit pairing and revokes previous pairing keys atomically. */
+  /** Commits first-use/manual pairing and revokes previous pairing keys atomically. */
   pair(peer: string, value: DevicePin): Promise<void>;
   credentials?(peer: string): CredentialStore;
 }

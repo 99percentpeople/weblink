@@ -8,6 +8,7 @@ import type {
 import type { PeerSession } from "@/libs/domain/session";
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { IdentityProof } from "@/libs/domain/device-identity/handshake";
+import type { PairingCredentials } from "@/libs/domain/device-identity/credentials";
 const hooks = vi.hoisted(
   () =>
     [] as {
@@ -38,6 +39,7 @@ function setup(pin?: DevicePin) {
   const pins = new Map<string, DevicePin>();
   if (pin) pins.set("b", pin);
   const reset = vi.fn();
+  const paired = vi.fn();
   const store: DeviceIdentityStore = {
     identity: async () => ({
       publicKey: "",
@@ -51,7 +53,10 @@ function setup(pin?: DevicePin) {
       pins.set(id, value);
     }),
   };
-  const service = new PeerTrustService(reset, store);
+  const service = new PeerTrustService(
+    { quarantine: reset, paired },
+    store,
+  );
   const events = new MultiEventEmitter<any>();
   const sdp = `a=fingerprint:sha-256 ${Array(32).fill("ab").join(":")}`;
   const session = {
@@ -71,6 +76,7 @@ function setup(pin?: DevicePin) {
     service,
     store,
     reset,
+    paired,
     pins,
     events,
     session,
@@ -81,24 +87,41 @@ const proof = {
   fingerprint: "new-key",
   code: "1234567890abcdef",
 };
-it("keeps a new device paired only after explicit confirmation and resets every permission", async () => {
+it("automatically pairs a new device only after verification and durable storage", async () => {
   const h = setup();
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
-  hooks[0].verified(proof);
-  await vi.waitFor(() =>
-    expect(h.service.get("b")?.state).toBe("unpaired"),
-  );
   expect(h.service.trusted("b")).toBe(false);
+  expect(h.paired).not.toHaveBeenCalled();
+  let release!: () => void;
+  vi.mocked(h.store.pair).mockImplementationOnce(
+    async (id, value) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      h.pins.set(id, value);
+    },
+  );
+  hooks[0].verified(proof);
+  await vi.waitFor(() => expect(release).toBeDefined());
+  expect(h.service.trusted("b")).toBe(false);
+  expect(h.paired).not.toHaveBeenCalled();
+  release();
+  await vi.waitFor(() =>
+    expect(h.service.trusted("b")).toBe(true),
+  );
   await expect(
     h.service.pair("b", proof.fingerprint, "stale-code"),
   ).rejects.toThrow("PAIRING_NOT_READY");
+  // A repeated UI/API request must not replace the newly exchanged keys.
   await h.service.pair("b", proof.fingerprint, proof.code);
-  expect(h.service.trusted("b")).toBe(true);
   expect(h.pins.get("b")).toEqual({
     fingerprint: proof.fingerprint,
     blocked: false,
   });
-  expect(h.reset).toHaveBeenCalledTimes(2);
+  expect(h.store.pair).toHaveBeenCalledOnce();
+  expect(h.paired).toHaveBeenCalledOnce();
+  expect(h.paired).toHaveBeenCalledWith("b");
+  expect(h.reset).not.toHaveBeenCalled();
 });
 it("quarantines a mismatching key persistently; even the old key needs re-pairing", async () => {
   const h = setup({
@@ -119,6 +142,18 @@ it("quarantines a mismatching key persistently; even the old key needs re-pairin
     expect(h.service.get("b")?.state).toBe("untrusted"),
   );
   expect(h.service.trusted("b")).toBe(false);
+  expect(h.paired).not.toHaveBeenCalled();
+  await expect(
+    h.service.pair("b", "old-key", "stale-code"),
+  ).rejects.toThrow("PAIRING_NOT_READY");
+  await Promise.all([
+    h.service.pair("b", "old-key", proof.code),
+    h.service.pair("b", "old-key", proof.code),
+  ]);
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.store.pair).toHaveBeenCalledOnce();
+  expect(h.paired).toHaveBeenCalledOnce();
+  expect(h.paired).toHaveBeenCalledWith("b");
 });
 it("retains permissions for the remembered valid key and ignores a duplicate binding", async () => {
   const h = setup({
@@ -131,17 +166,21 @@ it("retains permissions for the remembered valid key and ignores a duplicate bin
     expect(h.service.trusted("b")).toBe(true),
   );
   expect(h.reset).not.toHaveBeenCalled();
+  expect(h.paired).not.toHaveBeenCalled();
   expect(() => h.service.bind(h.session)).toThrow(
     "DUPLICATE_DEVICE_ID",
   );
   expect(h.service.trusted("b")).toBe(true);
 });
 it("cannot restore trust from an old verification or pairing completion", async () => {
-  const h = setup();
+  const h = setup({
+    fingerprint: "old-key",
+    blocked: false,
+  });
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
   hooks[0].verified(proof);
   await vi.waitFor(() =>
-    expect(h.service.get("b")?.state).toBe("unpaired"),
+    expect(h.service.get("b")?.state).toBe("untrusted"),
   );
   let release!: () => void;
   vi.mocked(h.store.pair).mockImplementationOnce(
@@ -169,6 +208,9 @@ it("cannot restore trust from an old verification or pairing completion", async 
     expect(h.pins.get("b")?.blocked).toBe(true),
   );
   expect(h.service.get("b")?.state).toBe("untrusted");
+  expect(
+    h.reset.mock.invocationCallOrder.at(-1),
+  ).toBeGreaterThan(h.paired.mock.invocationCallOrder[0]);
 });
 
 it("withdraws live authority on authenticated transport loss without quarantining the remembered key", async () => {
@@ -236,11 +278,14 @@ it("retries a stalled channel creation without clearing saved permissions", asyn
   expect(h.service.trusted("b")).toBe(true);
 });
 it("retains a valid pairing decision when transport closes during its storage commit", async () => {
-  const h = setup();
+  const h = setup({
+    fingerprint: "old-key",
+    blocked: false,
+  });
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
   hooks[0].verified(proof);
   await vi.waitFor(() =>
-    expect(h.service.get("b")?.state).toBe("unpaired"),
+    expect(h.service.get("b")?.state).toBe("untrusted"),
   );
   let release!: () => void;
   vi.mocked(h.store.pair).mockImplementationOnce(
@@ -264,6 +309,7 @@ it("retains a valid pairing decision when transport closes during its storage co
   release();
   await rejected;
   expect(h.pins.get("b")?.blocked).toBe(false);
+  expect(h.paired).toHaveBeenCalledOnce();
   expect(h.service.trusted("b")).toBe(false);
   h.reset.mockClear();
   h.events.dispatchEvent("messagechannelchange", "ready");
@@ -273,4 +319,151 @@ it("retains a valid pairing decision when transport closes during its storage co
     expect(h.service.trusted("b")).toBe(true),
   );
   expect(h.reset).not.toHaveBeenCalled();
+  expect(h.paired).toHaveBeenCalledOnce();
 });
+
+it("keeps a new device gated when its initial pin cannot be stored and retries automatically", async () => {
+  vi.useFakeTimers();
+  const h = setup();
+  vi.mocked(h.store.pair).mockRejectedValueOnce(
+    new Error("Storage unavailable"),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  hooks[0].verified(proof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.get("b")?.state).toBe("verifying");
+  expect(h.pins.size).toBe(0);
+  expect(h.paired).not.toHaveBeenCalled();
+  expect(h.reset).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1000);
+  hooks[1].verified(proof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.paired).toHaveBeenCalledOnce();
+});
+
+it("does not let a duplicate or stale first-use proof replace the live device", async () => {
+  const h = setup();
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  expect(() => h.service.bind(h.session)).toThrow(
+    "DUPLICATE_DEVICE_ID",
+  );
+  hooks[0].interrupted();
+  hooks[0].verified({ ...proof, fingerprint: "stale-key" });
+  h.events.dispatchEvent("messagechannelchange", "ready");
+  await vi.waitFor(() => expect(hooks).toHaveLength(2));
+  hooks[1].verified(proof);
+  await vi.waitFor(() =>
+    expect(h.service.trusted("b")).toBe(true),
+  );
+  expect(h.pins.get("b")?.fingerprint).toBe(
+    proof.fingerprint,
+  );
+  expect(h.store.pair).toHaveBeenCalledOnce();
+  expect(h.paired).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "issued",
+  "pending",
+  "received",
+  "blocked",
+] as const)(
+  "requires manual repair when only a remembered %s record survives without a pin",
+  async (kind) => {
+    const h = setup();
+    let keys: PairingCredentials =
+      kind === "blocked"
+        ? { blocked: true }
+        : {
+            [kind]: {
+              id: "remembered",
+              secret: "",
+              expiresAt: 1,
+            },
+          };
+    h.store.credentials = () => ({
+      read: async () => keys,
+      update: async (change) => (keys = change(keys)),
+    });
+    await vi.waitFor(() => expect(hooks).toHaveLength(1));
+    hooks[0].verified({ ...proof, credentialIds: [] });
+    await vi.waitFor(() =>
+      expect(h.service.get("b")?.state).toBe("untrusted"),
+    );
+    expect(h.store.pair).not.toHaveBeenCalled();
+    expect(h.paired).not.toHaveBeenCalled();
+    expect(h.reset).toHaveBeenCalledOnce();
+    expect(keys.blocked).toBe(true);
+  },
+);
+
+it("remembers a rejected first connection so it cannot retry as a new device", async () => {
+  const h = setup();
+  let keys: PairingCredentials = {};
+  h.store.credentials = () => ({
+    read: async () => keys,
+    update: async (change) => (keys = change(keys)),
+  });
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  hooks[0].failed();
+  await vi.waitFor(() => expect(keys.blocked).toBe(true));
+  h.events.dispatchEvent("messagechannelchange", "closed");
+  h.events.dispatchEvent("messagechannelchange", "ready");
+  await vi.waitFor(() => expect(hooks).toHaveLength(2));
+  hooks[1].verified(proof);
+  await vi.waitFor(() =>
+    expect(h.service.get("b")?.state).toBe("untrusted"),
+  );
+  expect(h.pins.size).toBe(0);
+  expect(h.store.pair).not.toHaveBeenCalled();
+  expect(h.paired).not.toHaveBeenCalled();
+});
+
+it.each(["interrupted", "failed"] as const)(
+  "orders a first-pairing commit against a concurrent %s callback",
+  async (event) => {
+    const h = setup();
+    let release!: () => void;
+    vi.mocked(h.store.pair).mockImplementationOnce(
+      async (id, value) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        h.pins.set(id, value);
+      },
+    );
+    await vi.waitFor(() => expect(hooks).toHaveLength(1));
+    hooks[0].verified(proof);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    hooks[0][event]();
+    release();
+    await vi.waitFor(() =>
+      expect(h.paired).toHaveBeenCalledOnce(),
+    );
+    expect(h.service.trusted("b")).toBe(false);
+    if (event === "failed") {
+      await vi.waitFor(() =>
+        expect(h.pins.get("b")?.blocked).toBe(true),
+      );
+      expect(
+        h.reset.mock.invocationCallOrder.at(-1),
+      ).toBeGreaterThan(
+        h.paired.mock.invocationCallOrder[0],
+      );
+    } else {
+      expect(h.pins.get("b")?.blocked).toBe(false);
+      expect(h.reset).not.toHaveBeenCalled();
+      h.events.dispatchEvent(
+        "messagechannelchange",
+        "ready",
+      );
+      await vi.waitFor(() => expect(hooks).toHaveLength(2));
+      hooks[1].verified(proof);
+      await vi.waitFor(() =>
+        expect(h.service.trusted("b")).toBe(true),
+      );
+      expect(h.paired).toHaveBeenCalledOnce();
+    }
+  },
+);

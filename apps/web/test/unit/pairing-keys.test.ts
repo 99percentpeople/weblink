@@ -131,8 +131,16 @@ async function connect(
   if (filterB) right.filter = filterB;
   const resetA = vi.fn(),
     resetB = vi.fn();
-  const trustA = new PeerTrustService(resetA, a.store),
-    trustB = new PeerTrustService(resetB, b.store);
+  const pairedA = vi.fn(),
+    pairedB = vi.fn();
+  const trustA = new PeerTrustService(
+      { quarantine: resetA, paired: pairedA },
+      a.store,
+    ),
+    trustB = new PeerTrustService(
+      { quarantine: resetB, paired: pairedB },
+      b.store,
+    );
   const events = new MultiEventEmitter<any>();
   const eventsA = new MultiEventEmitter<any>();
   const sdp = `a=fingerprint:sha-256 ${Array(32).fill("ab").join(":")}`;
@@ -177,6 +185,8 @@ async function connect(
     trustB,
     resetA,
     resetB,
+    pairedA,
+    pairedB,
     left,
     right,
     close,
@@ -196,12 +206,10 @@ async function paired() {
   const a = await endpoint(),
     b = await endpoint();
   const h = await connect(a, b);
-  const pa = h.trustA.get("b")!,
-    pb = h.trustB.get("a")!;
-  await h.trustA.pair("b", pa.fingerprint!, pa.code!);
-  expect(a.keys).toEqual({});
-  expect(b.keys).toEqual({});
-  await h.trustB.pair("a", pb.fingerprint!, pb.code!);
+  expect(h.trustA.trusted("b")).toBe(true);
+  expect(h.trustB.trusted("a")).toBe(true);
+  expect(h.pairedA).toHaveBeenCalledOnce();
+  expect(h.pairedB).toHaveBeenCalledOnce();
   await settled(a, b);
   return { a, b, h };
 }
@@ -210,6 +218,8 @@ function preserved(h: Awaited<ReturnType<typeof connect>>) {
   expect(h.trustB.trusted("a")).toBe(true);
   expect(h.resetA).not.toHaveBeenCalled();
   expect(h.resetB).not.toHaveBeenCalled();
+  expect(h.pairedA).not.toHaveBeenCalled();
+  expect(h.pairedB).not.toHaveBeenCalled();
 }
 it.each(["all", "offer", "ack"])(
   "resumes the first exchange after losing %s credential traffic without resetting permissions",
@@ -225,10 +235,6 @@ it.each(["all", "offer", "ack"])(
         ? undefined
         : frame,
     );
-    const pa = h.trustA.get("b")!,
-      pb = h.trustB.get("a")!;
-    await h.trustA.pair("b", pa.fingerprint!, pa.code!);
-    await h.trustB.pair("a", pb.fingerprint!, pb.code!);
     await vi.waitFor(() =>
       expect(b.keys.pending ?? b.keys.issued).toBeDefined(),
     );
@@ -250,10 +256,6 @@ it("does not accept a changed signing identity while the first exchange is incom
       ? undefined
       : frame,
   );
-  const pa = h.trustA.get("b")!,
-    pb = h.trustB.get("a")!;
-  await h.trustA.pair("b", pa.fingerprint!, pa.code!);
-  await h.trustB.pair("a", pb.fingerprint!, pb.code!);
   h.close();
   b.identity = await newIdentity();
   const attack = await connect(a, b);
@@ -265,7 +267,7 @@ it("does not accept a changed signing identity while the first exchange is incom
     ),
   ).toBe(false);
 });
-it("issues two independent pairing keys only after both devices consent", async () => {
+it("automatically pairs first-use devices and exchanges two independent pairing keys", async () => {
   const { a, b, h } = await paired();
   expect(a.keys.issued?.id).not.toBe(b.keys.issued?.id);
   expect(a.keys.issued?.expiresAt).toBeGreaterThan(
@@ -452,5 +454,6 @@ it("cannot automatically restore explicitly quarantined keys", async () => {
   );
   await settled(a, b);
   expect(a.keys.issued!.id).not.toBe(old);
-  expect(again.resetA).toHaveBeenCalledTimes(2);
+  expect(again.resetA).toHaveBeenCalledOnce();
+  expect(again.pairedA).toHaveBeenCalledOnce();
 });

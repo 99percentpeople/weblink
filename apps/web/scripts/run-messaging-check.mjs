@@ -334,6 +334,7 @@ try {
       return {
         trust: sessionService.trust.get(peer),
         receiving: sessionService.canReceive(peer),
+        sharing: sessionService.canShareScreen(peer),
         remoteReceiving: session && sessionService.capabilities.get(session)?.identity?.receiveContent === true,
         channelReady: session?.isMessageChannelReady === true,
       };
@@ -341,17 +342,14 @@ try {
         ),
       ),
     );
-  // Use the same pairing and permission APIs as device settings. New browser
-  // profiles must prove their keys and receive explicit consent before sending.
   const proofs = await until(
-    "both devices offer pairing proofs",
+    "both devices automatically pair on first use",
     async () => {
       const peers = await peerStates();
       return (
         peers.every(
           (peer) =>
-            peer.trust?.state === "unpaired" &&
-            peer.trust.fingerprint &&
+            peer.trust?.state === "trusted" &&
             peer.trust.code,
         ) && peers
       );
@@ -359,44 +357,12 @@ try {
   );
   if (proofs[0].trust.code !== proofs[1].trust.code)
     throw new Error("Pairing codes do not match");
-  await Promise.all(
-    clients.map((client, i) =>
-      evaluate(
-        client,
-        `(async () => {
-      const { sessionService } = await import('/src/libs/application/session-service.ts');
-      const proof = ${JSON.stringify(proofs[i].trust)};
-      await sessionService.trust.pair(${JSON.stringify(ids[1 - i])}, proof.fingerprint, proof.code);
-    })()`,
-      ),
-    ),
-  );
-  const paired = await until(
-    "both devices trust the paired keys",
-    async () => {
-      const peers = await peerStates();
-      return (
-        peers.every(
-          (peer) => peer.trust?.state === "trusted",
-        ) && peers
-      );
-    },
-  );
-  if (paired.some((peer) => peer.receiving))
+  if (
+    proofs.some((peer) => !peer.receiving || !peer.sharing)
+  )
     throw new Error(
-      "Pairing unexpectedly granted reception",
+      "First pairing did not enable default reception and sharing",
     );
-  await Promise.all(
-    clients.map((client, i) =>
-      evaluate(
-        client,
-        `(async () => {
-      const { setClientConfig } = await import('/src/options.ts');
-      setClientConfig(${JSON.stringify(ids[1 - i])}, { receiveContent: true });
-    })()`,
-      ),
-    ),
-  );
   const authorized = () =>
     until(
       "verified devices and bidirectional content permission",
@@ -405,13 +371,14 @@ try {
           (peer) =>
             peer.trust?.state === "trusted" &&
             peer.receiving &&
+            peer.sharing &&
             peer.remoteReceiving &&
             peer.channelReady,
         ),
     );
   await authorized();
   console.log(
-    "Passed: matching pairing codes and explicit content consent",
+    "Passed: automatic first pairing and default content reception",
   );
   const initial = await snapshots();
   if (!initial.every((s) => s.messages.length === 0))

@@ -5,7 +5,6 @@ import {
 } from "@/libs/state/app-state-context";
 import { resetClientConfig } from "@/libs/state/permission-options";
 import {
-  scopes,
   permissionGroupIds,
   permissionGroups,
 } from "@weblink/automation";
@@ -51,7 +50,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-it("locks every device permission until code-confirmed pairing, then leaves all grants off", async () => {
+it("locks every permission for an untrusted device and restores defaults after code-confirmed repair", async () => {
   const [trust, setTrust] = createSignal<PeerTrust>({
     state: "untrusted",
     fingerprint: "key",
@@ -65,15 +64,7 @@ it("locks every device permission until code-confirmed pairing, then leaves all 
     remoteControl: "allow",
   });
   fixture.pair.mockImplementation(async () => {
-    setClientConfig("peer", {
-      receiveContent: false,
-      shareScreen: false,
-      provideFileList: false,
-      remoteControl: "deny",
-      automation: Object.fromEntries(
-        scopes.map((scope) => [scope, "deny" as const]),
-      ),
-    });
+    resetClientConfig("peer");
     setTrust({ ...trust(), state: "trusted" });
   });
   renderDevice();
@@ -124,24 +115,31 @@ it("locks every device permission until code-confirmed pairing, then leaves all 
   for (const label of binaryLabels) {
     expect(permission(label)).toBeEnabled();
     expect(permission(label)).toHaveTextContent(
-      "setting.permissions.disallowed",
+      "setting.permissions.allowed",
     );
   }
+  expect(
+    permission("app_menu.settings_remote_control"),
+  ).toHaveTextContent("setting.permissions.ask");
+  for (const group of permissionGroupIds)
+    expect(
+      permission(`automation.permissions.${group}.title`),
+    ).toHaveTextContent("setting.permissions.ask");
   const receive = permission(
     "device_trust.receive_content",
   );
   await userEvent.click(receive);
   await userEvent.click(
     screen.getByRole("option", {
-      name: "setting.permissions.allowed",
+      name: "setting.permissions.disallowed",
     }),
   );
   expect(
     appState.options.clientConfigs.peer?.receiveContent,
-  ).toBe(true);
+  ).toBe(false);
   expect(
     appState.options.clientConfigs.peer?.shareScreen,
-  ).toBe(false);
+  ).toBe(true);
   setTrust({ state: "untrusted" });
   expect(receive).toBeDisabled();
   expect(receive).toHaveTextContent(

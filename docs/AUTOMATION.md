@@ -136,8 +136,9 @@ remote-device permissions screen, **Always allow** is a persistent remote-contro
 policy with no expiry. It is separate from MCP tokens and automation scope grants.
 The policy remains indexed by client ID, but is effective only after the peer
 proves its paired device key. Failed device verification resets it to deny.
-Automatic pairing-key repair/renewal preserves saved permissions; explicit
-re-pairing unlocks settings without restoring prior grants.
+Automatic pairing-key repair/renewal preserves saved permissions. First pairing
+and explicit re-pairing restore default device permissions, including Ask for
+automation; previous permanent grants are not restored.
 
 After persistent device pairing and reception permission, peers additionally
 create ephemeral P-256 ECDH keys for each automation channel and compare the displayed

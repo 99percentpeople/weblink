@@ -1497,7 +1497,7 @@
     "untrusted": "Nicht vertrauenswürdiges Gerät",
     "trusted": "Überprüftes Gerät",
     "offline": "Gerät offline; Identität nicht verfügbar",
-    "blocked_description": "Die Verbindung bleibt bestehen, aber alle Berechtigungen sind deaktiviert. Vergleiche die Codes und kopple erneut, um Berechtigungen einzustellen. Frühere Berechtigungen werden nicht automatisch wiederhergestellt.",
+    "blocked_description": "Berechtigungen sind deaktiviert. Prüfe die Codes und kopple erneut, um die Standardeinstellungen wiederherzustellen.",
     "pairing_code": "Kopplungscode",
     "confirm_code": "Ich habe über einen vertrauenswürdigen Kanal geprüft, dass beide Codes übereinstimmen",
     "repair": "Erneut koppeln",

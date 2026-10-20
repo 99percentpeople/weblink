@@ -1497,7 +1497,7 @@
     "untrusted": "Appareil non fiable",
     "trusted": "Appareil vérifié",
     "offline": "Appareil hors ligne ; identité indisponible",
-    "blocked_description": "La connexion reste ouverte, mais toutes les autorisations sont désactivées. Comparez les codes et recommencez l’appairage pour modifier les autorisations. Les anciennes autorisations ne sont pas rétablies automatiquement.",
+    "blocked_description": "Autorisations désactivées. Vérifiez les codes et recommencez l’appairage pour rétablir les valeurs par défaut.",
     "pairing_code": "Code d’appairage",
     "confirm_code": "J’ai vérifié par un canal fiable que les deux codes correspondent",
     "repair": "Appairer à nouveau",

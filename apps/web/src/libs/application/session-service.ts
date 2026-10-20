@@ -42,7 +42,10 @@ import {
   on,
   untrack,
 } from "solid-js";
-import { setClientConfig } from "@/libs/state/permission-options";
+import {
+  resetClientConfig,
+  setClientConfig,
+} from "@/libs/state/permission-options";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import { loadSessionIceServers } from "./ice-server-service";
 import { catchError, catchErrorSync } from "@/libs/catch";
@@ -61,17 +64,19 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
-  readonly trust = new PeerTrustService((id) =>
-    setClientConfig(id, {
-      remoteControl: "deny",
-      automation: Object.fromEntries(
-        scopes.map((scope) => [scope, "deny" as const]),
-      ),
-      provideFileList: false,
-      shareScreen: false,
-      receiveContent: false,
-    }),
-  );
+  readonly trust = new PeerTrustService({
+    quarantine: (id) =>
+      setClientConfig(id, {
+        remoteControl: "deny",
+        automation: Object.fromEntries(
+          scopes.map((scope) => [scope, "deny" as const]),
+        ),
+        provideFileList: false,
+        shareScreen: false,
+        receiveContent: false,
+      }),
+    paired: resetClientConfig,
+  });
   canReceive(id: string): boolean {
     return (
       this.trust.trusted(id) &&

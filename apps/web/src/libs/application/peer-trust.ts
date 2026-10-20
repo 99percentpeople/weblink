@@ -27,7 +27,7 @@ type Binding = {
   state: PeerTrust;
   opening: boolean;
 };
-/** No permissions derive from a display name, client ID, or unconfirmed new key. */
+/** First use pins a verified key; remembered identities must prove continuity. */
 export class PeerTrustService {
   private bindings = new Map<string, Binding>();
   private revision = createSignal(0);
@@ -51,9 +51,10 @@ export class PeerTrustService {
     return pending;
   }
   constructor(
-    private readonly resetPermissions: (
-      peer: string,
-    ) => void,
+    private readonly permissions: {
+      quarantine(peer: string): void;
+      paired(peer: string): void;
+    },
     private readonly store: DeviceIdentityStore = deviceIdentityStore,
   ) {}
   get(id: string): PeerTrust | undefined {
@@ -113,9 +114,11 @@ export class PeerTrustService {
       b.handshake?.close();
       b.proof = undefined;
       this.publish(b, { state: "untrusted" });
-      this.resetPermissions(id);
       try {
         await this.serialize(id, async () => {
+          // Serialize policy changes with pairing commits. A failed proof must
+          // win over a pairing write that was already in flight.
+          this.permissions.quarantine(id);
           const pin = await this.store.pin(id);
           if (pin)
             await this.store.save(id, {
@@ -203,11 +206,18 @@ export class PeerTrustService {
                   keys?.received ||
                   keys?.blocked
                 );
-                this.resetPermissions(id);
+                if (!remembered) {
+                  await this.commitPair(
+                    id,
+                    b,
+                    proof,
+                    generation,
+                  );
+                  return;
+                }
+                this.permissions.quarantine(id);
                 this.publish(b, {
-                  state: remembered
-                    ? "untrusted"
-                    : "unpaired",
+                  state: "untrusted",
                   ...proof,
                 });
                 if (pin)
@@ -215,13 +225,12 @@ export class PeerTrustService {
                     ...pin,
                     blocked: true,
                   });
-                if (remembered)
-                  await this.store
-                    .credentials?.(id)
-                    .update((state) => ({
-                      ...state,
-                      blocked: true,
-                    }));
+                await this.store
+                  .credentials?.(id)
+                  .update((state) => ({
+                    ...state,
+                    blocked: true,
+                  }));
               }
             }).catch(() => interrupted(generation)),
           failed: (error) => {
@@ -299,6 +308,32 @@ export class PeerTrustService {
       this.revision[1]((v) => v + 1);
     };
   }
+  /** Called only within the per-peer write queue, after a fresh proof. */
+  private async commitPair(
+    id: string,
+    b: Binding,
+    proof: IdentityProof,
+    generation: number,
+  ): Promise<void> {
+    const current = () =>
+      b.generation === generation &&
+      !b.life.signal.aborted &&
+      b.proof === proof;
+    if (!current())
+      throw new Error("PAIRING_CONNECTION_CHANGED");
+    if (b.state.state === "trusted") return;
+    await this.store.pair(id, {
+      fingerprint: proof.fingerprint,
+      blocked: false,
+    });
+    // Persist defaults for the valid pairing decision even if its transport
+    // closed during the write. A queued quarantine takes precedence afterwards.
+    this.permissions.paired(id);
+    if (!current())
+      throw new Error("PAIRING_CONNECTION_CHANGED");
+    this.publish(b, { state: "trusted", ...proof });
+    await b.handshake?.trust();
+  }
   async pair(
     id: string,
     fingerprint: string,
@@ -314,26 +349,10 @@ export class PeerTrustService {
       b.life.signal.aborted
     )
       throw new Error("PAIRING_NOT_READY");
+    if (b.state.state === "trusted") return;
     const generation = b.generation;
-    this.resetPermissions(id);
-    await this.serialize(id, async () => {
-      const current = () =>
-        b.generation === generation &&
-        !b.life.signal.aborted &&
-        b.proof === proof;
-      if (!current())
-        throw new Error("PAIRING_CONNECTION_CHANGED");
-      await this.store.pair(id, {
-        fingerprint,
-        blocked: false,
-      });
-      if (!current()) {
-        // The consent was valid when committed. A lost transport does not
-        // invalidate it; an actual invalid proof has its own serialized revoke.
-        throw new Error("PAIRING_CONNECTION_CHANGED");
-      }
-      this.publish(b, { state: "trusted", ...proof });
-      await b.handshake?.trust();
-    });
+    await this.serialize(id, () =>
+      this.commitPair(id, b, proof, generation),
+    );
   }
 }

@@ -1497,7 +1497,7 @@
     "untrusted": "不受信任的裝置",
     "trusted": "已驗證裝置",
     "offline": "裝置離線，無法驗證身分",
-    "blocked_description": "權限已關閉，重新配對後需重新授權。",
+    "blocked_description": "權限已關閉，核對配對碼並重新配對後恢復預設權限。",
     "pairing_code": "配對碼",
     "confirm_code": "已核對兩端配對碼一致",
     "repair": "重新配對",

@@ -57,6 +57,8 @@ export type ClientConfig = {
 
 export const defaultClientConfig: ClientConfig = {
   provideFileList: true,
+  shareScreen: true,
+  receiveContent: true,
 };
 
 export type RoomConfig = {

@@ -13,18 +13,25 @@ both connections' DTLS certificate fingerprints. Initial pairing records a
 SHA-256 public-key fingerprint; subsequent connections prove possession of an
 exchanged pairing key against the same fresh transcript. Names, client IDs and
 knowledge of public keys alone never grant authority.
-The UI displays a fresh 16-hex-digit pairing code on both devices, including
-when one device already trusts the other. Compare it through a trusted channel
-or directly on both screens before confirming pairing on each unpaired side.
+On first use, a device with no saved pin, pairing keys or quarantine record is
+automatically paired after its fresh signed proof is verified and its pin is
+stored. This trusts the first verified key encountered, without an out-of-band
+identity check. Later connections must prove continuity with that saved identity.
+The UI still displays a fresh 16-hex-digit pairing code on both devices. Compare
+it through a trusted channel or directly on both screens before manually repairing
+an untrusted device.
 
-A new device starts **unpaired**. Without a surviving verifiable pairing key,
+Without a surviving verifiable pairing key,
 a mismatching identity or invalid remote proof leaves the device **untrusted**. The signaling and
 RTC connections remain available for discovery and pairing. All application
 permissions are denied; current transfers, clipboard activity, input and peer
 automation are cancelled. Existing permission choices are reset when a device
 is quarantined. A remembered key that has been quarantined cannot automatically
 restore trust on a later reconnect. Explicit pairing replaces the pin and
-unlocks settings, with all permissions still off. Key storage must succeed
+restores the default permissions, as does automatic first pairing: receive content,
+share screen and provide file list are on; remote control and automation ask for
+approval. This does not start screen capture or bypass OS capture consent.
+Key storage must succeed
 before the device is trusted. Normal disconnection, handshake deadlines and local
 storage/transport errors withdraw live authority without quarantining the remembered
 key or erasing saved permissions, including before verification completes. The
@@ -33,7 +40,7 @@ Reconnection requires a fresh proof before saved device permissions can apply ag
 
 ## Pairing keys and automatic renewal
 
-After both devices confirm trust, each generates its own independent 256-bit
+After both devices establish trust, each generates its own independent 256-bit
 random shared key and sends it to the other over the verified DTLS channel.
 The issuer retains the same key as verification material. Reconnection uses
 HMAC-SHA-256 challenge proofs, not transmission of the secret. The proofs bind
@@ -64,14 +71,15 @@ Once pairing keys are enabled for a peer, its public pin cannot bypass a missing
 or invalid pairing-key proof, even if a client omits the key-exchange extension.
 Existing confirmed public pins can bootstrap the first exchange between updated
 clients; no exchange starts before local trust and peer consent. An undelivered
-first offer remains resumable using the explicitly confirmed signing identity.
+first offer remains resumable using the pinned signing identity.
 Receipt of a key or acknowledgement of an issuance atomically makes pairing-key
 authentication mandatory alongside persisting that key. Removing the keys later
 never clears this requirement. Explicit re-pairing atomically records the new
 confirmation and removes prior pairing keys. A connection lost during that commit
 cannot activate stale live authority or revoke the valid saved confirmation. Explicitly
 quarantined keys cannot recover automatically. Manual re-pairing clears old
-pairing keys and leaves permissions off. If no shared secret survives on both
+pairing keys and restores default permissions, never previous permanent grants.
+If a device remembers its peer but no shared secret survives on both
 devices, manual re-pairing remains necessary. Expiry does not provide a hard
 revocation deadline; explicit quarantine/re-pairing revokes the prior keys.
 
@@ -94,7 +102,7 @@ The per-device settings are:
   screen must both be enabled. The stored policy is usable only for a device
   that has proved its paired identity.
 - **Provide file list:** controls the shared file catalog in addition to the
-  reception gate. Pairing never enables it automatically.
+  reception gate. It is enabled in the default permission set.
 
 File transfers, control, clipboard and native streaming use duplex protocols;
 turning reception off also interrupts these exchanges when this device was the
@@ -129,8 +137,9 @@ Old clients can join an unused ID but cannot pass device pairing, exchange
 application content with these clients, or replace an existing member without a
 proof. An old signaling server does not protect against duplicate-ID eviction.
 Use HTTPS/localhost or the desktop secure origin for persistent WebCrypto keys.
-Clearing all profile storage removes both directions of pairing keys and
-requires manual re-pairing. Restoring peer trust after partial identity loss
+Clearing all profile storage removes both directions of pairing keys. That
+profile treats peers as new; any peer retaining the old identity still requires
+manual re-pairing when no shared key survives. Restoring peer trust after partial identity loss
 does not bypass signaling ownership: a different signing key cannot evict a
 currently connected member with the same ID. It must wait for the prior member
 to leave or its lease to expire; the client retries automatically while waiting.

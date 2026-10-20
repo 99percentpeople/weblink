@@ -117,7 +117,10 @@ async function connection(
     },
   });
   const trustA = new PeerTrustService(
-    () => receiveA[1](false),
+    {
+      quarantine: () => receiveA[1](false),
+      paired: () => receiveA[1](true),
+    },
     {
       identity: async () => a,
       pin: async (id) => pinsA.get(id),
@@ -132,7 +135,10 @@ async function connection(
     },
   );
   const trustB = new PeerTrustService(
-    () => receiveB[1](false),
+    {
+      quarantine: () => receiveB[1](false),
+      paired: () => receiveB[1](true),
+    },
     {
       identity: async () => b,
       pin: async (id) => pinsB.get(id),
@@ -247,10 +253,6 @@ async function checkInterruptedExchange(
     true,
   );
   try {
-    const pa = first.trustA.get("b")!,
-      pb = first.trustB.get("a")!;
-    await first.trustA.pair("b", pa.fingerprint!, pa.code!);
-    await first.trustB.pair("a", pb.fingerprint!, pb.code!);
     await until(
       () => !!keysB.get("a")?.pending,
       "first issuance persisted before interruption",
@@ -372,35 +374,15 @@ async function main() {
   const stream = canvas.captureStream(10);
   try {
     assert(
-      first.trustA.get("b")?.state === "unpaired",
-      "new device is unpaired",
+      first.trustA.trusted("b") &&
+        first.trustB.trusted("a"),
+      "new devices pair automatically after proof verification",
     );
-    let denied = false;
-    try {
-      await first.sessionA.sendMessage(
-        createSessionMessage(first.sessionA, "send-text", {
-          data: "blocked",
-        }),
-      );
-    } catch {
-      denied = true;
-    }
-    assert(denied, "unpaired send denied");
     const proofA = first.trustA.get("b")!,
       proofB = first.trustB.get("a")!;
     assert(
       proofA.code === proofB.code,
       "pairing code agrees over actual DTLS",
-    );
-    await first.trustA.pair(
-      "b",
-      proofA.fingerprint!,
-      proofA.code!,
-    );
-    await first.trustB.pair(
-      "a",
-      proofB.fingerprint!,
-      proofB.code!,
     );
     await until(
       keysSettled,
@@ -420,11 +402,9 @@ async function main() {
       "pairing key IDB round trip",
     );
     assert(
-      !first.receiveA[0]() && !first.receiveB[0](),
-      "pairing does not grant reception",
+      first.receiveA[0]() && first.receiveB[0](),
+      "first pairing enables reception by default",
     );
-    first.receiveA[1](true);
-    first.receiveB[1](true);
     await first.sessionB.sendMessage(
       createSessionMessage(first.sessionB, "send-text", {
         data: "allowed",
@@ -577,8 +557,8 @@ async function main() {
       proof.code!,
     );
     assert(
-      changed.trustA.trusted("b") && !changed.receiveA[0](),
-      "repair unlocks but does not restore grants",
+      changed.trustA.trusted("b") && changed.receiveA[0](),
+      "repair restores default permissions",
     );
   } finally {
     changed.close();
@@ -587,7 +567,8 @@ async function main() {
     ok: true,
     transport: "Chromium real WebRTC",
     persistentPrivateKey: true,
-    pairing: true,
+    automaticFirstPairing: true,
+    pairingRestoresDefaults: true,
     keyMismatchQuarantine: true,
     manualRepair: true,
     messageRevocation: true,

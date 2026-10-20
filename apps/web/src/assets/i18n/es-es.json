@@ -1497,7 +1497,7 @@
     "untrusted": "Dispositivo no confiable",
     "trusted": "Dispositivo verificado",
     "offline": "Dispositivo desconectado; identidad no disponible",
-    "blocked_description": "La conexión se mantiene, pero todos los permisos están desactivados. Compara los códigos y vuelve a emparejar para configurar los permisos. Los permisos anteriores no se restauran automáticamente.",
+    "blocked_description": "Los permisos están desactivados. Verifica los códigos y vuelve a emparejar para restaurar los valores predeterminados.",
     "pairing_code": "Código de emparejamiento",
     "confirm_code": "He verificado por un canal de confianza que ambos códigos coinciden",
     "repair": "Volver a emparejar",

@@ -113,8 +113,8 @@ covers a high-value end-to-end subsystem path with a small number of scenarios.
 
 `node apps/web/scripts/run-messaging-check.mjs` (from the repository root) launches
 the real app and Bun signaling server on temporary local ports, plus two isolated
-Chromium contexts. It compares both pairing codes, pairs through the application
-service and explicitly enables content reception. It checks private text/file
+Chromium contexts. It verifies automatic first pairing, matching pairing codes
+and default content reception through the application service. It checks private text/file
 sending with empty history and again after reloading persisted history, including
 automatic trust/permission restoration, room membership, receipts, draft clearing
 and downloaded file contents. It requires Node 22+, Bun and
@@ -460,7 +460,8 @@ still need end-to-end acceptance with the actual client and remote device.
 ## Device trust
 
 Run `bun run --cwd apps/web test:e2e:device-trust` for real Chromium WebRTC
-pairing, persistent key storage, changed-key isolation, manual repair, content
+automatic first pairing, persistent key storage, changed-key isolation, default
+permission restoration after manual repair, content
 revocation, media restoration, normal disconnects, automatic recovery from a
 surviving peer-issued key and renewal of expired keys without resetting permissions.
 Focused identity, pairing-key and peer-trust tests cover replay, DTLS binding,

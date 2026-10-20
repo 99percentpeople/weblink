@@ -142,4 +142,32 @@ describe("app options", () => {
       resolveClientConfig(options, "other").provideFileList,
     ).toBe(true);
   });
+
+  it("defaults to reception and sharing without changing stored denials or granting control", () => {
+    const options = getDefaultAppOptions();
+    expect(resolveClientConfig(options, "new")).toEqual({
+      provideFileList: true,
+      receiveContent: true,
+      shareScreen: true,
+    });
+    const stored = resolveStoredAppOptions({
+      clientConfigs: {
+        peer: {
+          provideFileList: false,
+          receiveContent: false,
+          shareScreen: false,
+          remoteControl: "deny",
+          automation: { "shell.execute": "deny" },
+        },
+      },
+    });
+    expect(resolveClientConfig(stored, "peer")).toEqual({
+      name: undefined,
+      provideFileList: false,
+      receiveContent: false,
+      shareScreen: false,
+      remoteControl: "deny",
+      automation: { "shell.execute": "deny" },
+    });
+  });
 });

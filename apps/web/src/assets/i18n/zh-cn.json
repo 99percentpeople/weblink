@@ -5,7 +5,7 @@
     "untrusted": "不可信设备",
     "trusted": "已验证设备",
     "offline": "设备离线，无法验证",
-    "blocked_description": "权限已关闭，重新配对后需重新授权。",
+    "blocked_description": "权限已关闭，核对配对码并重新配对后恢复默认权限。",
     "pairing_code": "配对码",
     "confirm_code": "已核对两端配对码一致",
     "repair": "重新配对",
