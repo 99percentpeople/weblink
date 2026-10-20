@@ -106,7 +106,7 @@ async function main() {
     assert(!(await second).ok, "Denied call succeeded");
     const context = webMcpContext(document);
     if (context) {
-      const unregister = registerWebMcp(
+      const unregister = await registerWebMcp(
         context,
         async () => ({ ok: true, data: {} }),
       );

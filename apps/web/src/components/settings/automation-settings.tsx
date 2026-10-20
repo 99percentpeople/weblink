@@ -55,8 +55,16 @@ export default function AutomationSettings() {
           description={t("automation.description")}
         >
           <SettingSwitch
-            checked={r().configuredEnabled()}
-            disabled={!r().ready() || busy()}
+            checked={
+              r().desktop
+                ? r().configuredEnabled()
+                : r().webSupported() && r().enabled()
+            }
+            disabled={
+              !r().ready() ||
+              busy() ||
+              (!r().desktop && !r().webSupported())
+            }
             onChange={(value) => {
               void run(() => r().configure(value));
             }}

@@ -23,7 +23,9 @@ import AutomationSettings from "@/components/settings/automation-settings";
 const fixture = vi.hoisted(() => ({
   scope: "shell.execute",
   desktop: true,
+  webSupported: true,
   enabled: true,
+  configure: vi.fn(async (_enabled: boolean) => {}),
   expiresAt: null as number | null,
   endpoints: () => ["http://127.0.0.1:123/mcp"],
   server: () => ({
@@ -68,8 +70,8 @@ vi.mock("@/libs/state/app-state-context", () => ({
       client: fixture.client,
       updateClient: fixture.updateClient,
       removeClient: fixture.removeClient,
-      webSupported: () => true,
-      configure: async () => {},
+      webSupported: () => fixture.webSupported,
+      configure: fixture.configure,
       decide: fixture.decide,
       revoke: fixture.revoke,
       stop: fixture.stop,
@@ -154,6 +156,7 @@ afterEach(async () => {
   fixture.expiresAt = null;
   fixture.updateClient.mockReset();
   fixture.desktop = true;
+  fixture.webSupported = true;
   fixture.enabled = true;
   fixture.endpoints = () => ["http://127.0.0.1:123/mcp"];
   fixture.server = () => ({ host: "127.0.0.1", port: 123 });
@@ -162,6 +165,40 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
+it.each([false, true])(
+  "keeps unsupported WebMCP off and disabled with saved preference %s",
+  async (enabled) => {
+    fixture.desktop = false;
+    fixture.webSupported = false;
+    fixture.enabled = enabled;
+    render(() => <AutomationSettings />);
+    const toggle = screen.getByRole("switch", {
+      name: "automation.enable",
+    });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText("automation.unsupported"),
+    ).toBeVisible();
+    await userEvent.click(toggle);
+    expect(fixture.configure).not.toHaveBeenCalled();
+  },
+);
+it.each([false, true])(
+  "allows supported automation on desktop=%s",
+  async (desktop) => {
+    fixture.desktop = desktop;
+    fixture.webSupported = !desktop;
+    fixture.enabled = false;
+    render(() => <AutomationSettings />);
+    const toggle = screen.getByRole("switch", {
+      name: "automation.enable",
+    });
+    expect(toggle).toBeEnabled();
+    await userEvent.click(toggle);
+    expect(fixture.configure).toHaveBeenCalledWith(true);
+  },
+);
 it("shows a separate privacy explanation for accessibility inspection", () => {
   fixture.scope = "accessibility.read";
   render(() => (

@@ -6,6 +6,7 @@ import { sessionService } from "@/libs/application/session-service";
 import { setClientConfig } from "@/options";
 import { PermissionSelect } from "./permission-select";
 import {
+  SettingBlock,
   SettingGroup,
   SettingSection,
 } from "./setting-layout";
@@ -33,86 +34,88 @@ export function ClientPermissions(props: {
       <SettingGroup
         title={t("setting.permissions.groups.identity")}
       >
-        <div class="space-y-2 text-sm">
-          <p
-            role="status"
-            class={
-              trusted()
-                ? "text-sm"
-                : "text-destructive text-sm"
-            }
-          >
-            {t(
-              `device_trust.${trust()?.state ?? "offline"}`,
-            )}
-          </p>
-          <Show when={trust()?.code}>
-            <p>
-              {t("device_trust.pairing_code")}:{" "}
-              <code>
-                {trust()
-                  ?.code?.match(/.{1,4}/g)
-                  ?.join("-")}
-              </code>
-            </p>
-          </Show>
-          <Show when={!trusted()}>
-            <p class="text-muted-foreground text-sm">
-              {t("device_trust.blocked_description")}
+        <SettingBlock>
+          <div class="space-y-2 text-sm">
+            <p
+              role="status"
+              class={
+                trusted()
+                  ? "text-sm"
+                  : "text-destructive text-sm"
+              }
+            >
+              {t(
+                `device_trust.${trust()?.state ?? "offline"}`,
+              )}
             </p>
             <Show when={trust()?.code}>
-              <label class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={confirmed()}
-                  onChange={(e) =>
-                    setConfirmed(e.currentTarget.checked)
-                  }
-                />
-                {t("device_trust.confirm_code")}
-              </label>
-              <div class="setting-actions">
-                <Button
-                  disabled={!confirmed() || busy()}
-                  onClick={async () => {
-                    const proof = trust();
-                    if (
-                      !proof?.fingerprint ||
-                      !proof.code ||
-                      !confirmed()
-                    )
-                      return;
-                    setBusy(true);
-                    setError("");
-                    try {
-                      await sessionService.trust.pair(
-                        props.clientId,
-                        proof.fingerprint,
-                        proof.code,
-                      );
-                    } catch (e) {
-                      setError(String(e));
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  {t("device_trust.repair")}
-                </Button>
-              </div>
-            </Show>
-            <Show when={!trust()?.code}>
-              <p class="text-muted-foreground text-sm">
-                {t("device_trust.proof_required")}
+              <p>
+                {t("device_trust.pairing_code")}:{" "}
+                <code>
+                  {trust()
+                    ?.code?.match(/.{1,4}/g)
+                    ?.join("-")}
+                </code>
               </p>
             </Show>
-          </Show>
-          <Show when={error()}>
-            <p role="alert" class="text-destructive">
-              {error()}
-            </p>
-          </Show>
-        </div>
+            <Show when={!trusted()}>
+              <p class="text-muted-foreground text-sm">
+                {t("device_trust.blocked_description")}
+              </p>
+              <Show when={trust()?.code}>
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={confirmed()}
+                    onChange={(e) =>
+                      setConfirmed(e.currentTarget.checked)
+                    }
+                  />
+                  {t("device_trust.confirm_code")}
+                </label>
+                <div class="setting-actions">
+                  <Button
+                    disabled={!confirmed() || busy()}
+                    onClick={async () => {
+                      const proof = trust();
+                      if (
+                        !proof?.fingerprint ||
+                        !proof.code ||
+                        !confirmed()
+                      )
+                        return;
+                      setBusy(true);
+                      setError("");
+                      try {
+                        await sessionService.trust.pair(
+                          props.clientId,
+                          proof.fingerprint,
+                          proof.code,
+                        );
+                      } catch (e) {
+                        setError(String(e));
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {t("device_trust.repair")}
+                  </Button>
+                </div>
+              </Show>
+              <Show when={!trust()?.code}>
+                <p class="text-muted-foreground text-sm">
+                  {t("device_trust.proof_required")}
+                </p>
+              </Show>
+            </Show>
+            <Show when={error()}>
+              <p role="alert" class="text-destructive">
+                {error()}
+              </p>
+            </Show>
+          </div>
+        </SettingBlock>
       </SettingGroup>
       <SettingGroup
         title={t("setting.permissions.groups.content")}

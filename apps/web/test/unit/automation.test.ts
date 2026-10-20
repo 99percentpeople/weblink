@@ -444,15 +444,20 @@ describe("shared tool contract", () => {
     const registered: Parameters<
       Parameters<typeof registerWebMcp>[0]["registerTool"]
     >[0][] = [];
+    const signals: AbortSignal[] = [];
     const context = {
-      registerTool: vi.fn((t) => registered.push(t)),
-      unregisterTool: vi.fn(),
+      registerTool: vi.fn<
+        Parameters<typeof registerWebMcp>[0]["registerTool"]
+      >(async (tool, { signal }) => {
+        registered.push(tool);
+        signals.push(signal);
+      }),
     };
     const invoke = vi.fn(async () => ({
       ok: true as const,
       data: {},
     }));
-    const close = registerWebMcp(context, invoke);
+    const close = await registerWebMcp(context, invoke);
     expect(registered.map((t) => t.name)).toEqual(
       tools.map((t) => t.name),
     );
@@ -469,9 +474,30 @@ describe("shared tool contract", () => {
       signal,
     );
     close();
-    expect(context.unregisterTool).toHaveBeenCalledTimes(
-      tools.length,
+    expect(signals).toHaveLength(tools.length);
+    expect(signals.every((signal) => signal.aborted)).toBe(
+      true,
     );
+  });
+  it("rolls back registered WebMCP tools when a later registration rejects", async () => {
+    let first!: AbortSignal;
+    const register = vi
+      .fn<
+        Parameters<typeof registerWebMcp>[0]["registerTool"]
+      >(async () => {
+        throw new Error("Registration denied");
+      })
+      .mockImplementationOnce(async (_, { signal }) => {
+        first = signal;
+      });
+    await expect(
+      registerWebMcp(
+        { registerTool: register },
+        async () => ({ ok: true, data: {} }),
+      ),
+    ).rejects.toThrow("Registration denied");
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(first.aborted).toBe(true);
   });
 });
 describe("stream diagnostics", () => {

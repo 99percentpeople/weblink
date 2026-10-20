@@ -9,9 +9,11 @@ clearing the saved preference.
 
 ## Connecting
 
-A supporting browser uses the WebMCP `document.modelContext` API (the
-2026-10-16 draft). Tool registration lasts only as long as this page. Unsupported
-browsers cannot register WebMCP tools. The browser is a controller, with no local
+A supporting browser uses the [WebMCP `document.modelContext` API](https://webmachinelearning.github.io/webmcp/). The switch
+stays off and disabled when WebMCP is unavailable, without erasing the saved
+preference. Automation becomes active only after tool registration succeeds;
+registration failure, disabling automation or closing the page aborts the
+registrations. The browser is a controller, with no local
 Token management or permission approval screen. Incoming peer automation calls
 to a browser are rejected; OS input and Shell execution require a desktop target.
 

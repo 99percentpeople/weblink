@@ -5,15 +5,15 @@
     "untrusted": "Untrusted device",
     "trusted": "Verified device",
     "offline": "Device offline; identity unavailable",
-    "blocked_description": "The connection remains open, but all application permissions are off. Compare the pairing codes and pair again to edit permissions. Previous permissions are not restored automatically.",
+    "blocked_description": "Permissions are off. Pair again, then grant access.",
     "pairing_code": "Pairing code",
-    "confirm_code": "I verified through a trusted channel that both pairing codes match",
+    "confirm_code": "I verified that both pairing codes match",
     "repair": "Pair again",
-    "proof_required": "Waiting for valid proof of the device key. Both devices need a pairing-capable version and a secure context. Failed verification cannot restore permissions.",
+    "proof_required": "Waiting for device verification. Both devices need a pairing-capable version and a secure connection.",
     "receive_content": "Receive content",
-    "receive_description": "Controls messages, files, clipboard and audio/video from this device. Turning it off stops active reception and keeps the connection open.",
+    "receive_description": "Receive messages, files, clipboard and audio/video from this device. Turning this off stops reception immediately.",
     "share_screen": "Share screen",
-    "share_description": "Allow local video and audio to be sent to this device, including active sharing. Sharing must still be started locally."
+    "share_description": "Allow this device to receive local video and audio once sharing starts."
   },
   "tasks": {
     "error_details": "Error details",
@@ -619,7 +619,7 @@
       "preferences_description": "These settings apply only to this client.",
       "provide_file_list": {
         "title": "Provide file list",
-        "description": "Allow this client to enumerate completed files in the local cache. When disabled, file-list requests return an empty list; chat, direct file sends, and existing transfers are unaffected."
+        "description": "Allow this device to browse the local cached file list."
       },
       "actions": "Client actions"
     },
@@ -1509,7 +1509,7 @@
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",
-    "token_once": "Copy this configuration now. The full token is shown only once; only its hash is stored. Tool permissions still require desktop approval.",
+    "token_once": "Copy now; the full token is shown only once. Tool calls still require approval.",
     "edit_token": "Edit token",
     "expired": "Expired",
     "created_at": "Created at",
@@ -1520,12 +1520,12 @@
     "token_lifetime": "Token validity",
     "title": "Automation",
     "policies_paused": "Always-allow policies are paused. Turn automation off and on to resume, or approve individual timed requests.",
-    "device_permissions_description": "Automation permissions save automatically and survive reconnection. They apply only after device pairing is verified and remain subject to content reception and screen sharing permissions.",
-    "description": "Connect AI tools to Weblink with separate permissions. The automation switch remembers its last state.",
+    "device_permissions_description": "Requires a trusted device and remains subject to content reception and screen sharing permissions.",
+    "description": "Connect AI tools through MCP or WebMCP.",
     "enable": "Enable automation",
-    "desktop": "Standard MCP runs on this desktop. Weblink peers connect over P2P.",
-    "browser": "WebMCP controls connected desktops. Permissions are checked on the destination desktop.",
-    "unsupported": "This browser does not support WebMCP. Use a supporting browser as the controller.",
+    "desktop": "Host MCP and accept automation from authorized devices.",
+    "browser": "Control desktops through WebMCP, with permissions managed on the target device.",
+    "unsupported": "WebMCP is unavailable in this browser and cannot be enabled.",
     "stop": "Stop all automation",
     "export": "Export diagnostics",
     "requests": "Approval requests",
@@ -1540,9 +1540,9 @@
     "deny": "Deny",
     "grants": "Active permissions",
     "revoke": "Revoke",
-    "pair_description": "Manage remote automation in each device’s permission settings. Temporary grants end on disconnect; always-allow policies apply after device verification.",
+    "pair_description": "Manage access in each device’s permission settings. Temporary grants end on disconnect.",
     "peers": "Connected devices",
-    "credentials_description": "Tokens authenticate MCP clients independently of remote device permissions. Create and manage them even when automation is off; they persist across restarts.",
+    "credentials_description": "Authenticate MCP clients independently of remote device permissions.",
     "clients": "Local MCP tokens",
     "client_name": "Token name",
     "create_client": "Create token",
@@ -1562,7 +1562,7 @@
     "input_warning": "Desktop control can operate terminals and applications, including through accessibility actions across the desktop. This is not a Shell sandbox.",
     "accessibility_warning": "Window names and control labels may contain private information. Password controls are redacted.",
     "session_control": "Session control",
-    "stop_description": "Cancel tasks and revoke automation grants while keeping the service running. Always-allow policies pause until automation is turned off and on again.",
+    "stop_description": "Cancel tasks and revoke grants while keeping the service running. Always-allow policies resume after automation is turned off and on.",
     "diagnostics": "Diagnostics",
     "export_description": "Export stream statistics and a redacted diagnostic report.",
     "peer": "Remote device",
@@ -1572,20 +1572,20 @@
     "no_jobs": "No command tasks.",
     "no_audit": "No recent calls.",
     "server": "MCP server",
-    "server_description": "Streamable HTTP for MCP clients. Settings are saved automatically; changing the listening address takes effect the next time automation is enabled. Existing tokens remain valid.",
+    "server_description": "Connect MCP clients over Streamable HTTP.",
     "server_status": "Service status",
     "server_active": "Running",
     "server_inactive": "Stopped",
     "endpoint": "MCP connection URL",
     "server_host": "Host",
     "server_port": "Port",
-    "server_host_description": "Use localhost or an IPv4 / IPv6 address. 127.0.0.1 limits access to this computer; 0.0.0.0 or :: listens on all interfaces. Other computers must use this desktop’s actual IP address.",
+    "server_host_description": "127.0.0.1 is local only; 0.0.0.0 or :: listens on all interfaces. Remote clients use this computer’s actual IP.",
     "server_port_description": "Default port: 32100. Use a value from 1 to 65535.",
     "server_invalid_host": "Enter localhost or a valid IPv4 / IPv6 address, without a scheme, path or port.",
     "server_invalid_port": "Enter a port from 1 to 65535. The default is 32100.",
     "token_created": "Token created",
-    "server_apply_description": "Listening settings apply on the next start. Current connections and running tasks remain active.",
-    "server_pending": "Listening settings have changed. The current connection URL remains active until automation is turned off and on again.",
+    "server_apply_description": "Settings save automatically and apply on the next service start.",
+    "server_pending": "New listening settings apply after automation is turned off and on.",
     "settings_auto_description": "Text fields save when you leave them; selections save immediately.",
     "saving": "Saving…",
     "settings_saved": "Saved automatically.",
@@ -1596,15 +1596,15 @@
     "permissions": {
       "read": {
         "title": "Reading and diagnostics",
-        "description": "Read device and stream status, screenshots and application UI content, which may contain sensitive information."
+        "description": "Read device and stream status, screenshots and UI content, which may contain private information."
       },
       "control": {
         "title": "Sharing and control",
-        "description": "Manage screen sharing and stream settings, and operate applications through keyboard, mouse and accessibility actions."
+        "description": "Manage sharing and streams, and control input and applications."
       },
       "terminal": {
         "title": "Terminal and commands",
-        "description": "Run Shell commands, read output and manage tasks. Commands run with the current OS account privileges."
+        "description": "Run commands and manage tasks as the current OS account."
       }
     },
     "mixed_permissions": "Existing individual settings",

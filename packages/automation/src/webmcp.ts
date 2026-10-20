@@ -4,67 +4,80 @@ import {
   type ToolResult,
 } from "./index";
 interface ModelContext {
-  registerTool(tool: {
-    name: string;
-    description: string;
-    inputSchema: object;
-    annotations: {
-      readOnlyHint: boolean;
-      untrustedContentHint: boolean;
-      consequentialHint: boolean;
-    };
-    execute(
-      input: Record<string, unknown>,
-      options?: { signal?: AbortSignal },
-    ): Promise<ToolResult>;
-  }): void;
-  unregisterTool(name: string): void;
+  registerTool(
+    tool: {
+      name: string;
+      description: string;
+      inputSchema: object;
+      annotations: {
+        readOnlyHint: boolean;
+        untrustedContentHint: boolean;
+        consequentialHint: boolean;
+      };
+      execute(
+        input: Record<string, unknown>,
+        options?: { signal?: AbortSignal },
+      ): Promise<ToolResult>;
+    },
+    options: { signal: AbortSignal },
+  ): Promise<void>;
 }
 export function webMcpContext(
   document: Document,
 ): ModelContext | undefined {
-  return (
+  const context = (
     document as Document & { modelContext?: ModelContext }
   ).modelContext;
+  return typeof context?.registerTool === "function"
+    ? context
+    : undefined;
 }
-/** Draft 2026-10-16 API isolated here; no guessed Agent identity or cross-origin exposure. */
-export function registerWebMcp(
+/** Registration is asynchronous; aborting its signal unregisters the tools. */
+export async function registerWebMcp(
   context: ModelContext,
   invoke: (
     call: ToolCall,
     signal?: AbortSignal,
   ) => Promise<ToolResult>,
   available: (name: string) => boolean = () => true,
-): () => void {
-  const registered: string[] = [];
+  signal?: AbortSignal,
+): Promise<() => void> {
+  const lifetime = new AbortController();
+  const abort = () => lifetime.abort(signal?.reason);
+  const close = () => {
+    signal?.removeEventListener("abort", abort);
+    lifetime.abort();
+  };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
+    signal?.throwIfAborted();
     for (const tool of tools.filter((t) =>
       available(t.name),
     )) {
-      context.registerTool({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: {
-          readOnlyHint: tool.readOnly,
-          untrustedContentHint: true,
-          consequentialHint: !tool.readOnly,
+      lifetime.signal.throwIfAborted();
+      await context.registerTool(
+        {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: {
+            readOnlyHint: tool.readOnly,
+            untrustedContentHint: true,
+            consequentialHint: !tool.readOnly,
+          },
+          execute: (args, options) =>
+            invoke(
+              { name: tool.name, arguments: args },
+              options?.signal,
+            ),
         },
-        execute: (args, options) =>
-          invoke(
-            { name: tool.name, arguments: args },
-            options?.signal,
-          ),
-      });
-      registered.push(tool.name);
+        { signal: lifetime.signal },
+      );
     }
+    lifetime.signal.throwIfAborted();
   } catch (error) {
-    for (const name of registered)
-      context.unregisterTool(name);
+    close();
     throw error;
   }
-  return () => {
-    for (const name of registered)
-      context.unregisterTool(name);
-  };
+  return close;
 }

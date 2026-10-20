@@ -5,15 +5,15 @@
     "untrusted": "不可信设备",
     "trusted": "已验证设备",
     "offline": "设备离线，无法验证",
-    "blocked_description": "连接保留，所有业务权限已关闭。核对两端配对码并重新配对后，才能设置权限；原有授权不会自动恢复。",
+    "blocked_description": "权限已关闭，重新配对后需重新授权。",
     "pairing_code": "配对码",
-    "confirm_code": "已通过可信方式核对两端配对码一致",
+    "confirm_code": "已核对两端配对码一致",
     "repair": "重新配对",
-    "proof_required": "等待对方提供有效的设备密钥证明。双方需使用支持配对的版本及安全连接；密钥验证失败时不能恢复权限。",
+    "proof_required": "等待设备验证。请确认双方版本支持配对，并使用安全连接。",
     "receive_content": "接收内容",
-    "receive_description": "统一控制接收此设备的消息、文件、剪贴板和音视频。关闭时停止正在接收的内容，连接继续保留。",
+    "receive_description": "接收此设备的消息、文件、剪贴板和音视频。关闭后立即停止接收。",
     "share_screen": "分享画面",
-    "share_description": "允许向此设备发送本地画面及音频，包括正在分享的内容。仍需先在本机开始共享。"
+    "share_description": "允许此设备接收本机画面和音频，仍需先开始共享。"
   },
   "tasks": {
     "error_details": "错误详情",
@@ -619,7 +619,7 @@
       "preferences_description": "这些设置只针对当前客户端。",
       "provide_file_list": {
         "title": "提供文件列表",
-        "description": "允许这个客户端查看本机已完成缓存文件的列表。关闭后，文件列表请求将返回空列表；聊天、直接发送文件和已有传输不受影响。"
+        "description": "允许此设备浏览本机已缓存的文件列表。"
       },
       "actions": "客户端操作"
     },
@@ -1509,7 +1509,7 @@
   },
   "automation": {
     "no_tokens": "暂无本机 MCP Token。",
-    "token_once": "请立即复制配置。完整 Token 仅显示这一次，本机只保存哈希；工具操作仍需桌面端授权。",
+    "token_once": "请立即复制，完整 Token 仅显示一次。工具调用仍需授权。",
     "edit_token": "编辑 Token",
     "expired": "已过期",
     "created_at": "创建时间",
@@ -1520,12 +1520,12 @@
     "token_lifetime": "Token 有效期",
     "title": "自动化",
     "policies_paused": "始终允许已暂停。重新关闭并开启自动化后恢复，也可以单独批准限时请求。",
-    "device_permissions_description": "自动化权限自动保存，并在重新连接后保留。仅对通过配对验证的设备生效，仍受接收内容和分享画面权限限制。",
-    "description": "让 AI 工具连接 Weblink。自动化开关会记住上次状态，各项能力分别授权。",
+    "device_permissions_description": "仅对可信设备生效，仍受接收内容和分享画面权限限制。",
+    "description": "通过 MCP 或 WebMCP 连接 AI 工具。",
     "enable": "启用自动化",
-    "desktop": "标准 MCP 在此桌面端提供服务，Weblink 远端设备通过 P2P 连接。",
-    "browser": "通过 WebMCP 控制已连接的桌面端，权限由目标桌面端验证。",
-    "unsupported": "当前浏览器不支持 WebMCP。请使用支持此功能的浏览器作为控制端。",
+    "desktop": "提供 MCP 服务，并接受已授权设备的自动化调用。",
+    "browser": "通过 WebMCP 控制桌面端，权限由目标设备管理。",
+    "unsupported": "当前浏览器不支持 WebMCP，无法启用。",
     "stop": "停止全部自动化",
     "export": "导出诊断",
     "requests": "授权请求",
@@ -1540,9 +1540,9 @@
     "deny": "拒绝",
     "grants": "有效授权",
     "revoke": "撤销",
-    "pair_description": "远端自动化权限在对应设备的权限设置中管理。临时授权在断线后失效，始终允许在重新验证设备后恢复。",
+    "pair_description": "在对应设备的权限设置中管理授权。临时授权断线失效。",
     "peers": "连接设备",
-    "credentials_description": "用于 MCP 客户端认证，与远端设备权限独立。自动化关闭时也可创建和管理 Token，重启后保留。",
+    "credentials_description": "用于 MCP 客户端认证，与远端设备权限独立。",
     "clients": "本机 MCP Token",
     "client_name": "Token 名称",
     "create_client": "创建 Token",
@@ -1562,7 +1562,7 @@
     "input_warning": "桌面控制可以操作终端和其他应用，也可通过可访问性接口操作整个桌面的控件。这不是 Shell 沙箱。",
     "accessibility_warning": "窗口名称和控件标签可能包含隐私信息。密码控件内容会被隐藏。",
     "session_control": "会话控制",
-    "stop_description": "取消正在执行的任务并撤销自动化授权，服务保持开启。始终允许将暂停，重新开启自动化后恢复。",
+    "stop_description": "取消任务并撤销授权，服务继续运行。始终允许暂停，重新开启自动化后恢复。",
     "diagnostics": "诊断",
     "export_description": "导出串流统计和经过脱敏处理的诊断报告。",
     "peer": "远端设备",
@@ -1572,20 +1572,20 @@
     "no_jobs": "暂无命令任务。",
     "no_audit": "暂无调用记录。",
     "server": "MCP 服务",
-    "server_description": "为 MCP 客户端提供 Streamable HTTP 接口。设置自动保存，监听地址变更在下次开启自动化时生效，现有 Token 保持有效。",
+    "server_description": "通过 Streamable HTTP 连接 MCP 客户端。",
     "server_status": "服务状态",
     "server_active": "运行中",
     "server_inactive": "未启动",
     "endpoint": "MCP 连接地址",
     "server_host": "监听地址（Host）",
     "server_port": "监听端口（Port）",
-    "server_host_description": "支持 localhost、IPv4 和 IPv6 地址。127.0.0.1 仅允许本机连接；0.0.0.0 或 :: 监听所有网卡。其他设备连接时请使用本机的实际 IP 地址。",
+    "server_host_description": "127.0.0.1 仅限本机；0.0.0.0 或 :: 监听所有网卡。远端请使用本机实际 IP。",
     "server_port_description": "默认端口为 32100，可设置为 1–65535。",
     "server_invalid_host": "请输入 localhost 或有效的 IPv4 / IPv6 地址，不包含协议、路径或端口。",
     "server_invalid_port": "请输入 1–65535 的端口，默认值为 32100。",
     "token_created": "Token 已创建",
-    "server_apply_description": "监听配置在下次启动服务时生效，当前连接和正在执行的任务保持运行。",
-    "server_pending": "监听配置已变更。当前连接地址仍有效，关闭再开启自动化后使用新配置。",
+    "server_apply_description": "设置自动保存，下次启动服务时生效。",
+    "server_pending": "新监听配置将在关闭并重新开启自动化后生效。",
     "settings_auto_description": "输入框在失焦后自动保存，下拉选项修改后立即保存。",
     "saving": "正在保存…",
     "settings_saved": "已自动保存。",
@@ -1596,15 +1596,15 @@
     "permissions": {
       "read": {
         "title": "读取与诊断",
-        "description": "读取设备和串流状态、屏幕截图及应用界面内容，可能包含敏感信息。"
+        "description": "读取设备、串流、截图和界面信息，可能包含隐私。"
       },
       "control": {
         "title": "共享与操控",
-        "description": "管理屏幕共享及串流参数，通过键鼠和辅助功能操控应用。"
+        "description": "管理共享和串流，操控键鼠与应用。"
       },
       "terminal": {
         "title": "终端与命令",
-        "description": "执行 Shell 命令、读取输出和管理任务。命令以当前系统账户权限运行。"
+        "description": "以当前系统账户执行命令并管理任务。"
       }
     },
     "mixed_permissions": "保留原有分项设置",

@@ -182,6 +182,11 @@ export function createAutomation(
     timer: ReturnType<typeof setTimeout> | undefined,
     unregister: (() => void) | undefined;
   const native = platform.automation;
+  const webSupported = () =>
+    !!globalThis.crypto?.subtle &&
+    !!webMcpContext(document);
+  let webRegistration: AbortController | undefined;
+  let configurationRevision = 0;
   let snapshotSequence = 0;
   const readNativeSnapshot = async () => {
     const sequence = ++snapshotSequence;
@@ -582,6 +587,7 @@ export function createAutomation(
       timer = setTimeout(() => void refresh(), 1000);
   };
   const configure = async (value: boolean) => {
+    const revision = ++configurationRevision;
     setError("");
     try {
       if (value && !globalThis.crypto?.subtle)
@@ -589,9 +595,42 @@ export function createAutomation(
           "SECURE_CONTEXT_REQUIRED",
           "Automation requires HTTPS or localhost",
         );
+      const context =
+        value && !native
+          ? webMcpContext(document)
+          : undefined;
+      if (value && !native && !context)
+        throw new AutomationError(
+          "UNSUPPORTED",
+          "WebMCP is unavailable in this browser",
+        );
       if (native) {
         await native.configure(epoch, value);
         await readNativeSnapshot();
+      } else {
+        webRegistration?.abort();
+        unregister?.();
+        unregister = undefined;
+        setEnabled(false);
+        sessionService.setAutomationEnabled(false);
+        if (value && context) {
+          webRegistration = new AbortController();
+          const close = await registerWebMcp(
+            context,
+            (call, signal) =>
+              invoke(webPrincipal, call, signal),
+            () => true,
+            webRegistration.signal,
+          );
+          if (
+            life.signal.aborted ||
+            revision !== configurationRevision
+          ) {
+            close();
+            return;
+          }
+          unregister = close;
+        }
       }
       if (life.signal.aborted) {
         if (native && epoch)
@@ -600,17 +639,6 @@ export function createAutomation(
       }
       setEnabled(value);
       sessionService.setAutomationEnabled(value);
-      unregister?.();
-      unregister = undefined;
-      if (value && !native) {
-        const context = webMcpContext(document);
-        if (context)
-          unregister = registerWebMcp(
-            context,
-            (call, signal) =>
-              invoke(webPrincipal, call, signal),
-          );
-      }
       if (!value) {
         permissions.stop();
         for (const c of calls.values()) c.abort();
@@ -622,6 +650,11 @@ export function createAutomation(
       setAppState("options", "automationEnabled", value);
       changed();
     } catch (e) {
+      if (
+        life.signal.aborted ||
+        revision !== configurationRevision
+      )
+        return;
       setError(String(e));
       throw e;
     }
@@ -664,7 +697,7 @@ export function createAutomation(
         }
       if (life.signal.aborted) return;
       if (
-        (!native || epoch) &&
+        (native ? epoch : webSupported()) &&
         appState.options.automationEnabled
       ) {
         try {
@@ -681,6 +714,7 @@ export function createAutomation(
   onCleanup(() => {
     life.abort();
     clearTimeout(timer);
+    webRegistration?.abort();
     unregister?.();
     permissions.stop();
     diagnostics.dispose();
@@ -706,7 +740,7 @@ export function createAutomation(
       return snapshot?.server ?? config;
     },
     desktop: !!native,
-    webSupported: () => !!webMcpContext(document),
+    webSupported,
     snapshot: () => {
       revision();
       return native
