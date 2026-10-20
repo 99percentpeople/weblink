@@ -322,6 +322,97 @@ try {
       ),
     );
   await ready();
+  const peerStates = () =>
+    Promise.all(
+      clients.map((client, i) =>
+        evaluate(
+          client,
+          `(async () => {
+      const { sessionService } = await import('/src/libs/application/session-service.ts');
+      const peer = ${JSON.stringify(ids[1 - i])};
+      const session = sessionService.sessions[peer];
+      return {
+        trust: sessionService.trust.get(peer),
+        receiving: sessionService.canReceive(peer),
+        remoteReceiving: session && sessionService.capabilities.get(session)?.identity?.receiveContent === true,
+        channelReady: session?.isMessageChannelReady === true,
+      };
+    })()`,
+        ),
+      ),
+    );
+  // Use the same pairing and permission APIs as device settings. New browser
+  // profiles must prove their keys and receive explicit consent before sending.
+  const proofs = await until(
+    "both devices offer pairing proofs",
+    async () => {
+      const peers = await peerStates();
+      return (
+        peers.every(
+          (peer) =>
+            peer.trust?.state === "unpaired" &&
+            peer.trust.fingerprint &&
+            peer.trust.code,
+        ) && peers
+      );
+    },
+  );
+  if (proofs[0].trust.code !== proofs[1].trust.code)
+    throw new Error("Pairing codes do not match");
+  await Promise.all(
+    clients.map((client, i) =>
+      evaluate(
+        client,
+        `(async () => {
+      const { sessionService } = await import('/src/libs/application/session-service.ts');
+      const proof = ${JSON.stringify(proofs[i].trust)};
+      await sessionService.trust.pair(${JSON.stringify(ids[1 - i])}, proof.fingerprint, proof.code);
+    })()`,
+      ),
+    ),
+  );
+  const paired = await until(
+    "both devices trust the paired keys",
+    async () => {
+      const peers = await peerStates();
+      return (
+        peers.every(
+          (peer) => peer.trust?.state === "trusted",
+        ) && peers
+      );
+    },
+  );
+  if (paired.some((peer) => peer.receiving))
+    throw new Error(
+      "Pairing unexpectedly granted reception",
+    );
+  await Promise.all(
+    clients.map((client, i) =>
+      evaluate(
+        client,
+        `(async () => {
+      const { setClientConfig } = await import('/src/options.ts');
+      setClientConfig(${JSON.stringify(ids[1 - i])}, { receiveContent: true });
+    })()`,
+      ),
+    ),
+  );
+  const authorized = () =>
+    until(
+      "verified devices and bidirectional content permission",
+      async () =>
+        (await peerStates()).every(
+          (peer) =>
+            peer.trust?.state === "trusted" &&
+            peer.receiving &&
+            peer.remoteReceiving &&
+            peer.channelReady,
+        ),
+    );
+  await authorized();
+  console.log(
+    "Passed: matching pairing codes and explicit content consent",
+  );
   const initial = await snapshots();
   if (!initial.every((s) => s.messages.length === 0))
     throw new Error(
@@ -342,6 +433,9 @@ try {
         clients.map((client) => client.call("Page.reload")),
       );
       await ready();
+      // Reconnection must restore trust and consent without pairing or granting
+      // permissions again; a visible composer alone does not prove readiness.
+      await authorized();
       const restored = await snapshots();
       if (!restored.every((s) => s.messages.length === 4))
         throw new Error("Reload lost private history");
@@ -457,6 +551,15 @@ try {
     try {
       console.error(
         await evaluate(client, "document.body.innerText"),
+      );
+      console.error(
+        await evaluate(
+          client,
+          `JSON.stringify({
+        downloads: Object.entries(window.__downloadFiles ?? {}).map(([name, file]) => ({name, size: file?.size})),
+        errors: [...document.querySelectorAll('[data-sonner-toast][data-type="error"]')].map(e => e.innerText),
+      })`,
+        ),
       );
     } catch {
       /* Browser may have exited. */

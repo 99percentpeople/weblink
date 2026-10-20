@@ -113,9 +113,11 @@ covers a high-value end-to-end subsystem path with a small number of scenarios.
 
 `node apps/web/scripts/run-messaging-check.mjs` (from the repository root) launches
 the real app and Bun signaling server on temporary local ports, plus two isolated
-Chromium contexts. It checks private text/file sending with empty history and
-again after reloading persisted history, including room membership, receipts,
-draft clearing and downloaded file contents. It requires Node 22+, Bun and
+Chromium contexts. It compares both pairing codes, pairs through the application
+service and explicitly enables content reception. It checks private text/file
+sending with empty history and again after reloading persisted history, including
+automatic trust/permission restoration, room membership, receipts, draft clearing
+and downloaded file contents. It requires Node 22+, Bun and
 Chromium (`CHROMIUM_PATH` can select the browser). Profiles, Vite caches and server
 processes are disposable; it does not connect to a deployed signaling service.
 
