@@ -89,6 +89,17 @@ separate `automation/1` capability and ordered WebRTC DataChannel. Existing
 clients without that capability cannot call tools. All peer application traffic
 also requires [device pairing and content permission](DEVICE_TRUST.md).
 
+Automation connections follow the shared peer capability notifications and
+message-channel lifecycle events; they do not poll connected devices. Both peers
+must allow receiving content before opening the channel. Revoking that permission
+closes it, and a new permission announcement allows reconnection. Only completed
+automation handshakes appear in the connected automation device list. An
+established channel can recover on its close event; a rejected handshake waits
+for another capability or channel-readiness notification instead of retrying in
+a loop. The native
+MCP authority's local heartbeat and cancellation checks are independent of peer
+discovery.
+
 ## Consent and identity
 
 Identity and authorization remain device-local. Each destination device manages

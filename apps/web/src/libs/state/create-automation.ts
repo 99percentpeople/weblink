@@ -114,7 +114,7 @@ export function createAutomation(
     PeerSession,
     {
       abort: AbortController;
-      opening: boolean;
+      opening?: object;
       pc: RTCPeerConnection | null;
       share: boolean;
     }
@@ -427,6 +427,26 @@ export function createAutomation(
       .finish(epoch, request.id, result)
       .catch(() => {});
   };
+  const canConnect = (session: PeerSession) => {
+    const capabilities =
+      sessionService.capabilities.get(session);
+    // Both ends must accept application data. Otherwise the destination closes
+    // every incoming channel and the polling loop keeps reopening it.
+    return (
+      sessionService.canReceive(session.targetClientId) &&
+      !!capabilities?.automation &&
+      capabilities.identity?.receiveContent === true
+    );
+  };
+  let syncScheduled = false;
+  const scheduleSync = () => {
+    if (syncScheduled || life.signal.aborted) return;
+    syncScheduled = true;
+    queueMicrotask(() => {
+      syncScheduled = false;
+      if (!life.signal.aborted) untrack(sync);
+    });
+  };
   const bind = (
     session: PeerSession,
     channel: RTCDataChannel,
@@ -435,9 +455,9 @@ export function createAutomation(
       !enabled() ||
       sessionService.sessions[session.targetClientId] !==
         session ||
-      !sessionService.canReceive(session.targetClientId) ||
+      !session.isMessageChannelReady ||
       links.has(session) ||
-      !sessionService.capabilities.get(session)?.automation
+      !canConnect(session)
     ) {
       channel.close();
       return;
@@ -483,6 +503,10 @@ export function createAutomation(
                 return native.disconnect(epoch, p.id);
             })
             .catch(() => {});
+        // Recover an established transport on its close event. Failed or
+        // rejected handshakes wait for a new capability/readiness notification.
+        if (link.fingerprint && !link.failure)
+          scheduleSync();
       },
     );
     links.set(session, link);
@@ -502,7 +526,6 @@ export function createAutomation(
       if (!b) {
         b = {
           abort: new AbortController(),
-          opening: false,
           pc: session.peerConnection,
           share: sessionService.canShareScreen(
             session.targetClientId,
@@ -525,7 +548,13 @@ export function createAutomation(
           ({ detail }) => {
             if (detail === "closed")
               links.get(session)?.close();
+            else untrack(sync);
           },
+          { signal: b.abort.signal },
+        );
+        session.addEventListener(
+          "peerconnectioninit",
+          () => untrack(sync),
           { signal: b.abort.signal },
         );
       }
@@ -540,12 +569,9 @@ export function createAutomation(
       if (b.pc !== session.peerConnection) {
         links.get(session)?.close();
         b.pc = session.peerConnection;
+        b.opening = undefined;
       }
-      const capable =
-        sessionService.canReceive(session.targetClientId) &&
-        !!sessionService.capabilities.get(session)
-          ?.automation;
-      if (!capable) {
+      if (!canConnect(session)) {
         links.get(session)?.close();
         continue;
       }
@@ -555,23 +581,31 @@ export function createAutomation(
         !links.has(session) &&
         !b.opening
       ) {
-        b.opening = true;
+        const attempt = {};
+        b.opening = attempt;
         const binding = b;
+        const pc = session.peerConnection;
         void session
-          .createChannel(CHANNEL, CHANNEL)
-          .then((channel) => {
-            if (binding.abort.signal.aborted)
+          .createChannel(CHANNEL, CHANNEL, (channel) => {
+            if (
+              binding.abort.signal.aborted ||
+              binding.opening !== attempt ||
+              session.peerConnection !== pc
+            )
               channel.close();
             else bind(session, channel);
           })
           .catch(() => {})
-          .finally(() => (binding.opening = false));
+          .finally(() => {
+            if (binding.opening === attempt)
+              binding.opening = undefined;
+          });
       }
     }
   };
-  const refresh = async () => {
-    permissions.expire();
-    untrack(sync);
+  // Native authority needs a local lease heartbeat and invocation cancellation
+  // checks. Peer discovery is driven by capability and transport events.
+  const refreshNative = async () => {
     if (native && epoch)
       try {
         await native.heartbeat(epoch);
@@ -592,7 +626,7 @@ export function createAutomation(
           link.close();
       }
     if (!life.signal.aborted)
-      timer = setTimeout(() => void refresh(), 1000);
+      timer = setTimeout(() => void refreshNative(), 1000);
   };
   const configure = async (value: boolean) => {
     const revision = ++configurationRevision;
@@ -716,7 +750,7 @@ export function createAutomation(
       }
       if (life.signal.aborted) return;
       setReady(!native || !!epoch);
-      void refresh();
+      if (native) void refreshNative();
     })();
   });
   onCleanup(() => {
@@ -763,17 +797,19 @@ export function createAutomation(
     },
     peers: () => {
       revision();
-      return [...links].map(([s, l]) => ({
-        id: s.targetClientId,
-        name:
-          sessionService.clientViewData[s.targetClientId]
-            ?.name ?? s.targetClientId,
-        code:
-          l.fingerprint
-            .slice(0, 12)
-            .match(/.{1,4}/g)
-            ?.join("-") ?? "…",
-      }));
+      return [...links]
+        .filter(([, link]) => !!link.fingerprint)
+        .map(([s, l]) => ({
+          id: s.targetClientId,
+          name:
+            sessionService.clientViewData[s.targetClientId]
+              ?.name ?? s.targetClientId,
+          code:
+            l.fingerprint
+              .slice(0, 12)
+              .match(/.{1,4}/g)
+              ?.join("-") ?? "…",
+        }));
     },
     principalPeerId: (id: string) => {
       revision();

@@ -619,8 +619,16 @@ export class PeerSession {
       );
   }
 
-  createChannel(label: string, protocol: string) {
-    return this.dataChannels.createChannel(label, protocol);
+  createChannel(
+    label: string,
+    protocol: string,
+    onAvailable?: (channel: RTCDataChannel) => void,
+  ) {
+    return this.dataChannels.createChannel(
+      label,
+      protocol,
+      onAvailable,
+    );
   }
 
   private receiveMessage(message: SessionMessage): void {

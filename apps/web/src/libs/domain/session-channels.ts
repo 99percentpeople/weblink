@@ -266,6 +266,7 @@ export class PeerSessionChannelController {
   async createChannel(
     label: string,
     protocol: string,
+    onAvailable?: (channel: RTCDataChannel) => void,
   ): Promise<RTCDataChannel> {
     if (
       this.options.acceptsChannel?.(label, protocol) ===
@@ -307,10 +308,12 @@ export class PeerSessionChannelController {
         : null;
 
     if (preferred?.readyState === "open") {
+      onAvailable?.(permitted(preferred));
       return preferred;
     }
 
     if (preferred?.readyState === "connecting") {
+      onAvailable?.(permitted(preferred));
       const [waitError] = await catchError(
         waitChannel(preferred),
       );
@@ -327,6 +330,7 @@ export class PeerSessionChannelController {
       ) {
         this.setupMessageChannel(openChannel);
       }
+      onAvailable?.(permitted(openChannel));
       return openChannel;
     }
 
@@ -340,6 +344,7 @@ export class PeerSessionChannelController {
       ) {
         this.setupMessageChannel(connectingChannel);
       }
+      onAvailable?.(permitted(connectingChannel));
 
       const [waitError] = await catchError(
         waitChannel(connectingChannel),
@@ -360,6 +365,9 @@ export class PeerSessionChannelController {
       this.setupMessageChannel(channel);
     }
 
+    // A peer can send its first packet before the creator's open event.
+    // Protocol listeners must be installed before waiting for readiness.
+    onAvailable?.(permitted(channel));
     await waitChannel(channel);
     return permitted(channel);
   }

@@ -219,6 +219,69 @@ async function setup(expectControl = true) {
   };
 }
 
+it("opens native media from peer consent notifications and channel events without periodic retries", async () => {
+  const f = await setup();
+  const events = f.session as unknown as Pick<
+    MultiEventEmitter<PeerSessionEventMap>,
+    "dispatchEvent"
+  >;
+  const channels: Channel[] = [];
+  const createDataChannel = vi.fn(() => {
+    const channel = new Channel();
+    channels.push(channel);
+    return channel;
+  });
+  vi.spyOn(f.session, "sendMessage").mockResolvedValue();
+  f.session.peerConnection = {
+    createDataChannel,
+    getTransceivers: () => [],
+  } as unknown as RTCPeerConnection;
+  let revision = 1;
+  const announce = (receiveContent: boolean) =>
+    events.dispatchEvent(
+      "message",
+      createSessionMessage(
+        { clientId: "remote", targetClientId: "local" },
+        "peer-capabilities",
+        {
+          update: {
+            kind: "patch",
+            generation: "remote-connection",
+            revision: ++revision,
+            services: {
+              "identity/1": { receiveContent },
+            },
+          },
+        },
+      ),
+    );
+  try {
+    events.dispatchEvent("messagechannelchange", "ready");
+    announce(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(createDataChannel).not.toHaveBeenCalled();
+    announce(true);
+    await flush();
+    expect(createDataChannel).toHaveBeenCalledTimes(1);
+
+    channels[0].close();
+    channels[0].dispatchEvent(new Event("close"));
+    await flush();
+    expect(createDataChannel).toHaveBeenCalledTimes(2);
+    announce(false);
+    await flush();
+    expect(channels[1].readyState).toBe("closed");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(createDataChannel).toHaveBeenCalledTimes(2);
+    announce(true);
+    await flush();
+    expect(createDataChannel).toHaveBeenCalledTimes(3);
+  } finally {
+    f.session.peerConnection = null;
+    f.close();
+  }
+});
+
 it("isolates browser codec choices from unrelated peer joins, capability updates and departures", async () => {
   const f = await setup();
   const options = (session: PeerSession) =>

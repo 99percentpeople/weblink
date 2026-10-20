@@ -516,9 +516,8 @@ export class SessionService {
       channelClosed: () => {
         opening = false;
         controlGeneration = createUuid();
-        clearTimeout(nativeReopenTimer);
         if (!controller.signal.aborted)
-          nativeReopenTimer = setTimeout(openNative, 1000);
+          queueMicrotask(() => openNative());
       },
       changed: (stream) => {
         if (
@@ -575,7 +574,7 @@ export class SessionService {
           session.refreshAccess();
           if (!this.canReceive(client.clientId))
             native.reset();
-          else queueMicrotask(() => openNative());
+          queueMicrotask(() => openNative());
         });
       });
       createEffect(
@@ -625,16 +624,22 @@ export class SessionService {
       return dispose;
     });
     let opening = false;
-    let nativeReopenTimer:
-      | ReturnType<typeof setTimeout>
-      | undefined;
     const openNative = () => {
+      if (controller.signal.aborted) return;
+      const capabilities = this.capabilities.get(session);
+      if (
+        !this.canReceive(client.clientId) ||
+        capabilities?.identity?.receiveContent === false
+      ) {
+        opening = false;
+        native.reset();
+        return;
+      }
       if (
         !session.polite ||
-        controller.signal.aborted ||
         !mainChannelReady ||
-        !this.canReceive(client.clientId) ||
-        !this.capabilities.get(session)?.screen ||
+        !capabilities?.screen ||
+        capabilities.identity?.receiveContent !== true ||
         opening ||
         !session.peerConnection
       )
@@ -656,8 +661,6 @@ export class SessionService {
           "Native screen channel unavailable",
           error,
         );
-        if (!controller.signal.aborted)
-          nativeReopenTimer = setTimeout(openNative, 2000);
       }
     };
     session.addEventListener(
@@ -676,7 +679,6 @@ export class SessionService {
       () => {
         opening = false;
         mainChannelReady = false;
-        clearTimeout(nativeReopenTimer);
         native.reset();
         controlGeneration = createUuid();
       },
@@ -689,7 +691,6 @@ export class SessionService {
         if (detail === "ready") void openNative();
         else {
           opening = false;
-          clearTimeout(nativeReopenTimer);
           native.reset();
           controlGeneration = createUuid();
         }
@@ -699,7 +700,6 @@ export class SessionService {
     controller.signal.addEventListener(
       "abort",
       () => {
-        clearTimeout(nativeReopenTimer);
         disposePolicy();
         disposeCapabilities();
         disposeTrust();

@@ -123,3 +123,55 @@ it("rechecks permission after an asynchronously opened application channel", asy
   expect(data.close).toHaveBeenCalled();
   controller.close();
 });
+
+it.each(["new", "connecting", "open"] as const)(
+  "installs protocol listeners before waiting for a %s channel",
+  async (state) => {
+    const data = channel(7);
+    Object.assign(data, {
+      label: "weblink-automation/1",
+      protocol: "weblink-automation/1",
+      readyState: state === "open" ? "open" : "connecting",
+    });
+    const createDataChannel = vi.fn(() => data);
+    const controller = new PeerSessionChannelController({
+      polite: false,
+      getStatus: () => "connected",
+      getPeerConnection: () =>
+        ({
+          createDataChannel,
+        }) as unknown as RTCPeerConnection,
+      getSessionSignal: () => undefined,
+      ordered: () => true,
+      createChannel: async () => data,
+      onChannel: vi.fn(),
+      onMessage: vi.fn(),
+      onMessageChannelChange: vi.fn(),
+    });
+    if (state !== "new")
+      controller.acceptIncomingChannel(data);
+    const received = vi.fn();
+    const available = vi.fn((channel: RTCDataChannel) => {
+      channel.addEventListener("message", received);
+    });
+    const opening = controller.createChannel(
+      data.label,
+      data.protocol,
+      available,
+    );
+    expect(available).toHaveBeenCalledOnce();
+    // RTC can deliver the peer's hello before firing our open event.
+    data.dispatchEvent(
+      new MessageEvent("message", { data: "hello" }),
+    );
+    expect(received).toHaveBeenCalledOnce();
+    Object.assign(data, { readyState: "open" });
+    data.dispatchEvent(new Event("open"));
+    await expect(opening).resolves.toBe(data);
+    expect(available).toHaveBeenCalledOnce();
+    expect(createDataChannel).toHaveBeenCalledTimes(
+      state === "new" ? 1 : 0,
+    );
+    controller.close();
+  },
+);

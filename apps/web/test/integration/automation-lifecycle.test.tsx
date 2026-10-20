@@ -55,7 +55,12 @@ vi.mock("@/libs/application/session-service", () => ({
       return fixture.sessions;
     },
     clientViewData: { peer: { name: "Peer" } },
-    capabilities: { get: () => ({ automation: {} }) },
+    capabilities: {
+      get: () => ({
+        automation: {},
+        identity: { receiveContent: true },
+      }),
+    },
     canReceive: () => fixture.receive,
     canShareScreen: () => true,
     setAutomationEnabled: fixture.advertise,
@@ -371,7 +376,15 @@ function peer() {
     isMessageChannelReady: true,
     peerConnection: {},
     addEventListener() {},
-    createChannel: async () => ({ close() {} }),
+    createChannel: async (
+      _label: string,
+      _protocol: string,
+      onAvailable?: (channel: unknown) => void,
+    ) => {
+      const channel = { close() {} };
+      onAvailable?.(channel);
+      return channel;
+    },
   } as unknown as PeerSession;
 }
 const incoming = () =>
