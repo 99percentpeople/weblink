@@ -99,6 +99,17 @@ impl Jobs {
         grant: &str,
         args: &Value,
     ) -> Result<StartedJob, String> {
+        self.start_with(owner, grant, args, || {
+            Ok(shell(args["script"].as_str().ok_or("INVALID_ARGUMENTS")?))
+        })
+    }
+    fn start_with(
+        &self,
+        owner: &str,
+        grant: &str,
+        args: &Value,
+        command: impl FnOnce() -> Result<Command, String>,
+    ) -> Result<StartedJob, String> {
         let mut entries = self.entries.lock().unwrap();
         if entries
             .values()
@@ -112,7 +123,7 @@ impl Jobs {
             entries.retain(|_, j| j.state.lock().unwrap().status == "running");
         }
         let id = uuid::Uuid::new_v4().to_string();
-        let mut command = shell(args["script"].as_str().ok_or("INVALID_ARGUMENTS")?);
+        let mut command = command()?;
         // Explicit environment allowlist. Never inherit app/MCP/cloud credentials.
         let env: Vec<_> = std::env::vars_os()
             .filter(|(k, _)| {
@@ -343,24 +354,79 @@ mod windows_tree {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Exercise real process/pipe/job-object behavior without starting a CLR and
+    // PowerShell for every state-machine test. Keep one real Shell smoke below.
+    fn fixture_command(mode: &str) -> Command {
+        static FIXTURE: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+        let dir = FIXTURE.get_or_init(|| {
+            let dir = tempfile::tempdir().unwrap();
+            let source = dir.path().join("main.rs");
+            std::fs::write(&source, include_str!("jobs/test_process.rs")).unwrap();
+            let status = std::process::Command::new(option_env!("RUSTC").unwrap_or("rustc"))
+                .args(["--edition=2021", "--crate-name", "weblink_job_fixture"])
+                .arg(source)
+                .arg("-o")
+                .arg(dir.path().join("job-fixture.exe"))
+                .status()
+                .unwrap();
+            assert!(status.success(), "Could not compile native job fixture");
+            dir
+        });
+        let mut command = Command::new(dir.path().join("job-fixture.exe"));
+        command.arg(mode);
+        command
+    }
+    fn start_fixture(jobs: &Jobs, mode: &str, args: Value) -> Result<StartedJob, String> {
+        // Compile before taking the job registry lock or starting wait deadlines.
+        let command = fixture_command(mode);
+        jobs.start_with("owner", "grant", &args, || Ok(command))
+    }
     async fn ended(jobs: &Jobs, id: &str) -> Value {
-        let result = tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let status = jobs
-                    .access("owner", "grant", "commands.status", &json!({"jobId":id}))
-                    .unwrap();
-                if status["status"] != "running" {
-                    return status;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await;
-        result.unwrap_or_else(|_| {
+        ended_within(jobs, id, Duration::from_secs(10)).await
+    }
+    async fn ended_within(jobs: &Jobs, id: &str, timeout: Duration) -> Value {
+        let done = jobs.entries.lock().unwrap()[id].done.clone();
+        if tokio::time::timeout(timeout, done.cancelled())
+            .await
+            .is_err()
+        {
             let output = jobs.access("owner", "grant", "commands.read", &json!({"jobId":id}));
             jobs.stop();
-            panic!("Job did not finish within 10 seconds: {output:?}");
-        })
+            panic!("Job did not finish within {timeout:?}: {output:?}");
+        }
+        jobs.access("owner", "grant", "commands.status", &json!({"jobId":id}))
+            .unwrap()
+    }
+    #[tokio::test]
+    async fn real_shell_executes_scripts_and_captures_output() {
+        let jobs = Jobs::default();
+        #[cfg(unix)]
+        let script = "printf shell-output; printf shell-error >&2; exit 7";
+        #[cfg(windows)]
+        let script =
+            "[Console]::Out.Write('shell-output'); [Console]::Error.Write('shell-error'); exit 7";
+        let result = jobs
+            .start("owner", "grant", &json!({"script":script}))
+            .unwrap();
+        let id = result["jobId"].as_str().unwrap();
+        // A safety bound, not an assertion about a cold Windows Shell's startup
+        // time. Run/background deadline behavior is covered by native fixtures.
+        let status = ended_within(&jobs, id, Duration::from_secs(30)).await;
+        assert_eq!(status["status"], "completed");
+        assert_eq!(status["exitCode"], 7);
+        let output = jobs
+            .access("owner", "grant", "commands.read", &json!({"jobId":id}))
+            .unwrap();
+        for (stream, expected) in [("stdout", "shell-output"), ("stderr", "shell-error")] {
+            let text: String = output["chunks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|chunk| chunk["stream"] == stream)
+                .map(|chunk| chunk["data"].as_str().unwrap())
+                .collect();
+            assert_eq!(text, expected);
+        }
     }
 
     #[tokio::test]
@@ -393,13 +459,7 @@ mod tests {
     #[tokio::test]
     async fn run_returns_completed_output_and_nonzero_exit() {
         let jobs = Jobs::default();
-        #[cfg(unix)]
-        let script = "printf out; printf err >&2; exit 7";
-        #[cfg(windows)]
-        let script = "[Console]::Out.Write('out'); [Console]::Error.Write('err'); exit 7";
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":script}))
-            .unwrap();
+        let job = start_fixture(&jobs, "exit", json!({})).unwrap();
         let id = job.id.clone();
         let result = job.wait(10000, || Ok(())).await.unwrap();
         assert_eq!(result["jobId"], id);
@@ -429,34 +489,20 @@ mod tests {
             )
             .is_err());
     }
-    fn slow_script() -> &'static str {
-        #[cfg(unix)]
-        {
-            "sleep 30"
-        }
-        #[cfg(windows)]
-        {
-            "Start-Sleep -Seconds 30"
-        }
-    }
     #[tokio::test]
     async fn run_wait_limit_hands_off_without_cancelling_and_start_returns_immediately() {
         let jobs = Jobs::default();
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":slow_script()}))
-            .unwrap();
+        let job = start_fixture(&jobs, "hold", json!({})).unwrap();
         let result = job.wait(1, || Ok(())).await.unwrap();
         assert_eq!(result["background"], true);
         assert_eq!(result["status"], "running");
         let id = result["jobId"].as_str().unwrap();
         assert!(!jobs.entries.lock().unwrap()[id].cancel.is_cancelled());
-        let background = jobs
-            .start("owner", "grant", &json!({"script":slow_script()}))
-            .unwrap();
+        let background = start_fixture(&jobs, "hold", json!({}))
+            .unwrap()
+            .background();
         assert_eq!(background.as_object().unwrap().len(), 1);
-        assert!(jobs
-            .start("owner", "grant", &json!({"script":slow_script()}))
-            .is_err());
+        assert!(start_fixture(&jobs, "hold", json!({})).is_err());
         jobs.access("owner", "grant", "commands.cancel", &json!({"jobId":id}))
             .unwrap();
         assert_eq!(ended(&jobs, id).await["status"], "cancelled");
@@ -469,9 +515,7 @@ mod tests {
     #[tokio::test]
     async fn run_cancellation_or_dropped_wait_cancels_owned_job() {
         let jobs = Jobs::default();
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":slow_script()}))
-            .unwrap();
+        let job = start_fixture(&jobs, "hold", json!({})).unwrap();
         let id = job.id.clone();
         let live = std::sync::atomic::AtomicBool::new(true);
         let (result, ()) = tokio::join!(
@@ -490,9 +534,7 @@ mod tests {
         );
         assert_eq!(result.unwrap_err(), "CANCELLED");
         assert_eq!(ended(&jobs, &id).await["status"], "cancelled");
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":slow_script()}))
-            .unwrap();
+        let job = start_fixture(&jobs, "hold", json!({})).unwrap();
         let id = job.id.clone();
         // Dropping even an unpolled wait future must cancel its command.
         drop(job.wait(10000, || Ok(())));
@@ -501,20 +543,12 @@ mod tests {
     #[tokio::test]
     async fn run_observes_execution_timeout_and_revocation_while_waiting() {
         let jobs = Jobs::default();
-        let job = jobs
-            .start_waiting(
-                "owner",
-                "grant",
-                &json!({"script":slow_script(),"timeoutMs":50}),
-            )
-            .unwrap();
+        let job = start_fixture(&jobs, "hold", json!({"timeoutMs":50})).unwrap();
         assert_eq!(
             job.wait(10000, || Ok(())).await.unwrap()["status"],
             "timed_out"
         );
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":slow_script()}))
-            .unwrap();
+        let job = start_fixture(&jobs, "hold", json!({})).unwrap();
         let (result, ()) = tokio::join!(job.wait(10000, || Ok(())), async {
             tokio::time::sleep(Duration::from_millis(10)).await;
             jobs.cancel_grant("grant");
@@ -559,15 +593,9 @@ mod tests {
     #[tokio::test]
     async fn output_owner_and_cancellation() {
         let jobs = Jobs::default();
-        #[cfg(unix)]
-        let script = "printf 'automation-output\\n'";
-        // Exercise pipe capture without echo/Write-Output's implicit cmdlet
-        // loading and output formatting on a cold Windows PowerShell process.
-        #[cfg(windows)]
-        let script = "[Console]::Out.WriteLine('automation-output')";
-        let result = jobs
-            .start("owner", "grant", &json!({"script":script}))
-            .unwrap();
+        let result = start_fixture(&jobs, "output", json!({}))
+            .unwrap()
+            .background();
         let id = result["jobId"].as_str().unwrap();
         assert_eq!(ended(&jobs, id).await["exitCode"], 0);
         assert!(jobs
@@ -581,13 +609,9 @@ mod tests {
             .unwrap();
         assert!(output.to_string().contains("automation-output"));
         assert!(output["nextCursor"].as_u64().unwrap() > 0);
-        #[cfg(unix)]
-        let script = "sleep 30";
-        #[cfg(windows)]
-        let script = "Start-Sleep -Seconds 30";
-        let result = jobs
-            .start("owner", "grant", &json!({"script":script}))
-            .unwrap();
+        let result = start_fixture(&jobs, "hold", json!({}))
+            .unwrap()
+            .background();
         let id = result["jobId"].as_str().unwrap();
         jobs.cancel_grant("grant");
         assert_eq!(ended(&jobs, id).await["status"], "cancelled");
@@ -595,14 +619,7 @@ mod tests {
     #[tokio::test]
     async fn run_and_background_reads_keep_final_results_after_large_output() {
         let jobs = Jobs::default();
-        #[cfg(unix)]
-        let script = "head -c 5000000 /dev/zero; printf '\nFINAL-RESULT\n'";
-        #[cfg(windows)]
-        let script =
-            "[Console]::Out.Write(('x' * 5000000)); [Console]::Out.Write(\"`nFINAL-RESULT`n\")";
-        let job = jobs
-            .start_waiting("owner", "grant", &json!({"script":script}))
-            .unwrap();
+        let job = start_fixture(&jobs, "large", json!({})).unwrap();
         let id = job.id.clone();
         let result = job.wait(10000, || Ok(())).await.unwrap();
         assert_eq!(result["status"], "completed");
@@ -653,29 +670,20 @@ mod tests {
             .is_err());
     }
     #[tokio::test]
-    #[cfg(unix)]
     async fn bounds_output_and_times_out() {
         let jobs = Jobs::default();
-        let result = jobs
-            .start(
-                "owner",
-                "grant",
-                &json!({"script":"head -c 5000000 /dev/zero"}),
-            )
-            .unwrap();
+        let result = start_fixture(&jobs, "bytes", json!({}))
+            .unwrap()
+            .background();
         let id = result["jobId"].as_str().unwrap();
         let status = ended(&jobs, id).await;
         assert_eq!(status["bytes"], 5000000);
         assert_eq!(status["retainedBytes"], output::LIMIT);
         assert_eq!(status["earliestCursor"], 5000000 - output::LIMIT);
         assert_eq!(status["truncated"], true);
-        let result = jobs
-            .start(
-                "owner",
-                "grant",
-                &json!({"script":"sleep 30","timeoutMs":50}),
-            )
-            .unwrap();
+        let result = start_fixture(&jobs, "hold", json!({"timeoutMs":50}))
+            .unwrap()
+            .background();
         let id = result["jobId"].as_str().unwrap();
         assert_eq!(ended(&jobs, id).await["status"], "timed_out");
     }

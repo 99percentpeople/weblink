@@ -107,6 +107,13 @@ normal suite. Socket tests explicitly control blocking mode, handle fragmented
 requests, and use bounded I/O. HTTP clients for local fixtures disable proxies
 without mutating process-wide proxy settings.
 
+Native job lifecycle tests compile one small standard-library-only child process
+on demand and share it across the suite. They exercise real pipes, exit codes,
+timeouts and process cancellation without repeatedly starting PowerShell.
+A separate real-Shell smoke test covers script execution. Its completion deadline
+is a safety bound; command wait-limit assertions must not depend on interpreter
+startup time or CI machine load.
+
 ### Browser E2E smoke tests
 
 Location: `test/e2e/smoke/`
