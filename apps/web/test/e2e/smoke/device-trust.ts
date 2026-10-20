@@ -21,6 +21,7 @@ import {
   type DeviceIdentity,
 } from "../../../src/libs/domain/device-identity/crypto";
 import { bootstrapMessage } from "../../../src/libs/domain/device-identity/access";
+import { bindCredential } from "../../../src/libs/domain/device-identity/credential-binding";
 import type {
   CredentialStore,
   PairingCredentials,
@@ -496,6 +497,18 @@ async function main() {
   // issuance record while the peer also renews its expired issuance.
   const oldB = keysB.get("a")!.issued!.id;
   keysB.get("a")!.issued!.expiresAt = Date.now() - 1;
+  keysB.get("a")!.issued!.binding = await bindCredential(
+    keysB.get("a")!.issued!,
+    {
+      identity: b,
+      client: "b",
+      target: "a",
+      remoteKey: a.publicKey,
+    },
+  );
+  keysA.get("b")!.received = structuredClone(
+    keysB.get("a")!.issued,
+  );
   keysA.set("b", { received: keysA.get("b")!.received });
   pinsA.delete("b");
   const recoveredIdentity = await newIdentity();
@@ -528,6 +541,53 @@ async function main() {
     );
   } finally {
     recovered.close();
+  }
+  // Retain the signing identity while removing every record of its peer.
+  // The peer-held signed issuance authenticates the remembering endpoint too.
+  pinsA.delete("b");
+  keysA.delete("b");
+  const identityRecovered = await connection(
+    recoveredIdentity,
+    b,
+    pinsA,
+    pinsB,
+    keysA,
+    keysB,
+    true,
+  );
+  try {
+    assert(
+      identityRecovered.trustA.trusted("b") &&
+        identityRecovered.trustB.trusted("a"),
+      "retained identity recovers all lost peer records",
+    );
+    assert(
+      identityRecovered.receiveA[0]() &&
+        identityRecovered.receiveB[0](),
+      "identity recovery preserves permissions",
+    );
+    await until(
+      keysSettled,
+      "fresh keys after identity recovery",
+    );
+    await identityRecovered.sessionB.sendMessage(
+      createSessionMessage(
+        identityRecovered.sessionB,
+        "send-text",
+        {
+          data: "identity-recovered",
+        },
+      ),
+    );
+    await until(
+      () =>
+        identityRecovered.received.includes(
+          "identity-recovered",
+        ),
+      "application traffic after identity recovery",
+    );
+  } finally {
+    identityRecovered.close();
   }
   // The replacement has lost every record; the remembered peer must not be
   // mistaken for a new connection just because this side has an empty store.
@@ -597,7 +657,8 @@ async function main() {
     transport: "Chromium real WebRTC",
     persistentPrivateKey: true,
     automaticFirstPairing: true,
-    bothSidesRejectLostRecords: true,
+    bothSidesRejectLostIdentity: true,
+    retainedIdentityRecoversAllPeerRecords: true,
     pairingRestoresDefaults: true,
     keyMismatchQuarantine: true,
     manualRepair: true,

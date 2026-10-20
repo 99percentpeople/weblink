@@ -1,13 +1,24 @@
 import { base64, bytes } from "./crypto";
 import { InvalidIdentityProof } from "./errors";
+import {
+  bindCredential,
+  verifyBinding,
+  verifyCredentialBinding,
+  type BindingContext,
+  type BoundCredential,
+  type CredentialBinding,
+} from "./credential-binding";
 
 // Expiry schedules renewal; it never invalidates an offline device's last proof.
 export const CREDENTIAL_LIFETIME = 90 * 24 * 60 * 60 * 1000;
-export interface PairingCredential {
-  id: string;
+export interface PairingCredential extends BoundCredential {
   secret: string;
-  expiresAt: number;
+  binding: CredentialBinding;
 }
+export type IdentityRecoveryState =
+  | "ready"
+  | "missing"
+  | "blocked";
 export interface PairingCredentials {
   issued?: PairingCredential;
   pending?: PairingCredential;
@@ -60,7 +71,16 @@ function validCredential(
     typeof c.secret === "string" &&
     /^[A-Za-z0-9+/]{43}=$/.test(c.secret) &&
     Number.isSafeInteger(c.expiresAt) &&
-    c.expiresAt > 0
+    c.expiresAt > 0 &&
+    !!c.binding &&
+    typeof c.binding.issuerKey === "string" &&
+    c.binding.issuerKey.length === 88 &&
+    typeof c.binding.recipientKey === "string" &&
+    c.binding.recipientKey.length === 88 &&
+    typeof c.binding.secretHash === "string" &&
+    /^[A-Za-z0-9+/]{43}=$/.test(c.binding.secretHash) &&
+    typeof c.binding.signature === "string" &&
+    c.binding.signature.length === 88
   );
 }
 
@@ -78,6 +98,7 @@ export class CredentialExchange {
   private timer?: ReturnType<typeof setTimeout>;
   private offered?: string;
   private readySent = false;
+  private binding?: BindingContext;
   constructor(
     private readonly store: CredentialStore,
     private readonly send: (frame: unknown) => void,
@@ -88,6 +109,77 @@ export class CredentialExchange {
   ) {}
   async prepare() {
     this.snapshot = await this.store.read();
+    // Invalid persisted records must not become a "missing keys" recovery
+    // request. Keep the handshake available for explicit pairing instead.
+    if (
+      candidates(this.snapshot).some(
+        (c) => !validCredential(c),
+      )
+    )
+      this.snapshot = { blocked: true };
+  }
+  recoveryState(): IdentityRecoveryState {
+    return this.snapshot.blocked
+      ? "blocked"
+      : candidates(this.snapshot).length
+        ? "ready"
+        : "missing";
+  }
+  bindIdentity(context: BindingContext) {
+    this.binding = context;
+  }
+  async recoveryProof(): Promise<
+    BoundCredential | undefined
+  > {
+    const c = this.snapshot.received;
+    if (
+      this.binding &&
+      !this.snapshot.blocked &&
+      c &&
+      (await verifyCredentialBinding(
+        c,
+        this.binding,
+        false,
+      ))
+    )
+      return {
+        id: c.id,
+        expiresAt: c.expiresAt,
+        binding: c.binding,
+      };
+  }
+  async authenticateIdentity(
+    value: unknown,
+  ): Promise<boolean> {
+    const context = this.binding;
+    if (!context || this.snapshot.blocked) return false;
+    if (value !== undefined) {
+      if (
+        !(await verifyBinding(
+          value,
+          context.client,
+          context.target,
+          context.identity.publicKey,
+          context.remoteKey,
+        ))
+      )
+        throw new InvalidIdentityProof(
+          "Invalid pairing identity binding",
+        );
+      return true;
+    }
+    // A retained issuance can also recover a lost public pin. Never use an
+    // arbitrary certificate signed only by the currently presented peer key.
+    for (const c of [
+      this.snapshot.issued,
+      this.snapshot.pending,
+    ])
+      if (
+        c &&
+        (await verifyCredentialBinding(c, context, true))
+      )
+        return true;
+    return false;
   }
   async proofs(
     transcript: string,
@@ -126,16 +218,19 @@ export class CredentialExchange {
           "Invalid pairing credential proof",
         );
       for (const c of candidates(this.snapshot)) {
+        if (c.id !== proof.id) continue;
         if (
-          c.id === proof.id &&
-          (await crypto.subtle.verify(
+          !(await crypto.subtle.verify(
             "HMAC",
             await key(c),
             bytes(proof.mac),
             message(transcript),
           ))
         )
-          authenticated.push(c.id);
+          throw new InvalidIdentityProof(
+            "Invalid pairing credential MAC",
+          );
+        authenticated.push(c.id);
       }
     }
     return authenticated;
@@ -180,7 +275,8 @@ export class CredentialExchange {
     });
   }
   private async refresh() {
-    if (!this.trusted || this.closed) return;
+    if (!this.trusted || this.closed || !this.binding)
+      return;
     try {
       let state = await this.store.read();
       if (this.closed || state.blocked) return;
@@ -193,19 +289,34 @@ export class CredentialExchange {
       }
       if (!this.remoteReady) return;
       const issued = state.issued;
+      const bound =
+        issued &&
+        (await verifyCredentialBinding(
+          issued,
+          this.binding,
+          true,
+        ));
       if (
         !state.pending &&
         (!issued ||
+          !bound ||
           issued.expiresAt <= this.now() ||
           this.remoteReceived !== issued.id)
       ) {
-        const credential: PairingCredential = {
+        const fields = {
           id: crypto.randomUUID(),
           secret: base64(
             crypto.getRandomValues(new Uint8Array(32))
               .buffer,
           ),
           expiresAt: this.now() + CREDENTIAL_LIFETIME,
+        };
+        const credential: PairingCredential = {
+          ...fields,
+          binding: await bindCredential(
+            fields,
+            this.binding,
+          ),
         };
         state = await this.update((latest) => ({
           ...latest,
@@ -214,6 +325,31 @@ export class CredentialExchange {
       }
       if (this.closed || state.blocked) return;
       if (state.pending) {
+        // Identity regeneration authenticated by a surviving shared key
+        // rebinds the outbox without discarding an unacknowledged secret.
+        if (
+          !(await verifyCredentialBinding(
+            state.pending,
+            this.binding,
+            true,
+          ))
+        ) {
+          const pending = state.pending;
+          const binding = await bindCredential(
+            pending,
+            this.binding,
+          );
+          state = await this.update((latest) =>
+            latest.pending?.id === pending.id
+              ? {
+                  ...latest,
+                  pending: { ...pending, binding },
+                }
+              : latest,
+          );
+        }
+        if (this.closed || state.blocked || !state.pending)
+          return;
         // Persist the outbox first. A lost ACK is retried with the same secret.
         this.offered = state.pending.id;
         this.transmit({
@@ -255,6 +391,17 @@ export class CredentialExchange {
             "Unauthorized credential offer",
           );
         const credential = frame.credential;
+        if (
+          !this.binding ||
+          !(await verifyCredentialBinding(
+            credential,
+            this.binding,
+            false,
+          ))
+        )
+          throw new InvalidIdentityProof(
+            "Invalid offered credential binding",
+          );
         try {
           const state = await this.update((latest) => ({
             ...latest,

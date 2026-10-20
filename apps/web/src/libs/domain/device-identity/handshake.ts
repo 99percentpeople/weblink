@@ -7,6 +7,7 @@ import {
 import {
   CredentialExchange,
   type CredentialStore,
+  type IdentityRecoveryState,
 } from "./credentials";
 import { InvalidIdentityProof } from "./errors";
 type Hello = {
@@ -18,6 +19,7 @@ type Hello = {
   transport: string;
   credentials?: true;
   pairingKnown?: boolean;
+  recovery?: IdentityRecoveryState;
 };
 export interface IdentityProof {
   fingerprint: string;
@@ -26,6 +28,10 @@ export interface IdentityProof {
   credentialIds?: string[];
   /** Signed peer history, when both endpoints support this extension. */
   remotePairingKnown?: boolean;
+  /** Includes invalid local credential records, which are never a recovery request. */
+  localPairingBlocked?: boolean;
+  /** Negotiated missing-key recovery, after fresh identity and binding checks. */
+  recovery?: { identityBound: boolean };
 }
 /** Binds both fresh challenges and both DTLS certificates; replay/relay cannot authenticate another connection. */
 export class DeviceHandshake {
@@ -38,6 +44,7 @@ export class DeviceHandshake {
   private timer: ReturnType<typeof setTimeout>;
   private abort = new AbortController();
   private complete = false;
+  private recoveryBindingSent = false;
   private credentials?: CredentialExchange;
   constructor(
     readonly channel: RTCDataChannel,
@@ -49,6 +56,7 @@ export class DeviceHandshake {
       identity: Promise<DeviceIdentity>;
       credentials?: CredentialStore;
       pairingKnown?(): Promise<boolean>;
+      recoveryBlocked?(): Promise<boolean>;
       verified(proof: IdentityProof): void;
       failed(error?: unknown): void;
       interrupted?(): void;
@@ -123,6 +131,11 @@ export class DeviceHandshake {
       transport: this.options.localTransport,
       credentials: this.credentials ? true : undefined,
       pairingKnown: await this.options.pairingKnown?.(),
+      recovery: this.options.pairingKnown
+        ? (await this.options.recoveryBlocked?.())
+          ? "blocked"
+          : this.credentials?.recoveryState()
+        : undefined,
     };
   }
   private helloSent = false;
@@ -159,7 +172,36 @@ export class DeviceHandshake {
               .map((h) => h.pairingKnown),
           ]
         : []),
+      ...(this.recoveryNegotiated()
+        ? [
+            "identity-recovery",
+            ...[this.local!, this.remote!]
+              .sort((a, b) =>
+                a.client < b.client ? -1 : 1,
+              )
+              .map((h) => h.recovery),
+          ]
+        : []),
     ]);
+  }
+  private recoveryNegotiated() {
+    return !!(
+      this.local?.credentials &&
+      this.remote?.credentials &&
+      this.local.pairingKnown !== undefined &&
+      this.remote.pairingKnown !== undefined &&
+      this.local.recovery !== undefined &&
+      this.remote.recovery !== undefined
+    );
+  }
+  private recovering() {
+    return (
+      this.recoveryNegotiated() &&
+      this.local!.recovery !== "blocked" &&
+      this.remote!.recovery !== "blocked" &&
+      (this.local!.recovery === "missing" ||
+        this.remote!.recovery === "missing")
+    );
   }
   private async receive(raw: unknown) {
     if (this.abort.signal.aborted) return;
@@ -192,6 +234,10 @@ export class DeviceHandshake {
         typeof frame.nonce !== "string" ||
         (frame.pairingKnown !== undefined &&
           typeof frame.pairingKnown !== "boolean") ||
+        (frame.recovery !== undefined &&
+          !["ready", "missing", "blocked"].includes(
+            frame.recovery,
+          )) ||
         !/^[a-f0-9-]{36}$/.test(frame.nonce)
       )
         throw new InvalidIdentityProof(
@@ -207,8 +253,24 @@ export class DeviceHandshake {
         credentials:
           frame.credentials === true ? true : undefined,
         pairingKnown: frame.pairingKnown,
+        recovery: frame.recovery,
       };
       const identity = await this.options.identity;
+      if (
+        this.local?.credentials &&
+        this.remote.credentials &&
+        !this.recoveryNegotiated()
+      )
+        throw new InvalidIdentityProof(
+          "Missing pairing identity binding support",
+        );
+      if (this.recoveryNegotiated())
+        this.credentials!.bindIdentity({
+          identity,
+          client: this.options.client,
+          target: this.options.target,
+          remoteKey: this.remote.key,
+        });
       const signature = await identity.sign(
         this.transcript(this.local!.client),
       );
@@ -218,13 +280,21 @@ export class DeviceHandshake {
               this.transcript(this.local!.client),
             )
           : undefined;
+      const recoveryBinding =
+        this.recovering() &&
+        this.remote.recovery === "missing"
+          ? await this.credentials!.recoveryProof()
+          : undefined;
       if (this.abort.signal.aborted) return;
       this.sent = true;
+      this.recoveryBindingSent =
+        recoveryBinding !== undefined;
       this.channel.send(
         JSON.stringify({
           kind: "proof",
           signature,
           credentialProofs,
+          recoveryBinding,
         }),
       );
     } else if (frame.kind === "proof") {
@@ -255,6 +325,34 @@ export class DeviceHandshake {
               this.transcript(this.remote.client),
             )
           : [];
+      if (
+        this.recoveryNegotiated() &&
+        this.remote.recovery === "missing" &&
+        frame.credentialProofs.length
+      )
+        throw new InvalidIdentityProof(
+          "Inconsistent recovery proof",
+        );
+      if (
+        frame.recoveryBinding !== undefined &&
+        !this.recovering()
+      )
+        throw new InvalidIdentityProof(
+          "Unexpected recovery binding",
+        );
+      const identityBound = this.recovering()
+        ? await this.credentials!.authenticateIdentity(
+            frame.recoveryBinding,
+          )
+        : false;
+      // A peer that forgot every record needs our copy of its signed issuance
+      // to authenticate us too. Recovery must authenticate both directions.
+      const recovery =
+        this.recovering() &&
+        (this.remote.pairingKnown ||
+          this.recoveryBindingSent)
+          ? { identityBound }
+          : undefined;
       const peer = await fingerprint(this.remote.key);
       const code = [
         ...new Uint8Array(
@@ -283,6 +381,9 @@ export class DeviceHandshake {
         this.remote.pairingKnown !== undefined
           ? { remotePairingKnown: this.remote.pairingKnown }
           : {}),
+        ...(recovery ? { recovery } : {}),
+        localPairingBlocked:
+          this.local?.recovery === "blocked",
       });
     } else if (
       this.complete &&

@@ -29,6 +29,12 @@ const credential = () => ({
     ),
   ),
   expiresAt: Date.now() + 10000,
+  binding: {
+    issuerKey: "issuer",
+    recipientKey: "recipient",
+    secretHash: "secret-hash",
+    signature: "signature",
+  },
 });
 it("promotes mandatory key authentication atomically with receipt, never just a pending offer", async () => {
   const s = await store(),

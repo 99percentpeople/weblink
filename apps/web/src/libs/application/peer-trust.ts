@@ -172,6 +172,12 @@ export class PeerTrustService {
                 keys?.blocked
               );
             }),
+          recoveryBlocked: () =>
+            this.serialize(
+              id,
+              async () =>
+                !!(await this.store.pin(id))?.blocked,
+            ),
           verified: (proof) =>
             void this.serialize(id, async () => {
               const pin = await this.store.pin(id);
@@ -188,21 +194,31 @@ export class PeerTrustService {
                     keys?.received,
                   ].some((key) => key?.id === keyId),
                 );
+              // Recovery is explicitly negotiated and signed. A missing-key
+              // claim alone proves nothing: require the original saved pin or
+              // our own prior signature binding this peer's current identity.
+              const identityRecovered =
+                proof.recovery &&
+                (pin?.fingerprint === proof.fingerprint ||
+                  (!pin && proof.recovery.identityBound));
               if (
                 !pin?.blocked &&
                 !keys?.blocked &&
+                !proof.localPairingBlocked &&
                 (credentialAuthenticated ||
+                  identityRecovered ||
                   (!pin?.credentialRequired &&
                     !keys?.issued &&
                     !keys?.received &&
                     pin?.fingerprint === proof.fingerprint))
               ) {
-                // Either issued pairing key can prove continuity; a public pin
-                // is only a migration path before these keys are exchanged.
+                // Recovery preserves saved policy and only enables the usual
+                // durable issuance/ACK exchange, never an unverified offer.
                 if (
                   pin?.fingerprint !== proof.fingerprint ||
                   (!pin.credentialRequired &&
-                    credentialAuthenticated)
+                    (credentialAuthenticated ||
+                      identityRecovered))
                 )
                   await this.store.save(id, {
                     fingerprint: proof.fingerprint,

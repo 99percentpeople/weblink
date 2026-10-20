@@ -17,6 +17,7 @@ import {
   CREDENTIAL_LIFETIME,
   type PairingCredentials,
 } from "@/libs/domain/device-identity/credentials";
+import { bindCredential } from "@/libs/domain/device-identity/credential-binding";
 import type {
   DeviceIdentityStore,
   DevicePin,
@@ -75,6 +76,8 @@ async function endpoint() {
     identity: async () => identity,
     pin: async () => structuredClone(pin),
     save: async (_, value) => {
+      if (failWrites)
+        throw new Error("Storage unavailable");
       pin = structuredClone(value);
     },
     pair: async (_, value) => {
@@ -111,6 +114,9 @@ async function endpoint() {
     set pin(value) {
       pin = value;
     },
+    get identity() {
+      return identity;
+    },
     set identity(value: DeviceIdentity) {
       identity = value;
     },
@@ -124,12 +130,15 @@ async function connect(
   a: Endpoint,
   b: Endpoint,
   filterB?: Channel["filter"],
+  filterA?: Channel["filter"],
+  waitForBoth = true,
 ) {
   const left = new Channel(),
     right = new Channel();
   left.other = right;
   right.other = left;
   if (filterB) right.filter = filterB;
+  if (filterA) left.filter = filterA;
   const resetA = vi.fn(),
     resetB = vi.fn();
   const pairedA = vi.fn(),
@@ -178,8 +187,9 @@ async function connect(
   };
   cleanup.push(close);
   await vi.waitFor(() => {
-    expect(trustA.get("b")?.code).toBeTruthy();
-    expect(trustB.get("a")?.code).toBeTruthy();
+    expect(trustA.get("b")?.state).not.toBe("verifying");
+    if (waitForBoth)
+      expect(trustB.get("a")?.state).not.toBe("verifying");
   });
   return {
     trustA,
@@ -202,6 +212,22 @@ async function settled(a: Endpoint, b: Endpoint) {
     expect(a.keys.pending).toBeUndefined();
     expect(b.keys.pending).toBeUndefined();
   });
+}
+async function setExpiry(
+  a: Endpoint,
+  b: Endpoint,
+  expiresAt: number,
+) {
+  const issued = a.keys.issued!;
+  issued.expiresAt = expiresAt;
+  issued.binding = await bindCredential(issued, {
+    identity: a.identity,
+    client: "a",
+    target: "b",
+    remoteKey: b.identity.publicKey,
+  });
+  if (b.keys.received?.id === issued.id)
+    b.keys.received = structuredClone(issued);
 }
 async function paired() {
   const a = await endpoint(),
@@ -316,7 +342,7 @@ it("lets the original issuer replace a received key lost by the other device", a
   expect(a.keys.issued!.id).toBe(oldA);
   expect(b.keys.issued!.id).not.toBe(oldB);
 });
-it("migrates already confirmed public pins into pairing keys without losing permissions", async () => {
+it("resumes both initial key exchanges from confirmed pins without losing permissions", async () => {
   const { a, b, h } = await paired();
   h.close();
   a.pin!.credentialRequired = false;
@@ -334,9 +360,7 @@ it("retains offline expired keys for proof and lets only their issuer renew them
   h.close();
   const oldA = a.keys.issued!.id,
     oldB = b.keys.issued!.id;
-  a.keys.issued!.expiresAt =
-    Date.now() - CREDENTIAL_LIFETIME;
-  b.keys.received!.expiresAt = a.keys.issued!.expiresAt;
+  await setExpiry(a, b, Date.now() - CREDENTIAL_LIFETIME);
   const again = await connect(a, b);
   await settled(a, b);
   preserved(again);
@@ -347,9 +371,10 @@ it("automatically renews while connected when the issuing clock reaches expiry",
   const { a, b, h } = await paired();
   h.close();
   const oldA = a.keys.issued!.id;
-  a.keys.issued!.expiresAt = Date.now() + 250;
-  b.keys.received!.expiresAt = a.keys.issued!.expiresAt;
+  await setExpiry(a, b, Date.now() + 500);
   const again = await connect(a, b);
+  // A valid signed issuance must survive the handshake until its deadline.
+  expect(a.keys.issued!.id).toBe(oldA);
   await vi.waitFor(() =>
     expect(a.keys.issued!.id).not.toBe(oldA),
   );
@@ -360,7 +385,7 @@ it("resumes a persisted offer after a lost ACK, even when it is the only survivi
   const { a, b, h } = await paired();
   h.close();
   const old = a.keys.issued!;
-  old.expiresAt = Date.now() - 1;
+  await setExpiry(a, b, Date.now() - 1);
   const interrupted = await connect(a, b, (frame) =>
     frame.kind === "credential-ack" ? undefined : frame,
   );
@@ -383,7 +408,7 @@ it("keeps old keys and trust when the receiver cannot persist the replacement", 
   const { a, b, h } = await paired();
   h.close();
   const old = a.keys.issued!.id;
-  a.keys.issued!.expiresAt = Date.now() - 1;
+  await setExpiry(a, b, Date.now() - 1);
   b.failWrites = true;
   const failed = await connect(a, b);
   await vi.waitFor(() =>
@@ -399,23 +424,16 @@ it("keeps old keys and trust when the receiver cannot persist the replacement", 
   preserved(resumed);
   expect(a.keys.issued!.id).not.toBe(old);
 });
-it("does not use a remembered public pin to bypass missing pairing keys", async () => {
+it("recovers missing pairing keys using both retained identity pins", async () => {
   const { a, b, h } = await paired();
   h.close();
   b.keys = {};
-  const missing = await connect(a, b);
-  expect(missing.trustA.get("b")?.state).toBe("untrusted");
-  expect(missing.trustB.get("a")?.state).toBe("untrusted");
-  expect(missing.resetA).toHaveBeenCalledOnce();
-  expect(missing.resetB).toHaveBeenCalledOnce();
-  expect(
-    missing.left.frames.some(
-      (f) => f.kind === "credential-offer",
-    ),
-  ).toBe(false);
+  const recovered = await connect(a, b);
+  await settled(a, b);
+  preserved(recovered);
 });
 it.each(["a", "b"] as const)(
-  "requires repair on both devices when %s loses all pairing records",
+  "recovers both directions when %s loses all peer records but retains its identity",
   async (side) => {
     const { a, b, h } = await paired();
     h.close();
@@ -423,35 +441,26 @@ it.each(["a", "b"] as const)(
     lost.pin = undefined;
     lost.keys = {};
     const again = await connect(a, b);
-    expect(again.trustA.get("b")?.state).toBe("untrusted");
-    expect(again.trustB.get("a")?.state).toBe("untrusted");
-    expect(again.pairedA).not.toHaveBeenCalled();
-    expect(again.pairedB).not.toHaveBeenCalled();
-    expect(a.keys.blocked).toBe(true);
-    expect(b.keys.blocked).toBe(true);
-    expect(
-      [...again.left.frames, ...again.right.frames].some(
-        (frame) => frame.kind.startsWith("credential-"),
-      ),
-    ).toBe(false);
-    // An explicit review on each side can restore defaults and exchange fresh keys.
-    const proofA = again.trustA.get("b")!;
-    const proofB = again.trustB.get("a")!;
-    await Promise.all([
-      again.trustA.pair(
-        "b",
-        proofA.fingerprint!,
-        proofA.code!,
-      ),
-      again.trustB.pair(
-        "a",
-        proofB.fingerprint!,
-        proofB.code!,
-      ),
-    ]);
     await settled(a, b);
-    expect(again.pairedA).toHaveBeenCalledOnce();
-    expect(again.pairedB).toHaveBeenCalledOnce();
+    preserved(again);
+    expect(a.pin?.fingerprint).toBe(
+      await fingerprint(b.identity.publicKey),
+    );
+    expect(b.pin?.fingerprint).toBe(
+      await fingerprint(a.identity.publicKey),
+    );
+    expect(a.keys.issued?.binding).toBeDefined();
+    expect(b.keys.issued?.binding).toBeDefined();
+    const recoveryFrames = [
+      ...again.left.frames,
+      ...again.right.frames,
+    ].filter((frame) => frame.kind === "proof");
+    expect(
+      recoveryFrames.some((frame) => frame.recoveryBinding),
+    ).toBe(true);
+    expect(JSON.stringify(recoveryFrames)).not.toContain(
+      '"secret":',
+    );
   },
 );
 
@@ -500,14 +509,14 @@ it("rejects a credential proof replayed into a new connection even with a valid 
   expect(replay.trustA.get("b")?.state).toBe("untrusted");
   expect(replay.resetA).toHaveBeenCalledOnce();
 });
-it("quarantines a failed key proof even when the public pin was lost", async () => {
+it("uses a locally signed issuance to recover a lost pin while the other side lost its keys", async () => {
   const { a, b, h } = await paired();
   h.close();
   a.pin = undefined;
   b.keys = {};
-  const missing = await connect(a, b);
-  expect(missing.trustA.get("b")?.state).toBe("untrusted");
-  expect(a.keys.blocked).toBe(true);
+  const recovered = await connect(a, b);
+  await settled(a, b);
+  preserved(recovered);
 });
 it("cannot automatically restore explicitly quarantined keys", async () => {
   const { a, b, h } = await paired();
@@ -527,4 +536,271 @@ it("cannot automatically restore explicitly quarantined keys", async () => {
   expect(a.keys.issued!.id).not.toBe(old);
   expect(again.resetA).toHaveBeenCalledOnce();
   expect(again.pairedA).toHaveBeenCalledOnce();
+});
+
+it("recovers when both devices lost their pairing keys but retained their identity pins", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  a.keys = {};
+  b.keys = {};
+  const recovered = await connect(a, b);
+  await settled(a, b);
+  preserved(recovered);
+});
+
+it.each(["a", "b"] as const)(
+  "rejects %s after losing both its identity and every peer record",
+  async (side) => {
+    const { a, b, h } = await paired();
+    h.close();
+    const lost = side === "a" ? a : b;
+    lost.keys = {};
+    lost.pin = undefined;
+    lost.identity = await newIdentity();
+    const attack = await connect(a, b);
+    expect(attack.trustA.get("b")?.state).toBe("untrusted");
+    expect(attack.trustB.get("a")?.state).toBe("untrusted");
+    expect(
+      [...attack.left.frames, ...attack.right.frames].some(
+        (f) => f.kind === "credential-offer",
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each(["pin", "keys"] as const)(
+  "does not use identity recovery to clear a quarantined %s",
+  async (record) => {
+    const { a, b, h } = await paired();
+    h.close();
+    if (record === "pin") a.pin!.blocked = true;
+    else a.keys.blocked = true;
+    b.pin = undefined;
+    b.keys = {};
+    const attack = await connect(a, b);
+    expect(attack.trustA.get("b")?.state).toBe("untrusted");
+    expect(attack.trustB.get("a")?.state).toBe("untrusted");
+    expect(attack.pairedA).not.toHaveBeenCalled();
+    expect(attack.pairedB).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["change", "remove", "invalid"] as const)(
+  "rejects a %s to the signed missing-key recovery declaration",
+  async (mode) => {
+    const { a, b, h } = await paired();
+    h.close();
+    b.keys = {};
+    const attack = await connect(
+      a,
+      b,
+      (frame) =>
+        frame.kind === "hello"
+          ? {
+              ...frame,
+              recovery:
+                mode === "change"
+                  ? "ready"
+                  : mode === "remove"
+                    ? undefined
+                    : true,
+            }
+          : frame,
+      undefined,
+      mode === "change",
+    );
+    expect(attack.trustA.get("b")?.state).toBe("untrusted");
+    expect(
+      attack.left.frames.some(
+        (f) => f.kind === "credential-offer",
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each([
+  "signature",
+  "recipientKey",
+  "secretHash",
+  "expiresAt",
+] as const)(
+  "rejects tampered recovery binding %s before granting authority",
+  async (field) => {
+    const { a, b, h } = await paired();
+    h.close();
+    a.pin = undefined;
+    a.keys = {};
+    const attack = await connect(a, b, (frame) => {
+      if (frame.kind !== "proof") return frame;
+      const certificate = structuredClone(
+        frame.recoveryBinding,
+      );
+      if (field === "expiresAt") certificate.expiresAt += 1;
+      else
+        certificate.binding[field] =
+          "A".repeat(field === "secretHash" ? 43 : 87) +
+          "=";
+      return { ...frame, recoveryBinding: certificate };
+    });
+    expect(attack.trustA.get("b")?.state).toBe("untrusted");
+    expect(attack.pairedA).not.toHaveBeenCalled();
+    expect(
+      attack.left.frames.some((f) =>
+        f.kind.startsWith("credential-"),
+      ),
+    ).toBe(false);
+  },
+);
+
+it("a stolen historical binding cannot authenticate a different signing identity", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  const { secret: _secret, ...certificate } =
+    b.keys.received!;
+  a.pin = undefined;
+  a.keys = {};
+  b.identity = await newIdentity();
+  const attack = await connect(a, b, (frame) =>
+    frame.kind === "proof"
+      ? { ...frame, recoveryBinding: certificate }
+      : frame,
+  );
+  expect(attack.trustA.get("b")?.state).toBe("untrusted");
+  expect(
+    attack.left.frames.some(
+      (f) => f.kind === "credential-offer",
+    ),
+  ).toBe(false);
+});
+
+it("a previously valid recovery signature cannot be replayed on a fresh connection", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  a.pin = undefined;
+  a.keys = {};
+  const recovered = await connect(a, b);
+  await settled(a, b);
+  const proof = recovered.right.frames.find(
+    (f) => f.kind === "proof",
+  )!;
+  recovered.close();
+  a.pin = undefined;
+  a.keys = {};
+  const attack = await connect(a, b, (frame) =>
+    frame.kind === "proof" ? proof : frame,
+  );
+  expect(attack.trustA.get("b")?.state).toBe("untrusted");
+  expect(
+    attack.left.frames.some(
+      (f) => f.kind === "credential-offer",
+    ),
+  ).toBe(false);
+});
+
+it("does not treat invalid persisted credential bindings as missing keys or silently upgrade them", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  b.keys.received!.binding.signature = "";
+  a.keys = {};
+  a.pin = undefined;
+  const missing = await connect(a, b);
+  expect(missing.trustA.get("b")?.state).toBe("untrusted");
+  expect(missing.trustB.get("a")?.state).toBe("untrusted");
+  expect(
+    [...missing.left.frames, ...missing.right.frames].some(
+      (f) => f.kind === "credential-offer",
+    ),
+  ).toBe(false);
+  const proofA = missing.trustA.get("b")!;
+  const proofB = missing.trustB.get("a")!;
+  await Promise.all([
+    missing.trustA.pair(
+      "b",
+      proofA.fingerprint!,
+      proofA.code!,
+    ),
+    missing.trustB.pair(
+      "a",
+      proofB.fingerprint!,
+      proofB.code!,
+    ),
+  ]);
+  await settled(a, b);
+  expect(missing.pairedA).toHaveBeenCalledOnce();
+  expect(missing.pairedB).toHaveBeenCalledOnce();
+});
+
+it("retains identity recovery across a disconnect before new keys can be stored", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  a.keys = {};
+  a.pin = undefined;
+  // Recover the pin, then simulate failure of the key transaction.
+  const save = a.store.save.bind(a.store);
+  a.store.save = async (...args) => {
+    await save(...args);
+    a.failWrites = true;
+  };
+  const interrupted = await connect(a, b);
+  preserved(interrupted);
+  await vi.waitFor(() =>
+    expect(b.keys.pending).toBeDefined(),
+  );
+  expect(a.keys.received).toBeUndefined();
+  const pending = b.keys.pending!.id;
+  interrupted.close();
+  a.store.save = save;
+  a.failWrites = false;
+  const resumed = await connect(a, b);
+  await settled(a, b);
+  preserved(resumed);
+  expect(b.keys.issued!.id).toBe(pending);
+});
+
+it("never falls back to identity recovery after a known pairing key has a wrong MAC", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  const original = await connect(a, b);
+  const stale = original.right.frames.find(
+    (f) => f.kind === "proof",
+  )!.credentialProofs;
+  original.close();
+  b.keys = {};
+  const attack = await connect(a, b, (frame) =>
+    frame.kind === "proof"
+      ? { ...frame, credentialProofs: stale }
+      : frame,
+  );
+  expect(attack.trustA.get("b")?.state).toBe("untrusted");
+  expect(
+    attack.left.frames.some(
+      (f) => f.kind === "credential-offer",
+    ),
+  ).toBe(false);
+});
+
+it("checks that a received key actually matches its signed secret hash", async () => {
+  const { a, b, h } = await paired();
+  h.close();
+  a.keys = {};
+  const attack = await connect(a, b, (frame) =>
+    frame.kind === "credential-offer"
+      ? {
+          ...frame,
+          credential: {
+            ...frame.credential,
+            secret: "A".repeat(43) + "=",
+          },
+        }
+      : frame,
+  );
+  await vi.waitFor(() =>
+    expect(attack.trustA.get("b")?.state).toBe("untrusted"),
+  );
+  expect(a.keys.received).toBeUndefined();
+  expect(
+    attack.left.frames.some(
+      (f) => f.kind === "credential-ack",
+    ),
+  ).toBe(false);
 });

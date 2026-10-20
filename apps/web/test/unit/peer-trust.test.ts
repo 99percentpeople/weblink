@@ -468,3 +468,140 @@ it.each(["interrupted", "failed"] as const)(
     }
   },
 );
+
+const recoveredProof: IdentityProof = {
+  ...proof,
+  credentialIds: [],
+  remotePairingKnown: true,
+  recovery: { identityBound: true },
+};
+it("persists a recovered pin before authority and rejects a duplicate device binding", async () => {
+  const h = setup();
+  let release!: () => void;
+  vi.mocked(h.store.save).mockImplementationOnce(
+    async (id, value) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      h.pins.set(id, value);
+    },
+  );
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  hooks[0].verified(recoveredProof);
+  await vi.waitFor(() => expect(release).toBeDefined());
+  expect(h.service.trusted("b")).toBe(false);
+  expect(() => h.service.bind(h.session)).toThrow(
+    "DUPLICATE_DEVICE_ID",
+  );
+  release();
+  await vi.waitFor(() =>
+    expect(h.service.trusted("b")).toBe(true),
+  );
+  expect(h.pins.get("b")?.credentialRequired).toBe(true);
+  expect(() => h.service.bind(h.session)).toThrow(
+    "DUPLICATE_DEVICE_ID",
+  );
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.store.pair).not.toHaveBeenCalled();
+  expect(h.paired).not.toHaveBeenCalled();
+  expect(h.reset).not.toHaveBeenCalled();
+});
+
+it.each(["interrupted", "failed"] as const)(
+  "does not activate a stale recovered identity when %s races its storage commit",
+  async (event) => {
+    const h = setup();
+    let release!: () => void;
+    vi.mocked(h.store.save).mockImplementationOnce(
+      async (id, value) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        h.pins.set(id, value);
+      },
+    );
+    await vi.waitFor(() => expect(hooks).toHaveLength(1));
+    hooks[0].verified(recoveredProof);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    hooks[0][event]();
+    hooks[0].verified(recoveredProof);
+    release();
+    await vi.waitFor(() =>
+      expect(h.pins.has("b")).toBe(true),
+    );
+    expect(h.service.trusted("b")).toBe(false);
+    expect(h.paired).not.toHaveBeenCalled();
+    if (event === "failed") {
+      await vi.waitFor(() =>
+        expect(h.pins.get("b")?.blocked).toBe(true),
+      );
+      expect(h.reset).toHaveBeenCalledOnce();
+    } else {
+      expect(h.reset).not.toHaveBeenCalled();
+      h.events.dispatchEvent(
+        "messagechannelchange",
+        "ready",
+      );
+      await vi.waitFor(() => expect(hooks).toHaveLength(2));
+      hooks[1].verified(recoveredProof);
+      await vi.waitFor(() =>
+        expect(h.service.trusted("b")).toBe(true),
+      );
+      expect(h.reset).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it("retries a failed recovery pin write without granting authority or clearing policy", async () => {
+  vi.useFakeTimers();
+  const h = setup();
+  vi.mocked(h.store.save).mockRejectedValueOnce(
+    new Error("Storage unavailable"),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  hooks[0].verified(recoveredProof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.get("b")?.state).toBe("verifying");
+  expect(h.pins.size).toBe(0);
+  expect(h.reset).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1000);
+  hooks[1].verified(recoveredProof);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.service.trusted("b")).toBe(true);
+  expect(h.paired).not.toHaveBeenCalled();
+});
+
+it("cannot use a historical binding to replace a different current identity pin", async () => {
+  const h = setup({
+    fingerprint: "current-identity",
+    blocked: false,
+    credentialRequired: true,
+  });
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  hooks[0].verified(recoveredProof);
+  await vi.waitFor(() =>
+    expect(h.service.get("b")?.state).toBe("untrusted"),
+  );
+  expect(h.pins.get("b")?.fingerprint).toBe(
+    "current-identity",
+  );
+  expect(h.paired).not.toHaveBeenCalled();
+});
+
+it("does not fall back to a required public pin without negotiated recovery", async () => {
+  const h = setup({
+    fingerprint: proof.fingerprint,
+    blocked: false,
+    credentialRequired: true,
+  });
+  await vi.waitFor(() => expect(hooks).toHaveLength(1));
+  hooks[0].verified({
+    ...proof,
+    credentialIds: [],
+    remotePairingKnown: true,
+  });
+  await vi.waitFor(() =>
+    expect(h.service.get("b")?.state).toBe("untrusted"),
+  );
+  expect(h.paired).not.toHaveBeenCalled();
+});

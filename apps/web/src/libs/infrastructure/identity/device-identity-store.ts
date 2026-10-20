@@ -9,7 +9,7 @@ import type {
 export interface DevicePin {
   fingerprint: string;
   blocked: boolean;
-  /** Once exchanged, pairing keys are mandatory; a public pin cannot bypass them. */
+  /** Requires pairing-key proofs or explicitly negotiated identity recovery. */
   credentialRequired?: boolean;
 }
 /** A local profile owns its own private key and its own peer trust decisions. */

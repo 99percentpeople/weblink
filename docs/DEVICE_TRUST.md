@@ -15,20 +15,20 @@ exchanged pairing key against the same fresh transcript. Names, client IDs and
 knowledge of public keys alone never grant authority.
 On first use, a device with no saved pin, pairing keys or quarantine record is
 automatically paired after its fresh signed proof is verified and its pin is
-stored. Updated peers include their pairing-history state in the signed
+stored. Peers include their pairing-history state in the signed
 transcript. If either side remembers a shared-key exchange or quarantine,
 a side without any local records cannot treat this as first use: both sides
-need a surviving common key or explicit repair. A matching pin saved before
-the initial key exchange can still resume that interrupted exchange.
-Peers without the history extension retain the existing transcript and local
-first-use policy; saved keys and quarantine still prevent downgrade.
+need a surviving common key, verified identity recovery, or explicit repair.
+A matching pin saved before the initial key exchange can still resume that
+interrupted exchange. Pairing-key connections require the signed history and
+identity-recovery negotiation; missing negotiation fields never enable a fallback.
 This trusts the first verified key encountered, without an out-of-band
 identity check. Later connections must prove continuity with that saved identity.
 The UI still displays a fresh 16-hex-digit pairing code on both devices. Compare
 it through a trusted channel or directly on both screens before manually repairing
 an untrusted device.
 
-Without a surviving verifiable pairing key,
+Without a surviving verifiable pairing key or verified identity recovery,
 a mismatching identity or invalid remote proof leaves the device **untrusted**. The signaling and
 RTC connections remain available for discovery and pairing. All application
 permissions are denied; current transfers, clipboard activity, input and peer
@@ -68,6 +68,41 @@ and uses the same replacement flow. A partial local identity keypair is
 regenerated on load without deleting peer keys. Public pins and issued/received
 keys are stored separately so loss of a pin does not delete the received key.
 
+Every pairing key requires an issuer signature. It binds the key
+ID, expiration and SHA-256 secret hash to both device IDs and both identity
+public keys. This is public metadata on the existing credential, not a new
+token or a copy of an identity private key. When a surviving shared key
+authenticates a regenerated signing identity, normal maintenance rebinds the
+pairing keys to that identity. Pending offers retain their secret through
+this process so a lost ACK never discards the pending key.
+
+If a device loses all peer records but retains its original identity keypair,
+the remembering device verifies the fresh connection signature against its saved
+pin. In the other direction, the remembering device presents the signed binding
+on the key previously issued by the forgetful device. The forgetful device
+verifies its own original signature and requires the recipient identity in that
+binding to match the peer's fresh connection proof. A retained local issuance
+can likewise restore a missing peer pin. A conflicting current pin takes
+precedence over a historical binding. Neither device trusts an assertion that
+the other device remembers it, and historical bindings alone cannot authenticate
+another device or replay a connection signature.
+
+Identity recovery is an explicit, signed negotiation: at least one side must
+have no pairing keys, neither may advertise quarantine, and both must support
+the extension. The recovery states join the same nonce/DTLS-bound transcript.
+A malformed binding or incorrect MAC for a known key is a verification failure,
+never a reason to fall back to identity recovery. No recovery secret is sent in
+the proof. After verification and durable pin storage, the existing issuance
+and ACK flow restores the missing keys without resetting permission choices.
+Interrupted recovery and failed storage writes remain retryable with live
+application access gated as appropriate.
+
+If the identity keypair was also lost and no common pairing key survives,
+explicit repair is required. If both pins remain, identity recovery can
+replace missing keys even when neither side retains an issuance.
+The pairing-key format is under development; unsigned keys and peers that
+omit the identity-binding negotiation are not supported.
+
 The default renewal interval is 90 days, measured by the issuer's clock. Expiry
 is a renewal deadline, not an offline revocation: the previous key remains valid
 for a fresh proof until replacement completes. The issuer renews on reconnect
@@ -78,19 +113,21 @@ failed storage write preserves the old/pending material and retries the same
 pending key. Successful automatic maintenance never resets permissions.
 
 Once pairing keys are enabled for a peer, its public pin cannot bypass a missing
-or invalid pairing-key proof, even if a client omits the key-exchange extension.
-Existing confirmed public pins can bootstrap the first exchange between updated
-clients; no exchange starts before local trust and peer consent. An undelivered
+or invalid pairing-key proof outside the explicitly negotiated identity recovery
+path. Omitting either extension cannot enable that path.
+Confirmed public pins can resume the first exchange; no exchange starts before
+local trust and peer consent. An undelivered
 first offer remains resumable using the pinned signing identity.
 Receipt of a key or acknowledgement of an issuance atomically makes pairing-key
-authentication mandatory alongside persisting that key. Removing the keys later
+authentication (or verified identity recovery) mandatory alongside persisting
+that key. Removing the keys later
 never clears this requirement. Explicit re-pairing atomically records the new
 confirmation and removes prior pairing keys. A connection lost during that commit
 cannot activate stale live authority or revoke the valid saved confirmation. Explicitly
 quarantined keys cannot recover automatically. Manual re-pairing clears old
 pairing keys and restores default permissions, never previous permanent grants.
-If a device remembers its peer but no shared secret survives on both
-devices, manual re-pairing remains necessary. Expiry does not provide a hard
+If neither a shared key nor the original bound identity can be verified,
+manual re-pairing remains necessary. Expiry does not provide a hard
 revocation deadline; explicit quarantine/re-pairing revokes the prior keys.
 
 The per-device settings are:
