@@ -112,30 +112,41 @@ not issued, changed or revoked by remote-device pairing.
 ## Duplicate IDs and signaling deployment
 
 Both Bun signaling and the Cloudflare Worker issue a fresh WebSocket challenge.
-A join proof signs the challenge, client ID and creation time. An existing room
-member can be replaced/resumed only by a valid proof with the same public key.
-Unsigned, wrong-key or replayed duplicate joins are rejected without a leave
-notification or closing the original socket. The rejected candidate waits with
+A join proof signs the challenge, client ID and creation time. A room member
+with a verified signing key can be replaced/resumed only by a valid proof with
+the same public key. Unsigned, wrong-key or replayed duplicate joins cannot
+replace that member or close its socket. The rejected duplicate candidate waits with
 capped exponential backoff and fresh join proofs, including when it has never
 joined successfully. Transient transport failures during that wait keep retrying;
 leaving the room cancels the wait. No retry sends a leave or overrides the current
-owner. Only after the old membership/lease is gone can a different signing key
+owner. Only after the signed membership/lease is gone can a different signing key
 join that ID. An already admitted session that is explicitly replaced still stops
 retrying, preventing takeover loops. This protects the currently
 admitted device; the server cannot establish ownership of an unused ID before
 its first admission. Endpoint pairing remains necessary.
 
+An unsigned legacy member retains the old same-ID replacement and resume
+behavior, including cached signaling during the disconnect grace period.
+Legacy clients can communicate with each other without implementing identity
+proofs. A supplied invalid proof is rejected rather than treated as legacy.
+A valid signed replacement upgrades an unsigned member; later unsigned joins
+cannot downgrade or replace it. Unsigned members retain the old protocol's
+limitations against ID impersonation.
+
 Bun deployments using Redis reserve a room/client lease atomically across nodes.
-A live lease on another node is conservatively rejected even for a matching key.
-Use sticky routing for reconnects. After a node fails, another node can admit
+A signed live lease on another node is conservatively rejected even for a matching
+key. Use sticky routing for signed reconnects. Unsigned leases can move between
+nodes for legacy reconnects; the previous transport is retired without emitting
+a stale leave or releasing the new lease. A different node acknowledges a fresh
+join so the client rebuilds its signaling state. After a node fails, another node can admit
 the ID when the lease expires (heartbeat timeout + disconnect grace + heartbeat
 interval + 10 seconds). Redis failure denies admission and forwarding rather
 than bypassing ownership checks. Deploy the updated server to every node before
 relying on this protection; mixed versions do not share the admission boundary.
 
-Old clients can join an unused ID but cannot pass device pairing, exchange
-application content with these clients, or replace an existing member without a
-proof. An old signaling server does not protect against duplicate-ID eviction.
+Old clients can join and resume unsigned membership but cannot pass device pairing,
+exchange application content with new clients, or replace a signed member without
+a matching proof. An old signaling server does not protect against duplicate-ID eviction.
 Use HTTPS/localhost or the desktop secure origin for persistent WebCrypto keys.
 Clearing all profile storage removes both directions of pairing keys. That
 profile treats peers as new; any peer retaining the old identity still requires
