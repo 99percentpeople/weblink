@@ -178,6 +178,111 @@ it("aborts application work immediately on a native cancellation event", async (
     ),
   );
 });
+it.each([false, true])(
+  "a delayed snapshot preserves newer calls and late cleanup cannot finish a replacement (reuse=%s)",
+  async (reuse) => {
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    await view.runtime.configure(true);
+    const signals = new Map<string, AbortSignal>();
+    const finish = new Map<string, () => void>();
+    fixture.handle.mockImplementation(
+      async (call, signal) => {
+        const source = String(call.arguments.sourceId);
+        signals.set(source, signal);
+        await new Promise<void>((resolve) => {
+          finish.set(source, resolve);
+        });
+        signal.throwIfAborted();
+        return { source };
+      },
+    );
+    const receive = vi.mocked(fixture.native.open).mock
+      .calls[0][0];
+    const request = (id: string, sourceId: string) =>
+      receive({
+        kind: "call",
+        id,
+        principal: {
+          id: "token",
+          label: "Agent",
+          kind: "mcp",
+        },
+        call: {
+          name: "screen.start",
+          arguments: { target: "local", sourceId },
+        },
+      });
+    request("old", "old");
+    await waitFor(() =>
+      expect(signals.has("old")).toBe(true),
+    );
+    let resolveSnapshot!: (value: unknown) => void;
+    vi.mocked(
+      fixture.native.snapshot,
+    ).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        }),
+    );
+    await waitFor(
+      () => expect(resolveSnapshot).toBeDefined(),
+      { timeout: 2500 },
+    );
+    const nextId = reuse ? "old" : "new";
+    if (reuse) receive({ kind: "cancel", id: "old" });
+    request(nextId, "new");
+    await waitFor(() =>
+      expect(signals.has("new")).toBe(true),
+    );
+    try {
+      resolveSnapshot({ ...snapshot(), activeCalls: [] });
+      await waitFor(() =>
+        expect(signals.get("old")!.aborted).toBe(true),
+      );
+      expect(signals.get("new")!.aborted).toBe(false);
+      finish.get("old")!();
+      // Let the old native callback complete before the replacement.
+      await new Promise((resolve) =>
+        setTimeout(resolve, 0),
+      );
+      if (reuse)
+        expect(
+          fixture.native.finish,
+        ).not.toHaveBeenCalled();
+      else
+        expect(fixture.native.finish).toHaveBeenCalledWith(
+          "epoch",
+          "old",
+          {
+            ok: false,
+            error: {
+              code: "CANCELLED",
+              message: "CANCELLED",
+            },
+          },
+        );
+      expect(signals.get("new")!.aborted).toBe(false);
+      finish.get("new")!();
+      await waitFor(() =>
+        expect(fixture.native.finish).toHaveBeenCalledWith(
+          "epoch",
+          nextId,
+          { ok: true, data: { source: "new" } },
+        ),
+      );
+      if (reuse)
+        expect(fixture.native.finish).toHaveBeenCalledTimes(
+          1,
+        );
+    } finally {
+      finish.forEach((resolve) => resolve());
+    }
+  },
+);
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

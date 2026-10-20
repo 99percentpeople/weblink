@@ -392,6 +392,9 @@ export function createAutomation(
     request: NativeAutomationRequest,
   ) => {
     const controller = new AbortController();
+    calls
+      .get(request.id)
+      ?.abort(new AutomationError("CANCELLED"));
     calls.set(request.id, controller);
     const combined = combineAbortSignals([
       controller.signal,
@@ -399,7 +402,8 @@ export function createAutomation(
     ]);
     const signal = combined.signal;
     const timeout = setTimeout(
-      () => controller.abort(),
+      () =>
+        controller.abort(new AutomationError("TIMEOUT")),
       150000,
     );
     let result: ToolResult;
@@ -416,6 +420,8 @@ export function createAutomation(
     }
     clearTimeout(timeout);
     combined.dispose();
+    // A cancelled invocation can finish after its ID has been reused.
+    if (calls.get(request.id) !== controller) return;
     calls.delete(request.id);
     await native!
       .finish(epoch, request.id, result)
@@ -569,13 +575,15 @@ export function createAutomation(
     if (native && epoch)
       try {
         await native.heartbeat(epoch);
+        const observed = new Map(calls);
         const snapshot = await readNativeSnapshot();
-        for (const [id, c] of calls)
+        for (const [id, c] of observed)
           if (
             snapshot?.activeCalls &&
+            calls.get(id) === c &&
             !snapshot.activeCalls.includes(id)
           )
-            c.abort();
+            c.abort(new AutomationError("CANCELLED"));
       } catch (e) {
         setError(String(e));
         setEnabled(false);

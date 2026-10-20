@@ -13,6 +13,7 @@ mod input_sequence;
 mod jobs;
 mod keyboard;
 mod native;
+mod native_read;
 mod pointer;
 mod policy;
 mod registry;
@@ -97,6 +98,8 @@ struct State {
 #[derive(Default)]
 pub struct Service {
     state: Mutex<State>,
+    opening: Mutex<()>,
+    native_read: Mutex<()>,
     jobs: jobs::Jobs,
     input_queue: input_sequence::Queue,
     input_holds: Mutex<input_holds::Holds>,
@@ -143,6 +146,15 @@ impl Service {
     }
     pub fn shutdown(&self) {
         let mut s = self.state.lock().unwrap();
+        self.shutdown_locked(&mut s);
+    }
+    fn close(&self, epoch: &str) -> Result<(), String> {
+        let mut s = self.state.lock().unwrap();
+        Self::check(&s, epoch)?;
+        self.shutdown_locked(&mut s);
+        Ok(())
+    }
+    fn shutdown_locked(&self, s: &mut State) {
         if let Some(cancel) = s.listener.take() {
             cancel.cancel();
         }
@@ -150,7 +162,7 @@ impl Service {
         s.endpoint.clear();
         s.active_server = None;
         s.grants.clear();
-        Self::cancel_all(&mut s);
+        Self::cancel_all(s);
         s.peers.clear();
         s.peer_policies.clear();
         s.channel = None;

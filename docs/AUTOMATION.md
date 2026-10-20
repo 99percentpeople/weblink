@@ -75,6 +75,14 @@ also produce MCP image content. No MCP credentials are sent to peers. HTTP autho
 credential and grant lifetime, not individual TCP connections: modern MCP HTTP
 is stateless. Cancelling an HTTP call cancels that invocation.
 
+Native source discovery and screenshots do not hold the permission lock while
+waiting for the OS. Token, grant and request validity are checked again before
+returning data; cancellation or revocation discards a late result. One native
+read may run at a time (`BUSY` for overlapping reads), and cancelling a caller
+does not release that slot until the OS operation returns. MCP management and
+permission cleanup run off the window thread so native window message handling
+remains available during lock and worker waits.
+
 Every tool requires an explicit `target`: `local` or a directly connected
 Weblink peer ID. `devices.list` discovers available peers. Remote calls use a
 separate `automation/1` capability and ordered WebRTC DataChannel. Existing

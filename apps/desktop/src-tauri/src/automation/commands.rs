@@ -7,71 +7,104 @@ fn main(window: &WebviewWindow) -> Result<(), String> {
         Err("PERMISSION_DENIED".into())
     }
 }
-#[tauri::command]
-pub fn automation_open(
+
+// IPC handlers must not wait for authority/worker locks on the window thread.
+// Native window discovery and input workers can need that thread to process messages.
+async fn blocking<T: Send + 'static>(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
+    operation: impl FnOnce(tauri::AppHandle, Shared) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    main(&window)?;
+    let app = window.app_handle().clone();
+    let service = service.inner().clone();
+    off_thread(move || operation(app, service)).await
+}
+
+async fn off_thread<T: Send + 'static>(
+    operation: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|_| "EXECUTION_FAILED")?
+}
+
+#[tauri::command]
+pub async fn automation_open(
+    window: WebviewWindow,
+    service: State<'_, Shared>,
     channel: Channel<Value>,
 ) -> Result<String, String> {
-    main(&window)?;
-    service.load_registry(
-        window
-            .app_handle()
-            .path()
-            .app_local_data_dir()
-            .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?
-            .join("mcp-tokens.json"),
-    )?;
-    service.shutdown();
-    native::sync_input(window.app_handle(), &service);
-    let epoch = {
-        let mut s = service.state.lock().unwrap();
-        s.epoch = uuid::Uuid::new_v4().to_string();
-        s.heartbeat = Some(Instant::now());
-        s.channel = Some(channel);
-        s.epoch.clone()
-    };
-    let background = service.inner().clone();
-    let app = window.app_handle().clone();
-    let generation = epoch.clone();
-    tauri::async_runtime::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            native::sync_input(&app, &background);
-            let s = background.state.lock().unwrap();
-            if s.epoch != generation
-                || s.heartbeat
-                    .is_none_or(|t| t.elapsed() > Duration::from_secs(20))
-            {
-                break;
+    blocking(window, service, move |app, service| {
+        let _opening = service.opening.lock().unwrap();
+        service.load_registry(
+            app.path()
+                .app_local_data_dir()
+                .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?
+                .join("mcp-tokens.json"),
+        )?;
+        service.shutdown();
+        native::sync_input(&app, &service);
+        let epoch = {
+            let mut s = service.state.lock().unwrap();
+            s.epoch = uuid::Uuid::new_v4().to_string();
+            s.heartbeat = Some(Instant::now());
+            s.channel = Some(channel);
+            s.epoch.clone()
+        };
+        let background = service.clone();
+        let app = app.clone();
+        let generation = epoch.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                let app = app.clone();
+                let background = background.clone();
+                let generation = generation.clone();
+                let current = off_thread(move || {
+                    native::sync_input(&app, &background);
+                    let s = background.state.lock().unwrap();
+                    Ok(s.epoch == generation
+                        && s.heartbeat
+                            .is_some_and(|t| t.elapsed() <= Duration::from_secs(20)))
+                })
+                .await
+                .unwrap_or(false);
+                if !current {
+                    break;
+                }
             }
-        }
-    });
-    Ok(epoch)
+        });
+        Ok(epoch)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_heartbeat(
+pub async fn automation_heartbeat(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    s.heartbeat = Some(Instant::now());
-    Ok(())
+    blocking(window, service, move |_app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        s.heartbeat = Some(Instant::now());
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_close(
+pub async fn automation_close(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    Service::check(&service.state.lock().unwrap(), &epoch)?;
-    service.shutdown();
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+    blocking(window, service, move |app, service| {
+        service.close(&epoch)?;
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
 pub async fn automation_configure(
@@ -81,31 +114,37 @@ pub async fn automation_configure(
     enabled: bool,
 ) -> Result<(), String> {
     main(&window)?;
-    {
-        let mut s = service.state.lock().unwrap();
-        Service::check(&s, &epoch)?;
+    let app = window.app_handle().clone();
+    let authority = service.inner().clone();
+    let generation = epoch.clone();
+    let start = off_thread(move || {
+        let mut s = authority.state.lock().unwrap();
+        Service::check(&s, &generation)?;
         if s.enabled == enabled {
-            return Ok(());
+            return Ok(false);
         }
         s.enabled = enabled;
         if enabled {
             s.policies_suspended = false;
+            return Ok(true);
         }
-        if !enabled {
-            s.endpoint.clear();
-            s.active_server = None;
-            s.grants.clear();
-            Service::cancel_all(&mut s);
-            s.peers.clear();
-            s.peer_policies.clear();
-            if let Some(c) = s.listener.take() {
-                c.cancel();
-            }
-            service.jobs.stop();
-            drop(s);
-            native::sync_input(window.app_handle(), &service);
-            return Ok(());
+        s.endpoint.clear();
+        s.active_server = None;
+        s.grants.clear();
+        Service::cancel_all(&mut s);
+        s.peers.clear();
+        s.peer_policies.clear();
+        if let Some(c) = s.listener.take() {
+            c.cancel();
         }
+        authority.jobs.stop();
+        drop(s);
+        native::sync_input(&app, &authority);
+        Ok(false)
+    })
+    .await?;
+    if !start {
+        return Ok(());
     }
     if let Err(error) = http::start(service.inner().clone(), epoch.clone()).await {
         let mut s = service.state.lock().unwrap();
@@ -118,22 +157,24 @@ pub async fn automation_configure(
     Ok(())
 }
 #[tauri::command]
-pub fn automation_server_configure(
+pub async fn automation_server_configure(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     config: server::ServerConfig,
 ) -> Result<(), String> {
-    main(&window)?;
-    service.configure_server(&epoch, config)
+    blocking(window, service, move |_app, service| {
+        service.configure_server(&epoch, config)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_snapshot(
+pub async fn automation_snapshot(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
 ) -> Result<Value, String> {
-    main(&window)?;
+    blocking(window, service, move |_app, service| {
     service.expire();
     let s = service.state.lock().unwrap();
     Service::check(&s, &epoch)?;
@@ -142,160 +183,178 @@ pub fn automation_snapshot(
     drop(s);
     snapshot["endpoints"] = json!(server::endpoints(active.as_ref()));
     Ok(snapshot)
+
+    }).await
 }
 #[tauri::command]
-pub fn automation_client(
+pub async fn automation_client(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     label: String,
     expires_at: Option<u64>,
 ) -> Result<Value, String> {
-    main(&window)?;
-    service.create_client(&epoch, label, expires_at)
+    blocking(window, service, move |_app, service| {
+        service.create_client(&epoch, label, expires_at)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_client_update(
+pub async fn automation_client_update(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
     label: String,
     expires_at: Option<u64>,
 ) -> Result<(), String> {
-    main(&window)?;
-    service.update_client(&epoch, &id, label, expires_at)?;
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+    blocking(window, service, move |app, service| {
+        service.update_client(&epoch, &id, label, expires_at)?;
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_client_remove(
+pub async fn automation_client_remove(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    service.remove_client(&epoch, &id)?;
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+    blocking(window, service, move |app, service| {
+        service.remove_client(&epoch, &id)?;
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_disconnect(
+pub async fn automation_disconnect(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     principal: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    s.peers.remove(&principal);
-    s.peer_policies.remove(&principal);
-    let ids: Vec<_> = s
-        .grants
-        .values()
-        .filter(|g| g.principal.id == principal)
-        .map(|g| g.id.clone())
-        .collect();
-    for id in ids {
-        service.revoke_locked(&mut s, &id);
-    }
-    let pending: Vec<_> = s
-        .pending
-        .iter()
-        .filter(|(_, p)| p.principal.id == principal)
-        .map(|(id, _)| id.clone())
-        .collect();
-    for id in pending {
-        Service::cancel_request(&mut s, &id);
-    }
-    drop(s);
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+    blocking(window, service, move |app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        s.peers.remove(&principal);
+        s.peer_policies.remove(&principal);
+        let ids: Vec<_> = s
+            .grants
+            .values()
+            .filter(|g| g.principal.id == principal)
+            .map(|g| g.id.clone())
+            .collect();
+        for id in ids {
+            service.revoke_locked(&mut s, &id);
+        }
+        let pending: Vec<_> = s
+            .pending
+            .iter()
+            .filter(|(_, p)| p.principal.id == principal)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in pending {
+            Service::cancel_request(&mut s, &id);
+        }
+        drop(s);
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_peer(
+pub async fn automation_peer(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     label: String,
     fingerprint: String,
 ) -> Result<String, String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    if !s.enabled
-        || s.peers.len() >= 32
-        || label.len() > 128
-        || fingerprint.len() != 64
-        || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        return Err("INVALID_ARGUMENTS".into());
-    }
-    let id = uuid::Uuid::new_v4().to_string();
-    s.peers.insert(
-        id.clone(),
-        Principal {
-            id: id.clone(),
-            label,
-            kind: "peer".into(),
-            fingerprint: Some(fingerprint),
-        },
-    );
-    Ok(id)
+    blocking(window, service, move |_app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        if !s.enabled
+            || s.peers.len() >= 32
+            || label.len() > 128
+            || fingerprint.len() != 64
+            || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err("INVALID_ARGUMENTS".into());
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        s.peers.insert(
+            id.clone(),
+            Principal {
+                id: id.clone(),
+                label,
+                kind: "peer".into(),
+                fingerprint: Some(fingerprint),
+            },
+        );
+        Ok(id)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_peer_policy(
+pub async fn automation_peer_policy(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     principal: String,
     policy: policy::PeerPolicy,
 ) -> Result<(), String> {
-    main(&window)?;
-    service.set_peer_policy(&epoch, &principal, policy)?;
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+    blocking(window, service, move |app, service| {
+        service.set_peer_policy(&epoch, &principal, policy)?;
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_decide(
+pub async fn automation_decide(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
     minutes: u32,
 ) -> Result<(), String> {
-    main(&window)?;
-    service.decide(&epoch, &id, minutes)
+    blocking(window, service, move |_app, service| {
+        service.decide(&epoch, &id, minutes)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_revoke(
+pub async fn automation_revoke(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: Option<String>,
 ) -> Result<(), String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    if let Some(id) = id {
-        if s.grants.get(&id).is_some_and(|g| g.expires_at.is_none()) {
-            service.pause_policies(&mut s);
-        }
-        service.revoke_locked(&mut s, &id);
-    } else {
-        let ids: Vec<_> = s.grants.keys().cloned().collect();
-        for id in ids {
+    blocking(window, service, move |app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        if let Some(id) = id {
+            if s.grants.get(&id).is_some_and(|g| g.expires_at.is_none()) {
+                service.pause_policies(&mut s);
+            }
             service.revoke_locked(&mut s, &id);
+        } else {
+            let ids: Vec<_> = s.grants.keys().cloned().collect();
+            for id in ids {
+                service.revoke_locked(&mut s, &id);
+            }
+            Service::cancel_all(&mut s);
+            s.policies_suspended = true;
+            service.jobs.stop();
         }
-        Service::cancel_all(&mut s);
-        s.policies_suspended = true;
-        service.jobs.stop();
-    }
-    drop(s);
-    native::sync_input(window.app_handle(), &service);
-    Ok(())
+        drop(s);
+        native::sync_input(&app, &service);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
 pub async fn automation_call(
@@ -321,47 +380,53 @@ pub async fn automation_call(
     Ok(service.inner().clone().invoke(p, id, call).await)
 }
 #[tauri::command]
-pub fn automation_cancel(
+pub async fn automation_cancel(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    Service::cancel_request(&mut s, &id);
-    Ok(())
+    blocking(window, service, move |_app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        Service::cancel_request(&mut s, &id);
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_check(
+pub async fn automation_check(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
 ) -> Result<(), String> {
-    main(&window)?;
-    Service::check_call(&service.state.lock().unwrap(), &epoch, &id)
+    blocking(window, service, move |_app, service| {
+        Service::check_call(&service.state.lock().unwrap(), &epoch, &id)
+    })
+    .await
 }
 #[tauri::command]
-pub fn automation_finish(
+pub async fn automation_finish(
     window: WebviewWindow,
-    service: State<Shared>,
+    service: State<'_, Shared>,
     epoch: String,
     id: String,
     result: Value,
 ) -> Result<(), String> {
-    main(&window)?;
-    let mut s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    let valid = Service::check_call(&s, &epoch, &id).is_ok();
-    let t = s.tickets.remove(&id).ok_or("CANCELLED")?;
-    let _ = t.answer.send(if valid {
-        result
-    } else {
-        error("GRANT_EXPIRED")
-    });
-    Ok(())
+    blocking(window, service, move |_app, service| {
+        let mut s = service.state.lock().unwrap();
+        Service::check(&s, &epoch)?;
+        let valid = Service::check_call(&s, &epoch, &id).is_ok();
+        let t = s.tickets.remove(&id).ok_or("CANCELLED")?;
+        let _ = t.answer.send(if valid {
+            result
+        } else {
+            error("GRANT_EXPIRED")
+        });
+        Ok(())
+    })
+    .await
 }
 #[tauri::command]
 pub async fn automation_action(
@@ -380,4 +445,42 @@ pub async fn automation_action(
         binding.unwrap_or_default(),
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn management_waits_do_not_block_the_dispatch_runtime() {
+        let (resume, waiting) = std::sync::mpsc::channel();
+        let dispatch_thread = std::thread::current().id();
+        let operation = off_thread(move || {
+            assert_ne!(std::thread::current().id(), dispatch_thread);
+            waiting
+                .recv_timeout(Duration::from_secs(3))
+                .map_err(|_| "Dispatch thread was blocked".to_string())
+        });
+        let dispatch = async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            resume.send(()).unwrap();
+        };
+        let (result, _) = tokio::join!(operation, dispatch);
+        result.unwrap();
+    }
+
+    #[test]
+    fn an_old_close_cannot_clear_the_replacement_authority() {
+        let service = Service::default();
+        {
+            let mut s = service.state.lock().unwrap();
+            s.epoch = "replacement".into();
+            s.heartbeat = Some(Instant::now());
+            s.enabled = true;
+        }
+        assert_eq!(service.close("old").unwrap_err(), "SESSION_CLOSED");
+        assert!(service.state.lock().unwrap().enabled);
+        service.close("replacement").unwrap();
+        assert!(!service.state.lock().unwrap().enabled);
+    }
 }
