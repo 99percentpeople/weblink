@@ -112,9 +112,20 @@ without mutating process-wide proxy settings.
 Native job lifecycle tests compile one small standard-library-only child process
 on demand and share it across the suite. They exercise real pipes, exit codes,
 timeouts and process cancellation without repeatedly starting PowerShell.
-A separate real-Shell smoke test covers script execution. Its completion deadline
-is a safety bound; command wait-limit assertions must not depend on interpreter
-startup time or CI machine load.
+A separate real-Shell smoke test covers script execution. On Windows it is
+opt-in because PowerShell/CLR cold startup depends on the host image and load;
+Unix keeps the smoke in the default suite. To run the Windows smoke explicitly:
+
+```sh
+cargo test --locked -p weblink-desktop --lib automation::jobs::tests::real_shell_executes_scripts_and_captures_output -- --exact --ignored --nocapture
+```
+
+Default correctness tests should assert event ordering, ownership and cleanup instead
+of interpreter startup speed, GPU latency or a fixed number of idle status reads.
+Use completion notifications to synchronize workers. Timeouts bound deadlocks and
+test cleanup; host-dependent performance measurements and Windows Shell smoke
+checks stay opt-in.
+The idle-host measurement remains available as `idle_host_status_reads`.
 
 ### Browser E2E smoke tests
 

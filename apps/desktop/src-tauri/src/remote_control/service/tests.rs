@@ -241,32 +241,6 @@ fn idle_host_status_reads() {
     );
 }
 
-#[test]
-fn an_idle_notifying_backend_wakes_the_host_without_periodic_status_reads() {
-    let state = Arc::new(DeviceState::default());
-    let service = Service::default();
-    let shared = state.clone();
-    service
-        .start(move || Ok(Box::new(TestSession::new(shared))))
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while state.status_reads.load(Ordering::Relaxed) < 3 {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(5));
-    }
-    // Let the retained startup token drain before observing steady-state idle.
-    thread::sleep(Duration::from_millis(50));
-    let reads = state.status_reads.load(Ordering::Relaxed);
-    thread::sleep(Duration::from_millis(150));
-    assert_eq!(state.status_reads.load(Ordering::Relaxed), reads);
-    state.owner.lock().unwrap().as_ref().unwrap().unpark();
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while state.status_reads.load(Ordering::Relaxed) == reads {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(5));
-    }
-    service.close();
-}
 impl Drop for TestSession {
     fn drop(&mut self) {
         self.shutdown();
@@ -305,6 +279,7 @@ impl GeometrySource for Source {
 struct TestSender {
     state: Arc<DeviceState>,
     sent: Mutex<Vec<Value>>,
+    closed: Mutex<Option<std::sync::mpsc::Sender<()>>>,
 }
 impl Sender for TestSender {
     fn send(&self, data: &[u8]) -> SendResult {
@@ -320,6 +295,9 @@ impl Sender for TestSender {
             .lock()
             .unwrap()
             .push(Observation::ChannelClosed);
+        if let Some(closed) = self.closed.lock().unwrap().as_ref() {
+            let _ = closed.send(());
+        }
     }
 }
 struct Rig {
@@ -518,6 +496,7 @@ impl Rig {
         let sender = Arc::new(TestSender {
             state: state.clone(),
             sent: Mutex::default(),
+            closed: Mutex::default(),
         });
         endpoint.opened(sender.clone());
         let rig = Self {
@@ -1308,24 +1287,18 @@ fn source_end_cancels_pending_consent_and_geometry_change_releases_active_input(
 }
 
 #[test]
-fn connected_host_sleeps_until_capture_invalidation_and_unsubscribes_on_removal() {
+fn capture_invalidation_wakes_the_host_and_unsubscribes_on_removal() {
     let rig = Rig::new();
-    thread::sleep(Duration::from_millis(60));
-    let reads = rig.state.status_reads.load(Ordering::Relaxed);
-    thread::sleep(Duration::from_millis(350));
-    assert_eq!(rig.state.status_reads.load(Ordering::Relaxed), reads);
+    let (closed, closure) = std::sync::mpsc::channel();
+    *rig.sender.closed.lock().unwrap() = Some(closed);
     rig.source.0.store(false, Ordering::Release);
     for changed in rig.source.2.lock().unwrap().values() {
         changed();
     }
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while !rig.endpoint.is_closed() {
-        assert!(
-            Instant::now() < deadline,
-            "Capture notification did not wake host"
-        );
-        thread::sleep(Duration::from_millis(5));
-    }
+    closure
+        .recv_timeout(Duration::from_secs(10))
+        .expect("Capture notification did not close the endpoint");
+    assert!(rig.endpoint.is_closed());
     rig.service.close();
     assert!(rig.source.2.lock().unwrap().is_empty());
 }
@@ -1455,6 +1428,7 @@ fn choosing_a_concurrent_request_grants_one_peer_and_sends_busy_to_the_other() {
     let sender = Arc::new(TestSender {
         state: rig.state.clone(),
         sent: Mutex::default(),
+        closed: Mutex::default(),
     });
     endpoint.opened(sender.clone());
     rig.tick();

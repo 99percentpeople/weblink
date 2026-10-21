@@ -1,7 +1,10 @@
 use super::*;
 use crate::surface::readback::{PendingReadback, Readback};
 use std::{
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::Notify;
@@ -145,30 +148,35 @@ fn isolated_readback_completes_while_acquisition_context_is_locked() {
         }
         let (ready, entered) = std::sync::mpsc::channel();
         let (release, released) = std::sync::mpsc::channel();
+        let held = Arc::new(AtomicBool::new(false));
+        let acquisition_held = held.clone();
         let lock = std::thread::spawn(move || {
             unsafe {
                 protection.Enter();
             }
+            acquisition_held.store(true, Ordering::Release);
             ready.send(()).unwrap();
             // Bounded test cleanup even if a regression blocks the readback.
-            let _ = released.recv_timeout(Duration::from_secs(2));
+            let _ = released.recv_timeout(Duration::from_secs(10));
+            acquisition_held.store(false, Ordering::Release);
             unsafe {
                 protection.Leave();
             }
         });
-        entered.recv().unwrap();
-        let started = Instant::now();
+        entered
+            .recv_timeout(Duration::from_secs(10))
+            .expect("Acquisition context lock was not acquired");
         let notify = Arc::new(Notify::new());
         let mut pending = retained
             .submit_notifying((32, 16), None, notify.clone())
             .unwrap();
         pixels(&mut pending, &notify, 96).await;
-        let elapsed = started.elapsed();
+        let completed_while_locked = held.load(Ordering::Acquire);
         let _ = release.send(());
         lock.join().unwrap();
         assert!(
-            elapsed < Duration::from_secs(1),
-            "Readback waited for acquisition: {elapsed:?}"
+            completed_while_locked,
+            "Readback completed only after releasing the acquisition context"
         );
     });
 }

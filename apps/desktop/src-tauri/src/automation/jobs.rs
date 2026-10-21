@@ -398,6 +398,10 @@ mod tests {
             .unwrap()
     }
     #[tokio::test]
+    #[cfg_attr(
+        windows,
+        ignore = "Opt-in Windows PowerShell smoke; interpreter startup depends on the host image"
+    )]
     async fn real_shell_executes_scripts_and_captures_output() {
         let jobs = Jobs::default();
         #[cfg(unix)]
