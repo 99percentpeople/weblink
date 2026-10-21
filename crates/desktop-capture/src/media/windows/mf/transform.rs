@@ -2,7 +2,7 @@
 use super::encoders::Codec;
 use crate::damage::DirtyRect;
 use crate::media::latency::CodecControl;
-use std::{mem::ManuallyDrop, ptr, sync::Arc};
+use std::{ptr, sync::Arc};
 use windows::{
     core::Interface,
     Win32::{
@@ -61,6 +61,7 @@ pub struct Transform {
     controls: Option<ICodecAPI>,
     input: u32,
     output: u32,
+    output_type: IMFMediaType,
     pub width: u32,
     pub height: u32,
     fps: u32,
@@ -246,6 +247,7 @@ impl Transform {
                     controls,
                     input: input[0],
                     output: output[0],
+                    output_type,
                     width,
                     height,
                     fps,
@@ -437,28 +439,13 @@ impl Transform {
     }
     fn output(&mut self) -> Result<Option<Packet>> {
         unsafe {
-            let info = self.transform.GetOutputStreamInfo(self.output)?;
-            let sample = if info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32 == 0 {
-                let sample = MFCreateSample()?;
-                sample.AddBuffer(&MFCreateMemoryBuffer(
-                    info.cbSize.max(self.width * self.height * 2),
-                )?)?;
-                Some(sample)
-            } else {
-                None
-            };
-            let mut output = [MFT_OUTPUT_DATA_BUFFER {
-                dwStreamID: self.output,
-                pSample: ManuallyDrop::new(sample),
-                dwStatus: 0,
-                pEvents: ManuallyDrop::new(None),
-            }];
-            let mut flags = 0;
-            let result = self.transform.ProcessOutput(0, &mut output, &mut flags);
-            let sample = ManuallyDrop::take(&mut output[0].pSample);
-            drop(ManuallyDrop::take(&mut output[0].pEvents));
-            result?;
-            let Some(sample) = sample else {
+            let Some(sample) = super::output::read(
+                &self.transform,
+                self.output,
+                &self.output_type,
+                self.width * self.height * 2,
+            )?
+            else {
                 return Ok(None);
             };
             let buffer = sample.ConvertToContiguousBuffer()?;
