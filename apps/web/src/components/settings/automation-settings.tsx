@@ -9,6 +9,10 @@ import {
 import { SettingSwitch } from "./setting-controls";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import {
+  callStatusLabel,
+  jobStatusLabel,
+} from "@/libs/i18n/automation";
 import McpServerSettings from "./mcp-server-settings";
 import McpTokenSettings from "./mcp-token-settings";
 const Empty = (props: { message: string }) => (
@@ -149,7 +153,7 @@ export default function AutomationSettings() {
                 {(job) => (
                   <SettingRow label={<code>{job.id}</code>}>
                     <span class="text-sm">
-                      {job.status}
+                      {jobStatusLabel(job.status)}
                       {job.exitCode !== null
                         ? ` (${job.exitCode})`
                         : ""}
@@ -203,7 +207,7 @@ export default function AutomationSettings() {
                       {new Date(
                         entry.at,
                       ).toLocaleTimeString()}{" "}
-                      · {entry.status}
+                      · {callStatusLabel(entry.status)}
                     </span>
                   </li>
                 )}

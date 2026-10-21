@@ -198,7 +198,7 @@ it.each(["approve", "decline"])(
 );
 
 it.each([true, false])(
-  "opens the speed-test panel without a second toast and lets it respond when browser buttons are unavailable (accepted=%s)",
+  "opens the existing approval toast when browser notification buttons are unavailable (accepted=%s)",
   async (accepted) => {
     mocks.capabilities.mockResolvedValue({
       ...granted,
@@ -213,18 +213,18 @@ it.each([true, false])(
     visibility(true);
     expect(mocks.info).not.toHaveBeenCalled();
     action(request.id, "open");
-    expect(mocks.openDetails).toHaveBeenCalledWith(
-      "peer",
-      "speed",
-    );
+    await flush();
+    expect(mocks.openDetails).not.toHaveBeenCalled();
     expect(mocks.showApp).toHaveBeenCalledOnce();
+    expect(mocks.info).toHaveBeenCalledOnce();
     expect(controller.pending()?.id).toBe(request.id);
     visibility(false);
     visibility(true);
-    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.info).toHaveBeenCalledOnce();
     expect(mocks.show).toHaveBeenCalledOnce();
-    if (accepted) controller.accept("peer");
-    else controller.decline("peer");
+    const options = mocks.info.mock.calls[0][1];
+    if (accepted) options.action.onClick();
+    else options.cancel.onClick();
     await expect(result).resolves.toBe(accepted);
   },
 );

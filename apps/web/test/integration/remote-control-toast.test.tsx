@@ -119,7 +119,10 @@ function mount({
     async (_notification: SystemNotification) => {},
   );
   const dismiss = vi.fn(async () => {});
-  const showApplication = vi.fn();
+  const showApplication = vi.fn(() => {
+    visible = true;
+    service.reconcile();
+  });
   let receive!: (action: NotificationAction) => void;
   const service = new NotificationService(
     native
@@ -515,7 +518,7 @@ it("does not send a background notice after the same request already appeared as
 });
 
 it.each([true, false])(
-  "opens an actionable dialog from a notification without buttons, with no second toast (accepted=%s)",
+  "opens the existing request toast from a system notification without buttons (accepted=%s)",
   async (accepted) => {
     const view = mount({ native: true, visible: false });
     const id = `browser-${accepted}`;
@@ -534,7 +537,12 @@ it.each([true, false])(
         .some((item) => item.id === `remote-control:${id}`),
     ).toBe(false);
     view.open(id);
-    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(
+      await screen.findByRole("button", {
+        name: "remote_control.more_choices",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(view.showApplication).toHaveBeenCalledOnce();
     expect(fixture.approve).not.toHaveBeenCalled();
     fireEvent.click(
@@ -550,7 +558,13 @@ it.each([true, false])(
       accepted,
     );
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).toBeNull(),
+      expect(
+        toast
+          .getToasts()
+          .some(
+            (item) => item.id === `remote-control:${id}`,
+          ),
+      ).toBe(false),
     );
     view.setVisible(false);
     view.setVisible(true);
@@ -577,8 +591,41 @@ it("closes a notification-opened confirmation when its exact request expires", a
   });
   setStatus({ closed: false, clientId: null, pending: [] });
   await waitFor(() =>
-    expect(screen.queryByRole("dialog")).toBeNull(),
+    expect(
+      toast
+        .getToasts()
+        .some(
+          (item) =>
+            item.id === "remote-control:browser-expired",
+        ),
+    ).toBe(false),
   );
   fireEvent.click(allow);
   expect(fixture.approve).not.toHaveBeenCalled();
+});
+
+it("retains remembered decisions in the request toast opened from the system notification", async () => {
+  const view = mount({ native: true, visible: false });
+  setStatus(request("remember-from-system"));
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  view.open("remember-from-system");
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", {
+      name: "remote_control.more_choices",
+    }),
+  );
+  await user.click(
+    await screen.findByRole("menuitem", {
+      name: "remote_control.allow_remember",
+    }),
+  );
+  expect(fixture.approve).toHaveBeenCalledWith(
+    "remember-from-system",
+    true,
+    true,
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

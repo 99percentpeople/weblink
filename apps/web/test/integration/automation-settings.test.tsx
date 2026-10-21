@@ -20,11 +20,18 @@ import {
   vi,
 } from "vitest";
 import AutomationSettings from "@/components/settings/automation-settings";
+import type { AutomationRuntime } from "@/libs/state/create-automation";
 const fixture = vi.hoisted(() => ({
   scope: "shell.execute",
   desktop: true,
   webSupported: true,
   enabled: true,
+  jobs: [] as ReturnType<
+    AutomationRuntime["snapshot"]
+  >["jobs"],
+  audit: [] as ReturnType<
+    AutomationRuntime["snapshot"]
+  >["audit"],
   configure: vi.fn(async (_enabled: boolean) => {}),
   expiresAt: null as number | null,
   endpoints: () => ["http://127.0.0.1:123/mcp"],
@@ -55,7 +62,10 @@ const fixture = vi.hoisted(() => ({
   revoke: vi.fn(async () => {}),
   stop: vi.fn(async () => {}),
 }));
-vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/i18n", () => ({
+  t: (key: string, values?: { code?: string }) =>
+    values?.code ? `${key} ${values.code}` : key,
+}));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     automation: {
@@ -108,8 +118,8 @@ vi.mock("@/libs/state/app-state-context", () => ({
           },
         ],
         grants: [],
-        audit: [],
-        jobs: [],
+        audit: fixture.audit,
+        jobs: fixture.jobs,
         clients: [
           {
             id: "saved",
@@ -158,6 +168,8 @@ afterEach(async () => {
   fixture.desktop = true;
   fixture.webSupported = true;
   fixture.enabled = true;
+  fixture.jobs = [];
+  fixture.audit = [];
   fixture.endpoints = () => ["http://127.0.0.1:123/mcp"];
   fixture.server = () => ({ host: "127.0.0.1", port: 123 });
   fixture.configureServer.mockReset();
@@ -184,6 +196,54 @@ it.each([false, true])(
     expect(fixture.configure).not.toHaveBeenCalled();
   },
 );
+it("localizes command and call states while preserving diagnostic codes", () => {
+  fixture.jobs = [
+    "running",
+    "completed",
+    "cancelled",
+    "timed_out",
+    "future_status",
+  ].map((status) => ({
+    id: `job-${status}`,
+    principal: "local-token",
+    status,
+    exitCode: status === "completed" ? 7 : null,
+    truncated: false,
+  }));
+  fixture.audit = ["ok", "error", "PERMISSION_DENIED"].map(
+    (status) => ({
+      id: `call-${status}`,
+      principal: "Local token",
+      at: 1700000000000,
+      tool: "commands.run",
+      target: "local",
+      status,
+    }),
+  );
+  render(() => <AutomationSettings />);
+  for (const label of [
+    "automation.job_status.running",
+    "automation.job_status.completed (7)",
+    "automation.job_status.cancelled",
+    "automation.job_status.timed_out",
+    "future_status",
+  ])
+    expect(screen.getByText(label)).toBeVisible();
+  expect(
+    screen.getByText(/automation.call_status.ok/),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/automation.call_status.error$/),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      /automation.call_status.error_code PERMISSION_DENIED/,
+    ),
+  ).toBeVisible();
+  expect(screen.getAllByText("commands.run")).toHaveLength(
+    3,
+  );
+});
 it.each([false, true])(
   "allows supported automation on desktop=%s",
   async (desktop) => {

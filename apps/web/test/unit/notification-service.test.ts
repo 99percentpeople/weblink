@@ -358,7 +358,7 @@ describe("shared toast and system delivery", () => {
     expect(x.present).toHaveBeenCalledOnce();
   });
 
-  it("never replays a system event as a toast, including after it was consumed", async () => {
+  it("keeps events without an in-app open action on their original channel", async () => {
     const x = withToast();
     await x.service.show(x.intent);
     x.visibility(true);
@@ -372,6 +372,80 @@ describe("shared toast and system delivery", () => {
     await x.service.show(x.intent);
     expect(x.intent.respond).toHaveBeenCalledOnce();
     expect(x.session.show).toHaveBeenCalledOnce();
+    expect(x.present).not.toHaveBeenCalled();
+  });
+
+  it("opens the existing toast once and waits for foreground visibility without another native dispatch", async () => {
+    const x = withToast();
+    const opening = Promise.withResolvers<void>();
+    x.intent.openInApp = vi.fn(() => opening.promise);
+    await x.service.show(x.intent);
+    x.action({
+      id: x.intent.notification.id,
+      action: "open",
+    });
+    x.action({
+      id: x.intent.notification.id,
+      action: "approve",
+    });
+    x.action({
+      id: x.intent.notification.id,
+      action: "open",
+    });
+    await x.service.show(x.intent);
+    expect(x.intent.openInApp).toHaveBeenCalledOnce();
+    expect(x.intent.respond).not.toHaveBeenCalled();
+    expect(x.present).not.toHaveBeenCalled();
+    expect(x.session.show).toHaveBeenCalledOnce();
+    x.visibility(true);
+    expect(x.present).toHaveBeenCalledOnce();
+    opening.resolve();
+    await opening.promise;
+    x.visibility(false);
+    x.visibility(true);
+    expect(x.present).toHaveBeenCalledOnce();
+    x.service.dismiss(x.intent.notification.id);
+    expect(x.presentation.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it.each(["expired", "cancelled", "closed"])(
+    "does not restore a request that became %s while opening the app",
+    async (reason) => {
+      const x = withToast();
+      const opening = Promise.withResolvers<void>();
+      x.intent.openInApp = vi.fn(() => opening.promise);
+      await x.service.show(x.intent);
+      x.action({
+        id: x.intent.notification.id,
+        action: "open",
+      });
+      if (reason === "expired")
+        x.intent.notification.expiresAt = Date.now() - 1;
+      if (reason === "cancelled")
+        x.service.dismiss(x.intent.notification.id);
+      if (reason === "closed") x.service.close();
+      x.visibility(true);
+      opening.resolve();
+      await opening.promise;
+      expect(x.present).not.toHaveBeenCalled();
+      expect(x.intent.respond).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps direct notification buttons independent of the in-app body action", async () => {
+    const x = withToast();
+    x.intent.openInApp = vi.fn();
+    await x.service.show(x.intent);
+    x.action({
+      id: x.intent.notification.id,
+      action: "approve",
+    });
+    x.visibility(true);
+    expect(x.intent.respond).toHaveBeenCalledWith({
+      id: x.intent.notification.id,
+      action: "approve",
+    });
+    expect(x.intent.openInApp).not.toHaveBeenCalled();
     expect(x.present).not.toHaveBeenCalled();
   });
 

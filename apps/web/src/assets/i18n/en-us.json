@@ -1527,7 +1527,7 @@
   },
   "automation": {
     "no_tokens": "No local MCP tokens.",
-    "token_once": "Copy now; the full token is shown only once. Tool calls still require approval.",
+    "token_once": "Copy now; the full token is shown only once.",
     "edit_token": "Edit token",
     "expired": "Expired",
     "created_at": "Created at",
@@ -1626,6 +1626,17 @@
       }
     },
     "mixed_permissions": "Existing individual settings",
-    "review_request": "Review request"
+    "review_request": "Review request",
+    "job_status": {
+      "running": "Running",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out"
+    },
+    "call_status": {
+      "ok": "Succeeded",
+      "error": "Failed",
+      "error_code": "Failed ({{code}})"
+    }
   }
 }

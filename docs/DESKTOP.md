@@ -408,7 +408,12 @@ approvals, and remote clipboard/file-drop transfer feedback. Chat messages and
 ordinary file-transfer completion use system notifications only; they are not
 replayed as toasts when the app becomes visible. For events with in-app feedback,
 an undelivered, still-valid notice can appear on return to the foreground. An event
-already delivered through a system notification does not also produce a toast.
+already delivered through a system notification does not automatically produce a toast.
+Explicitly clicking a control or speed-test notification body brings the app
+forward and opens that request's existing toast, including its combined action
+buttons. This is not triggered by an ordinary focus change. The same notification
+owner retains cleanup, expiry and duplicate-action handling after the handoff;
+clicking native approve/decline buttons still responds directly.
 Update reminders retain the pending lifetime described in Desktop updates above;
 other requests and transfers keep their existing expiry and validity checks.
 
@@ -454,7 +459,7 @@ failed local acceptance retains the reply in the conversation draft. Delivery
 failure after acceptance belongs to the stored message and its existing retry flow.
 Speed-test notifications share the exact pending approval with the in-app toast and
 panel, including its original 20-second deadline. Approve/decline settles that
-request once; opening the notification only opens the peer's speed-test panel.
+request once; opening the notification shows the existing approval toast.
 Cancellation, connection loss, expiry or an in-app response retracts the notification.
 A late action cannot approve a newer request from the same peer. Speed-test alerts
 have their own category switch and follow the common permission, focus, preview and

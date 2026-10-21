@@ -28,8 +28,10 @@ export interface NotificationIntent {
   canDisplay?(): boolean;
   /** Defer image work until display is allowed; cancellation is checked again afterwards. */
   prepareIcon?(): Promise<string | undefined>;
-  /** Invoked only when this event has not been delivered and the app is visible. */
+  /** Show the shared toast while visible, including after an explicit native body click. */
   present?(): InAppNotification | undefined;
+  /** Bring the app forward and reuse present() when the system notice body is clicked. */
+  openInApp?(): void | Promise<void>;
   respond(action: NotificationAction): Promise<void>;
 }
 
@@ -39,6 +41,7 @@ interface Delivery {
     | "waiting"
     | "preparing"
     | "dispatching"
+    | "opening"
     | "toast"
     | "system"
     | "dismissed";
@@ -46,7 +49,7 @@ interface Delivery {
   presentation?: InAppNotification;
 }
 
-/** One event uses one channel, including across visibility changes and asynchronous OS calls. */
+/** One event uses one channel; an explicit native body click can transfer it to the existing toast. */
 export class NotificationService {
   private readonly deliveries = new Map<string, Delivery>();
   private readonly pending = new Map<string, Delivery>();
@@ -91,7 +94,8 @@ export class NotificationService {
   }
   private present(delivery: Delivery): void {
     if (
-      delivery.state !== "waiting" ||
+      (delivery.state !== "waiting" &&
+        delivery.state !== "opening") ||
       !this.visible() ||
       !this.current(delivery.intent, true) ||
       !delivery.intent.present
@@ -245,6 +249,7 @@ export class NotificationService {
       const intent = delivery.intent;
       const inApp =
         delivery.state === "waiting" ||
+        delivery.state === "opening" ||
         delivery.state === "preparing" ||
         delivery.state === "toast";
       if (!this.current(intent, inApp)) {
@@ -296,6 +301,28 @@ export class NotificationService {
       )
     )
       return;
+    if (
+      action.action === "open" &&
+      intent.openInApp &&
+      intent.present
+    ) {
+      // Consume before focusing. Focus can synchronously reconcile visibility,
+      // and duplicate OS callbacks must not create another toast or grant consent.
+      this.pending.delete(action.id);
+      delivery.revision++;
+      delivery.state = "opening";
+      void this.session
+        ?.then((session) => session.dismiss(action.id))
+        .catch(this.onError);
+      try {
+        await intent.openInApp();
+      } catch (error) {
+        this.onError(error);
+      } finally {
+        this.present(delivery);
+      }
+      return;
+    }
     this.dismiss(action.id); // Consume before awaiting; duplicate callbacks must be harmless.
     try {
       await intent.respond(action);

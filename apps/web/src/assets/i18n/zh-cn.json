@@ -1527,7 +1527,7 @@
   },
   "automation": {
     "no_tokens": "暂无本机 MCP Token。",
-    "token_once": "请立即复制，完整 Token 仅显示一次。工具调用仍需授权。",
+    "token_once": "请立即复制，完整 Token 仅显示一次。",
     "edit_token": "编辑 Token",
     "expired": "已过期",
     "created_at": "创建时间",
@@ -1626,6 +1626,17 @@
       }
     },
     "mixed_permissions": "保留原有分项设置",
-    "review_request": "查看授权请求"
+    "review_request": "查看授权请求",
+    "job_status": {
+      "running": "运行中",
+      "completed": "已完成",
+      "cancelled": "已取消",
+      "timed_out": "已超时"
+    },
+    "call_status": {
+      "ok": "成功",
+      "error": "失败",
+      "error_code": "失败（{{code}}）"
+    }
   }
 }

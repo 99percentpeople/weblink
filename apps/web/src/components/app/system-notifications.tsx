@@ -20,7 +20,6 @@ import { renderNotificationAvatar } from "@/libs/application/notifications/notif
 import { appendConversationDraft } from "@/libs/hooks/conversation-draft";
 import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { NotificationsContext } from "@/libs/state/notifications-context";
-import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
 import { createRemoteTransferFeedback } from "@/libs/hooks/create-remote-transfer-feedback";
 import { isRemoteContentTransferTask } from "@/libs/application/task-service";
 import { createUpdateFeedback } from "@/libs/hooks/create-update-feedback";
@@ -232,6 +231,7 @@ export function SystemNotificationBridge(
           current: () =>
             state.speedTestApproval()?.id === request.id,
           present: () => request.present(),
+          openInApp: () => platform.application?.show(),
           notification: {
             id,
             title: t("speed_test.phases.approval_incoming"),
@@ -253,20 +253,7 @@ export function SystemNotificationBridge(
             ],
           },
           async respond(action) {
-            if (action.action === "open") {
-              requestClientInfoDialog(
-                request.peerId,
-                "speed",
-              );
-              void platform.application
-                ?.show()
-                .catch((error) =>
-                  console.warn(
-                    "Could not show application",
-                    error,
-                  ),
-                );
-            } else if (
+            if (
               action.action === "approve" ||
               action.action === "decline"
             ) {

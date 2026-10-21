@@ -2,7 +2,6 @@ import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import {
   createEffect,
-  createSignal,
   mapArray,
   onCleanup,
   untrack,
@@ -12,8 +11,6 @@ import { sessionService } from "@/libs/application/session-service";
 import { appState } from "@/libs/state/app-state";
 import { t } from "@/i18n";
 import { toast } from "solid-sonner";
-import { createDialog } from "@/components/dialogs/dialog";
-import { Button } from "@/components/ui/button";
 import type { NotificationService } from "@/libs/application/notifications/notification-service";
 
 export function RemoteControlStatus(props: {
@@ -50,62 +47,6 @@ export function RemoteControlStatus(props: {
       </span>
     </>
   );
-  const [selected, setSelected] = createSignal<string>();
-  const [busy, setBusy] = createSignal(false);
-  const [failed, setFailed] = createSignal(false);
-  const selectedRequest = () =>
-    pending().find((item) => item.consentId === selected());
-  const decide = async (accepted: boolean) => {
-    const request = selectedRequest();
-    if (!request || busy()) return;
-    setBusy(true);
-    setFailed(false);
-    try {
-      await host.approve(request.consentId, accepted);
-      if (selected() === request.consentId) dialog.close();
-    } catch {
-      if (selected() === request.consentId) setFailed(true);
-    } finally {
-      if (selected() === request.consentId) setBusy(false);
-    }
-  };
-  // Opening a native notification is an explicit action, not a second toast reminder.
-  const dialog = createDialog({
-    title: () => t("remote_control.request_title"),
-    description: () => description(selectedRequest()),
-    onCancel: () => {
-      setSelected(undefined);
-      setBusy(false);
-      setFailed(false);
-    },
-    content: () =>
-      failed() ? (
-        <p role="alert">
-          {t("remote_control.approval_failed")}
-        </p>
-      ) : null,
-    confirm: (
-      <Button
-        disabled={busy() || !selectedRequest()}
-        onClick={() => void decide(true)}
-      >
-        {t("remote_control.allow")}
-      </Button>
-    ),
-    cancel: (
-      <Button
-        variant="outline"
-        disabled={busy() || !selectedRequest()}
-        onClick={() => void decide(false)}
-      >
-        {t("remote_control.decline")}
-      </Button>
-    ),
-  });
-  createEffect(() => {
-    if (selected() && !selectedRequest()) dialog.close();
-  });
-  onCleanup(() => dialog.close());
   createEffect(
     mapArray(
       () => pending().map((p) => p.consentId),
@@ -145,15 +86,9 @@ export function RemoteControlStatus(props: {
                   },
                 ],
               },
+              openInApp: () => props.showApplication?.(),
               async respond(action) {
-                if (action.action === "open") {
-                  if (!isCurrent()) return;
-                  dialog.close();
-                  setSelected(consentId);
-                  setFailed(false);
-                  props.showApplication?.();
-                  await dialog.open();
-                } else if (
+                if (
                   action.action === "approve" ||
                   action.action === "decline"
                 ) {
