@@ -206,6 +206,35 @@ describe("native publication selection", () => {
       selection.select({ video: [], audio: [] }),
     ).toEqual(chosen);
   });
+  it("excludes failed automatic formats only for the requesting receiver and preserves explicit choices", async () => {
+    const selection =
+      await createNativeCodecSelection(share());
+    const decode = receiver("video/h265", "video/h264");
+    expect(
+      selection.select(decode, ["video/h265"]).video,
+    ).toBe("video/h264");
+    expect(selection.select(decode).video).toBe(
+      "video/h265",
+    );
+    expect(() =>
+      selection.select(decode, [
+        "video/h265",
+        "video/h264",
+      ]),
+    ).toThrow("No common");
+    const manual = await createNativeCodecSelection(
+      share(),
+      { codec: "video/h265" },
+    );
+    expect(
+      manual.select(decode, ["video/h265"]).video,
+    ).toBe("video/h265");
+    // Unknown/legacy capabilities still use the compatibility baseline.
+    expect(
+      selection.select(undefined, ["video/h264"]).video,
+    ).toBe("video/vp8");
+    expect(selection.recording()?.video).toBe("video/h265");
+  });
   it("respects an explicitly selected encoder and capture colour constraints", async () => {
     const selection = await createNativeCodecSelection(
       share(),

@@ -1,5 +1,8 @@
 import type { RemotePointer } from "../remote-control/pointer";
-import { ScreenDecodeError } from "./errors";
+import {
+  ScreenDecodeError,
+  ScreenDecodeStallError,
+} from "./errors";
 import { monitorScreenDecode } from "./decode-monitor";
 import {
   RtpEncodedMediaTrack,
@@ -228,15 +231,9 @@ export class ScreenReceiver {
     this.stopDecodeMonitor = monitorScreenDecode(
       this.pc,
       healthy,
-      // RTP without decoded progress can be interrupted video, including a
-      // missing keyframe after resume. Use the session's bounded retry path;
-      // only explicit format rejection establishes an unsupported codec.
-      () =>
-        this.fail(
-          new Error(
-            "Native screen video decoding stalled while receiving data",
-          ),
-        ),
+      // First request a fresh connection/keyframe. A sender may probe another
+      // format if decoding still stalls; this is not a browser-wide codec ban.
+      () => this.fail(new ScreenDecodeStallError()),
     );
   }
   decodeFailed(): void {

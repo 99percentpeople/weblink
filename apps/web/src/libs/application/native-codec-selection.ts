@@ -9,6 +9,7 @@ import type { MediaDecodeCapabilities } from "../domain/protocol/media-codecs";
 interface NativeCodecSelection {
   select(
     receiver?: MediaDecodeCapabilities,
+    excludedVideo?: readonly string[],
   ): NativeSendCodecs;
   recording(): NativeSendCodecs | undefined;
 }
@@ -64,6 +65,7 @@ export async function createNativeCodecSelection(
     .flatMap((encoder) => encoder.codecs);
   const select = (
     receiver?: MediaDecodeCapabilities,
+    excludedVideo: readonly string[] = [],
   ): NativeSendCodecs => {
     const receivers = [receiver];
     const next = {
@@ -74,7 +76,7 @@ export async function createNativeCodecSelection(
           video,
           receivers,
           hardware,
-        )[0] ??
+        ).find((codec) => !excludedVideo.includes(codec)) ??
         "",
       audio:
         options?.audioCodec ??

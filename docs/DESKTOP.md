@@ -537,7 +537,7 @@ use geometric 1.5× buckets rounded down, including the configured ceiling.
 A budget change can split or merge only the affected viewer; it retains its RTP
 connection, rejects stale group output, and resumes on a keyframe with a common
 monotonic timestamp. A sole viewer changes bitrate in place. Browser and native
-software encoders remain managed by WebRTC and are not part of this pool. A selected
+software encoders remain managed by WebRTC and are not part of this pool. An explicitly selected
 codec restricts negotiation to that format: incompatible receivers fail instead
 of silently switching codecs. Driver/session limits and accepted resolution/rate
 combinations still apply. The Windows local preview does not create an encoder or
@@ -570,21 +570,30 @@ A CPU brand alone does not establish hardware encoding support. HEVC uses Main
 hardware backend opts into the Cargo fork's external-HEVC factory; normal/software factories
 do not advertise an encoder they cannot provide. Existing H.264 encoder IDs stay
 stable; HEVC IDs include a codec suffix for multi-codec driver registrations.
-Receivers must negotiate H.265 support. A rejected video answer fails promptly
-with a compatible-format suggestion, without waiting for ICE or silently switching
-formats. Native AV1 hardware publication is not implemented.
+Receivers must negotiate H.265 support. A rejected video answer reports the
+format failure promptly without waiting for ICE. Automatic selection then tries
+the next common format for that receiver; a concrete encoder/format choice stays
+fixed. Native AV1 hardware publication is not implemented.
 
 Negotiation alone does not prove decoding. Receivers observe decoded-frame progress
-while video RTP is arriving. A sustained stall uses the bounded transport retry
-path; missing decoded frames alone do not establish an unsupported codec. Hidden
+while video RTP is arriving. A sustained stall first requests a fresh connection
+and keyframe. Two stalls without sustained decoded progress allow automatic
+selection to probe the next common video format. This is scoped to that
+publication/receiver, not a browser-wide codec ban. Network failures without a
+decode-stall report retain the same format and bounded transport retry path. Hidden
 or frozen pages, interrupted sampling and reset RTP counters start a fresh
 observation window, so background time cannot exhaust the video recovery window.
-Explicit codec/playback rejection remains terminal and is shown inside the
+Explicit codec/playback rejection immediately excludes that format from automatic
+selection for the affected receiver. The replacement uses the existing capture
+and encoder pool; other viewers and recording keep their current workers.
+Failed formats are not retried until the publication/session resets. Exhausted
+common formats and explicit choices remain terminal, with the error shown in the
 existing source card. Cards use publication identity across media reconnection.
-Terminal failures do not automatically switch codecs or retry; restarting sharing
-creates a new publication. Transport retries remain bounded, with their budget reset
-only after sustained decoded progress. Additive `receiver-status` messages report
-healthy/unsupported receivers; `stop.retry` preserves the card during transport repair.
+Transport retries remain bounded, with their budget reset only after sustained
+decoded progress or a change of format. Additive `receiver-status` messages report
+healthy/unsupported receivers; `retry.reason=decode` distinguishes decoder stalls
+from network interruptions. Older senders can ignore the reason and use their
+existing bounded retry policy. `stop.retry` preserves the card during transport repair.
 Explicit stop also clears that retained card during backoff or an unfinished offer.
 
 Browser/WebView decoding follows the runtime's negotiated receiver capabilities,

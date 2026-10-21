@@ -12,7 +12,10 @@ import {
   type NativeScreenPublication,
 } from "@/libs/domain/native-screen/session";
 import { getNativeScreenAudioOwner } from "@/libs/domain/native-screen/tracks";
-import { ScreenDecodeError } from "@/libs/domain/native-screen/errors";
+import {
+  ScreenDecodeError,
+  ScreenDecodeStallError,
+} from "@/libs/domain/native-screen/errors";
 
 class Stream {
   constructor(private tracks: MediaStreamTrack[] = []) {}
@@ -294,14 +297,11 @@ it("requests a replacement after a runtime video stall and accepts its audio/vid
   });
   await flush();
   receivers[0].changed(mediaStream("old"));
-  receivers[0].failed(
-    new Error(
-      "Native screen video decoding stalled while receiving data",
-    ),
-  );
+  receivers[0].failed(new ScreenDecodeStallError());
   expect(channel.sent.at(-1)).toEqual({
     type: "retry",
     id: "old",
+    reason: "decode",
   });
   expect(
     channel.sent.some((s) => s.state === "unsupported"),

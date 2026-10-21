@@ -5,6 +5,7 @@ import type { NativeControlContext } from "@weblink/platform";
 import { ScreenReceiver } from "./receiver";
 import {
   ScreenDecodeError,
+  ScreenDecodeStallError,
   type NativeScreenView,
 } from "./errors";
 import { bindNativeScreenAudio } from "./tracks";
@@ -642,7 +643,13 @@ export class NativeScreenSession {
               id: value.id,
               state: "unsupported",
             }
-          : { type: "retry", id: value.id },
+          : {
+              type: "retry",
+              id: value.id,
+              ...(error instanceof ScreenDecodeStallError
+                ? { reason: "decode" as const }
+                : {}),
+            },
       );
     };
     try {

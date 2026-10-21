@@ -21,6 +21,7 @@ export interface NativeScreenPublication {
   readonly controlEligible?: boolean;
   selectCodecs?(
     receiver?: MediaDecodeCapabilities,
+    excludedVideo?: readonly string[],
   ): NativeSendCodecs;
   getSenderStats?(
     peerId?: string,
@@ -63,6 +64,7 @@ interface ScreenSenderPort {
 }
 type Outgoing = {
   id: string;
+  codecs?: NativeSendCodecs;
   answerApplied: boolean;
   candidates: RTCIceCandidateInit[];
 };
@@ -88,22 +90,27 @@ export class NativeScreenSender {
   private unsupported = false;
   private timer?: ReturnType<typeof setTimeout>;
   private codecKey?: string;
+  private readonly excludedVideo = new Set<string>();
+  private decodeStalls = 0;
 
   constructor(
     readonly publication: NativeScreenPublication,
     private readonly port: ScreenSenderPort,
   ) {}
 
+  private selectCodecs(): NativeSendCodecs | undefined {
+    return this.publication.selectCodecs?.(
+      this.port.decodeCapabilities?.(),
+      [...this.excludedVideo],
+    );
+  }
+
   /** Only this receiver's selected format can replace its native connection. */
   refreshCodecs(): void {
     if (!this.publication.selectCodecs) return;
     let key: string;
     try {
-      key = JSON.stringify(
-        this.publication.selectCodecs(
-          this.port.decodeCapabilities?.(),
-        ),
-      );
+      key = JSON.stringify(this.selectCodecs());
     } catch {
       key = "unsupported";
     }
@@ -112,6 +119,7 @@ export class NativeScreenSender {
     this.stop(true);
     this.retries = 0;
     this.unsupported = false;
+    this.decodeStalls = 0;
     void this.publish();
   }
 
@@ -140,6 +148,8 @@ export class NativeScreenSender {
     this.stop();
     this.retries = 0;
     this.unsupported = false;
+    this.excludedVideo.clear();
+    this.decodeStalls = 0;
   }
   restartControl(): void {
     if (
@@ -203,9 +213,8 @@ export class NativeScreenSender {
     try {
       let codecs: NativeSendCodecs | undefined;
       try {
-        codecs = this.publication.selectCodecs?.(
-          this.port.decodeCapabilities?.(),
-        );
+        codecs = this.selectCodecs();
+        outgoing.codecs = codecs;
         this.codecKey = JSON.stringify(codecs);
       } catch (error) {
         this.codecKey = "unsupported";
@@ -304,6 +313,34 @@ export class NativeScreenSender {
       void this.publish();
     }, 1000 * this.retries);
   }
+  /** Probe alternatives only for this publication/receiver. Explicit choices
+   * and exhausted common formats retain the terminal card until reset. */
+  private rejectFormat(outgoing: Outgoing): void {
+    const codec = outgoing.codecs?.video;
+    if (codec && this.publication.selectCodecs) {
+      this.excludedVideo.add(codec);
+      let next: NativeSendCodecs | undefined;
+      try {
+        next = this.selectCodecs();
+        this.codecKey = JSON.stringify(next);
+      } catch {
+        this.codecKey = "unsupported";
+      }
+      if (next && !this.excludedVideo.has(next.video)) {
+        this.stop(true);
+        this.retries = 0;
+        this.decodeStalls = 0;
+        void this.publish();
+        return;
+      }
+    }
+    this.clearTimer();
+    this.retries = MAX_RETRIES + 1;
+    this.unsupported = true;
+    void this.publication
+      .closePeer(outgoing.id)
+      .catch(this.port.error);
+  }
   async handle(value: SenderSignal): Promise<void> {
     const outgoing = this.outgoing;
     if (
@@ -345,15 +382,21 @@ export class NativeScreenSender {
         }
       }
     } else if (value.type === "retry") {
-      this.retry(value.id);
+      if (
+        value.reason === "decode" &&
+        ++this.decodeStalls >= 2 &&
+        outgoing.codecs &&
+        this.publication.selectCodecs
+      )
+        this.rejectFormat(outgoing);
+      else this.retry(value.id);
     } else if (value.state === "healthy") {
-      if (outgoing.answerApplied) this.retries = 0;
+      if (outgoing.answerApplied) {
+        this.retries = 0;
+        this.decodeStalls = 0;
+      }
     } else {
-      // Retain remote identity until stop/restart, without retrying decode errors.
-      this.clearTimer();
-      this.retries = MAX_RETRIES + 1;
-      this.unsupported = true;
-      await this.publication.closePeer(value.id);
+      this.rejectFormat(outgoing);
     }
   }
 }

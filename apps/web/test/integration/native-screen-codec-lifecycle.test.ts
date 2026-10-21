@@ -14,6 +14,149 @@ const flush = async () => {
 };
 afterEach(() => vi.useRealTimers());
 
+it.each(["unsupported", "decode-stall"])(
+  "tries another encoder for a receiver's %s without replacing a healthy viewer",
+  async (failure) => {
+    vi.useFakeTimers();
+    const selection = await createNativeCodecSelection({
+      encoders: async () => [
+        {
+          id: "hardware",
+          hardware: true,
+          codecs: ["video/h265", "video/h264"],
+        },
+      ],
+      codecs: async () => ["audio/opus"],
+    } as unknown as NativeScreenShare);
+    const active = new Map<string, string>();
+    const closeNative = vi.fn(async (id: string) => {
+      active.delete(id);
+    });
+    const peers = new NativeScreenPeers(closeNative);
+    const publication: NativeScreenPublication = {
+      sourceId: "live-capture",
+      selectCodecs: selection.select,
+      offer: (
+        id,
+        _servers,
+        _relay,
+        _ice,
+        _control,
+        codecs,
+      ) =>
+        peers.offer(id, async () => {
+          if (active.size >= 2)
+            throw new Error("Encoder session limit");
+          active.set(id, codecs!.video);
+          return "offer";
+        }),
+      answer: async () => {},
+      closePeer: (id) => peers.close(id),
+    };
+    const viewer = () => {
+      const signals: ScreenSignal[] = [];
+      const sender = new NativeScreenSender(publication, {
+        ready: () => true,
+        selected: () => true,
+        trickleIce: () => false,
+        decodeCapabilities: () => ({
+          video: ["video/h265", "video/h264"],
+          audio: ["audio/opus"],
+        }),
+        controlContext: async () => undefined,
+        loadIceServers: async () => [],
+        relayOnly: () => false,
+        send: (signal) => signals.push(signal),
+        error: vi.fn(),
+      });
+      const id = () =>
+        signals.filter((s) => s.type === "offer").at(-1)!
+          .id;
+      return { sender, signals, id };
+    };
+    const chrome = viewer(),
+      webview = viewer();
+    try {
+      await chrome.sender.publish();
+      await webview.sender.publish();
+      const chromeId = chrome.id(),
+        rejectedId = webview.id();
+      await chrome.sender.handle({
+        type: "answer",
+        id: chromeId,
+        sdp: "answer",
+      });
+      const reject = async () => {
+        await webview.sender.handle(
+          failure === "unsupported"
+            ? {
+                type: "receiver-status",
+                id: webview.id(),
+                state: "unsupported",
+              }
+            : {
+                type: "retry",
+                id: webview.id(),
+                reason: "decode",
+              },
+        );
+        await flush();
+      };
+      await reject();
+      if (failure === "decode-stall") {
+        // One failed keyframe/recovery attempt does not change format.
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(active.get(webview.id())).toBe("video/h265");
+        await reject();
+      }
+      expect(active.get(webview.id())).toBe("video/h264");
+      expect(active.get(chromeId)).toBe("video/h265");
+      expect(closeNative).not.toHaveBeenCalledWith(
+        chromeId,
+      );
+      // Stale failure and unchanged hello/occupancy updates cannot revert it.
+      await webview.sender.handle({
+        type: "receiver-status",
+        id: rejectedId,
+        state: "unsupported",
+      });
+      webview.sender.refreshCodecs();
+      await flush();
+      expect(active.get(webview.id())).toBe("video/h264");
+      // Exhausting the receiver's formats is bounded; it cannot loop to HEVC.
+      await reject();
+      if (failure === "decode-stall") {
+        await vi.advanceTimersByTimeAsync(1000);
+        await reject();
+      }
+      const offers = webview.signals.filter(
+        (s) => s.type === "offer",
+      ).length;
+      webview.sender.refreshCodecs();
+      await vi.advanceTimersByTimeAsync(180000);
+      expect(
+        webview.signals.filter((s) => s.type === "offer"),
+      ).toHaveLength(offers);
+      expect([...active]).toEqual([
+        [chromeId, "video/h265"],
+      ]);
+      expect(
+        chrome.signals.filter((s) => s.type === "offer"),
+      ).toHaveLength(1);
+      // Explicit reset can probe the original format again.
+      webview.sender.reset();
+      await webview.sender.publish();
+      expect(active.get(webview.id())).toBe("video/h265");
+    } finally {
+      chrome.sender.dispose();
+      webview.sender.dispose();
+      await flush();
+    }
+    expect(active.size).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
 it.each([false, true])(
   "keeps the first native connection during another receiver's join, codec change and leave (HEVC=%s)",
   async (hevc) => {

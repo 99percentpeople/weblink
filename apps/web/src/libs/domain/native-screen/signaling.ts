@@ -25,7 +25,7 @@ export type ScreenSignal =
       id: string;
       state: "healthy" | "unsupported";
     }
-  | { type: "retry"; id: string };
+  | { type: "retry"; id: string; reason?: "decode" };
 export function parseScreenSignal(
   data: unknown,
 ): ScreenSignal | undefined {
