@@ -28,7 +28,7 @@ const fixture = vi.hoisted(() => ({
     ) => options.id,
   ),
   dismiss: vi.fn(),
-  principalPeerId: vi.fn(),
+  canReceive: vi.fn(),
 }));
 vi.mock("solid-sonner", () => ({
   toast: Object.assign(fixture.notify, {
@@ -42,9 +42,12 @@ vi.mock("@/libs/state/app-state-context", () => ({
       snapshot: () => ({
         pending: fixture.pending?.() ?? [],
       }),
-      principalPeerId: fixture.principalPeerId,
     },
   }),
+}));
+
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: { canReceive: fixture.canReceive },
 }));
 
 let setPending: Setter<Approval[]>;
@@ -55,7 +58,7 @@ const request = (
 ): Approval => ({
   id,
   principal: {
-    id: "verified-channel",
+    id: "paired-device",
     kind,
     label: "Device",
   },
@@ -71,7 +74,7 @@ beforeEach(() => {
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
   );
-  fixture.principalPeerId.mockReturnValue("paired-device");
+  fixture.canReceive.mockReturnValue(true);
   window.addEventListener(
     OPEN_CLIENT_INFO_DIALOG_EVENT,
     openPeer,
@@ -88,8 +91,8 @@ it("routes peer requests to verified device settings without prompting local MCP
   render(() => <AutomationApprovalToasts />);
   setPending([request()]);
   review()();
-  expect(fixture.principalPeerId).toHaveBeenCalledWith(
-    "verified-channel",
+  expect(fixture.canReceive).toHaveBeenCalledWith(
+    "paired-device",
   );
   expect(
     (openPeer.mock.calls[0][0] as CustomEvent).detail,
@@ -116,7 +119,7 @@ it("deduplicates snapshots and dismisses resolved requests and notifications on 
     "automation-approval:next",
   );
 });
-it("ignores stale, expired and disconnected peer actions without falling back to a claimed device ID", () => {
+it("ignores stale, expired and disconnected peer actions using shared device access checks", () => {
   render(() => <AutomationApprovalToasts />);
   setPending([request()]);
   const stale = review();
@@ -125,7 +128,7 @@ it("ignores stale, expired and disconnected peer actions without falling back to
   setPending([{ ...request(), expiresAt: Date.now() - 1 }]);
   review()();
   setPending([request("peer", "disconnected")]);
-  fixture.principalPeerId.mockReturnValue(undefined);
+  fixture.canReceive.mockReturnValue(false);
   review()();
   expect(openPeer).not.toHaveBeenCalled();
 });

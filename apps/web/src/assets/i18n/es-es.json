@@ -1549,8 +1549,6 @@
     "requests": "Solicitudes de autorización",
     "no_requests": "No hay solicitudes pendientes.",
     "target": "Destino",
-    "compare": "Compara este código con el del dispositivo solicitante",
-    "verified": "Los códigos coinciden",
     "shell_warning": "Permite ejecutar cualquier comando Shell con tu cuenta del sistema durante el período elegido. Los comandos pueden modificar archivos y el estado del sistema. Revocar el permiso no deshace los cambios realizados.",
     "duration": "Duración",
     "minutes": "minutos",

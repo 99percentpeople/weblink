@@ -1,6 +1,6 @@
 use super::{
     host::{Active, Host},
-    input_error, Context, ControlEvent, Observer, Snapshot,
+    input_error, Context, ControlEvent, ControllerKind, Observer, Snapshot,
 };
 use std::{
     collections::HashMap,
@@ -123,6 +123,7 @@ impl Service {
             .get(&grant.binding.target.media_id)
             .ok_or("Control peer ended")?;
         if !owner.live()
+            || active.kind != ControllerKind::Remote
             || grant.id != grant_id
             || grant.binding.client_id != client
             || host.worker.status().grant.as_ref() != Some(grant)
@@ -148,12 +149,14 @@ impl Service {
     ) -> Result<(i32, i32), String> {
         let owner = self.owner(owner_id)?;
         let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
-        let grant = &host.active.as_ref().ok_or("Remote control ended")?.grant;
+        let active = host.active.as_ref().ok_or("Remote control ended")?;
+        let grant = &active.grant;
         let peer = host
             .peers
             .get(&target.media_id)
             .ok_or("Control peer ended")?;
         if !owner.live()
+            || active.kind != ControllerKind::Remote
             || grant.id != grant_id
             || grant.binding.client_id != client
             || &grant.binding.target != target
@@ -422,6 +425,7 @@ impl Service {
         if let Signal::Grant { grant_id, .. } = &signal {
             let binding = h.peers.get(&media).ok_or("Media ended")?.binding.clone();
             h.active = Some(Active {
+                kind: ControllerKind::Remote,
                 gamepad_feedback: Default::default(),
                 sequencer: Sequencer::new(
                     grant_id.clone(),

@@ -15,11 +15,6 @@ import {
 } from "./setting-layout";
 import { SettingSelect } from "./setting-controls";
 import { Button } from "@/components/ui/button";
-import {
-  Checkbox,
-  CheckboxControl,
-  CheckboxLabel,
-} from "@/components/ui/checkbox";
 import { t } from "@/i18n";
 const Empty = (props: { message: string }) => (
   <SettingBlock>
@@ -34,8 +29,7 @@ export default function AutomationPermissions(props: {
 }) {
   const accepts = (principal: Principal) =>
     principal.kind === "peer" &&
-    props.runtime.principalPeerId(principal.id) ===
-      props.peerId;
+    principal.id === props.peerId;
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const run = async (action: () => Promise<unknown>) => {
@@ -72,8 +66,6 @@ export default function AutomationPermissions(props: {
         >
           {(request) => {
             const [minutes, setMinutes] = createSignal(15);
-            const [verified, setVerified] =
-              createSignal(false);
             return (
               <div class="setting-group">
                 <SettingRow
@@ -99,30 +91,6 @@ export default function AutomationPermissions(props: {
                         {request.source?.kind} ·{" "}
                         {request.source?.label}
                       </p>
-                    </Show>
-                    <Show
-                      when={request.principal.fingerprint}
-                    >
-                      <p>
-                        {t("automation.compare")}:{" "}
-                        <code>
-                          {request.principal.fingerprint
-                            ?.slice(0, 12)
-                            .match(/.{1,4}/g)
-                            ?.join("-")}
-                        </code>
-                      </p>
-                      <Checkbox
-                        checked={verified()}
-                        disabled={busy()}
-                        onChange={setVerified}
-                        class="flex items-center gap-2"
-                      >
-                        <CheckboxControl />
-                        <CheckboxLabel class="text-sm">
-                          {t("automation.verified")}
-                        </CheckboxLabel>
-                      </Checkbox>
                     </Show>
                     <p class="text-muted-foreground text-sm">
                       {groupDescription(
@@ -165,11 +133,7 @@ export default function AutomationPermissions(props: {
                     <Button
                       size="sm"
                       wrap
-                      disabled={
-                        busy() ||
-                        (!!request.principal.fingerprint &&
-                          !verified())
-                      }
+                      disabled={busy()}
                       onClick={() =>
                         void run(() =>
                           props.runtime.decide(

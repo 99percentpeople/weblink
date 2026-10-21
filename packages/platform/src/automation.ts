@@ -23,7 +23,7 @@ export interface NativeAutomationRequest {
     id: string;
     label: string;
     kind: "mcp" | "peer";
-    fingerprint?: string;
+    generation?: string;
   };
   call: {
     /** Informational origin only; authority comes from the verified principal. */
@@ -35,6 +35,11 @@ export interface NativeAutomationRequest {
 export type NativeAutomationEvent =
   | NativeAutomationRequest
   | { kind: "cancel"; id: string };
+/** Verified device identity and the shared connection generation. */
+export interface NativeAutomationPeer {
+  id: string;
+  generation: string;
+}
 export interface NativeAutomation {
   open(
     onRequest: (request: NativeAutomationEvent) => void,
@@ -71,21 +76,21 @@ export interface NativeAutomation {
   revoke(epoch: string, id?: string): Promise<void>;
   peer(
     epoch: string,
+    principal: NativeAutomationPeer,
     label: string,
-    fingerprint: string,
-  ): Promise<string>;
+  ): Promise<void>;
   peerPolicy(
     epoch: string,
-    principal: string,
+    principal: NativeAutomationPeer,
     policy: Record<string, "ask" | "allow" | "deny">,
   ): Promise<void>;
   disconnect(
     epoch: string,
-    principal: string,
+    principal: NativeAutomationPeer,
   ): Promise<void>;
   call(
     epoch: string,
-    principal: string,
+    principal: NativeAutomationPeer,
     id: string,
     call: NativeAutomationRequest["call"],
   ): Promise<unknown>;

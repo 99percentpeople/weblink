@@ -13,7 +13,7 @@ pub type PeerPolicy = HashMap<String, Decision>;
 
 impl Service {
     pub(super) fn peer_decision(s: &State, p: &Principal, scope: &str) -> Decision {
-        if p.kind != "peer" {
+        if p.kind != "peer" || !Self::principal_active(s, p) {
             return Decision::Ask;
         }
         let decision = s
@@ -76,7 +76,7 @@ impl Service {
     pub(super) fn set_peer_policy(
         &self,
         epoch: &str,
-        id: &str,
+        peer: &peers::Identity,
         policy: PeerPolicy,
     ) -> Result<(), String> {
         if policy.keys().any(|scope| {
@@ -88,7 +88,8 @@ impl Service {
         }
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
-        let principal = s.peers.get(id).cloned().ok_or("SESSION_CLOSED")?;
+        let principal = Self::peer_principal(&s, peer)?;
+        let id = peer.id.as_str();
         if !Self::current(&s) || principal.kind != "peer" {
             return Err("SESSION_CLOSED".into());
         }
@@ -144,7 +145,7 @@ mod tests {
             id: "paired-channel".into(),
             label: "Device".into(),
             kind: "peer".into(),
-            fingerprint: Some("a".repeat(64)),
+            generation: Some("connection-1".into()),
         };
         {
             let mut s = service.state.lock().unwrap();
@@ -174,7 +175,7 @@ mod tests {
             .map(|scope| (scope.clone(), Decision::Allow))
             .collect();
         service
-            .set_peer_policy("epoch", &p.id, policy.clone())
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy.clone())
             .unwrap();
         {
             let mut s = service.state.lock().unwrap();
@@ -189,7 +190,9 @@ mod tests {
         }
         policy.insert("screen.read".into(), Decision::Deny);
         policy.insert("accessibility.read".into(), Decision::Ask);
-        service.set_peer_policy("epoch", &p.id, policy).unwrap();
+        service
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy)
+            .unwrap();
         let mut s = service.state.lock().unwrap();
         assert!(s.grants.is_empty());
         Service::policy_grant(&mut s, &p, "diagnostics.read");
@@ -211,7 +214,7 @@ mod tests {
     async fn permanent_policy_executes_without_prompt_and_deny_cancels_existing_tickets() {
         let (service, p) = fixture();
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         let task = tokio::spawn(service.clone().invoke(p.clone(), "request".into(), call()));
         until(|| {
@@ -233,7 +236,7 @@ mod tests {
                 .all(|g| g.expires_at.is_none() && Service::grant_live(&s, g)));
         }
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Deny))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Deny))
             .unwrap();
         assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
         assert!(service.state.lock().unwrap().grants.is_empty());
@@ -256,7 +259,7 @@ mod tests {
         })
         .await;
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         until(|| {
             service
@@ -270,7 +273,9 @@ mod tests {
         // An unrelated scope edit must not revoke this grant.
         let mut changed = policy(Decision::Allow);
         changed.insert("shell.execute".into(), Decision::Deny);
-        service.set_peer_policy("epoch", &p.id, changed).unwrap();
+        service
+            .set_peer_policy("epoch", &peers::Identity::from(&p), changed)
+            .unwrap();
         assert!(service
             .state
             .lock()
@@ -278,7 +283,7 @@ mod tests {
             .tickets
             .contains_key("request"));
         service
-            .set_peer_policy("epoch", &p.id, PeerPolicy::new())
+            .set_peer_policy("epoch", &peers::Identity::from(&p), PeerPolicy::new())
             .unwrap();
         assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
     }
@@ -286,7 +291,7 @@ mod tests {
     async fn suspended_policies_cannot_reauthorize_after_stop_or_reconnect() {
         let (service, p) = fixture();
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         {
             let mut s = service.state.lock().unwrap();
@@ -298,7 +303,7 @@ mod tests {
         }
         // Resubmitting the saved policy must not bypass an emergency pause.
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         let task = tokio::spawn(service.clone().invoke(p, "request".into(), call()));
         until(|| {
@@ -311,13 +316,13 @@ mod tests {
         })
         .await;
         service.shutdown();
-        assert_eq!(task.await.unwrap()["error"]["code"], "PERMISSION_DENIED");
+        assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
     }
     #[tokio::test]
     async fn stale_or_lookalike_peer_identity_does_not_inherit_policy() {
         let (service, p) = fixture();
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         let other = Principal {
             id: "other-channel".into(),
@@ -332,7 +337,7 @@ mod tests {
             assert!(Service::peer_decision(&s, &other, "diagnostics.read") == Decision::Ask);
         }
         assert!(service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .is_err());
         assert_eq!(
             service.clone().invoke(p, "stale".into(), call()).await["error"]["code"],
@@ -341,13 +346,13 @@ mod tests {
         let task = tokio::spawn(service.clone().invoke(other, "new".into(), call()));
         until(|| service.state.lock().unwrap().pending.contains_key("new")).await;
         service.shutdown();
-        assert_eq!(task.await.unwrap()["error"]["code"], "PERMISSION_DENIED");
+        assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
     }
     #[tokio::test]
     async fn policies_are_scoped_cannot_forward_and_never_authorize_mcp_tokens() {
         let (service, p) = fixture();
         service
-            .set_peer_policy("epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
         let s = service.state.lock().unwrap();
         let mcp = Principal {
@@ -360,12 +365,16 @@ mod tests {
         assert!(service
             .set_peer_policy(
                 "epoch",
-                &p.id,
+                &peers::Identity::from(&p),
                 HashMap::from([("made.up".into(), Decision::Allow)])
             )
             .is_err());
         assert!(service
-            .set_peer_policy("old-epoch", &p.id, policy(Decision::Allow))
+            .set_peer_policy(
+                "old-epoch",
+                &peers::Identity::from(&p),
+                policy(Decision::Allow)
+            )
             .is_err());
         let mut remote = call();
         remote.arguments["target"] = json!("third-device");
@@ -381,7 +390,9 @@ mod tests {
             ("shell.execute".into(), Decision::Allow),
             ("diagnostics.read".into(), Decision::Allow),
         ]);
-        service.set_peer_policy("epoch", &p.id, saved).unwrap();
+        service
+            .set_peer_policy("epoch", &peers::Identity::from(&p), saved)
+            .unwrap();
         let grant = {
             let mut s = service.state.lock().unwrap();
             Service::policy_grant(&mut s, &p, "shell.execute");
@@ -405,7 +416,7 @@ mod tests {
         service
             .set_peer_policy(
                 "epoch",
-                &p.id,
+                &peers::Identity::from(&p),
                 HashMap::from([
                     ("shell.execute".into(), Decision::Deny),
                     ("diagnostics.read".into(), Decision::Allow),

@@ -25,6 +25,9 @@ import type {
 } from "@weblink/automation";
 import type { PeerSession } from "@/libs/domain/session";
 const fixture = vi.hoisted(() => ({
+  generation: "connection-1",
+  closeLink: undefined as (() => void) | undefined,
+  events: new EventTarget(),
   native: undefined as unknown as NativeAutomation,
   sessions: {} as Record<string, PeerSession>,
   receive: true,
@@ -63,6 +66,7 @@ vi.mock("@/libs/application/session-service", () => ({
     },
     clientViewData: { peer: { name: "Peer" } },
     capabilities: {
+      generation: () => fixture.generation,
       get: () => ({
         automation: {},
         identity: { receiveContent: true },
@@ -78,10 +82,11 @@ vi.mock("@/libs/application/automation/handlers", () => ({
   diagnosticSources: () => [],
 }));
 vi.mock("@/libs/application/automation/peer-link", () => ({
+  AUTOMATION_CHANNEL: "weblink-automation/1",
   AutomationPeerLink: class {
     readonly lifetime = new AbortController();
     readonly ready = Promise.resolve();
-    readonly fingerprint = "a".repeat(64);
+    readonly connected = true;
     call = fixture.remoteCall;
     constructor(
       _channel: unknown,
@@ -90,6 +95,7 @@ vi.mock("@/libs/application/automation/peer-link", () => ({
       private closed: () => void,
     ) {
       fixture.incoming = incoming;
+      fixture.closeLink = () => this.close();
     }
     close() {
       if (!this.lifetime.signal.aborted) {
@@ -119,6 +125,9 @@ const mount = () => {
   return { runtime, ...view };
 };
 beforeEach(() => {
+  fixture.generation = "connection-1";
+  fixture.events = new EventTarget();
+  fixture.closeLink = undefined;
   fixture.handle.mockReset().mockResolvedValue({});
   fixture.remoteCall.mockReset().mockResolvedValue({
     ok: true,
@@ -134,7 +143,7 @@ beforeEach(() => {
     heartbeat: vi.fn(async () => {}),
     snapshot: vi.fn(async () => snapshot()),
     configure: vi.fn(async () => {}),
-    peer: vi.fn(async () => "native-peer"),
+    peer: vi.fn(async () => {}),
     peerPolicy: vi.fn(async () => {}),
     disconnect: vi.fn(async () => {}),
     call: vi.fn(async () => ({ ok: true, data: {} })),
@@ -387,7 +396,9 @@ function peer() {
     targetClientId: "peer",
     isMessageChannelReady: true,
     peerConnection: {},
-    addEventListener() {},
+    addEventListener: fixture.events.addEventListener.bind(
+      fixture.events,
+    ),
     createChannel: async (
       _label: string,
       _protocol: string,
@@ -486,11 +497,19 @@ it("applies verified device policies before calls, updates them live, and retain
   await incoming();
   expect(fixture.native.peerPolicy).toHaveBeenCalledWith(
     "epoch",
-    "native-peer",
+    expect.objectContaining({
+      id: "peer",
+      generation: "connection-1",
+    }),
     { "diagnostics.read": "allow" },
   );
-  expect(view.runtime.principalPeerId("native-peer")).toBe(
-    "peer",
+  expect(fixture.native.peer).toHaveBeenCalledWith(
+    "epoch",
+    expect.objectContaining({
+      id: "peer",
+      generation: "connection-1",
+    }),
+    "Peer",
   );
   expect(
     vi.mocked(fixture.native.peerPolicy).mock
@@ -510,15 +529,25 @@ it("applies verified device policies before calls, updates them live, and retain
   await waitFor(() =>
     expect(
       fixture.native.peerPolicy,
-    ).toHaveBeenLastCalledWith("epoch", "native-peer", {
-      "diagnostics.read": "deny",
-    }),
+    ).toHaveBeenLastCalledWith(
+      "epoch",
+      expect.objectContaining({
+        id: "peer",
+        generation: "connection-1",
+      }),
+      {
+        "diagnostics.read": "deny",
+      },
+    ),
   );
   view.unmount();
   await waitFor(() =>
     expect(fixture.native.disconnect).toHaveBeenCalledWith(
       "epoch",
-      "native-peer",
+      expect.objectContaining({
+        id: "peer",
+        generation: "connection-1",
+      }),
     ),
   );
   expect(
@@ -549,40 +578,49 @@ it("never applies a saved allow policy when the device cannot receive authentica
   expect(fixture.native.peerPolicy).not.toHaveBeenCalled();
   expect(fixture.native.call).not.toHaveBeenCalled();
 });
-it("rejects a stale channel when a same-id session replaces it during native registration", async () => {
-  peer();
-  let resolve!: (id: string) => void;
-  vi.mocked(fixture.native.peer).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
+it.each(["session", "generation"])(
+  "rejects a stale channel when its %s changes during native registration",
+  async (change) => {
+    peer();
+    let resolve!: () => void;
+    vi.mocked(fixture.native.peer).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    await view.runtime.configure(true);
+    await waitFor(() =>
+      expect(fixture.incoming).toBeDefined(),
+    );
+    const request = incoming();
+    const rejected = expect(request).rejects.toThrow(
+      "TARGET_DISCONNECTED",
+    );
+    await waitFor(() =>
+      expect(fixture.native.peer).toHaveBeenCalled(),
+    );
+    if (change === "session") peer();
+    else fixture.generation = "connection-2";
+    resolve();
+    await rejected;
+    expect(
+      fixture.native.peerPolicy,
+    ).not.toHaveBeenCalled();
+    expect(fixture.native.call).not.toHaveBeenCalled();
+    expect(fixture.native.disconnect).toHaveBeenCalledWith(
+      "epoch",
+      expect.objectContaining({
+        id: "peer",
+        generation: "connection-1",
       }),
-  );
-  const view = mount();
-  await waitFor(() =>
-    expect(view.runtime.ready()).toBe(true),
-  );
-  await view.runtime.configure(true);
-  await waitFor(() =>
-    expect(fixture.incoming).toBeDefined(),
-  );
-  const request = incoming();
-  const rejected = expect(request).rejects.toThrow(
-    "TARGET_DISCONNECTED",
-  );
-  await waitFor(() =>
-    expect(fixture.native.peer).toHaveBeenCalled(),
-  );
-  peer();
-  resolve("stale-peer");
-  await rejected;
-  expect(fixture.native.peerPolicy).not.toHaveBeenCalled();
-  expect(fixture.native.call).not.toHaveBeenCalled();
-  expect(fixture.native.disconnect).toHaveBeenCalledWith(
-    "epoch",
-    "stale-peer",
-  );
-});
+    );
+  },
+);
 
 it("waits for a policy changed during registration before admitting the call", async () => {
   peer();
@@ -626,9 +664,16 @@ it("waits for a policy changed during registration before admitting the call", a
   await request;
   expect(
     fixture.native.peerPolicy,
-  ).toHaveBeenLastCalledWith("epoch", "native-peer", {
-    "diagnostics.read": "deny",
-  });
+  ).toHaveBeenLastCalledWith(
+    "epoch",
+    expect.objectContaining({
+      id: "peer",
+      generation: "connection-1",
+    }),
+    {
+      "diagnostics.read": "deny",
+    },
+  );
   expect(
     vi.mocked(fixture.native.peerPolicy).mock
       .invocationCallOrder[1],
@@ -663,4 +708,127 @@ it("does not reuse an already registered authority after a same-id session repla
       "diagnostics.read"
     ],
   ).toBe("allow");
+});
+
+it("waits for native cleanup before reopening an automation channel in the same connection generation", async () => {
+  peer();
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  await view.runtime.configure(true);
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  await incoming();
+  const previous = fixture.incoming;
+  let release!: () => void;
+  vi.mocked(
+    fixture.native.disconnect,
+  ).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  fixture.closeLink!();
+  await waitFor(() => expect(release).toBeDefined());
+  fixture.events.dispatchEvent(
+    new CustomEvent("messagechannelchange", {
+      detail: "ready",
+    }),
+  );
+  expect(view.runtime.peers()).toEqual([]);
+  expect(fixture.incoming).toBe(previous);
+  expect(fixture.native.peer).toHaveBeenCalledTimes(1);
+  release();
+  await waitFor(() =>
+    expect(fixture.incoming).not.toBe(previous),
+  );
+  await incoming();
+  expect(fixture.native.peer).toHaveBeenCalledTimes(2);
+  expect(fixture.native.disconnect).toHaveBeenCalledTimes(
+    1,
+  );
+  expect(
+    vi.mocked(fixture.native.peer).mock.calls[1][1],
+  ).toMatchObject({
+    id: "peer",
+    generation: "connection-1",
+  });
+});
+
+it("fences a registered channel immediately when the shared connection generation changes", async () => {
+  peer();
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  await view.runtime.configure(true);
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  await incoming();
+  const previous = fixture.incoming;
+  fixture.generation = "connection-2";
+  await expect(incoming()).rejects.toThrow(
+    "TARGET_DISCONNECTED",
+  );
+  expect(fixture.native.call).toHaveBeenCalledTimes(1);
+  fixture.events.dispatchEvent(
+    new CustomEvent("messagechannelchange", {
+      detail: "ready",
+    }),
+  );
+  await waitFor(() =>
+    expect(fixture.incoming).not.toBe(previous),
+  );
+  await incoming();
+  expect(
+    vi.mocked(fixture.native.call).mock.calls[1][1],
+  ).toEqual({ id: "peer", generation: "connection-2" });
+  expect(fixture.native.disconnect).toHaveBeenCalledWith(
+    "epoch",
+    expect.objectContaining({
+      id: "peer",
+      generation: "connection-1",
+    }),
+  );
+});
+
+it("admits automation only after shared paired-device access succeeds and revokes it when access is lost", async () => {
+  peer();
+  fixture.receive = false;
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  await view.runtime.configure(true);
+  expect(fixture.incoming).toBeUndefined();
+  expect(fixture.native.peer).not.toHaveBeenCalled();
+  fixture.receive = true;
+  fixture.events.dispatchEvent(
+    new CustomEvent("messagechannelchange", {
+      detail: "ready",
+    }),
+  );
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  await incoming();
+  fixture.receive = false;
+  fixture.events.dispatchEvent(
+    new CustomEvent("messagechannelchange", {
+      detail: "ready",
+    }),
+  );
+  await waitFor(() =>
+    expect(fixture.native.disconnect).toHaveBeenCalled(),
+  );
+  expect(view.runtime.peers()).toEqual([]);
+  expect(await incoming()).toMatchObject({
+    ok: false,
+    error: { code: "PERMISSION_DENIED" },
+  });
+  expect(fixture.native.call).toHaveBeenCalledTimes(1);
 });

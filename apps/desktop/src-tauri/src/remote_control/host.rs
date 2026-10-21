@@ -2,7 +2,7 @@ use super::{
     binding::{GeometryChanges, GeometrySource, GeometryWatches},
     input_error,
     transport::Endpoint,
-    ControlEvent, Observer, Pending, Snapshot,
+    ControlEvent, ControllerKind, Observer, Pending, Snapshot,
 };
 use std::{
     collections::HashMap,
@@ -50,6 +50,7 @@ pub(super) struct Consent {
     pub(super) requested: Instant,
 }
 pub(super) struct Active {
+    pub(super) kind: ControllerKind,
     pub(super) grant: Grant,
     pub(super) sequencer: Sequencer,
     pub(super) gamepad_feedback:
@@ -111,6 +112,7 @@ impl Host {
     pub(super) fn snapshot(&self) -> Snapshot {
         let status = self.worker.status();
         Snapshot {
+            controller_kind: self.active.as_ref().map(|a| a.kind),
             source_id: self
                 .active
                 .as_ref()

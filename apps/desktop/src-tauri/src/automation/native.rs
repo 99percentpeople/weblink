@@ -110,6 +110,11 @@ pub async fn action(
         }
         let call = t.call.clone();
         let principal = t.principal.id.clone();
+        let generation = t
+            .principal
+            .generation
+            .clone()
+            .unwrap_or_else(|| epoch.clone());
         let grant = t.grant.clone();
         if let Some(turn) = &_turn {
             super::input_sequence::check(&s, &epoch, &id)?;
@@ -154,6 +159,7 @@ pub async fn action(
                 let result = control.automation_acquire(
                     capture.inner().clone(),
                     &principal,
+                    &generation,
                     session.clone(),
                     source.clone(),
                 )?;

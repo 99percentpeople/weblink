@@ -1549,8 +1549,6 @@
     "requests": "Demandes d’autorisation",
     "no_requests": "Aucune demande en attente.",
     "target": "Cible",
-    "compare": "Comparez ce code avec celui de l’appareil demandeur",
-    "verified": "Les codes correspondent",
     "shell_warning": "Autorise toute commande Shell avec votre compte système pendant la durée choisie. Les commandes peuvent modifier les fichiers et l’état du système. Révoquer l’autorisation n’annule pas les modifications effectuées.",
     "duration": "Durée",
     "minutes": "minutes",

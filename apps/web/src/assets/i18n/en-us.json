@@ -1549,8 +1549,6 @@
     "requests": "Approval requests",
     "no_requests": "No pending requests.",
     "target": "Target",
-    "compare": "Compare this code on the requesting device",
-    "verified": "The codes match",
     "shell_warning": "This grants arbitrary Shell execution as your OS account for the selected duration. Commands can change files and system state; revocation cannot undo completed changes.",
     "duration": "Duration",
     "minutes": "minutes",

@@ -5,6 +5,8 @@ import {
   type ToolCall,
   type ToolResult,
 } from "@weblink/automation";
+import { CURRENT_PROTOCOL_VERSIONS } from "../../domain/protocol/protocol-versions";
+export const AUTOMATION_CHANNEL = `weblink-automation/${CURRENT_PROTOCOL_VERSIONS.automation}`;
 const MAX = 6 * 1024 * 1024;
 const encode = (bytes: Uint8Array): string => {
   let s = "";
@@ -16,27 +18,18 @@ const encode = (bytes: Uint8Array): string => {
 };
 const decode = (s: string): Uint8Array<ArrayBuffer> =>
   Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-const hex = (b: ArrayBuffer) =>
-  [...new Uint8Array(b)]
-    .map((v) => v.toString(16).padStart(2, "0"))
-    .join("");
 interface Packet {
   sequence: number;
-  from: string;
   kind: "call" | "result" | "cancel";
   id: string;
   call?: ToolCall;
   result?: ToolResult;
 }
-/** One ephemeral ECDH identity per ordered DataChannel; approval compares the transcript fingerprint. */
+/** Framing over the paired device's ordered DTLS DataChannel. Identity comes from the owning session. */
 export class AutomationPeerLink {
   readonly lifetime = new AbortController();
-  fingerprint = "";
+  connected = false;
   failure?: string;
-  private local = "";
-  private remote = "";
-  private key?: CryptoKey;
-  private pair?: CryptoKeyPair;
   private sendSequence = 0;
   private receiveSequence = 0;
   private receiving: Promise<void> = Promise.resolve();
@@ -67,7 +60,7 @@ export class AutomationPeerLink {
     this.readyResolve = resolve;
     this.readyReject = reject;
   });
-  private handshakeTimer: ReturnType<typeof setTimeout>;
+  private openTimer: ReturnType<typeof setTimeout>;
   constructor(
     readonly channel: RTCDataChannel,
     private readonly invoke: (
@@ -78,10 +71,10 @@ export class AutomationPeerLink {
     private readonly disconnected: () => void,
   ) {
     void this.ready.catch(() => {});
-    this.handshakeTimer = setTimeout(
-      () => this.close(),
-      10000,
-    );
+    this.openTimer = setTimeout(() => {
+      this.failure = "OPEN_TIMEOUT";
+      this.close();
+    }, 10000);
     channel.addEventListener("close", () => this.close(), {
       signal: this.lifetime.signal,
     });
@@ -92,7 +85,7 @@ export class AutomationPeerLink {
       "message",
       (event) => {
         const data: unknown = event.data;
-        // Bound frames before retaining them in the async decryption queue.
+        // Bound frames before retaining them in the receive queue.
         if (
           typeof data !== "string" ||
           data.length > 18000 ||
@@ -125,83 +118,27 @@ export class AutomationPeerLink {
       },
       { signal: this.lifetime.signal },
     );
-    const start = () =>
-      void this.hello().catch(() => this.close());
+    const start = () => {
+      clearTimeout(this.openTimer);
+      this.connected = true;
+      this.readyResolve();
+      this.changed();
+    };
     if (channel.readyState === "open") start();
+    else if (channel.readyState !== "connecting")
+      this.close();
     else
       channel.addEventListener("open", start, {
         once: true,
         signal: this.lifetime.signal,
       });
   }
-  private async hello(): Promise<void> {
-    this.pair = await crypto.subtle.generateKey(
-      { name: "ECDH", namedCurve: "P-256" },
-      false,
-      ["deriveKey"],
-    );
-    this.local = encode(
-      new Uint8Array(
-        await crypto.subtle.exportKey(
-          "raw",
-          this.pair.publicKey,
-        ),
-      ),
-    );
-    if (this.lifetime.signal.aborted) return;
-    this.channel.send(
-      JSON.stringify({ kind: "hello", key: this.local }),
-    );
-    if (this.remote) await this.derive();
-  }
-  private async derive(): Promise<void> {
-    if (this.key || !this.pair) return;
-    const remote = await crypto.subtle.importKey(
-      "raw",
-      decode(this.remote),
-      { name: "ECDH", namedCurve: "P-256" },
-      false,
-      [],
-    );
-    this.key = await crypto.subtle.deriveKey(
-      { name: "ECDH", public: remote },
-      this.pair.privateKey,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
-    this.fingerprint = hex(
-      await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(
-          [
-            "weblink-automation/1",
-            ...[this.local, this.remote].sort(),
-          ].join("\n"),
-        ),
-      ),
-    );
-    clearTimeout(this.handshakeTimer);
-    this.readyResolve();
-    this.changed();
-  }
   private async receive(data: unknown): Promise<void> {
     if (typeof data !== "string" || data.length > 18000)
       throw new Error("Invalid frame");
     const frame = JSON.parse(data);
-    if (frame.kind === "hello") {
-      if (
-        this.remote ||
-        typeof frame.key !== "string" ||
-        frame.key.length > 128
-      )
-        throw new Error("Invalid hello");
-      this.remote = frame.key;
-      await this.derive();
-      return;
-    }
     if (
-      !this.key ||
+      !this.connected ||
       frame.kind !== "chunk" ||
       typeof frame.id !== "string" ||
       frame.id.length > 40 ||
@@ -243,18 +180,11 @@ export class AutomationPeerLink {
     this.assemblyTimer = undefined;
     this.assembly = undefined;
     const bytes = decode(a.parts.join(""));
-    if (bytes.length > MAX + 64)
-      throw new Error("Oversize");
-    const plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: bytes.slice(0, 12) },
-      this.key,
-      bytes.slice(12),
-    );
+    if (bytes.length > MAX) throw new Error("Oversize");
     const packet = JSON.parse(
-      new TextDecoder().decode(plain),
+      new TextDecoder().decode(bytes),
     ) as Packet;
     if (
-      packet.from !== this.remote ||
       packet.sequence !== this.receiveSequence + 1 ||
       typeof packet.id !== "string" ||
       packet.id.length > 128
@@ -319,7 +249,7 @@ export class AutomationPeerLink {
       .finally(() => this.executing.delete(packet.id));
   }
   private send(
-    packet: Omit<Packet, "sequence" | "from">,
+    packet: Omit<Packet, "sequence">,
   ): Promise<void> {
     const run = async () => {
       await this.ready;
@@ -328,23 +258,11 @@ export class AutomationPeerLink {
         JSON.stringify({
           ...packet,
           sequence: ++this.sendSequence,
-          from: this.local,
         }),
       );
       if (raw.length > MAX)
         throw new AutomationError("RESULT_TOO_LARGE");
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const encrypted = new Uint8Array(
-        await crypto.subtle.encrypt(
-          { name: "AES-GCM", iv },
-          this.key!,
-          raw,
-        ),
-      );
-      const bytes = new Uint8Array(12 + encrypted.length);
-      bytes.set(iv);
-      bytes.set(encrypted, 12);
-      const text = encode(bytes),
+      const text = encode(raw),
         id = crypto.randomUUID(),
         count = Math.ceil(text.length / 12000);
       const deadline = Date.now() + 30000;
@@ -421,8 +339,11 @@ export class AutomationPeerLink {
   }
   close(): void {
     if (this.lifetime.signal.aborted) return;
+    if (!this.connected)
+      this.failure ??= "CHANNEL_NOT_OPEN";
+    this.connected = false;
     this.lifetime.abort();
-    clearTimeout(this.handshakeTimer);
+    clearTimeout(this.openTimer);
     clearTimeout(this.assemblyTimer);
     this.readyReject(
       new AutomationError("TARGET_DISCONNECTED"),

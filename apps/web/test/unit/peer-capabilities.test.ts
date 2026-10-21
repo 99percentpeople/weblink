@@ -521,3 +521,27 @@ it("bounds the envelope without interpreting feature-version payloads", () => {
       validCapabilityUpdate({ ...snapshot, revision }),
     ).toBe(false);
 });
+
+it("shares a stable connection generation until the main channel resets", async () => {
+  const s = setup();
+  const first = s.service.generation(s.session);
+  expect(first).toBeTruthy();
+  s.local({ automation: {} });
+  expect(s.service.generation(s.session)).toBe(first);
+  await flushRtc();
+  s.events.dispatchEvent("messagechannelchange", "closed");
+  const second = s.service.generation(s.session);
+  expect(second).toBeTruthy();
+  expect(second).not.toBe(first);
+  s.events.dispatchEvent("messagechannelchange", "ready");
+  expect(s.service.generation(s.session)).toBe(second);
+  await flushRtc();
+  expect(s.send.mock.calls.at(-1)?.[0]).toMatchObject({
+    update: { kind: "snapshot", generation: second },
+  });
+  s.stop();
+  expect(s.service.generation(s.session)).toBeUndefined();
+  const dispose = s.service.bind(s.session, () => {});
+  expect(s.service.generation(s.session)).not.toBe(second);
+  dispose();
+});

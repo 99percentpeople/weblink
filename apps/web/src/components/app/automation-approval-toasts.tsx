@@ -1,3 +1,4 @@
+import { sessionService } from "@/libs/application/session-service";
 import { createEffect, onCleanup } from "solid-js";
 import { toast } from "solid-sonner";
 import { useAppState } from "@/libs/state/app-state-context";
@@ -46,10 +47,8 @@ export function AutomationApprovalToasts() {
               )
                 return;
               if (current.principal.kind === "peer") {
-                const peerId = automation?.principalPeerId(
-                  current.principal.id,
-                );
-                if (peerId)
+                const peerId = current.principal.id;
+                if (sessionService.canReceive(peerId))
                   requestClientInfoDialog(
                     peerId,
                     "settings",

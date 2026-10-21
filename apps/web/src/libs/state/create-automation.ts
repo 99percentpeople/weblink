@@ -29,19 +29,23 @@ import {
 import { platform } from "@/libs/platform/runtime";
 import { DEFAULT_MCP_SERVER } from "@weblink/platform";
 import type {
+  NativeAutomationPeer,
   NativeAutomationRequest,
   McpTokenSummary,
   McpServerConfig,
 } from "@weblink/platform";
 import type { PeerSession } from "@/libs/domain/session";
 import { sessionService } from "@/libs/application/session-service";
-import { AutomationPermissions } from "@/libs/application/automation/permissions";
+import { AutomationAudit } from "@/libs/application/automation/audit";
 import { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import {
   automationHandlers,
   diagnosticSources,
 } from "@/libs/application/automation/handlers";
-import { AutomationPeerLink } from "@/libs/application/automation/peer-link";
+import {
+  AutomationPeerLink,
+  AUTOMATION_CHANNEL as CHANNEL,
+} from "@/libs/application/automation/peer-link";
 import type { AppStateContextProps } from "./app-state-context";
 interface NativeSnapshot {
   enabled: boolean;
@@ -78,7 +82,6 @@ const empty: NativeSnapshot = {
 export type AutomationRuntime = ReturnType<
   typeof createAutomation
 >;
-const CHANNEL = "weblink-automation/1";
 export function createAutomation(
   state: AppStateContextProps,
 ) {
@@ -89,7 +92,7 @@ export function createAutomation(
   const [error, setError] = createSignal("");
   const [ready, setReady] = createSignal(false);
   const changed = () => setRevision((v) => v + 1);
-  const permissions = new AutomationPermissions(changed);
+  const audit = new AutomationAudit(changed);
   const presentation = new PresentationDiagnostics();
   const diagnostics = new AutomationDiagnostics(() =>
     diagnosticSources(state, presentation, platform),
@@ -101,14 +104,14 @@ export function createAutomation(
   );
   const life = new AbortController();
   const webPrincipal: Principal = {
-    id: createUuid(),
+    id: "webmcp",
     label: "WebMCP · current page",
     kind: "webmcp",
   };
   const links = new Map<PeerSession, AutomationPeerLink>();
   const peerPrincipals = new Map<
     AutomationPeerLink,
-    Promise<Principal>
+    Promise<Principal & NativeAutomationPeer>
   >();
   const bindings = new Map<
     PeerSession,
@@ -117,12 +120,13 @@ export function createAutomation(
       opening?: object;
       pc: RTCPeerConnection | null;
       share: boolean;
+      generation?: string;
     }
   >();
   const authorities = new Map<
     AutomationPeerLink,
     {
-      id: string;
+      principal: NativeAutomationPeer;
       session: PeerSession;
       policy: string;
       pending: Promise<void>;
@@ -147,6 +151,9 @@ export function createAutomation(
             sessionService.sessions[
               authority.session.targetClientId
             ] !== authority.session ||
+            sessionService.capabilities.generation(
+              authority.session,
+            ) !== authority.principal.generation ||
             !sessionService.canReceive(
               authority.session.targetClientId,
             )
@@ -157,7 +164,7 @@ export function createAutomation(
           }
           await native.peerPolicy(
             epoch,
-            authority.id,
+            authority.principal,
             policy,
           );
         },
@@ -182,9 +189,7 @@ export function createAutomation(
     timer: ReturnType<typeof setTimeout> | undefined,
     unregister: (() => void) | undefined;
   const native = platform.automation;
-  const webSupported = () =>
-    !!globalThis.crypto?.subtle &&
-    !!webMcpContext(document);
+  const webSupported = () => !!webMcpContext(document);
   let webRegistration: AbortController | undefined;
   let configurationRevision = 0;
   let snapshotSequence = 0;
@@ -205,36 +210,33 @@ export function createAutomation(
   const principal = async (
     link: AutomationPeerLink,
     session: PeerSession,
-  ): Promise<Principal> => {
+    generation: string,
+  ): Promise<Principal & NativeAutomationPeer> => {
     const peerId = session.targetClientId;
     await link.ready;
     link.lifetime.signal.throwIfAborted();
     if (
       sessionService.sessions[peerId] !== session ||
+      sessionService.capabilities.generation(session) !==
+        generation ||
       !sessionService.canReceive(peerId)
     )
       throw new AutomationError("TARGET_DISCONNECTED");
     let promise = peerPrincipals.get(link);
     if (!promise) {
       promise = (async () => {
-        const p: Principal = {
-          id: native
-            ? await native.peer(
-                epoch,
-                sessionService.clientViewData[peerId]
-                  ?.name ?? peerId,
-                link.fingerprint,
-              )
-            : createUuid(),
+        const p: Principal & NativeAutomationPeer = {
+          id: peerId,
           label:
             sessionService.clientViewData[peerId]?.name ??
             peerId,
           kind: "peer" as const,
-          fingerprint: link.fingerprint,
+          generation,
         };
         if (native) {
+          await native.peer(epoch, p, p.label);
           authorities.set(link, {
-            id: p.id,
+            principal: p,
             session,
             policy: "",
             pending: Promise.resolve(),
@@ -244,7 +246,7 @@ export function createAutomation(
           } catch (e) {
             authorities.delete(link);
             await native
-              .disconnect(epoch, p.id)
+              .disconnect(epoch, p)
               .catch(() => {});
             throw e;
           }
@@ -268,10 +270,10 @@ export function createAutomation(
     if (
       link.lifetime.signal.aborted ||
       sessionService.sessions[peerId] !== session ||
+      sessionService.capabilities.generation(session) !==
+        generation ||
       !sessionService.canReceive(peerId)
     ) {
-      if (native)
-        void native.disconnect(epoch, p.id).catch(() => {});
       throw new AutomationError("TARGET_DISCONNECTED");
     }
     return p;
@@ -294,7 +296,7 @@ export function createAutomation(
             String(call.arguments.target)
           ],
         link = links.get(session);
-      if (!link)
+      if (!link || !canConnect(session))
         throw new AutomationError("TARGET_DISCONNECTED");
       const result = await link.call(
         {
@@ -350,6 +352,8 @@ export function createAutomation(
       signal = bounded.signal;
       signal.throwIfAborted();
       if (native && p.kind === "peer") {
+        if (!p.generation)
+          throw new AutomationError("TARGET_DISCONNECTED");
         const id = createUuid();
         const cancel = () =>
           void native.cancel(epoch, id).catch(() => {});
@@ -359,7 +363,7 @@ export function createAutomation(
         try {
           return (await native.call(
             epoch,
-            p.id,
+            { id: p.id, generation: p.generation },
             id,
             call,
           )) as ToolResult;
@@ -374,10 +378,10 @@ export function createAutomation(
       signal.throwIfAborted();
       const data = await route(call, signal);
       signal.throwIfAborted();
-      permissions.record(p, call, "ok");
+      audit.record(p, call, "ok");
       return { ok: true, data };
     } catch (e) {
-      permissions.record(
+      audit.record(
         p,
         call,
         e instanceof AutomationError ? e.code : "error",
@@ -451,7 +455,12 @@ export function createAutomation(
     session: PeerSession,
     channel: RTCDataChannel,
   ) => {
+    const generation =
+      sessionService.capabilities.generation(session);
     if (
+      !generation ||
+      channel.readyState === "closed" ||
+      channel.readyState === "closing" ||
       !enabled() ||
       sessionService.sessions[session.targetClientId] !==
         session ||
@@ -482,31 +491,28 @@ export function createAutomation(
             new AutomationError("PERMISSION_DENIED"),
           );
         return invoke(
-          await principal(link, session),
+          await principal(link, session, generation),
           call,
           signal,
         );
       },
       changed,
       () => {
-        if (links.get(session) === link)
-          links.delete(session);
         const promise = peerPrincipals.get(link);
-        peerPrincipals.delete(link);
-        authorities.delete(link);
-        changed();
-        if (promise)
-          void promise
-            .then((p) => {
-              permissions.disconnect(p.id);
-              if (native)
-                return native.disconnect(epoch, p.id);
-            })
-            .catch(() => {});
-        // Recover an established transport on its close event. Failed or
-        // rejected handshakes wait for a new capability/readiness notification.
-        if (link.fingerprint && !link.failure)
-          scheduleSync();
+        // Keep this session occupied until cleanup completes. Reopening the
+        // automation channel within the same connection must not let late
+        // cleanup unregister its replacement's identical device/generation.
+        void Promise.resolve(promise)
+          .then((p) => p && native?.disconnect(epoch, p))
+          .catch(() => {})
+          .finally(() => {
+            peerPrincipals.delete(link);
+            authorities.delete(link);
+            if (links.get(session) === link)
+              links.delete(session);
+            changed();
+            if (!link.failure) scheduleSync();
+          });
       },
     );
     links.set(session, link);
@@ -527,6 +533,8 @@ export function createAutomation(
         b = {
           abort: new AbortController(),
           pc: session.peerConnection,
+          generation:
+            sessionService.capabilities.generation(session),
           share: sessionService.canShareScreen(
             session.targetClientId,
           ),
@@ -566,9 +574,15 @@ export function createAutomation(
       );
       if (b.share && !share) links.get(session)?.close();
       b.share = share;
-      if (b.pc !== session.peerConnection) {
+      const generation =
+        sessionService.capabilities.generation(session);
+      if (
+        b.pc !== session.peerConnection ||
+        b.generation !== generation
+      ) {
         links.get(session)?.close();
         b.pc = session.peerConnection;
+        b.generation = generation;
         b.opening = undefined;
       }
       if (!canConnect(session)) {
@@ -682,7 +696,6 @@ export function createAutomation(
       setEnabled(value);
       sessionService.setAutomationEnabled(value);
       if (!value) {
-        permissions.stop();
         for (const c of calls.values()) c.abort();
         for (const link of [...links.values()])
           link.close();
@@ -704,6 +717,7 @@ export function createAutomation(
   createEffect(() => {
     Object.values(sessionService.sessions).forEach((s) => {
       sessionService.capabilities.get(s);
+      sessionService.capabilities.generation(s);
       sessionService.canReceive(s.targetClientId);
       sessionService.canShareScreen(s.targetClientId);
       JSON.stringify(policyFor(s));
@@ -758,7 +772,6 @@ export function createAutomation(
     clearTimeout(timer);
     webRegistration?.abort();
     unregister?.();
-    permissions.stop();
     diagnostics.dispose();
     presentation.clear();
     for (const b of bindings.values()) b.abort.abort();
@@ -792,44 +805,36 @@ export function createAutomation(
             enabled: enabled(),
             grants: [],
             pending: [],
-            audit: permissions.audit.slice(),
+            audit: audit.entries.slice(),
           };
     },
     peers: () => {
       revision();
       return [...links]
-        .filter(([, link]) => !!link.fingerprint)
-        .map(([s, l]) => ({
+        .filter(
+          ([, link]) =>
+            link.connected && !link.lifetime.signal.aborted,
+        )
+        .map(([s]) => ({
           id: s.targetClientId,
           name:
             sessionService.clientViewData[s.targetClientId]
               ?.name ?? s.targetClientId,
-          code:
-            l.fingerprint
-              .slice(0, 12)
-              .match(/.{1,4}/g)
-              ?.join("-") ?? "…",
         }));
     },
-    principalPeerId: (id: string) => {
-      revision();
-      return [...authorities.values()].find(
-        (authority) => authority.id === id,
-      )?.session.targetClientId;
-    },
     decide: async (id: string, minutes: number) => {
-      if (native) await native.decide(epoch, id, minutes);
-      else permissions.decide(id, minutes);
-      if (native) await readNativeSnapshot();
+      if (native) {
+        await native.decide(epoch, id, minutes);
+        await readNativeSnapshot();
+      }
     },
     revoke: async (id?: string) => {
-      if (native) await native.revoke(epoch, id);
-      else if (id) permissions.revoke(id);
-      else permissions.stop();
-      if (native) await readNativeSnapshot();
+      if (native) {
+        await native.revoke(epoch, id);
+        await readNativeSnapshot();
+      }
     },
     stop: async () => {
-      permissions.stop();
       for (const c of calls.values()) c.abort();
       for (const l of [...links.values()]) l.close();
       if (native) await native.revoke(epoch);

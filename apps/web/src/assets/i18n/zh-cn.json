@@ -1549,8 +1549,6 @@
     "requests": "授权请求",
     "no_requests": "暂无待处理请求。",
     "target": "目标",
-    "compare": "请与请求设备显示的核对码比较",
-    "verified": "两端核对码一致",
     "shell_warning": "此权限允许在所选期限内，以当前系统账户执行任意 Shell 命令。命令可以修改文件和系统状态，撤销不能还原已发生的修改。",
     "duration": "有效期",
     "minutes": "分钟",

@@ -62,6 +62,68 @@ function setup(
       receive?.(status),
   };
 }
+it.each([false, true])(
+  "keeps automation authority independent of device remote-control policy (allow list: %s)",
+  async (whitelistOnly) => {
+    const decision = vi.fn((id: string) =>
+      id === "paired-device"
+        ? ("allow" as const)
+        : ("deny" as const),
+    );
+    const { host, api, emit } = setup({
+      whitelistOnly: () => whitelistOnly,
+      decision,
+      remember: vi.fn(),
+    });
+    host.start();
+    await flush();
+    const controlled = {
+      pending: [],
+      closed: false,
+      sourceId: "screen",
+      grantId: "grant",
+    };
+    emit({
+      ...controlled,
+      clientId: "paired-device",
+      controllerKind: "remote",
+    });
+    await flush();
+    expect(api.revoke).not.toHaveBeenCalled();
+    // Both a verified device and a local MCP token use native automation consent.
+    for (const clientId of ["paired-device", "mcp-token"]) {
+      decision.mockReturnValue("deny");
+      emit({
+        ...controlled,
+        clientId,
+        controllerKind: "automation",
+      });
+      await flush();
+      await host.policyChanged(clientId);
+      expect(api.revoke).not.toHaveBeenCalled();
+      expect(host.status().clientId).toBe(clientId);
+      expect(() =>
+        host.clipboardScope(clientId, "grant"),
+      ).toThrow();
+      await expect(
+        host.requestScreen(
+          "paired-device",
+          "peer",
+          new AbortController().signal,
+        ),
+      ).resolves.toBeUndefined();
+    }
+    // Explicit local stop still works for automation.
+    await host.revoke();
+    expect(api.revoke).toHaveBeenCalledTimes(1);
+    // Missing metadata retains the legacy remote-control checks.
+    emit({ ...controlled, clientId: "unpaired-device" });
+    await flush();
+    expect(api.revoke).toHaveBeenCalledTimes(2);
+    host.close();
+  },
+);
+
 it("does not let an asynchronous automatic approval overwrite a newer native snapshot", async () => {
   const { host, api, emit } = setup({
     decision: () => "allow",

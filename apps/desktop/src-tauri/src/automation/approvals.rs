@@ -63,7 +63,7 @@ mod tests {
             id: "verified-channel".into(),
             label: "Device".into(),
             kind: "peer".into(),
-            fingerprint: None,
+            generation: Some("connection-1".into()),
         };
         {
             let mut s = service.state.lock().unwrap();
@@ -139,7 +139,7 @@ mod tests {
         service
             .set_peer_policy(
                 "epoch",
-                &principal.id,
+                &peers::Identity::from(&principal),
                 HashMap::from([("screen.read".into(), policy::Decision::Deny)]),
             )
             .unwrap();

@@ -25,7 +25,7 @@ impl Client {
             id: self.id.clone(),
             label: self.label.clone(),
             kind: "mcp".into(),
-            fingerprint: None,
+            generation: None,
         }
     }
     pub fn summary(&self) -> Value {
@@ -136,7 +136,10 @@ impl Service {
     pub(super) fn principal_active(s: &State, p: &Principal) -> bool {
         match p.kind.as_str() {
             "mcp" => s.registry.clients.get(&p.id).is_some_and(Client::active),
-            "peer" => s.peers.contains_key(&p.id),
+            "peer" => s
+                .peers
+                .get(&p.id)
+                .is_some_and(|current| current.generation == p.generation),
             _ => false,
         }
     }
@@ -474,7 +477,7 @@ mod tests {
             id: "remote".into(),
             label: "Device".into(),
             kind: "peer".into(),
-            fingerprint: Some("a".repeat(64)),
+            generation: Some("connection-1".into()),
         };
         let (tx, rx) = oneshot::channel();
         {

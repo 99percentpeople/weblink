@@ -234,32 +234,10 @@ pub async fn automation_disconnect(
     window: WebviewWindow,
     service: State<'_, Shared>,
     epoch: String,
-    principal: String,
+    principal: peers::Identity,
 ) -> Result<(), String> {
     blocking(window, service, move |app, service| {
-        let mut s = service.state.lock().unwrap();
-        Service::check(&s, &epoch)?;
-        s.peers.remove(&principal);
-        s.peer_policies.remove(&principal);
-        let ids: Vec<_> = s
-            .grants
-            .values()
-            .filter(|g| g.principal.kind == "peer" && g.principal.id == principal)
-            .map(|g| g.id.clone())
-            .collect();
-        for id in ids {
-            service.revoke_locked(&mut s, &id);
-        }
-        let pending: Vec<_> = s
-            .pending
-            .iter()
-            .filter(|(_, p)| p.principal.kind == "peer" && p.principal.id == principal)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in pending {
-            Service::cancel_request(&mut s, &id);
-        }
-        drop(s);
+        service.disconnect_peer(&epoch, &principal)?;
         native::sync_input(&app, &service);
         Ok(())
     })
@@ -270,31 +248,13 @@ pub async fn automation_peer(
     window: WebviewWindow,
     service: State<'_, Shared>,
     epoch: String,
+    principal: peers::Identity,
     label: String,
-    fingerprint: String,
-) -> Result<String, String> {
-    blocking(window, service, move |_app, service| {
-        let mut s = service.state.lock().unwrap();
-        Service::check(&s, &epoch)?;
-        if !s.enabled
-            || s.peers.len() >= 32
-            || label.len() > 128
-            || fingerprint.len() != 64
-            || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit())
-        {
-            return Err("INVALID_ARGUMENTS".into());
-        }
-        let id = uuid::Uuid::new_v4().to_string();
-        s.peers.insert(
-            id.clone(),
-            Principal {
-                id: id.clone(),
-                label,
-                kind: "peer".into(),
-                fingerprint: Some(fingerprint),
-            },
-        );
-        Ok(id)
+) -> Result<(), String> {
+    blocking(window, service, move |app, service| {
+        service.connect_peer(&epoch, principal, label)?;
+        native::sync_input(&app, &service);
+        Ok(())
     })
     .await
 }
@@ -303,7 +263,7 @@ pub async fn automation_peer_policy(
     window: WebviewWindow,
     service: State<'_, Shared>,
     epoch: String,
-    principal: String,
+    principal: peers::Identity,
     policy: policy::PeerPolicy,
 ) -> Result<(), String> {
     blocking(window, service, move |app, service| {
@@ -361,7 +321,7 @@ pub async fn automation_call(
     window: WebviewWindow,
     service: State<'_, Shared>,
     epoch: String,
-    principal: String,
+    principal: peers::Identity,
     id: String,
     call: Call,
 ) -> Result<Value, String> {
@@ -369,10 +329,7 @@ pub async fn automation_call(
     let p = {
         let s = service.state.lock().unwrap();
         Service::check(&s, &epoch)?;
-        s.peers
-            .get(&principal)
-            .cloned()
-            .ok_or("PERMISSION_DENIED")?
+        Service::peer_principal(&s, &principal)?
     };
     if id.len() > 128 {
         return Err("INVALID_ARGUMENTS".into());

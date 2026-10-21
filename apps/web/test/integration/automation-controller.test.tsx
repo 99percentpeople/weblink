@@ -20,20 +20,20 @@ import {
 } from "@/libs/state/app-state";
 import type { registerWebMcp } from "@weblink/automation/webmcp";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
-import { AutomationPermissions } from "@/libs/application/automation/permissions";
 import type {
   ToolCall,
   ToolResult,
 } from "@weblink/automation";
 import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 const fixture = vi.hoisted(() => ({
+  generation: "connection-1",
   remoteCapabilities: (() => undefined) as () =>
     | PeerCapabilities
     | undefined,
   channel: { close: vi.fn() },
   createChannel: vi.fn<() => Promise<unknown>>(),
-  handshakeReady: true,
-  finishHandshake: undefined as (() => void) | undefined,
+  channelReady: true,
+  finishOpening: undefined as (() => void) | undefined,
   closeLink: undefined as (() => void) | undefined,
   events: undefined as unknown as EventTarget,
   messageReady: true,
@@ -90,6 +90,7 @@ vi.mock("@/libs/application/session-service", () => ({
     },
     clientViewData: { desktop: { name: "Desktop" } },
     capabilities: {
+      generation: () => fixture.generation,
       get: () => fixture.remoteCapabilities(),
     },
     setAutomationEnabled: fixture.advertise,
@@ -102,10 +103,12 @@ vi.mock("@/libs/application/automation/handlers", () => ({
   diagnosticSources: () => [],
 }));
 vi.mock("@/libs/application/automation/peer-link", () => ({
+  AUTOMATION_CHANNEL: "weblink-automation/1",
   AutomationPeerLink: class {
     readonly lifetime = new AbortController();
     readonly ready: Promise<void>;
-    fingerprint = "";
+    connected = false;
+    failure?: string;
     constructor(
       _channel: unknown,
       invoke: typeof fixture.incoming,
@@ -116,17 +119,18 @@ vi.mock("@/libs/application/automation/peer-link", () => ({
       fixture.closeLink = () => this.close();
       this.ready = new Promise((resolve) => {
         const finish = () => {
-          this.fingerprint = "a".repeat(64);
+          this.connected = true;
           resolve();
           changed();
         };
-        if (fixture.handshakeReady) finish();
-        else fixture.finishHandshake = finish;
+        if (fixture.channelReady) finish();
+        else fixture.finishOpening = finish;
       });
     }
     call = fixture.call;
     close() {
       if (this.lifetime.signal.aborted) return;
+      if (!this.connected) this.failure = "OPEN_TIMEOUT";
       this.lifetime.abort();
       this.disconnected();
     }
@@ -147,11 +151,12 @@ const mount = () => {
   return { runtime, ...view };
 };
 beforeEach(() => {
+  fixture.generation = "connection-1";
   vi.stubGlobal("crypto", webcrypto);
   setAppState("options", "automationEnabled", false);
   fixture.incoming = undefined;
-  fixture.handshakeReady = true;
-  fixture.finishHandshake = undefined;
+  fixture.channelReady = true;
+  fixture.finishOpening = undefined;
   fixture.closeLink = undefined;
   fixture.events = new EventTarget();
   fixture.messageReady = true;
@@ -249,16 +254,16 @@ it("closes a pending automation channel when destination consent is withdrawn be
   expect(runtime.peers()).toEqual([]);
   expect(fixture.incoming).toBeUndefined();
 });
-it("lists a device only after the automation handshake completes", async () => {
-  fixture.handshakeReady = false;
+it("lists a device only after the automation channel opens", async () => {
+  fixture.channelReady = false;
   setContext({ registerTool: vi.fn(async () => {}) });
   const { runtime } = mount();
   await runtime.configure(true);
   await waitFor(() =>
-    expect(fixture.finishHandshake).toBeDefined(),
+    expect(fixture.finishOpening).toBeDefined(),
   );
   expect(runtime.peers()).toEqual([]);
-  fixture.finishHandshake!();
+  fixture.finishOpening!();
   expect(runtime.peers()).toHaveLength(1);
 });
 it("uses channel readiness events instead of scanning sessions on a timer and removes listeners on cleanup", async () => {
@@ -354,14 +359,14 @@ it("starts a replacement from its connection event and ignores an older channel 
   );
   expect(fixture.channel.close).not.toHaveBeenCalled();
 });
-it("recovers an established channel from its close event without retrying rejected handshakes", async () => {
+it("recovers an established channel from its close event without retrying failed channel opens", async () => {
   vi.useFakeTimers();
   setContext({ registerTool: vi.fn(async () => {}) });
   const { runtime } = mount();
   await runtime.configure(true);
   await vi.advanceTimersByTimeAsync(0);
   expect(runtime.peers()).toHaveLength(1);
-  fixture.handshakeReady = false;
+  fixture.channelReady = false;
   fixture.closeLink!();
   await vi.advanceTimersByTimeAsync(0);
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
@@ -390,10 +395,6 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
       );
     },
   } satisfies ModelContext);
-  const require = vi.spyOn(
-    AutomationPermissions.prototype,
-    "require",
-  );
   const { runtime } = mount();
   await runtime.configure(true);
   await waitFor(() =>
@@ -412,7 +413,6 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
     }),
     expect.any(AbortSignal),
   );
-  expect(require).not.toHaveBeenCalled();
   expect(runtime.snapshot().pending).toEqual([]);
   const incoming = await fixture.incoming!(
     {

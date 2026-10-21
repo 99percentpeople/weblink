@@ -28,9 +28,16 @@ pub struct Pending {
     pub source_id: String,
     pub peer_generation: String,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ControllerKind {
+    Remote,
+    Automation,
+}
 #[derive(Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    pub controller_kind: Option<ControllerKind>,
     pub source_id: Option<String>,
     pub devices: weblink_desktop_input::devices::Snapshot,
     pub grant_id: Option<String>,

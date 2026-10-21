@@ -58,7 +58,7 @@ it("expires an incomplete frame assembly even if no further frames arrive", asyn
   expect(r.lifetime.signal.aborted).toBe(true);
   expect(r.failure).toBe("ASSEMBLY_TIMEOUT");
 });
-it("bounds queued frames before asynchronous parsing or decryption", async () => {
+it("bounds queued frames before asynchronous parsing", async () => {
   const { l, r, b } = pair(async () => ({
     ok: true,
     data: {},
@@ -76,9 +76,11 @@ const pair = (
   handler: ConstructorParameters<
     typeof AutomationPeerLink
   >[1],
+  state = "open",
 ) => {
   const a = new Channel(),
     b = new Channel();
+  a.readyState = b.readyState = state;
   a.peer = b;
   b.peer = a;
   const l = new AutomationPeerLink(
@@ -96,14 +98,15 @@ const pair = (
   links.push(l, r);
   return { l, r, a, b };
 };
-it("uses identical ephemeral fingerprints and transports large structured results", async () => {
-  const { l, r } = pair(async () => ({
+it("opens without an extra handshake and transports large structured results", async () => {
+  const { l, r, a, b } = pair(async () => ({
     ok: true,
     data: { output: "x".repeat(50000) },
   }));
   await Promise.all([l.ready, r.ready]);
-  expect(l.fingerprint).toBe(r.fingerprint);
-  expect(l.fingerprint).toHaveLength(64);
+  expect(a.sent).toEqual([]);
+  expect(b.sent).toEqual([]);
+  expect(l.connected && r.connected).toBe(true);
   const result = await l.call(
     {
       name: "diagnostics.snapshot",
@@ -180,8 +183,48 @@ it("propagates cancellation to an executing call", async () => {
   );
   await vi.waitFor(() => expect(signal).toBeDefined());
   controller.abort();
-  expect((await pending).ok).toBe(false);
+  expect(await pending).toMatchObject({
+    ok: false,
+    error: { code: "CANCELLED" },
+  });
   await vi.waitFor(() =>
     expect(signal!.aborted).toBe(true),
   );
+});
+
+it("waits only for DataChannel open and sends no identity exchange", async () => {
+  const { l, r, a, b } = pair(
+    async () => ({ ok: true, data: {} }),
+    "connecting",
+  );
+  let ready = false;
+  void l.ready.then(() => {
+    ready = true;
+  });
+  await Promise.resolve();
+  expect(ready).toBe(false);
+  for (const channel of [a, b]) {
+    channel.readyState = "open";
+    channel.dispatchEvent(new Event("open"));
+  }
+  await Promise.all([l.ready, r.ready]);
+  expect(ready).toBe(true);
+  expect(a.sent).toEqual([]);
+  expect(b.sent).toEqual([]);
+});
+
+it("closes a stalled opening channel without leaving an unresolved readiness wait", async () => {
+  vi.useFakeTimers();
+  const { l, a } = pair(
+    async () => ({ ok: true, data: {} }),
+    "connecting",
+  );
+  const pending = expect(l.ready).rejects.toMatchObject({
+    code: "TARGET_DISCONNECTED",
+  });
+  await vi.advanceTimersByTimeAsync(10001);
+  await pending;
+  expect(l.failure).toBe("OPEN_TIMEOUT");
+  expect(a.readyState).toBe("closed");
+  expect(a.sent).toEqual([]);
 });

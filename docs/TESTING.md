@@ -457,11 +457,11 @@ merge. Benchmarks are only required when making or validating performance claims
 
 ## Automation
 
-Run `bun run test:e2e:automation` for real Chromium DataChannel consent,
-revocation and bounded result transport. Its report states whether the installed
+Run `bun run test:e2e:automation` for real Chromium DataChannel cancellation
+and bounded result transport. Its report states whether the installed
 browser exposes WebMCP; absence does not simulate browser Agent integration.
-Focused TS tests cover the registry, authorization, replay, cancellation and
-settings approval. Native tests run with
+Focused TS tests cover shared pairing, connection generations, stale cleanup,
+replay, cancellation and device settings approval. Native tests run with
 `cargo test --locked -p weblink-desktop automation --lib` and cover authenticated
 HTTP MCP discovery, native grants, Shell ownership and process cleanup.
 

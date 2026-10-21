@@ -18,7 +18,7 @@ import {
   type Principal,
   type ToolCall,
 } from "@weblink/automation";
-import { AutomationPermissions } from "@/libs/application/automation/permissions";
+import { AutomationAudit } from "@/libs/application/automation/audit";
 import { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { registerWebMcp } from "@weblink/automation/webmcp";
 const principal: Principal = {
@@ -31,158 +31,23 @@ const call: ToolCall = {
   arguments: { target: "local" },
 };
 afterEach(() => vi.useRealTimers());
-describe("automation authority", () => {
-  it("shares timed consent within a group, resolves concurrent requests and keeps other groups isolated", async () => {
-    const p = new AutomationPermissions(() => {});
-    const abort = new AbortController();
-    const first = p.require(
-      principal,
-      "diagnostics.read",
-      call,
-      abort.signal,
-    );
-    const second = p.require(
-      principal,
-      "screen.read",
-      {
-        name: "control.screenshot",
-        arguments: { target: "local", sourceId: "screen" },
-      },
-      abort.signal,
-    );
-    const control = p
-      .require(
-        principal,
-        "input.control",
-        {
-          name: "control.acquire",
-          arguments: { target: "local", trackId: "track" },
-        },
-        abort.signal,
-      )
-      .catch((error) => error);
-    const shell = p
-      .require(
-        principal,
-        "shell.execute",
-        {
-          name: "commands.start",
-          arguments: { target: "local", script: "echo ok" },
-        },
-        abort.signal,
-      )
-      .catch((error) => error);
-    p.decide([...p.pending.keys()][0], 15);
-    const [firstLease, secondLease] = await Promise.all([
-      first,
-      second,
-    ]);
-    expect(firstLease).toBe(secondLease);
-    expect(p.pending.size).toBe(2);
-    expect([...p.grants.values()][0].scopes).toEqual(
-      permissionGroups.read,
-    );
-    const ui = await p.require(
-      principal,
-      "accessibility.read",
-      {
-        name: "accessibility.windows",
-        arguments: { target: "local" },
-      },
-      abort.signal,
-    );
-    expect(ui).toBe(firstLease);
-    p.revoke([...p.grants.keys()][0]);
-    expect(ui.aborted).toBe(true);
-    abort.abort();
-    await Promise.all([control, shell]);
+it("bounds browser audit history without retaining tool arguments", () => {
+  const audit = new AutomationAudit(
+    () => {},
+    () => 1000,
+  );
+  for (let i = 0; i < 1001; i++)
+    audit.record(principal, call, String(i));
+  expect(audit.entries).toHaveLength(1000);
+  expect(audit.entries[0].status).toBe("1");
+  expect(audit.entries.at(-1)).toMatchObject({
+    at: 1000,
+    principal: "Page",
+    tool: call.name,
+    target: "local",
+    status: "1000",
   });
-  it("requires independent permission for each target and binds revocation to running work", async () => {
-    const p = new AutomationPermissions(() => {});
-    const waiting = p.require(
-      principal,
-      "diagnostics.read",
-      call,
-      new AbortController().signal,
-    );
-    const id = [...p.pending.keys()][0];
-    expect(id).toBeDefined();
-    p.decide(id, 15);
-    const signal = await waiting;
-    expect(signal.aborted).toBe(false);
-    const remote = p.require(
-      principal,
-      "diagnostics.read",
-      { ...call, arguments: { target: "peer" } },
-      new AbortController().signal,
-    );
-    expect(p.pending.size).toBe(1);
-    p.decide([...p.pending.keys()][0], 0);
-    await expect(remote).rejects.toMatchObject({
-      code: "PERMISSION_DENIED",
-    });
-    p.disconnect(principal.id);
-    expect(signal.aborted).toBe(true);
-    expect(p.grants.size).toBe(0);
-  });
-  it("never carries a grant to another connection identity and expires leases", async () => {
-    let now = 1000;
-    const p = new AutomationPermissions(
-      () => {},
-      () => now,
-    );
-    const pending = p.require(
-      principal,
-      "shell.execute",
-      {
-        name: "commands.start",
-        arguments: { target: "local", script: "echo ok" },
-      },
-      new AbortController().signal,
-    );
-    p.decide([...p.pending.keys()][0], 5);
-    const signal = await pending;
-    const otherAbort = new AbortController();
-    const other = p.require(
-      { ...principal, id: "reconnected" },
-      "shell.execute",
-      call,
-      otherAbort.signal,
-    );
-    expect(p.pending.size).toBe(1);
-    otherAbort.abort();
-    await expect(other).rejects.toBeDefined();
-    now += 300001;
-    p.expire();
-    expect(signal.aborted).toBe(true);
-    p.stop();
-  });
-  it("cancels approval without leaving pending state and bounds flooding", async () => {
-    const p = new AutomationPermissions(() => {});
-    const abort = new AbortController();
-    const requests = Array.from({ length: 8 }, () =>
-      p
-        .require(
-          principal,
-          "diagnostics.read",
-          call,
-          abort.signal,
-        )
-        .catch(() => undefined),
-    );
-    await expect(
-      p.require(
-        principal,
-        "diagnostics.read",
-        call,
-        abort.signal,
-      ),
-    ).rejects.toMatchObject({ code: "BUSY" });
-    abort.abort();
-    await Promise.all(requests);
-    expect(p.pending.size).toBe(0);
-    expect(p.grants.size).toBe(0);
-  });
+  expect(audit.entries[0]).not.toHaveProperty("arguments");
 });
 describe("shared tool contract", () => {
   it("maps every current scope to exactly one group and preserves legacy mixed decisions", () => {

@@ -150,3 +150,22 @@ it("gates each feature independently while allowing bootstrap and pending replie
   ] as const)
     expect(requiredMessageFeatures(type)).toEqual([]);
 });
+
+it("keeps paired automation on the existing version-one contract", () => {
+  const local = advertiseCapabilities({
+    automation: {},
+    messaging: {},
+  });
+  expect(local["automation/1"]).toEqual({});
+  expect(
+    new ProtocolNegotiation().project(local, {
+      "automation/99": {},
+      "messaging/1": {},
+    }),
+  ).toEqual({ messaging: {} });
+  expect(
+    new ProtocolNegotiation().project(local, {
+      "automation/1": {},
+    }),
+  ).toEqual({ automation: {} });
+});

@@ -56,7 +56,7 @@ mod tests {
             id: "caller".into(),
             label: "Test".into(),
             kind: "peer".into(),
-            fingerprint: None,
+            generation: None,
         };
         {
             let mut s = service.state.lock().unwrap();

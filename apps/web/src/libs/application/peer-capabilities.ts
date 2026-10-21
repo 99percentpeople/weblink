@@ -54,6 +54,11 @@ export class PeerCapabilitiesService {
     this.change[0]();
     return this.bindings.get(session)?.negotiated;
   }
+  /** Shared connection generation; replaced whenever the main transport resets. */
+  generation(session: PeerSession): string | undefined {
+    this.change[0]();
+    return this.bindings.get(session)?.generation;
+  }
   /** Exact selected handler ID; undefined also covers invalid or withdrawn offers. */
   protocol(
     session: PeerSession,
@@ -130,6 +135,7 @@ export class PeerCapabilitiesService {
     };
     this.bindings.set(session, binding);
     const reset = () => {
+      binding.generation = createUuid();
       clearTimeout(binding.retry);
       binding.retry = undefined;
       clearTimeout(binding.resyncRetry);

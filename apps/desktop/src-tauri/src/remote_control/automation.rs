@@ -1,5 +1,11 @@
 //! Automation shares the existing native authority, exclusivity and emergency shortcut.
-use super::{host::Active, input_error, service::Service, Context};
+use super::{
+    binding::GeometrySource,
+    host::{Active, Host},
+    input_error,
+    service::Service,
+    Context, ControllerKind,
+};
 use crate::automation::coordinates;
 use serde_json::Value;
 use std::sync::Arc;
@@ -9,6 +15,7 @@ use weblink_desktop_capture::{
 };
 use weblink_desktop_input::{
     authorization::{Grant, RequestResult},
+    engine::TrustedTarget,
     input::{Event, Geometry},
     protocol::Signal,
     wire::Sequencer,
@@ -25,6 +32,7 @@ impl Service {
         &self,
         capture: Arc<CaptureService>,
         principal: &str,
+        generation: &str,
         session: String,
         source: String,
     ) -> Result<Value, String> {
@@ -45,7 +53,7 @@ impl Service {
             &owner.id,
             Context {
                 owner_id: owner.id.clone(),
-                peer_generation: principal.into(),
+                peer_generation: generation.into(),
                 client_id: principal.into(),
                 source_id: source,
             },
@@ -64,55 +72,9 @@ impl Service {
         );
         result_geometry["acquired"] = serde_json::json!(true);
         let mut h = owner.host.lock().unwrap_or_else(|e| e.into_inner());
-        h.tick();
-        if h.active.is_some() || !h.pending.is_empty() {
-            return Err("BUSY".into());
-        }
-        let endpoint = h.register(capture, target)?;
-        endpoint.opened(Arc::new(Sink));
-        let result = (|| {
-            let consent = match h
-                .worker
-                .request(
-                    media.clone(),
-                    Signal::Request {
-                        request_id: uuid::Uuid::new_v4().to_string(),
-                        target: binding.target.clone(),
-                    },
-                )
-                .map_err(input_error)?
-            {
-                Some(RequestResult::Pending { consent_id }) => consent_id,
-                _ => return Err("BUSY".into()),
-            };
-            let signal = h
-                .worker
-                .approve(consent)
-                .map_err(input_error)?
-                .ok_or("PERMISSION_DENIED")?;
-            let Signal::Grant { grant_id, .. } = signal else {
-                return Err("PERMISSION_DENIED".into());
-            };
-            h.active = Some(Active {
-                gamepad_feedback: Default::default(),
-                sequencer: Sequencer::new(
-                    grant_id.clone(),
-                    media.clone(),
-                    binding.target.geometry_revision.clone(),
-                ),
-                grant: Grant {
-                    id: grant_id,
-                    binding,
-                },
-            });
-            h.worker.flush().map_err(input_error)?;
-            Ok(result_geometry)
-        })();
-        if result.is_err() {
-            h.remove_peer(&media);
-        }
+        let result = h.acquire_automation(capture, target);
         owner.publish(h.snapshot());
-        result
+        result.map(|_| result_geometry)
     }
     pub fn automation_lease(&self, principal: &str) -> Result<String, String> {
         let owner = self
@@ -125,7 +87,9 @@ impl Service {
         let grant = &h
             .active
             .as_ref()
-            .filter(|a| a.grant.binding.client_id == principal)
+            .filter(|a| {
+                a.kind == ControllerKind::Automation && a.grant.binding.client_id == principal
+            })
             .ok_or("CONTROL_REQUIRED")?
             .grant;
         let status = h.worker.status();
@@ -145,7 +109,11 @@ impl Service {
         let grant = &h
             .active
             .as_ref()
-            .filter(|a| a.grant.binding.client_id == principal && a.grant.id == lease)
+            .filter(|a| {
+                a.kind == ControllerKind::Automation
+                    && a.grant.binding.client_id == principal
+                    && a.grant.id == lease
+            })
             .ok_or("CONTROL_REQUIRED")?
             .grant;
         let status = h.worker.status();
@@ -170,7 +138,11 @@ impl Service {
         let grant = &h
             .active
             .as_ref()
-            .filter(|a| a.grant.binding.client_id == principal && a.grant.id == lease)
+            .filter(|a| {
+                a.kind == ControllerKind::Automation
+                    && a.grant.binding.client_id == principal
+                    && a.grant.id == lease
+            })
             .ok_or("CONTROL_REQUIRED")?
             .grant;
         if h.worker.status().window_bound {
@@ -199,7 +171,11 @@ impl Service {
         let grant = &h
             .active
             .as_ref()
-            .filter(|a| a.grant.binding.client_id == principal && a.grant.id == lease)
+            .filter(|a| {
+                a.kind == ControllerKind::Automation
+                    && a.grant.binding.client_id == principal
+                    && a.grant.id == lease
+            })
             .ok_or("CONTROL_REQUIRED")?
             .grant;
         if !h.worker.renew(grant.clone()).map_err(input_error)? {
@@ -235,7 +211,11 @@ impl Service {
         let grant = &h
             .active
             .as_ref()
-            .filter(|a| a.grant.binding.client_id == principal && a.grant.id == lease)
+            .filter(|a| {
+                a.kind == ControllerKind::Automation
+                    && a.grant.binding.client_id == principal
+                    && a.grant.id == lease
+            })
             .ok_or("CONTROL_REQUIRED")?
             .grant;
         if !h.worker.renew(grant.clone()).map_err(input_error)? {
@@ -273,7 +253,9 @@ impl Service {
         let h = owner.host.lock().unwrap_or_else(|e| e.into_inner());
         // Only the automation IDs supplied here may be renewed. Other controls remain untouched.
         if let Some(a) = h.active.as_ref() {
-            if principals.contains(&a.grant.binding.client_id) {
+            if a.kind == ControllerKind::Automation
+                && principals.contains(&a.grant.binding.client_id)
+            {
                 let _ = h.worker.renew(a.grant.clone());
             }
         }
@@ -293,7 +275,8 @@ impl Service {
             .active
             .as_ref()
             .filter(|a| {
-                a.grant.binding.client_id == principal
+                a.kind == ControllerKind::Automation
+                    && a.grant.binding.client_id == principal
                     && lease.is_none_or(|lease| a.grant.id == lease)
             })
             .map(|a| a.grant.binding.target.media_id.clone());
@@ -303,5 +286,65 @@ impl Service {
             h.remove_peer(&media);
             owner.publish(h.snapshot());
         }
+    }
+}
+
+impl Host {
+    pub(super) fn acquire_automation(
+        &mut self,
+        capture: Arc<dyn GeometrySource>,
+        target: TrustedTarget,
+    ) -> Result<(), String> {
+        let binding = target.binding.clone();
+        let media = binding.target.media_id.clone();
+        self.tick();
+        if self.active.is_some() || !self.pending.is_empty() {
+            return Err("BUSY".into());
+        }
+        let endpoint = self.register(capture, target)?;
+        endpoint.opened(Arc::new(Sink));
+        let result = (|| {
+            let consent = match self
+                .worker
+                .request(
+                    media.clone(),
+                    Signal::Request {
+                        request_id: uuid::Uuid::new_v4().to_string(),
+                        target: binding.target.clone(),
+                    },
+                )
+                .map_err(input_error)?
+            {
+                Some(RequestResult::Pending { consent_id }) => consent_id,
+                _ => return Err("BUSY".into()),
+            };
+            let signal = self
+                .worker
+                .approve(consent)
+                .map_err(input_error)?
+                .ok_or("PERMISSION_DENIED")?;
+            let Signal::Grant { grant_id, .. } = signal else {
+                return Err("PERMISSION_DENIED".into());
+            };
+            self.active = Some(Active {
+                kind: ControllerKind::Automation,
+                gamepad_feedback: Default::default(),
+                sequencer: Sequencer::new(
+                    grant_id.clone(),
+                    media.clone(),
+                    binding.target.geometry_revision.clone(),
+                ),
+                grant: Grant {
+                    id: grant_id,
+                    binding,
+                },
+            });
+            self.worker.flush().map_err(input_error)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            self.remove_peer(&media);
+        }
+        result
     }
 }

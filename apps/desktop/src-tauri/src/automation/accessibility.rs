@@ -178,7 +178,7 @@ mod tests {
             id: "caller".into(),
             label: "Test".into(),
             kind: "mcp".into(),
-            fingerprint: None,
+            generation: None,
         };
         let mut s = State {
             enabled: true,

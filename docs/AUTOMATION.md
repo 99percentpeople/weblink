@@ -87,16 +87,16 @@ remains available during lock and worker waits.
 
 Every tool requires an explicit `target`: `local` or a directly connected
 Weblink peer ID. `devices.list` discovers available peers. Remote calls use a
-separate `automation/1` capability and ordered WebRTC DataChannel. Existing
+`automation/1` capability and ordered WebRTC DataChannel. Existing
 clients without that capability cannot call tools. All peer application traffic
 also requires [device pairing and content permission](DEVICE_TRUST.md).
 
 Automation connections follow the shared peer capability notifications and
 message-channel lifecycle events; they do not poll connected devices. Both peers
 must allow receiving content before opening the channel. Revoking that permission
-closes it, and a new permission announcement allows reconnection. Only completed
-automation handshakes appear in the connected automation device list. An
-established channel can recover on its close event; a rejected handshake waits
+closes it, and a new permission announcement allows reconnection. Only open
+automation channels appear in the connected automation device list. An
+established channel can recover on its close event; a failed channel open waits
 for another capability or channel-readiness notification instead of retrying in
 a loop. The native
 MCP authority's local heartbeat and cancellation checks are independent of peer
@@ -149,22 +149,32 @@ grant. Native execution still checks the exact tool scope. Existing
 remote-control allowlists do not grant automation permissions. In the existing
 remote-device permissions screen, **Always allow** is a persistent remote-control
 policy with no expiry. It is separate from MCP tokens and automation scope grants.
+Native control snapshots identify whether the active grant came from remote
+control or automation. Device remote-control policy applies only to remote-control
+grants; automation grants retain their own scope checks and the shared local stop.
 The policy remains indexed by client ID, but is effective only after the peer
 proves its paired device key. Failed device verification resets it to deny.
 Automatic pairing-key repair/renewal preserves saved permissions. First pairing
 and explicit re-pairing restore default device permissions, including Ask for
 automation; previous permanent grants are not restored.
 
-After persistent device pairing and reception permission, peers additionally
-create ephemeral P-256 ECDH keys for each automation channel and compare the displayed
-12-hex-digit transcript code before approving an Ask request. Subsequent messages use
-AES-GCM, ordered sequence validation, bounded framing and receive queues, duplicate request
-rejection and a maximum of four concurrent calls. The cryptographic identity is
-the current verified connection, not the signaling profile's name or client ID.
-The receiver trusts only its direct peer; callers cannot route a second hop.
-Reconnection requires new approval for Ask scopes; Always allow is reapplied only
-after paired-device verification. Browser Agent names are not authenticated;
-source labels are informational and never authorize access.
+Automation reuses the existing paired-device authentication and the ordered,
+DTLS-protected WebRTC connection. It has no additional handshake, key, comparison
+code or device-identity mapping. The native peer authority uses the verified device
+ID and the shared capability connection generation for calls, policy updates and
+disconnect cleanup. Resetting the main transport replaces that generation; old
+requests and cleanup cannot affect the replacement connection. Reopening an
+automation channel within the same connection waits for its predecessor's cleanup.
+Temporary grants end with the channel; Always allow is reapplied only after shared
+device verification and reception permission checks.
+
+The shared protocol registry advertises `automation/1`. Messages retain sequence validation,
+bounded framing and receive queues, duplicate request rejection and at most four
+concurrent calls. The receiver accepts only its direct paired peer; a call cannot
+route a second hop. Browser Agent names and source labels are informational and
+never authorize access. Browser WebMCP only controls destinations and records a
+bounded local audit; permission decisions remain in the destination's native
+authority. Local MCP clients continue to authenticate with their existing tokens.
 
 Incomplete frame assemblies expire after 30 seconds even if the sender goes silent.
 
@@ -175,7 +185,9 @@ effects and before delivering results. Application-side tools recheck their tick
 around asynchronous work, and native cancellation immediately notifies the UI to
 abort active operations. A stream created during revoked screen-start work is
 disposed before publication. Duplicate requests and late cleanup cannot cancel a
-new request with the same ID. Closing the UI revokes authority; crashes
+new request with the same ID. Cancelling a request while it awaits consent returns
+and records `CANCELLED`; an explicit denial returns `PERMISSION_DENIED`.
+Closing the UI revokes authority; crashes
 or a frozen frontend expire the native heartbeat lease after 20 seconds.
 
 Use **Stop all automation** to revoke grants, cancel queued work and command

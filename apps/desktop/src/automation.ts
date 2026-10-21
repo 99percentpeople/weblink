@@ -60,11 +60,11 @@ export const nativeAutomation: NativeAutomation = {
     invoke("automation_decide", { epoch, id, minutes }),
   revoke: (epoch, id) =>
     invoke("automation_revoke", { epoch, id }),
-  peer: (epoch, label, fingerprint) =>
+  peer: (epoch, principal, label) =>
     invoke("automation_peer", {
       epoch,
+      principal,
       label,
-      fingerprint,
     }),
   peerPolicy: (epoch, principal, policy) =>
     invoke("automation_peer_policy", {

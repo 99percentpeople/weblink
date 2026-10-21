@@ -14,6 +14,7 @@ mod jobs;
 mod keyboard;
 mod native;
 mod native_read;
+mod peers;
 mod pointer;
 mod policy;
 mod registry;
@@ -37,7 +38,7 @@ pub struct Principal {
     pub label: String,
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fingerprint: Option<String>,
+    pub generation: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Source {
@@ -372,12 +373,11 @@ impl Service {
             }
         };
         if let Some(approval) = approval {
-            if !tokio::time::timeout(Duration::from_secs(120), approval)
+            let allowed = tokio::time::timeout(Duration::from_secs(120), approval)
                 .await
-                .ok()
-                .and_then(Result::ok)
-                .unwrap_or(false)
-            {
+                .map_err(|_| "TIMEOUT".to_string())?
+                .map_err(|_| "CANCELLED".to_string())?;
+            if !allowed {
                 return Err("PERMISSION_DENIED".into());
             }
         }
@@ -386,7 +386,7 @@ impl Service {
             if s.requests.get(&id).map(String::as_str) != Some(generation) {
                 return Err("CANCELLED".into());
             }
-            if !Self::current(&s) {
+            if !Self::current(&s) || !Self::principal_active(&s, &principal) {
                 return Err("SESSION_CLOSED".into());
             }
             let grant = grant

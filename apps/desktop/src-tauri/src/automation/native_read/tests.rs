@@ -7,7 +7,7 @@ fn fixture(name: &str) -> Shared {
         id: "caller".into(),
         label: "Test".into(),
         kind: "mcp".into(),
-        fingerprint: None,
+        generation: None,
     };
     let mut s = service.state.lock().unwrap();
     s.epoch = "epoch".into();

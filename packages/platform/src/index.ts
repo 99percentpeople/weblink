@@ -497,6 +497,8 @@ export interface NativeControlContext {
   sourceId: string;
 }
 export interface NativeControlStatus {
+  /** Set by the native grant path. Older snapshots describe remote control. */
+  controllerKind?: "remote" | "automation" | null;
   sourceId?: string | null;
   devices?: InputDeviceSnapshot;
   grantId?: string | null;

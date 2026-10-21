@@ -197,6 +197,7 @@ async fn reported_mcp_source_does_not_bypass_destination_peer_permissions() {
     let (service, token, _receive) = connected();
     let peer = Principal {
         kind: "peer".into(),
+        generation: Some("connection-1".into()),
         ..token.clone()
     };
     {
@@ -234,7 +235,7 @@ async fn reported_mcp_source_does_not_bypass_destination_peer_permissions() {
     service
         .set_peer_policy(
             "epoch",
-            &peer.id,
+            &peers::Identity::from(&peer),
             HashMap::from([("diagnostics.read".into(), policy::Decision::Deny)]),
         )
         .unwrap();

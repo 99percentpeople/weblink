@@ -456,10 +456,12 @@ fn observers_push_initial_consent_grant_revoke_and_owner_close_in_order() {
     let controlled = next();
     assert_eq!(controlled.client_id.as_deref(), Some("client"));
     assert_eq!(controlled.source_id.as_deref(), Some("source"));
+    assert_eq!(controlled.controller_kind, Some(ControllerKind::Remote));
     rig.service.revoke(&rig.owner).unwrap();
     let released = next();
     assert!(released.client_id.is_none());
     assert!(released.source_id.is_none());
+    assert!(released.controller_kind.is_none());
     rig.tick();
     assert!(receive.try_recv().is_err());
     rig.service.end(&rig.owner);
@@ -567,6 +569,17 @@ impl Rig {
             .as_str()
             .unwrap()
             .into()
+    }
+    fn acquire_automation(&self) -> String {
+        let owner = self.service.owner(&self.owner).unwrap();
+        let mut host = owner.host.lock().unwrap();
+        host.acquire_automation(
+            self.source.clone(),
+            target(&self.owner, "capture", &uuid::Uuid::new_v4().to_string()),
+        )
+        .unwrap();
+        owner.publish(host.snapshot());
+        host.active.as_ref().unwrap().grant.id.clone()
     }
     fn input(&self, grant: &str, epoch: u64, sequence: u64, event: Value) {
         self.send(json!({"type":"input","grantId":grant,"generation":"media","geometryRevision":"layout",
@@ -1480,10 +1493,48 @@ fn choosing_a_concurrent_request_grants_one_peer_and_sends_busy_to_the_other() {
 }
 
 #[test]
+fn remote_and_automation_grants_cannot_authorize_each_others_operations() {
+    let rig = Rig::new();
+    let grant = rig.approve();
+    assert!(!rig.service.automation_active("client"));
+    assert!(rig
+        .service
+        .automation_input("client", &grant, vec![])
+        .is_err());
+    rig.service.automation_release("client");
+    assert_eq!(
+        rig.service.status(&rig.owner).unwrap().grant_id,
+        Some(grant)
+    );
+    rig.service.revoke(&rig.owner).unwrap();
+    let grant = rig.acquire_automation();
+    let status = rig.service.status(&rig.owner).unwrap();
+    assert_eq!(status.client_id.as_deref(), Some("client"));
+    assert_eq!(status.controller_kind, Some(ControllerKind::Automation));
+    assert_eq!(
+        serde_json::to_value(status).unwrap()["controllerKind"],
+        "automation"
+    );
+    assert!(rig
+        .service
+        .with_clipboard(&rig.owner, "client", &grant, || Ok(()))
+        .is_err());
+    assert!(rig.service.automation_active("client"));
+    rig.service.revoke(&rig.owner).unwrap();
+    assert!(!rig.service.automation_active("client"));
+    assert!(rig
+        .service
+        .status(&rig.owner)
+        .unwrap()
+        .controller_kind
+        .is_none());
+}
+
+#[test]
 fn automation_buttons_persist_and_stale_cleanup_cannot_release_reacquired_control() {
     use weblink_desktop_input::input::{Button, Position};
     let rig = Rig::new();
-    let first = rig.approve();
+    let first = rig.acquire_automation();
     let button = |button, down| Event::Button {
         position: Position { x: 0.5, y: 0.5 },
         button,
@@ -1532,12 +1583,7 @@ fn automation_buttons_persist_and_stale_cleanup_cannot_release_reacquired_contro
             button: Button::Left,
             down: false
         })));
-    rig.send(json!({"type":"request","requestId":"request-next","target":target(&rig.owner,"capture","media").binding.target}));
-    let consent = rig.service.status(&rig.owner).unwrap().pending[0]
-        .consent_id
-        .clone();
-    rig.service.approve(&rig.owner, &consent, true).unwrap();
-    let second = rig.service.automation_lease("client").unwrap();
+    let second = rig.acquire_automation();
     assert_ne!(first, second);
     rig.service
         .automation_input("client", &second, vec![button(Button::Right, true)])
@@ -1570,7 +1616,7 @@ fn automation_buttons_persist_and_stale_cleanup_cannot_release_reacquired_contro
 fn interrupted_native_input_is_not_an_active_automation_lease() {
     use weblink_desktop_input::input::{Button, Position};
     let rig = Rig::new();
-    let grant = rig.approve();
+    let grant = rig.acquire_automation();
     rig.service
         .automation_input(
             "client",
@@ -1602,7 +1648,7 @@ fn interrupted_native_input_is_not_an_active_automation_lease() {
 fn automation_modifier_and_mouse_hold_are_released_together_without_touching_a_new_lease() {
     use weblink_desktop_input::input::{Button, Position};
     let rig = Rig::new();
-    let first = rig.approve();
+    let first = rig.acquire_automation();
     let shift = ScanCode::new(0x2a, false).unwrap();
     rig.service
         .automation_input(
@@ -1655,12 +1701,7 @@ fn automation_modifier_and_mouse_hold_are_released_together_without_touching_a_n
         .lock()
         .unwrap()
         .contains(&release_button));
-    rig.send(json!({"type":"request","requestId":"next-keyboard","target":target(&rig.owner,"capture","media").binding.target}));
-    let consent = rig.service.status(&rig.owner).unwrap().pending[0]
-        .consent_id
-        .clone();
-    rig.service.approve(&rig.owner, &consent, true).unwrap();
-    let second = rig.service.automation_lease("client").unwrap();
+    let second = rig.acquire_automation();
     rig.service
         .automation_input(
             "client",
@@ -1716,7 +1757,7 @@ fn automation_window_binding_is_exact_and_focus_loss_interrupts_idle_input() {
         }
     }
     let rig = Rig::new();
-    let grant = rig.approve();
+    let grant = rig.acquire_automation();
     let focused = Arc::new(AtomicBool::new(true));
     let window = Arc::new(Window(focused.clone()));
     assert!(!rig

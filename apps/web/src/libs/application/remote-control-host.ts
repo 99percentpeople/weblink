@@ -49,6 +49,7 @@ export class RemoteControlHost {
   clipboardScope(clientId: string, grantId: string) {
     if (
       !this.owner ||
+      this.status().controllerKind === "automation" ||
       !this.exposes(clientId) ||
       this.status().clientId !== clientId ||
       this.status().grantId !== grantId ||
@@ -224,7 +225,10 @@ export class RemoteControlHost {
         this.selected[1](null);
       if (status.clientId) {
         this.screen.close();
-        if (!this.exposes(status.clientId))
+        if (
+          status.controllerKind !== "automation" &&
+          !this.exposes(status.clientId)
+        )
           await this.platform.remoteControl!.revoke(owner);
         return;
       }
@@ -425,7 +429,10 @@ export class RemoteControlHost {
   async policyChanged(clientId: string) {
     if (!this.exposes(clientId)) {
       this.screen.cancelClient(clientId);
-      if (this.status().clientId === clientId)
+      if (
+        this.status().controllerKind !== "automation" &&
+        this.status().clientId === clientId
+      )
         await this.revoke();
       // Native bindings are withdrawn by refreshControlCapabilities. Do not
       // send a denial that discloses control support to a hidden client.

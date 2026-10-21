@@ -87,7 +87,6 @@ vi.mock("@/libs/state/app-state-context", () => ({
       stop: fixture.stop,
       export: () => ({}),
       peers: () => [],
-      principalPeerId: () => "peer",
       snapshot: () => ({
         server: fixture.server(),
         serverPending:
@@ -104,10 +103,9 @@ vi.mock("@/libs/state/app-state-context", () => ({
           {
             id: "request",
             principal: {
-              id: "peer-principal",
+              id: "peer",
               label: "Remote",
               kind: "peer",
-              fingerprint: "a".repeat(64),
             },
             scope: fixture.scope,
             tool: "commands.start",
@@ -279,9 +277,9 @@ it("shows a separate privacy explanation for accessibility inspection", () => {
     screen.getByRole("button", {
       name: "automation.allow",
     }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 });
-it("requires fingerprint confirmation before approving a remote Shell session", async () => {
+it("approves a paired device request without a second verification code", async () => {
   render(() => (
     <AutomationPermissions
       runtime={useAppState().automation!}
@@ -291,17 +289,15 @@ it("requires fingerprint confirmation before approving a remote Shell session", 
   const allow = screen.getByRole("button", {
     name: "automation.allow",
   });
-  expect(allow).toBeDisabled();
+  expect(allow).toBeEnabled();
   expect(
     screen.getByText(
       "automation.permissions.terminal.description",
     ),
   ).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "automation.verified",
-    }),
-  );
+  expect(
+    screen.queryByRole("checkbox"),
+  ).not.toBeInTheDocument();
   expect(allow).toBeEnabled();
   fireEvent.click(allow);
   expect(fixture.decide).toHaveBeenCalledWith(
@@ -309,7 +305,7 @@ it("requires fingerprint confirmation before approving a remote Shell session", 
     15,
   );
 });
-it("denies without pairing confirmation and provides immediate stop", async () => {
+it("denies a paired device request and provides immediate stop", async () => {
   render(() => (
     <>
       <AutomationSettings />
@@ -841,7 +837,7 @@ it("keeps device approvals isolated from other devices and local MCP clients", (
         id: "chosen",
         principal: {
           ...request.principal,
-          id: "chosen-peer",
+          id: "peer",
           label: "Chosen device",
         },
       },
@@ -865,8 +861,6 @@ it("keeps device approvals isolated from other devices and local MCP clients", (
       },
     ],
   });
-  runtime.principalPeerId = (id) =>
-    id === "chosen-peer" ? "peer" : "other";
   const view = render(() => (
     <AutomationPermissions
       runtime={runtime}
@@ -884,7 +878,7 @@ it("keeps device approvals isolated from other devices and local MCP clients", (
   render(() => (
     <AutomationPermissions
       runtime={runtime}
-      peerId="other"
+      peerId="other-peer"
     />
   ));
   expect(

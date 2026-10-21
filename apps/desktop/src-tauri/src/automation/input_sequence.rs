@@ -168,7 +168,7 @@ mod tests {
             id: "peer".into(),
             label: "Peer".into(),
             kind: "peer".into(),
-            fingerprint: None,
+            generation: None,
         };
         let mut s = State {
             epoch: "epoch".into(),

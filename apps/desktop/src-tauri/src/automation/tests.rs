@@ -160,6 +160,29 @@ fn stale_cleanup_never_removes_a_reused_id() {
     );
 }
 #[tokio::test]
+async fn cancelled_pending_approval_is_audited_as_cancelled_and_does_not_touch_a_reused_id() {
+    let (service, p) = peer_fixture();
+    let first = tokio::spawn(service.clone().invoke(p.clone(), "same".into(), call()));
+    until(|| service.state.lock().unwrap().pending.contains_key("same")).await;
+    Service::cancel_request(&mut service.state.lock().unwrap(), "same");
+    let second = tokio::spawn(service.clone().invoke(p, "same".into(), call()));
+    until(|| service.state.lock().unwrap().pending.contains_key("same")).await;
+    assert_eq!(first.await.unwrap()["error"]["code"], "CANCELLED");
+    {
+        let s = service.state.lock().unwrap();
+        assert!(s.pending.contains_key("same"));
+        assert!(s.tickets.is_empty());
+        assert_eq!(s.audit.last().unwrap()["status"], "CANCELLED");
+    }
+    // A deliberate denial still has its own result and audit status.
+    service.decide("epoch", "same", 0).unwrap();
+    assert_eq!(second.await.unwrap()["error"]["code"], "PERMISSION_DENIED");
+    let s = service.state.lock().unwrap();
+    assert_eq!(s.audit.last().unwrap()["status"], "PERMISSION_DENIED");
+    assert!(s.requests.is_empty());
+    assert!(s.pending.is_empty());
+}
+#[tokio::test]
 async fn cancelling_between_approval_and_dispatch_cannot_resume_using_a_new_grant() {
     let (service, p) = peer_fixture();
     let first = tokio::spawn(service.clone().invoke(p.clone(), "request".into(), call()));
@@ -245,13 +268,59 @@ async fn revocation_and_dropped_invocations_immediately_cancel_ui_work() {
     assert!(service.state.lock().unwrap().tickets.is_empty());
     assert!(service.state.lock().unwrap().requests.is_empty());
 }
+
+#[tokio::test]
+async fn reconnect_between_approval_and_dispatch_cannot_reuse_the_new_channels_authority() {
+    let (service, _) = fixture();
+    let old = peers::Identity {
+        id: "device".into(),
+        generation: "connection-1".into(),
+    };
+    service
+        .connect_peer("epoch", old.clone(), "Device".into())
+        .unwrap();
+    let principal = Service::peer_principal(&service.state.lock().unwrap(), &old).unwrap();
+    let task = tokio::spawn(service.clone().invoke(principal, "request".into(), call()));
+    until(|| {
+        service
+            .state
+            .lock()
+            .unwrap()
+            .pending
+            .contains_key("request")
+    })
+    .await;
+    service.decide("epoch", "request", 5).unwrap();
+    // Complete a reconnect before the approved future can dispatch.
+    let replacement = peers::Identity {
+        generation: "connection-2".into(),
+        ..old
+    };
+    service
+        .connect_peer("epoch", replacement.clone(), "Device".into())
+        .unwrap();
+    service
+        .set_peer_policy(
+            "epoch",
+            &replacement,
+            HashMap::from([("diagnostics.read".into(), policy::Decision::Allow)]),
+        )
+        .unwrap();
+    {
+        let mut s = service.state.lock().unwrap();
+        let principal = Service::peer_principal(&s, &replacement).unwrap();
+        Service::policy_grant(&mut s, &principal, "diagnostics.read");
+    }
+    assert_eq!(task.await.unwrap()["error"]["code"], "SESSION_CLOSED");
+    assert!(service.state.lock().unwrap().tickets.is_empty());
+}
 pub(super) fn fixture() -> (Shared, Principal) {
     let service = Arc::new(Service::default());
     let p = Principal {
         id: "client".into(),
         label: "Test".into(),
         kind: "mcp".into(),
-        fingerprint: None,
+        generation: None,
     };
     {
         let mut s = service.state.lock().unwrap();

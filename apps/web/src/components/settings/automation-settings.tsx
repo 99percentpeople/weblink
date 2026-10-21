@@ -132,11 +132,7 @@ export default function AutomationSettings() {
                 <Empty message={t("automation.no_peers")} />
               }
             >
-              {(peer) => (
-                <SettingRow label={peer.name}>
-                  <code class="text-sm">{peer.code}</code>
-                </SettingRow>
-              )}
+              {(peer) => <SettingRow label={peer.name} />}
             </For>
             <Show when={r().desktop}>
               <SettingHeading>

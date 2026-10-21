@@ -188,7 +188,7 @@ export interface Principal {
   id: string;
   label: string;
   kind: "webmcp" | "mcp" | "peer";
-  fingerprint?: string;
+  generation?: string;
 }
 export interface Grant {
   target: string;

@@ -1,5 +1,7 @@
-import { AutomationPeerLink } from "../../../src/libs/application/automation/peer-link";
-import { AutomationPermissions } from "../../../src/libs/application/automation/permissions";
+import {
+  AutomationPeerLink,
+  AUTOMATION_CHANNEL,
+} from "../../../src/libs/application/automation/peer-link";
 import {
   webMcpContext,
   registerWebMcp,
@@ -20,7 +22,7 @@ async function main() {
     b = new RTCPeerConnection();
   let left: AutomationPeerLink | undefined,
     right: AutomationPeerLink | undefined;
-  const permissions = new AutomationPermissions(() => {});
+  let cancelled = false;
   let count = 0;
   try {
     a.onicecandidate = (e) => {
@@ -32,18 +34,26 @@ async function main() {
     b.ondatachannel = (e) => {
       right = new AutomationPeerLink(
         e.channel,
-        async (call, signal) => {
-          await permissions.require(
-            {
-              id: right!.fingerprint,
-              label: "paired browser",
-              kind: "peer",
-              fingerprint: right!.fingerprint,
-            },
-            "diagnostics.read",
-            call,
-            signal,
-          );
+        async (_call, signal) => {
+          if (count > 0) {
+            await new Promise<void>((resolve) =>
+              signal.addEventListener(
+                "abort",
+                () => {
+                  cancelled = true;
+                  resolve();
+                },
+                { once: true },
+              ),
+            );
+            return {
+              ok: false,
+              error: {
+                code: "CANCELLED",
+                message: "CANCELLED",
+              },
+            };
+          }
           count++;
           return {
             ok: true,
@@ -51,12 +61,12 @@ async function main() {
           };
         },
         () => {},
-        () => permissions.stop(),
+        () => {},
       );
     };
     left = new AutomationPeerLink(
-      a.createDataChannel("weblink-automation/1", {
-        protocol: "weblink-automation/1",
+      a.createDataChannel(AUTOMATION_CHANNEL, {
+        protocol: AUTOMATION_CHANNEL,
       }),
       async () => ({ ok: true, data: {} }),
       () => {},
@@ -68,10 +78,6 @@ async function main() {
     await a.setRemoteDescription(b.localDescription!);
     await wait(() => !!right);
     await Promise.all([left.ready, right!.ready]);
-    assert(
-      left.fingerprint === right!.fingerprint,
-      "Fingerprint mismatch",
-    );
     const call = {
       name: "diagnostics.snapshot",
       arguments: { target: "local" },
@@ -80,30 +86,26 @@ async function main() {
       call,
       new AbortController().signal,
     );
-    await wait(() => permissions.pending.size === 1);
-    assert(count === 0, "Executed without approval");
-    permissions.decide(
-      [...permissions.pending.keys()][0],
-      15,
-    );
     const result = await pending;
     assert(
       result.ok &&
         result.data.payload === "x".repeat(64000),
       "Chunked result differs",
     );
-    permissions.stop();
-    const second = left.call(
-      call,
-      new AbortController().signal,
+    const abort = new AbortController();
+    const second = left.call(call, abort.signal);
+    // Wait for delivery before exercising cancellation across the real channel.
+    await new Promise((resolve) =>
+      setTimeout(resolve, 100),
     );
-    await wait(() => permissions.pending.size === 1);
-    assert(count === 1, "Revoked grant reused");
-    permissions.decide(
-      [...permissions.pending.keys()][0],
-      0,
+    abort.abort();
+    const result2 = await second;
+    assert(
+      !result2.ok && result2.error.code === "CANCELLED",
+      "Cancellation status differs",
     );
-    assert(!(await second).ok, "Denied call succeeded");
+    await wait(() => cancelled);
+    assert(count === 1, "Cancelled call executed");
     const context = webMcpContext(document);
     if (context) {
       const unregister = await registerWebMcp(
@@ -115,15 +117,13 @@ async function main() {
     window.__SPEED_TEST_REPORT__ = {
       ok: true,
       transport: "real Chromium RTCDataChannel",
-      consent: true,
-      revocation: true,
+      cancellation: true,
       chunkedOutput: true,
       webMcpRegistration: !!context,
     };
   } finally {
     left?.close();
     right?.close();
-    permissions.stop();
     a.close();
     b.close();
   }

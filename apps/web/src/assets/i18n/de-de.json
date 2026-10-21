@@ -1549,8 +1549,6 @@
     "requests": "Berechtigungsanfragen",
     "no_requests": "Keine offenen Anfragen.",
     "target": "Ziel",
-    "compare": "Diesen Code mit dem anfragenden Gerät vergleichen",
-    "verified": "Die Codes stimmen überein",
     "shell_warning": "Erlaubt während der gewählten Dauer beliebige Shell-Befehle mit Ihrem Systemkonto. Befehle können Dateien und Systemeinstellungen ändern. Ein Widerruf macht ausgeführte Änderungen nicht rückgängig.",
     "duration": "Gültigkeitsdauer",
     "minutes": "Minuten",
