@@ -28,7 +28,7 @@ impl Service {
                 Self::grant_live(s, g)
                     && g.principal.id == t.principal.id
                     && g.principal.kind == t.principal.kind
-                    && t.call.arguments["target"] == g.target
+                    && g.covers_target(&t.call.arguments["target"])
                     && catalog::find(&t.call.name)
                         .is_ok_and(|tool| g.scopes.iter().any(|scope| tool["scope"] == *scope))
             })

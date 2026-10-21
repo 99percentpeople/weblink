@@ -35,6 +35,13 @@ const fixture = vi.hoisted(() => ({
         signal: AbortSignal,
       ) => Promise<ToolResult>),
   advertise: vi.fn(),
+  remoteCall:
+    vi.fn<
+      (
+        call: ToolCall,
+        signal: AbortSignal,
+      ) => Promise<ToolResult>
+    >(),
   handle: vi.fn(
     async (
       _call: ToolCall,
@@ -75,6 +82,7 @@ vi.mock("@/libs/application/automation/peer-link", () => ({
     readonly lifetime = new AbortController();
     readonly ready = Promise.resolve();
     readonly fingerprint = "a".repeat(64);
+    call = fixture.remoteCall;
     constructor(
       _channel: unknown,
       incoming: typeof fixture.incoming,
@@ -112,6 +120,10 @@ const mount = () => {
 };
 beforeEach(() => {
   fixture.handle.mockReset().mockResolvedValue({});
+  fixture.remoteCall.mockReset().mockResolvedValue({
+    ok: true,
+    data: { remote: true },
+  });
   vi.stubGlobal("crypto", webcrypto);
   fixture.sessions = {};
   fixture.receive = true;
@@ -395,6 +407,68 @@ const incoming = () =>
     },
     new AbortController().signal,
   );
+it.each([true, false])(
+  "forwards token calls without local consent and preserves the destination decision (allowed=%s)",
+  async (allowed) => {
+    peer();
+    const result: ToolResult = allowed
+      ? { ok: true, data: { remote: true } }
+      : {
+          ok: false,
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "PERMISSION_DENIED",
+          },
+        };
+    fixture.remoteCall.mockResolvedValue(result);
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    await view.runtime.configure(true);
+    await waitFor(() =>
+      expect(fixture.incoming).toBeDefined(),
+    );
+    const source = {
+      kind: "mcp" as const,
+      label: "Local agent",
+    };
+    vi.mocked(fixture.native.open).mock.calls[0][0]({
+      kind: "call",
+      id: "forwarded",
+      principal: {
+        id: "token",
+        label: "Local agent",
+        kind: "mcp",
+      },
+      call: {
+        source,
+        name: "diagnostics.snapshot",
+        arguments: { target: "peer" },
+      },
+    });
+    await waitFor(() =>
+      expect(fixture.native.finish).toHaveBeenCalledWith(
+        "epoch",
+        "forwarded",
+        result,
+      ),
+    );
+    expect(fixture.native.check).toHaveBeenCalledWith(
+      "epoch",
+      "forwarded",
+    );
+    expect(fixture.remoteCall).toHaveBeenCalledWith(
+      {
+        source,
+        name: "diagnostics.snapshot",
+        arguments: { target: "local" },
+      },
+      expect.any(AbortSignal),
+    );
+    expect(fixture.handle).not.toHaveBeenCalled();
+  },
+);
 it("applies verified device policies before calls, updates them live, and retains them after disconnect", async () => {
   peer();
   setAppState("options", "clientConfigs", "peer", {

@@ -143,11 +143,15 @@ impl Service {
     pub(super) fn grant_live(s: &State, g: &Grant) -> bool {
         g.expires_at.is_none_or(|at| at > now())
             && Self::principal_active(s, &g.principal)
-            && g.scopes.iter().all(|scope| {
-                let decision = Self::peer_decision(s, &g.principal, scope);
-                decision != policy::Decision::Deny
-                    && (g.expires_at.is_some() || decision == policy::Decision::Allow)
-            })
+            && if g.principal.kind == "mcp" {
+                !s.policies_suspended
+            } else {
+                g.scopes.iter().all(|scope| {
+                    let decision = Self::peer_decision(s, &g.principal, scope);
+                    decision != policy::Decision::Deny
+                        && (g.expires_at.is_some() || decision == policy::Decision::Allow)
+                })
+            }
     }
     pub(super) fn create_client(
         &self,
@@ -384,7 +388,7 @@ mod tests {
         assert!(rx.blocking_recv().is_err());
     }
     #[test]
-    fn renewing_an_expired_token_requires_fresh_consent_even_before_cleanup_tick() {
+    fn renewing_an_expired_token_invalidates_old_authority_even_before_cleanup_tick() {
         let service = Service::default();
         start(&service);
         let saved = service

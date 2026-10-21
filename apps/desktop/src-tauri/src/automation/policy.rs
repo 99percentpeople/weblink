@@ -32,6 +32,7 @@ impl Service {
     pub(super) fn policy_grant(s: &mut State, p: &Principal, scope: &str) {
         if s.grants.values().any(|g| {
             g.principal.id == p.id
+                && g.principal.kind == p.kind
                 && g.target == "local"
                 && g.scopes.iter().any(|v| v == scope)
                 && Self::grant_live(s, g)
@@ -102,7 +103,11 @@ impl Service {
         let grants: Vec<_> = s
             .grants
             .values()
-            .filter(|g| g.principal.id == id && g.scopes.iter().any(|scope| changed(scope)))
+            .filter(|g| {
+                g.principal.kind == "peer"
+                    && g.principal.id == id
+                    && g.scopes.iter().any(|scope| changed(scope))
+            })
             .map(|g| g.id.clone())
             .collect();
         for grant in grants {
@@ -111,7 +116,9 @@ impl Service {
         let pending: Vec<_> = s
             .pending
             .iter()
-            .filter(|(_, p)| p.principal.id == id && changed(&p.scope))
+            .filter(|(_, p)| {
+                p.principal.kind == "peer" && p.principal.id == id && changed(&p.scope)
+            })
             .map(|(key, _)| key.clone())
             .collect();
         for key in pending {

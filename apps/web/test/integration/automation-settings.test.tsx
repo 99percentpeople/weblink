@@ -275,6 +275,18 @@ it("denies without pairing confirmation and provides immediate stop", async () =
   );
   expect(fixture.stop).toHaveBeenCalledOnce();
 });
+it("manages local tokens without a second approval list on desktop", () => {
+  render(() => <AutomationSettings />);
+  expect(
+    screen.getByText("Saved local token"),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("automation.requests"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("automation.grants"),
+  ).not.toBeInTheDocument();
+});
 it("keeps local token management and approval UI off the Web controller", () => {
   fixture.desktop = false;
   render(() => <AutomationSettings />);
@@ -809,14 +821,17 @@ it("keeps device approvals isolated from other devices and local MCP clients", (
     screen.queryByText("Local MCP client"),
   ).not.toBeInTheDocument();
   view.unmount();
-  render(() => <AutomationPermissions runtime={runtime} />);
+  render(() => (
+    <AutomationPermissions
+      runtime={runtime}
+      peerId="other"
+    />
+  ));
   expect(
-    screen.getByText("Local MCP client"),
-  ).toBeVisible();
+    screen.queryByText("Local MCP client"),
+  ).not.toBeInTheDocument();
   expect(
     screen.queryByText("Chosen device"),
   ).not.toBeInTheDocument();
-  expect(
-    screen.queryByText("Other device"),
-  ).not.toBeInTheDocument();
+  expect(screen.getByText("Other device")).toBeVisible();
 });

@@ -178,7 +178,7 @@ pub async fn automation_snapshot(
     service.expire();
     let s = service.state.lock().unwrap();
     Service::check(&s, &epoch)?;
-    let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":s.policies_suspended,"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
+    let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":s.policies_suspended,"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
     let active = s.active_server.clone();
     drop(s);
     snapshot["endpoints"] = json!(server::endpoints(active.as_ref()));
@@ -244,7 +244,7 @@ pub async fn automation_disconnect(
         let ids: Vec<_> = s
             .grants
             .values()
-            .filter(|g| g.principal.id == principal)
+            .filter(|g| g.principal.kind == "peer" && g.principal.id == principal)
             .map(|g| g.id.clone())
             .collect();
         for id in ids {
@@ -253,7 +253,7 @@ pub async fn automation_disconnect(
         let pending: Vec<_> = s
             .pending
             .iter()
-            .filter(|(_, p)| p.principal.id == principal)
+            .filter(|(_, p)| p.principal.kind == "peer" && p.principal.id == principal)
             .map(|(id, _)| id.clone())
             .collect();
         for id in pending {

@@ -30,14 +30,12 @@ const Empty = (props: { message: string }) => (
 );
 export default function AutomationPermissions(props: {
   runtime: AutomationRuntime;
-  peerId?: string;
+  peerId: string;
 }) {
   const accepts = (principal: Principal) =>
-    props.peerId
-      ? principal.kind === "peer" &&
-        props.runtime.principalPeerId(principal.id) ===
-          props.peerId
-      : principal.kind === "mcp";
+    principal.kind === "peer" &&
+    props.runtime.principalPeerId(principal.id) ===
+      props.peerId;
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const run = async (action: () => Promise<unknown>) => {
@@ -90,9 +88,7 @@ export default function AutomationPermissions(props: {
                   }
                 >
                   <span class="text-muted-foreground text-sm">
-                    {request.principal.kind === "mcp"
-                      ? "MCP"
-                      : t("automation.peer")}
+                    {t("automation.peer")}
                   </span>
                 </SettingRow>
                 <SettingBlock>

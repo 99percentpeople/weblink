@@ -1,4 +1,3 @@
-import AutomationPermissions from "./automation-permissions";
 import { For, Show, createSignal } from "solid-js";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
@@ -118,7 +117,6 @@ export default function AutomationSettings() {
             <McpTokenSettings runtime={r()} />
           </Show>
           <Show when={r().enabled()}>
-            <AutomationPermissions runtime={r()} />
             <SettingHeading
               description={t("automation.pair_description")}
             >

@@ -26,6 +26,8 @@ export interface NativeAutomationRequest {
     fingerprint?: string;
   };
   call: {
+    /** Informational origin only; authority comes from the verified principal. */
+    source?: { kind: "mcp" | "webmcp"; label: string };
     name: string;
     arguments: Record<string, unknown>;
   };

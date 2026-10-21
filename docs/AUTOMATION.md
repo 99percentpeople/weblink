@@ -52,17 +52,19 @@ random token is displayed only at creation. Only a SHA-256 hash, a short prefix,
 name, creation time and expiration are stored in `mcp-tokens.json` in the local
 app-data directory. Changes are written atomically before becoming active. The
 list, creation, editing and revocation remain available while automation is
-disabled. Creating a token never starts the listener or grants tool authority;
+disabled. Issuing a token authorizes local tool calls and forwarding without an
+additional local approval, but never starts the listener;
 its connection configuration uses the saved endpoint when the server is off. Tokens survive disabling/restarting, while
 runtime grants and pending calls do not. Expired tokens remain visible and can
 be renewed or revoked. Every HTTP request and final native effect checks token
 validity. Expiry/revocation cancels the token's grants and native tasks. Renewing
-an already expired token requires fresh tool consent; it cannot revive old grants
+an already expired token authorizes new calls; it cannot revive old grants
 or pending calls, including between background cleanup ticks.
 
 These tokens authenticate local MCP clients only. They do not pair remote
 devices, appear in remote-device permission lists, or authorize a remote device.
-A valid token still requires the relevant desktop tool approval. Requests require
+A valid token needs no extra local approval to connect to another client or call
+a tool. The destination still enforces its own device permissions. Requests require
 the accepted socket's concrete IP and port in Host, including on wildcard
 listeners; arbitrary DNS names and forwarded headers never authorize a request.
 A present Origin must match that HTTP origin. Browser cross-origin HTTP
@@ -109,9 +111,12 @@ separate credentials. SSO, identity federation and organization-wide policy are
 outside the current scope. Device pairing and proof of key possession do not
 require those enterprise features.
 
-The desktop MCP entrypoint and the destination desktop each enforce their own
-authorization. WebMCP forwards requests without a second browser approval; the
-destination desktop is the authority.
+The desktop MCP entrypoint authenticates its token and checks its lifetime on
+every call. Issuing the token is the local authorization, including for
+`target:"local"`. Forwarding to other clients needs no further approval on the
+entrypoint. WebMCP also forwards without a browser approval. The destination
+desktop enforces its own peer permissions independently; an MCP source label or
+the controller's token never bypasses its Ask, Always allow or Deny policies.
 Permissions are presented as three independent groups:
 
 - **Reading and diagnostics**: device/stream state, screenshots and accessibility tree content.
@@ -132,12 +137,11 @@ and automatic key repair retain the saved policy. The content reception and
 screen sharing switches remain prerequisite gates.
 
 Ask requests and current grants appear in the corresponding device dialog.
-Local MCP requests remain under Automation and are independent of device policies.
-Toast review actions open the corresponding device settings for a verified peer,
-or Automation for local MCP. Resolved requests dismiss their notifications;
+Local MCP tokens remain under Automation, without a second request/grant list,
+and are independent of device policies. Toast review actions open the corresponding
+device settings for a verified peer. Resolved requests dismiss their notifications;
 a stale notification cannot navigate using an unverified claimed device ID.
-Creating or extending a local MCP token does not grant tools automatically.
-Temporary approvals last 5, 15, or 60 minutes, with 15 minutes selected initially. They
+Temporary peer approvals last 5, 15, or 60 minutes, with 15 minutes selected initially. They
 bind a caller identity, target, permission group and current connection lifetime.
 Consent resolves concurrent requests in that same group only. Explicit legacy
 Deny decisions remain excluded from the grant. Revocation ends the whole timed
@@ -177,9 +181,9 @@ or a frozen frontend expire the native heartbeat lease after 20 seconds.
 Use **Stop all automation** to revoke grants, cancel queued work and command
 process trees, and release automated input. The native emergency shortcut also
 invalidates the affected automated input grant. Stop-all, emergency input release,
-and explicit revocation of a policy grant also pause automatic Always-allow grants
+and explicit revocation of a policy grant also pause token calls and automatic Always-allow grants
 until automation is disabled and enabled again. This pause does not erase saved
-policies; individual timed approvals remain available. Automated input is blocked while permission requests await local review.
+policies; individual timed peer approvals remain available. Automated input is blocked while permission requests await local review.
 Full desktop input can operate terminals and other applications; separating
 Shell tools is not an OS sandbox for a caller that already has desktop control.
 Input shares the existing

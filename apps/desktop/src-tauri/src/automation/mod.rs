@@ -18,6 +18,7 @@ mod pointer;
 mod policy;
 mod registry;
 mod server;
+mod token_authority;
 pub use commands::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -329,6 +330,9 @@ impl Service {
             if principal.kind == "peer" && call.arguments["target"] != "local" {
                 return Err("PERMISSION_DENIED".into());
             }
+            if principal.kind == "mcp" {
+                Self::token_grant(&mut s, &principal, &call.arguments["target"])?;
+            }
             let decision = Self::peer_decision(&s, &principal, &scope);
             if decision == policy::Decision::Deny {
                 return Err("PERMISSION_DENIED".into());
@@ -341,8 +345,10 @@ impl Service {
                 .values()
                 .find(|g| {
                     g.principal.id == principal.id
+                        && g.principal.kind == principal.kind
                         && g.scopes.contains(&scope)
-                        && call.arguments["target"] == g.target
+                        && g.covers_target(&call.arguments["target"])
+                        && Self::grant_live(&s, g)
                 })
                 .map(|g| g.id.clone());
             if grant.is_none() {
@@ -389,8 +395,10 @@ impl Service {
                         .values()
                         .find(|g| {
                             g.principal.id == principal.id
+                                && g.principal.kind == principal.kind
                                 && g.scopes.contains(&scope)
-                                && call.arguments["target"] == g.target
+                                && g.covers_target(&call.arguments["target"])
+                                && Self::grant_live(&s, g)
                         })
                         .map(|g| g.id.clone())
                 })

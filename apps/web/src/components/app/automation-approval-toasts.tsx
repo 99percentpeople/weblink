@@ -1,7 +1,6 @@
 import { createEffect, onCleanup } from "solid-js";
 import { toast } from "solid-sonner";
 import { useAppState } from "@/libs/state/app-state-context";
-import { useAppDialogs } from "@/libs/state/app-dialogs-context";
 import { requestClientInfoDialog } from "@/components/dialogs/client-info-dialog-events";
 import { scopeLabel } from "@/libs/i18n/automation";
 import { t } from "@/i18n";
@@ -9,10 +8,13 @@ import { t } from "@/i18n";
 /** A notification only opens the authoritative review UI; it never grants access. */
 export function AutomationApprovalToasts() {
   const { automation } = useAppState();
-  const dialogs = useAppDialogs();
   const visible = new Map<string, string | number>();
   createEffect(() => {
-    const pending = automation?.snapshot().pending ?? [];
+    const pending = (
+      automation?.snapshot().pending ?? []
+    ).filter(
+      (request) => request.principal.kind === "peer",
+    );
     const ids = new Set(
       pending.map((request) => request.id),
     );
@@ -52,8 +54,6 @@ export function AutomationApprovalToasts() {
                     peerId,
                     "settings",
                   );
-              } else if (current.principal.kind === "mcp") {
-                void dialogs.openSettings("automation");
               }
             },
           },

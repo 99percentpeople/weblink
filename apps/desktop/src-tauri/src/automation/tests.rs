@@ -12,9 +12,6 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
     let (sent, mut events) = tokio::sync::mpsc::unbounded_channel::<Value>();
     {
         let mut s = service.state.lock().unwrap();
-        let mut g = grant(&p);
-        g.scopes = vec!["screen.read".into()];
-        s.grants.insert(g.id.clone(), g);
         s.channel = Some(Channel::new(move |body| {
             let tauri::ipc::InvokeResponseBody::Json(body) = body else {
                 panic!("expected JSON")
@@ -121,7 +118,7 @@ fn grant(p: &Principal) -> Grant {
 }
 #[tokio::test]
 async fn duplicate_requests_cannot_clear_pending_approval_or_executing_ticket() {
-    let (service, p) = fixture();
+    let (service, p) = peer_fixture();
     let first = tokio::spawn(service.clone().invoke(p.clone(), "same".into(), call()));
     until(|| service.state.lock().unwrap().pending.contains_key("same")).await;
     assert_eq!(
@@ -164,7 +161,7 @@ fn stale_cleanup_never_removes_a_reused_id() {
 }
 #[tokio::test]
 async fn cancelling_between_approval_and_dispatch_cannot_resume_using_a_new_grant() {
-    let (service, p) = fixture();
+    let (service, p) = peer_fixture();
     let first = tokio::spawn(service.clone().invoke(p.clone(), "request".into(), call()));
     until(|| {
         service
@@ -188,7 +185,7 @@ async fn cancelling_between_approval_and_dispatch_cannot_resume_using_a_new_gran
 }
 #[tokio::test]
 async fn revocation_and_dropped_invocations_immediately_cancel_ui_work() {
-    let (service, p) = fixture();
+    let (service, p) = peer_fixture();
     let events = Arc::new(Mutex::new(Vec::<Value>::new()));
     let sent = events.clone();
     {
@@ -248,7 +245,7 @@ async fn revocation_and_dropped_invocations_immediately_cancel_ui_work() {
     assert!(service.state.lock().unwrap().tickets.is_empty());
     assert!(service.state.lock().unwrap().requests.is_empty());
 }
-fn fixture() -> (Shared, Principal) {
+pub(super) fn fixture() -> (Shared, Principal) {
     let service = Arc::new(Service::default());
     let p = Principal {
         id: "client".into(),
@@ -281,6 +278,17 @@ fn fixture() -> (Shared, Principal) {
     }
     (service, p)
 }
+fn peer_fixture() -> (Shared, Principal) {
+    let (service, mut principal) = fixture();
+    principal.kind = "peer".into();
+    service
+        .state
+        .lock()
+        .unwrap()
+        .peers
+        .insert(principal.id.clone(), principal.clone());
+    (service, principal)
+}
 async fn until(test: impl Fn() -> bool) {
     tokio::time::timeout(Duration::from_secs(3), async {
         while !test() {
@@ -292,7 +300,7 @@ async fn until(test: impl Fn() -> bool) {
 }
 #[tokio::test]
 async fn grants_are_bound_to_target_and_revocation_drops_tickets() {
-    let (service, p) = fixture();
+    let (service, p) = peer_fixture();
     service.state.lock().unwrap().grants.insert(
         "remote".into(),
         Grant {

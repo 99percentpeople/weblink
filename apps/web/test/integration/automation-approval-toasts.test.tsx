@@ -28,7 +28,6 @@ const fixture = vi.hoisted(() => ({
     ) => options.id,
   ),
   dismiss: vi.fn(),
-  openSettings: vi.fn(),
   principalPeerId: vi.fn(),
 }));
 vi.mock("solid-sonner", () => ({
@@ -45,11 +44,6 @@ vi.mock("@/libs/state/app-state-context", () => ({
       }),
       principalPeerId: fixture.principalPeerId,
     },
-  }),
-}));
-vi.mock("@/libs/state/app-dialogs-context", () => ({
-  useAppDialogs: () => ({
-    openSettings: fixture.openSettings,
   }),
 }));
 
@@ -90,7 +84,7 @@ afterEach(() => {
     openPeer,
   );
 });
-it("routes peer requests to the verified device settings and local MCP requests to automation", () => {
+it("routes peer requests to verified device settings without prompting local MCP clients", () => {
   render(() => <AutomationApprovalToasts />);
   setPending([request()]);
   review()();
@@ -100,12 +94,10 @@ it("routes peer requests to the verified device settings and local MCP requests 
   expect(
     (openPeer.mock.calls[0][0] as CustomEvent).detail,
   ).toEqual({ clientId: "paired-device", tab: "settings" });
-  expect(fixture.openSettings).not.toHaveBeenCalled();
   setPending([request("mcp", "local")]);
-  review()();
-  expect(fixture.openSettings).toHaveBeenCalledOnce();
-  expect(fixture.openSettings).toHaveBeenCalledWith(
-    "automation",
+  expect(fixture.notify).toHaveBeenCalledOnce();
+  expect(fixture.dismiss).toHaveBeenCalledWith(
+    "automation-approval:request",
   );
 });
 it("deduplicates snapshots and dismisses resolved requests and notifications on unmount", () => {
@@ -118,7 +110,7 @@ it("deduplicates snapshots and dismisses resolved requests and notifications on 
   expect(fixture.dismiss).toHaveBeenCalledWith(
     "automation-approval:request",
   );
-  setPending([request("mcp", "next")]);
+  setPending([request("peer", "next")]);
   view.unmount();
   expect(fixture.dismiss).toHaveBeenCalledWith(
     "automation-approval:next",
@@ -136,5 +128,4 @@ it("ignores stale, expired and disconnected peer actions without falling back to
   fixture.principalPeerId.mockReturnValue(undefined);
   review()();
   expect(openPeer).not.toHaveBeenCalled();
-  expect(fixture.openSettings).not.toHaveBeenCalled();
 });
