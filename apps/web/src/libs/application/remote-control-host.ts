@@ -293,10 +293,21 @@ export class RemoteControlHost {
         (!clientId || this.exposes(clientId)),
     };
   }
-  async context(peerGeneration: string, clientId: string) {
+  async context(
+    peerGeneration: string,
+    clientId: string,
+    connectionGeneration?: string,
+  ) {
     await this.ready;
     return this.owner && this.exposes(clientId)
-      ? { ownerId: this.owner, peerGeneration, clientId }
+      ? {
+          ownerId: this.owner,
+          peerGeneration,
+          clientId,
+          ...(connectionGeneration
+            ? { connectionGeneration }
+            : {}),
+        }
       : undefined;
   }
   async approve(

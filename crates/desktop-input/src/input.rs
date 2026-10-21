@@ -177,6 +177,8 @@ pub enum Event {
     },
     /// Committed text, not a parallel copy of physical key events. At most 64 UTF-16 units.
     Text(String),
+    /// Native caller cleanup only; never accepted from the remote wire protocol.
+    ReleaseInputs(Vec<Held>),
     ReleaseAll,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

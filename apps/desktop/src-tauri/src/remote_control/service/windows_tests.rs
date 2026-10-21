@@ -87,6 +87,7 @@ fn browser_pointer_attended() {
         .attach(
             capture.clone(),
             Context {
+                connection_generation: None,
                 owner_id: owner.clone(),
                 peer_generation: "probe-peer".into(),
                 client_id: "browser-test".into(),

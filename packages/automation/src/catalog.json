@@ -175,7 +175,7 @@
   },
   {
     "name": "control.acquire",
-    "description": "Acquire exclusive control of a live native monitor stream. Returns its sourceId, physical bounds and geometryRevision for pointer operations.",
+    "description": "Acquire control of a live native monitor stream. Reuses the same verified device's existing manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -229,7 +229,7 @@
   },
   {
     "name": "control.release",
-    "description": "Release this caller's exclusive input control.",
+    "description": "Release this caller's input lease and held inputs. A reused manual control grant and its stream remain active.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,

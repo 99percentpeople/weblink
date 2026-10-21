@@ -493,6 +493,8 @@ export interface NativeScreenPreview {
 export interface NativeControlContext {
   ownerId: string;
   peerGeneration: string;
+  /** Shared verified connection lifetime, independent of media replacements. */
+  connectionGeneration?: string;
   clientId: string;
   sourceId: string;
 }

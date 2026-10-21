@@ -425,6 +425,7 @@ impl Service {
         if let Signal::Grant { grant_id, .. } = &signal {
             let binding = h.peers.get(&media).ok_or("Media ended")?.binding.clone();
             h.active = Some(Active {
+                reuse: None,
                 kind: ControllerKind::Remote,
                 gamepad_feedback: Default::default(),
                 sequencer: Sequencer::new(
@@ -461,6 +462,14 @@ impl Service {
         media: String,
     ) -> Result<Arc<dyn Port>, String> {
         let o = self.owner(&context.owner_id)?;
+        if context
+            .connection_generation
+            .as_ref()
+            .is_some_and(|s| !protocol::valid_id(s))
+        {
+            return Err("Invalid local control connection".into());
+        }
+        let connection_generation = context.connection_generation.clone();
         if ![
             &context.peer_generation,
             &context.client_id,
@@ -474,7 +483,7 @@ impl Service {
         }
         let target = super::binding::resolve(&capture, &o.id, context, session, media)?;
         let mut h = o.host.lock().unwrap_or_else(|e| e.into_inner());
-        h.register(capture, target)
+        h.register(capture, target, connection_generation)
             .map(|endpoint| endpoint as Arc<dyn Port>)
     }
 }

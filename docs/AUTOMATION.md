@@ -152,6 +152,19 @@ policy with no expiry. It is separate from MCP tokens and automation scope grant
 Native control snapshots identify whether the active grant came from remote
 control or automation. Device remote-control policy applies only to remote-control
 grants; automation grants retain their own scope checks and the shared local stop.
+When the same verified device already controls the requested monitor,
+`control.acquire` borrows that manual grant instead of replacing it and returns
+`reused: true`. Both the device ID and shared connection generation must match,
+as must the capture, source and geometry. Automation permissions are still checked
+independently. Local MCP token identities cannot borrow another device's grant.
+The native snapshot continues to report the manual controller; its media and
+input channels remain open. Repeated acquisition is idempotent. Borrowed leases
+have separate IDs, held-input ownership and optional window confinement.
+Release, cancellation and window-focus failure clear only the borrowed lease and
+its held inputs. A human's held modifiers/buttons block automated input rather
+than becoming part of it. Manual input pauses while an automated gesture holds
+keys/buttons. Native interruption, grant revocation, media teardown and connection
+replacement invalidate the borrowed lease; stale cleanup cannot release a new one.
 The policy remains indexed by client ID, but is effective only after the peer
 proves its paired device key. Failed device verification resets it to deny.
 Automatic pairing-key repair/renewal preserves saved permissions. First pairing

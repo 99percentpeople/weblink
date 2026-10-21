@@ -62,6 +62,26 @@ function setup(
       receive?.(status),
   };
 }
+it("carries shared connection identity separately from the media control generation", async () => {
+  const { host } = setup();
+  host.start();
+  await flush();
+  expect(
+    await host.context("media-1", "client", "connection-1"),
+  ).toEqual({
+    ownerId: "owner-1",
+    peerGeneration: "media-1",
+    clientId: "client",
+    connectionGeneration: "connection-1",
+  });
+  expect(
+    await host.context("media-2", "client", "connection-2"),
+  ).toMatchObject({
+    peerGeneration: "media-2",
+    connectionGeneration: "connection-2",
+  });
+  host.close();
+});
 it.each([false, true])(
   "keeps automation authority independent of device remote-control policy (allow list: %s)",
   async (whitelistOnly) => {

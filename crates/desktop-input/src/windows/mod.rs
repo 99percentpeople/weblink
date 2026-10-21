@@ -87,6 +87,7 @@ impl Worker {
         let exclusive = Exclusive;
         let queue = Arc::new(Mailbox::default());
         let status = Arc::new(Mutex::new(Status {
+            held: vec![],
             window_bound: false,
             devices: Default::default(),
             input_suspended: false,
@@ -108,6 +109,7 @@ impl Worker {
             // Submission counters do not change host authorization state.
             let mut previous = current.clone();
             previous.submitted = next.submitted;
+            previous.held = next.held.clone();
             let notify = previous != next;
             *current = next;
             drop(current);

@@ -18,6 +18,7 @@ use weblink_desktop_input::{
     wire::{self, Sequencer},
 };
 pub(super) struct Peer {
+    pub(super) connection_generation: Option<String>,
     pub(super) binding: Binding,
     pub(super) endpoint: Arc<Endpoint>,
     pub(super) capture: Arc<dyn GeometrySource>,
@@ -50,11 +51,19 @@ pub(super) struct Consent {
     pub(super) requested: Instant,
 }
 pub(super) struct Active {
+    pub(super) reuse: Option<AutomationReuse>,
     pub(super) kind: ControllerKind,
     pub(super) grant: Grant,
     pub(super) sequencer: Sequencer,
     pub(super) gamepad_feedback:
         HashMap<u8, (String, weblink_desktop_input::gamepad::Rumble, Instant)>,
+}
+pub(super) struct AutomationReuse {
+    pub(super) id: String,
+    pub(super) principal: String,
+    pub(super) generation: String,
+    pub(super) held: Vec<weblink_desktop_input::input::Held>,
+    pub(super) window: Option<weblink_desktop_input::window::BoundWindow>,
 }
 pub(super) struct Host {
     pub(super) wake: Option<std::thread::Thread>,
@@ -72,6 +81,7 @@ impl Host {
         &mut self,
         capture: Arc<dyn GeometrySource>,
         target: TrustedTarget,
+        connection_generation: Option<String>,
     ) -> Result<Arc<Endpoint>, String> {
         let display = target.geometry.display;
         let binding = target.binding.clone();
@@ -91,6 +101,7 @@ impl Host {
         self.peers.insert(
             media,
             Peer {
+                connection_generation,
                 display,
                 cursor_visibility: capture.cursor_visibility_supported(&binding),
                 cursor_visible: true,
@@ -164,6 +175,10 @@ impl Host {
     fn synchronize_input(&mut self) {
         if !self.worker.status().input_suspended {
             return;
+        }
+        // An interrupted native input epoch must never revive a borrowed lease.
+        if let Some(active) = self.active.as_mut() {
+            active.reuse = None;
         }
         if let Some(active) = self.active.as_mut().filter(|a| a.sequencer.active()) {
             self.text_focus.cancel();
@@ -438,6 +453,15 @@ impl Host {
                 self.cursor.cancel();
             }
             for event in events {
+                // A held automation gesture owns its keys/buttons until release.
+                // Manual reset still releases everything through the shared engine.
+                if let Some(reuse) = active.reuse.as_mut() {
+                    if matches!(event, weblink_desktop_input::input::Event::ReleaseAll) {
+                        reuse.held.clear();
+                    } else if !reuse.held.is_empty() {
+                        continue;
+                    }
+                }
                 if self.worker.input(active.grant.clone(), event).is_err() {
                     peer.endpoint.closed();
                     return;

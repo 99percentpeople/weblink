@@ -74,10 +74,15 @@ impl input_runner::Sink for NativeSink {
         control.automation_input(&self.principal, &self.lease, events)
     }
     fn abort(&self) {
-        let _s = self.service.state.lock().unwrap_or_else(|e| e.into_inner());
-        self.app
-            .state::<crate::remote_control::Shared>()
-            .automation_revoke_lease(&self.principal, &self.lease);
+        let mut state = self.service.state.lock().unwrap_or_else(|e| e.into_inner());
+        let control = self.app.state::<crate::remote_control::Shared>();
+        control.automation_revoke_lease(&self.principal, &self.lease);
+        // This invocation ended its own lease; it is not an external emergency stop.
+        if !control.automation_active(&self.principal) {
+            state
+                .input_owners
+                .retain(|principal| principal != &self.principal);
+        }
         self.service
             .input_holds
             .lock()

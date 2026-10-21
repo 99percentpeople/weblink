@@ -58,6 +58,15 @@ pub trait Session: Send {
     fn revoke(&self) -> Result<(), Error>;
     /// Success means queued; flush observes completed native submissions.
     fn input(&self, grant: Grant, event: Event) -> Result<(), Error>;
+    /// Check a temporary caller-specific window guard on the native input thread.
+    fn input_scoped(
+        &self,
+        _grant: Grant,
+        _event: Event,
+        _window: Option<crate::window::BoundWindow>,
+    ) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
     fn flush(&self) -> Result<Status, Error>;
     fn status(&self) -> Status;
     /// Close the queue, release held inputs and join the native thread. Idempotent;

@@ -10,6 +10,7 @@ use weblink_desktop_input::{
     protocol::Target,
     session::Session,
 };
+mod automation_reuse;
 
 #[derive(Debug, PartialEq)]
 enum Observation {
@@ -198,6 +199,18 @@ impl Session for TestSession {
             .lock()
             .unwrap()
             .input(&grant, event, Instant::now())
+    }
+    fn input_scoped(
+        &self,
+        grant: Grant,
+        event: Event,
+        window: Option<weblink_desktop_input::window::BoundWindow>,
+    ) -> Result<(), Error> {
+        let now = Instant::now();
+        self.engine
+            .lock()
+            .unwrap()
+            .queued_input_scoped(&grant, event, now, now, window)
     }
     fn flush(&self) -> Result<Status, Error> {
         Ok(self.status())
@@ -491,7 +504,7 @@ impl Rig {
             .host
             .lock()
             .unwrap()
-            .register(source.clone(), target(&owner, "capture", "media"))
+            .register(source.clone(), target(&owner, "capture", "media"), None)
             .unwrap();
         let sender = Arc::new(TestSender {
             state: state.clone(),
@@ -555,6 +568,7 @@ impl Rig {
         host.acquire_automation(
             self.source.clone(),
             target(&self.owner, "capture", &uuid::Uuid::new_v4().to_string()),
+            false,
         )
         .unwrap();
         owner.publish(host.snapshot());
@@ -1248,6 +1262,7 @@ fn stopping_capture_invalidates_channels_and_releases_input_but_keeps_other_sour
         .register(
             rig.source.clone(),
             target(&rig.owner, "other-capture", "other-media"),
+            None,
         )
         .unwrap();
     rig.service.stop_capture("capture");
@@ -1311,6 +1326,7 @@ fn viewers_share_one_capture_subscription_until_the_last_peer_leaves() {
     host.register(
         rig.source.clone(),
         target(&rig.owner, "capture", "other-viewer"),
+        None,
     )
     .unwrap();
     assert_eq!(rig.source.2.lock().unwrap().len(), 1);
@@ -1423,7 +1439,7 @@ fn choosing_a_concurrent_request_grants_one_peer_and_sends_busy_to_the_other() {
         .host
         .lock()
         .unwrap()
-        .register(rig.source.clone(), second)
+        .register(rig.source.clone(), second, None)
         .unwrap();
     let sender = Arc::new(TestSender {
         state: rig.state.clone(),

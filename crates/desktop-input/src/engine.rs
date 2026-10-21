@@ -131,6 +131,17 @@ impl<D: Device> InputState<D> {
             .map_or(Ok(()), |window| window.check(point))
     }
     fn apply(&mut self, grant: &Grant, event: Event, now: Instant) -> Result<(), Error> {
+        if let Event::ReleaseInputs(inputs) = event {
+            for held in inputs.into_iter().rev() {
+                if self.held.contains(&held) {
+                    if !self.release_action(held.up()) {
+                        return Err(Error::Release);
+                    }
+                    self.held.retain(|input| *input != held);
+                }
+            }
+            return Ok(());
+        }
         if self.window.is_some()
             && matches!(
                 event,
@@ -296,6 +307,7 @@ impl<D: Device> InputState<D> {
                 self.submitted += 1;
                 return Ok(());
             }
+            Event::ReleaseInputs(_) => unreachable!("handled above"),
             Event::ReleaseAll => {
                 return if self.release_all() {
                     Ok(())
@@ -354,6 +366,7 @@ impl<D: Device> Backend for InputState<D> {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Status {
+    pub held: Vec<Held>,
     pub window_bound: bool,
     pub devices: devices::Snapshot,
     pub input_suspended: bool,
@@ -530,6 +543,28 @@ impl<D: Device> Engine<D> {
         queued: Instant,
         now: Instant,
     ) -> Result<(), Error> {
+        self.queued_input_inner(grant, event, queued, now, None, false)
+    }
+    /// A borrowed caller's window guard applies to this submission only.
+    pub fn queued_input_scoped(
+        &mut self,
+        grant: &Grant,
+        event: Event,
+        queued: Instant,
+        now: Instant,
+        window: Option<crate::window::BoundWindow>,
+    ) -> Result<(), Error> {
+        self.queued_input_inner(grant, event, queued, now, window, true)
+    }
+    fn queued_input_inner(
+        &mut self,
+        grant: &Grant,
+        event: Event,
+        queued: Instant,
+        now: Instant,
+        window: Option<crate::window::BoundWindow>,
+        scoped: bool,
+    ) -> Result<(), Error> {
         if !self.authority.permits(&grant.binding, &grant.id, now) {
             return Err(Error::Unauthorized);
         }
@@ -537,15 +572,23 @@ impl<D: Device> Engine<D> {
             .checked_duration_since(queued)
             .is_none_or(|age| age > MAX_INPUT_AGE)
         {
-            self.interrupt();
+            if !scoped {
+                self.interrupt();
+            }
             return Err(Error::Stale);
         }
-        if self.authority.backend_mut().interrupted && !matches!(event, Event::ReleaseAll) {
+        if self.authority.backend_mut().interrupted
+            && !matches!(event, Event::ReleaseAll | Event::ReleaseInputs(_))
+        {
             return Err(Error::Unauthorized);
         }
         let reset = matches!(event, Event::ReleaseAll);
         let gamepad = matches!(event, Event::Gamepad(_));
+        let previous = window.map(|window| self.authority.backend_mut().window.replace(window));
         let result = self.authority.backend_mut().apply(grant, event, now);
+        if let Some(previous) = previous {
+            self.authority.backend_mut().window = previous;
+        }
         if reset && result.is_ok() {
             self.authority.backend_mut().interrupted = false;
         }
@@ -554,7 +597,12 @@ impl<D: Device> Engine<D> {
                 error,
                 Error::WindowUnavailable | Error::WindowFocusLost | Error::WindowPointOutside
             ) {
-                self.interrupt();
+                if !scoped {
+                    self.interrupt();
+                }
+                return Err(error);
+            }
+            if scoped && error == Error::Stale {
                 return Err(error);
             }
             if error != Error::Unavailable || !gamepad {
@@ -609,6 +657,7 @@ impl<D: Device> Engine<D> {
         let pending_consents = self.authority.pending_consents();
         let state = self.authority.backend_mut();
         Status {
+            held: state.held.clone(),
             window_bound: state.window.is_some(),
             devices: state.device.snapshot(),
             input_suspended: state.interrupted,

@@ -201,6 +201,17 @@ async function setup(expectControl = true) {
   expect(offer.control).toBe(
     expectControl ? true : undefined,
   );
+  if (expectControl) {
+    const generation =
+      service.capabilities.generation(session);
+    expect(generation).toEqual(expect.any(String));
+    expect(
+      publication.offer.mock.calls[0][4],
+    ).toMatchObject({
+      clientId: "remote",
+      connectionGeneration: generation,
+    });
+  }
   channel.receive({
     type: "answer",
     id: offer.id,

@@ -59,6 +59,17 @@ impl crate::session::Session for Worker {
     fn input(&self, grant: Grant, event: Event) -> Result<(), Error> {
         Worker::input(self, grant, event)
     }
+    fn input_scoped(
+        &self,
+        grant: Grant,
+        event: Event,
+        window: Option<crate::window::BoundWindow>,
+    ) -> Result<(), Error> {
+        let queued = Instant::now();
+        self.call(move |engine| {
+            engine.queued_input_scoped(&grant, event, queued, Instant::now(), window)
+        })?
+    }
     fn flush(&self) -> Result<Status, Error> {
         Worker::flush(self)
     }

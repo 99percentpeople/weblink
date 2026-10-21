@@ -110,6 +110,7 @@ pub async fn action(
         }
         let call = t.call.clone();
         let principal = t.principal.id.clone();
+        let reuse_remote = t.principal.kind == "peer";
         let generation = t
             .principal
             .generation
@@ -160,6 +161,7 @@ pub async fn action(
                     capture.inner().clone(),
                     &principal,
                     &generation,
+                    reuse_remote,
                     session.clone(),
                     source.clone(),
                 )?;

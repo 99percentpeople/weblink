@@ -497,6 +497,7 @@ export class SessionService {
         this.remoteControl.context(
           controlGeneration,
           client.clientId,
+          this.capabilities.generation(session),
         ),
       loadIceServers: this.loadIceServers,
       relayOnly: () => appState.options.relayOnly,

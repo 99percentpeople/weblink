@@ -17,6 +17,8 @@ pub use service::Service;
 pub struct Context {
     pub owner_id: String,
     pub peer_generation: String,
+    #[serde(default)]
+    pub connection_generation: Option<String>,
     pub client_id: String,
     pub source_id: String,
 }

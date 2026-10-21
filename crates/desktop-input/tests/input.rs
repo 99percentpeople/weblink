@@ -143,6 +143,76 @@ fn setup() -> (Engine<Fake>, Fake, Grant, Instant) {
     (engine, fake, grant, now)
 }
 #[test]
+fn selective_cleanup_releases_only_recorded_inputs_without_moving_or_ending_the_grant() {
+    let (mut engine, fake, grant, now) = setup();
+    let first = ScanCode::new(30, false).unwrap();
+    let second = ScanCode::new(0x2a, false).unwrap();
+    for key in [first, second] {
+        engine
+            .input(&grant, Event::Key { key, down: true }, now)
+            .unwrap();
+    }
+    let before = fake.0.borrow().actions.len();
+    engine
+        .input(
+            &grant,
+            Event::ReleaseInputs(vec![Held::Key(first), Held::Button(Button::Right)]),
+            now,
+        )
+        .unwrap();
+    assert_eq!(
+        &fake.0.borrow().actions[before..],
+        &[Action::Key {
+            key: first,
+            down: false
+        }]
+    );
+    assert_eq!(engine.status().held, vec![Held::Key(second)]);
+    assert_eq!(engine.status().grant.as_ref(), Some(&grant));
+    assert!(!engine.status().input_suspended);
+    let mut foreign = grant.clone();
+    foreign.id = "old-grant".into();
+    assert_eq!(
+        engine.input(&foreign, Event::ReleaseInputs(vec![Held::Key(second)]), now),
+        Err(Error::Unauthorized)
+    );
+    assert_eq!(engine.status().held, vec![Held::Key(second)]);
+}
+
+#[test]
+fn scoped_window_failure_or_stale_input_does_not_interrupt_the_manual_grant() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut engine, _, grant, now) = setup();
+    let held = ScanCode::new(0x2a, false).unwrap();
+    engine
+        .input(
+            &grant,
+            Event::Key {
+                key: held,
+                down: true,
+            },
+            now,
+        )
+        .unwrap();
+    let window = WindowCheck::new();
+    window.focused.store(false, SeqCst);
+    let event = || Event::Move(Position { x: 0.5, y: 0.5 });
+    assert_eq!(
+        engine.queued_input_scoped(&grant, event(), now, now, Some(window)),
+        Err(Error::WindowFocusLost)
+    );
+    assert!(!engine.status().window_bound);
+    let later = now + Duration::from_millis(101);
+    assert_eq!(
+        engine.queued_input_scoped(&grant, event(), now, later, None),
+        Err(Error::Stale)
+    );
+    assert_eq!(engine.status().held, vec![Held::Key(held)]);
+    assert!(!engine.status().input_suspended);
+    assert_eq!(engine.status().grant.as_ref(), Some(&grant));
+    engine.input(&grant, event(), later).unwrap();
+}
+#[test]
 fn trackpad_reads_the_current_system_cursor_and_never_replays_a_cached_position() {
     use weblink_desktop_input::trackpad;
     let (mut e, fake, grant, now) = setup();
