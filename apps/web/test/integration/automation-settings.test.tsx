@@ -194,7 +194,7 @@ it.each([false, true])(
     expect(fixture.configure).not.toHaveBeenCalled();
   },
 );
-it("localizes command and call states while preserving diagnostic codes", () => {
+it("shows recent calls and diagnostic codes without a duplicate command task list", () => {
   fixture.jobs = [
     "running",
     "completed",
@@ -219,14 +219,8 @@ it("localizes command and call states while preserving diagnostic codes", () => 
     }),
   );
   render(() => <AutomationSettings />);
-  for (const label of [
-    "automation.job_status.running",
-    "automation.job_status.completed (7)",
-    "automation.job_status.cancelled",
-    "automation.job_status.timed_out",
-    "future_status",
-  ])
-    expect(screen.getByText(label)).toBeVisible();
+  expect(screen.queryByText("automation.jobs")).toBeNull();
+  expect(screen.queryByText("job-running")).toBeNull();
   expect(
     screen.getByText(/automation.call_status.ok/),
   ).toBeVisible();

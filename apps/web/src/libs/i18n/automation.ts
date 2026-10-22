@@ -12,19 +12,6 @@ export const groupDescription = (group: PermissionGroup) =>
 export const scopeLabel = (scope: Scope) =>
   groupLabel(permissionGroup(scope));
 
-const jobStatusKeys = {
-  running: "automation.job_status.running",
-  completed: "automation.job_status.completed",
-  cancelled: "automation.job_status.cancelled",
-  timed_out: "automation.job_status.timed_out",
-} as const;
-
-export function jobStatusLabel(status: string): string {
-  return Object.hasOwn(jobStatusKeys, status)
-    ? t(jobStatusKeys[status as keyof typeof jobStatusKeys])
-    : status;
-}
-
 export function callStatusLabel(status: string): string {
   if (status === "ok")
     return t("automation.call_status.ok");

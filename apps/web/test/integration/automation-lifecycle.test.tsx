@@ -12,6 +12,7 @@ import {
   vi,
 } from "vitest";
 import { webcrypto } from "node:crypto";
+import { For } from "solid-js";
 import { createAutomation } from "@/libs/state/create-automation";
 import {
   appState,
@@ -124,6 +125,53 @@ const mount = () => {
   });
   return { runtime, ...view };
 };
+it("preserves call rows and text selection when unchanged native snapshots arrive", async () => {
+  let status = "ok";
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async () => ({
+      ...snapshot(),
+      audit: [
+        {
+          id: "call-1",
+          principal: "Peer",
+          at: 1700000000000,
+          tool: "control.text",
+          target: "local",
+          status,
+        },
+      ],
+    }),
+  );
+  let runtime!: ReturnType<typeof createAutomation>;
+  const view = render(() => {
+    runtime = createAutomation({} as AppStateContextProps);
+    return (
+      <For each={runtime.snapshot().audit}>
+        {(entry) => (
+          <span>
+            {entry.tool} · {entry.status}
+          </span>
+        )}
+      </For>
+    );
+  });
+  await waitFor(() => expect(runtime.ready()).toBe(true));
+  const row = view.getByText("control.text · ok");
+  const selection = document.getSelection()!;
+  const range = document.createRange();
+  range.selectNodeContents(row);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  await runtime.configure(true);
+  expect(view.getByText("control.text · ok")).toBe(row);
+  expect(selection.toString()).toBe("control.text · ok");
+  status = "PERMISSION_DENIED";
+  await runtime.configure(true);
+  expect(
+    view.getByText("control.text · PERMISSION_DENIED"),
+  ).toBe(row);
+  selection.removeAllRanges();
+});
 beforeEach(() => {
   fixture.generation = "connection-1";
   fixture.events = new EventTarget();

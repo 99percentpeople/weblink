@@ -9,10 +9,7 @@ import {
 import { SettingSwitch } from "./setting-controls";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
-import {
-  callStatusLabel,
-  jobStatusLabel,
-} from "@/libs/i18n/automation";
+import { callStatusLabel } from "@/libs/i18n/automation";
 import McpServerSettings from "./mcp-server-settings";
 import McpTokenSettings from "./mcp-token-settings";
 const Empty = (props: { message: string }) => (
@@ -134,30 +131,6 @@ export default function AutomationSettings() {
             >
               {(peer) => <SettingRow label={peer.name} />}
             </For>
-            <Show when={r().desktop}>
-              <SettingHeading>
-                {t("automation.jobs")}
-              </SettingHeading>
-              <For
-                each={r().snapshot().jobs}
-                fallback={
-                  <Empty
-                    message={t("automation.no_jobs")}
-                  />
-                }
-              >
-                {(job) => (
-                  <SettingRow label={<code>{job.id}</code>}>
-                    <span class="text-sm">
-                      {jobStatusLabel(job.status)}
-                      {job.exitCode !== null
-                        ? ` (${job.exitCode})`
-                        : ""}
-                    </span>
-                  </SettingRow>
-                )}
-              </For>
-            </Show>
           </Show>
           <SettingHeading>
             {t("automation.diagnostics")}

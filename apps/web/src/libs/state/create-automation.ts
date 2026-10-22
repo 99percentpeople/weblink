@@ -10,6 +10,7 @@ import {
   onMount,
   untrack,
 } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
   AutomationError,
   failure,
@@ -87,8 +88,10 @@ export function createAutomation(
 ) {
   const [enabled, setEnabled] = createSignal(false);
   const [revision, setRevision] = createSignal(0);
-  const [nativeState, setNativeState] =
-    createSignal<NativeSnapshot>(empty);
+  const [nativeState, updateNativeState] =
+    createStore<NativeSnapshot>(structuredClone(empty));
+  const setNativeState = (snapshot: NativeSnapshot) =>
+    updateNativeState(reconcile(snapshot, { key: "id" }));
   const [error, setError] = createSignal("");
   const [ready, setReady] = createSignal(false);
   const changed = () => setRevision((v) => v + 1);
@@ -799,7 +802,7 @@ export function createAutomation(
     snapshot: () => {
       revision();
       return native
-        ? nativeState()
+        ? nativeState
         : {
             ...empty,
             enabled: enabled(),
