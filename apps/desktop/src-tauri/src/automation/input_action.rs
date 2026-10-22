@@ -4,15 +4,18 @@ use tauri::Manager;
 use weblink_desktop_input::input::Event;
 
 /// Called under the automation authority lock by its existing lifecycle sampler.
-pub(super) fn expire_holds(app: &tauri::AppHandle, service: &Service, interrupted: bool) {
+pub(super) fn expire_holds(
+    control: &crate::remote_control::Service,
+    service: &Service,
+    interrupted: bool,
+) {
     if let Some((principal, lease)) = service
         .input_holds
         .lock()
         .unwrap()
         .expired(Instant::now(), interrupted)
     {
-        app.state::<crate::remote_control::Shared>()
-            .automation_revoke_lease(&principal, &lease);
+        control.automation_revoke_lease(&principal, &lease);
     }
 }
 struct NativeSink {

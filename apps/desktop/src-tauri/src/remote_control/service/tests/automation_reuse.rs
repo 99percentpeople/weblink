@@ -1,5 +1,17 @@
 use super::*;
-use weblink_desktop_input::input::{Held, Position};
+use weblink_desktop_input::input::{Button, Held, Position};
+
+pub(crate) fn with_bound_borrowed_input(test: impl FnOnce(&Service, &str, &dyn Fn(bool))) {
+    let (rig, _) = manual();
+    let lease = borrow(&rig);
+    let window = Arc::new(Window(AtomicBool::new(true)));
+    rig.service
+        .automation_bind_window("client", &lease, window.clone())
+        .unwrap();
+    test(&rig.service, &lease, &|focused| {
+        window.0.store(focused, Ordering::Release);
+    });
+}
 
 fn manual() -> (Rig, String) {
     let rig = Rig::new();
@@ -237,7 +249,14 @@ fn borrowed_window_binding_confines_only_automation_and_does_not_end_manual_inpu
     let owner = rig.service.owner(&rig.owner).unwrap();
     assert!(!owner.host.lock().unwrap().worker.status().window_bound);
     window.0.store(false, Ordering::Release);
-    assert!(!rig.service.automation_active("client"));
+    // The heartbeat uses this query to detect emergency revocation and pause
+    // all automatic permissions. A stale/blurred window only rejects this
+    // borrowed input scope; the underlying authority still exists.
+    assert!(rig.service.automation_active("client"));
+    assert_eq!(
+        rig.service.automation_lease("client"),
+        Err("WINDOW_FOCUS_LOST".into())
+    );
     assert_eq!(
         rig.service.automation_input(
             "client",
@@ -266,4 +285,154 @@ fn borrowed_window_binding_confines_only_automation_and_does_not_end_manual_inpu
         Some(grant)
     );
     assert!(!rig.endpoint.is_closed());
+}
+
+#[test]
+fn blurred_borrowed_window_is_retired_and_rebound_without_emergency_reauthorization() {
+    let (rig, grant) = manual();
+    let first = borrow(&rig);
+    let window = Arc::new(Window(AtomicBool::new(true)));
+    rig.service
+        .automation_bind_window("client", &first, window.clone())
+        .unwrap();
+    window.0.store(false, Ordering::Release);
+    rig.service.automation_sync(&["client".into()]);
+    assert!(rig.service.automation_active("client"));
+    assert_eq!(
+        rig.service.automation_take_window_interruption("other"),
+        None
+    );
+    assert_eq!(
+        rig.service.automation_take_window_interruption("client"),
+        Some(first.clone())
+    );
+    assert!(!rig.service.automation_active("client"));
+    let second = borrow(&rig);
+    assert_ne!(first, second);
+    rig.service
+        .automation_bind_window("client", &second, Arc::new(Window(AtomicBool::new(true))))
+        .unwrap();
+    rig.service
+        .automation_input("client", &second, vec![Event::Text("继续输入".into())])
+        .unwrap();
+    assert_eq!(
+        rig.service.status(&rig.owner).unwrap().grant_id,
+        Some(grant)
+    );
+    assert!(!rig.endpoint.is_closed());
+}
+
+#[test]
+fn borrowed_window_blur_releases_owned_keys_and_buttons_and_cannot_resume_on_refocus() {
+    for check_on_input in [false, true] {
+        let (rig, grant) = manual();
+        let lease = borrow(&rig);
+        let window = Arc::new(Window(AtomicBool::new(true)));
+        rig.service
+            .automation_bind_window("client", &lease, window.clone())
+            .unwrap();
+        let ctrl = ScanCode::new(0x1d, false).unwrap();
+        let human = ScanCode::new(0x2a, false).unwrap();
+        rig.service
+            .automation_input(
+                "client",
+                &lease,
+                vec![
+                    key(ctrl, true),
+                    Event::Button {
+                        button: Button::Left,
+                        down: true,
+                        position: Position { x: 0.5, y: 0.5 },
+                    },
+                ],
+            )
+            .unwrap();
+        let owner = rig.service.owner(&rig.owner).unwrap();
+        {
+            let host = owner.host.lock().unwrap();
+            host.worker
+                .input(
+                    host.active.as_ref().unwrap().grant.clone(),
+                    key(human, true),
+                )
+                .unwrap();
+        }
+        window.0.store(false, Ordering::Release);
+        if check_on_input {
+            assert_eq!(
+                rig.service.automation_lease("client"),
+                Err("WINDOW_FOCUS_LOST".into())
+            );
+        } else {
+            rig.tick();
+        }
+        assert_eq!(
+            owner.host.lock().unwrap().worker.status().held,
+            vec![Held::Key(human)]
+        );
+        let observations = rig.state.observations.lock().unwrap();
+        assert!(observations.contains(&Observation::Input(Action::Key {
+            key: ctrl,
+            down: false
+        })));
+        assert!(observations.contains(&Observation::Input(Action::Button {
+            button: Button::Left,
+            down: false
+        })));
+        drop(observations);
+        window.0.store(true, Ordering::Release);
+        assert_eq!(
+            rig.service
+                .automation_input("client", &lease, vec![Event::Text("stale".into())]),
+            Err("WINDOW_FOCUS_LOST".into())
+        );
+        // Reacquisition before the authority heartbeat also gets a fresh lease.
+        let replacement = borrow(&rig);
+        assert_ne!(lease, replacement);
+        rig.service.automation_revoke_lease("client", &lease);
+        assert!(rig.service.automation_matches("client", &replacement));
+        assert_eq!(
+            rig.service.automation_take_window_interruption("client"),
+            None
+        );
+        assert_eq!(
+            rig.service.status(&rig.owner).unwrap().grant_id,
+            Some(grant)
+        );
+        assert!(!rig.endpoint.is_closed());
+    }
+}
+
+#[test]
+fn idle_borrowed_window_monitor_releases_a_hold_without_more_input_or_heartbeats() {
+    let (rig, _) = manual();
+    let lease = borrow(&rig);
+    let window = Arc::new(Window(AtomicBool::new(true)));
+    rig.service
+        .automation_bind_window("client", &lease, window.clone())
+        .unwrap();
+    let ctrl = ScanCode::new(0x1d, false).unwrap();
+    rig.service
+        .automation_input("client", &lease, vec![key(ctrl, true)])
+        .unwrap();
+    window.0.store(false, Ordering::Release);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Key {
+            key: ctrl,
+            down: false,
+        }))
+    {
+        assert!(
+            Instant::now() < deadline,
+            "Idle monitor did not release Ctrl"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    window.0.store(true, Ordering::Release);
+    assert!(!rig.service.automation_matches("client", &lease));
 }

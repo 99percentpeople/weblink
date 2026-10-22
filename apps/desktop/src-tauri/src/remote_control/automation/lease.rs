@@ -11,6 +11,45 @@ use weblink_desktop_input::{
 
 impl Host {
     pub(in crate::remote_control) fn automation_grant(
+        &mut self,
+        principal: &str,
+        lease: Option<&str>,
+    ) -> Result<(&Grant, &str), String> {
+        self.automation_authority(principal, lease)?;
+        if let Some(error) = self.check_automation_window() {
+            return Err(input_error(error));
+        }
+        self.automation_authority(principal, lease)
+    }
+
+    /// Latch scope failure until the authority sampler consumes it. Keeping the
+    /// reason separate from revocation preserves permissions without reviving
+    /// this lease when focus returns. Only this borrower's held inputs are released.
+    pub(in crate::remote_control) fn check_automation_window(
+        &mut self,
+    ) -> Option<weblink_desktop_input::input::Error> {
+        let active = self.active.as_mut()?;
+        let reuse = active.reuse.as_mut()?;
+        if let Some(error) = reuse.window_error {
+            return Some(error);
+        }
+        let error = reuse.window.as_ref()?.check(None).err()?;
+        reuse.window_error = Some(error);
+        reuse.window = None;
+        let held = std::mem::take(&mut reuse.held);
+        if !held.is_empty() && self.worker.status().grant.as_ref() == Some(&active.grant) {
+            let _ = self
+                .worker
+                .input(active.grant.clone(), Event::ReleaseInputs(held));
+            let _ = self.worker.flush();
+        }
+        Some(error)
+    }
+
+    /// Permission lifetime is independent of a borrowed invocation's window scope.
+    /// Losing that window must reject input, not look like emergency revocation
+    /// to the automation heartbeat and suspend every permission group.
+    pub(in crate::remote_control) fn automation_authority(
         &self,
         principal: &str,
         lease: Option<&str>,
@@ -35,9 +74,6 @@ impl Host {
                         && peer.connection_generation.as_deref() == Some(reuse.generation.as_str())
                 })
                 .ok_or("CONTROL_REQUIRED")?;
-            if let Some(window) = &reuse.window {
-                window.check(None).map_err(input_error)?;
-            }
             reuse.id.as_str()
         };
         let status = self.worker.status();
@@ -99,13 +135,19 @@ impl Host {
                 {
                     return Err("BUSY".into());
                 }
-            } else {
+            }
+            if active
+                .reuse
+                .as_ref()
+                .is_none_or(|reuse| reuse.window_error.is_some())
+            {
                 self.active.as_mut().unwrap().reuse = Some(AutomationReuse {
                     id: uuid::Uuid::new_v4().to_string(),
                     principal: requested.client_id.clone(),
                     generation: requested.peer_generation.clone(),
                     held: vec![],
                     window: None,
+                    window_error: None,
                 });
             }
             return Ok(true);

@@ -10,6 +10,8 @@ mod service;
 mod text_focus;
 mod transport;
 pub use commands::*;
+#[cfg(test)]
+pub(crate) use service::tests::automation_reuse::with_bound_borrowed_input;
 pub use service::Service;
 
 #[derive(Clone, Deserialize)]

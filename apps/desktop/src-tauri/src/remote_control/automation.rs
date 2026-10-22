@@ -80,18 +80,22 @@ impl Service {
     }
     pub fn automation_lease(&self, principal: &str) -> Result<String, String> {
         let owner = self.automation_owner()?;
-        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
         Ok(host.automation_grant(principal, None)?.1.to_owned())
     }
     pub fn automation_matches(&self, principal: &str, lease: &str) -> bool {
         self.automation_lease(principal).as_deref() == Ok(lease)
     }
     pub fn automation_active(&self, principal: &str) -> bool {
-        self.automation_lease(principal).is_ok()
+        let Ok(owner) = self.automation_owner() else {
+            return false;
+        };
+        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        host.automation_authority(principal, None).is_ok()
     }
     pub fn automation_window_bound(&self, principal: &str, lease: &str) -> Result<bool, String> {
         let owner = self.automation_owner()?;
-        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
         host.automation_grant(principal, Some(lease))?;
         Ok(host
             .active
@@ -121,6 +125,9 @@ impl Service {
             window.activate().map_err(input_error)?;
             window.check(None).map_err(input_error)?;
             host.active.as_mut().unwrap().reuse.as_mut().unwrap().window = Some(window);
+            if let Some(wake) = &host.wake {
+                wake.unpark();
+            }
             Ok(())
         } else {
             host.worker.bind_window(grant, window).map_err(input_error)
@@ -210,8 +217,8 @@ impl Service {
         revision: &str,
     ) -> Result<Geometry, String> {
         let owner = self.automation_owner()?;
-        let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
-        let grant = host.automation_grant(principal, Some(lease))?.0;
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let grant = host.automation_grant(principal, Some(lease))?.0.clone();
         if !host.worker.renew(grant.clone()).map_err(input_error)? {
             return Err("CONTROL_REQUIRED".into());
         }
@@ -243,10 +250,20 @@ impl Service {
         };
         let host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
         for principal in principals {
-            if let Ok((grant, _)) = host.automation_grant(principal, None) {
+            if let Ok((grant, _)) = host.automation_authority(principal, None) {
                 let _ = host.worker.renew(grant.clone());
             }
         }
+    }
+    /// Consume a window-scope interruption while the automation authority lock
+    /// is held. Real revocation wins if the underlying manual grant also ended.
+    pub(crate) fn automation_take_window_interruption(&self, principal: &str) -> Option<String> {
+        let owner = self.automation_owner().ok()?;
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        host.automation_authority(principal, None).ok()?;
+        host.check_automation_window()?;
+        host.automation_authority(principal, None).ok()?;
+        Some(host.active.as_mut()?.reuse.take()?.id)
     }
     pub fn automation_release(&self, principal: &str) {
         self.automation_release_matching(principal, None);

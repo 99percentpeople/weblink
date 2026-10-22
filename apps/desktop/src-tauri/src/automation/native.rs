@@ -1,10 +1,23 @@
 use super::*;
 use tauri::Manager;
+#[cfg(test)]
+mod tests;
 pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
+    sync_input_control(service, &app.state::<crate::remote_control::Shared>());
+}
+fn sync_input_control(service: &Service, control: &crate::remote_control::Service) {
     service.expire();
     let mut s = service.state.lock().unwrap();
-    let control = app.state::<crate::remote_control::Shared>();
-    super::input_action::expire_holds(app, service, !s.pending.is_empty());
+    // Retire a failed invocation scope before detecting emergency revocation.
+    // The manual grant and every automation permission group remain intact.
+    s.input_owners.retain(|principal| {
+        let Some(lease) = control.automation_take_window_interruption(principal) else {
+            return true;
+        };
+        service.input_holds.lock().unwrap().clear(&lease);
+        false
+    });
+    super::input_action::expire_holds(control, service, !s.pending.is_empty());
     let ended: Vec<_> = s
         .input_owners
         .iter()

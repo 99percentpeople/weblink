@@ -10,7 +10,7 @@ use weblink_desktop_input::{
     protocol::Target,
     session::Session,
 };
-mod automation_reuse;
+pub(in crate::remote_control) mod automation_reuse;
 
 #[derive(Debug, PartialEq)]
 enum Observation {

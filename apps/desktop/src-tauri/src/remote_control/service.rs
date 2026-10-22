@@ -278,7 +278,7 @@ impl Service {
                     };
                     drop(owner);
                     // Channels, capture, pointer and backend status wake the owner.
-                    // Only pending consent / changed-cursor rate limiting need a
+                    // Consent, borrowed windows and cursor rate limiting need a
                     // deadline. Unknown backends retain their existing safety bound.
                     let wait = if notified {
                         wait
@@ -498,6 +498,6 @@ impl Drop for Service {
 #[path = "../../../../../crates/desktop-input/examples/support/mod.rs"]
 mod test_window;
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 #[cfg(all(test, windows))]
 mod windows_tests;

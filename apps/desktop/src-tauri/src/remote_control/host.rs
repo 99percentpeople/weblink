@@ -64,6 +64,7 @@ pub(super) struct AutomationReuse {
     pub(super) generation: String,
     pub(super) held: Vec<weblink_desktop_input::input::Held>,
     pub(super) window: Option<weblink_desktop_input::window::BoundWindow>,
+    pub(super) window_error: Option<weblink_desktop_input::input::Error>,
 }
 pub(super) struct Host {
     pub(super) wake: Option<std::thread::Thread>,
@@ -202,6 +203,7 @@ impl Host {
         self.pending
             .retain(|p| now.duration_since(p.requested) < Duration::from_secs(30));
         self.synchronize_input();
+        self.check_automation_window();
         if let Some(update) = self.text_focus.take() {
             let watch = update.watch;
             let status = self.worker.status();
@@ -317,6 +319,13 @@ impl Host {
         consent
             .into_iter()
             .chain(self.cursor.wait_duration(now))
+            .chain(
+                self.active
+                    .as_ref()
+                    .and_then(|active| active.reuse.as_ref())
+                    .filter(|reuse| reuse.window.is_some())
+                    .map(|_| Duration::from_millis(50)),
+            )
             .chain(
                 self.gamepad_feedback_active()
                     .then_some(Duration::from_millis(16)),
