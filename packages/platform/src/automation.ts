@@ -44,6 +44,7 @@ export interface NativeAutomation {
   open(
     onRequest: (request: NativeAutomationEvent) => void,
   ): Promise<string>;
+  /** Check the native page session; delayed renderer timers do not expire it. */
   heartbeat(epoch: string): Promise<void>;
   close(epoch: string): Promise<void>;
   configure(epoch: string, enabled: boolean): Promise<void>;

@@ -172,7 +172,6 @@ mod tests {
         };
         let mut s = State {
             epoch: "epoch".into(),
-            heartbeat: Some(Instant::now()),
             enabled: true,
             ..Default::default()
         };

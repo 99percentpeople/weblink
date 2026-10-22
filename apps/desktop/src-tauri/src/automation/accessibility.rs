@@ -183,7 +183,6 @@ mod tests {
         let mut s = State {
             enabled: true,
             epoch: "epoch".into(),
-            heartbeat: Some(Instant::now()),
             ..Default::default()
         };
         s.registry.clients.insert(

@@ -144,7 +144,9 @@ impl Service {
         }
     }
     pub(super) fn grant_live(s: &State, g: &Grant) -> bool {
-        g.expires_at.is_none_or(|at| at > now())
+        s.page.live()
+            && !s.emergency.pending()
+            && g.expires_at.is_none_or(|at| at > now())
             && Self::principal_active(s, &g.principal)
             && if g.principal.kind == "mcp" {
                 !s.policies_suspended
@@ -258,7 +260,6 @@ mod tests {
         let mut s = service.state.lock().unwrap();
         s.enabled = true;
         s.epoch = "epoch".into();
-        s.heartbeat = Some(Instant::now());
     }
     #[tokio::test]
     async fn restart_reuses_endpoint_and_credentials() {

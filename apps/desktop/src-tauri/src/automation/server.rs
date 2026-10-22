@@ -149,7 +149,6 @@ mod tests {
         {
             let mut s = service.state.lock().unwrap();
             s.epoch = "epoch".into();
-            s.heartbeat = Some(Instant::now());
         }
         service
     }

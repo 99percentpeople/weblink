@@ -69,7 +69,6 @@ mod tests {
             let mut s = service.state.lock().unwrap();
             s.epoch = "epoch".into();
             s.enabled = true;
-            s.heartbeat = Some(Instant::now());
             s.channel = Some(Channel::new(|_| Ok(())));
             s.peers.insert(principal.id.clone(), principal.clone());
         }

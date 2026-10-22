@@ -331,7 +331,6 @@ pub(super) fn fixture() -> (Shared, Principal) {
             .unwrap()
             .port();
         s.epoch = "epoch".into();
-        s.heartbeat = Some(Instant::now());
         s.channel = Some(Channel::new(|_| Ok(())));
         s.registry.clients.insert(
             p.id.clone(),
@@ -430,7 +429,7 @@ async fn grants_are_bound_to_target_and_revocation_drops_tickets() {
     service.shutdown();
 }
 #[tokio::test]
-async fn old_principal_and_expired_frontend_cannot_execute() {
+async fn old_principal_and_closed_page_cannot_execute() {
     let (service, mut p) = fixture();
     p.id = "forged".into();
     assert_eq!(
@@ -448,7 +447,8 @@ async fn old_principal_and_expired_frontend_cannot_execute() {
             .await["error"]["code"],
         "SESSION_CLOSED"
     );
-    service.state.lock().unwrap().heartbeat = Some(Instant::now() - Duration::from_secs(21));
+    service.close_page();
+    assert!(service.authenticate("test-token").is_none());
     service.expire();
     assert!(service.authenticate("test-token").is_none());
     assert!(!service.state.lock().unwrap().enabled);

@@ -644,6 +644,15 @@ impl<D: Device> Engine<D> {
     pub fn revoke(&mut self) {
         self.authority.revoke();
     }
+    /// Report whether this cleanup, rather than an earlier external revoke,
+    /// ended the exact grant. The comparison and release share the actor turn.
+    pub fn revoke_matching(&mut self, grant: &Grant) -> bool {
+        if self.authority.grant() != Some(grant) {
+            return false;
+        }
+        self.revoke();
+        true
+    }
     pub fn fail(&mut self, error: Error) {
         self.authority.backend_mut().failure = Some(error);
         self.shutdown();

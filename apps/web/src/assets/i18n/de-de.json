@@ -421,7 +421,7 @@
       },
       "emergency_shortcut": {
         "title": "Tastenkombination für den Notstopp am Host",
-        "description": "Nur Windows-Desktop. Während dieser Computer ferngesteuert wird, stoppt diese Verknüpfung ihn, selbst wenn die App im Hintergrund läuft. Die Schlüssel werden nicht reserviert oder abgefangen; Möglicherweise reagieren auch andere Apps.",
+        "description": "Nur unter Windows. Stoppt Fernsteuerung und Automatisierung, bricht Aufgaben ab und pausiert automatische Berechtigungen, auch im Hintergrund oder ohne aktive Steuerung. Die Tasten werden nicht reserviert oder abgefangen; andere Apps können ebenfalls reagieren.",
         "failed": "Der Notfall-Shortcut-Listener konnte nicht aktualisiert werden. Die vorherige Einstellung wurde beibehalten. Bitte versuchen Sie es erneut."
       },
       "gamepad_heading": "Gamepad",
@@ -1544,7 +1544,6 @@
     "desktop": "Stellt einen MCP-Dienst bereit und nimmt Automatisierungsaufrufe autorisierter Geräte an.",
     "browser": "Desktops über WebMCP steuern. Das Zielgerät verwaltet die Berechtigungen.",
     "unsupported": "Dieser Browser unterstützt WebMCP nicht. Die Funktion kann nicht aktiviert werden.",
-    "stop": "Alle Automatisierungen stoppen",
     "export": "Diagnose exportieren",
     "requests": "Berechtigungsanfragen",
     "no_requests": "Keine offenen Anfragen.",
@@ -1577,8 +1576,6 @@
     "reported_source": "Gemeldeter Zugangspunkt (Geräteidentität wird separat geprüft)",
     "input_warning": "Die Desktopsteuerung kann Terminals und Anwendungen bedienen, auch über Barrierefreiheitsaktionen auf dem gesamten Desktop. Dies ist keine Shell-Sandbox.",
     "accessibility_warning": "Fensternamen und Beschriftungen können private Informationen enthalten. Inhalte von Passwortfeldern werden ausgeblendet.",
-    "session_control": "Sitzungssteuerung",
-    "stop_description": "Aufträge abbrechen sowie Token-Aufrufe und dauerhafte Freigaben pausieren, bis die Automatisierung aus- und wieder eingeschaltet wird.",
     "diagnostics": "Diagnose",
     "export_description": "Streaming-Statistiken und einen Diagnosebericht ohne sensible Angaben exportieren.",
     "peer": "Entferntes Gerät",

@@ -8,6 +8,11 @@ pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
 fn sync_input_control(service: &Service, control: &crate::remote_control::Service) {
     service.expire();
     let mut s = service.state.lock().unwrap();
+    // The host can be replaced by room teardown. Keep the same shortcut available
+    // for background commands even when automation holds no native input lease.
+    if control.automation_listener(s.enabled).is_err() && s.enabled {
+        service.stop_locked(&mut s);
+    }
     // Retire a failed invocation scope before detecting emergency revocation.
     // The manual grant and every automation permission group remain intact.
     s.input_owners.retain(|principal| {

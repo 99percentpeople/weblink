@@ -5,6 +5,7 @@ mod catalog;
 mod command_run;
 mod commands;
 pub(crate) mod coordinates;
+mod emergency;
 mod http;
 mod input_action;
 mod input_holds;
@@ -12,6 +13,7 @@ mod input_runner;
 mod input_sequence;
 mod jobs;
 mod keyboard;
+mod lifecycle;
 mod native;
 mod native_read;
 mod peers;
@@ -78,8 +80,9 @@ struct Ticket {
 }
 #[derive(Default)]
 struct State {
+    emergency: Arc<emergency::Emergency>,
     epoch: String,
-    heartbeat: Option<Instant>,
+    page: lifecycle::Page,
     enabled: bool,
     channel: Option<Channel<Value>>,
     endpoint: String,
@@ -97,15 +100,33 @@ struct State {
     listener: Option<CancellationToken>,
     input_owners: Vec<String>,
 }
-#[derive(Default)]
 pub struct Service {
     state: Mutex<State>,
+    page: Mutex<lifecycle::Page>,
     opening: Mutex<()>,
     native_read: Mutex<()>,
     jobs: jobs::Jobs,
     input_queue: input_sequence::Queue,
     input_holds: Mutex<input_holds::Holds>,
     accessibility: weblink_desktop_accessibility::Client,
+}
+impl Default for Service {
+    fn default() -> Self {
+        let page = lifecycle::Page::default();
+        Self {
+            state: Mutex::new(State {
+                page: page.clone(),
+                ..Default::default()
+            }),
+            page: Mutex::new(page),
+            opening: Default::default(),
+            native_read: Default::default(),
+            jobs: Default::default(),
+            input_queue: Default::default(),
+            input_holds: Default::default(),
+            accessibility: Default::default(),
+        }
+    }
 }
 pub type Shared = Arc<Service>;
 struct RequestCleanup {
@@ -132,19 +153,14 @@ fn error(code: &str) -> Value {
 }
 impl Service {
     fn check(s: &State, epoch: &str) -> Result<(), String> {
-        if s.epoch != epoch
-            || s.heartbeat
-                .is_none_or(|t| t.elapsed() > Duration::from_secs(20))
-        {
+        if epoch.is_empty() || s.epoch != epoch || !s.page.live() {
             Err("SESSION_CLOSED".into())
         } else {
             Ok(())
         }
     }
     fn current(s: &State) -> bool {
-        s.enabled
-            && s.heartbeat
-                .is_some_and(|t| t.elapsed() < Duration::from_secs(20))
+        s.enabled && !s.epoch.is_empty() && s.page.live() && !s.emergency.pending()
     }
     pub fn shutdown(&self) {
         let mut s = self.state.lock().unwrap();
@@ -168,7 +184,6 @@ impl Service {
         s.peers.clear();
         s.peer_policies.clear();
         s.channel = None;
-        s.heartbeat = None;
         s.epoch.clear();
         self.jobs.stop();
     }
@@ -187,13 +202,15 @@ impl Service {
     }
     fn expire(&self) {
         let mut s = self.state.lock().unwrap();
-        let closed = s
-            .heartbeat
-            .is_some_and(|t| t.elapsed() > Duration::from_secs(20));
+        self.consume_emergency(&mut s);
+        if !s.page.live() {
+            self.shutdown_locked(&mut s);
+            return;
+        }
         let expired: Vec<_> = s
             .grants
             .values()
-            .filter(|g| closed || !Self::grant_live(&s, g))
+            .filter(|g| !Self::grant_live(&s, g))
             .map(|g| g.id.clone())
             .collect();
         for id in expired {
@@ -208,30 +225,17 @@ impl Service {
         let calls: Vec<_> = s
             .pending
             .iter()
-            .filter(|(_, p)| {
-                closed || p.deadline <= Instant::now() || inactive.contains(&p.principal.id)
-            })
+            .filter(|(_, p)| p.deadline <= Instant::now() || inactive.contains(&p.principal.id))
             .map(|(id, _)| id.clone())
             .chain(
                 s.tickets
                     .iter()
-                    .filter(|(_, t)| closed || t.deadline <= Instant::now())
+                    .filter(|(_, t)| t.deadline <= Instant::now())
                     .map(|(id, _)| id.clone()),
             )
             .collect();
         for id in calls {
             Self::cancel_request(&mut s, &id);
-        }
-        if closed {
-            Self::cancel_all(&mut s);
-            s.enabled = false;
-            s.endpoint.clear();
-            s.active_server = None;
-            s.peers.clear();
-            s.peer_policies.clear();
-            if let Some(c) = s.listener.take() {
-                c.cancel();
-            }
         }
     }
     fn authenticate(&self, token: &str) -> Option<Principal> {

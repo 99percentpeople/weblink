@@ -448,7 +448,7 @@
       },
       "emergency_shortcut": {
         "title": "被控端紧急停止快捷键",
-        "description": "仅 Windows 桌面端可用。在本机授予远控权限后响应，即使应用在后台也能停止远控。不独占或拦截按键，其他程序仍可响应相同组合键。",
+        "description": "仅 Windows 桌面端可用。停止远控和自动化、取消任务并暂停自动授权，在后台或未持有控制租约时也可用。不独占或拦截按键，其他程序仍可响应相同组合键。",
         "failed": "无法更新紧急停止快捷键监听，已保留原设置，请重试。"
       },
       "gamepad_heading": "手柄",
@@ -1544,7 +1544,6 @@
     "desktop": "提供 MCP 服务，并接受已授权设备的自动化调用。",
     "browser": "通过 WebMCP 控制桌面端，权限由目标设备管理。",
     "unsupported": "当前浏览器不支持 WebMCP，无法启用。",
-    "stop": "停止全部自动化",
     "export": "导出诊断",
     "requests": "授权请求",
     "no_requests": "暂无待处理请求。",
@@ -1577,8 +1576,6 @@
     "reported_source": "请求方报告的入口（设备身份另行核验）",
     "input_warning": "桌面控制可以操作终端和其他应用，也可通过可访问性接口操作整个桌面的控件。这不是 Shell 沙箱。",
     "accessibility_warning": "窗口名称和控件标签可能包含隐私信息。密码控件内容会被隐藏。",
-    "session_control": "会话控制",
-    "stop_description": "取消任务，暂停 Token 调用和始终允许，重新开启自动化后恢复。",
     "diagnostics": "诊断",
     "export_description": "导出串流统计和经过脱敏处理的诊断报告。",
     "peer": "远端设备",

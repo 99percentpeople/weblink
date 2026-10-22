@@ -30,6 +30,9 @@ pub trait Session: Send {
     /// Install a lightweight invalidation callback for pointer movement. It runs
     /// on the native hook thread and must only notify, never query or inject input.
     fn observe_pointer(&self, _changed: Option<Arc<dyn Fn() + Send + Sync>>) {}
+    /// Share the host's physical emergency shortcut with application services.
+    /// The callback runs on the hook thread: only signal, never wait or inject.
+    fn observe_emergency(&self, _stopped: Option<Arc<dyn Fn() + Send + Sync>>) {}
     fn pointer_activity(&self) -> PointerActivity {
         PointerActivity::default()
     }
@@ -56,6 +59,10 @@ pub trait Session: Send {
     /// Discard queued input and release held inputs, retaining the attended grant.
     fn interrupt(&self) -> Result<(), Error>;
     fn revoke(&self) -> Result<(), Error>;
+    /// Atomically release only the exact grant and report whether it was live.
+    fn revoke_matching(&self, _grant: Grant) -> Result<bool, Error> {
+        Err(Error::Unavailable)
+    }
     /// Success means queued; flush observes completed native submissions.
     fn input(&self, grant: Grant, event: Event) -> Result<(), Error>;
     /// Check a temporary caller-specific window guard on the native input thread.

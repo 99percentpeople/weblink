@@ -129,7 +129,16 @@ async fn token_expiry_revocation_and_emergency_stop_invalidate_dispatched_calls(
                 service.expire();
             }
             "revoked" => service.remove_client("epoch", &principal.id).unwrap(),
-            _ => service.pause_policies(&mut service.state.lock().unwrap()),
+            _ => {
+                let control = crate::remote_control::Service::default();
+                control.observe_emergency(service.emergency_observer());
+                control.emergency_revoke(); // No input owner/grant is required.
+                assert!(
+                    Service::check_call(&service.state.lock().unwrap(), "epoch", "request")
+                        .is_err()
+                );
+                service.expire();
+            }
         }
         assert_eq!(
             task.await.unwrap()["error"]["code"],

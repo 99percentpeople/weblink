@@ -35,8 +35,13 @@ pub async fn automation_open(
     service: State<'_, Shared>,
     channel: Channel<Value>,
 ) -> Result<String, String> {
+    // Capture before dispatch: a queued open from an unloaded page cannot revive it.
+    let page = service.page.lock().unwrap().clone();
     blocking(window, service, move |app, service| {
         let _opening = service.opening.lock().unwrap();
+        if !page.live() {
+            return Err("SESSION_CLOSED".into());
+        }
         service.load_registry(
             app.path()
                 .app_local_data_dir()
@@ -47,26 +52,34 @@ pub async fn automation_open(
         native::sync_input(&app, &service);
         let epoch = {
             let mut s = service.state.lock().unwrap();
+            if !page.live() {
+                return Err("SESSION_CLOSED".into());
+            }
             s.epoch = uuid::Uuid::new_v4().to_string();
-            s.heartbeat = Some(Instant::now());
+            s.page = page;
             s.channel = Some(channel);
             s.epoch.clone()
         };
         let background = service.clone();
+        let emergency = service.state.lock().unwrap().emergency.clone();
         let app = app.clone();
         let generation = epoch.clone();
         tauri::async_runtime::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {},
+                    _ = emergency.wake.notified() => {},
+                }
                 let app = app.clone();
                 let background = background.clone();
                 let generation = generation.clone();
                 let current = off_thread(move || {
+                    // Run cleanup once even when this page ended, releasing native
+                    // input/listeners before the sampler exits. A replacement page
+                    // is checked against its own current state by sync_input.
                     native::sync_input(&app, &background);
                     let s = background.state.lock().unwrap();
-                    Ok(s.epoch == generation
-                        && s.heartbeat
-                            .is_some_and(|t| t.elapsed() <= Duration::from_secs(20)))
+                    Ok(Service::check(&s, &generation).is_ok())
                 })
                 .await
                 .unwrap_or(false);
@@ -86,10 +99,7 @@ pub async fn automation_heartbeat(
     epoch: String,
 ) -> Result<(), String> {
     blocking(window, service, move |_app, service| {
-        let mut s = service.state.lock().unwrap();
-        Service::check(&s, &epoch)?;
-        s.heartbeat = Some(Instant::now());
-        Ok(())
+        Service::check(&service.state.lock().unwrap(), &epoch)
     })
     .await
 }
@@ -120,9 +130,12 @@ pub async fn automation_configure(
     let start = off_thread(move || {
         let mut s = authority.state.lock().unwrap();
         Service::check(&s, &generation)?;
+        authority.consume_emergency(&mut s);
         if s.enabled == enabled {
             return Ok(false);
         }
+        app.state::<crate::remote_control::Shared>()
+            .automation_listener(enabled)?;
         s.enabled = enabled;
         if enabled {
             s.policies_suspended = false;
@@ -302,13 +315,7 @@ pub async fn automation_revoke(
             }
             service.revoke_locked(&mut s, &id);
         } else {
-            let ids: Vec<_> = s.grants.keys().cloned().collect();
-            for id in ids {
-                service.revoke_locked(&mut s, &id);
-            }
-            Service::cancel_all(&mut s);
-            s.policies_suspended = true;
-            service.jobs.stop();
+            service.stop_locked(&mut s);
         }
         drop(s);
         native::sync_input(&app, &service);
@@ -432,7 +439,6 @@ mod tests {
         {
             let mut s = service.state.lock().unwrap();
             s.epoch = "replacement".into();
-            s.heartbeat = Some(Instant::now());
             s.enabled = true;
         }
         assert_eq!(service.close("old").unwrap_err(), "SESSION_CLOSED");

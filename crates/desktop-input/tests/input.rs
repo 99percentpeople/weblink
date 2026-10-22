@@ -143,6 +143,24 @@ fn setup() -> (Engine<Fake>, Fake, Grant, Instant) {
     (engine, fake, grant, now)
 }
 #[test]
+fn exact_cleanup_distinguishes_prior_revocation_and_preserves_a_replacement() {
+    let (mut engine, _, first, now) = setup();
+    engine.input(&first, key(true), now).unwrap();
+    assert!(engine.revoke_matching(&first));
+    assert!(engine.status().held.is_empty());
+    assert!(!engine.revoke_matching(&first));
+    let consent = pending(&mut engine, "replacement", now);
+    engine.approve(&consent, now).unwrap();
+    let second = engine.status().grant.unwrap();
+    engine.input(&second, key(true), now).unwrap();
+    assert!(!engine.revoke_matching(&first));
+    assert_eq!(engine.status().grant, Some(second.clone()));
+    assert!(!engine.status().held.is_empty());
+    engine.revoke();
+    assert!(!engine.revoke_matching(&second));
+}
+
+#[test]
 fn selective_cleanup_releases_only_recorded_inputs_without_moving_or_ending_the_grant() {
     let (mut engine, fake, grant, now) = setup();
     let first = ScanCode::new(30, false).unwrap();

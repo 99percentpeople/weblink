@@ -11,7 +11,6 @@ fn fixture(name: &str) -> Shared {
     };
     let mut s = service.state.lock().unwrap();
     s.epoch = "epoch".into();
-    s.heartbeat = Some(Instant::now());
     s.enabled = true;
     s.registry.clients.insert(
         principal.id.clone(),
@@ -71,7 +70,6 @@ fn discovery_and_screenshots_leave_heartbeat_and_revocation_responsive() {
         ready.recv_timeout(Duration::from_secs(3)).unwrap();
         // Fail without deadlocking the test if native work keeps authority locked.
         let responsive = if let Ok(mut s) = service.state.try_lock() {
-            s.heartbeat = Some(Instant::now());
             service.revoke_locked(&mut s, "grant");
             true
         } else {
@@ -89,7 +87,7 @@ fn results_are_discarded_when_authority_changes_during_native_work() {
     let changes: [fn(&mut State); 7] = [
         |s| s.enabled = false,
         |s| s.epoch = "replacement".into(),
-        |s| s.heartbeat = Some(Instant::now() - Duration::from_secs(30)),
+        |s| s.epoch.clear(),
         |s| s.registry.clients.get_mut("caller").unwrap().expires_at = Some(now() - 1),
         |s| s.grants.get_mut("grant").unwrap().expires_at = Some(now() - 1),
         |s| s.grants.get_mut("grant").unwrap().scopes = vec!["shell.execute".into()],

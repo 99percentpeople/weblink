@@ -98,9 +98,8 @@ closes it, and a new permission announcement allows reconnection. Only open
 automation channels appear in the connected automation device list. An
 established channel can recover on its close event; a failed channel open waits
 for another capability or channel-readiness notification instead of retrying in
-a loop. The native
-MCP authority's local heartbeat and cancellation checks are independent of peer
-discovery.
+a loop. Native input renewal and cancellation checks run independently of peer
+discovery and renderer timers.
 
 ## Consent and identity
 
@@ -200,15 +199,27 @@ abort active operations. A stream created during revoked screen-start work is
 disposed before publication. Duplicate requests and late cleanup cannot cancel a
 new request with the same ID. Cancelling a request while it awaits consent returns
 and records `CANCELLED`; an explicit denial returns `PERMISSION_DENIED`.
-Closing the UI revokes authority; crashes
-or a frozen frontend expire the native heartbeat lease after 20 seconds.
+Automation authority lasts for the native page session, like remote control.
+Switching Weblink to the background, minimizing it or hiding it in the tray keeps
+permissions and input leases alive. Native input renewal runs independently of
+renderer timers; a delayed UI status refresh does not end the session. Reloading
+the page, destroying the main window or exiting revokes the old authority and
+cancels its work. Token/approval expiry, disconnection and explicit revocation
+still end their respective permissions. An explicitly bound target window losing
+focus still releases its held input and ends that input lease.
 
-Use **Stop all automation** to revoke grants, cancel queued work and command
-process trees, and release automated input. The native emergency shortcut also
-invalidates the affected automated input grant. Stop-all, emergency input release,
-and explicit revocation of a policy grant also pause token calls and automatic Always-allow grants
+Use the existing **Host emergency stop shortcut** on Windows to stop both remote
+control and automation, including when no control lease is active. The same native
+listener respects the configured shortcut and works while the app is in the background.
+It fences new calls immediately, revokes grants, cancels pending reviews, queued work
+and command process trees, and releases automated input. The tray's local revoke
+action uses the same stop path; automation settings have no separate stop button.
+Emergency stop and explicit revocation of a policy grant pause token calls and automatic Always-allow grants
 until automation is disabled and enabled again. This pause does not erase saved
-policies; individual timed peer approvals remain available. Automated input is blocked while permission requests await local review.
+policies; individual timed peer approvals remain available. A borrowed window losing
+focus only ends its input lease and releases its held keys/buttons; it does not pause
+automation permissions. Late input cleanup cannot suppress an emergency stop or release
+a replacement lease. Automated input is blocked while permission requests await local review.
 Full desktop input can operate terminals and other applications; separating
 Shell tools is not an OS sandbox for a caller that already has desktop control.
 Input shares the existing

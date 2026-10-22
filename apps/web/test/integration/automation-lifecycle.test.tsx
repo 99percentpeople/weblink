@@ -26,6 +26,7 @@ import type {
 } from "@weblink/automation";
 import type { PeerSession } from "@/libs/domain/session";
 const fixture = vi.hoisted(() => ({
+  configureShortcut: vi.fn(async (_shortcut: string) => {}),
   generation: "connection-1",
   closeLink: undefined as (() => void) | undefined,
   events: new EventTarget(),
@@ -55,6 +56,10 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("@/libs/platform/runtime", () => ({
   platform: {
+    remoteControl: {
+      configureShortcut: fixture.configureShortcut,
+    },
+    getCapabilities: async () => ({ remoteInput: true }),
     get automation() {
       return fixture.native;
     },
@@ -173,6 +178,7 @@ it("preserves call rows and text selection when unchanged native snapshots arriv
   selection.removeAllRanges();
 });
 beforeEach(() => {
+  fixture.configureShortcut.mockReset().mockResolvedValue();
   fixture.generation = "connection-1";
   fixture.events = new EventTarget();
   fixture.closeLink = undefined;
@@ -207,6 +213,103 @@ beforeEach(() => {
     undefined,
   );
 });
+it("uses the saved host emergency shortcut before starting local automation without a room", async () => {
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "emergencyShortcut",
+    "ctrl-alt-shift-f9",
+  );
+  try {
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    await view.runtime.configure(true);
+    expect(fixture.configureShortcut).toHaveBeenCalledWith(
+      "ctrl-alt-shift-f9",
+    );
+    expect(
+      fixture.configureShortcut.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(fixture.native.configure).mock
+        .invocationCallOrder[0],
+    );
+  } finally {
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "emergencyShortcut",
+      "ctrl-alt-shift-f10",
+    );
+  }
+});
+it("does not reenable automation when shortcut setup finishes after a newer disable", async () => {
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  let release!: () => void;
+  fixture.configureShortcut.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const enabling = view.runtime.configure(true);
+  await waitFor(() => expect(release).toBeDefined());
+  try {
+    await view.runtime.configure(false);
+  } finally {
+    release();
+  }
+  await enabling;
+  expect(fixture.native.configure).toHaveBeenCalledTimes(1);
+  expect(fixture.native.configure).toHaveBeenCalledWith(
+    "epoch",
+    false,
+  );
+  expect(view.runtime.enabled()).toBe(false);
+  expect(appState.options.automationEnabled).toBe(false);
+});
+it.each([false, true])(
+  "orders a newer disable after an in-flight native enable (failed=%s)",
+  async (failed) => {
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    let release!: () => void;
+    let nativeEnabled = false;
+    vi.mocked(fixture.native.configure).mockImplementation(
+      async (_, value) => {
+        if (value) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          if (failed)
+            throw new Error("listener unavailable");
+        }
+        nativeEnabled = value;
+      },
+    );
+    const enabling = view.runtime.configure(true);
+    await waitFor(() => expect(release).toBeDefined());
+    const disabling = view.runtime.configure(false);
+    release();
+    await Promise.all([enabling, disabling]);
+    expect(
+      vi.mocked(fixture.native.configure).mock.calls,
+    ).toEqual([
+      ["epoch", true],
+      ["epoch", false],
+    ]);
+    expect(nativeEnabled).toBe(false);
+    expect(view.runtime.enabled()).toBe(false);
+    expect(appState.options.automationEnabled).toBe(false);
+    expect(view.runtime.error()).toBe("");
+  },
+);
 it("aborts application work immediately on a native cancellation event", async () => {
   const view = mount();
   await waitFor(() =>
@@ -359,6 +462,8 @@ it.each([false, true])(
 );
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -466,6 +571,84 @@ const incoming = () =>
     },
     new AbortController().signal,
   );
+it("keeps the peer session and calls alive while Weblink is hidden and status refresh is delayed", async () => {
+  peer();
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  await view.runtime.configure(true);
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  await incoming();
+  const connection = fixture.incoming;
+  let finish!: () => void;
+  let active!: AbortSignal;
+  fixture.handle.mockImplementationOnce(
+    async (_, signal) => {
+      active = signal;
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      signal.throwIfAborted();
+      return { completed: true };
+    },
+  );
+  const receive = vi.mocked(fixture.native.open).mock
+    .calls[0][0];
+  receive({
+    kind: "call",
+    id: "background",
+    principal: { id: "token", label: "Agent", kind: "mcp" },
+    call: {
+      name: "screen.start",
+      arguments: { target: "local", sourceId: "screen" },
+    },
+  });
+  await waitFor(() => expect(active).toBeDefined());
+  try {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(
+      true,
+    );
+    vi.spyOn(
+      document,
+      "visibilityState",
+      "get",
+    ).mockReturnValue("hidden");
+    window.dispatchEvent(new Event("blur"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    // Advance the wall clock without running renderer timers, as in a throttled page.
+    vi.setSystemTime(Date.now() + 60_000);
+    expect(view.runtime.enabled()).toBe(true);
+    expect(active.aborted).toBe(false);
+    expect(fixture.incoming).toBe(connection);
+    expect(fixture.native.close).not.toHaveBeenCalled();
+    expect(
+      fixture.native.disconnect,
+    ).not.toHaveBeenCalled();
+    expect(fixture.native.cancel).not.toHaveBeenCalled();
+    await incoming();
+    expect(fixture.native.call).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+    finish();
+  }
+  await waitFor(() =>
+    expect(fixture.native.finish).toHaveBeenCalledWith(
+      "epoch",
+      "background",
+      { ok: true, data: { completed: true } },
+    ),
+  );
+  view.unmount();
+  await waitFor(() =>
+    expect(fixture.native.close).toHaveBeenCalledWith(
+      "epoch",
+    ),
+  );
+});
 it.each([true, false])(
   "forwards token calls without local consent and preserves the destination decision (allowed=%s)",
   async (allowed) => {

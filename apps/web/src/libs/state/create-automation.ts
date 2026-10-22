@@ -1,6 +1,7 @@
 import { appState, setAppState } from "./app-state";
 import { readAutomationPolicy } from "@weblink/automation";
 import { createUuid } from "@/libs/domain/ids";
+import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
 import {
@@ -195,6 +196,7 @@ export function createAutomation(
   const webSupported = () => !!webMcpContext(document);
   let webRegistration: AbortController | undefined;
   let configurationRevision = 0;
+  let nativeConfiguration = Promise.resolve();
   let snapshotSequence = 0;
   const readNativeSnapshot = async () => {
     const sequence = ++snapshotSequence;
@@ -620,8 +622,8 @@ export function createAutomation(
       }
     }
   };
-  // Native authority needs a local lease heartbeat and invocation cancellation
-  // checks. Peer discovery is driven by capability and transport events.
+  // Refresh native status and cancellation checks. Native session lifetime and
+  // input renewal do not depend on this renderer timer running in the background.
   const refreshNative = async () => {
     if (native && epoch)
       try {
@@ -647,6 +649,9 @@ export function createAutomation(
   };
   const configure = async (value: boolean) => {
     const revision = ++configurationRevision;
+    const current = () =>
+      !life.signal.aborted &&
+      revision === configurationRevision;
     setError("");
     try {
       if (value && !globalThis.crypto?.subtle)
@@ -664,7 +669,30 @@ export function createAutomation(
           "WebMCP is unavailable in this browser",
         );
       if (native) {
-        await native.configure(epoch, value);
+        if (
+          value &&
+          platform.remoteControl?.configureShortcut &&
+          (await platform.getCapabilities()).remoteInput
+        ) {
+          if (!current()) return;
+          await platform.remoteControl.configureShortcut(
+            resolveRemoteKeyboardOptions(
+              appState.options.remoteKeyboard,
+            ).emergencyShortcut,
+          );
+        }
+        if (!current()) return;
+        // Keep native side effects ordered, including a disable arriving while
+        // an earlier enable is still starting its listener.
+        const pending = nativeConfiguration.then(
+          async () => {
+            if (current())
+              await native.configure(epoch, value);
+          },
+        );
+        nativeConfiguration = pending.catch(() => {});
+        await pending;
+        if (!current()) return;
         await readNativeSnapshot();
       } else {
         webRegistration?.abort();
@@ -696,6 +724,7 @@ export function createAutomation(
           await native.close(epoch).catch(() => {});
         return;
       }
+      if (revision !== configurationRevision) return;
       setEnabled(value);
       sessionService.setAutomationEnabled(value);
       if (!value) {
@@ -836,12 +865,6 @@ export function createAutomation(
         await native.revoke(epoch, id);
         await readNativeSnapshot();
       }
-    },
-    stop: async () => {
-      for (const c of calls.values()) c.abort();
-      for (const l of [...links.values()]) l.close();
-      if (native) await native.revoke(epoch);
-      diagnostics.detail(0);
     },
     client: async (
       label: string,

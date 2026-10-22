@@ -421,7 +421,7 @@
       },
       "emergency_shortcut": {
         "title": "Raccourci d’arrêt d’urgence de l’hôte",
-        "description": "Bureau Windows uniquement. Lorsque cet ordinateur est sous contrôle à distance, ce raccourci l'arrête même lorsque l'application est en arrière-plan. Il ne réserve ni n'intercepte les clés ; d'autres applications peuvent également répondre.",
+        "description": "Sous Windows uniquement. Arrête le contrôle à distance et l’automatisation, annule les tâches et suspend les autorisations automatiques, même en arrière-plan ou sans contrôle actif. Les touches ne sont ni réservées ni interceptées ; d’autres applications peuvent aussi réagir.",
         "failed": "Impossible de mettre à jour l'écouteur de raccourci d'urgence. Le réglage précédent a été conservé. Veuillez réessayer."
       },
       "gamepad_heading": "Manette",
@@ -1544,7 +1544,6 @@
     "desktop": "Fournit un service MCP et accepte les appels d’automatisation des appareils autorisés.",
     "browser": "Contrôlez des ordinateurs via WebMCP. L’appareil cible gère les permissions.",
     "unsupported": "Ce navigateur ne prend pas en charge WebMCP. L’activation est impossible.",
-    "stop": "Arrêter toute l’automatisation",
     "export": "Exporter le diagnostic",
     "requests": "Demandes d’autorisation",
     "no_requests": "Aucune demande en attente.",
@@ -1577,8 +1576,6 @@
     "reported_source": "Point d’entrée déclaré (l’identité de l’appareil est vérifiée séparément)",
     "input_warning": "Le contrôle du bureau permet d’utiliser les terminaux et les applications, y compris via des actions d’accessibilité sur tout le bureau. Il ne s’agit pas d’un environnement Shell isolé.",
     "accessibility_warning": "Les noms des fenêtres et les libellés des contrôles peuvent contenir des informations privées. Le contenu des champs de mot de passe est masqué.",
-    "session_control": "Contrôle de session",
-    "stop_description": "Annule les tâches et suspend les appels par jeton et les autorisations permanentes jusqu’à la désactivation puis réactivation de l’automatisation.",
     "diagnostics": "Diagnostic",
     "export_description": "Exportez les statistiques de diffusion et un rapport de diagnostic sans données sensibles.",
     "peer": "Appareil distant",

@@ -62,7 +62,6 @@ mod tests {
             let mut s = service.state.lock().unwrap();
             s.enabled = true;
             s.epoch = "epoch".into();
-            s.heartbeat = Some(Instant::now());
             s.peers.insert(p.id.clone(), p.clone());
             s.grants.insert(
                 "grant".into(),

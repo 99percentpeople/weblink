@@ -60,7 +60,6 @@ const fixture = vi.hoisted(() => ({
   removeClient: vi.fn(async () => {}),
   decide: vi.fn(async () => {}),
   revoke: vi.fn(async () => {}),
-  stop: vi.fn(async () => {}),
 }));
 vi.mock("@/i18n", () => ({
   t: (key: string, values?: { code?: string }) =>
@@ -84,7 +83,6 @@ vi.mock("@/libs/state/app-state-context", () => ({
       configure: fixture.configure,
       decide: fixture.decide,
       revoke: fixture.revoke,
-      stop: fixture.stop,
       export: () => ({}),
       peers: () => [],
       snapshot: () => ({
@@ -299,7 +297,7 @@ it("approves a paired device request without a second verification code", async 
     15,
   );
 });
-it("denies a paired device request and provides immediate stop", async () => {
+it("denies a paired device request without a separate automation stop button", () => {
   render(() => (
     <>
       <AutomationSettings />
@@ -313,17 +311,11 @@ it("denies a paired device request and provides immediate stop", async () => {
     screen.getByRole("button", { name: "automation.deny" }),
   );
   expect(fixture.decide).toHaveBeenCalledWith("request", 0);
-  await waitFor(() =>
-    expect(
-      screen.getByRole("button", {
-        name: "automation.stop",
-      }),
-    ).toBeEnabled(),
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "automation.stop" }),
-  );
-  expect(fixture.stop).toHaveBeenCalledOnce();
+  expect(
+    screen.queryByRole("button", {
+      name: "automation.stop",
+    }),
+  ).not.toBeInTheDocument();
 });
 it("manages local tokens without a second approval list on desktop", () => {
   render(() => <AutomationSettings />);
@@ -554,7 +546,7 @@ it("automatically saves running listener settings for the next start", async () 
   expect(
     screen.getByText("http://127.0.0.1:123/mcp"),
   ).toBeVisible();
-  expect(fixture.stop).not.toHaveBeenCalled();
+  expect(fixture.configure).not.toHaveBeenCalled();
 });
 it("lists complete live connection URLs and refreshes network addresses without using pending settings", async () => {
   const [endpoints, setEndpoints] = createSignal([

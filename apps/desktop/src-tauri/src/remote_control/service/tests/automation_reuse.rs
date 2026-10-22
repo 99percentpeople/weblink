@@ -151,9 +151,9 @@ fn borrowed_cleanup_releases_only_automation_holds_and_ignores_stale_cleanup() {
             .unwrap();
         host.worker.flush().unwrap();
     }
-    rig.service.automation_revoke_lease("client", &first);
+    assert!(!rig.service.automation_revoke_lease("client", &first));
     assert!(rig.service.automation_matches("client", &second));
-    rig.service.automation_revoke_lease("client", &second);
+    assert!(rig.service.automation_revoke_lease("client", &second));
     let host = owner.host.lock().unwrap();
     assert_eq!(host.worker.status().held, vec![Held::Key(human)]);
     assert_eq!(host.active.as_ref().unwrap().grant.id, grant);

@@ -87,22 +87,6 @@ export default function AutomationSettings() {
               </p>
             </SettingBlock>
           </Show>
-          <SettingRow
-            label={t("automation.session_control")}
-            description={t("automation.stop_description")}
-          >
-            <div class="flex justify-end">
-              <Button
-                size="sm"
-                wrap
-                variant="destructive"
-                disabled={!r().enabled() || busy()}
-                onClick={() => void run(() => r().stop())}
-              >
-                {t("automation.stop")}
-              </Button>
-            </div>
-          </SettingRow>
           <Show when={r().snapshot().policiesSuspended}>
             <SettingBlock>
               <p

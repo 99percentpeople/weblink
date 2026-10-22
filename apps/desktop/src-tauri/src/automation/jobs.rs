@@ -517,6 +517,24 @@ mod tests {
         );
     }
     #[tokio::test]
+    async fn shared_emergency_stops_background_jobs_without_any_control_lease() {
+        let service = crate::automation::Service::default();
+        service.state.lock().unwrap().enabled = true;
+        let job = start_fixture(&service.jobs, "hold", json!({})).unwrap();
+        let id = job.id.clone();
+        job.background();
+        let control = crate::remote_control::Service::default();
+        control.observe_emergency(service.emergency_observer());
+        control.emergency_revoke();
+        let emergency = service.state.lock().unwrap().emergency.clone();
+        tokio::time::timeout(Duration::from_secs(1), emergency.wake.notified())
+            .await
+            .unwrap();
+        service.expire();
+        assert_eq!(ended(&service.jobs, &id).await["status"], "cancelled");
+        assert!(service.state.lock().unwrap().policies_suspended);
+    }
+    #[tokio::test]
     async fn run_cancellation_or_dropped_wait_cancels_owned_job() {
         let jobs = Jobs::default();
         let job = start_fixture(&jobs, "hold", json!({})).unwrap();

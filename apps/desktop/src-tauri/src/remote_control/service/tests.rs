@@ -19,6 +19,7 @@ enum Observation {
     Shutdown,
 }
 struct DeviceState {
+    emergency_observer: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     gamepad_feedback: Mutex<Vec<(u8, weblink_desktop_input::gamepad::Rumble)>>,
     gamepad_available: AtomicBool,
     gamepad_reports: Mutex<Vec<weblink_desktop_input::gamepad::State>>,
@@ -34,6 +35,7 @@ struct DeviceState {
 impl Default for DeviceState {
     fn default() -> Self {
         Self {
+            emergency_observer: Mutex::new(None),
             gamepad_feedback: Default::default(),
             gamepad_available: AtomicBool::new(false),
             gamepad_reports: Mutex::default(),
@@ -117,6 +119,9 @@ impl TestSession {
     }
 }
 impl Session for TestSession {
+    fn observe_emergency(&self, stopped: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self.state.emergency_observer.lock().unwrap() = stopped;
+    }
     fn bind_window(
         &self,
         grant: Grant,
@@ -194,6 +199,9 @@ impl Session for TestSession {
         self.engine.lock().unwrap().revoke();
         Ok(())
     }
+    fn revoke_matching(&self, grant: Grant) -> Result<bool, Error> {
+        Ok(self.engine.lock().unwrap().revoke_matching(&grant))
+    }
     fn input(&self, grant: Grant, event: Event) -> Result<(), Error> {
         self.engine
             .lock()
@@ -232,6 +240,53 @@ impl Session for TestSession {
                 .push(Observation::Shutdown);
         }
     }
+}
+
+#[test]
+fn automation_listener_reuses_the_host_and_survives_owner_replacement() {
+    let service = Service::default();
+    let stopped = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let calls = stopped.clone();
+    service.observe_emergency(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+    }));
+    let first = Arc::new(DeviceState::default());
+    let worker = first.clone();
+    let owner = service
+        .start_shared(true, || Ok(Box::new(TestSession::new(worker))))
+        .unwrap();
+    assert_eq!(
+        service
+            .start_shared(true, || panic!("must reuse live host"))
+            .unwrap(),
+        owner
+    );
+    first.emergency_observer.lock().unwrap().as_ref().unwrap()();
+    assert_eq!(stopped.load(Ordering::SeqCst), 1);
+    let second = Arc::new(DeviceState::default());
+    let worker = second.clone();
+    let replacement = service
+        .start(|| Ok(Box::new(TestSession::new(worker))))
+        .unwrap();
+    assert_ne!(replacement, owner);
+    assert!(service.status(&owner).unwrap().closed);
+    second.emergency_observer.lock().unwrap().as_ref().unwrap()();
+    assert_eq!(stopped.load(Ordering::SeqCst), 2);
+    service.automation_listener(false).unwrap();
+    assert!(
+        !service.status(&replacement).unwrap().closed,
+        "disabling automation must preserve the room's host"
+    );
+    service.close();
+    let worker = Arc::new(DeviceState::default());
+    let standalone = service
+        .start_shared(true, || Ok(Box::new(TestSession::new(worker))))
+        .unwrap();
+    service.automation_listener(false).unwrap();
+    if weblink_desktop_input::session::supported() {
+        assert!(service.status(&standalone).unwrap().closed);
+    }
+    service.close();
 }
 
 #[test]

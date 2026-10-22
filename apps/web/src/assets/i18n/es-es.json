@@ -421,7 +421,7 @@
       },
       "emergency_shortcut": {
         "title": "Atajo de parada de emergencia del equipo",
-        "description": "Solo en el escritorio de Windows. Mientras este equipo esté bajo control remoto, este atajo lo detiene incluso con la aplicación en segundo plano. No reserva ni intercepta las teclas; otras aplicaciones también pueden responder.",
+        "description": "Solo en Windows. Detiene el control remoto y la automatización, cancela tareas y pausa la autorización automática, incluso en segundo plano o sin una sesión de control activa. No reserva ni intercepta las teclas; otras aplicaciones también pueden responder.",
         "failed": "No se pudo actualizar la escucha del atajo de emergencia. Se conservó el ajuste anterior. Inténtalo de nuevo."
       },
       "gamepad_heading": "Mando",
@@ -1544,7 +1544,6 @@
     "desktop": "Ofrece un servicio MCP y acepta llamadas de automatización de dispositivos autorizados.",
     "browser": "Controla equipos de escritorio mediante WebMCP. El dispositivo de destino gestiona los permisos.",
     "unsupported": "Este navegador no admite WebMCP. No se puede activar.",
-    "stop": "Detener toda la automatización",
     "export": "Exportar diagnóstico",
     "requests": "Solicitudes de autorización",
     "no_requests": "No hay solicitudes pendientes.",
@@ -1577,8 +1576,6 @@
     "reported_source": "Punto de entrada declarado (la identidad del dispositivo se verifica por separado)",
     "input_warning": "El control del escritorio permite manejar terminales y aplicaciones, incluso mediante acciones de accesibilidad en todo el escritorio. No es un entorno Shell aislado.",
     "accessibility_warning": "Los nombres de ventanas y las etiquetas de controles pueden contener información privada. El contenido de los campos de contraseña se oculta.",
-    "session_control": "Control de sesión",
-    "stop_description": "Cancela tareas y pausa las llamadas con token y los permisos permanentes hasta desactivar y volver a activar la automatización.",
     "diagnostics": "Diagnóstico",
     "export_description": "Exporta estadísticas de transmisión y un informe de diagnóstico sin datos sensibles.",
     "peer": "Dispositivo remoto",

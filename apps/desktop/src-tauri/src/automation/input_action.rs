@@ -77,21 +77,27 @@ impl input_runner::Sink for NativeSink {
         control.automation_input(&self.principal, &self.lease, events)
     }
     fn abort(&self) {
-        let mut state = self.service.state.lock().unwrap_or_else(|e| e.into_inner());
         let control = self.app.state::<crate::remote_control::Shared>();
-        control.automation_revoke_lease(&self.principal, &self.lease);
-        // This invocation ended its own lease; it is not an external emergency stop.
-        if !control.automation_active(&self.principal) {
-            state
-                .input_owners
-                .retain(|principal| principal != &self.principal);
-        }
-        self.service
-            .input_holds
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear(&self.lease);
+        abort_lease(&self.service, &control, &self.principal, &self.lease);
     }
+}
+pub(super) fn abort_lease(
+    service: &Service,
+    control: &crate::remote_control::Service,
+    principal: &str,
+    lease: &str,
+) {
+    let mut state = service.state.lock().unwrap_or_else(|e| e.into_inner());
+    // Only a successful self-release retires the owner. An earlier external
+    // revoke must remain visible to the authority sampler, even after cleanup.
+    if control.automation_revoke_lease(principal, lease) {
+        state.input_owners.retain(|owner| owner != principal);
+    }
+    service
+        .input_holds
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear(lease);
 }
 pub async fn action(
     app: tauri::AppHandle,

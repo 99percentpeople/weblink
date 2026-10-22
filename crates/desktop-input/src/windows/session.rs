@@ -14,6 +14,9 @@ impl crate::session::Session for Worker {
     fn observe_pointer(&self, changed: Option<Arc<dyn Fn() + Send + Sync>>) {
         self.observations.observe_pointer(changed);
     }
+    fn observe_emergency(&self, stopped: Option<Arc<dyn Fn() + Send + Sync>>) {
+        self.observations.observe_emergency(stopped);
+    }
     fn pointer_activity(&self) -> crate::session::PointerActivity {
         self.observations.pointer_activity()
     }
@@ -55,6 +58,12 @@ impl crate::session::Session for Worker {
     }
     fn revoke(&self) -> Result<(), Error> {
         Worker::revoke(self)
+    }
+    fn revoke_matching(&self, grant: Grant) -> Result<bool, Error> {
+        self.call_with_priority(true, move |engine| {
+            let released = engine.revoke_matching(&grant);
+            engine.status().failure.map_or(Ok(released), Err)
+        })?
     }
     fn input(&self, grant: Grant, event: Event) -> Result<(), Error> {
         Worker::input(self, grant, event)

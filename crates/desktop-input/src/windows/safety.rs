@@ -31,6 +31,7 @@ pub(super) struct Observations {
     owner: thread::Thread,
     grant_epoch: AtomicU64,
     emergency_epoch: AtomicU64,
+    emergency_observer: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     pointer_activity: AtomicU64,
     pointer_changed: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
@@ -42,6 +43,7 @@ impl Observations {
             owner: thread::current(),
             grant_epoch: AtomicU64::new(0),
             emergency_epoch: AtomicU64::new(0),
+            emergency_observer: Mutex::new(None),
             pointer_activity: AtomicU64::new(0),
             pointer_changed: Mutex::new(None),
         }
@@ -88,6 +90,31 @@ impl Observations {
         if epoch != 0 && epoch == self.grant_epoch() && !self.closed.load(Ordering::Acquire) {
             self.emergency_epoch.fetch_max(epoch, Ordering::AcqRel);
             self.owner.unpark();
+        }
+    }
+    pub fn observe_emergency(&self, observer: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self
+            .emergency_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = observer;
+    }
+    pub fn shortcut_enabled(&self) -> bool {
+        self.grant_epoch() != 0
+            || self
+                .emergency_observer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_some()
+    }
+    pub fn shortcut_pressed(&self, epoch: u64) {
+        self.emergency(epoch);
+        let observer = self
+            .emergency_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(observer) = observer {
+            observer();
         }
     }
     pub fn take_emergency(&self) -> bool {
@@ -508,6 +535,29 @@ mod tests {
         assert!(!observations.take_emergency());
         observations.emergency(3);
         assert!(observations.take_emergency());
+    }
+    #[test]
+    fn shared_shortcut_notifies_without_an_input_grant_and_keeps_native_epoch_fencing() {
+        let observations = Observations::new();
+        let stopped = Arc::new(AtomicU64::new(0));
+        assert!(!observations.shortcut_enabled());
+        let calls = stopped.clone();
+        observations.observe_emergency(Some(Arc::new(move || {
+            calls.fetch_add(1, Ordering::AcqRel);
+        })));
+        assert!(observations.shortcut_enabled());
+        observations.shortcut_pressed(0);
+        assert_eq!(stopped.load(Ordering::Acquire), 1);
+        assert!(!observations.take_emergency());
+        observations.authorize(2);
+        observations.shortcut_pressed(1);
+        assert!(!observations.take_emergency());
+        observations.shortcut_pressed(2);
+        assert!(observations.take_emergency());
+        assert_eq!(stopped.load(Ordering::Acquire), 3);
+        observations.observe_emergency(None);
+        observations.authorize(0);
+        assert!(!observations.shortcut_enabled());
     }
     #[test]
     fn ordinary_settings_changes_keep_control_but_changed_or_unavailable_desktop_does_not() {

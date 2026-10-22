@@ -55,9 +55,9 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
                     vk,
                     !event.flags.contains(LLKHF_UP),
                     event.flags.contains(LLKHF_INJECTED),
-                    epoch != 0,
+                    state.observations.shortcut_enabled(),
                 ) {
-                    state.observations.emergency(epoch);
+                    state.observations.shortcut_pressed(epoch);
                 }
             }
         });

@@ -230,6 +230,9 @@ pub fn run() {
             capture::capture_close_peer
         ])
         .setup(|app| {
+            app.state::<remote_control::Shared>().observe_emergency(
+                app.state::<automation::Shared>().emergency_observer(),
+            );
             if let Err(error) = application::setup(app.handle()) {
                 // Keep the application usable; without a tray no operation may hide it.
                 eprintln!("could not create Weblink tray: {error}");
@@ -277,6 +280,7 @@ pub fn run() {
                 })
                 .on_page_load(|webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                        webview.state::<automation::Shared>().close_page();
                         webview.state::<file_save::Service>().clear();
                         webview.state::<filesystem::Service>().clear_page();
                         preview::clear(&webview);
@@ -316,6 +320,7 @@ pub fn run() {
                 app.state::<keyboard::Shared>().close();
             }
             if matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+                app.state::<automation::Shared>().close_page();
                 app.state::<picture_in_picture::Service>().shutdown();
                 app.state::<application::Service>().shutdown();
                 app.state::<notifications::Service>().clear();

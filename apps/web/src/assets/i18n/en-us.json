@@ -448,7 +448,7 @@
       },
       "emergency_shortcut": {
         "title": "Host emergency stop shortcut",
-        "description": "Windows desktop only. While this computer is under remote control, this shortcut stops it even when the app is in the background. It does not reserve or intercept the keys; other apps may also respond.",
+        "description": "Windows desktop only. Stops remote control and automation, cancels tasks and pauses automatic authorization, even in the background or without an active control lease. It does not reserve or intercept keys; other apps may also respond.",
         "failed": "Could not update the emergency shortcut listener. The previous setting was kept. Please try again."
       },
       "gamepad_heading": "Gamepad",
@@ -1544,7 +1544,6 @@
     "desktop": "Host MCP and accept automation from authorized devices.",
     "browser": "Control desktops through WebMCP, with permissions managed on the target device.",
     "unsupported": "WebMCP is unavailable in this browser and cannot be enabled.",
-    "stop": "Stop all automation",
     "export": "Export diagnostics",
     "requests": "Approval requests",
     "no_requests": "No pending requests.",
@@ -1577,8 +1576,6 @@
     "reported_source": "Reported entrypoint (device identity is verified separately)",
     "input_warning": "Desktop control can operate terminals and applications, including through accessibility actions across the desktop. This is not a Shell sandbox.",
     "accessibility_warning": "Window names and control labels may contain private information. Password controls are redacted.",
-    "session_control": "Session control",
-    "stop_description": "Cancel tasks and pause token calls and always-allow policies until automation is turned off and on.",
     "diagnostics": "Diagnostics",
     "export_description": "Export stream statistics and a redacted diagnostic report.",
     "peer": "Remote device",

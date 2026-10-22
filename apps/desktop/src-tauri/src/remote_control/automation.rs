@@ -268,17 +268,18 @@ impl Service {
     pub fn automation_release(&self, principal: &str) {
         self.automation_release_matching(principal, None);
     }
-    pub fn automation_revoke_lease(&self, principal: &str, lease: &str) {
-        self.automation_release_matching(principal, Some(lease));
+    pub fn automation_revoke_lease(&self, principal: &str, lease: &str) -> bool {
+        self.automation_release_matching(principal, Some(lease))
     }
-    fn automation_release_matching(&self, principal: &str, lease: Option<&str>) {
+    fn automation_release_matching(&self, principal: &str, lease: Option<&str>) -> bool {
         let Ok(owner) = self.automation_owner() else {
-            return;
+            return false;
         };
         let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
         let Some(active) = host.active.as_mut() else {
-            return;
+            return false;
         };
+        let mut released = false;
         if active.kind == ControllerKind::Remote {
             if active.reuse.as_ref().is_some_and(|reuse| {
                 reuse.principal == principal && lease.is_none_or(|lease| reuse.id == lease)
@@ -286,18 +287,27 @@ impl Service {
                 let reuse = active.reuse.take().unwrap();
                 let grant = active.grant.clone();
                 if !reuse.held.is_empty() && host.worker.status().grant.as_ref() == Some(&grant) {
-                    let _ = host.worker.input(grant, Event::ReleaseInputs(reuse.held));
-                    let _ = host.worker.flush();
+                    let _ = host
+                        .worker
+                        .input(grant.clone(), Event::ReleaseInputs(reuse.held));
                 }
+                // Flush also observes an emergency already pending on the input actor.
+                released = host.worker.flush().is_ok_and(|status| {
+                    status.grant.as_ref() == Some(&grant)
+                        && !status.input_suspended
+                        && status.failure.is_none()
+                });
             }
         } else if active.grant.binding.client_id == principal
             && lease.is_none_or(|lease| active.grant.id == lease)
         {
             let media = active.grant.binding.target.media_id.clone();
-            let _ = host.worker.revoke();
+            let grant = active.grant.clone();
+            released = host.worker.revoke_matching(grant).unwrap_or(false);
             host.end_grant();
             host.remove_peer(&media);
         }
         owner.publish(host.snapshot());
+        released
     }
 }

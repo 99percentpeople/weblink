@@ -19,6 +19,7 @@ use weblink_desktop_input::{
 };
 pub(super) struct Owner {
     pub(super) id: String,
+    standalone: bool,
     alive: AtomicBool,
     pub(super) host: Mutex<Host>,
     thread: Mutex<Option<JoinHandle<()>>>,
@@ -55,11 +56,54 @@ impl Owner {
 }
 #[derive(Default)]
 pub struct Service {
+    automation_listening: AtomicBool,
     shortcut: Mutex<weblink_desktop_input::shortcut::Shortcut>,
     pub(super) owner: Mutex<Option<Arc<Owner>>>,
     observer: Mutex<Option<Observer>>,
+    emergency_observer: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl Service {
+    /// Keep the shared shortcut available for local automation outside a room.
+    pub fn automation_listener(&self, enabled: bool) -> Result<(), String> {
+        if !weblink_desktop_input::session::supported() {
+            return Ok(());
+        }
+        self.automation_listening.store(enabled, Ordering::Release);
+        if enabled {
+            if let Err(error) = self.ensure_automation_listener() {
+                self.automation_listening.store(false, Ordering::Release);
+                return Err(error);
+            }
+        } else {
+            let mut slot = self.owner.lock().unwrap_or_else(|e| e.into_inner());
+            if slot.as_ref().is_some_and(|owner| owner.standalone) {
+                slot.take().unwrap().shutdown();
+            }
+        }
+        Ok(())
+    }
+    fn ensure_automation_listener(&self) -> Result<(), String> {
+        let shortcut = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
+        self.start_shared(true, || {
+            weblink_desktop_input::session::start_with_shortcut(*shortcut)
+        })?;
+        Ok(())
+    }
+    pub fn observe_emergency(&self, observer: Arc<dyn Fn() + Send + Sync>) {
+        let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner());
+        *self
+            .emergency_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(observer.clone());
+        if let Some(owner) = owner.as_ref().filter(|owner| owner.live()) {
+            owner
+                .host
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .worker
+                .observe_emergency(Some(observer));
+        }
+    }
     pub fn devices(&self) -> Result<weblink_desktop_input::devices::Snapshot, String> {
         let owner = self.owner.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(owner) = owner.filter(|owner| owner.live()) {
@@ -216,13 +260,44 @@ impl Service {
             weblink_desktop_input::input::Error,
         >,
     ) -> Result<String, String> {
+        self.start_shared(false, start)
+    }
+    fn start_shared(
+        &self,
+        standalone: bool,
+        start: impl FnOnce() -> Result<
+            Box<dyn weblink_desktop_input::session::Session>,
+            weblink_desktop_input::input::Error,
+        >,
+    ) -> Result<String, String> {
         let mut slot = self.owner.lock().unwrap_or_else(|e| e.into_inner());
+        if standalone {
+            if let Some(owner) = slot.as_ref().filter(|owner| owner.live()) {
+                if !owner
+                    .host
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .worker
+                    .status()
+                    .closed
+                {
+                    return Ok(owner.id.clone());
+                }
+            }
+        }
         if let Some(old) = slot.take() {
             old.shutdown();
         }
         let worker = start().map_err(input_error)?;
+        worker.observe_emergency(
+            self.emergency_observer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
+        );
         let owner = Arc::new(Owner {
             id: uuid::Uuid::new_v4().to_string(),
+            standalone,
             alive: AtomicBool::new(true),
             host: Mutex::new(Host {
                 wake: None,
@@ -315,6 +390,10 @@ impl Service {
                 owner.shutdown();
             }
         }
+        drop(slot);
+        if self.automation_listening.load(Ordering::Acquire) {
+            let _ = self.ensure_automation_listener();
+        }
     }
     pub fn status(&self, id: &str) -> Result<Snapshot, String> {
         // Polling only observes state. WebView scheduling must not own the lifetime
@@ -382,6 +461,14 @@ impl Service {
     }
     /// Preserve the host's emergency path while the same app captures controller keys.
     pub fn emergency_revoke(&self) {
+        let observer = self
+            .emergency_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(observer) = observer {
+            observer();
+        }
         let id = self
             .owner
             .lock()
