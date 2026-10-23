@@ -175,7 +175,7 @@
   },
   {
     "name": "control.acquire",
-    "description": "Acquire control of a live native monitor stream. Reuses the same verified device's existing manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
+    "description": "Acquire control of a live native monitor stream. New leases default to desktop input: call control.pointer/key/text directly without bindWindow or accessibility focus; keys/text go to the current foreground application and pointer coordinates are physical desktop pixels. Reuses the same verified device's manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Repeated acquisition preserves the existing lease and any optional window binding. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -202,7 +202,7 @@
   },
   {
     "name": "control.bindWindow",
-    "description": "Bind keyboard, text and pointer input to a top-level windowId returned as elementId by accessibility.windows. Requires acquired control and all keys/buttons released. Attempts foreground activation once; subsequent focus loss/window destruction stops input. Pointer points must belong to the visible bound window and acquired monitor. Bind once per control lease; release/acquire to change or remove binding. UIA semantic actions retain their explicit element targets.",
+    "description": "Optional window confinement; omit this tool for normal desktop input. Bind keyboard, text and pointer input to a top-level windowId returned as elementId by accessibility.windows. Requires acquired control and all keys/buttons released. Attempts foreground activation once; subsequent focus loss/window destruction stops input. Closing this window can take effect before an action returns CONTROL_REQUIRED or a window/focus error; inspect windows or a screenshot before retrying. Pointer points must belong to the visible bound window and acquired monitor. Bind once per control lease; release/acquire to change or remove binding. UIA semantic actions retain their explicit element targets.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -319,7 +319,7 @@
   },
   {
     "name": "control.pointer",
-    "description": "Mouse actions in desktopPhysicalPixels, bound to sourceId and geometryRevision from control.acquire. action is required: move jumps to x/y, or follows path from x/y; drag presses at x/y, follows path then releases. path has 1..128 waypoints; durationMs defaults to 500 (16..10000). down/up maintain button state across calls, with a 30-second hold limit. click supports clickCount 1..2, holdMs (default 30) and intervalMs (default 100). scroll requires scrollX and scrollY (120 units per detent, use 0 for the unused axis). Input actions execute serially. Cancellation, stale geometry or lost authority releases the affected control lease.",
+    "description": "Mouse actions in desktopPhysicalPixels, bound to sourceId and geometryRevision from control.acquire. No window binding or focus call is required for desktop input; click directly at screen coordinates. An optional bindWindow confines input to that window. action is required: move jumps to x/y, or follows path from x/y; drag presses at x/y, follows path then releases. path has 1..128 waypoints; durationMs defaults to 500 (16..10000). down/up maintain button state across calls, with a 30-second hold limit. click supports clickCount 1..2, holdMs (default 30) and intervalMs (default 100). scroll requires scrollX and scrollY (120 units per detent, use 0 for the unused axis). Input actions execute serially. Cancellation, stale geometry or lost authority releases the affected control lease.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -809,7 +809,7 @@
   },
   {
     "name": "control.key",
-    "description": "Operate named physical keys: press, down, up or ordered chord (reverse release). Timed actions default to holdMs=30, repeat=1, intervalMs=100; total scheduled duration <=10 seconds. Names are physical positions, not text. Held keys can combine with mouse actions; overlapping presses are rejected.",
+    "description": "Send named physical keys to the current foreground application using the acquired control lease; no bindWindow or focus call is required. An optional bindWindow confines input to that window. Actions: press, down, up or ordered chord (reverse release). Timed actions default to holdMs=30, repeat=1, intervalMs=100; total scheduled duration <=10 seconds. Names are physical positions, not text. Held keys can combine with mouse actions; overlapping presses are rejected.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -1482,7 +1482,7 @@
   },
   {
     "name": "control.text",
-    "description": "Type committed Unicode text into the focused application. Controls (including newline/Tab) require control.key. All held keys/buttons must first be released. Cancellable chunks preserve Unicode characters; intervalMs optionally spaces characters, with <=10 seconds of scheduled gaps.",
+    "description": "Type committed Unicode text into the current foreground application's focused control using the acquired control lease; no bindWindow or focus call is required. An optional bindWindow confines input to that window. Controls (including newline/Tab) require control.key. All held keys/buttons must first be released. Cancellable chunks preserve Unicode characters; intervalMs optionally spaces characters, with <=10 seconds of scheduled gaps.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,

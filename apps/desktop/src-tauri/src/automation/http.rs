@@ -19,7 +19,18 @@ use rmcp::{
 struct Handler(Shared);
 impl ServerHandler for Handler {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions("Weblink automation. Explicit targets. A valid MCP token authorizes forwarding and device discovery. Other local calls also require local automation to be enabled. Remote calls follow the destination device's permissions. Calls never approve their own remote permissions.")
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(concat!(
+            "Weblink automation. Explicit targets. A valid MCP token authorizes forwarding and device discovery. ",
+            "Other local calls also require local automation to be enabled. Remote calls follow the destination device's permissions. ",
+            "Calls never approve their own remote permissions. ",
+            "For desktop input, use a live native monitor track (sessions.list or screen.start), call control.acquire once, ",
+            "then call control.pointer/key/text directly. No bindWindow or accessibility focus call is needed. ",
+            "Keys/text go to the current foreground application; pointer actions use physical desktop coordinates. ",
+            "Use bindWindow only when window confinement is explicitly wanted. To remove an existing binding, release and acquire again. ",
+            "Input and accessibility actions may already have taken effect when CONTROL_REQUIRED or a window/focus error is returned, ",
+            "for example after closing the bound window. Re-observe with accessibility.windows or control.screenshot to determine ",
+            "the actual outcome before retrying; an error does not prove the window is still open."
+        ))
     }
     async fn list_tools(
         &self,

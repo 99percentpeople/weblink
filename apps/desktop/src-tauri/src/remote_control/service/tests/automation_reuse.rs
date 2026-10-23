@@ -25,6 +25,54 @@ pub(crate) fn with_bound_owned_input(test: impl FnOnce(&Service, &str, &dyn Fn(b
     });
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum InputInterruption {
+    CaptureEnded,
+    InputInterrupted,
+    ControlReleased,
+}
+
+pub(crate) fn with_interruptible_input(
+    borrowed: bool,
+    test: impl FnOnce(&Service, &str, &dyn Fn(InputInterruption)),
+) {
+    let rig = if borrowed { manual().0 } else { Rig::new() };
+    let lease = if borrowed {
+        borrow(&rig)
+    } else {
+        rig.acquire_automation()
+    };
+    test(&rig.service, &lease, &|reason| {
+        match reason {
+            InputInterruption::CaptureEnded => rig.source.0.store(false, Ordering::Release),
+            InputInterruption::InputInterrupted => {
+                rig.service
+                    .owner(&rig.owner)
+                    .unwrap()
+                    .host
+                    .lock()
+                    .unwrap()
+                    .worker
+                    .interrupt()
+                    .unwrap();
+            }
+            InputInterruption::ControlReleased => rig.service.revoke(&rig.owner).unwrap(),
+        }
+        rig.tick();
+    });
+    assert!(rig
+        .service
+        .owner(&rig.owner)
+        .unwrap()
+        .host
+        .lock()
+        .unwrap()
+        .worker
+        .status()
+        .held
+        .is_empty());
+}
+
 fn manual() -> (Rig, String) {
     let rig = Rig::new();
     rig.service
@@ -95,6 +143,87 @@ fn borrow(rig: &Rig) -> String {
 }
 fn key(key: ScanCode, down: bool) -> Event {
     Event::Key { key, down }
+}
+
+#[test]
+fn desktop_automation_accepts_pointer_keys_and_text_without_window_binding() {
+    for borrowed in [false, true] {
+        let rig = if borrowed { manual().0 } else { Rig::new() };
+        let lease = if borrowed {
+            borrow(&rig)
+        } else {
+            rig.acquire_automation()
+        };
+        assert!(!rig
+            .service
+            .automation_window_bound("client", &lease)
+            .unwrap());
+        let enter = ScanCode::new(0x1c, false).unwrap();
+        let point = Position { x: 0.75, y: 0.25 };
+        // No window discovery, activation or focus check precedes these calls.
+        rig.service
+            .automation_input(
+                "client",
+                &lease,
+                vec![
+                    Event::Move(point),
+                    Event::Button {
+                        button: Button::Left,
+                        down: true,
+                        position: point,
+                    },
+                    Event::Button {
+                        button: Button::Left,
+                        down: false,
+                        position: point,
+                    },
+                ],
+            )
+            .unwrap();
+        rig.service
+            .automation_input("client", &lease, vec![key(enter, true), key(enter, false)])
+            .unwrap();
+        rig.service
+            .automation_input("client", &lease, vec![Event::Text("中".into())])
+            .unwrap();
+        let observations = rig.state.observations.lock().unwrap();
+        for action in [
+            Action::Button {
+                button: Button::Left,
+                down: true,
+            },
+            Action::Button {
+                button: Button::Left,
+                down: false,
+            },
+            Action::Key {
+                key: enter,
+                down: true,
+            },
+            Action::Key {
+                key: enter,
+                down: false,
+            },
+            Action::Unicode {
+                unit: '中' as u16,
+                down: true,
+            },
+            Action::Unicode {
+                unit: '中' as u16,
+                down: false,
+            },
+        ] {
+            assert!(observations.contains(&Observation::Input(action)));
+        }
+        drop(observations);
+        assert!(rig.service.automation_matches("client", &lease));
+        assert!(!rig
+            .service
+            .automation_window_bound("client", &lease)
+            .unwrap());
+        rig.service.automation_release("client");
+        assert!(!rig.service.automation_active("client"));
+    }
 }
 
 #[test]
@@ -303,9 +432,8 @@ fn borrowed_window_binding_confines_only_automation_and_does_not_end_manual_inpu
     let owner = rig.service.owner(&rig.owner).unwrap();
     assert!(!owner.host.lock().unwrap().worker.status().window_bound);
     window.0.store(false, Ordering::Release);
-    // The heartbeat uses this query to detect emergency revocation and pause
-    // all automatic permissions. A stale/blurred window only rejects this
-    // borrowed input scope; the underlying authority still exists.
+    // A stale/blurred window rejects this borrowed input scope; the underlying
+    // manual authority still exists until the automation sampler retires the scope.
     assert!(rig.service.automation_active("client"));
     assert_eq!(
         rig.service.automation_lease("client"),

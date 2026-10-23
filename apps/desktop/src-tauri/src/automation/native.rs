@@ -5,15 +5,26 @@ mod tests;
 pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
     sync_input_control(service, &app.state::<crate::remote_control::Shared>());
 }
-fn retire_window_interruption(
+fn retire_input_interruption(
     service: &Service,
     control: &crate::remote_control::Service,
     principal: &str,
 ) -> bool {
-    let Some(lease) = control.automation_take_window_interruption(principal) else {
+    if let Some(lease) = control.automation_take_window_interruption(principal) {
+        service.input_holds.lock().unwrap().clear(&lease);
+        return true;
+    }
+    if control.automation_active(principal) {
         return false;
-    };
-    service.input_holds.lock().unwrap().clear(&lease);
+    }
+    // A capture ending, input interruption or hold timeout ends only this lease.
+    // Emergency authority is fenced independently by the shared shortcut observer.
+    control.automation_release(principal);
+    service
+        .input_holds
+        .lock()
+        .unwrap()
+        .clear_principal(principal);
     true
 }
 fn sync_input_control(service: &Service, control: &crate::remote_control::Service) {
@@ -25,35 +36,9 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
     if control.automation_listener(active).is_err() && active {
         service.stop_locked(&mut s);
     }
-    // Retire a failed invocation scope before detecting emergency revocation.
-    // The manual grant and every automation permission group remain intact.
-    s.input_owners
-        .retain(|principal| !retire_window_interruption(service, control, principal));
     super::input_action::expire_holds(control, service, !s.pending.is_empty());
-    let ended: Vec<_> = s
-        .input_owners
-        .iter()
-        .filter(|id| !control.automation_active(id))
-        .cloned()
-        .collect();
-    let revoked: Vec<_> = s
-        .grants
-        .values()
-        .filter(|g| {
-            ended.contains(&g.principal.id)
-                && g.scopes.iter().any(|v| v == "input.control")
-                && g.target == "local"
-        })
-        .map(|g| g.id.clone())
-        .collect();
-    // Disconnect/revocation already removed its grants. Only a still-authorized
-    // owner ending externally needs to suspend automatic reacquisition.
-    if !revoked.is_empty() {
-        service.pause_policies(&mut s);
-    }
-    for id in revoked {
-        service.revoke_locked(&mut s, &id);
-    }
+    s.input_owners
+        .retain(|principal| !retire_input_interruption(service, control, principal));
     let allowed: Vec<String> = s
         .grants
         .values()
@@ -169,17 +154,10 @@ pub async fn action(
         {
             return Err("APPROVAL_PENDING".into());
         }
-        if retire_window_interruption(&service, &control, &principal) {
-            s.input_owners.retain(|id| id != &principal);
-        }
-        if catalog::find(&call.name)?["scope"] == "input.control"
-            && s.input_owners.contains(&principal)
-            && !control.automation_active(&principal)
+        if s.input_owners.contains(&principal)
+            && retire_input_interruption(&service, &control, &principal)
         {
-            service.pause_policies(&mut s);
-            service.revoke_locked(&mut s, &grant);
             s.input_owners.retain(|id| id != &principal);
-            return Err("GRANT_EXPIRED".into());
         }
         match call.name.as_str() {
             "commands.capabilities" => Ok(super::jobs::capabilities()),

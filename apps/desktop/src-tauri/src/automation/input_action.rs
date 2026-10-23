@@ -88,8 +88,8 @@ pub(super) fn abort_lease(
     lease: &str,
 ) {
     let mut state = service.state.lock().unwrap_or_else(|e| e.into_inner());
-    // Only a successful self-release retires the owner. An earlier external
-    // revoke must remain visible to the authority sampler, even after cleanup.
+    // Retire only the lease we released; stale cleanup must leave a replacement
+    // owner alone. The shared emergency observer fences permissions separately.
     if control.automation_revoke_lease(principal, lease) {
         state.input_owners.retain(|owner| owner != principal);
     }

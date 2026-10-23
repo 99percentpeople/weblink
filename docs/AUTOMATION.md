@@ -251,9 +251,11 @@ Emergency stop and explicit revocation of a policy grant pause token calls and a
 until their respective switch is disabled and enabled again: MCP resumes token
 calls, while automation resumes remote-device Always-allow policies. Each switch
 leaves the other pause intact. This pause does not erase saved policies;
-individual timed peer approvals remain available. A borrowed window losing
-focus only ends its input lease and releases its held keys/buttons; it does not pause
-automation permissions. Late input cleanup cannot suppress an emergency stop or release
+individual timed peer approvals remain available. Window focus loss, capture end,
+input interruption and held-input timeout only end the affected input lease and
+release its held keys/buttons; they do not pause automation permissions or unrelated
+command jobs. Reacquiring control still requires a current capture and valid permission.
+Late input cleanup cannot suppress an emergency stop or release
 a replacement lease. Automated input is blocked while permission requests await local review.
 Full desktop input can operate terminals and other applications; separating
 Shell tools is not an OS sandbox for a caller that already has desktop control.
@@ -273,7 +275,7 @@ contracts belong to `packages/platform`; Tauri imports remain in `apps/desktop`.
   capture discovery, sharing without audio, and live stream configuration.
 - `control.acquire`, `control.bindWindow`, `control.release`, `control.screenshot`, `control.pointer`,
   `control.key`, `control.text`: exclusive monitor control and bounded screenshots.
-  Screenshots currently use the existing bounded native snapshot (up to 640×360).
+  Screenshots default to fitting inside 1024×1024, with window/rectangle crops.
   Acquire requires a live local native monitor track. Pointer operations use
   physical desktop pixels, shared with screenshots and UIA. Keys use PC set-1
   scan codes; text excludes control characters. Existing native platform support
@@ -439,9 +441,29 @@ and emergency release use the existing native cleanup. A late cleanup cannot
 release a new owner's or reacquired lease. After an interrupted gesture or hold
 timeout, acquire control again before sending more input.
 
-## Binding input to a window
+## Direct desktop input (default)
 
-After `control.acquire`, call `accessibility.windows` and choose the desired
+Use a live native monitor track from `sessions.list`, or create one with
+`screen.start`, then call `control.acquire` with its `trackId`. Call
+`control.pointer`, `control.key` and `control.text` directly afterwards;
+`accessibility.windows`, `accessibility.action` with `focus`, and `control.bindWindow`
+are not prerequisites.
+
+Keys and text go to the current foreground application's focused control. Pointer
+actions use physical desktop coordinates with the acquired `sourceId` and
+`geometryRevision`; clicking a control can select it as with a physical mouse.
+Weblink itself can remain in the background. Switching between application windows
+does not end an unbound desktop lease. This does not deliver keys to a particular
+background window; the foreground application determines their recipient.
+
+Keep the lease for subsequent input calls. If it already has an optional window
+binding, call `control.release` and `control.acquire` to return to desktop input;
+repeating `control.acquire` alone preserves the existing binding.
+
+## Optional window confinement
+
+Only when input must stay inside one window, after `control.acquire`, call
+`accessibility.windows` and choose the desired
 top-level window by its returned name/process information. Pass that window's
 `elementId` as `windowId` to `control.bindWindow`:
 
@@ -480,6 +502,15 @@ becoming the input target. The marker is removed when its native guard is droppe
 Idle bound input is checked about every 50 ms. Window destruction, minimization
 or focus loss interrupts input and releases held keys/buttons; returning focus
 does not resume it automatically. Acquire and bind again after interruption.
+
+An action can take effect before its final lease check fails. For example,
+clicking a bound calculator's close button or sending Alt+F4 can close the window,
+then return `CONTROL_REQUIRED`, `WINDOW_UNAVAILABLE` or `WINDOW_FOCUS_LOST` as
+the remaining input sequence loses its target. These errors do not roll back
+already submitted input and do not prove the close failed. Query
+`accessibility.windows` or take a fresh `control.screenshot` to determine the
+actual outcome before deciding whether to retry. If the intended window has
+closed, the close task is complete; acquire a new lease only for further input.
 
 This is foreground input confinement, not a background message/input injection
 API. Dialogs or popups that become separate foreground windows require a new

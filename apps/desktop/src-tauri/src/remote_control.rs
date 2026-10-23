@@ -12,7 +12,7 @@ mod transport;
 pub use commands::*;
 #[cfg(test)]
 pub(crate) use service::tests::automation_reuse::{
-    with_bound_borrowed_input, with_bound_owned_input,
+    with_bound_borrowed_input, with_bound_owned_input, with_interruptible_input, InputInterruption,
 };
 pub use service::Service;
 

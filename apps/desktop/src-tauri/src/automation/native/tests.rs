@@ -1,5 +1,7 @@
 use super::*;
-use crate::remote_control::{with_bound_borrowed_input, with_bound_owned_input};
+use crate::remote_control::{
+    with_bound_borrowed_input, with_bound_owned_input, with_interruptible_input, InputInterruption,
+};
 use weblink_desktop_input::input::{Event, ScanCode};
 
 fn authority(timed: bool) -> Service {
@@ -20,6 +22,7 @@ fn authority(timed: bool) -> Service {
             HashMap::from([
                 ("input.control".into(), policy::Decision::Allow),
                 ("diagnostics.read".into(), policy::Decision::Allow),
+                ("shell.execute".into(), policy::Decision::Allow),
             ]),
         );
         for scope in ["input.control", "diagnostics.read"] {
@@ -220,7 +223,7 @@ fn borrowed_blur_heartbeat_clears_lease_and_holds_but_preserves_all_permissions(
 }
 
 #[test]
-fn actual_revocation_still_suspends_permissions_even_when_the_borrowed_window_blurs() {
+fn ended_borrowed_lease_preserves_permissions_even_when_the_window_blurs() {
     with_bound_borrowed_input(|control, _, focus| {
         let service = authority(false);
         focus(false);
@@ -228,15 +231,189 @@ fn actual_revocation_still_suspends_permissions_even_when_the_borrowed_window_bl
         sync_input_control(&service, control);
         let s = service.state.lock().unwrap();
         assert!(s.input_owners.is_empty());
-        assert!(s.policies_suspended);
-        assert!(s.grants.is_empty());
+        assert!(!s.policies_suspended);
+        assert!(!s.mcp_suspended);
+        assert_eq!(s.grants.len(), 2);
     });
+}
+
+#[test]
+fn hold_timeout_releases_input_without_suspending_permanent_permissions() {
+    with_bound_borrowed_input(|control, lease, _| {
+        let service = authority(false);
+        control.observe_emergency(service.emergency_observer());
+        let events = [Event::Key {
+            key: ScanCode::new(0x1d, false).unwrap(),
+            down: true,
+        }];
+        service.input_holds.lock().unwrap().update(
+            "client",
+            lease,
+            &events,
+            Instant::now() - input_holds::HOLD_LIMIT,
+        );
+        control
+            .automation_input("client", lease, events.to_vec())
+            .unwrap();
+        sync_input_control(&service, control);
+        assert!(!control.automation_active("client"));
+        assert!(!service.input_holds.lock().unwrap().any(lease));
+        let s = service.state.lock().unwrap();
+        assert!(s.input_owners.is_empty());
+        assert!(!s.policies_suspended);
+        assert!(!s.mcp_suspended);
+        assert_eq!(s.grants.len(), 2);
+    });
+}
+
+#[test]
+fn native_lease_interruptions_preserve_peer_and_mcp_authority() {
+    for borrowed in [false, true] {
+        for interruption in [
+            InputInterruption::CaptureEnded,
+            InputInterruption::InputInterrupted,
+            InputInterruption::ControlReleased,
+        ] {
+            for before_sampler in [false, true] {
+                with_interruptible_input(borrowed, |control, lease, interrupt| {
+                    let service = authority(false);
+                    control.observe_emergency(service.emergency_observer());
+                    let events = [Event::Key {
+                        key: ScanCode::new(0x1d, false).unwrap(),
+                        down: true,
+                    }];
+                    service.input_holds.lock().unwrap().update(
+                        "client",
+                        lease,
+                        &events,
+                        Instant::now(),
+                    );
+                    control
+                        .automation_input("client", lease, events.to_vec())
+                        .unwrap();
+                    let grants =
+                        serde_json::to_value(&service.state.lock().unwrap().grants).unwrap();
+                    interrupt(interruption);
+                    if before_sampler {
+                        // control.acquire/control.release can observe the end before the sampler.
+                        let mut s = service.state.lock().unwrap();
+                        assert!(retire_input_interruption(&service, control, "client"));
+                        s.input_owners.clear();
+                    }
+                    sync_input_control(&service, control);
+                    sync_input_control(&service, control);
+                    assert!(!control.automation_active("client"));
+                    assert!(control
+                        .automation_input("client", lease, vec![Event::Text("stale".into())])
+                        .is_err());
+                    assert!(!service.input_holds.lock().unwrap().any(lease));
+                    let mut s = service.state.lock().unwrap();
+                    assert!(s.input_owners.is_empty());
+                    assert!(
+                        !s.policies_suspended,
+                        "{interruption:?}, borrowed={borrowed}"
+                    );
+                    assert!(!s.mcp_suspended);
+                    assert_eq!(serde_json::to_value(&s.grants).unwrap(), grants);
+                    let peer = s.peers["client"].clone();
+                    for scope in ["input.control", "diagnostics.read", "shell.execute"] {
+                        assert!(
+                            Service::peer_decision(&s, &peer, scope) == policy::Decision::Allow
+                        );
+                        Service::policy_grant(&mut s, &peer, scope);
+                        assert!(s
+                            .grants
+                            .values()
+                            .any(|g| g.scopes.iter().any(|v| v == scope)
+                                && Service::grant_live(&s, g)));
+                    }
+                    assert!(s.pending.is_empty());
+                });
+                with_interruptible_input(borrowed, |control, lease, interrupt| {
+                    let (service, token) = super::super::tests::fixture();
+                    control.observe_emergency(service.emergency_observer());
+                    {
+                        let mut s = service.state.lock().unwrap();
+                        Service::token_grant(&mut s, &token, &json!("local")).unwrap();
+                        s.input_owners.push(token.id.clone());
+                    }
+                    interrupt(interruption);
+                    if before_sampler {
+                        let mut s = service.state.lock().unwrap();
+                        assert!(retire_input_interruption(&service, control, "client"));
+                        s.input_owners.clear();
+                    }
+                    sync_input_control(&service, control);
+                    let mut s = service.state.lock().unwrap();
+                    assert!(!s.mcp_suspended);
+                    Service::token_grant(&mut s, &token, &json!("local")).unwrap();
+                    assert!(s.input_owners.is_empty());
+                    assert!(!control.automation_matches("client", lease));
+                });
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn permanent_allow_dispatches_without_a_new_review_after_capture_ends() {
+    let service = Arc::new(authority(false));
+    let (sent, mut events) = tokio::sync::mpsc::unbounded_channel::<Value>();
+    service.state.lock().unwrap().channel = Some(Channel::new(move |body| {
+        let tauri::ipc::InvokeResponseBody::Json(body) = body else {
+            panic!("expected JSON")
+        };
+        let _ = sent.send(serde_json::from_str(&body).unwrap());
+        Ok(())
+    }));
+    with_interruptible_input(true, |control, _, interrupt| {
+        control.observe_emergency(service.emergency_observer());
+        interrupt(InputInterruption::CaptureEnded);
+        sync_input_control(&service, control);
+    });
+    let peer = service.state.lock().unwrap().peers["client"].clone();
+    for name in [
+        "diagnostics.snapshot",
+        "commands.capabilities",
+        "control.acquire",
+    ] {
+        let arguments = if name == "control.acquire" {
+            json!({"target":"local", "trackId":"new-capture"})
+        } else {
+            json!({"target":"local"})
+        };
+        let call = Call {
+            name: name.into(),
+            source: None,
+            arguments,
+        };
+        let request = tokio::spawn(service.clone().invoke(peer.clone(), name.into(), call));
+        let event = tokio::time::timeout(Duration::from_secs(3), events.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(event["kind"], "call");
+        assert_eq!(event["call"]["name"], name);
+        let mut s = service.state.lock().unwrap();
+        assert!(s.pending.is_empty());
+        assert!(Service::check_call(&s, "epoch", name).is_ok());
+        // The frontend/native executor still validates the new capture for acquire.
+        s.tickets
+            .remove(name)
+            .unwrap()
+            .answer
+            .send(json!({"ok": true}))
+            .unwrap();
+        drop(s);
+        assert_eq!(request.await.unwrap(), json!({"ok": true}));
+    }
 }
 
 #[test]
 fn input_cleanup_does_not_hide_an_earlier_external_revoke() {
     with_bound_borrowed_input(|control, lease, _| {
         let service = authority(false);
+        control.observe_emergency(service.emergency_observer());
         control.emergency_revoke();
         super::super::input_action::abort_lease(&service, control, "client", lease);
         assert_eq!(service.state.lock().unwrap().input_owners, vec!["client"]);

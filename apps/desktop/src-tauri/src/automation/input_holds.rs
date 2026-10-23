@@ -45,6 +45,11 @@ impl Holds {
             self.0 = None;
         }
     }
+    pub fn clear_principal(&mut self, principal: &str) {
+        if self.0.as_ref().is_some_and(|h| h.principal == principal) {
+            self.0 = None;
+        }
+    }
     pub fn update(&mut self, principal: &str, lease: &str, events: &[Event], now: Instant) {
         for event in events {
             let (input, down) = match event {
