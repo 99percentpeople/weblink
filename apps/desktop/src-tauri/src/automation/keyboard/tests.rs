@@ -134,6 +134,37 @@ fn shared_key_names_roundtrip_and_schema_covers_exact_native_whitelist() {
     }
 }
 #[test]
+fn alt_f4_focus_loss_releases_keys_without_replaying_the_remaining_sequence() {
+    use super::super::input_sequence::window_result;
+    use weblink_desktop_input::{
+        input::Error,
+        window::{BoundWindow, WindowGuard},
+    };
+    struct LostWindow;
+    impl WindowGuard for LostWindow {
+        fn check(&self, _: Option<(i32, i32)>) -> Result<(), Error> {
+            Err(Error::WindowUnavailable)
+        }
+        fn activate(&self) -> Result<(), Error> {
+            panic!("Never refocus an interrupted input target")
+        }
+    }
+    let window: BoundWindow = std::sync::Arc::new(LostWindow);
+    let f = Fake::new();
+    // Both downs were sent; native lease cleanup wins the next authority check.
+    f.stop_after.set(Some(2));
+    f.failure.set("CONTROL_REQUIRED");
+    let result = f.key(&json!({"target":"local","action":"chord","keys":["AltLeft","F4"]}));
+    assert_eq!(result, Err("CONTROL_REQUIRED".into()));
+    assert_eq!(
+        window_result(result, Some(&window), || Ok(())),
+        Err("WINDOW_FOCUS_LOST".into())
+    );
+    assert_eq!(f.events.borrow().len(), 2);
+    assert_eq!(f.aborted.get(), 1);
+    assert!(!f.holds.borrow().any("old"));
+}
+#[test]
 fn chords_press_in_order_release_in_reverse_and_repeat_after_the_gap() {
     let f = Fake::new();
     f.key(&chord()).unwrap();
@@ -237,6 +268,8 @@ fn interruption_at_every_chord_boundary_stops_later_events_and_releases_owned_ke
         "CANCELLED",
         "GRANT_EXPIRED",
         "CONTROL_REQUIRED",
+        "WINDOW_FOCUS_LOST",
+        "WINDOW_UNAVAILABLE",
         "APPROVAL_PENDING",
         "HOLD_EXPIRED",
     ] {

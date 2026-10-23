@@ -51,6 +51,7 @@ pub(super) struct Consent {
     pub(super) requested: Instant,
 }
 pub(super) struct Active {
+    pub(super) automation_window: Option<weblink_desktop_input::window::BoundWindow>,
     pub(super) reuse: Option<AutomationReuse>,
     pub(super) kind: ControllerKind,
     pub(super) grant: Grant,

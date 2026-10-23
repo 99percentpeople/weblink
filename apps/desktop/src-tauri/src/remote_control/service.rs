@@ -512,6 +512,7 @@ impl Service {
         if let Signal::Grant { grant_id, .. } = &signal {
             let binding = h.peers.get(&media).ok_or("Media ended")?.binding.clone();
             h.active = Some(Active {
+                automation_window: None,
                 reuse: None,
                 kind: ControllerKind::Remote,
                 gamepad_feedback: Default::default(),

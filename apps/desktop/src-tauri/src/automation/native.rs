@@ -98,18 +98,26 @@ pub async fn action(
     if matches!(
         name.as_str(),
         "control.pointer" | "control.key" | "control.text"
-    ) {
-        return super::input_action::action(
-            app,
-            service,
-            epoch,
-            id,
-            turn.ok_or("CONTROL_REQUIRED")?,
-        )
-        .await;
-    }
-    if name.starts_with("accessibility.") || name == "control.bindWindow" {
-        return super::accessibility::action(app, service, epoch, id, turn).await;
+    ) || name.starts_with("accessibility.")
+        || name == "control.bindWindow"
+    {
+        let window = turn.as_ref().and_then(|turn| turn.window.clone());
+        let result = if name.starts_with("accessibility.") || name == "control.bindWindow" {
+            super::accessibility::action(app, service.clone(), epoch.clone(), id.clone(), turn)
+                .await
+        } else {
+            super::input_action::action(
+                app,
+                service.clone(),
+                epoch.clone(),
+                id.clone(),
+                turn.ok_or("CONTROL_REQUIRED")?,
+            )
+            .await
+        };
+        return super::input_sequence::window_result(result, window.as_ref(), || {
+            super::input_sequence::check(&service.state.lock().unwrap(), &epoch, &id).map(|_| ())
+        });
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _turn = turn;

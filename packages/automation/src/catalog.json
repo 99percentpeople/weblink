@@ -202,7 +202,7 @@
   },
   {
     "name": "control.bindWindow",
-    "description": "Optional window confinement; omit this tool for normal desktop input. Bind keyboard, text and pointer input to a top-level windowId returned as elementId by accessibility.windows. Requires acquired control and all keys/buttons released. Attempts foreground activation once; subsequent focus loss/window destruction stops input. Closing this window can take effect before an action returns CONTROL_REQUIRED or a window/focus error; inspect windows or a screenshot before retrying. Pointer points must belong to the visible bound window and acquired monitor. Bind once per control lease; release/acquire to change or remove binding. UIA semantic actions retain their explicit element targets.",
+    "description": "Optional window confinement; omit this tool for normal desktop input. Bind keyboard, text and pointer input to a top-level windowId returned as elementId by accessibility.windows. Requires acquired control and all keys/buttons released. Attempts foreground activation once; subsequent focus loss/window destruction stops input. Loss of the bound window during an action is reported as WINDOW_FOCUS_LOST, including closure. The action may already have taken effect; inspect windows or a screenshot before retrying. Pointer points must belong to the visible bound window and acquired monitor. Bind once per control lease; release/acquire to change or remove binding. UIA semantic actions retain their explicit element targets.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,

@@ -27,8 +27,8 @@ impl ServerHandler for Handler {
             "then call control.pointer/key/text directly. No bindWindow or accessibility focus call is needed. ",
             "Keys/text go to the current foreground application; pointer actions use physical desktop coordinates. ",
             "Use bindWindow only when window confinement is explicitly wanted. To remove an existing binding, release and acquire again. ",
-            "Input and accessibility actions may already have taken effect when CONTROL_REQUIRED or a window/focus error is returned, ",
-            "for example after closing the bound window. Re-observe with accessibility.windows or control.screenshot to determine ",
+            "Loss of the bound window during input or accessibility actions is reported as WINDOW_FOCUS_LOST, including closure. ",
+            "The action may already have taken effect. Re-observe with accessibility.windows or control.screenshot to determine ",
             "the actual outcome before retrying; an error does not prove the window is still open."
         ))
     }

@@ -505,12 +505,15 @@ does not resume it automatically. Acquire and bind again after interruption.
 
 An action can take effect before its final lease check fails. For example,
 clicking a bound calculator's close button or sending Alt+F4 can close the window,
-then return `CONTROL_REQUIRED`, `WINDOW_UNAVAILABLE` or `WINDOW_FOCUS_LOST` as
-the remaining input sequence loses its target. These errors do not roll back
-already submitted input and do not prove the close failed. Query
+then return `WINDOW_FOCUS_LOST` as the remaining input sequence loses its target.
+Bound input and accessibility actions retain their original window reference
+through lease cleanup so this interruption is reported consistently. This is
+not a close-success result and does not roll back already submitted input. Query
 `accessibility.windows` or take a fresh `control.screenshot` to determine the
 actual outcome before deciding whether to retry. If the intended window has
 closed, the close task is complete; acquire a new lease only for further input.
+Calls without an active lease still return `CONTROL_REQUIRED`; permission
+revocation, cancellation and emergency stop keep their existing errors.
 
 This is foreground input confinement, not a background message/input injection
 API. Dialogs or popups that become separate foreground windows require a new

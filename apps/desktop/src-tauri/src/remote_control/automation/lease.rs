@@ -180,6 +180,7 @@ impl Host {
                 return Err("PERMISSION_DENIED".into());
             };
             self.active = Some(Active {
+                automation_window: None,
                 reuse: None,
                 kind: ControllerKind::Automation,
                 gamepad_feedback: Default::default(),

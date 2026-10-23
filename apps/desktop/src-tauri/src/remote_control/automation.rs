@@ -130,8 +130,28 @@ impl Service {
             }
             Ok(())
         } else {
-            host.worker.bind_window(grant, window).map_err(input_error)
+            host.worker
+                .bind_window(grant, window.clone())
+                .map_err(input_error)?;
+            host.active.as_mut().unwrap().automation_window = Some(window);
+            Ok(())
         }
+    }
+    /// Retain this invocation's window for reporting focus loss after lease
+    /// cleanup. Observing the guard cannot authorize further input.
+    pub(crate) fn automation_bound_window(
+        &self,
+        principal: &str,
+        lease: &str,
+    ) -> Result<Option<weblink_desktop_input::window::BoundWindow>, String> {
+        let owner = self.automation_owner()?;
+        let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        host.automation_grant(principal, Some(lease))?;
+        let active = host.active.as_ref().ok_or("CONTROL_REQUIRED")?;
+        Ok(match &active.reuse {
+            Some(reuse) => reuse.window.clone(),
+            None => active.automation_window.clone(),
+        })
     }
     fn automation_bound(&self, host: &Host) -> bool {
         host.active

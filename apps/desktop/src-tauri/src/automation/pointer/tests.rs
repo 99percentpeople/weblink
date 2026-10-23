@@ -241,6 +241,8 @@ fn all_interruptions_release_pressed_buttons_and_stop_later_events() {
         "CANCELLED",
         "GRANT_EXPIRED",
         "SESSION_CLOSED",
+        "WINDOW_FOCUS_LOST",
+        "WINDOW_UNAVAILABLE",
         "GEOMETRY_CHANGED",
         "APPROVAL_PENDING",
     ] {
