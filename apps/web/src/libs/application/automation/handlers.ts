@@ -44,6 +44,18 @@ export function automationHandlers(
     signal.throwIfAborted();
     const args = call.arguments;
     switch (call.name) {
+      case "commands.capabilities":
+        return native
+          ? native()
+          : {
+              supported: false,
+              transport: "none",
+              stdin: false,
+              eof: false,
+              pty: false,
+              supportedSignals: [],
+              signalSemantics: {},
+            };
       case "accessibility.capabilities":
         return native
           ? native()

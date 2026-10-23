@@ -35,13 +35,23 @@ async fn next_call(receive: &mut UnboundedReceiver<Value>) -> Value {
 #[tokio::test]
 async fn token_dispatches_local_and_multiple_remote_targets_without_consent() {
     let (service, principal, mut receive) = connected();
-    for target in ["local", "first-device", "second-device", "local"] {
+    for (target, name) in [
+        ("local", "diagnostics.snapshot"),
+        ("first-device", "diagnostics.snapshot"),
+        ("second-device", "diagnostics.snapshot"),
+        ("local", "commands.capabilities"),
+        ("first-device", "commands.capabilities"),
+        ("second-device", "commands.capabilities"),
+    ] {
+        let mut request = call(target);
+        request.name = name.into();
         let task = tokio::spawn(service.clone().invoke(
             principal.clone(),
             "request".into(),
-            call(target),
+            request,
         ));
         let event = next_call(&mut receive).await;
+        assert_eq!(event["call"]["name"], name);
         assert_eq!(event["call"]["arguments"]["target"], target);
         assert_eq!(event["call"]["source"]["kind"], "mcp");
         {
@@ -69,11 +79,20 @@ async fn token_reuses_authority_for_local_commands_and_output_reads() {
     let (service, principal, mut receive) = connected();
     let mut grant = None;
     for (name, arguments) in [
+        ("commands.capabilities", json!({"target":"local"})),
         (
             "commands.start",
             json!({"target":"local","script":"echo ok"}),
         ),
         ("commands.read", json!({"target":"local","jobId":"job"})),
+        (
+            "commands.send",
+            json!({"target":"local","jobId":"job","input":"text\n","eof":true}),
+        ),
+        (
+            "commands.send",
+            json!({"target":"local","jobId":"job","signal":"SIGKILL"}),
+        ),
         (
             "control.screenshot",
             json!({"target":"local","sourceId":"screen"}),

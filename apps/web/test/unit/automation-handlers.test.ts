@@ -7,6 +7,7 @@ import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { PlatformRuntime } from "@weblink/platform";
 import type { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
+import { parseCall, validate } from "@weblink/automation";
 const fixture = vi.hoisted(() => ({
   capture: vi.fn(),
   sessions: {} as Record<string, unknown>,
@@ -90,6 +91,87 @@ function handler(stream?: unknown) {
     ),
   };
 }
+it("reports no local shell or signals in a browser and uses the native backend when present", async () => {
+  const { run } = handler();
+  const call = {
+    name: "commands.capabilities",
+    arguments: { target: "local" },
+  };
+  const schema = parseCall(call).outputSchema;
+  const signal = new AbortController().signal;
+  const browser = await run(call, signal);
+  expect(browser).toEqual({
+    supported: false,
+    transport: "none",
+    stdin: false,
+    eof: false,
+    pty: false,
+    supportedSignals: [],
+    signalSemantics: {},
+  });
+  expect(
+    validate(schema, { ok: true, data: browser }),
+  ).toBe(true);
+  const windows = {
+    supported: true,
+    transport: "pipe",
+    stdin: true,
+    eof: true,
+    pty: false,
+    supportedSignals: ["SIGTERM", "SIGKILL"],
+    signalSemantics: {
+      SIGTERM: "terminate-process-tree",
+      SIGKILL: "terminate-process-tree",
+    },
+  };
+  const native = vi.fn(async () => windows);
+  expect(await run(call, signal, native)).toBe(windows);
+  expect(native).toHaveBeenCalledOnce();
+  expect(
+    validate(schema, { ok: true, data: windows }),
+  ).toBe(true);
+  expect(
+    validate(schema, {
+      ok: false,
+      error: {
+        code: "UNSUPPORTED",
+        message: "Unknown tool",
+      },
+    }),
+  ).toBe(true);
+  expect(
+    validate(schema, {
+      ok: true,
+      data: { ...windows, supportedSignals: ["SIGSTOP"] },
+    }),
+  ).toBe(false);
+});
+
+it("does not query native command capabilities after cancellation or permission revocation", async () => {
+  const { run } = handler();
+  const call = {
+    name: "commands.capabilities",
+    arguments: { target: "local" },
+  };
+  const native = vi.fn(async () => ({}));
+  const cancelled = new AbortController();
+  cancelled.abort();
+  await expect(
+    run(call, cancelled.signal, native),
+  ).rejects.toThrow();
+  await expect(
+    run(
+      call,
+      new AbortController().signal,
+      native,
+      async () => {
+        throw new Error("GRANT_EXPIRED");
+      },
+    ),
+  ).rejects.toThrow("GRANT_EXPIRED");
+  expect(native).not.toHaveBeenCalled();
+});
+
 it("rechecks permission after async capture and disposes a stream before publishing it", async () => {
   const { run, replace } = handler();
   let resolve!: (stream: unknown) => void;

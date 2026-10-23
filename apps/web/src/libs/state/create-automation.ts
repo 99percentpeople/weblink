@@ -322,7 +322,11 @@ export function createAutomation(
       return result.data;
     }
     await check();
-    if (!native && call.name !== "devices.list")
+    if (
+      !native &&
+      call.name !== "devices.list" &&
+      call.name !== "commands.capabilities"
+    )
       throw new AutomationError("UNSUPPORTED");
     return handle(
       call,

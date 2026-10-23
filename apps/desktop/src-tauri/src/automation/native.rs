@@ -182,8 +182,9 @@ pub async fn action(
             return Err("GRANT_EXPIRED".into());
         }
         match call.name.as_str() {
+            "commands.capabilities" => Ok(super::jobs::capabilities()),
             "commands.start" => service.jobs.start(&principal, &grant, args),
-            "commands.status" | "commands.read" | "commands.cancel" => {
+            "commands.status" | "commands.read" | "commands.send" => {
                 service.jobs.access(&principal, &grant, &call.name, args)
             }
             "control.acquire" => {

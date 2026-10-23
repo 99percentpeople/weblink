@@ -172,4 +172,62 @@ mod tests {
         )
         .is_ok());
     }
+
+    #[test]
+    fn command_capabilities_are_read_only_discovery_without_job_or_shell_authority() {
+        use serde_json::json;
+        for target in ["local", "remote-device"] {
+            let tool = validate("commands.capabilities", &json!({"target":target})).unwrap();
+            assert_eq!(tool["scope"], "diagnostics.read");
+            assert_eq!(tool["readOnly"], true);
+            assert_eq!(tool["native"], true);
+        }
+        for args in [
+            json!({}),
+            json!({"target":""}),
+            json!({"target":"local","jobId":"job"}),
+            json!({"target":"local","signal":"SIGKILL"}),
+        ] {
+            assert!(validate("commands.capabilities", &args).is_err());
+        }
+    }
+    #[test]
+    fn job_send_accepts_bounded_input_eof_or_signal_but_never_ambiguous_actions() {
+        use serde_json::json;
+        for action in [
+            json!({"input":"中文🙂\n"}),
+            json!({"input":"x".repeat(16384),"eof":true}),
+            json!({"eof":true}),
+            json!({"signal":"SIGINT"}),
+            json!({"signal":"SIGTERM"}),
+            json!({"signal":"SIGKILL"}),
+        ] {
+            let mut args = json!({"target":"local","jobId":"job"});
+            args.as_object_mut()
+                .unwrap()
+                .extend(action.as_object().unwrap().clone());
+            let tool = validate("commands.send", &args).unwrap();
+            assert_eq!(tool["scope"], "shell.execute");
+            assert_eq!(tool["readOnly"], false);
+        }
+        for action in [
+            json!({}),
+            json!({"input":""}),
+            json!({"input":"🙂".repeat(16385)}),
+            json!({"eof":false}),
+            json!({"eof":null}),
+            json!({"input":"text","signal":"SIGKILL"}),
+            json!({"eof":true,"signal":"SIGTERM"}),
+            json!({"signal":"STOP"}),
+            json!({"signal":9}),
+            json!({"input":"text","extra":true}),
+        ] {
+            let mut args = json!({"target":"local","jobId":"job"});
+            args.as_object_mut()
+                .unwrap()
+                .extend(action.as_object().unwrap().clone());
+            assert!(validate("commands.send", &args).is_err());
+        }
+        assert!(find("commands.cancel").is_err());
+    }
 }

@@ -1643,8 +1643,129 @@
     }
   },
   {
+    "name": "commands.capabilities",
+    "description": "Read the target device's command backend capabilities without starting a job. Returns supported, transport (pipe or none), stdin, eof, pty, supportedSignals and signalSemantics. Windows pipe jobs support SIGTERM/SIGKILL (both terminate the process tree); Unix supports SIGINT/SIGTERM (process-group signals) and SIGKILL (terminate the process tree). Query the actual target before commands.send; the controller's OS does not determine remote support. Browser-local queries return supported=false and no signals. Capability discovery does not grant shell.execute permission or guarantee that a shell executable is installed.",
+    "scope": "diagnostics.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "supported": {
+                  "type": "boolean"
+                },
+                "transport": {
+                  "type": "string",
+                  "enum": ["pipe", "none"]
+                },
+                "stdin": {
+                  "type": "boolean"
+                },
+                "eof": {
+                  "type": "boolean"
+                },
+                "pty": {
+                  "type": "boolean",
+                  "enum": [false]
+                },
+                "supportedSignals": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["SIGINT", "SIGTERM", "SIGKILL"]
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 3
+                },
+                "signalSemantics": {
+                  "type": "object",
+                  "properties": {
+                    "SIGINT": {
+                      "type": "string",
+                      "enum": ["interrupt-process-group"]
+                    },
+                    "SIGTERM": {
+                      "type": "string",
+                      "enum": [
+                        "terminate-process-group",
+                        "terminate-process-tree"
+                      ]
+                    },
+                    "SIGKILL": {
+                      "type": "string",
+                      "enum": ["terminate-process-tree"]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "supported",
+                "transport",
+                "stdin",
+                "eof",
+                "pty",
+                "supportedSignals",
+                "signalSemantics"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  {
     "name": "commands.run",
-    "description": "Run a noninteractive shell command and wait up to waitMs (default 10000, maximum 60000). Returns jobId, status, exitCode and the latest 16384 output bytes (chunks/startCursor/nextCursor), prioritizing final results/errors. If still running, background=true; continue commands.read with nextCursor. Use commands.read(cursor=0) for retained earlier output. timeoutMs independently limits process lifetime. Cancelling the call before handoff cancels the job.",
+    "description": "Run a pipe-based shell command (no PTY) and wait up to waitMs (default 10000, maximum 60000). Returns jobId, status, exitCode and the latest 16384 output bytes (chunks/startCursor/nextCursor), prioritizing final results/errors. If still running, background=true; continue commands.read with nextCursor. Use commands.read(cursor=0) for retained earlier output. timeoutMs independently limits process lifetime. Cancelling the call before handoff cancels the job. Up to 10 concurrent jobs per device. Stdin stays open; commands.send writes UTF-8 input, closes stdin (eof), or sends a signal.",
     "scope": "shell.execute",
     "native": true,
     "readOnly": false,
@@ -1686,7 +1807,7 @@
   },
   {
     "name": "commands.start",
-    "description": "Start a noninteractive shell job in the background and return jobId immediately. Use commands.read(target,jobId) for the latest 16384 bytes, or tailLines/tailBytes for a smaller tail. Follow new output by passing nextCursor as cursor; poll until status is not running and hasMore=false. timeoutMs defaults to 60000, maximum 600000. stdout/stderr share one absolute byte cursor. Oldest output is evicted to retain the latest 4 MiB/8192 stream segments.",
+    "description": "Start a pipe-based shell job (no PTY) in the background and return jobId immediately. Use commands.read(target,jobId) for the latest 16384 bytes, or tailLines/tailBytes for a smaller tail. Follow new output by passing nextCursor as cursor; poll until status is not running and hasMore=false. timeoutMs defaults to 60000, maximum 600000. stdout/stderr share one absolute byte cursor. Oldest output is evicted to retain the latest 4 MiB/8192 stream segments. Up to 10 concurrent jobs per device. Stdin stays open; commands.send writes UTF-8 input, closes stdin (eof), or sends a signal.",
     "scope": "shell.execute",
     "native": true,
     "readOnly": false,
@@ -1723,7 +1844,7 @@
   },
   {
     "name": "commands.status",
-    "description": "Read job status (running/completed/cancelled/timed_out), exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated (old output evicted), and outputIncomplete (pipe read failed or draining timed out). Does not return output; use commands.read for the latest output or incremental reads.",
+    "description": "Read job status (running/completed/cancelled/timed_out), exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated (old output evicted), and outputIncomplete (pipe read failed or draining timed out). Does not return output; use commands.read for the latest output or incremental reads. stdinStatus is open, closing (EOF queued), closed, or failed (pipe write failed).",
     "scope": "shell.execute",
     "native": true,
     "readOnly": true,
@@ -1750,7 +1871,7 @@
   },
   {
     "name": "commands.read",
-    "description": "Read the latest 16384 output bytes by default. Select only one of: tailBytes (1-16384), tailLines (1-1000 LF-delimited lines, still capped at 16384 bytes; tailLimited marks this cap), or cursor (absolute byte offset for incremental reads; 0 requests earliest retained output). Returns stdout/stderr chunks with display data and exact dataBase64, startCursor, nextCursor, hasMore, status, exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated, cursorExpired, tailLimited and outputIncomplete (pipe read failed or draining timed out). Retain latest 4 MiB/8192 stream segments; old output is evicted. An expired cursor resumes at earliestCursor with cursorExpired=true. Follow with nextCursor; hasMore=false means caught up now, keep polling while running. Access requires the original caller and shell grant.",
+    "description": "Read the latest 16384 output bytes by default. Select only one of: tailBytes (1-16384), tailLines (1-1000 LF-delimited lines, still capped at 16384 bytes; tailLimited marks this cap), or cursor (absolute byte offset for incremental reads; 0 requests earliest retained output). Returns stdout/stderr chunks with display data and exact dataBase64, startCursor, nextCursor, hasMore, status, exitCode, cumulative bytes, retainedBytes, earliestCursor, truncated, cursorExpired, tailLimited and outputIncomplete (pipe read failed or draining timed out). Retain latest 4 MiB/8192 stream segments; old output is evicted. An expired cursor resumes at earliestCursor with cursorExpired=true. Follow with nextCursor; hasMore=false means caught up now, keep polling while running. Access requires the original caller and shell grant. stdinStatus is open, closing (EOF queued), closed, or failed (pipe write failed).",
     "scope": "shell.execute",
     "native": true,
     "readOnly": true,
@@ -1853,8 +1974,8 @@
     }
   },
   {
-    "name": "commands.cancel",
-    "description": "Terminate your job and its process tree.",
+    "name": "commands.send",
+    "description": "Send to your running job: UTF-8 input (literal text, no implicit newline), optional eof=true to close stdin after queued input, or a signal (exclusive with input/eof). Returns queued=true when accepted, not an acknowledgement that the process consumed it. Input is limited to 16384 characters/65536 UTF-8 bytes per call and 8 queued messages; BUSY means nothing was queued. After EOF, input is rejected. SIGKILL cancels the process tree on all platforms; SIGTERM sends POSIX TERM on Unix and terminates the process tree on Windows. SIGINT sends POSIX INT on Unix; Windows returns UNSUPPORTED_SIGNAL (no console/PTY). Signals bypass blocked stdin. Use commands.read/status to observe output, stdinStatus and completion. Requires the original caller and shell grant.",
     "scope": "shell.execute",
     "native": true,
     "readOnly": false,
@@ -1870,10 +1991,76 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "eof": {
+          "type": "boolean"
+        },
+        "signal": {
+          "type": "string",
+          "enum": ["SIGINT", "SIGTERM", "SIGKILL"]
         }
       },
       "required": ["target", "jobId"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "input": {
+              "type": "string"
+            },
+            "eof": {
+              "type": "boolean"
+            }
+          },
+          "required": ["input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "eof": {
+              "type": "boolean",
+              "enum": [true]
+            }
+          },
+          "required": ["eof"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "signal": {
+              "type": "string"
+            }
+          },
+          "required": ["signal"],
+          "additionalProperties": false
+        }
+      ]
     },
     "outputSchema": {
       "type": "object"

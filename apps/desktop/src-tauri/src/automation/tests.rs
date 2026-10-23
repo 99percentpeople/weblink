@@ -47,6 +47,51 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
             .len(),
         catalog::tools().len()
     );
+    let capabilities_request = json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+        "params":{"name":"commands.capabilities","arguments":{"target":"local"},"_meta":meta}});
+    let response = tokio::spawn(
+        client
+            .post(&url)
+            .bearer_auth("test-token")
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "tools/call")
+            .header("Mcp-Name", "commands.capabilities")
+            .json(&capabilities_request)
+            .send(),
+    );
+    let event = tokio::time::timeout(Duration::from_secs(3), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event["call"]["name"], "commands.capabilities");
+    assert_eq!(event["call"]["arguments"], json!({"target":"local"}));
+    let capabilities = json!({"ok":true,"data":jobs::capabilities()});
+    service
+        .state
+        .lock()
+        .unwrap()
+        .tickets
+        .remove(event["id"].as_str().unwrap())
+        .unwrap()
+        .answer
+        .send(capabilities.clone())
+        .unwrap();
+    let response: Value = response.await.unwrap().unwrap().json().await.unwrap();
+    let advertised = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "commands.capabilities")
+        .unwrap();
+    assert_eq!(advertised["annotations"]["readOnlyHint"], true);
+    assert_eq!(response["result"]["structuredContent"], capabilities);
+    assert!(jsonschema::is_valid(
+        &advertised["outputSchema"],
+        &response["result"]["structuredContent"]
+    ));
+    assert!(service.jobs.list().is_empty());
+
     let request = json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
         "params":{"name":"control.screenshot","arguments":{"target":"local","sourceId":"screen"},"_meta":meta}});
     let response = tokio::spawn(

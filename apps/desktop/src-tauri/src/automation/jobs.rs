@@ -1,6 +1,11 @@
+mod input;
 mod output;
+mod shell;
+mod signals;
 use output::{Output, Read};
 use serde_json::{json, Value};
+pub(super) use signals::capabilities;
+use signals::Signal;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -13,6 +18,8 @@ struct Job {
     owner: String,
     grant: String,
     cancel: CancellationToken,
+    input: input::Input,
+    signals: tokio::sync::mpsc::Sender<&'static str>,
     state: Arc<Mutex<JobState>>,
     done: CancellationToken,
 }
@@ -48,6 +55,7 @@ impl StartedJob {
                 let mut result = output_page(&state, Read::default())?;
                 result["jobId"] = json!(self.id);
                 result["background"] = json!(state.status == "running");
+                result["stdinStatus"] = json!(self.job.input.status());
                 self.guard.disarm();
                 return Ok(result);
             }
@@ -100,7 +108,9 @@ impl Jobs {
         args: &Value,
     ) -> Result<StartedJob, String> {
         self.start_with(owner, grant, args, || {
-            Ok(shell(args["script"].as_str().ok_or("INVALID_ARGUMENTS")?))
+            Ok(shell::commands(
+                args["script"].as_str().ok_or("INVALID_ARGUMENTS")?,
+            ))
         })
     }
     fn start_with(
@@ -108,14 +118,14 @@ impl Jobs {
         owner: &str,
         grant: &str,
         args: &Value,
-        command: impl FnOnce() -> Result<Command, String>,
+        command: impl FnOnce() -> Result<Vec<Command>, String>,
     ) -> Result<StartedJob, String> {
         let mut entries = self.entries.lock().unwrap();
         if entries
             .values()
             .filter(|j| j.state.lock().unwrap().status == "running")
             .count()
-            >= 2
+            >= 10
         {
             return Err("BUSY".into());
         }
@@ -123,7 +133,7 @@ impl Jobs {
             entries.retain(|_, j| j.state.lock().unwrap().status == "running");
         }
         let id = uuid::Uuid::new_v4().to_string();
-        let mut command = command()?;
+        let commands = command()?;
         // Explicit environment allowlist. Never inherit app/MCP/cloud credentials.
         let env: Vec<_> = std::env::vars_os()
             .filter(|(k, _)| {
@@ -143,25 +153,24 @@ impl Jobs {
                 .contains(&k.to_string_lossy().to_ascii_uppercase().as_str())
             })
             .collect();
-        command
-            .env_clear()
-            .envs(env)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true);
-        if let Some(cwd) = args["cwd"].as_str() {
-            command.current_dir(cwd);
-        }
-        #[cfg(unix)]
-        command.process_group(0);
-        #[cfg(windows)]
-        command.creation_flags(0x08000000);
-        #[cfg(windows)]
-        command.stdin(std::process::Stdio::piped());
-        let mut child = command
-            .spawn()
-            .map_err(|_| "Could not start Shell".to_string())?;
+        let mut child = shell::spawn_with(commands, |command| {
+            command
+                .env_clear()
+                .envs(env.iter().cloned())
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true);
+            if let Some(cwd) = args["cwd"].as_str() {
+                command.current_dir(cwd);
+            }
+            #[cfg(unix)]
+            command.process_group(0);
+            #[cfg(windows)]
+            command.creation_flags(0x08000000);
+            command.spawn()
+        })
+        .map_err(|_| "Could not start Shell".to_string())?;
         let process_id = child.id().ok_or("Process unavailable")?;
         #[cfg(windows)]
         let tree = windows_tree::Tree::attach(process_id).map_err(|e| {
@@ -178,10 +187,14 @@ impl Jobs {
         }));
         let cancel = CancellationToken::new();
         let done = CancellationToken::new();
+        let (input, input_receiver) = input::Input::new();
+        let (signals, mut signal_receiver) = tokio::sync::mpsc::channel::<&'static str>(8);
         let job = Job {
             owner: owner.into(),
             grant: grant.into(),
             cancel: cancel.clone(),
+            input: input.clone(),
+            signals,
             state: state.clone(),
             done: done.clone(),
         };
@@ -193,21 +206,43 @@ impl Jobs {
         entries.insert(id, job);
         let timeout = Duration::from_millis(args["timeoutMs"].as_u64().unwrap_or(60000));
         tokio::spawn(async move {
-            #[cfg(windows)]
-            {
-                use tokio::io::AsyncWriteExt;
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(b"ready\n").await;
-                }
-            }
+            let stdin = child.stdin.take().unwrap();
+            let writer = input.clone();
+            let writer_cancel = cancel.clone();
+            let writer_task = tokio::spawn(async move {
+                writer
+                    .run(stdin, input_receiver, writer_cancel, cfg!(windows))
+                    .await;
+            });
             let mut readers = tokio::task::JoinSet::new();
             readers.spawn(drain(stdout, state.clone(), "stdout"));
             readers.spawn(drain(stderr, state.clone(), "stderr"));
-            let (status, exit) = tokio::select! {
-                result=child.wait() => ("completed",result.ok().and_then(|s| s.code())),
-                _=cancel.cancelled() => ("cancelled",None),
-                _=tokio::time::sleep(timeout) => ("timed_out",None),
+            let deadline = tokio::time::Instant::now() + timeout;
+            let (status, exit) = loop {
+                tokio::select! {
+                    biased;
+                    _=cancel.cancelled() => break ("cancelled",None),
+                    _=tokio::time::sleep_until(deadline) => break ("timed_out",None),
+                    result=child.wait() => break ("completed",result.ok().and_then(|s| s.code())),
+                    Some(signal)=signal_receiver.recv() => {
+                        #[cfg(windows)]
+                        {
+                            debug_assert_eq!(signal, "TERM");
+                            break ("cancelled",None);
+                        }
+                        #[cfg(unix)]
+                        let _ = Command::new("/bin/kill")
+                            .args(["-s",signal,"--",&format!("-{process_id}")])
+                            .status().await;
+                    }
+                }
             };
+            // Fence new sends as soon as the process stops. The public terminal
+            // status still waits for final output collection below.
+            cancel.cancel();
+            writer_task.abort();
+            let _ = writer_task.await;
+            input.close();
             // Kill remaining descendants even when the Shell exited first.
             #[cfg(unix)]
             {
@@ -241,18 +276,43 @@ impl Jobs {
             .get(args["jobId"].as_str().ok_or("INVALID_ARGUMENTS")?)
             .filter(|j| j.owner == owner && j.grant == grant)
             .ok_or("PERMISSION_DENIED")?;
-        if name == "commands.cancel" {
-            job.cancel.cancel();
-            return Ok(json!({"cancelling":true}));
+        if name == "commands.send" {
+            if job.cancel.is_cancelled() || job.state.lock().unwrap().status != "running" {
+                return Err("JOB_NOT_RUNNING".into());
+            }
+            if let Some(signal) = args.get("signal") {
+                if args.get("input").is_some() || args.get("eof").is_some() {
+                    return Err("INVALID_ARGUMENTS".into());
+                }
+                match Signal::parse(signal.as_str().ok_or("INVALID_ARGUMENTS")?)? {
+                    Signal::Kill => job.cancel.cancel(),
+                    signal @ (Signal::Terminate | Signal::Interrupt) => {
+                        let signal = if signal == Signal::Terminate {
+                            "TERM"
+                        } else {
+                            "INT"
+                        };
+                        job.signals.try_send(signal).map_err(|e| match e {
+                            tokio::sync::mpsc::error::TrySendError::Full(_) => "BUSY",
+                            tokio::sync::mpsc::error::TrySendError::Closed(_) => "JOB_NOT_RUNNING",
+                        })?;
+                    }
+                }
+                return Ok(json!({"queued":true,"signal":signal}));
+            }
+            return job.input.enqueue(args);
         }
         let s = job.state.lock().unwrap();
         if name == "commands.read" {
-            return output_page(&s, Read::parse(args)?);
+            let mut page = output_page(&s, Read::parse(args)?)?;
+            page["stdinStatus"] = json!(job.input.status());
+            return Ok(page);
         }
         let mut status = s.output.metadata();
         status["status"] = json!(s.status);
         status["exitCode"] = json!(s.exit);
         status["outputIncomplete"] = json!(s.output_incomplete);
+        status["stdinStatus"] = json!(job.input.status());
         Ok(status)
     }
 }
@@ -287,26 +347,6 @@ async fn drain(
             return true;
         }
         state.lock().unwrap().output.append(&buf[..n], stream);
-    }
-}
-fn shell(script: &str) -> Command {
-    #[cfg(windows)]
-    {
-        let mut c = Command::new("powershell.exe");
-        c.args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!("$null = [Console]::ReadLine(); & {{ {script} }}"),
-        ]);
-        c
-    }
-    #[cfg(not(windows))]
-    {
-        let mut c = Command::new("/bin/sh");
-        c.args(["-c", script]);
-        c
     }
 }
 #[cfg(windows)]
@@ -379,7 +419,7 @@ mod tests {
     fn start_fixture(jobs: &Jobs, mode: &str, args: Value) -> Result<StartedJob, String> {
         // Compile before taking the job registry lock or starting wait deadlines.
         let command = fixture_command(mode);
-        jobs.start_with("owner", "grant", &args, || Ok(command))
+        jobs.start_with("owner", "grant", &args, || Ok(vec![command]))
     }
     async fn ended(jobs: &Jobs, id: &str) -> Value {
         ended_within(jobs, id, Duration::from_secs(10)).await
@@ -433,6 +473,91 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "Opt-in UTF-8 smoke for installed pwsh and Windows PowerShell"]
+    async fn windows_shells_preserve_utf8_output_native_pipelines_and_files() {
+        use base64::Engine;
+        let fixture = fixture_command("echo-stdin");
+        let executable = fixture
+            .as_std()
+            .get_program()
+            .to_string_lossy()
+            .replace('\'', "''");
+        let script = format!(
+            r#"$text = '中文🙂';
+[Console]::Out.WriteLine("stdout:$text");
+[Console]::Error.WriteLine("stderr:$text");
+Write-Output "pipeline:$text";
+$text | & '{executable}' echo-stdin;
+Set-Content -LiteralPath 'text.txt' -Value $text -NoNewline;
+Write-Output "file:$(Get-Content -LiteralPath 'text.txt' -Raw)";
+$text > 'redirect.txt';
+Write-Output "encodings:$($OutputEncoding.CodePage),$([Console]::InputEncoding.CodePage),$([Console]::OutputEncoding.CodePage)";
+exit 7;
+# A trailing comment must not consume the wrapper's closing brace"#
+        );
+        for command in shell::commands(&script) {
+            let program = command.as_std().get_program().to_owned();
+            let dir = tempfile::tempdir().unwrap();
+            let cwd = dir.path().join("中文 Shell");
+            std::fs::create_dir(&cwd).unwrap();
+            let jobs = Jobs::default();
+            let mut commands = Vec::new();
+            if program == "powershell.exe" {
+                // Exercise a real missing-executable fallback without changing
+                // global PATH or depending on whether pwsh is installed.
+                commands.push(Command::new(dir.path().join("missing-pwsh.exe")));
+            }
+            commands.push(command);
+            let job = jobs
+                .start_with("owner", "grant", &json!({"cwd":cwd}), || Ok(commands))
+                .unwrap_or_else(|error| panic!("{program:?}: {error}"));
+            let id = job.background()["jobId"].as_str().unwrap().to_owned();
+            let status = ended_within(&jobs, &id, Duration::from_secs(30)).await;
+            assert_eq!(status["status"], "completed", "{program:?}");
+            assert_eq!(status["exitCode"], 7, "{program:?}");
+            let output = jobs
+                .access("owner", "grant", "commands.read", &json!({"jobId":id}))
+                .unwrap();
+            for (stream, expected) in [
+                (
+                    "stdout",
+                    "stdout:中文🙂\r\npipeline:中文🙂\r\n中文🙂\r\nfile:中文🙂\r\nencodings:65001,65001,65001\r\n",
+                ),
+                ("stderr", "stderr:中文🙂\r\n"),
+            ] {
+                let chunks: Vec<_> = output["chunks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|chunk| chunk["stream"] == stream)
+                    .collect();
+                let bytes: Vec<_> = chunks
+                    .iter()
+                    .flat_map(|chunk| {
+                        base64::engine::general_purpose::STANDARD
+                            .decode(chunk["dataBase64"].as_str().unwrap())
+                            .unwrap()
+                    })
+                    .collect();
+                assert_eq!(bytes, expected.as_bytes(), "{program:?} {stream}");
+                let displayed: String = chunks
+                    .iter()
+                    .map(|chunk| chunk["data"].as_str().unwrap())
+                    .collect();
+                assert_eq!(displayed, expected, "{program:?} {stream}");
+            }
+            for (name, expected) in [("text.txt", "中文🙂"), ("redirect.txt", "中文🙂\r\n")]
+            {
+                let bytes = std::fs::read(cwd.join(name)).unwrap();
+                // Windows PowerShell writes a BOM with -Encoding utf8; pwsh does not.
+                let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
+                assert_eq!(bytes, expected.as_bytes(), "{program:?} {name}");
+            }
+        }
+    }
+
     #[tokio::test]
     async fn output_finalization_waits_for_cancelled_readers_and_reports_incomplete_output() {
         let mut readers = tokio::task::JoinSet::new();
@@ -459,6 +584,318 @@ mod tests {
         assert!(finish_output(&mut readers, Duration::from_secs(1)).await);
         readers.spawn(async { true });
         assert!(!finish_output(&mut readers, Duration::from_secs(1)).await);
+    }
+
+    #[tokio::test]
+    async fn ten_jobs_can_run_and_completed_jobs_release_slots() {
+        let jobs = Jobs::default();
+        let mut ids = Vec::new();
+        for _ in 0..10 {
+            let job = start_fixture(&jobs, "hold", json!({})).unwrap();
+            ids.push(job.id.clone());
+            job.background();
+        }
+        assert_eq!(
+            start_fixture(&jobs, "hold", json!({})).err().unwrap(),
+            "BUSY"
+        );
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":ids[0],"signal":"SIGKILL"}),
+        )
+        .unwrap();
+        assert_eq!(ended(&jobs, &ids[0]).await["status"], "cancelled");
+        let job = start_fixture(&jobs, "exit", json!({})).unwrap();
+        assert_eq!(job.wait(10000, || Ok(())).await.unwrap()["exitCode"], 7);
+        jobs.cancel_grant("grant");
+        for id in &ids[1..] {
+            assert_eq!(ended(&jobs, id).await["status"], "cancelled");
+        }
+    }
+
+    #[tokio::test]
+    async fn send_enforces_ownership_and_delivers_input_and_eof() {
+        let jobs = Jobs::default();
+        let job = start_fixture(&jobs, "input", json!({})).unwrap();
+        let id = job.id.clone();
+        job.background();
+        for (owner, grant) in [("other", "grant"), ("owner", "new-grant")] {
+            for action in [
+                json!({"input":"forbidden"}),
+                json!({"signal":"SIGKILL"}),
+                json!({"eof":true}),
+            ] {
+                let mut args = json!({"jobId":id});
+                args.as_object_mut()
+                    .unwrap()
+                    .extend(action.as_object().unwrap().clone());
+                assert_eq!(
+                    jobs.access(owner, grant, "commands.send", &args)
+                        .unwrap_err(),
+                    "PERMISSION_DENIED"
+                );
+            }
+        }
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"input":"first\n"}),
+        )
+        .unwrap();
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"input":"中文🙂","eof":true}),
+        )
+        .unwrap();
+        assert_eq!(ended(&jobs, &id).await["exitCode"], 0);
+        let output = jobs
+            .access("owner", "grant", "commands.read", &json!({"jobId":id}))
+            .unwrap();
+        assert_eq!(output["stdinStatus"], "closed");
+        let text: String = output["chunks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["data"].as_str().unwrap())
+            .collect();
+        assert_eq!(text, "first\n中文🙂");
+        assert_eq!(
+            jobs.access(
+                "owner",
+                "grant",
+                "commands.send",
+                &json!({"jobId":id,"input":"late"})
+            )
+            .unwrap_err(),
+            "JOB_NOT_RUNNING"
+        );
+    }
+
+    #[tokio::test]
+    async fn signals_and_revocation_bypass_blocked_stdin() {
+        for signal in [Some("SIGKILL"), Some("SIGTERM"), None] {
+            let jobs = Jobs::default();
+            let job = start_fixture(&jobs, "hold", json!({})).unwrap();
+            let id = job.id.clone();
+            job.background();
+            // The fixture never reads stdin after its launch barrier.
+            let args = json!({"jobId":id,"input":"🙂".repeat(16384)});
+            for _ in 0..10 {
+                if jobs
+                    .access("owner", "grant", "commands.send", &args)
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            if let Some(signal) = signal {
+                jobs.access(
+                    "owner",
+                    "grant",
+                    "commands.send",
+                    &json!({"jobId":id,"signal":signal}),
+                )
+                .unwrap();
+            } else {
+                jobs.cancel_grant("grant");
+            }
+            assert_ne!(ended(&jobs, &id).await["status"], "running");
+            assert_eq!(
+                jobs.access("owner", "grant", "commands.status", &json!({"jobId":id}))
+                    .unwrap()["stdinStatus"],
+                "closed"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn process_exit_fences_sends_before_output_finalization() {
+        let jobs = Jobs::default();
+        let job = start_fixture(&jobs, "exit", json!({})).unwrap();
+        let id = job.id.clone();
+        let stopping = job.job.cancel.clone();
+        job.background();
+        tokio::time::timeout(Duration::from_secs(10), stopping.cancelled())
+            .await
+            .unwrap();
+        for action in [
+            json!({"input":"late"}),
+            json!({"eof":true}),
+            json!({"signal":"SIGTERM"}),
+        ] {
+            let mut args = json!({"jobId":id});
+            args.as_object_mut()
+                .unwrap()
+                .extend(action.as_object().unwrap().clone());
+            assert_eq!(
+                jobs.access("owner", "grant", "commands.send", &args)
+                    .unwrap_err(),
+                "JOB_NOT_RUNNING"
+            );
+        }
+        assert_eq!(ended(&jobs, &id).await["status"], "completed");
+    }
+
+    #[tokio::test]
+    async fn control_characters_are_literal_input_and_do_not_close_or_signal_the_job() {
+        let jobs = Jobs::default();
+        let job = start_fixture(&jobs, "input-hex", json!({})).unwrap();
+        let id = job.id.clone();
+        job.background();
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"input":"\u{0}\u{3}\u{4}\t\r\n\u{1b}"}),
+        )
+        .unwrap();
+        let status = jobs
+            .access("owner", "grant", "commands.status", &json!({"jobId":id}))
+            .unwrap();
+        assert_eq!(status["status"], "running");
+        assert_eq!(status["stdinStatus"], "open");
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"input":"\u{1a}\u{8}END","eof":true}),
+        )
+        .unwrap();
+        assert_eq!(ended(&jobs, &id).await["exitCode"], 0);
+        let output = jobs
+            .access("owner", "grant", "commands.read", &json!({"jobId":id}))
+            .unwrap();
+        let text: String = output["chunks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["data"].as_str().unwrap())
+            .collect();
+        assert_eq!(text, "000304090d0a1b1a08454e44");
+    }
+
+    #[tokio::test]
+    async fn closed_child_stdin_reports_write_failure_while_process_is_still_running() {
+        let jobs = Jobs::default();
+        let job = start_fixture(&jobs, "closed-input", json!({})).unwrap();
+        let id = job.id.clone();
+        job.background();
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let status = jobs
+                    .access("owner", "grant", "commands.status", &json!({"jobId":id}))
+                    .unwrap();
+                if status["bytes"].as_u64().unwrap() > 0 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            jobs.access(
+                "owner",
+                "grant",
+                "commands.send",
+                &json!({"jobId":id,"input":"hello"}),
+            )
+            .unwrap();
+            loop {
+                let status = jobs
+                    .access("owner", "grant", "commands.status", &json!({"jobId":id}))
+                    .unwrap();
+                if status["stdinStatus"] == "failed" {
+                    return status;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        jobs.stop();
+        ended(&jobs, &id).await;
+        assert_eq!(
+            result.expect("Deferred pipe failure must be visible without another send")["status"],
+            "running"
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn unsupported_windows_interrupt_has_no_side_effects() {
+        let jobs = Jobs::default();
+        let job = start_fixture(&jobs, "input", json!({})).unwrap();
+        let id = job.id.clone();
+        job.background();
+        assert_eq!(
+            jobs.access(
+                "owner",
+                "grant",
+                "commands.send",
+                &json!({"jobId":id,"signal":"SIGINT"})
+            )
+            .unwrap_err(),
+            "UNSUPPORTED_SIGNAL"
+        );
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"input":"still running","eof":true}),
+        )
+        .unwrap();
+        assert_eq!(ended(&jobs, &id).await["exitCode"], 0);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "Opt-in stdin smoke for installed pwsh and Windows PowerShell"]
+    async fn windows_shells_deliver_early_input_without_launch_barrier_read_ahead() {
+        let fixture = fixture_command("echo-stdin");
+        let executable = fixture
+            .as_std()
+            .get_program()
+            .to_string_lossy()
+            .replace('\'', "''");
+        for script in [
+            "[Console]::Out.Write([Console]::In.ReadToEnd())".to_string(),
+            format!("& '{executable}' echo-stdin"),
+        ] {
+            for command in shell::commands(&script) {
+                let program = command.as_std().get_program().to_owned();
+                let jobs = Jobs::default();
+                let job = jobs
+                    .start_with("owner", "grant", &json!({}), || Ok(vec![command]))
+                    .unwrap();
+                let id = job.id.clone();
+                job.background();
+                // Queue immediately, before PowerShell has finished starting.
+                jobs.access(
+                    "owner",
+                    "grant",
+                    "commands.send",
+                    &json!({"jobId":id,"input":"中文🙂\nsecond line","eof":true}),
+                )
+                .unwrap();
+                let status = ended_within(&jobs, &id, Duration::from_secs(30)).await;
+                assert_eq!(status["exitCode"], 0, "{program:?}: {status}");
+                let output = jobs
+                    .access("owner", "grant", "commands.read", &json!({"jobId":id}))
+                    .unwrap();
+                let text: String = output["chunks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|c| c["data"].as_str().unwrap())
+                    .collect();
+                assert_eq!(
+                    text.replace("\r\n", "\n").trim_end(),
+                    "中文🙂\nsecond line",
+                    "{program:?}"
+                );
+            }
+        }
     }
     #[tokio::test]
     async fn run_returns_completed_output_and_nonzero_exit() {
@@ -506,9 +943,13 @@ mod tests {
             .unwrap()
             .background();
         assert_eq!(background.as_object().unwrap().len(), 1);
-        assert!(start_fixture(&jobs, "hold", json!({})).is_err());
-        jobs.access("owner", "grant", "commands.cancel", &json!({"jobId":id}))
-            .unwrap();
+        jobs.access(
+            "owner",
+            "grant",
+            "commands.send",
+            &json!({"jobId":id,"signal":"SIGKILL"}),
+        )
+        .unwrap();
         assert_eq!(ended(&jobs, id).await["status"], "cancelled");
         jobs.cancel_grant("grant");
         assert_eq!(

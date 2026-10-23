@@ -260,7 +260,9 @@ contracts belong to `packages/platform`; Tauri imports remain in `apps/desktop`.
   physical desktop pixels, shared with screenshots and UIA. Keys use PC set-1
   scan codes; text excludes control characters. Existing native platform support
   determines availability.
-- `commands.run`, `commands.start`, `commands.status`, `commands.read`, `commands.cancel`: Shell
+- `commands.capabilities`: read-only discovery of the target's pipe backend,
+  stdin/EOF support and available signals, using `diagnostics.read` permission.
+- `commands.run`, `commands.start`, `commands.status`, `commands.read`, `commands.send`: Shell
   tasks owned by the exact caller and Shell grant that created them.
 - `diagnostics.snapshot`, `diagnostics.history`, `diagnostics.start`,
   `diagnostics.stop`, `diagnostics.export`: redacted statistics and reports.
@@ -607,7 +609,7 @@ results and errors remain visible after verbose logs. Earlier retained output
 is available through `commands.read` with an explicit cursor.
 `waitMs` defaults to 10 seconds and is bounded to
 1–60,000 ms. If the wait ends first, `background: true` means the job continues;
-use `commands.status`, `commands.read` and `commands.cancel` with its `jobId`.
+use `commands.status`, `commands.read` and `commands.send` with its `jobId`.
 `commands.start` always returns only `jobId` immediately. Both use the same job
 manager, concurrency limit, caller ownership and terminal permission.
 
@@ -692,13 +694,101 @@ loop:
 When reading from an explicit cursor, even a completed job can still have unread
 pages. Finish only when both
 `status != "running"` and `hasMore == false`. `commands.status` is optional for
-status-only polling and returns no output. `commands.cancel` takes the same
-`target`/`jobId`; continue reading afterward to drain retained output and observe
-`cancelled`. Reads are polling, not a pushed stream, and process-side buffering
+status-only polling and returns no output. After sending a termination signal,
+continue reading to drain retained output and observe the terminal status.
+Reads are polling, not a pushed stream, and process-side buffering
 can delay when new bytes become available. Terminal status is published only after
 both output readers have stopped. `outputIncomplete:true` reports a pipe read
 failure or the two-second drain deadline; it is distinct from normal cache
 eviction and means the collected output may not include all process output.
+
+### Sending input and signals
+
+Query `commands.capabilities({target})` before choosing a signal. Discovery runs
+on the addressed device, including remote targets; it never infers remote
+support from the controller's operating system. It requires `diagnostics.read`,
+starts no process and does not grant `shell.execute`. The normal automation
+enablement and permission checks still apply. The result describes the backend,
+not whether an interpreter is installed or whether a particular job will exit
+after receiving a signal.
+
+A Windows desktop returns:
+
+```json
+{
+  "supported": true,
+  "transport": "pipe",
+  "stdin": true,
+  "eof": true,
+  "pty": false,
+  "supportedSignals": ["SIGTERM", "SIGKILL"],
+  "signalSemantics": {
+    "SIGTERM": "terminate-process-tree",
+    "SIGKILL": "terminate-process-tree"
+  }
+}
+```
+
+Unix desktops additionally list `SIGINT` as `interrupt-process-group` and describe
+`SIGTERM` as `terminate-process-group`; `SIGKILL` remains
+`terminate-process-tree`. Browser-local WebMCP discovery returns `supported:false`,
+`transport:"none"`, `stdin:false`, `eof:false`, `pty:false`, `supportedSignals:[]`
+and `signalSemantics:{}`. Browsers still do not accept incoming peer automation.
+An older target without this tool returns `UNSUPPORTED`; the controller does not
+replace that response with its own capabilities. All desktop jobs retain pipe
+transport without terminal emulation.
+
+`commands.send` replaces `commands.cancel`. Use `signal: "SIGKILL"` for the old
+cancel behavior. Every send requires the original caller, target and Shell grant.
+A completed or cancelling job rejects sends with `JOB_NOT_RUNNING`.
+This also applies while a stopped process's final output is still being collected.
+
+Stdin remains open until explicitly closed or the job ends. Send literal UTF-8
+text with `input`; newlines are not added automatically. Each call accepts up to
+16,384 Unicode characters / 65,536 UTF-8 bytes. Up to eight input messages can be
+queued per job. `BUSY` means the new message was not queued. The response
+`{queued:true,bytes:...,eof:...}` confirms queue acceptance, not that the process
+has consumed the input. Sends are serialized in accepted order; a blocked stdin
+pipe does not block other tools, signals, permission revocation or emergency stop.
+
+```json
+{
+  "name": "commands.send",
+  "arguments": {
+    "target": "local",
+    "jobId": "<returned jobId>",
+    "input": "hello\n",
+    "eof": true
+  }
+}
+```
+
+`eof:true` closes stdin after earlier queued input and the input in this call.
+It can also be sent alone. Once EOF is accepted, later input is rejected with
+`STDIN_CLOSED`. Run results, reads and status include `stdinStatus`: `open`,
+`closing` (EOF queued), `closed`, or `failed` (a pipe write failed). Cancellation
+or exit discards input that has not yet been written. PowerShell still runs with
+`-NonInteractive`; use standard input APIs or native programs, not `Read-Host` or
+console UI prompts. This does not add a PTY or terminal emulation.
+JSON-escaped control characters (including `\u0003` and `\u0004`) are written
+literally; they do not implicitly send signals or close stdin. Each message's
+buffered writes are flushed so deferred pipe failures are reported even when
+there is no subsequent send. Successful EOF finishes those writes before closing
+stdin; a write failure preserves `stdinStatus:"failed"`.
+
+Signals are mutually exclusive with `input` and `eof`:
+
+- `SIGKILL`: cancel the task and terminate its process tree on all platforms;
+  terminal status is `cancelled`.
+- `SIGTERM`: send TERM to the process group on Unix; on Windows, terminate the
+  process tree (Windows has no POSIX TERM delivery). A Unix handler may keep the
+  job running; use `SIGKILL` if forced termination is required.
+- `SIGINT`: send INT to the process group on Unix. Windows returns
+  `UNSUPPORTED_SIGNAL`, since these jobs have no console or PTY for Ctrl+C.
+
+Signal acceptance returns `{queued:true,signal:...}`; poll for completion rather
+than assuming immediate exit. Signal delivery bypasses the stdin queue. Grant
+revocation, expiry, emergency stop and shutdown always force process-tree cleanup.
 
 `data` is a lossy UTF-8 display view; byte-based tail selection, eviction and page
 boundaries can split a character or a line.
@@ -726,11 +816,18 @@ handoff releases this call-level cancellation, while grant revocation/expiry and
 shutdown continue to cancel the owned process tree for both run and start.
 Waiting does not hold the authority mutex, so permission changes remain available.
 
-Shell defaults to noninteractive PowerShell on Windows and `/bin/sh` on other
-platforms, at the app account's privileges. It is **not a sandbox**; a working
-directory is not an access boundary. No privilege elevation is performed.
+Windows prefers noninteractive `pwsh.exe`, falling back to `powershell.exe` only
+when the preferred executable is missing. A script failure never triggers a
+retry in another interpreter. Each Windows job sets console input/output and
+PowerShell native-pipeline encoding to UTF-8 without a BOM, and defaults cmdlet
+`Encoding` parameters to `utf8` (explicit script parameters override this).
+Windows PowerShell may still write a BOM to UTF-8 files. Programs that explicitly
+emit another encoding still require decoding their raw output accordingly.
+Other platforms use `/bin/sh`. Commands run at the app account's privileges.
+It is **not a sandbox**; a working directory is not an access boundary.
+No privilege elevation is performed.
 Only basic OS environment variables are inherited, not app credentials.
-Tasks default to 60 seconds, have a ten-minute maximum, and are limited to two
+Tasks default to 60 seconds, have a ten-minute maximum, and are limited to ten
 concurrent tasks per device. Output retention is bounded to 4 MiB per task and
 32 task records. Once output or segment limits are reached, the oldest output
 is evicted while new output continues to be retained. Reads use absolute byte

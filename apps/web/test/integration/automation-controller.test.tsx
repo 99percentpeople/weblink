@@ -442,6 +442,101 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
   await runtime.configureMcp(false);
   expect(tools.size).toBe(0);
 });
+it.each([
+  {
+    platform: "Windows",
+    signals: ["SIGTERM", "SIGKILL"],
+    term: "terminate-process-tree",
+  },
+  {
+    platform: "Unix",
+    signals: ["SIGINT", "SIGTERM", "SIGKILL"],
+    term: "terminate-process-group",
+  },
+])(
+  "queries the $platform destination's command signals without substituting browser capabilities",
+  async ({ signals, term }) => {
+    const tools = new Map<
+      string,
+      Parameters<ModelContext["registerTool"]>[0]
+    >();
+    setContext({
+      async registerTool(tool) {
+        tools.set(tool.name, tool);
+      },
+    } satisfies ModelContext);
+    const { runtime } = mount();
+    await runtime.configureMcp(true);
+    await waitFor(() =>
+      expect(fixture.incoming).toBeDefined(),
+    );
+    const capabilities = {
+      supported: true,
+      transport: "pipe",
+      stdin: true,
+      eof: true,
+      pty: false,
+      supportedSignals: signals,
+      signalSemantics: {
+        ...(signals.includes("SIGINT")
+          ? { SIGINT: "interrupt-process-group" }
+          : {}),
+        SIGTERM: term,
+        SIGKILL: "terminate-process-tree",
+      },
+    };
+    fixture.call.mockResolvedValueOnce({
+      ok: true,
+      data: capabilities,
+    });
+    const tool = tools.get("commands.capabilities")!;
+    expect(tool.annotations.readOnlyHint).toBe(true);
+    expect(
+      await tool.execute({ target: "desktop" }),
+    ).toEqual({ ok: true, data: capabilities });
+    expect(fixture.call).toHaveBeenCalledWith(
+      {
+        name: "commands.capabilities",
+        arguments: { target: "local" },
+        source: expect.objectContaining({ kind: "webmcp" }),
+      },
+      expect.any(AbortSignal),
+    );
+    // Local browser queries reach the handler instead of the native-only rejection.
+    expect(await tool.execute({ target: "local" })).toEqual(
+      { ok: true, data: { local: true } },
+    );
+    expect(fixture.call).toHaveBeenCalledTimes(1);
+    // An older destination must not silently fall back to the controller's capabilities.
+    fixture.call.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: "UNSUPPORTED",
+        message: "Unknown tool",
+      },
+    });
+    expect(
+      await tool.execute({ target: "desktop" }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "UNSUPPORTED" },
+    });
+    expect(
+      await fixture.incoming!(
+        {
+          name: "commands.capabilities",
+          arguments: { target: "local" },
+        },
+        new AbortController().signal,
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "UNSUPPORTED" },
+    });
+    expect(runtime.enabled()).toBe(false);
+  },
+);
+
 it.each([undefined, null, {}, { registerTool: true }])(
   "rejects unavailable WebMCP without advertising automation: %j",
   async (context) => {
