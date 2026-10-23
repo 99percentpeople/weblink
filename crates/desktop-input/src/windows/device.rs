@@ -9,6 +9,13 @@ pub(super) struct WindowsDevice(
     pub super::gamepad::GamepadDevice,
 );
 impl Device for WindowsDevice {
+    fn insert_text(
+        &mut self,
+        text: &str,
+        window: Option<&crate::window::BoundWindow>,
+    ) -> Result<bool, Error> {
+        super::text::insert(text, window, || self.available())
+    }
     fn reset_gamepad_feedback(&mut self, slot: u8) {
         self.3.reset_feedback(slot);
     }

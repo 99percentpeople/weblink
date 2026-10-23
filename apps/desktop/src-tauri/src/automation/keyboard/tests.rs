@@ -279,6 +279,12 @@ fn unicode_chunks_preserve_characters_allow_processing_time_and_support_typing_g
         .collect();
     assert_eq!(rebuilt, text);
     assert!(f.elapsed.get() > Duration::from_millis(500));
+    assert!(f.elapsed.get() < Duration::from_secs(2));
+    assert!(f
+        .events
+        .borrow()
+        .windows(2)
+        .all(|pair| { pair[1].0 > pair[0].0 + f.cost.get() }));
     let f = Fake::new();
     f.text(&json!({"target":"local","text":"中😀A","intervalMs":50}))
         .unwrap();

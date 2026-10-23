@@ -12,6 +12,9 @@ use weblink_desktop_input::{
 #[derive(Default)]
 struct State {
     actions: Vec<Action>,
+    native_text: bool,
+    inserted: String,
+    text_error: Option<Error>,
     fail: bool,
     unavailable: bool,
     panic: bool,
@@ -26,6 +29,18 @@ struct State {
 #[derive(Clone, Default)]
 struct Fake(Rc<RefCell<State>>);
 impl Device for Fake {
+    fn insert_text(
+        &mut self,
+        text: &str,
+        _: Option<&weblink_desktop_input::window::BoundWindow>,
+    ) -> Result<bool, Error> {
+        let mut state = self.0.borrow_mut();
+        if !state.native_text {
+            return Ok(false);
+        }
+        state.inserted.push_str(text);
+        state.text_error.map_or(Ok(true), Err)
+    }
     fn pan_supported(&self) -> bool {
         self.0.borrow().pan_supported
     }
@@ -636,6 +651,73 @@ fn text_preserves_surrogate_pairs_and_rejects_controls_or_held_modifiers() {
         Err(Error::Invalid)
     );
 }
+
+#[test]
+fn unicode_text_stops_at_blur_and_remembers_the_reason_until_revoked() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut e, f, g, now) = setup();
+    let window = WindowCheck::new();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    window.checks.store(0, SeqCst);
+    window.fail_after.store(3, SeqCst);
+    assert_eq!(
+        e.input(&g, Event::Text("AB".into()), now),
+        Err(Error::WindowFocusLost)
+    );
+    assert_eq!(f.0.borrow().actions.len(), 2);
+    assert_eq!(e.status().window_error, Some(Error::WindowFocusLost));
+    assert!(e.status().input_suspended);
+    e.revoke();
+    assert_eq!(e.status().window_error, None);
+    assert!(e.status().grant.is_none());
+}
+
+#[test]
+fn native_text_preserves_scalars_and_never_replays_an_uncertain_submission() {
+    let (mut e, f, g, now) = setup();
+    f.0.borrow_mut().native_text = true;
+    e.input(&g, Event::Text("中😀𝄞e\u{301}".into()), now)
+        .unwrap();
+    assert_eq!(f.0.borrow().inserted, "中😀𝄞e\u{301}");
+    assert!(f.0.borrow().actions.is_empty());
+    f.0.borrow_mut().text_error = Some(Error::WindowUnavailable);
+    assert_eq!(
+        e.input(&g, Event::Text("partial".into()), now),
+        Err(Error::WindowUnavailable)
+    );
+    assert_eq!(f.0.borrow().inserted, "中😀𝄞e\u{301}partial");
+    assert!(f.0.borrow().actions.is_empty());
+    assert!(e.status().input_suspended);
+    assert_eq!(e.status().window_error, Some(Error::WindowUnavailable));
+}
+
+#[test]
+fn native_text_cannot_bypass_bound_window_or_held_input_checks() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut e, f, g, now) = setup();
+    f.0.borrow_mut().native_text = true;
+    let window = WindowCheck::new();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    e.input(&g, key(true), now).unwrap();
+    assert_eq!(
+        e.input(&g, Event::Text("held".into()), now),
+        Err(Error::Invalid)
+    );
+    assert!(f.0.borrow().inserted.is_empty());
+
+    let (mut e, f, g, now) = setup();
+    f.0.borrow_mut().native_text = true;
+    let window = WindowCheck::new();
+    e.bind_window(&g, window.clone(), now).unwrap();
+    window.checks.store(0, SeqCst);
+    window.fail_after.store(1, SeqCst);
+    assert_eq!(
+        e.input(&g, Event::Text("blurred".into()), now),
+        Err(Error::WindowFocusLost)
+    );
+    assert!(f.0.borrow().inserted.is_empty());
+    assert!(f.0.borrow().actions.is_empty());
+}
 #[test]
 fn reapproval_never_replays_queued_input_from_revoked_grant() {
     let (mut e, f, g, now) = setup();
@@ -1108,7 +1190,7 @@ fn window_focus_is_checked_between_unicode_submissions() {
     let window = WindowCheck::new();
     e.bind_window(&g, window.clone(), now).unwrap();
     window.checks.store(0, SeqCst);
-    window.fail_after.store(2, SeqCst); // event check, first character; stop before the second
+    window.fail_after.store(3, SeqCst); // event, native text probe, first character; stop before the second
     assert_eq!(
         e.input(&g, Event::Text("AB".into()), now),
         Err(Error::WindowFocusLost)

@@ -9,6 +9,7 @@ mod pan;
 mod pointer_observer;
 mod safety;
 mod session;
+mod text;
 mod touch;
 use crate::{
     authorization::{Binding, Grant, RequestResult},
@@ -89,6 +90,7 @@ impl Worker {
         let status = Arc::new(Mutex::new(Status {
             held: vec![],
             window_bound: false,
+            window_error: None,
             devices: Default::default(),
             input_suspended: false,
             pan_supported: false,

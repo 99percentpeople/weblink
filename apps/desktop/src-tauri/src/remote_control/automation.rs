@@ -256,10 +256,30 @@ impl Service {
         }
     }
     /// Consume a window-scope interruption while the automation authority lock
-    /// is held. Real revocation wins if the underlying manual grant also ended.
+    /// is held. Real revocation wins if the underlying native grant also ended.
     pub(crate) fn automation_take_window_interruption(&self, principal: &str) -> Option<String> {
         let owner = self.automation_owner().ok()?;
         let mut host = owner.host.lock().unwrap_or_else(|e| e.into_inner());
+        let active = host.active.as_ref()?;
+        if active.kind == ControllerKind::Automation {
+            let status = host.worker.status();
+            if active.grant.binding.client_id != principal
+                || status.grant.as_ref() != Some(&active.grant)
+                || status.window_error.is_none()
+                || status.failure.is_some()
+            {
+                return None;
+            }
+            let grant = active.grant.clone();
+            // The actor rechecks its exact grant, including a pending emergency.
+            if !host.worker.revoke_matching(grant.clone()).ok()? {
+                return None;
+            }
+            host.end_grant();
+            host.remove_peer(&grant.binding.target.media_id);
+            owner.publish(host.snapshot());
+            return Some(grant.id);
+        }
         host.automation_authority(principal, None).ok()?;
         host.check_automation_window()?;
         host.automation_authority(principal, None).ok()?;

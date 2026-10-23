@@ -5,6 +5,17 @@ mod tests;
 pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
     sync_input_control(service, &app.state::<crate::remote_control::Shared>());
 }
+fn retire_window_interruption(
+    service: &Service,
+    control: &crate::remote_control::Service,
+    principal: &str,
+) -> bool {
+    let Some(lease) = control.automation_take_window_interruption(principal) else {
+        return false;
+    };
+    service.input_holds.lock().unwrap().clear(&lease);
+    true
+}
 fn sync_input_control(service: &Service, control: &crate::remote_control::Service) {
     service.expire();
     let mut s = service.state.lock().unwrap();
@@ -16,13 +27,8 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
     }
     // Retire a failed invocation scope before detecting emergency revocation.
     // The manual grant and every automation permission group remain intact.
-    s.input_owners.retain(|principal| {
-        let Some(lease) = control.automation_take_window_interruption(principal) else {
-            return true;
-        };
-        service.input_holds.lock().unwrap().clear(&lease);
-        false
-    });
+    s.input_owners
+        .retain(|principal| !retire_window_interruption(service, control, principal));
     super::input_action::expire_holds(control, service, !s.pending.is_empty());
     let ended: Vec<_> = s
         .input_owners
@@ -162,6 +168,9 @@ pub async fn action(
             && !s.pending.is_empty()
         {
             return Err("APPROVAL_PENDING".into());
+        }
+        if retire_window_interruption(&service, &control, &principal) {
+            s.input_owners.retain(|id| id != &principal);
         }
         if catalog::find(&call.name)?["scope"] == "input.control"
             && s.input_owners.contains(&principal)

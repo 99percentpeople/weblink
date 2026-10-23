@@ -475,6 +475,15 @@ spacing sends one character at a time; requested gaps must total at most
 explicit `Enter` or `Tab` key actions between text calls. Text also requires all
 held keys and buttons to be released. It sends committed text to the currently
 focused application; it does not automate IME composition or change focus.
+On Windows, supported native Unicode Edit/RichEdit controls in another process
+receive bounded text replacements at the caret or current selection, preserving
+undo and avoiding rapid keyboard-packet corruption in Notepad. Default batches
+yield briefly between submissions so the editor can process window messages.
+Other controls retain Unicode keyboard injection. This does not use the clipboard or change
+the input method. Read-only/disabled editors do not opt into direct insertion.
+Focus and window confinement are checked before each submission. A failed or
+timed-out submission ends the input lease without retrying the text, since it
+may already have been inserted.
 
 Key events, character chunks and timed waits recheck cancellation, permission,
 the exact native lease and the shared hold deadline. Only the bounded native

@@ -94,9 +94,12 @@ impl Plan {
             ..Self::default()
         };
         // <=32 Unicode scalar values => <=64 UTF-16 units. Never split a surrogate pair.
+        // Give native recipients time to process focus/window messages between
+        // batches. The runner waits outside authority locks and rechecks the lease.
+        let gap = if interval == 0 { 5. } else { interval as f64 };
         for (i, chunk) in chars.chunks(if interval == 0 { 32 } else { 1 }).enumerate() {
             plan.push(
-                if i == 0 { 0. } else { interval as f64 },
+                if i == 0 { 0. } else { gap },
                 vec![Event::Text(chunk.iter().collect())],
             );
         }

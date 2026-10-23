@@ -1,5 +1,5 @@
 use super::*;
-use crate::remote_control::with_bound_borrowed_input;
+use crate::remote_control::{with_bound_borrowed_input, with_bound_owned_input};
 use weblink_desktop_input::input::{Event, ScanCode};
 
 fn authority(timed: bool) -> Service {
@@ -37,6 +37,72 @@ fn authority(timed: bool) -> Service {
         s.input_owners.push(principal.id.clone());
     }
     service
+}
+
+#[test]
+fn owned_window_blur_keeps_mcp_authority_and_releases_the_input_lease() {
+    for cleanup_first in [false, true] {
+        with_bound_owned_input(|control, lease, focus| {
+            let (service, principal) = super::super::tests::fixture();
+            {
+                let mut s = service.state.lock().unwrap();
+                Service::token_grant(&mut s, &principal, &json!("local")).unwrap();
+                s.input_owners.push(principal.id.clone());
+            }
+            let events = [Event::Key {
+                key: ScanCode::new(0x1d, false).unwrap(),
+                down: true,
+            }];
+            service
+                .input_holds
+                .lock()
+                .unwrap()
+                .update("client", lease, &events, Instant::now());
+            control
+                .automation_input("client", lease, events.to_vec())
+                .unwrap();
+            let grants = serde_json::to_value(&service.state.lock().unwrap().grants).unwrap();
+            focus(false);
+            if cleanup_first {
+                super::super::input_action::abort_lease(&service, control, "client", lease);
+            }
+            sync_input_control(&service, control);
+            focus(true);
+            sync_input_control(&service, control);
+            let mut s = service.state.lock().unwrap();
+            assert!(
+                !s.mcp_suspended,
+                "Window blur must not suspend the MCP token"
+            );
+            Service::token_grant(&mut s, &principal, &json!("local")).unwrap();
+            assert!(!s.policies_suspended);
+            assert_eq!(serde_json::to_value(&s.grants).unwrap(), grants);
+            assert!(s.input_owners.is_empty());
+            assert!(!control.automation_active("client"));
+            assert!(!service.input_holds.lock().unwrap().any(lease));
+        });
+    }
+}
+
+#[test]
+fn owned_window_blur_cannot_hide_a_real_emergency() {
+    for cleanup_first in [false, true] {
+        with_bound_owned_input(|control, lease, focus| {
+            let service = authority(false);
+            control.observe_emergency(service.emergency_observer());
+            focus(false);
+            if cleanup_first {
+                super::super::input_action::abort_lease(&service, control, "client", lease);
+            }
+            control.emergency_revoke();
+            sync_input_control(&service, control);
+            let s = service.state.lock().unwrap();
+            assert!(s.mcp_suspended);
+            assert!(s.policies_suspended);
+            assert!(s.grants.is_empty());
+            assert!(s.input_owners.is_empty());
+        });
+    }
 }
 
 #[test]

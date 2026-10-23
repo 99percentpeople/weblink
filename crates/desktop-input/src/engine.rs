@@ -71,6 +71,15 @@ pub trait Device {
     fn available(&self) -> bool;
     fn geometry_current(&self, geometry: Geometry) -> bool;
     fn submit(&mut self, actions: &[Action]) -> Result<(), Error>;
+    /// Insert committed text into a supported focused editor. False guarantees
+    /// nothing was submitted; an error may be partial and must not be retried.
+    fn insert_text(
+        &mut self,
+        _text: &str,
+        _window: Option<&crate::window::BoundWindow>,
+    ) -> Result<bool, Error> {
+        Ok(false)
+    }
 }
 #[derive(Clone, Debug)]
 pub struct TrustedTarget {
@@ -83,6 +92,7 @@ struct InputState<D: Device> {
     invalidated: HashMap<String, Arc<AtomicBool>>,
     held: Vec<Held>,
     window: Option<crate::window::BoundWindow>,
+    window_error: Option<Error>,
     touches: crate::touch::Contacts,
     panning: bool,
     interrupted: bool,
@@ -292,6 +302,15 @@ impl<D: Device> InputState<D> {
                 if !crate::input::valid_text(&text) || !self.held.is_empty() {
                     return Err(Error::Invalid);
                 }
+                self.check_window(None)?;
+                if self
+                    .device
+                    .backend
+                    .insert_text(&text, self.window.as_ref())?
+                {
+                    self.submitted += 1;
+                    return Ok(());
+                }
                 for unit in text.encode_utf16() {
                     if started.elapsed() > MAX_INPUT_AGE {
                         return Err(Error::Stale);
@@ -357,6 +376,7 @@ impl<D: Device> Backend for InputState<D> {
         self.interrupted = true;
         let released = self.release_all();
         self.window = None;
+        self.window_error = None;
         let unmounted = self.device.unmount_all();
         if !unmounted {
             self.failure = Some(Error::Release);
@@ -368,6 +388,8 @@ impl<D: Device> Backend for InputState<D> {
 pub struct Status {
     pub held: Vec<Held>,
     pub window_bound: bool,
+    /// A window-scope failure, distinct from revocation or a stalled input queue.
+    pub window_error: Option<Error>,
     pub devices: devices::Snapshot,
     pub input_suspended: bool,
     pub pan_supported: bool,
@@ -412,6 +434,7 @@ impl<D: Device> Engine<D> {
                 invalidated: HashMap::new(),
                 held: vec![],
                 window: None,
+                window_error: None,
                 touches: Default::default(),
                 panning: false,
                 interrupted: false,
@@ -483,6 +506,7 @@ impl<D: Device> Engine<D> {
         let approved = self.authority.approve(consent, now);
         if approved.is_some() {
             self.authority.backend_mut().interrupted = false;
+            self.authority.backend_mut().window_error = None;
         }
         approved
     }
@@ -591,6 +615,7 @@ impl<D: Device> Engine<D> {
         }
         if reset && result.is_ok() {
             self.authority.backend_mut().interrupted = false;
+            self.authority.backend_mut().window_error = None;
         }
         if let Err(error) = result {
             if matches!(
@@ -599,6 +624,7 @@ impl<D: Device> Engine<D> {
             ) {
                 if !scoped {
                     self.interrupt();
+                    self.authority.backend_mut().window_error = Some(error);
                 }
                 return Err(error);
             }
@@ -614,8 +640,11 @@ impl<D: Device> Engine<D> {
     pub fn tick(&mut self, now: Instant) {
         self.authority.tick(now);
         let state = self.authority.backend_mut();
-        if !state.interrupted && state.window.is_some() && state.check_window(None).is_err() {
-            self.interrupt();
+        if !state.interrupted && state.window.is_some() {
+            if let Err(error) = state.check_window(None) {
+                self.interrupt();
+                self.authority.backend_mut().window_error = Some(error);
+            }
         }
         if !self.authority.backend_mut().device.expire_gamepads(now) {
             self.fail(Error::Release);
@@ -637,6 +666,7 @@ impl<D: Device> Engine<D> {
     pub fn interrupt(&mut self) {
         let state = self.authority.backend_mut();
         state.interrupted = true;
+        state.window_error = None;
         if !state.release_all() {
             self.fail(Error::Release);
         }
@@ -668,6 +698,7 @@ impl<D: Device> Engine<D> {
         Status {
             held: state.held.clone(),
             window_bound: state.window.is_some(),
+            window_error: state.window_error,
             devices: state.device.snapshot(),
             input_suspended: state.interrupted,
             pan_supported: state.device.backend.pan_supported(),

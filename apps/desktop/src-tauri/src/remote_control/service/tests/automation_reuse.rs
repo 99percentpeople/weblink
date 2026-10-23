@@ -13,6 +13,18 @@ pub(crate) fn with_bound_borrowed_input(test: impl FnOnce(&Service, &str, &dyn F
     });
 }
 
+pub(crate) fn with_bound_owned_input(test: impl FnOnce(&Service, &str, &dyn Fn(bool))) {
+    let rig = Rig::new();
+    let lease = rig.acquire_automation();
+    let window = Arc::new(Window(AtomicBool::new(true)));
+    rig.service
+        .automation_bind_window("client", &lease, window.clone())
+        .unwrap();
+    test(&rig.service, &lease, &|focused| {
+        window.0.store(focused, Ordering::Release);
+    });
+}
+
 fn manual() -> (Rig, String) {
     let rig = Rig::new();
     rig.service
@@ -28,6 +40,48 @@ fn manual() -> (Rig, String) {
     let grant = rig.approve();
     rig.input(&grant, 1, 1, json!({"type":"activate"}));
     (rig, grant)
+}
+
+#[test]
+fn owned_window_scope_ends_on_blur_and_can_acquire_a_fresh_lease() {
+    let rig = Rig::new();
+    let first = rig.acquire_automation();
+    let window = Arc::new(Window(AtomicBool::new(true)));
+    rig.service
+        .automation_bind_window("client", &first, window.clone())
+        .unwrap();
+    let ctrl = ScanCode::new(0x1d, false).unwrap();
+    rig.service
+        .automation_input("client", &first, vec![key(ctrl, true)])
+        .unwrap();
+    window.0.store(false, Ordering::Release);
+    rig.tick();
+    assert_eq!(
+        rig.service.automation_take_window_interruption("other"),
+        None
+    );
+    assert_eq!(
+        rig.service.automation_take_window_interruption("client"),
+        Some(first.clone())
+    );
+    assert!(rig
+        .state
+        .observations
+        .lock()
+        .unwrap()
+        .contains(&Observation::Input(Action::Key {
+            key: ctrl,
+            down: false
+        })));
+    window.0.store(true, Ordering::Release);
+    assert!(!rig.service.automation_matches("client", &first));
+    let next = rig.acquire_automation();
+    assert_ne!(first, next);
+    assert!(!rig.service.automation_revoke_lease("client", &first));
+    assert!(rig.service.automation_matches("client", &next));
+    rig.service
+        .automation_input("client", &next, vec![Event::Text("fresh".into())])
+        .unwrap();
 }
 fn borrow(rig: &Rig) -> String {
     let owner = rig.service.owner(&rig.owner).unwrap();

@@ -11,7 +11,9 @@ mod text_focus;
 mod transport;
 pub use commands::*;
 #[cfg(test)]
-pub(crate) use service::tests::automation_reuse::with_bound_borrowed_input;
+pub(crate) use service::tests::automation_reuse::{
+    with_bound_borrowed_input, with_bound_owned_input,
+};
 pub use service::Service;
 
 #[derive(Clone, Deserialize)]
