@@ -33,6 +33,7 @@ fn lease(service: &Shared, epoch: String, principal: String, grant: String) -> C
         let service = service.upgrade().ok_or(Error::Cancelled)?;
         let s = service.state.lock().unwrap();
         if Service::check(&s, &epoch).is_err()
+            || !s.enabled
             || !Service::current(&s)
             || !s.grants.get(&grant).is_some_and(|g| {
                 Service::grant_live(&s, g) && g.principal.id == principal && g.target == "local"
@@ -50,6 +51,7 @@ fn check_ticket(s: &State, epoch: &str, id: &str) -> Result<(), Error> {
         return Err(Error::Timeout);
     }
     if !Service::current(s)
+        || !Service::call_enabled(s, &ticket.principal, &ticket.call)
         || ticket.call.arguments["target"] != "local"
         || !s.grants.get(&ticket.grant).is_some_and(|g| {
             Service::grant_live(&s, g)
@@ -182,6 +184,7 @@ mod tests {
         };
         let mut s = State {
             enabled: true,
+            mcp_enabled: true,
             epoch: "epoch".into(),
             ..Default::default()
         };

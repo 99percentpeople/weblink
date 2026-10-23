@@ -153,7 +153,7 @@ const mount = () => {
 beforeEach(() => {
   fixture.generation = "connection-1";
   vi.stubGlobal("crypto", webcrypto);
-  setAppState("options", "automationEnabled", false);
+  setAppState("options", "mcpEnabled", false);
   fixture.incoming = undefined;
   fixture.channelReady = true;
   fixture.finishOpening = undefined;
@@ -194,7 +194,7 @@ it.each([undefined, false])(
     setContext({ registerTool: vi.fn(async () => {}) });
     vi.useFakeTimers();
     const { runtime } = mount();
-    await runtime.configure(true);
+    await runtime.configureMcp(true);
     await vi.advanceTimersByTimeAsync(3000);
     expect(fixture.createChannel).not.toHaveBeenCalled();
     expect(runtime.peers()).toEqual([]);
@@ -241,7 +241,7 @@ it("closes a pending automation channel when destination consent is withdrawn be
       }),
   );
   const { runtime } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   expect(opened).toBeDefined();
   setCapabilities({
     automation: {},
@@ -258,7 +258,7 @@ it("lists a device only after the automation channel opens", async () => {
   fixture.channelReady = false;
   setContext({ registerTool: vi.fn(async () => {}) });
   const { runtime } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   await waitFor(() =>
     expect(fixture.finishOpening).toBeDefined(),
   );
@@ -271,7 +271,7 @@ it("uses channel readiness events instead of scanning sessions on a timer and re
   fixture.messageReady = false;
   setContext({ registerTool: vi.fn(async () => {}) });
   const { runtime, unmount } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   fixture.messageReady = true;
   await vi.advanceTimersByTimeAsync(5000);
   expect(fixture.createChannel).not.toHaveBeenCalled();
@@ -332,7 +332,7 @@ it("starts a replacement from its connection event and ignores an older channel 
         }),
     );
   const { runtime } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   expect(fixture.createChannel).toHaveBeenCalledTimes(1);
   fixture.pc = {};
   fixture.events.dispatchEvent(
@@ -363,7 +363,7 @@ it("recovers an established channel from its close event without retrying failed
   vi.useFakeTimers();
   setContext({ registerTool: vi.fn(async () => {}) });
   const { runtime } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   await vi.advanceTimersByTimeAsync(0);
   expect(runtime.peers()).toHaveLength(1);
   fixture.channelReady = false;
@@ -396,7 +396,7 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
     },
   } satisfies ModelContext);
   const { runtime } = mount();
-  await runtime.configure(true);
+  await runtime.configureMcp(true);
   await waitFor(() =>
     expect(fixture.incoming).toBeDefined(),
   );
@@ -413,6 +413,20 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
     }),
     expect.any(AbortSignal),
   );
+  expect(runtime.enabled()).toBe(false);
+  expect(
+    await tools
+      .get("devices.list")!
+      .execute({ target: "local" }),
+  ).toEqual({ ok: true, data: { local: true } });
+  expect(
+    await tools
+      .get("diagnostics.snapshot")!
+      .execute({ target: "local" }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "UNSUPPORTED" },
+  });
   expect(runtime.snapshot().pending).toEqual([]);
   const incoming = await fixture.incoming!(
     {
@@ -425,7 +439,7 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
     ok: false,
     error: { code: "UNSUPPORTED" },
   });
-  await runtime.configure(false);
+  await runtime.configureMcp(false);
   expect(tools.size).toBe(0);
 });
 it.each([undefined, null, {}, { registerTool: true }])(
@@ -436,12 +450,12 @@ it.each([undefined, null, {}, { registerTool: true }])(
     await waitFor(() => expect(runtime.ready()).toBe(true));
     expect(runtime.webSupported()).toBe(false);
     await expect(
-      runtime.configure(true),
+      runtime.configureMcp(true),
     ).rejects.toMatchObject({
       code: "UNSUPPORTED",
     });
-    expect(runtime.enabled()).toBe(false);
-    expect(appState.options.automationEnabled).toBe(false);
+    expect(runtime.mcpEnabled()).toBe(false);
+    expect(appState.options.mcpEnabled).toBe(false);
     expect(fixture.advertise).not.toHaveBeenCalledWith(
       true,
     );
@@ -449,12 +463,12 @@ it.each([undefined, null, {}, { registerTool: true }])(
   },
 );
 it("does not restore enabled state in an unsupported browser or erase the saved preference", async () => {
-  setAppState("options", "automationEnabled", true);
+  setAppState("options", "mcpEnabled", true);
   const { runtime } = mount();
   await waitFor(() => expect(runtime.ready()).toBe(true));
-  expect(runtime.enabled()).toBe(false);
+  expect(runtime.mcpEnabled()).toBe(false);
   expect(runtime.error()).toBe("");
-  expect(appState.options.automationEnabled).toBe(true);
+  expect(appState.options.mcpEnabled).toBe(true);
   expect(fixture.advertise).not.toHaveBeenCalledWith(true);
 });
 it("keeps automation disabled when asynchronous tool registration fails", async () => {
@@ -464,12 +478,12 @@ it("keeps automation disabled when asynchronous tool registration fails", async 
     }),
   } satisfies ModelContext);
   const { runtime } = mount();
-  await expect(runtime.configure(true)).rejects.toThrow(
+  await expect(runtime.configureMcp(true)).rejects.toThrow(
     "Registration denied",
   );
-  expect(runtime.enabled()).toBe(false);
+  expect(runtime.mcpEnabled()).toBe(false);
   expect(runtime.error()).toContain("Registration denied");
-  expect(appState.options.automationEnabled).toBe(false);
+  expect(appState.options.mcpEnabled).toBe(false);
   expect(fixture.advertise).not.toHaveBeenCalledWith(true);
 });
 it.each(["disable", "unmount"])(
@@ -487,16 +501,16 @@ it.each(["disable", "unmount"])(
     );
     setContext({ registerTool: register });
     const { runtime, unmount } = mount();
-    const enabling = runtime.configure(true);
-    expect(runtime.enabled()).toBe(false);
+    const enabling = runtime.configureMcp(true);
+    expect(runtime.mcpEnabled()).toBe(false);
     if (action === "unmount") unmount();
-    else await runtime.configure(false);
+    else await runtime.configureMcp(false);
     expect(registration.aborted).toBe(true);
     finish();
     await enabling;
     expect(register).toHaveBeenCalledTimes(1);
-    expect(runtime.enabled()).toBe(false);
-    expect(appState.options.automationEnabled).toBe(false);
+    expect(runtime.mcpEnabled()).toBe(false);
+    expect(appState.options.mcpEnabled).toBe(false);
     expect(fixture.advertise).not.toHaveBeenCalledWith(
       true,
     );

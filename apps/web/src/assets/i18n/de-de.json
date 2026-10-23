@@ -1537,11 +1537,11 @@
     "days": "Tage",
     "token_lifetime": "Token-Gültigkeit",
     "title": "Automatisierung",
-    "policies_paused": "Token-Aufrufe und dauerhafte Freigaben sind pausiert. Automatisierung aus- und wieder einschalten, um fortzufahren.",
+    "policies_paused": "Token-Aufrufe und dauerhafte Freigaben sind pausiert. MCP aus- und einschalten, um Token-Aufrufe fortzusetzen; Automatisierung aus- und einschalten, um Gerätefreigaben fortzusetzen.",
     "device_permissions_description": "Gilt nur für vertrauenswürdige Geräte. Berechtigungen zum Empfang von Inhalten und zur Bildschirmfreigabe gelten weiterhin.",
     "description": "KI-Werkzeuge über MCP oder WebMCP verbinden.",
     "enable": "Automatisierung aktivieren",
-    "desktop": "Stellt einen MCP-Dienst bereit und nimmt Automatisierungsaufrufe autorisierter Geräte an.",
+    "desktop": "MCP-Clients und autorisierten entfernten Geräten erlauben, diesen Computer zu automatisieren.",
     "browser": "Desktops über WebMCP steuern. Das Zielgerät verwaltet die Berechtigungen.",
     "unsupported": "Dieser Browser unterstützt WebMCP nicht. Die Funktion kann nicht aktiviert werden.",
     "export": "Diagnose exportieren",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "Einen Port von 1 bis 65535 eingeben. Standard: 32100.",
     "token_created": "Token erstellt",
     "server_apply_description": "Einstellungen werden automatisch gespeichert und beim nächsten Dienststart wirksam.",
-    "server_pending": "Die neue Bindekonfiguration wird nach Aus- und Einschalten der Automatisierung wirksam.",
+    "server_pending": "Neue Netzwerkeinstellungen gelten nach dem Aus- und Einschalten von MCP.",
     "settings_auto_description": "Textfelder werden beim Verlassen gespeichert, Auswahlfelder sofort.",
     "saving": "Wird gespeichert…",
     "settings_saved": "Automatisch gespeichert.",
@@ -1632,6 +1632,8 @@
       "ok": "Erfolgreich",
       "error": "Fehlgeschlagen",
       "error_code": "Fehlgeschlagen ({{code}})"
-    }
+    },
+    "mcp_enable": "MCP aktivieren",
+    "mcp_description": "MCP-API bereitstellen. Die Steuerung entfernter Geräte erfordert keine lokale Automatisierung; die Steuerung dieses Computers schon."
   }
 }

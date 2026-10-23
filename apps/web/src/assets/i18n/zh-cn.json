@@ -1537,11 +1537,11 @@
     "days": "天",
     "token_lifetime": "Token 有效期",
     "title": "自动化",
-    "policies_paused": "Token 调用和始终允许已暂停，关闭并重新开启自动化后恢复。",
+    "policies_paused": "Token 调用和始终允许已暂停。关闭并重新开启 MCP 可恢复 Token 调用；关闭并重新开启自动化可恢复远端设备策略。",
     "device_permissions_description": "仅对可信设备生效，仍受接收内容和分享画面权限限制。",
     "description": "通过 MCP 或 WebMCP 连接 AI 工具。",
     "enable": "启用自动化",
-    "desktop": "提供 MCP 服务，并接受已授权设备的自动化调用。",
+    "desktop": "允许 MCP 客户端和已授权的远端设备自动化操作本机。",
     "browser": "通过 WebMCP 控制桌面端，权限由目标设备管理。",
     "unsupported": "当前浏览器不支持 WebMCP，无法启用。",
     "export": "导出诊断",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "请输入 1–65535 的端口，默认值为 32100。",
     "token_created": "Token 已创建",
     "server_apply_description": "设置自动保存，下次启动服务时生效。",
-    "server_pending": "新监听配置将在关闭并重新开启自动化后生效。",
+    "server_pending": "新监听配置将在关闭并重新开启 MCP 后生效。",
     "settings_auto_description": "输入框在失焦后自动保存，下拉选项修改后立即保存。",
     "saving": "正在保存…",
     "settings_saved": "已自动保存。",
@@ -1632,6 +1632,8 @@
       "ok": "成功",
       "error": "失败",
       "error_code": "失败（{{code}}）"
-    }
+    },
+    "mcp_enable": "启用 MCP",
+    "mcp_description": "开放 MCP API。控制远端设备无需启用本机自动化；控制本机需同时启用自动化。"
   }
 }

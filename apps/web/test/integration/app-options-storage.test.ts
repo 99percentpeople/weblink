@@ -390,6 +390,7 @@ it("restores the automation switch and only valid per-device scope decisions", a
   });
   const { appState } = await boot();
   expect(appState.options.automationEnabled).toBe(true);
+  expect(appState.options.mcpEnabled).toBe(true);
   expect(
     appState.options.clientConfigs.peer?.automation,
   ).toEqual({
@@ -409,5 +410,35 @@ it.each([undefined, "true", null, 1])(
     store({ automationEnabled });
     const { appState } = await boot();
     expect(appState.options.automationEnabled).toBe(false);
+  },
+);
+
+it.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  "persists independent automation=%s and MCP=%s preferences",
+  async (automationEnabled, mcpEnabled) => {
+    store({ automationEnabled, mcpEnabled });
+    const { appState } = await boot();
+    expect(appState.options.automationEnabled).toBe(
+      automationEnabled,
+    );
+    expect(appState.options.mcpEnabled).toBe(mcpEnabled);
+    expect(saved()).toMatchObject({
+      automationEnabled,
+      mcpEnabled,
+    });
+  },
+);
+it.each(["true", null, 1])(
+  "does not migrate over an invalid explicit MCP preference (%j)",
+  async (mcpEnabled) => {
+    store({ automationEnabled: true, mcpEnabled });
+    const { appState } = await boot();
+    expect(appState.options.automationEnabled).toBe(true);
+    expect(appState.options.mcpEnabled).toBe(false);
   },
 );

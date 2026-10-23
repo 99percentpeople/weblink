@@ -1,18 +1,32 @@
 # Automation: WebMCP and MCP
 
 Weblink exposes a shared tool catalog through browser WebMCP and a native MCP
-server. Enable **Settings → Automation** separately on every participating
-device. Automation starts disabled on first use; subsequent page/app restarts restore
-the last successfully selected switch state. Native startup waits for its authority
-channel before restarting the listener. A failed bind reports the error without
-clearing the saved preference.
+server. **Settings → Automation** has two independent switches on desktop:
+
+- **Enable automation** permits MCP clients and authorized remote devices to
+  operate this computer. It does not start the MCP API.
+- **Enable MCP** starts the MCP API. With local automation off, clients can still
+  use `devices.list` and forward calls to directly connected desktops. Other local
+  tools return `DISABLED`. Incoming peer calls require local automation regardless
+  of the MCP switch, plus the existing destination-device permissions.
+
+Browsers expose only **Enable MCP** for WebMCP registration. They do not accept
+incoming automation or execute local tools other than device discovery.
+Both switches start disabled and persist independently. An existing combined
+preference migrates to both switches only when the MCP preference is absent.
+Native startup waits for its authority channel before restoring each switch.
+A failed MCP bind reports the error without clearing the saved preference or
+stopping local automation. Disabling automation cancels local calls, approvals,
+command jobs and input leases while keeping MCP forwarding alive. Disabling MCP
+cancels token calls and stops its listener while retaining incoming peer authority.
+The automation peer channel remains available while either switch is enabled.
 
 ## Connecting
 
 A supporting browser uses the [WebMCP `document.modelContext` API](https://webmachinelearning.github.io/webmcp/). The switch
 stays off and disabled when WebMCP is unavailable, without erasing the saved
-preference. Automation becomes active only after tool registration succeeds;
-registration failure, disabling automation or closing the page aborts the
+preference. MCP becomes active only after tool registration succeeds;
+registration failure, disabling MCP or closing the page aborts the
 registrations. The browser is a controller, with no local
 Token management or permission approval screen. Incoming peer automation calls
 to a browser are rejected; OS input and Shell execution require a desktop target.
@@ -20,8 +34,8 @@ to a browser are rejected; OS input and Shell execution require a desktop target
 On desktop, create one MCP credential per client in Automation settings. Copy
 the displayed Streamable HTTP URL and Authorization header into the client's
 MCP configuration. The **MCP server** settings configure the listening host and
-port. Text fields save automatically on blur, including while automation is running.
-Listener changes take effect the next time automation is enabled, preserving
+port. Text fields save automatically on blur, including while MCP is running.
+Listener changes take effect the next time MCP is enabled, preserving
 the current endpoint, calls and grants until then. The UI distinguishes the
 active URL from pending settings. The default host is `127.0.0.1`; `localhost`,
 IPv4 and IPv6 literals are accepted. `0.0.0.0` and `::` explicitly enable listening
@@ -51,9 +65,9 @@ secret. The compact list shows token summaries and actions. The full
 random token is displayed only at creation. Only a SHA-256 hash, a short prefix,
 name, creation time and expiration are stored in `mcp-tokens.json` in the local
 app-data directory. Changes are written atomically before becoming active. The
-list, creation, editing and revocation remain available while automation is
-disabled. Issuing a token authorizes local tool calls and forwarding without an
-additional local approval, but never starts the listener;
+list, creation, editing and revocation remain available while MCP is disabled.
+Issuing a token authorizes forwarding and, when local automation is enabled,
+local tool calls without additional local approval, but never starts the listener;
 its connection configuration uses the saved endpoint when the server is off. Tokens survive disabling/restarting, while
 runtime grants and pending calls do not. Expired tokens remain visible and can
 be renewed or revoked. Every HTTP request and final native effect checks token
@@ -63,8 +77,9 @@ or pending calls, including between background cleanup ticks.
 
 These tokens authenticate local MCP clients only. They do not pair remote
 devices, appear in remote-device permission lists, or authorize a remote device.
-A valid token needs no extra local approval to connect to another client or call
-a tool. The destination still enforces its own device permissions. Requests require
+A valid token needs no extra local approval to connect to another client.
+Local tool calls also require the automation switch, except for `devices.list`.
+The destination still enforces its own device permissions. Requests require
 the accepted socket's concrete IP and port in Host, including on wildcard
 listeners; arbitrary DNS names and forwarded headers never authorize a request.
 A present Origin must match that HTTP origin. Browser cross-origin HTTP
@@ -111,8 +126,8 @@ outside the current scope. Device pairing and proof of key possession do not
 require those enterprise features.
 
 The desktop MCP entrypoint authenticates its token and checks its lifetime on
-every call. Issuing the token is the local authorization, including for
-`target:"local"`. Forwarding to other clients needs no further approval on the
+every call. Issuing the token supplies the client authorization; the automation
+switch gates `target:"local"` calls except `devices.list`. Forwarding to other clients needs no further approval on the
 entrypoint. WebMCP also forwards without a browser approval. The destination
 desktop enforces its own peer permissions independently; an MCP source label or
 the controller's token never bypasses its Ask, Always allow or Deny policies.
@@ -215,8 +230,10 @@ It fences new calls immediately, revokes grants, cancels pending reviews, queued
 and command process trees, and releases automated input. The tray's local revoke
 action uses the same stop path; automation settings have no separate stop button.
 Emergency stop and explicit revocation of a policy grant pause token calls and automatic Always-allow grants
-until automation is disabled and enabled again. This pause does not erase saved
-policies; individual timed peer approvals remain available. A borrowed window losing
+until their respective switch is disabled and enabled again: MCP resumes token
+calls, while automation resumes remote-device Always-allow policies. Each switch
+leaves the other pause intact. This pause does not erase saved policies;
+individual timed peer approvals remain available. A borrowed window losing
 focus only ends its input lease and releases its held keys/buttons; it does not pause
 automation permissions. Late input cleanup cannot suppress an emergency stop or release
 a replacement lease. Automated input is blocked while permission requests await local review.

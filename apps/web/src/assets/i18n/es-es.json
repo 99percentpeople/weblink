@@ -1537,11 +1537,11 @@
     "days": "días",
     "token_lifetime": "Validez del token",
     "title": "Automatización",
-    "policies_paused": "Las llamadas con token y los permisos permanentes están en pausa. Desactiva y vuelve a activar la automatización para reanudarlos.",
+    "policies_paused": "Las llamadas con token y los permisos permanentes están en pausa. Desactiva y activa MCP para reanudar las llamadas, o la automatización para reanudar los permisos de dispositivos.",
     "device_permissions_description": "Solo se aplica a dispositivos de confianza y respeta los permisos de recepción de contenido y de pantalla compartida.",
     "description": "Conecta herramientas de IA mediante MCP o WebMCP.",
     "enable": "Activar automatización",
-    "desktop": "Ofrece un servicio MCP y acepta llamadas de automatización de dispositivos autorizados.",
+    "desktop": "Permitir que los clientes MCP y los dispositivos remotos autorizados automaticen este equipo.",
     "browser": "Controla equipos de escritorio mediante WebMCP. El dispositivo de destino gestiona los permisos.",
     "unsupported": "Este navegador no admite WebMCP. No se puede activar.",
     "export": "Exportar diagnóstico",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "Introduce un puerto de 1 a 65535. El predeterminado es 32100.",
     "token_created": "Token creado",
     "server_apply_description": "Los ajustes se guardan automáticamente y se aplican al volver a iniciar el servicio.",
-    "server_pending": "La nueva configuración de escucha se aplicará al desactivar y volver a activar la automatización.",
+    "server_pending": "La nueva configuración de escucha se aplica al desactivar y activar MCP.",
     "settings_auto_description": "Los campos de texto se guardan al salir de ellos; las selecciones, de inmediato.",
     "saving": "Guardando…",
     "settings_saved": "Guardado automáticamente.",
@@ -1632,6 +1632,8 @@
       "ok": "Correcta",
       "error": "Fallida",
       "error_code": "Fallida ({{code}})"
-    }
+    },
+    "mcp_enable": "Activar MCP",
+    "mcp_description": "Publicar la API de MCP. Controlar dispositivos remotos no requiere automatización local; controlar este equipo sí."
   }
 }

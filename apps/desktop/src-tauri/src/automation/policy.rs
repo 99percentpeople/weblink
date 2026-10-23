@@ -62,6 +62,7 @@ impl Service {
 
     pub(super) fn pause_policies(&self, s: &mut State) {
         s.policies_suspended = true;
+        s.mcp_suspended = true;
         let grants: Vec<_> = s
             .grants
             .values()

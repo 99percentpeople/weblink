@@ -17,10 +17,10 @@ impl Service {
         principal: &Principal,
         target: &Value,
     ) -> Result<(), String> {
-        if principal.kind != "mcp" || !Self::principal_active(s, principal) {
+        if !s.mcp_enabled || principal.kind != "mcp" || !Self::principal_active(s, principal) {
             return Err("SESSION_CLOSED".into());
         }
-        if s.policies_suspended {
+        if s.mcp_suspended {
             return Err("PERMISSION_DENIED".into());
         }
         // Keep at most two authorities per token, regardless of requested peer IDs.

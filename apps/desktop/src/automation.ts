@@ -34,6 +34,8 @@ export const nativeAutomation: NativeAutomation = {
   close: (epoch) => invoke("automation_close", { epoch }),
   configure: (epoch, enabled) =>
     invoke("automation_configure", { epoch, enabled }),
+  configureMcp: (epoch, enabled) =>
+    invoke("automation_mcp_configure", { epoch, enabled }),
   configureServer: (epoch, config) =>
     invoke("automation_server_configure", {
       epoch,

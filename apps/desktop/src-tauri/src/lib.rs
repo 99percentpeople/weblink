@@ -104,6 +104,7 @@ pub fn run() {
             automation::automation_heartbeat,
             automation::automation_close,
             automation::automation_configure,
+            automation::automation_mcp_configure,
             automation::automation_server_configure,
             automation::automation_snapshot,
             automation::automation_client,

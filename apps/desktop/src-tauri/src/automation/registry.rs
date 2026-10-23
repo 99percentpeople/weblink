@@ -149,13 +149,14 @@ impl Service {
             && g.expires_at.is_none_or(|at| at > now())
             && Self::principal_active(s, &g.principal)
             && if g.principal.kind == "mcp" {
-                !s.policies_suspended
+                s.mcp_enabled && !s.mcp_suspended
             } else {
-                g.scopes.iter().all(|scope| {
-                    let decision = Self::peer_decision(s, &g.principal, scope);
-                    decision != policy::Decision::Deny
-                        && (g.expires_at.is_some() || decision == policy::Decision::Allow)
-                })
+                s.enabled
+                    && g.scopes.iter().all(|scope| {
+                        let decision = Self::peer_decision(s, &g.principal, scope);
+                        decision != policy::Decision::Deny
+                            && (g.expires_at.is_some() || decision == policy::Decision::Allow)
+                    })
             }
     }
     pub(super) fn create_client(
@@ -259,6 +260,7 @@ mod tests {
     fn start(service: &Service) {
         let mut s = service.state.lock().unwrap();
         s.enabled = true;
+        s.mcp_enabled = true;
         s.epoch = "epoch".into();
     }
     #[tokio::test]

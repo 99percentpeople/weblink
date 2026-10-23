@@ -12,6 +12,7 @@ fn main() {
             "automation_heartbeat",
             "automation_close",
             "automation_configure",
+            "automation_mcp_configure",
             "automation_server_configure",
             "automation_snapshot",
             "automation_client",

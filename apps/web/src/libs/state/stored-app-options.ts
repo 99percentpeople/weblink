@@ -63,6 +63,11 @@ export function resolveStoredAppOptions(
     }),
   ) as AppOption;
 
+  // The previous switch enabled both local automation and the MCP API.
+  // Preserve that preference only when the new independent field is absent.
+  if (!Object.hasOwn(saved, "mcpEnabled"))
+    options.mcpEnabled = options.automationEnabled;
+
   options.locale = normalizeLocalePreference(
     options.locale,
   );

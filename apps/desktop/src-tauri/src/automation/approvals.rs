@@ -13,6 +13,7 @@ impl Service {
             .cloned()
             .collect();
         let allow = Self::current(&s)
+            && Self::call_enabled(&s, &p.principal, &p.call)
             && Self::principal_active(&s, &p.principal)
             && scopes.contains(&p.scope)
             && [5, 15, 60].contains(&minutes)

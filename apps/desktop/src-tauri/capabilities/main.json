@@ -9,6 +9,7 @@
     "allow-automation-heartbeat",
     "allow-automation-close",
     "allow-automation-configure",
+    "allow-automation-mcp-configure",
     "allow-automation-server-configure",
     "allow-automation-snapshot",
     "allow-automation-client",

@@ -143,19 +143,28 @@ async fn duplicate_requests_cannot_clear_pending_approval_or_executing_ticket() 
 #[test]
 fn stale_cleanup_never_removes_a_reused_id() {
     let (service, _) = fixture();
-    service
-        .state
-        .lock()
-        .unwrap()
-        .requests
-        .insert("same".into(), "new".into());
+    service.state.lock().unwrap().requests.insert(
+        "same".into(),
+        Invocation {
+            generation: "new".into(),
+            mcp: true,
+            local: true,
+        },
+    );
     drop(RequestCleanup {
         service: service.clone(),
         id: "same".into(),
         generation: "old".into(),
     });
     assert_eq!(
-        service.state.lock().unwrap().requests.get("same").unwrap(),
+        service
+            .state
+            .lock()
+            .unwrap()
+            .requests
+            .get("same")
+            .unwrap()
+            .generation,
         "new"
     );
 }
@@ -325,6 +334,7 @@ pub(super) fn fixture() -> (Shared, Principal) {
     {
         let mut s = service.state.lock().unwrap();
         s.enabled = true;
+        s.mcp_enabled = true;
         s.registry.port = std::net::TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()

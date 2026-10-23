@@ -47,7 +47,13 @@ export interface NativeAutomation {
   /** Check the native page session; delayed renderer timers do not expire it. */
   heartbeat(epoch: string): Promise<void>;
   close(epoch: string): Promise<void>;
+  /** Accept automation of this machine from MCP clients and remote peers. */
   configure(epoch: string, enabled: boolean): Promise<void>;
+  /** Expose the MCP API independently of local automation authority. */
+  configureMcp(
+    epoch: string,
+    enabled: boolean,
+  ): Promise<void>;
   configureServer(
     epoch: string,
     config: McpServerConfig,

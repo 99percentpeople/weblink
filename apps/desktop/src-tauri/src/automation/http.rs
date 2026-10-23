@@ -19,7 +19,7 @@ use rmcp::{
 struct Handler(Shared);
 impl ServerHandler for Handler {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions("Weblink automation. Explicit targets. A valid MCP token authorizes local calls and forwarding without additional local approval. Remote calls follow the destination device's permissions. Calls never approve their own remote permissions.")
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions("Weblink automation. Explicit targets. A valid MCP token authorizes forwarding and device discovery. Other local calls also require local automation to be enabled. Remote calls follow the destination device's permissions. Calls never approve their own remote permissions.")
     }
     async fn list_tools(
         &self,

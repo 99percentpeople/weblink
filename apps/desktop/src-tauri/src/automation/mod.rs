@@ -4,6 +4,7 @@ mod cancellation;
 mod catalog;
 mod command_run;
 mod commands;
+mod configuration;
 pub(crate) mod coordinates;
 mod emergency;
 mod http;
@@ -78,12 +79,18 @@ struct Ticket {
     answer: oneshot::Sender<Value>,
     used: bool,
 }
+struct Invocation {
+    generation: String,
+    mcp: bool,
+    local: bool,
+}
 #[derive(Default)]
 struct State {
     emergency: Arc<emergency::Emergency>,
     epoch: String,
     page: lifecycle::Page,
     enabled: bool,
+    mcp_enabled: bool,
     channel: Option<Channel<Value>>,
     endpoint: String,
     active_server: Option<server::ServerConfig>,
@@ -92,10 +99,11 @@ struct State {
     peers: HashMap<String, Principal>,
     peer_policies: HashMap<String, policy::PeerPolicy>,
     policies_suspended: bool,
+    mcp_suspended: bool,
     grants: HashMap<String, Grant>,
     pending: HashMap<String, Pending>,
     tickets: HashMap<String, Ticket>,
-    requests: HashMap<String, String>,
+    requests: HashMap<String, Invocation>,
     audit: Vec<Value>,
     listener: Option<CancellationToken>,
     input_owners: Vec<String>,
@@ -137,7 +145,10 @@ struct RequestCleanup {
 impl Drop for RequestCleanup {
     fn drop(&mut self) {
         let mut s = self.service.state.lock().unwrap();
-        if s.requests.get(&self.id) == Some(&self.generation) {
+        if s.requests
+            .get(&self.id)
+            .is_some_and(|r| r.generation == self.generation)
+        {
             Service::cancel_request(&mut s, &self.id);
         }
     }
@@ -160,7 +171,10 @@ impl Service {
         }
     }
     fn current(s: &State) -> bool {
-        s.enabled && !s.epoch.is_empty() && s.page.live() && !s.emergency.pending()
+        (s.enabled || s.mcp_enabled)
+            && !s.epoch.is_empty()
+            && s.page.live()
+            && !s.emergency.pending()
     }
     pub fn shutdown(&self) {
         let mut s = self.state.lock().unwrap();
@@ -177,6 +191,7 @@ impl Service {
             cancel.cancel();
         }
         s.enabled = false;
+        s.mcp_enabled = false;
         s.endpoint.clear();
         s.active_server = None;
         s.grants.clear();
@@ -240,7 +255,7 @@ impl Service {
     }
     fn authenticate(&self, token: &str) -> Option<Principal> {
         let s = self.state.lock().unwrap();
-        if !Self::current(&s) {
+        if !s.mcp_enabled || !Self::current(&s) {
             return None;
         }
         if token.len() > 256 {
@@ -275,7 +290,14 @@ impl Service {
                 return error("BUSY");
             }
             let generation = uuid::Uuid::new_v4().to_string();
-            s.requests.insert(id.clone(), generation.clone());
+            s.requests.insert(
+                id.clone(),
+                Invocation {
+                    generation: generation.clone(),
+                    mcp: principal.kind == "mcp",
+                    local: call.arguments["target"] == "local",
+                },
+            );
             RequestCleanup {
                 service: self.clone(),
                 id: id.clone(),
@@ -317,10 +339,10 @@ impl Service {
         self.expire();
         let (grant, approval) = {
             let mut s = self.state.lock().unwrap();
-            if s.requests.get(&id).map(String::as_str) != Some(generation) {
+            if s.requests.get(&id).map(|r| r.generation.as_str()) != Some(generation) {
                 return Err("CANCELLED".into());
             }
-            if !Self::current(&s) {
+            if !Self::current(&s) || !Self::call_enabled(&s, &principal, &call) {
                 return Err("DISABLED".into());
             }
             if !Self::principal_active(&s, &principal) {
@@ -387,11 +409,14 @@ impl Service {
         }
         let rx = {
             let mut s = self.state.lock().unwrap();
-            if s.requests.get(&id).map(String::as_str) != Some(generation) {
+            if s.requests.get(&id).map(|r| r.generation.as_str()) != Some(generation) {
                 return Err("CANCELLED".into());
             }
             if !Self::current(&s) || !Self::principal_active(&s, &principal) {
                 return Err("SESSION_CLOSED".into());
+            }
+            if !Self::call_enabled(&s, &principal, &call) {
+                return Err("DISABLED".into());
             }
             let grant = grant
                 .or_else(|| {

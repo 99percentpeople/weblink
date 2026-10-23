@@ -23,6 +23,7 @@ impl Service {
         Self::check(s, epoch)?;
         let t = s.tickets.get(id).ok_or("CANCELLED")?;
         if !Self::current(s)
+            || !Self::call_enabled(s, &t.principal, &t.call)
             || t.deadline <= Instant::now()
             || !s.grants.get(&t.grant).is_some_and(|g| {
                 Self::grant_live(s, g)

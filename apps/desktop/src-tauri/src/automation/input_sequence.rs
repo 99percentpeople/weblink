@@ -30,6 +30,7 @@ pub(super) fn check<'a>(s: &'a State, epoch: &str, id: &str) -> Result<&'a Ticke
     let t = s.tickets.get(id).ok_or("CANCELLED")?;
     if t.deadline <= Instant::now()
         || !Service::current(s)
+        || !Service::call_enabled(s, &t.principal, &t.call)
         || t.call.arguments["target"] != "local"
         || !s.grants.get(&t.grant).is_some_and(|g| {
             Service::grant_live(s, g)
@@ -173,6 +174,7 @@ mod tests {
         let mut s = State {
             epoch: "epoch".into(),
             enabled: true,
+            mcp_enabled: true,
             ..Default::default()
         };
         s.peers.insert(p.id.clone(), p.clone());

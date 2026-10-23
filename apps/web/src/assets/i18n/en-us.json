@@ -1537,11 +1537,11 @@
     "days": "days",
     "token_lifetime": "Token validity",
     "title": "Automation",
-    "policies_paused": "Token calls and always-allow policies are paused. Turn automation off and on to resume.",
+    "policies_paused": "Token calls and always-allow policies are paused. Toggle MCP to resume token calls, or automation to resume remote-device policies.",
     "device_permissions_description": "Requires a trusted device and remains subject to content reception and screen sharing permissions.",
     "description": "Connect AI tools through MCP or WebMCP.",
     "enable": "Enable automation",
-    "desktop": "Host MCP and accept automation from authorized devices.",
+    "desktop": "Allow MCP clients and authorized remote devices to automate this computer.",
     "browser": "Control desktops through WebMCP, with permissions managed on the target device.",
     "unsupported": "WebMCP is unavailable in this browser and cannot be enabled.",
     "export": "Export diagnostics",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "Enter a port from 1 to 65535. The default is 32100.",
     "token_created": "Token created",
     "server_apply_description": "Settings save automatically and apply on the next service start.",
-    "server_pending": "New listening settings apply after automation is turned off and on.",
+    "server_pending": "New listening settings apply after MCP is turned off and on.",
     "settings_auto_description": "Text fields save when you leave them; selections save immediately.",
     "saving": "Saving…",
     "settings_saved": "Saved automatically.",
@@ -1632,6 +1632,8 @@
       "ok": "Succeeded",
       "error": "Failed",
       "error_code": "Failed ({{code}})"
-    }
+    },
+    "mcp_enable": "Enable MCP",
+    "mcp_description": "Expose the MCP API. Remote control does not require local automation; controlling this computer does."
   }
 }

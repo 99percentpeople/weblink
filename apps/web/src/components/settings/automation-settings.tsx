@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
+import { createStore } from "solid-js/store";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
   SettingSection,
@@ -22,16 +23,23 @@ const Empty = (props: { message: string }) => (
 export default function AutomationSettings() {
   const runtime = useAppState().automation;
   const [error, setError] = createSignal("");
-  const [busy, setBusy] = createSignal(false);
-  const run = async (action: () => Promise<unknown>) => {
+  const [busy, setBusy] = createStore({
+    automation: false,
+    mcp: false,
+  });
+  const run = async (
+    feature: keyof typeof busy,
+    action: () => Promise<unknown>,
+  ) => {
+    if (busy[feature]) return;
     setError("");
-    setBusy(true);
+    setBusy(feature, true);
     try {
       await action();
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusy(false);
+      setBusy(feature, false);
     }
   };
   const download = (data: unknown) => {
@@ -54,24 +62,43 @@ export default function AutomationSettings() {
           title={t("automation.title")}
           description={t("automation.description")}
         >
+          <Show when={r().desktop}>
+            <SettingSwitch
+              checked={r().configuredEnabled()}
+              disabled={!r().ready()}
+              // Disabling a focused input drops focus to the document body.
+              readOnly={busy.automation}
+              aria-busy={busy.automation}
+              onChange={(value) => {
+                void run("automation", () =>
+                  r().configure(value),
+                );
+              }}
+              label={t("automation.enable")}
+              description={t("automation.desktop")}
+            />
+          </Show>
           <SettingSwitch
             checked={
               r().desktop
-                ? r().configuredEnabled()
-                : r().webSupported() && r().enabled()
+                ? r().configuredMcpEnabled()
+                : r().webSupported() && r().mcpEnabled()
             }
             disabled={
               !r().ready() ||
-              busy() ||
               (!r().desktop && !r().webSupported())
             }
+            readOnly={busy.mcp}
+            aria-busy={busy.mcp}
             onChange={(value) => {
-              void run(() => r().configure(value));
+              void run("mcp", () =>
+                r().configureMcp(value),
+              );
             }}
-            label={t("automation.enable")}
+            label={t("automation.mcp_enable")}
             description={
               r().desktop
-                ? t("automation.desktop")
+                ? t("automation.mcp_description")
                 : r().webSupported()
                   ? t("automation.browser")
                   : t("automation.unsupported")
@@ -101,7 +128,7 @@ export default function AutomationSettings() {
             <McpServerSettings runtime={r()} />
             <McpTokenSettings runtime={r()} />
           </Show>
-          <Show when={r().enabled()}>
+          <Show when={r().active()}>
             <SettingHeading
               description={t("automation.pair_description")}
             >

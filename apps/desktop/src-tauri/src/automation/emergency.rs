@@ -24,12 +24,13 @@ impl Service {
     }
     pub(super) fn consume_emergency(&self, s: &mut State) {
         // Consume under the authority lock. A subsequent signal remains pending.
-        if s.emergency.pending.swap(false, Ordering::AcqRel) && s.enabled {
+        if s.emergency.pending.swap(false, Ordering::AcqRel) && (s.enabled || s.mcp_enabled) {
             self.stop_locked(s);
         }
     }
     pub(super) fn stop_locked(&self, s: &mut State) {
         s.policies_suspended = true;
+        s.mcp_suspended = true;
         s.grants.clear();
         Self::cancel_all(s);
         *self.input_holds.lock().unwrap() = input_holds::Holds::default();

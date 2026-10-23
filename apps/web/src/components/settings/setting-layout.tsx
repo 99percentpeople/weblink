@@ -46,11 +46,15 @@ export function SettingHeading(
   props: ParentProps<{
     id?: string;
     description?: JSX.Element;
+    actions?: JSX.Element;
   }>,
 ) {
   return (
     <div class="setting-group-heading">
-      <h4 id={props.id}>{props.children}</h4>
+      <div class="flex items-center justify-between gap-3">
+        <h4 id={props.id}>{props.children}</h4>
+        {props.actions}
+      </div>
       <Show when={props.description}>
         <p class="setting-description">
           {props.description}

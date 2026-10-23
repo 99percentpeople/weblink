@@ -61,6 +61,18 @@ export default function McpTokenSettings(props: {
         description={t(
           "automation.credentials_description",
         )}
+        actions={
+          <Button
+            size="sm"
+            wrap
+            variant="outline"
+            disabled={busy() || !props.runtime.ready()}
+            onClick={() => setSelected({})}
+          >
+            <Plus class="size-4" />
+            {t("automation.create_client")}
+          </Button>
+        }
       >
         {t("automation.clients")}
       </SettingHeading>
@@ -147,18 +159,6 @@ export default function McpTokenSettings(props: {
             </div>
           </div>
         </Show>
-        <div class="setting-actions">
-          <Button
-            size="sm"
-            wrap
-            variant="outline"
-            disabled={busy() || !props.runtime.ready()}
-            onClick={() => setSelected({})}
-          >
-            <Plus class="size-4" />
-            {t("automation.create_client")}
-          </Button>
-        </div>
       </SettingBlock>
       <Dialog
         open={!!selected()}

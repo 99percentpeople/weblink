@@ -123,6 +123,24 @@ pub async fn automation_configure(
     epoch: String,
     enabled: bool,
 ) -> Result<(), String> {
+    configure(window, service, epoch, false, enabled).await
+}
+#[tauri::command]
+pub async fn automation_mcp_configure(
+    window: WebviewWindow,
+    service: State<'_, Shared>,
+    epoch: String,
+    enabled: bool,
+) -> Result<(), String> {
+    configure(window, service, epoch, true, enabled).await
+}
+async fn configure(
+    window: WebviewWindow,
+    service: State<'_, Shared>,
+    epoch: String,
+    mcp: bool,
+    enabled: bool,
+) -> Result<(), String> {
     main(&window)?;
     let app = window.app_handle().clone();
     let authority = service.inner().clone();
@@ -131,41 +149,34 @@ pub async fn automation_configure(
         let mut s = authority.state.lock().unwrap();
         Service::check(&s, &generation)?;
         authority.consume_emergency(&mut s);
-        if s.enabled == enabled {
+        if (if mcp { s.mcp_enabled } else { s.enabled }) == enabled {
             return Ok(false);
         }
+        let active = enabled || if mcp { s.enabled } else { s.mcp_enabled };
         app.state::<crate::remote_control::Shared>()
-            .automation_listener(enabled)?;
-        s.enabled = enabled;
-        if enabled {
-            s.policies_suspended = false;
-            return Ok(true);
-        }
-        s.endpoint.clear();
-        s.active_server = None;
-        s.grants.clear();
-        Service::cancel_all(&mut s);
-        s.peers.clear();
-        s.peer_policies.clear();
-        if let Some(c) = s.listener.take() {
-            c.cancel();
-        }
-        authority.jobs.stop();
+            .automation_listener(active)?;
+        authority.configure_locked(&mut s, mcp, enabled);
         drop(s);
         native::sync_input(&app, &authority);
-        Ok(false)
+        Ok(mcp && enabled)
     })
     .await?;
-    if !start {
-        return Ok(());
-    }
-    if let Err(error) = http::start(service.inner().clone(), epoch.clone()).await {
-        let mut s = service.state.lock().unwrap();
-        if s.epoch == epoch && s.listener.is_none() {
-            s.enabled = false;
-            s.endpoint.clear();
+    if start {
+        if let Err(error) = http::start(service.inner().clone(), epoch.clone()).await {
+            let app = window.app_handle().clone();
+            let authority = service.inner().clone();
+            off_thread(move || {
+                let mut s = authority.state.lock().unwrap();
+                if s.epoch == epoch && s.listener.is_none() {
+                    authority.configure_locked(&mut s, true, false);
+                }
+                drop(s);
+                native::sync_input(&app, &authority);
+                Ok(())
+            })
+            .await?;
+            return Err(error);
         }
-        return Err(error);
     }
     Ok(())
 }
@@ -191,7 +202,7 @@ pub async fn automation_snapshot(
     service.expire();
     let s = service.state.lock().unwrap();
     Service::check(&s, &epoch)?;
-    let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":s.policies_suspended,"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
+    let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"mcpEnabled":s.mcp_enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":(s.enabled && s.policies_suspended) || (s.mcp_enabled && s.mcp_suspended),"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
     let active = s.active_server.clone();
     drop(s);
     snapshot["endpoints"] = json!(server::endpoints(active.as_ref()));
@@ -440,6 +451,7 @@ mod tests {
             let mut s = service.state.lock().unwrap();
             s.epoch = "replacement".into();
             s.enabled = true;
+            s.mcp_enabled = true;
         }
         assert_eq!(service.close("old").unwrap_err(), "SESSION_CLOSED");
         assert!(service.state.lock().unwrap().enabled);

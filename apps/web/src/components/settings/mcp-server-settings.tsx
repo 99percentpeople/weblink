@@ -119,7 +119,7 @@ export default function McpServerSettings(props: {
         <div class="flex justify-end">
           <span class="text-sm">
             {t(
-              props.runtime.enabled()
+              props.runtime.mcpEnabled()
                 ? "automation.server_active"
                 : "automation.server_inactive",
             )}
@@ -128,7 +128,8 @@ export default function McpServerSettings(props: {
       </SettingRow>
       <Show
         when={
-          props.runtime.enabled() && endpoints().length > 0
+          props.runtime.mcpEnabled() &&
+          endpoints().length > 0
         }
       >
         <SettingRow

@@ -113,6 +113,7 @@ vi.mock("@/libs/application/automation/peer-link", () => ({
 }));
 const snapshot = () => ({
   enabled: false,
+  mcpEnabled: false,
   endpoint: "",
   server: { host: "127.0.0.1", port: 32100 },
   serverPending: false,
@@ -197,6 +198,7 @@ beforeEach(() => {
     heartbeat: vi.fn(async () => {}),
     snapshot: vi.fn(async () => snapshot()),
     configure: vi.fn(async () => {}),
+    configureMcp: vi.fn(async () => {}),
     peer: vi.fn(async () => {}),
     peerPolicy: vi.fn(async () => {}),
     disconnect: vi.fn(async () => {}),
@@ -206,6 +208,7 @@ beforeEach(() => {
     finish: vi.fn(async () => {}),
   } as unknown as NativeAutomation;
   setAppState("options", "automationEnabled", false);
+  setAppState("options", "mcpEnabled", false);
   setAppState(
     "options",
     "clientConfigs",
@@ -508,23 +511,23 @@ it("restores enabled state only after native initialization and retains it acros
   expect(fixture.native.configure).not.toHaveBeenCalled();
 });
 it("keeps the saved enabled preference when listener startup fails", async () => {
-  setAppState("options", "automationEnabled", true);
-  vi.mocked(fixture.native.configure).mockRejectedValueOnce(
-    new Error("PORT_IN_USE"),
-  );
+  setAppState("options", "mcpEnabled", true);
+  vi.mocked(
+    fixture.native.configureMcp,
+  ).mockRejectedValueOnce(new Error("PORT_IN_USE"));
   const { runtime } = mount();
   await waitFor(() => expect(runtime.ready()).toBe(true));
-  expect(runtime.enabled()).toBe(false);
+  expect(runtime.mcpEnabled()).toBe(false);
   expect(runtime.error()).toContain("PORT_IN_USE");
-  expect(runtime.configuredEnabled()).toBe(true);
-  expect(appState.options.automationEnabled).toBe(true);
+  expect(runtime.configuredMcpEnabled()).toBe(true);
+  expect(appState.options.mcpEnabled).toBe(true);
   expect(fixture.advertise).not.toHaveBeenCalledWith(true);
-  await runtime.configure(false);
-  expect(runtime.configuredEnabled()).toBe(false);
-  expect(appState.options.automationEnabled).toBe(false);
+  await runtime.configureMcp(false);
+  expect(runtime.configuredMcpEnabled()).toBe(false);
+  expect(appState.options.mcpEnabled).toBe(false);
 });
 it("does not start the listener if the owner closes while native initialization is pending", async () => {
-  setAppState("options", "automationEnabled", true);
+  setAppState("options", "mcpEnabled", true);
   let resolve!: (epoch: string) => void;
   vi.mocked(fixture.native.open).mockImplementationOnce(
     () =>
@@ -540,8 +543,10 @@ it("does not start the listener if the owner closes while native initialization 
       "late",
     ),
   );
-  expect(fixture.native.configure).not.toHaveBeenCalled();
-  expect(appState.options.automationEnabled).toBe(true);
+  expect(
+    fixture.native.configureMcp,
+  ).not.toHaveBeenCalled();
+  expect(appState.options.mcpEnabled).toBe(true);
 });
 function peer() {
   fixture.sessions.peer = {
@@ -667,7 +672,8 @@ it.each([true, false])(
     await waitFor(() =>
       expect(view.runtime.ready()).toBe(true),
     );
-    await view.runtime.configure(true);
+    await view.runtime.configureMcp(true);
+    expect(view.runtime.enabled()).toBe(false);
     await waitFor(() =>
       expect(fixture.incoming).toBeDefined(),
     );
@@ -1063,3 +1069,96 @@ it("admits automation only after shared paired-device access succeeds and revoke
   });
   expect(fixture.native.call).toHaveBeenCalledTimes(1);
 });
+
+it("keeps the peer channel while either independent feature needs it", async () => {
+  peer();
+  const { runtime } = mount();
+  await waitFor(() => expect(runtime.ready()).toBe(true));
+  await runtime.configure(true);
+  expect(
+    fixture.native.configureMcp,
+  ).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  await incoming();
+  const connection = fixture.incoming;
+  await runtime.configureMcp(true);
+  await runtime.configureMcp(false);
+  expect(fixture.incoming).toBe(connection);
+  expect(runtime.enabled()).toBe(true);
+  expect((await incoming()).ok).toBe(true);
+  await runtime.configureMcp(true);
+  await runtime.configure(false);
+  expect(fixture.incoming).toBe(connection);
+  expect(runtime.mcpEnabled()).toBe(true);
+  expect(runtime.peers()).toHaveLength(1);
+  expect(await incoming()).toMatchObject({
+    ok: false,
+    error: { code: "DISABLED" },
+  });
+  expect(fixture.native.call).toHaveBeenCalledTimes(2);
+  expect(fixture.native.disconnect).not.toHaveBeenCalled();
+  await runtime.configure(true);
+  expect((await incoming()).ok).toBe(true);
+  expect(fixture.native.peer).toHaveBeenCalledTimes(1);
+  await runtime.configure(false);
+  await runtime.configureMcp(false);
+  await waitFor(() =>
+    expect(runtime.peers()).toHaveLength(0),
+  );
+  expect(appState.options.automationEnabled).toBe(false);
+  expect(appState.options.mcpEnabled).toBe(false);
+});
+
+it("a later automation disable supersedes delayed setup without discarding MCP enable", async () => {
+  const { runtime } = mount();
+  await waitFor(() => expect(runtime.ready()).toBe(true));
+  let release!: () => void;
+  fixture.configureShortcut.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const enabling = runtime.configure(true);
+  await waitFor(() => expect(release).toBeDefined());
+  await runtime.configureMcp(true);
+  await runtime.configure(false);
+  release();
+  await enabling;
+  expect(runtime.enabled()).toBe(false);
+  expect(runtime.mcpEnabled()).toBe(true);
+  expect(
+    vi.mocked(fixture.native.configure).mock.calls,
+  ).toEqual([["epoch", false]]);
+  expect(
+    vi.mocked(fixture.native.configureMcp).mock.calls,
+  ).toEqual([["epoch", true]]);
+  expect(appState.options.automationEnabled).toBe(false);
+  expect(appState.options.mcpEnabled).toBe(true);
+});
+
+it.each([
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  "restores automation=%s and MCP=%s independently",
+  async (automationEnabled, mcpEnabled) => {
+    setAppState("options", {
+      automationEnabled,
+      mcpEnabled,
+    });
+    const { runtime } = mount();
+    await waitFor(() => expect(runtime.ready()).toBe(true));
+    expect(runtime.enabled()).toBe(automationEnabled);
+    expect(runtime.mcpEnabled()).toBe(mcpEnabled);
+    expect(fixture.native.configure).toHaveBeenCalledTimes(
+      Number(automationEnabled),
+    );
+    expect(
+      fixture.native.configureMcp,
+    ).toHaveBeenCalledTimes(Number(mcpEnabled));
+  },
+);

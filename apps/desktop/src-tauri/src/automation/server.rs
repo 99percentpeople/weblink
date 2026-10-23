@@ -71,7 +71,7 @@ fn endpoints_for(ip: IpAddr, port: u16, addresses: Vec<IpAddr>) -> Vec<String> {
 }
 
 pub(super) fn pending(s: &State) -> bool {
-    s.enabled
+    s.mcp_enabled
         && s.active_server.as_ref().is_some_and(|active| {
             active.host != s.registry.host.to_string() || active.port != s.registry.port
         })
@@ -81,7 +81,7 @@ pub(super) fn pending(s: &State) -> bool {
 /// the latest desired settings.
 pub(super) fn activate(s: &mut State, epoch: &str, ip: IpAddr, port: u16) -> Result<(), String> {
     Service::check(s, epoch)?;
-    if !s.enabled {
+    if !s.mcp_enabled {
         return Err("DISABLED".into());
     }
     s.endpoint = endpoint(ip, port);
@@ -277,11 +277,11 @@ mod tests {
             assert_eq!(s.registry.host.to_string(), "127.0.0.1");
             assert_eq!(s.registry.port, 4321);
         }
-        service.state.lock().unwrap().enabled = true;
+        service.state.lock().unwrap().mcp_enabled = true;
         let token = service
             .create_client("epoch", "Saved agent".into(), None)
             .unwrap();
-        service.state.lock().unwrap().enabled = false;
+        service.state.lock().unwrap().mcp_enabled = false;
         service
             .configure_server("epoch", config("::1", 65535))
             .unwrap();
@@ -291,10 +291,10 @@ mod tests {
             let s = restored.state.lock().unwrap();
             assert_eq!(s.registry.host.to_string(), "::1");
             assert_eq!(s.registry.port, 65535);
-            assert!(!s.enabled);
+            assert!(!s.mcp_enabled);
             assert_eq!(s.registry.clients.len(), 1);
         }
-        restored.state.lock().unwrap().enabled = true;
+        restored.state.lock().unwrap().mcp_enabled = true;
         assert!(restored
             .authenticate(token["token"].as_str().unwrap())
             .is_some());
@@ -314,7 +314,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         {
             let mut s = service.state.lock().unwrap();
-            s.enabled = false;
+            s.mcp_enabled = false;
             // A directory cannot be replaced with a credential registry file.
             s.registry_path = Some(directory.path().to_path_buf());
         }
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn a_setting_written_during_bind_survives_activation() {
         let service = fixture();
-        service.state.lock().unwrap().enabled = true;
+        service.state.lock().unwrap().mcp_enabled = true;
         service
             .configure_server("epoch", config("::1", 4321))
             .unwrap();
@@ -360,7 +360,7 @@ mod tests {
             .create_client("old-epoch", "Invalid".into(), None)
             .is_err());
         let s = service.state.lock().unwrap();
-        assert!(!s.enabled);
+        assert!(!s.mcp_enabled);
         assert!(s.listener.is_none());
         assert!(s.grants.is_empty());
         assert!(s.peers.is_empty());
@@ -379,7 +379,7 @@ mod tests {
         service
             .configure_server("epoch", config("127.0.0.1", available_port("127.0.0.1")))
             .unwrap();
-        service.state.lock().unwrap().enabled = true;
+        service.state.lock().unwrap().mcp_enabled = true;
         http::start(service.clone(), "epoch".into()).await.unwrap();
         let secret = token["token"].as_str().unwrap();
         let principal = service.authenticate(secret).unwrap();
@@ -414,7 +414,7 @@ mod tests {
         service.shutdown();
         let restarted = fixture();
         restarted.load_registry(path).unwrap();
-        restarted.state.lock().unwrap().enabled = true;
+        restarted.state.lock().unwrap().mcp_enabled = true;
         http::start(restarted.clone(), "epoch".into())
             .await
             .unwrap();
@@ -434,7 +434,7 @@ mod tests {
         service
             .configure_server("epoch", config("127.0.0.1", port))
             .unwrap();
-        service.state.lock().unwrap().enabled = true;
+        service.state.lock().unwrap().mcp_enabled = true;
         assert!(http::start(service.clone(), "epoch".into()).await.is_err());
         let s = service.state.lock().unwrap();
         assert_eq!(s.registry.port, port);
@@ -447,7 +447,7 @@ mod tests {
         service
             .configure_server("epoch", config(host, port))
             .unwrap();
-        service.state.lock().unwrap().enabled = true;
+        service.state.lock().unwrap().mcp_enabled = true;
         http::start(service.clone(), "epoch".into()).await.unwrap();
         let token = service
             .create_client("epoch", "Agent".into(), None)

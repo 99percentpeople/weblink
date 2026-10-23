@@ -88,6 +88,7 @@ mod tests {
         s.page = service.page.lock().unwrap().clone();
         s.epoch = "replacement".into();
         s.enabled = true;
+        s.mcp_enabled = true;
         drop(s);
         service.expire();
         assert_eq!(service.close("epoch"), Err("SESSION_CLOSED".into()));

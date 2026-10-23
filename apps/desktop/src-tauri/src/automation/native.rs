@@ -10,7 +10,8 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
     let mut s = service.state.lock().unwrap();
     // The host can be replaced by room teardown. Keep the same shortcut available
     // for background commands even when automation holds no native input lease.
-    if control.automation_listener(s.enabled).is_err() && s.enabled {
+    let active = s.enabled || s.mcp_enabled;
+    if control.automation_listener(active).is_err() && active {
         service.stop_locked(&mut s);
     }
     // Retire a failed invocation scope before detecting emergency revocation.
@@ -51,7 +52,8 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
         .grants
         .values()
         .filter(|g| {
-            Service::grant_live(&s, g)
+            s.enabled
+                && Service::grant_live(&s, g)
                 && g.target == "local"
                 && g.scopes.iter().any(|v| v == "input.control")
         })
@@ -59,6 +61,9 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
         .collect();
     for id in &s.input_owners {
         if !allowed.contains(id) {
+            if let Ok(lease) = control.automation_lease(id) {
+                service.input_holds.lock().unwrap().clear(&lease);
+            }
             control.automation_release(id);
         }
     }

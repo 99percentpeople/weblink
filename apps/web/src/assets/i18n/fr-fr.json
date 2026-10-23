@@ -1537,11 +1537,11 @@
     "days": "jours",
     "token_lifetime": "Validité du jeton",
     "title": "Automatisation",
-    "policies_paused": "Les appels par jeton et les autorisations permanentes sont suspendus. Désactivez puis réactivez l’automatisation pour les reprendre.",
+    "policies_paused": "Les appels par jeton et les autorisations permanentes sont suspendus. Désactivez puis réactivez MCP pour reprendre les appels, ou l’automatisation pour reprendre les autorisations des appareils.",
     "device_permissions_description": "S’applique uniquement aux appareils de confiance et reste soumis aux permissions de réception de contenu et de partage d’écran.",
     "description": "Connectez des outils d’IA via MCP ou WebMCP.",
     "enable": "Activer l’automatisation",
-    "desktop": "Fournit un service MCP et accepte les appels d’automatisation des appareils autorisés.",
+    "desktop": "Autoriser les clients MCP et les appareils distants autorisés à automatiser cet ordinateur.",
     "browser": "Contrôlez des ordinateurs via WebMCP. L’appareil cible gère les permissions.",
     "unsupported": "Ce navigateur ne prend pas en charge WebMCP. L’activation est impossible.",
     "export": "Exporter le diagnostic",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "Saisissez un port de 1 à 65535. La valeur par défaut est 32100.",
     "token_created": "Jeton créé",
     "server_apply_description": "Les paramètres sont enregistrés automatiquement et s’appliquent au prochain démarrage du service.",
-    "server_pending": "La nouvelle configuration d’écoute s’appliquera après la désactivation puis réactivation de l’automatisation.",
+    "server_pending": "Les nouveaux paramètres d’écoute s’appliquent après la désactivation puis la réactivation de MCP.",
     "settings_auto_description": "Les champs de texte sont enregistrés lorsque vous les quittez ; les sélections, immédiatement.",
     "saving": "Enregistrement…",
     "settings_saved": "Enregistré automatiquement.",
@@ -1632,6 +1632,8 @@
       "ok": "Réussi",
       "error": "Échec",
       "error_code": "Échec ({{code}})"
-    }
+    },
+    "mcp_enable": "Activer MCP",
+    "mcp_description": "Exposer l’API MCP. Le contrôle des appareils distants ne nécessite pas l’automatisation locale ; le contrôle de cet ordinateur la nécessite."
   }
 }

@@ -12,6 +12,7 @@ fn fixture(name: &str) -> Shared {
     let mut s = service.state.lock().unwrap();
     s.epoch = "epoch".into();
     s.enabled = true;
+    s.mcp_enabled = true;
     s.registry.clients.insert(
         principal.id.clone(),
         registry::Client {
@@ -33,7 +34,14 @@ fn fixture(name: &str) -> Shared {
             expires_at: Some(now() + 60000),
         },
     );
-    s.requests.insert("ticket".into(), "generation".into());
+    s.requests.insert(
+        "ticket".into(),
+        Invocation {
+            generation: "generation".into(),
+            mcp: true,
+            local: true,
+        },
+    );
     s.tickets.insert(
         "ticket".into(),
         Ticket {
@@ -153,7 +161,14 @@ fn cancellation_does_not_release_the_worker_slot_or_validate_a_reused_request_id
         {
             let mut s = service.state.try_lock().unwrap();
             // Reuse the ID with an otherwise identical live ticket and grant.
-            s.requests.insert("ticket".into(), "replacement".into());
+            s.requests.insert(
+                "ticket".into(),
+                Invocation {
+                    generation: "replacement".into(),
+                    mcp: true,
+                    local: true,
+                },
+            );
             s.tickets.get_mut("ticket").unwrap().used = false;
         }
         assert_eq!(

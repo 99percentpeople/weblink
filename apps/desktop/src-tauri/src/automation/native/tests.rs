@@ -68,6 +68,38 @@ fn native_sampler_keeps_the_same_lease_and_permissions_without_renderer_heartbea
 }
 
 #[test]
+fn local_switch_releases_input_and_holds_while_mcp_remains_enabled() {
+    with_bound_borrowed_input(|control, lease, _| {
+        let service = authority(false);
+        let events = [Event::Key {
+            key: ScanCode::new(0x1d, false).unwrap(),
+            down: true,
+        }];
+        service
+            .input_holds
+            .lock()
+            .unwrap()
+            .update("client", lease, &events, Instant::now());
+        control
+            .automation_input("client", lease, events.to_vec())
+            .unwrap();
+        {
+            let mut s = service.state.lock().unwrap();
+            s.mcp_enabled = true;
+            service.configure_locked(&mut s, false, false);
+        }
+        sync_input_control(&service, control);
+        assert!(!control.automation_active("client"));
+        assert!(!service.input_holds.lock().unwrap().any(lease));
+        let s = service.state.lock().unwrap();
+        assert!(s.mcp_enabled);
+        assert!(!s.policies_suspended);
+        assert!(!s.mcp_suspended);
+        assert!(s.input_owners.is_empty());
+    });
+}
+
+#[test]
 fn borrowed_blur_heartbeat_clears_lease_and_holds_but_preserves_all_permissions() {
     for timed in [false, true] {
         with_bound_borrowed_input(|control, lease, focus| {

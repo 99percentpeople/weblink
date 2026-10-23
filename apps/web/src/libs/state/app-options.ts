@@ -109,6 +109,7 @@ export const resolveClientConfig = (
 
 export type AppOption = {
   automationEnabled: boolean;
+  mcpEnabled: boolean;
   maxConcurrentTransfers: number;
   autoCheckUpdates: boolean;
   notifications: NotificationOptions;
@@ -238,6 +239,7 @@ export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
     automationEnabled: false,
+    mcpEnabled: false,
     maxConcurrentTransfers:
       DEFAULT_MAX_CONCURRENT_TRANSFERS,
     chunkSize: 512 * 1024,

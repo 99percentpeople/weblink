@@ -1537,11 +1537,11 @@
     "days": "天",
     "token_lifetime": "Token 有效期",
     "title": "自動化",
-    "policies_paused": "Token 呼叫和一律允許已暫停，關閉並重新啟用自動化後恢復。",
+    "policies_paused": "Token 呼叫和一律允許已暫停。關閉並重新開啟 MCP 可恢復 Token 呼叫；關閉並重新開啟自動化可恢復遠端裝置策略。",
     "device_permissions_description": "僅對可信任的裝置生效，仍受接收內容和分享畫面權限限制。",
     "description": "透過 MCP 或 WebMCP 連接 AI 工具。",
     "enable": "啟用自動化",
-    "desktop": "提供 MCP 服務，並接受已授權裝置的自動化呼叫。",
+    "desktop": "允許 MCP 用戶端和已授權的遠端裝置自動化操作本機。",
     "browser": "透過 WebMCP 控制桌面端，權限由目標裝置管理。",
     "unsupported": "目前瀏覽器不支援 WebMCP，無法啟用。",
     "export": "匯出診斷",
@@ -1598,7 +1598,7 @@
     "server_invalid_port": "請輸入 1–65535 的連接埠，預設值為 32100。",
     "token_created": "Token 已建立",
     "server_apply_description": "設定自動儲存，下次啟動服務時生效。",
-    "server_pending": "新監聽設定將在關閉並重新啟用自動化後生效。",
+    "server_pending": "新監聽設定將在關閉並重新開啟 MCP 後生效。",
     "settings_auto_description": "輸入欄位在移開焦點後自動儲存，下拉選項變更後立即儲存。",
     "saving": "正在儲存…",
     "settings_saved": "已自動儲存。",
@@ -1632,6 +1632,8 @@
       "ok": "成功",
       "error": "失敗",
       "error_code": "失敗（{{code}}）"
-    }
+    },
+    "mcp_enable": "啟用 MCP",
+    "mcp_description": "開放 MCP API。控制遠端裝置無需啟用本機自動化；控制本機需同時啟用自動化。"
   }
 }

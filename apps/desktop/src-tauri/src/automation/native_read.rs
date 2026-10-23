@@ -19,7 +19,11 @@ fn read(
     let (call, generation) = {
         let mut s = service.state.lock().unwrap();
         Service::check_call(&s, epoch, id)?;
-        let generation = s.requests.get(id).cloned().ok_or("CANCELLED")?;
+        let generation = s
+            .requests
+            .get(id)
+            .map(|r| r.generation.clone())
+            .ok_or("CANCELLED")?;
         let ticket = s.tickets.get_mut(id).ok_or("CANCELLED")?;
         if ticket.used {
             return Err("CANCELLED".into());
@@ -32,7 +36,7 @@ fn read(
     };
     let result = operation(&call);
     let s = service.state.lock().unwrap();
-    if s.requests.get(id) != Some(&generation) {
+    if s.requests.get(id).map(|r| &r.generation) != Some(&generation) {
         return Err("CANCELLED".into());
     }
     Service::check_call(&s, epoch, id)?;

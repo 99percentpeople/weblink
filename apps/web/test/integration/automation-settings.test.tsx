@@ -12,6 +12,13 @@ import {
 } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { createSignal } from "solid-js";
+import { BaseDialog } from "@/components/dialogs/dialog";
+import { ResponsiveTabs } from "@/components/ui/responsive-tabs";
+import {
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   afterEach,
   beforeEach,
@@ -26,6 +33,7 @@ const fixture = vi.hoisted(() => ({
   desktop: true,
   webSupported: true,
   enabled: true,
+  mcpEnabled: true,
   jobs: [] as ReturnType<
     AutomationRuntime["snapshot"]
   >["jobs"],
@@ -33,6 +41,7 @@ const fixture = vi.hoisted(() => ({
     AutomationRuntime["snapshot"]
   >["audit"],
   configure: vi.fn(async (_enabled: boolean) => {}),
+  configureMcp: vi.fn(async (_enabled: boolean) => {}),
   expiresAt: null as number | null,
   endpoints: () => ["http://127.0.0.1:123/mcp"],
   server: () => ({
@@ -66,10 +75,13 @@ vi.mock("@/i18n", () => ({
     values?.code ? `${key} ${values.code}` : key,
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
-  useAppState: () => ({
+  useAppState: vi.fn(() => ({
     automation: {
       enabled: () => fixture.enabled,
       configuredEnabled: () => fixture.enabled,
+      mcpEnabled: () => fixture.mcpEnabled,
+      configuredMcpEnabled: () => fixture.mcpEnabled,
+      active: () => fixture.enabled || fixture.mcpEnabled,
       ready: () => true,
       error: () => "",
       get desktop() {
@@ -81,6 +93,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
       removeClient: fixture.removeClient,
       webSupported: () => fixture.webSupported,
       configure: fixture.configure,
+      configureMcp: fixture.configureMcp,
       decide: fixture.decide,
       revoke: fixture.revoke,
       export: () => ({}),
@@ -88,13 +101,13 @@ vi.mock("@/libs/state/app-state-context", () => ({
       snapshot: () => ({
         server: fixture.server(),
         serverPending:
-          fixture.enabled &&
+          fixture.mcpEnabled &&
           (fixture.server().host !== "127.0.0.1" ||
             fixture.server().port !== 123),
-        endpoint: fixture.enabled
+        endpoint: fixture.mcpEnabled
           ? "http://127.0.0.1:123/mcp"
           : "",
-        endpoints: fixture.enabled
+        endpoints: fixture.mcpEnabled
           ? fixture.endpoints()
           : [],
         pending: [
@@ -128,7 +141,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
         ],
       }),
     },
-  }),
+  })),
 }));
 let animationStyle: HTMLStyleElement;
 beforeEach(() => {
@@ -164,6 +177,7 @@ afterEach(async () => {
   fixture.desktop = true;
   fixture.webSupported = true;
   fixture.enabled = true;
+  fixture.mcpEnabled = true;
   fixture.jobs = [];
   fixture.audit = [];
   fixture.endpoints = () => ["http://127.0.0.1:123/mcp"];
@@ -178,10 +192,10 @@ it.each([false, true])(
   async (enabled) => {
     fixture.desktop = false;
     fixture.webSupported = false;
-    fixture.enabled = enabled;
+    fixture.mcpEnabled = enabled;
     render(() => <AutomationSettings />);
     const toggle = screen.getByRole("switch", {
-      name: "automation.enable",
+      name: "automation.mcp_enable",
     });
     expect(toggle).toBeDisabled();
     expect(toggle).not.toBeChecked();
@@ -189,7 +203,7 @@ it.each([false, true])(
       screen.getByText("automation.unsupported"),
     ).toBeVisible();
     await userEvent.click(toggle);
-    expect(fixture.configure).not.toHaveBeenCalled();
+    expect(fixture.configureMcp).not.toHaveBeenCalled();
   },
 );
 it("shows recent calls and diagnostic codes without a duplicate command task list", () => {
@@ -235,18 +249,18 @@ it("shows recent calls and diagnostic codes without a duplicate command task lis
   );
 });
 it.each([false, true])(
-  "allows supported automation on desktop=%s",
+  "allows MCP on desktop=%s",
   async (desktop) => {
     fixture.desktop = desktop;
     fixture.webSupported = !desktop;
-    fixture.enabled = false;
+    fixture.mcpEnabled = false;
     render(() => <AutomationSettings />);
     const toggle = screen.getByRole("switch", {
-      name: "automation.enable",
+      name: "automation.mcp_enable",
     });
     expect(toggle).toBeEnabled();
     await userEvent.click(toggle);
-    expect(fixture.configure).toHaveBeenCalledWith(true);
+    expect(fixture.configureMcp).toHaveBeenCalledWith(true);
   },
 );
 it("shows a separate privacy explanation for accessibility inspection", () => {
@@ -428,7 +442,7 @@ it("creates permanent and timed local MCP tokens", async () => {
 });
 
 it("automatically edits and revokes tokens while automation is off", async () => {
-  fixture.enabled = false;
+  fixture.mcpEnabled = false;
   render(() => <AutomationSettings />);
   await userEvent.click(
     screen.getByRole("button", {
@@ -474,7 +488,7 @@ it("automatically edits and revokes tokens while automation is off", async () =>
   );
 });
 it("creates a token while disabled using the configured fixed endpoint", async () => {
-  fixture.enabled = false;
+  fixture.mcpEnabled = false;
   fixture.client.mockResolvedValueOnce({
     id: "offline",
     token: "secret-token",
@@ -583,7 +597,7 @@ it("lists complete live connection URLs and refreshes network addresses without 
   ).not.toBeInTheDocument();
 });
 it("validates automatic writes and restores the default host and port", async () => {
-  fixture.enabled = false;
+  fixture.mcpEnabled = false;
   render(() => <AutomationSettings />);
   const port = screen.getByRole("spinbutton", {
     name: "automation.server_port",
@@ -673,7 +687,7 @@ it("keeps the draft and reports automatic save errors", async () => {
   ).not.toBeInTheDocument();
 });
 it("restores the default token lifetime automatically without changing its name", async () => {
-  fixture.enabled = false;
+  fixture.mcpEnabled = false;
   render(() => <AutomationSettings />);
   await userEvent.click(
     screen.getByRole("button", {
@@ -874,4 +888,216 @@ it("keeps device approvals isolated from other devices and local MCP clients", (
     screen.queryByText("Chosen device"),
   ).not.toBeInTheDocument();
   expect(screen.getByText("Other device")).toBeVisible();
+});
+
+it.each([false, true])(
+  "shows a local automation switch only on desktop=%s",
+  async (desktop) => {
+    fixture.desktop = desktop;
+    fixture.enabled = false;
+    fixture.mcpEnabled = true;
+    render(() => <AutomationSettings />);
+    const local = screen.queryByRole("switch", {
+      name: "automation.enable",
+    });
+    expect(local !== null).toBe(desktop);
+    expect(
+      screen.getByRole("switch", {
+        name: "automation.mcp_enable",
+      }),
+    ).toBeChecked();
+    if (local) {
+      expect(local).not.toBeChecked();
+      expect(
+        screen.getByText("automation.server_active"),
+      ).toBeVisible();
+      await userEvent.click(local);
+      expect(fixture.configure).toHaveBeenCalledWith(true);
+      expect(fixture.configureMcp).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it("shows MCP stopped while local automation remains enabled", () => {
+  fixture.enabled = true;
+  fixture.mcpEnabled = false;
+  render(() => <AutomationSettings />);
+  expect(
+    screen.getByRole("switch", {
+      name: "automation.enable",
+    }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("switch", {
+      name: "automation.mcp_enable",
+    }),
+  ).not.toBeChecked();
+  expect(
+    screen.getByText("automation.server_inactive"),
+  ).toBeVisible();
+});
+
+it.each(["automation", "mcp"] as const)(
+  "keeps the pending %s switch focusable and the other switch available",
+  async (feature) => {
+    const action =
+      feature === "automation"
+        ? fixture.configure
+        : fixture.configureMcp;
+    const otherAction =
+      feature === "automation"
+        ? fixture.configureMcp
+        : fixture.configure;
+    let finish!: () => void;
+    action.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(() => <AutomationSettings />);
+    const user = userEvent.setup();
+    const toggle = screen.getByRole("switch", {
+      name:
+        feature === "automation"
+          ? "automation.enable"
+          : "automation.mcp_enable",
+    });
+    const other = screen.getByRole("switch", {
+      name:
+        feature === "automation"
+          ? "automation.mcp_enable"
+          : "automation.enable",
+    });
+    await user.click(toggle);
+    expect(action).toHaveBeenCalledOnce();
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-readonly", "true");
+    expect(toggle).toHaveFocus();
+    await user.keyboard(" ");
+    await user.click(toggle);
+    expect(action).toHaveBeenCalledOnce();
+    expect(other).not.toBeDisabled();
+    await user.click(other);
+    expect(otherAction).toHaveBeenCalledOnce();
+    finish();
+    await waitFor(() =>
+      expect(toggle).not.toHaveAttribute(
+        "aria-readonly",
+        "true",
+      ),
+    );
+    await user.click(toggle);
+    expect(action).toHaveBeenCalledTimes(2);
+  },
+);
+
+it("keeps the settings page and focused drafts mounted across switch and service updates", async () => {
+  const state = useAppState();
+  const original = state.automation!;
+  const [enabled, setEnabled] = createSignal(true);
+  const [mcpEnabled, setMcpEnabled] = createSignal(true);
+  const [pending, setPending] = createSignal(false);
+  const runtime = {
+    ...original,
+    enabled,
+    configuredEnabled: enabled,
+    mcpEnabled,
+    configuredMcpEnabled: mcpEnabled,
+    active: () => enabled() || mcpEnabled(),
+    configure: async (value: boolean) => {
+      setEnabled(value);
+    },
+    configureMcp: async (value: boolean) => {
+      setMcpEnabled(value);
+    },
+    snapshot: () => ({
+      ...original.snapshot(),
+      serverPending: pending(),
+    }),
+  };
+  vi.mocked(useAppState).mockReturnValueOnce({
+    ...state,
+    automation: runtime,
+  });
+  render(() => (
+    <BaseDialog
+      isOpen={true}
+      title="Settings"
+      content={
+        <ResponsiveTabs value="automation">
+          <TabsList>
+            <TabsTrigger value="automation">
+              Automation
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="automation">
+            <AutomationSettings />
+          </TabsContent>
+        </ResponsiveTabs>
+      }
+    />
+  ));
+  const user = userEvent.setup();
+  const page = screen.getByRole("region", {
+    name: "automation.title",
+  });
+  const host = screen.getByRole("textbox", {
+    name: "automation.server_host",
+  }) as HTMLInputElement;
+  const local = screen.getByRole("switch", {
+    name: "automation.enable",
+  });
+  const mcp = screen.getByRole("switch", {
+    name: "automation.mcp_enable",
+  });
+  const create = screen.getByRole("button", {
+    name: "automation.create_client",
+  });
+  await user.click(local);
+  expect(enabled()).toBe(false);
+  expect(
+    screen.getByRole("region", {
+      name: "automation.title",
+    }),
+  ).toBe(page);
+  expect(
+    screen.getByRole("textbox", {
+      name: "automation.server_host",
+    }),
+  ).toBe(host);
+  expect(
+    screen.getByRole("switch", {
+      name: "automation.enable",
+    }),
+  ).toBe(local);
+  await user.click(mcp);
+  expect(mcpEnabled()).toBe(false);
+  expect(
+    screen.getByRole("textbox", {
+      name: "automation.server_host",
+    }),
+  ).toBe(host);
+  expect(
+    screen.getByRole("button", {
+      name: "automation.create_client",
+    }),
+  ).toBe(create);
+  await user.click(host);
+  await user.clear(host);
+  await user.type(host, "192.168.1.20");
+  host.setSelectionRange(2, 6);
+  setMcpEnabled(true);
+  setPending(true);
+  expect(
+    screen.getByRole("textbox", {
+      name: "automation.server_host",
+    }),
+  ).toBe(host);
+  expect(document.activeElement).toBe(host);
+  expect(host.value).toBe("192.168.1.20");
+  expect([host.selectionStart, host.selectionEnd]).toEqual([
+    2, 6,
+  ]);
+  expect(fixture.configureServer).not.toHaveBeenCalled();
 });

@@ -9,6 +9,7 @@ fn check(s: &State, epoch: &str, id: &str) -> Result<(), String> {
     }
     if t.deadline <= Instant::now()
         || !Service::current(s)
+        || !Service::call_enabled(s, &t.principal, &t.call)
         || !s.grants.get(&t.grant).is_some_and(|g| {
             Service::grant_live(s, g)
                 && g.principal.id == t.principal.id
@@ -61,6 +62,7 @@ mod tests {
         {
             let mut s = service.state.lock().unwrap();
             s.enabled = true;
+            s.mcp_enabled = true;
             s.epoch = "epoch".into();
             s.peers.insert(p.id.clone(), p.clone());
             s.grants.insert(

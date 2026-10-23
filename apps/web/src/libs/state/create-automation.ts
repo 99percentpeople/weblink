@@ -51,6 +51,7 @@ import {
 import type { AppStateContextProps } from "./app-state-context";
 interface NativeSnapshot {
   enabled: boolean;
+  mcpEnabled: boolean;
   endpoint: string;
   endpoints: string[];
   server: McpServerConfig;
@@ -71,6 +72,7 @@ interface NativeSnapshot {
 }
 const empty: NativeSnapshot = {
   enabled: false,
+  mcpEnabled: false,
   endpoint: "",
   endpoints: [],
   server: { ...DEFAULT_MCP_SERVER },
@@ -88,6 +90,8 @@ export function createAutomation(
   state: AppStateContextProps,
 ) {
   const [enabled, setEnabled] = createSignal(false);
+  const [mcpEnabled, setMcpEnabled] = createSignal(false);
+  const active = () => enabled() || mcpEnabled();
   const [revision, setRevision] = createSignal(0);
   const [nativeState, updateNativeState] =
     createStore<NativeSnapshot>(structuredClone(empty));
@@ -195,7 +199,7 @@ export function createAutomation(
   const native = platform.automation;
   const webSupported = () => !!webMcpContext(document);
   let webRegistration: AbortController | undefined;
-  let configurationRevision = 0;
+  const configurationRevision = { automation: 0, mcp: 0 };
   let nativeConfiguration = Promise.resolve();
   let snapshotSequence = 0;
   const readNativeSnapshot = async () => {
@@ -317,6 +321,9 @@ export function createAutomation(
         );
       return result.data;
     }
+    await check();
+    if (!native && call.name !== "devices.list")
+      throw new AutomationError("UNSUPPORTED");
     return handle(
       call,
       signal,
@@ -342,7 +349,8 @@ export function createAutomation(
       270000,
     );
     try {
-      if (!enabled()) throw new AutomationError("DISABLED");
+      if (!(p.kind === "webmcp" ? mcpEnabled() : enabled()))
+        throw new AutomationError("DISABLED");
       if (p.kind === "webmcp")
         call = {
           ...call,
@@ -417,7 +425,7 @@ export function createAutomation(
     );
     let result: ToolResult;
     try {
-      if (!enabled()) throw new AutomationError("DISABLED");
+      // Native tickets are authoritative, including cancellation during a toggle.
       parseCall(request.call);
       result = {
         ok: true,
@@ -466,7 +474,7 @@ export function createAutomation(
       !generation ||
       channel.readyState === "closed" ||
       channel.readyState === "closing" ||
-      !enabled() ||
+      !active() ||
       sessionService.sessions[session.targetClientId] !==
         session ||
       !session.isMessageChannelReady ||
@@ -479,6 +487,12 @@ export function createAutomation(
     const link: AutomationPeerLink = new AutomationPeerLink(
       channel,
       async (call, signal) => {
+        if (!native || !enabled())
+          return failure(
+            new AutomationError(
+              native ? "DISABLED" : "UNSUPPORTED",
+            ),
+          );
         if (
           !sessionService.canReceive(session.targetClientId)
         )
@@ -526,12 +540,12 @@ export function createAutomation(
   const sync = () => {
     const sessions = Object.values(sessionService.sessions);
     for (const [session, b] of bindings)
-      if (!enabled() || !sessions.includes(session)) {
+      if (!active() || !sessions.includes(session)) {
         b.abort.abort();
         bindings.delete(session);
         links.get(session)?.close();
       }
-    if (!enabled()) return;
+    if (!active()) return;
     for (const session of sessions) {
       let b = bindings.get(session);
       if (!b) {
@@ -640,6 +654,7 @@ export function createAutomation(
       } catch (e) {
         setError(String(e));
         setEnabled(false);
+        setMcpEnabled(false);
         sessionService.setAutomationEnabled(false);
         for (const link of [...links.values()])
           link.close();
@@ -647,13 +662,19 @@ export function createAutomation(
     if (!life.signal.aborted)
       timer = setTimeout(() => void refreshNative(), 1000);
   };
-  const configure = async (value: boolean) => {
-    const revision = ++configurationRevision;
+  const configureFeature = async (
+    feature: "automation" | "mcp",
+    value: boolean,
+  ) => {
+    const mcp = feature === "mcp";
+    const revision = ++configurationRevision[feature];
     const current = () =>
       !life.signal.aborted &&
-      revision === configurationRevision;
+      revision === configurationRevision[feature];
     setError("");
     try {
+      if (!native && !mcp)
+        throw new AutomationError("UNSUPPORTED");
       if (value && !globalThis.crypto?.subtle)
         throw new AutomationError(
           "SECURE_CONTEXT_REQUIRED",
@@ -682,12 +703,15 @@ export function createAutomation(
           );
         }
         if (!current()) return;
-        // Keep native side effects ordered, including a disable arriving while
-        // an earlier enable is still starting its listener.
+        // Serialize native effects, while each switch supersedes only its own
+        // older requests. Disabling either feature cannot re-enable the other.
         const pending = nativeConfiguration.then(
           async () => {
-            if (current())
-              await native.configure(epoch, value);
+            if (current()) {
+              if (mcp)
+                await native.configureMcp(epoch, value);
+              else await native.configure(epoch, value);
+            }
           },
         );
         nativeConfiguration = pending.catch(() => {});
@@ -698,7 +722,7 @@ export function createAutomation(
         webRegistration?.abort();
         unregister?.();
         unregister = undefined;
-        setEnabled(false);
+        setMcpEnabled(false);
         sessionService.setAutomationEnabled(false);
         if (value && context) {
           webRegistration = new AbortController();
@@ -709,10 +733,7 @@ export function createAutomation(
             () => true,
             webRegistration.signal,
           );
-          if (
-            life.signal.aborted ||
-            revision !== configurationRevision
-          ) {
+          if (!current()) {
             close();
             return;
           }
@@ -724,28 +745,33 @@ export function createAutomation(
           await native.close(epoch).catch(() => {});
         return;
       }
-      if (revision !== configurationRevision) return;
-      setEnabled(value);
-      sessionService.setAutomationEnabled(value);
-      if (!value) {
+      if (!current()) return;
+      if (mcp) setMcpEnabled(value);
+      else setEnabled(value);
+      sessionService.setAutomationEnabled(active());
+      if (!active()) {
         for (const c of calls.values()) c.abort();
         for (const link of [...links.values()])
           link.close();
-        diagnostics.detail(0);
       }
+      if (!enabled()) diagnostics.detail(0);
       untrack(sync);
-      setAppState("options", "automationEnabled", value);
+      setAppState(
+        "options",
+        mcp ? "mcpEnabled" : "automationEnabled",
+        value,
+      );
       changed();
     } catch (e) {
-      if (
-        life.signal.aborted ||
-        revision !== configurationRevision
-      )
-        return;
+      if (!current()) return;
       setError(String(e));
       throw e;
     }
   };
+  const configure = (value: boolean) =>
+    configureFeature("automation", value);
+  const configureMcp = (value: boolean) =>
+    configureFeature("mcp", value);
   createEffect(() => {
     Object.values(sessionService.sessions).forEach((s) => {
       sessionService.capabilities.get(s);
@@ -754,7 +780,7 @@ export function createAutomation(
       sessionService.canShareScreen(s.targetClientId);
       JSON.stringify(policyFor(s));
     });
-    enabled();
+    active();
     untrack(sync);
   });
   onMount(() => {
@@ -785,13 +811,25 @@ export function createAutomation(
         }
       if (life.signal.aborted) return;
       if (
-        (native ? epoch : webSupported()) &&
+        native &&
+        epoch &&
         appState.options.automationEnabled
       ) {
         try {
           await configure(true);
         } catch {
           /* Keep the saved preference for the next startup. */
+        }
+      }
+      if (life.signal.aborted) return;
+      if (
+        (native ? epoch : webSupported()) &&
+        appState.options.mcpEnabled
+      ) {
+        try {
+          await configureMcp(true);
+        } catch {
+          /* Keep the independent MCP preference for the next startup. */
         }
       }
       if (life.signal.aborted) return;
@@ -815,11 +853,15 @@ export function createAutomation(
   return {
     presentation,
     enabled,
+    mcpEnabled,
+    active,
+    configuredMcpEnabled: () => appState.options.mcpEnabled,
     configuredEnabled: () =>
       appState.options.automationEnabled,
     ready,
     error,
     configure,
+    configureMcp,
     configureServer: async (config: McpServerConfig) => {
       if (!native) throw new AutomationError("UNSUPPORTED");
       await native.configureServer(epoch, config);
@@ -835,6 +877,7 @@ export function createAutomation(
         : {
             ...empty,
             enabled: enabled(),
+            mcpEnabled: mcpEnabled(),
             grants: [],
             pending: [],
             audit: audit.entries.slice(),
