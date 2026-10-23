@@ -84,12 +84,14 @@ impl Backend for NativeBackend {
         &self,
         source: &CaptureSource,
         bounds: &crate::geometry::PixelRect,
+        region: &crate::snapshot::Region,
     ) -> Result<Vec<u8>> {
         match source.kind {
-            SourceKind::Monitor => screen::thumbnail(source),
+            SourceKind::Monitor => snapshot::region(region),
             SourceKind::Window => crate::surface::thumbnail::capture_sized(
                 |frames| window::start(source, CaptureMethod::Wgc, frames),
                 Some((bounds.width, bounds.height)),
+                Some(region.clone()),
             ),
         }
     }

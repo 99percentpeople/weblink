@@ -1,6 +1,6 @@
-//! One GDI transfer directly into a thumbnail-sized bitmap. No capture session.
+//! One GDI crop/resize directly into a bounded bitmap. No capture session.
 use crate::{
-    surface::{thumbnail, Rotation},
+    surface::{snapshot, thumbnail, Rotation},
     Result,
 };
 use std::{mem::size_of, ptr, slice};
@@ -41,7 +41,35 @@ pub(super) fn monitor(monitor: Monitor) -> Result<Vec<u8>> {
     if width <= 0 || height <= 0 {
         return Err("Display has no visible area".into());
     }
-    let (w, h) = thumbnail::dimensions(width as u32, height as u32);
+    let bounds = crate::geometry::PixelRect {
+        left: rect.left,
+        top: rect.top,
+        width: width as u32,
+        height: height as u32,
+    };
+    let area = crate::snapshot::SnapshotOptions {
+        max_width: 640,
+        max_height: 360,
+        rect: None,
+    }
+    .region(&bounds)?;
+    capture(&area, true)
+}
+
+pub(super) fn region(area: &crate::snapshot::Region) -> Result<Vec<u8>> {
+    let _dpi = DpiContext(unsafe {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+    });
+    if _dpi.0 .0.is_null() {
+        return Err("Could not set snapshot DPI awareness".into());
+    }
+    capture(area, false)
+}
+
+fn capture(area: &crate::snapshot::Region, preview: bool) -> Result<Vec<u8>> {
+    let rect = &area.bounds;
+    let (width, height) = (rect.width as i32, rect.height as i32);
+    let (w, h) = area.dimensions();
     let mut bitmap = Bitmap::default();
     unsafe {
         bitmap.screen = GetDC(None);
@@ -104,13 +132,24 @@ pub(super) fn monitor(monitor: Monitor) -> Result<Vec<u8>> {
         .map_err(|e| e.to_string())?;
         // Complete GDI's batched writes before reading the DIB's memory directly.
         GdiFlush().ok().map_err(|e| e.to_string())?;
-        thumbnail::encode(
-            slice::from_raw_parts(pixels.cast(), (w * h * 4) as usize),
-            (w * 4) as usize,
-            w,
-            h,
-            Rotation::Identity,
-        )
+        let bytes = slice::from_raw_parts(pixels.cast(), (w * h * 4) as usize);
+        if preview {
+            thumbnail::encode(bytes, (w * 4) as usize, w, h, Rotation::Identity)
+        } else {
+            // GDI already cropped and resized. Encode this bitmap at exactly 1:1.
+            let region = crate::snapshot::SnapshotOptions {
+                max_width: w,
+                max_height: h,
+                rect: None,
+            }
+            .region(&crate::geometry::PixelRect {
+                left: 0,
+                top: 0,
+                width: w,
+                height: h,
+            })?;
+            snapshot::encode(bytes, (w * 4) as usize, w, h, Rotation::Identity, &region)
+        }
     }
 }
 

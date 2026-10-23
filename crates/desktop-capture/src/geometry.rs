@@ -1,9 +1,9 @@
 //! Physical display coordinates. A layout revision is valid only for this service lifetime.
 use crate::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PixelRect {
     pub left: i32,
     pub top: i32,

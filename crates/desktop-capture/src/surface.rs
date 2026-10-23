@@ -3,6 +3,7 @@ mod damage;
 pub(crate) mod gpu;
 pub(crate) mod readback;
 mod scale;
+pub(crate) mod snapshot;
 pub(crate) mod thumbnail;
 pub use crate::damage::{DirtyRect, Rotation};
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D};

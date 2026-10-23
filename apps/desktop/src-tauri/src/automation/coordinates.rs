@@ -18,14 +18,15 @@ pub(crate) fn metadata(source: &str, revision: &str, geometry: Geometry) -> Valu
         "geometryRevision":revision, "bounds":bounds(geometry.display), "virtualBounds":bounds(geometry.desktop)})
 }
 pub(super) fn screenshot(source: &str, snapshot: CaptureSnapshot) -> Result<Value, String> {
-    if snapshot.image.len() > 4 * 1024 * 1024 {
+    if snapshot.image.len() > weblink_desktop_capture::snapshot::MAX_PNG_BYTES {
         return Err("RESULT_TOO_LARGE".into());
     }
     let reader = png::Decoder::new(std::io::Cursor::new(&snapshot.image))
         .read_info()
         .map_err(|_| "INVALID_CAPTURE")?;
     let (width, height) = (reader.info().width, reader.info().height);
-    if width == 0 || height == 0 || width > 640 || height > 360 {
+    let max = weblink_desktop_capture::snapshot::MAX_DIMENSION;
+    if width == 0 || height == 0 || width > max || height > max {
         return Err("INVALID_CAPTURE".into());
     }
     let bounds = &snapshot.bounds;
@@ -153,5 +154,53 @@ mod tests {
         assert_eq!((x, y), (-540., 760.));
         let p = geometry().normalized(Position { x, y }).unwrap();
         assert_eq!(geometry().pixels(p), Some((-540, 760)));
+    }
+
+    #[test]
+    fn cropped_screenshot_scales_back_to_absolute_desktop_points() {
+        use weblink_desktop_capture::geometry::DisplayLayout;
+        for (width, height) in [(600, 400), (300, 200), (1600, 1000), (2048, 1280)] {
+            let mut png = Vec::new();
+            {
+                let mut encoder = png::Encoder::new(&mut png, width, height);
+                encoder.set_color(png::ColorType::Rgb);
+                encoder.set_depth(png::BitDepth::Eight);
+                encoder
+                    .write_header()
+                    .unwrap()
+                    .write_image_data(&vec![0; (width * height * 3) as usize])
+                    .unwrap();
+            }
+            let bounds = PixelRect {
+                left: -1800,
+                top: -100,
+                width: 2048,
+                height: 1280,
+            };
+            let result = screenshot(
+                "window",
+                CaptureSnapshot {
+                    image: png,
+                    bounds: bounds.clone(),
+                    layout: DisplayLayout {
+                        revision: "revision".into(),
+                        virtual_bounds: bounds,
+                        displays: vec![],
+                    },
+                },
+            )
+            .unwrap();
+            let m = &result["imageToDesktop"];
+            assert_eq!(m["offsetX"], -1800.);
+            assert_eq!(m["offsetY"], -100.);
+            assert_eq!(
+                f64::from(width) * m["scaleX"].as_f64().unwrap() + m["offsetX"].as_f64().unwrap(),
+                248.
+            );
+            assert_eq!(
+                f64::from(height) * m["scaleY"].as_f64().unwrap() + m["offsetY"].as_f64().unwrap(),
+                1180.
+            );
+        }
     }
 }

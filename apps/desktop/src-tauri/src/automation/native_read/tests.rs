@@ -1,6 +1,38 @@
 use super::*;
 use std::sync::mpsc;
 
+#[test]
+fn screenshot_catalog_and_native_options_accept_bounded_desktop_crops() {
+    let args = json!({"target":"local", "sourceId":"window", "maxWidth":2048, "maxHeight":1200,
+        "rect":{"left":-1800,"top":-100,"width":600,"height":400}});
+    catalog::validate("control.screenshot", &args).unwrap();
+    let options = screenshot_options(&args).unwrap();
+    assert_eq!((options.max_width, options.max_height), (2048, 1200));
+    assert_eq!(options.rect.unwrap().left, -1800);
+    let defaults = screenshot_options(&json!({"target":"local","sourceId":"monitor"})).unwrap();
+    assert_eq!((defaults.max_width, defaults.max_height), (1600, 1600));
+    for extra in [
+        json!({"maxWidth":0}),
+        json!({"maxWidth":2049}),
+        json!({"maxHeight":2049}),
+        json!({"maxWidth":1.5}),
+        json!({"rect":{"left":0,"top":0,"width":0,"height":1}}),
+        json!({"rect":{"left":0,"top":0,"width":1,"height":1,"x":0}}),
+        json!({"rect":{"left":0.5,"top":0,"width":1,"height":1}}),
+    ] {
+        let mut args = json!({"target":"local", "sourceId":"monitor"});
+        args.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        assert!(catalog::validate("control.screenshot", &args).is_err());
+        assert!(screenshot_options(&args).is_err());
+    }
+    assert!(
+        screenshot_options(&json!({"rect":{"left":2147483647,"top":0,"width":1,"height":1}}))
+            .is_err()
+    );
+}
+
 fn fixture(name: &str) -> Shared {
     let service = Arc::new(Service::default());
     let principal = Principal {

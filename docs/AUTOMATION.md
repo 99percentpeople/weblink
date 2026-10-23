@@ -290,6 +290,48 @@ desktopX = imageX * imageToDesktop.scaleX + imageToDesktop.offsetX
 desktopY = imageY * imageToDesktop.scaleY + imageToDesktop.offsetY
 ```
 
+Choose a monitor **or window** `sourceId` from `screen.sources`; a window source
+uses native window capture. This ID is different from an accessibility `elementId`.
+Screenshots default to fitting inside **1600 × 1600** pixels, preserving aspect
+ratio without enlarging smaller sources. Optional `maxWidth` and `maxHeight`
+each accept 1–2048 pixels and independently default to 1600. For example, a
+1920 × 1080 monitor returns 1600 × 900 by default; requesting both limits as
+2048 retains its original resolution. Source-picker previews remain 640 × 360.
+
+Optional `rect: {left, top, width, height}` crops the selected monitor or window
+in **absolute physical desktop pixels, before resizing**. All fields are
+integers, width/height must be positive, and the rectangle must lie wholly inside
+the selected source (`RECT_OUT_OF_BOUNDS` otherwise). Negative desktop origins
+are supported. There is no implicit clipping, padding, or window-relative mode.
+A small crop therefore retains native small-text detail instead of enlarging a
+thumbnail. To inspect a 600 × 400 area on a monitor left of the primary display:
+
+```json
+{
+  "name": "control.screenshot",
+  "arguments": {
+    "target": "local",
+    "sourceId": "<monitor or window sourceId from screen.sources>",
+    "rect": {
+      "left": -1800,
+      "top": 100,
+      "width": 600,
+      "height": 400
+    },
+    "maxWidth": 2048,
+    "maxHeight": 2048
+  }
+}
+```
+
+The returned `bounds` describe the cropped desktop rectangle; `imageToDesktop`
+includes both its offset and any scaling. Pointer input always remains in
+`desktopPhysicalPixels`: map image points with that transform and use the monitor
+`sourceId`/`geometryRevision` from `control.acquire`, even for a window screenshot.
+PNG output remains limited to 4 MiB so local and peer transports share the same
+budget. `RESULT_TOO_LARGE` requires a smaller region or output dimensions; the
+service does not silently lower the requested resolution or switch to a lossy format.
+
 Pass a mapped screenshot point or a UIA node's physical center to `control.pointer`
 with `coordinateSpace: "desktopPhysicalPixels"`, and the `sourceId` and
 `geometryRevision` returned by `control.acquire`. The point must be inside that

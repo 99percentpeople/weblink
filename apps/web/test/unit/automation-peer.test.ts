@@ -7,6 +7,7 @@ import {
   vi,
 } from "vitest";
 import { AutomationPeerLink } from "@/libs/application/automation/peer-link";
+import type { ToolCall } from "@weblink/automation";
 class Channel extends EventTarget {
   readyState = "open";
   bufferedAmount = 0;
@@ -120,6 +121,57 @@ it("opens without an extra handshake and transports large structured results", a
   expect(result.ok && result.data.output).toHaveLength(
     50000,
   );
+});
+it("transports a maximum-budget screenshot and preserves crop coordinates", async () => {
+  // A 4 MiB PNG grows once in its result field and again in transport framing.
+  const image = btoa("x".repeat(4 * 1024 * 1024));
+  const expected = {
+    mimeType: "image/png",
+    data: image,
+    imageWidth: 2048,
+    imageHeight: 1152,
+    coordinateSpace: "desktopPhysicalPixels",
+    sourceId: "window",
+    geometryRevision: "layout",
+    bounds: {
+      left: -2000,
+      top: -100,
+      width: 2560,
+      height: 1440,
+    },
+    imageToDesktop: {
+      scaleX: 1.25,
+      scaleY: 1.25,
+      offsetX: -2000,
+      offsetY: -100,
+    },
+  };
+  const execute = vi.fn(async (_call: ToolCall) => ({
+    ok: true as const,
+    data: expected,
+  }));
+  const { l, r } = pair(execute);
+  await Promise.all([l.ready, r.ready]);
+  const call = {
+    name: "control.screenshot",
+    arguments: {
+      target: "local",
+      sourceId: "window",
+      maxWidth: 2048,
+      maxHeight: 2048,
+      rect: expected.bounds,
+    },
+  };
+  const result = await l.call(
+    call,
+    new AbortController().signal,
+  );
+  expect(result, `${l.failure}/${r.failure}`).toEqual({
+    ok: true,
+    data: expected,
+  });
+  expect(execute.mock.calls[0]?.[0]).toEqual(call);
+  expect(l.connected && r.connected).toBe(true);
 });
 it("rejects replayed authenticated requests without repeating a side effect", async () => {
   const execute = vi.fn(async () => ({

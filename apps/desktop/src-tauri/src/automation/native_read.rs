@@ -3,6 +3,19 @@
 use super::*;
 use weblink_desktop_capture::CaptureService;
 
+fn screenshot_options(
+    args: &Value,
+) -> Result<weblink_desktop_capture::snapshot::SnapshotOptions, String> {
+    let fields = ["maxWidth", "maxHeight", "rect"]
+        .into_iter()
+        .filter_map(|key| args.get(key).map(|value| (key.to_owned(), value.clone())))
+        .collect::<serde_json::Map<_, _>>();
+    let options: weblink_desktop_capture::snapshot::SnapshotOptions =
+        serde_json::from_value(Value::Object(fields)).map_err(|_| "INVALID_ARGUMENTS")?;
+    options.validate()?;
+    Ok(options)
+}
+
 pub(super) fn handles(name: &str) -> bool {
     matches!(name, "screen.sources" | "control.screenshot")
 }
@@ -69,7 +82,13 @@ pub(super) async fn action(
                 let source = call.arguments["sourceId"]
                     .as_str()
                     .ok_or("INVALID_ARGUMENTS")?;
-                super::coordinates::screenshot(source, capture.snapshot(source.into())?)
+                super::coordinates::screenshot(
+                    source,
+                    capture.snapshot_with_options(
+                        source.into(),
+                        screenshot_options(&call.arguments)?,
+                    )?,
+                )
             }
             _ => Err("UNSUPPORTED".into()),
         })

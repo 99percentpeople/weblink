@@ -9,14 +9,15 @@ use std::{
 pub(crate) fn capture(
     start: impl FnOnce(Arc<Mutex<Frames>>) -> Result<Box<dyn Session>>,
 ) -> Result<Vec<u8>> {
-    capture_sized(start, None)
+    capture_sized(start, None, None)
 }
 
 pub(crate) fn capture_sized(
     start: impl FnOnce(Arc<Mutex<Frames>>) -> Result<Box<dyn Session>>,
     expected: Option<(u32, u32)>,
+    region: Option<crate::snapshot::Region>,
 ) -> Result<Vec<u8>> {
-    let (sink, image) = collector(expected);
+    let (sink, image) = collector(expected, region);
     let session = start(Arc::new(Mutex::new(Frames {
         sink: Some(sink),
         thumbnail: true,
@@ -34,10 +35,11 @@ pub(crate) fn capture_sized(
 
 fn collector(
     expected: Option<(u32, u32)>,
+    region: Option<crate::snapshot::Region>,
 ) -> (Arc<dyn FrameSink>, mpsc::Receiver<Result<Vec<u8>>>) {
     let (sender, receiver) = mpsc::sync_channel(1);
     (
-        Arc::new(Snapshot(Mutex::new(Some(sender)), expected)),
+        Arc::new(Snapshot(Mutex::new(Some(sender)), expected, region)),
         receiver,
     )
 }
@@ -45,6 +47,7 @@ fn collector(
 struct Snapshot(
     Mutex<Option<mpsc::SyncSender<Result<Vec<u8>>>>>,
     Option<(u32, u32)>,
+    Option<crate::snapshot::Region>,
 );
 impl FrameSink for Snapshot {
     fn frame(&self, frame: TextureFrame<'_>) -> Result<()> {
@@ -63,6 +66,16 @@ impl FrameSink for Snapshot {
                     return Err("CAPTURE_BOUNDS_MISMATCH".into());
                 }
                 let mapped = readback.map()?;
+                if let Some(region) = &self.2 {
+                    return super::snapshot::encode(
+                        mapped.bytes(),
+                        mapped.stride() as usize,
+                        width,
+                        height,
+                        frame.rotation,
+                        region,
+                    );
+                }
                 encode(
                     mapped.bytes(),
                     mapped.stride() as usize,

@@ -19,6 +19,7 @@ struct Fake {
     displays: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
     mapped_layout: Rc<RefCell<Option<Vec<geometry::DisplayGeometry>>>>,
     mapped_window: Rc<RefCell<Option<geometry::PixelRect>>>,
+    snapshot_region: Rc<RefCell<Option<snapshot::Region>>>,
     window_rect: Rc<RefCell<Option<geometry::PixelRect>>>,
     #[cfg(windows)]
     snapshot: Rc<RefCell<Option<Vec<u8>>>>,
@@ -77,7 +78,13 @@ impl Backend for Fake {
             .clone()
             .ok_or_else(|| "no window".into())
     }
-    fn snapshot(&self, _: &CaptureSource, _: &geometry::PixelRect) -> Result<Vec<u8>> {
+    fn snapshot(
+        &self,
+        _: &CaptureSource,
+        _: &geometry::PixelRect,
+        region: &snapshot::Region,
+    ) -> Result<Vec<u8>> {
+        self.snapshot_region.replace(Some(region.clone()));
         if let Some(layout) = self.mapped_layout.borrow_mut().take() {
             self.displays.replace(Some(layout));
         }
@@ -745,27 +752,99 @@ fn mapped_snapshot_rejects_changed_layout_and_window_bounds() {
         scale_percent: Some(150),
     };
     fake.displays.replace(Some(vec![display.clone()]));
-    let shot = engine.snapshot("selected").unwrap();
+    let shot = engine.snapshot("selected", Default::default()).unwrap();
     assert_eq!(shot.bounds, bounds);
     assert_eq!(shot.image, vec![1, 2, 3]);
     assert_eq!(
         shot.layout.revision,
         engine.display_layout().unwrap().revision
     );
-    assert!(engine.snapshot("arbitrary-handle").is_err());
+    assert!(engine
+        .snapshot("arbitrary-handle", Default::default())
+        .is_err());
     let mut changed = display.clone();
     changed.scale_percent = Some(200);
     fake.mapped_layout.replace(Some(vec![changed]));
-    assert!(matches!(engine.snapshot("selected"),Err(e) if e=="GEOMETRY_CHANGED"));
+    assert!(
+        matches!(engine.snapshot("selected", Default::default()),Err(e) if e=="GEOMETRY_CHANGED")
+    );
     fake.monitor.set(false);
     fake.window_rect.replace(Some(bounds.clone()));
-    assert_eq!(engine.snapshot("selected").unwrap().bounds, bounds);
+    assert_eq!(
+        engine
+            .snapshot("selected", Default::default())
+            .unwrap()
+            .bounds,
+        bounds
+    );
     let mut moved = bounds.clone();
     moved.left += 100;
     fake.mapped_window.replace(Some(moved));
-    assert!(matches!(engine.snapshot("selected"),Err(e) if e=="GEOMETRY_CHANGED"));
+    assert!(
+        matches!(engine.snapshot("selected", Default::default()),Err(e) if e=="GEOMETRY_CHANGED")
+    );
     let mut invalid = bounds;
     invalid.width = 0;
     fake.window_rect.replace(Some(invalid));
-    assert!(engine.snapshot("selected").is_err());
+    assert!(engine.snapshot("selected", Default::default()).is_err());
+}
+
+#[test]
+fn cropped_snapshots_preserve_desktop_mapping_for_monitors_and_windows() {
+    let (mut engine, fake) = setup();
+    let source = geometry::PixelRect {
+        left: -1920,
+        top: -200,
+        width: 1920,
+        height: 1080,
+    };
+    fake.displays.replace(Some(vec![geometry::DisplayGeometry {
+        source_id: "selected".into(),
+        bounds: source.clone(),
+        rotation: 0,
+        scale_percent: Some(150),
+    }]));
+    fake.window_rect.replace(Some(source.clone()));
+    let rect = geometry::PixelRect {
+        left: -1800,
+        top: -100,
+        width: 600,
+        height: 400,
+    };
+    for monitor in [true, false] {
+        fake.monitor.set(monitor);
+        let shot = engine
+            .snapshot(
+                "selected",
+                snapshot::SnapshotOptions {
+                    rect: Some(rect.clone()),
+                    max_width: 300,
+                    max_height: 200,
+                },
+            )
+            .unwrap();
+        assert_eq!(shot.bounds, rect);
+        let area = fake.snapshot_region.borrow().clone().unwrap();
+        assert_eq!((area.x, area.y), (120, 100));
+        assert_eq!(area.dimensions(), (300, 200));
+        assert!(fake.frames.borrow().is_none());
+        fake.snapshot_region.replace(None);
+        assert_eq!(
+            engine
+                .snapshot(
+                    "selected",
+                    snapshot::SnapshotOptions {
+                        rect: Some(geometry::PixelRect {
+                            left: -1921,
+                            ..rect.clone()
+                        }),
+                        ..Default::default()
+                    }
+                )
+                .err()
+                .as_deref(),
+            Some("RECT_OUT_OF_BOUNDS")
+        );
+        assert!(fake.snapshot_region.borrow().is_none());
+    }
 }

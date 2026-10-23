@@ -18,6 +18,7 @@ pub use observers::StatusObserver;
 pub mod damage;
 pub mod geometry;
 pub mod media;
+pub mod snapshot;
 #[cfg(windows)]
 pub mod surface;
 #[cfg(test)]
@@ -203,7 +204,12 @@ trait Backend {
     fn window_bounds(&self, _: &CaptureSource) -> Result<geometry::PixelRect> {
         Err("Window geometry is unavailable on this platform".into())
     }
-    fn snapshot(&self, _: &CaptureSource, _: &geometry::PixelRect) -> Result<Vec<u8>> {
+    fn snapshot(
+        &self,
+        _: &CaptureSource,
+        _: &geometry::PixelRect,
+        _: &snapshot::Region,
+    ) -> Result<Vec<u8>> {
         Err("Mapped snapshots are unavailable on this platform".into())
     }
     #[cfg(windows)]
@@ -305,7 +311,12 @@ impl<B: Backend> Engine<B> {
         Ok(layout)
     }
 
-    fn snapshot(&mut self, source_id: &str) -> Result<CaptureSnapshot> {
+    fn snapshot(
+        &mut self,
+        source_id: &str,
+        options: snapshot::SnapshotOptions,
+    ) -> Result<CaptureSnapshot> {
+        options.validate()?;
         let source = self
             .backend
             .sources()?
@@ -324,7 +335,11 @@ impl<B: Backend> Engine<B> {
         };
         let bounds = bounds_for(&layout)?;
         bounds.edges()?;
-        let image = self.backend.snapshot(&source, &bounds)?;
+        let region = options.region(&bounds)?;
+        let image = self.backend.snapshot(&source, &bounds, &region)?;
+        if image.len() > snapshot::MAX_PNG_BYTES {
+            return Err("RESULT_TOO_LARGE".into());
+        }
         // A moved/resized window or changed display layout cannot produce a valid mapping.
         let after_bounds = bounds_for(&layout)?;
         let after = self.display_layout()?;
@@ -333,7 +348,7 @@ impl<B: Backend> Engine<B> {
         }
         Ok(CaptureSnapshot {
             image,
-            bounds,
+            bounds: region.bounds,
             layout,
         })
     }
@@ -622,7 +637,11 @@ enum Command {
     DisplayRefreshRates(mpsc::Sender<Vec<u32>>),
     Sources(mpsc::Sender<Result<Vec<CaptureSource>>>),
     Thumbnail(String, CaptureOptions, mpsc::Sender<Result<Vec<u8>>>),
-    Snapshot(String, mpsc::Sender<Result<CaptureSnapshot>>),
+    Snapshot(
+        String,
+        snapshot::SnapshotOptions,
+        mpsc::Sender<Result<CaptureSnapshot>>,
+    ),
     Start(
         String,
         CaptureOptions,
@@ -721,8 +740,8 @@ impl CaptureService {
                         Ok(Command::Thumbnail(id, options, reply)) => {
                             let _ = reply.send(engine.thumbnail(&id, options));
                         }
-                        Ok(Command::Snapshot(id, reply)) => {
-                            let _ = reply.send(engine.snapshot(&id));
+                        Ok(Command::Snapshot(id, options, reply)) => {
+                            let _ = reply.send(engine.snapshot(&id, options));
                         }
                         Ok(Command::Start(id, options, sink, reply)) => {
                             let result =
@@ -804,7 +823,16 @@ impl CaptureService {
         self.request(|r| Command::Thumbnail(source_id, options, r))?
     }
     pub fn snapshot(&self, source_id: String) -> Result<CaptureSnapshot> {
-        self.request(|r| Command::Snapshot(source_id, r))?
+        self.snapshot_with_options(source_id, snapshot::SnapshotOptions::default())
+    }
+    /// Capture a monitor/window, cropping in physical desktop pixels before scaling.
+    pub fn snapshot_with_options(
+        &self,
+        source_id: String,
+        options: snapshot::SnapshotOptions,
+    ) -> Result<CaptureSnapshot> {
+        options.validate()?;
+        self.request(|r| Command::Snapshot(source_id, options, r))?
     }
     pub fn start(&self, source_id: String) -> Result<CaptureStatus> {
         self.start_with_options(source_id, CaptureOptions::default())
