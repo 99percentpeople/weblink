@@ -1546,6 +1546,8 @@
     "unsupported": "Este navegador no admite WebMCP. No se puede activar.",
     "export": "Exportar diagnóstico",
     "requests": "Solicitudes de autorización",
+    "allow_minutes": "Permitir durante {{minutes}} minutos",
+    "approval_failed": "No se pudo procesar la solicitud de autorización. Inténtalo de nuevo.",
     "no_requests": "No hay solicitudes pendientes.",
     "target": "Destino",
     "shell_warning": "Permite ejecutar cualquier comando Shell con tu cuenta del sistema durante el período elegido. Los comandos pueden modificar archivos y el estado del sistema. Revocar el permiso no deshace los cambios realizados.",

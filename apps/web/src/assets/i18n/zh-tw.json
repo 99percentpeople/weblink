@@ -1546,6 +1546,8 @@
     "unsupported": "目前瀏覽器不支援 WebMCP，無法啟用。",
     "export": "匯出診斷",
     "requests": "授權請求",
+    "allow_minutes": "允許 {{minutes}} 分鐘",
+    "approval_failed": "處理授權請求失敗，請重試。",
     "no_requests": "暫無待處理的請求。",
     "target": "目標",
     "shell_warning": "此權限允許在所選期限內，以目前系統帳戶執行任意 Shell 命令。命令可以修改檔案和系統狀態，撤銷權限無法還原已完成的變更。",

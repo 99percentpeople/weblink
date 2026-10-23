@@ -335,6 +335,53 @@ describe("shared toast and system delivery", () => {
     return { ...x, present, presentation };
   }
 
+  it.each([
+    "current",
+    "expired",
+    "cancelled",
+    "closed",
+    "dismissed",
+    "not-opted-in",
+  ])(
+    "only restores a failed native answer for an explicit foreground retry when %s",
+    async (state) => {
+      const x = withToast();
+      x.intent.retryInAppOnError = state !== "not-opted-in";
+      const answer = Promise.withResolvers<void>();
+      vi.mocked(x.intent.respond).mockReturnValue(
+        answer.promise,
+      );
+      await x.service.show(x.intent);
+      const action = {
+        id: x.intent.notification.id,
+        action: "approve",
+      };
+      x.action(action);
+      x.action(action);
+      if (state === "expired")
+        x.intent.notification.expiresAt = 0;
+      if (state === "cancelled")
+        vi.mocked(x.intent.current).mockReturnValue(false);
+      if (state === "closed") x.service.close();
+      if (state === "dismissed")
+        x.service.dismiss(x.intent.notification.id);
+      const error = new Error("decision failed");
+      answer.reject(error);
+      await vi.waitFor(() =>
+        expect(x.onError).toHaveBeenCalledWith(error),
+      );
+      expect(x.present).not.toHaveBeenCalled();
+      x.visibility(true);
+      x.action(action);
+      expect(x.present).toHaveBeenCalledTimes(
+        state === "current" ? 1 : 0,
+      );
+      expect(x.intent.respond).toHaveBeenCalledOnce();
+      expect(x.session.show).toHaveBeenCalledOnce();
+      x.service.close();
+    },
+  );
+
   it("keeps a foreground event on its original channel after visibility and settings changes", async () => {
     const x = withToast();
     x.visibility(true);

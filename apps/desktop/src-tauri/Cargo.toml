@@ -37,6 +37,7 @@ weblink-desktop-accessibility = { path = "../../../crates/desktop-accessibility"
 weblink-desktop-capture = { path = "../../../crates/desktop-capture" }
 tauri-plugin-autostart = "=2.6.0"
 base64 = "0.22"
+getrandom = "0.4"
 png = "0.18"
 tempfile = "3"
 sha2 = "0.10"

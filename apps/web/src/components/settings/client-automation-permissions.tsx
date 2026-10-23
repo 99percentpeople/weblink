@@ -10,7 +10,6 @@ import { appState } from "@/libs/state/app-state";
 import { setClientConfig } from "@/libs/state/permission-options";
 import { SettingGroup } from "./setting-layout";
 import { PermissionSelect } from "./permission-select";
-import AutomationPermissions from "./automation-permissions";
 import {
   groupLabel,
   groupDescription,
@@ -84,14 +83,6 @@ export default function ClientAutomationPermissions(props: {
               )}
             </For>
           </SettingGroup>
-          <Show
-            when={props.trusted && automation().enabled()}
-          >
-            <AutomationPermissions
-              runtime={automation()}
-              peerId={props.clientId}
-            />
-          </Show>
         </>
       )}
     </Show>

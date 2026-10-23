@@ -251,7 +251,7 @@
   },
   {
     "name": "control.screenshot",
-    "description": "Capture a monitor or window PNG using sourceId from screen.sources (not a UIA elementId). Fits within maxWidth/maxHeight (default 1600 each, maximum 2048), preserving aspect ratio without upscaling. Optional rect {left,top,width,height} uses absolute desktopPhysicalPixels and must be wholly inside the selected source; crop happens before scaling. Returns cropped physical bounds, actual image dimensions, geometryRevision and imageToDesktop. Map image points back to desktop coordinates for control.pointer; never apply DPI scale again. Refresh after display/window movement. PNG is limited to 4 MiB; use a smaller region or size on RESULT_TOO_LARGE.",
+    "description": "Capture a monitor or window as a losslessly compressed PNG using sourceId from screen.sources (not a UIA elementId). Fits within maxWidth/maxHeight (default 1024 each, maximum 2048), preserving aspect ratio without upscaling. Use window or rect crops for fine details. Optional rect {left,top,width,height} uses absolute desktopPhysicalPixels and must be wholly inside the selected source; crop happens before scaling. Returns cropped physical bounds, actual image dimensions, geometryRevision and imageToDesktop. Map image points back to desktop coordinates for control.pointer; never apply DPI scale again. Refresh after display/window movement. PNG is limited to 4 MiB; use a smaller region or size on RESULT_TOO_LARGE.",
     "scope": "screen.read",
     "native": true,
     "readOnly": true,
@@ -273,13 +273,13 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 2048,
-          "default": 1600
+          "default": 1024
         },
         "maxHeight": {
           "type": "integer",
           "minimum": 1,
           "maximum": 2048,
-          "default": 1600
+          "default": 1024
         },
         "rect": {
           "type": "object",

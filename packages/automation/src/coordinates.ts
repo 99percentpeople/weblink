@@ -29,7 +29,7 @@ export interface ScreenshotArguments {
   target: string;
   /** Monitor or window source ID from screen.sources (not a UIA elementId). */
   sourceId: string;
-  /** Fit within these limits, preserving aspect ratio; each defaults to 1600, max 2048. */
+  /** Fit within these limits, preserving aspect ratio; each defaults to 1024, max 2048. */
   maxWidth?: number;
   maxHeight?: number;
   /** Absolute desktopPhysicalPixels, wholly within the selected source; cropped before scaling. */

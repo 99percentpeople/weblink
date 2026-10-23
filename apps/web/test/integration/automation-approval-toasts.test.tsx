@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import {
   afterEach,
   beforeEach,
@@ -6,129 +7,497 @@ import {
   it,
   vi,
 } from "vitest";
-import { cleanup, render } from "@solidjs/testing-library";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@solidjs/testing-library";
+import userEvent from "@testing-library/user-event";
 import {
   createSignal,
+  onCleanup,
   type Accessor,
   type Setter,
 } from "solid-js";
+import { toast, Toaster } from "solid-sonner";
 import type { Approval } from "@weblink/automation";
+import type {
+  NotificationAction,
+  SystemNotification,
+} from "@weblink/platform";
 import { AutomationApprovalToasts } from "@/components/app/automation-approval-toasts";
-import { OPEN_CLIENT_INFO_DIALOG_EVENT } from "@/components/dialogs/client-info-dialog-events";
+import { NotificationService } from "@/libs/application/notifications/notification-service";
+import { defaultNotificationOptions } from "@/libs/domain/notification-options";
+import { ModalProvider } from "@/components/dialogs/base";
 
 const fixture = vi.hoisted(() => ({
   pending: undefined as Accessor<Approval[]> | undefined,
-  notify: vi.fn(
-    (
-      _title: string,
-      options: {
-        id: string;
-        action: { onClick: () => void };
-      },
-    ) => options.id,
-  ),
-  dismiss: vi.fn(),
+  decide: vi.fn(),
   canReceive: vi.fn(),
+  enabled: true,
+  ready: true,
+  preview: true,
 }));
-vi.mock("solid-sonner", () => ({
-  toast: Object.assign(fixture.notify, {
-    dismiss: fixture.dismiss,
-  }),
+vi.mock("@/i18n", () => ({
+  t: (key: string, values?: Record<string, unknown>) =>
+    values
+      ? `${key}: ${Object.values(values).join(", ")}`
+      : key,
 }));
-vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     automation: {
+      desktop: true,
+      enabled: () => fixture.enabled,
+      ready: () => fixture.ready,
+      decide: fixture.decide,
       snapshot: () => ({
         pending: fixture.pending?.() ?? [],
       }),
     },
   }),
 }));
-
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: { canReceive: fixture.canReceive },
 }));
+vi.mock("@/libs/state/app-state", () => ({
+  appState: {
+    options: {
+      notifications: {
+        get preview() {
+          return fixture.preview;
+        },
+      },
+      remoteKeyboard: { emergencyShortcut: "ctrl-alt-f8" },
+    },
+  },
+}));
 
 let setPending: Setter<Approval[]>;
-const openPeer = vi.fn();
+let sequence = 0;
 const request = (
   kind: "peer" | "mcp" = "peer",
-  id = "request",
 ): Approval => ({
-  id,
+  id: `request-${++sequence}`,
   principal: {
     id: "paired-device",
     kind,
     label: "Device",
+    generation: "connection-1",
   },
   scope: "shell.execute",
   tool: "commands.start",
-  arguments: { target: "local", script: "echo ok" },
+  source: { kind: "mcp", label: "Reported caller" },
+  arguments: {
+    target: "local",
+    script: "echo private-detail",
+  },
   expiresAt: Date.now() + 120000,
 });
-const review = () =>
-  fixture.notify.mock.calls.at(-1)![1].action.onClick;
+const allowLabel = (minutes = 15) =>
+  `automation.allow_minutes: ${minutes}`;
 beforeEach(() => {
-  vi.clearAllMocks();
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
   );
-  fixture.canReceive.mockReturnValue(true);
-  window.addEventListener(
-    OPEN_CLIENT_INFO_DIALOG_EVENT,
-    openPeer,
-  );
+  fixture.decide.mockReset().mockResolvedValue(undefined);
+  fixture.canReceive.mockReset().mockReturnValue(true);
+  fixture.enabled = fixture.ready = fixture.preview = true;
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
 });
 afterEach(() => {
   cleanup();
-  window.removeEventListener(
-    OPEN_CLIENT_INFO_DIALOG_EVENT,
-    openPeer,
-  );
+  toast.dismiss();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
-it("routes peer requests to verified device settings without prompting local MCP clients", () => {
-  render(() => <AutomationApprovalToasts />);
-  setPending([request()]);
-  review()();
-  expect(fixture.canReceive).toHaveBeenCalledWith(
-    "paired-device",
+function mount({
+  visible = true,
+  native = false,
+  enabled = true,
+} = {}) {
+  const show = vi.fn(
+    async (_notification: SystemNotification) => {},
   );
+  const dismiss = vi.fn(async () => {});
+  let receive!: (action: NotificationAction) => void;
+  const service = new NotificationService(
+    native
+      ? {
+          capabilities: async () => ({
+            permission: "granted",
+            actions: true,
+            reply: false,
+          }),
+          requestPermission: vi.fn(),
+          watch: async (listener) => {
+            receive = listener;
+            return { show, dismiss, close: vi.fn() };
+          },
+        }
+      : undefined,
+    () => ({ ...defaultNotificationOptions, enabled }),
+    () => visible,
+    vi.fn(),
+  );
+  const showApplication = vi.fn(() => {
+    visible = true;
+    service.reconcile();
+  });
+  const view = render(() => {
+    onCleanup(() => service.close());
+    return (
+      <ModalProvider>
+        <Toaster theme="light" />
+        <AutomationApprovalToasts
+          notifications={service}
+          showApplication={showApplication}
+        />
+      </ModalProvider>
+    );
+  });
+  return {
+    ...view,
+    show,
+    dismiss,
+    showApplication,
+    service,
+    respond(action: string) {
+      receive({
+        id: show.mock.calls.at(-1)![0].id,
+        action,
+      });
+    },
+    setVisible(value: boolean) {
+      visible = value;
+      service.reconcile();
+    },
+  };
+}
+
+it.each([0, 5, 15, 60])(
+  "responds through the in-app notification with %i minutes",
+  async (minutes) => {
+    mount();
+    const pending = request();
+    setPending([pending]);
+    const allow = await screen.findByRole("button", {
+      name: allowLabel(),
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByText(
+        /Device · automation.permissions.terminal.title/,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "automation.permissions.terminal.description",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/remote_control.revoke_hint.*F8/),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByText("automation.arguments"),
+    );
+    expect(
+      screen.getByText(/echo private-detail/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Reported caller/),
+    ).toBeVisible();
+    if (minutes === 0)
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "automation.deny",
+        }),
+      );
+    else if (minutes === 15) fireEvent.click(allow);
+    else {
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: "automation.duration",
+        }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", {
+          name: allowLabel(minutes),
+        }),
+      );
+    }
+    await waitFor(() =>
+      expect(fixture.decide).toHaveBeenCalledWith(
+        pending.id,
+        minutes,
+      ),
+    );
+    expect(fixture.decide).toHaveBeenCalledOnce();
+  },
+);
+
+it("explains the read permission group before approving accessibility inspection", async () => {
+  mount();
+  const pending = {
+    ...request(),
+    scope: "accessibility.read" as const,
+    tool: "accessibility.snapshot",
+    arguments: { target: "local", elementId: "window" },
+  };
+  setPending([pending]);
+  const allow = await screen.findByRole("button", {
+    name: allowLabel(),
+  });
   expect(
-    (openPeer.mock.calls[0][0] as CustomEvent).detail,
-  ).toEqual({ clientId: "paired-device", tab: "settings" });
-  setPending([request("mcp", "local")]);
-  expect(fixture.notify).toHaveBeenCalledOnce();
-  expect(fixture.dismiss).toHaveBeenCalledWith(
-    "automation-approval:request",
+    screen.getByText(
+      "automation.permissions.read.description",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      /Device · automation.permissions.read.title/,
+    ),
+  ).toBeVisible();
+  fireEvent.click(allow);
+  expect(fixture.decide).toHaveBeenCalledWith(
+    pending.id,
+    15,
   );
 });
-it("deduplicates snapshots and dismisses resolved requests and notifications on unmount", () => {
-  const view = render(() => <AutomationApprovalToasts />);
+
+it("keeps one notification across snapshot refreshes and dismisses resolved requests and unmounts", async () => {
+  const view = mount();
   const pending = request();
   setPending([pending]);
+  const allow = await screen.findByRole("button", {
+    name: allowLabel(),
+  });
   setPending([{ ...pending }]);
-  expect(fixture.notify).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("button", { name: allowLabel() }),
+  ).toBe(allow);
   setPending([]);
-  expect(fixture.dismiss).toHaveBeenCalledWith(
-    "automation-approval:request",
-  );
-  setPending([request("peer", "next")]);
+  fireEvent.click(allow);
+  expect(fixture.decide).not.toHaveBeenCalled();
+  expect(
+    toast
+      .getToasts()
+      .some(
+        (t) => t.id === `automation-approval:${pending.id}`,
+      ),
+  ).toBe(false);
+  const next = request();
+  setPending([next]);
   view.unmount();
-  expect(fixture.dismiss).toHaveBeenCalledWith(
-    "automation-approval:next",
+  expect(
+    toast
+      .getToasts()
+      .some(
+        (t) => t.id === `automation-approval:${next.id}`,
+      ),
+  ).toBe(false);
+});
+
+it("retries a failed decision and prevents duplicate or conflicting answers while pending", async () => {
+  fixture.decide.mockRejectedValueOnce(
+    new Error("native unavailable"),
+  );
+  mount();
+  const pending = request();
+  setPending([pending]);
+  const allow = await screen.findByRole("button", {
+    name: allowLabel(),
+  });
+  fireEvent.click(allow);
+  expect(
+    await screen.findByRole("alert"),
+  ).toHaveTextContent("automation.approval_failed");
+  let finish!: () => void;
+  fixture.decide.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  fireEvent.click(allow);
+  expect(allow).toBeDisabled();
+  const deny = screen.getByRole("button", {
+    name: "automation.deny",
+  });
+  expect(deny).toBeDisabled();
+  fireEvent.click(allow);
+  fireEvent.click(deny);
+  expect(fixture.decide).toHaveBeenCalledTimes(2);
+  finish();
+  await waitFor(() =>
+    expect(
+      toast
+        .getToasts()
+        .some(
+          (t) =>
+            t.id === `automation-approval:${pending.id}`,
+        ),
+    ).toBe(false),
   );
 });
-it("ignores stale, expired and disconnected peer actions using shared device access checks", () => {
-  render(() => <AutomationApprovalToasts />);
+
+it.each(["approve", "decline"])(
+  "handles the native %s action once with the request deadline",
+  async (action) => {
+    const view = mount({ visible: false, native: true });
+    const pending = request();
+    setPending([pending]);
+    await waitFor(() =>
+      expect(view.show).toHaveBeenCalledOnce(),
+    );
+    expect(
+      screen.queryByRole("button", { name: allowLabel() }),
+    ).toBeNull();
+    expect(view.show.mock.calls[0][0]).toMatchObject({
+      expiresAt: pending.expiresAt,
+      body: "Device · automation.permissions.terminal.title",
+      actions: [
+        { id: "approve", title: allowLabel() },
+        { id: "decline", title: "automation.deny" },
+      ],
+    });
+    expect(
+      JSON.stringify(view.show.mock.calls[0][0]),
+    ).not.toContain("private-detail");
+    view.respond(action);
+    view.respond(action);
+    await waitFor(() =>
+      expect(fixture.decide).toHaveBeenCalledWith(
+        pending.id,
+        action === "approve" ? 15 : 0,
+      ),
+    );
+    expect(fixture.decide).toHaveBeenCalledOnce();
+  },
+);
+
+it("opens a private native notice into the existing in-app approval without granting access", async () => {
+  fixture.preview = false;
+  const view = mount({ visible: false, native: true });
   setPending([request()]);
-  const stale = review();
-  setPending([]);
-  stale();
-  setPending([{ ...request(), expiresAt: Date.now() - 1 }]);
-  review()();
-  setPending([request("peer", "disconnected")]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  expect(view.show.mock.calls[0][0].body).toBe(
+    "automation.requests",
+  );
+  view.respond("open");
+  view.respond("open");
+  expect(view.showApplication).toHaveBeenCalledOnce();
+  await screen.findByRole("button", { name: allowLabel() });
+  expect(fixture.decide).not.toHaveBeenCalled();
+  expect(view.show).toHaveBeenCalledOnce();
+});
+
+it("allows a failed native decision to be retried in-app without replaying native callbacks", async () => {
+  fixture.decide.mockRejectedValueOnce(
+    new Error("native unavailable"),
+  );
+  const view = mount({ visible: false, native: true });
+  const pending = request();
+  setPending([pending]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  view.respond("approve");
+  view.respond("approve");
+  await waitFor(() =>
+    expect(
+      screen.getByText("automation.approval_failed"),
+    ).toBeInTheDocument(),
+  );
+  expect(fixture.decide).toHaveBeenCalledOnce();
+  view.setVisible(true);
+  const allow = await screen.findByRole("button", {
+    name: allowLabel(),
+  });
+  view.respond("approve");
+  expect(fixture.decide).toHaveBeenCalledOnce();
+  fireEvent.click(allow);
+  await waitFor(() =>
+    expect(fixture.decide).toHaveBeenCalledTimes(2),
+  );
+  expect(fixture.decide).toHaveBeenLastCalledWith(
+    pending.id,
+    15,
+  );
+});
+
+it("keeps foreground approval available when system notifications are disabled", async () => {
+  const view = mount({
+    visible: false,
+    native: true,
+    enabled: false,
+  });
+  setPending([request()]);
+  expect(view.show).not.toHaveBeenCalled();
+  view.setVisible(true);
+  await screen.findByRole("button", { name: allowLabel() });
+});
+
+it.each([
+  "expired",
+  "resolved",
+  "untrusted",
+  "disabled",
+  "closed",
+  "reconnected",
+])(
+  "ignores stale native answers after the request is %s",
+  async (reason) => {
+    const view = mount({ visible: false, native: true });
+    const pending = request();
+    setPending([pending]);
+    await waitFor(() =>
+      expect(view.show).toHaveBeenCalledOnce(),
+    );
+    if (reason === "expired")
+      vi.spyOn(Date, "now").mockReturnValue(
+        pending.expiresAt + 1,
+      );
+    if (reason === "resolved") setPending([]);
+    if (reason === "untrusted")
+      fixture.canReceive.mockReturnValue(false);
+    if (reason === "disabled") fixture.enabled = false;
+    if (reason === "closed") fixture.ready = false;
+    if (reason === "reconnected")
+      setPending([
+        {
+          ...pending,
+          principal: {
+            ...pending.principal,
+            generation: "connection-2",
+          },
+        },
+      ]);
+    view.respond("approve");
+    expect(fixture.decide).not.toHaveBeenCalled();
+    view.service.reconcile();
+    await waitFor(() =>
+      expect(view.dismiss).toHaveBeenCalled(),
+    );
+  },
+);
+
+it("does not prompt for local tokens, unverified peers or already expired requests", () => {
+  const view = mount({ visible: false, native: true });
+  setPending([request("mcp")]);
   fixture.canReceive.mockReturnValue(false);
-  review()();
-  expect(openPeer).not.toHaveBeenCalled();
+  setPending([request()]);
+  fixture.canReceive.mockReturnValue(true);
+  setPending([{ ...request(), expiresAt: Date.now() - 1 }]);
+  expect(view.show).not.toHaveBeenCalled();
+  expect(fixture.decide).not.toHaveBeenCalled();
 });

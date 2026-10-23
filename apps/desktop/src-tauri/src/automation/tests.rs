@@ -510,12 +510,63 @@ async fn old_principal_and_closed_page_cannot_execute() {
 }
 #[tokio::test]
 async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
+    for legacy in [false, true] {
+        for bearer in [false, true] {
+            check_http_authorization(legacy, bearer).await;
+        }
+    }
+}
+async fn check_http_authorization(legacy: bool, bearer: bool) {
     let (service, _) = fixture();
+    let saved = service
+        .create_client("epoch", "Header test".into(), None)
+        .unwrap();
+    let id = saved["id"].as_str().unwrap();
+    let token = if legacy {
+        let token = "0123456789abcdef".repeat(4);
+        service
+            .state
+            .lock()
+            .unwrap()
+            .registry
+            .clients
+            .get_mut(id)
+            .unwrap()
+            .token_hash = registry::digest(&token);
+        token
+    } else {
+        saved["token"].as_str().unwrap().to_owned()
+    };
+    let authorization = if bearer {
+        format!("Bearer {token}")
+    } else {
+        token.clone()
+    };
     http::start(service.clone(), "epoch".into()).await.unwrap();
     let url = service.state.lock().unwrap().endpoint.clone();
     let _ = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
     let request = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}});
+    for invalid in [
+        String::new(),
+        "wrong-token".into(),
+        "Bearer wrong-token".into(),
+        format!("Basic {token}"),
+        format!("Bearer Bearer {token}"),
+        format!("{token} extra"),
+    ] {
+        assert_eq!(
+            client
+                .post(&url)
+                .header("Authorization", invalid)
+                .json(&request)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+    }
     assert_eq!(
         client
             .post(&url)
@@ -529,7 +580,7 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
     assert_eq!(
         client
             .post(&url)
-            .bearer_auth("test-token")
+            .header("Authorization", &authorization)
             .header("Origin", "https://evil.test")
             .json(&request)
             .send()
@@ -541,7 +592,7 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
     assert_eq!(
         client
             .post(&url)
-            .bearer_auth("test-token")
+            .header("Authorization", &authorization)
             .header("Host", "evil.test")
             .json(&request)
             .send()
@@ -552,7 +603,7 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
     );
     let response = client
         .post(&url)
-        .bearer_auth("test-token")
+        .header("Authorization", &authorization)
         .header("Accept", "application/json, text/event-stream")
         .json(&request)
         .send()
@@ -562,7 +613,7 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
     let list = json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}});
     let response = client
         .post(&url)
-        .bearer_auth("test-token")
+        .header("Authorization", &authorization)
         .header("Accept", "application/json, text/event-stream")
         .header("MCP-Protocol-Version", "2025-11-25")
         .json(&list)
@@ -582,13 +633,13 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
         .unwrap()
         .registry
         .clients
-        .get_mut("client")
+        .get_mut(id)
         .unwrap()
         .expires_at = Some(now() - 1);
     assert_eq!(
         client
             .post(&url)
-            .bearer_auth("test-token")
+            .header("Authorization", &authorization)
             .json(&list)
             .send()
             .await
@@ -597,13 +648,13 @@ async fn real_http_requires_credentials_origin_and_host_and_serves_catalog() {
         401
     );
     service
-        .update_client("epoch", "client", "Test".into(), None)
+        .update_client("epoch", id, "Test".into(), None)
         .unwrap();
-    service.remove_client("epoch", "client").unwrap();
+    service.remove_client("epoch", id).unwrap();
     assert_eq!(
         client
             .post(&url)
-            .bearer_auth("test-token")
+            .header("Authorization", &authorization)
             .json(&list)
             .send()
             .await

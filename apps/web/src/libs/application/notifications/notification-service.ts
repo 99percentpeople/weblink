@@ -32,6 +32,8 @@ export interface NotificationIntent {
   present?(): InAppNotification | undefined;
   /** Bring the app forward and reuse present() when the system notice body is clicked. */
   openInApp?(): void | Promise<void>;
+  /** Keep a failed native answer available for an explicit in-app retry; never replay the action. */
+  retryInAppOnError?: boolean;
   respond(action: NotificationAction): Promise<void>;
 }
 
@@ -228,8 +230,8 @@ export class NotificationService {
   }
   dismiss(id: string): void {
     const delivery = this.deliveries.get(id);
+    if (delivery) delivery.revision++;
     if (delivery && delivery.state !== "dismissed") {
-      delivery.revision++;
       delivery.state = "dismissed";
       delivery.presentation?.dismiss();
       delivery.presentation = undefined;
@@ -324,10 +326,19 @@ export class NotificationService {
       return;
     }
     this.dismiss(action.id); // Consume before awaiting; duplicate callbacks must be harmless.
+    const revision = delivery.revision;
     try {
       await intent.respond(action);
     } catch (error) {
       this.onError(error);
+      if (
+        intent.retryInAppOnError &&
+        delivery.revision === revision &&
+        this.current(intent, true)
+      ) {
+        delivery.state = "waiting";
+        this.present(delivery);
+      }
     }
   }
   clear(): void {

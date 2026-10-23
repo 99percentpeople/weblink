@@ -1546,6 +1546,8 @@
     "unsupported": "WebMCP is unavailable in this browser and cannot be enabled.",
     "export": "Export diagnostics",
     "requests": "Approval requests",
+    "allow_minutes": "Allow for {{minutes}} minutes",
+    "approval_failed": "Could not respond to the authorization request. Please retry.",
     "no_requests": "No pending requests.",
     "target": "Target",
     "shell_warning": "This grants arbitrary Shell execution as your OS account for the selected duration. Commands can change files and system state; revocation cannot undo completed changes.",

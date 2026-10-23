@@ -10,7 +10,12 @@ fn screenshot_catalog_and_native_options_accept_bounded_desktop_crops() {
     assert_eq!((options.max_width, options.max_height), (2048, 1200));
     assert_eq!(options.rect.unwrap().left, -1800);
     let defaults = screenshot_options(&json!({"target":"local","sourceId":"monitor"})).unwrap();
-    assert_eq!((defaults.max_width, defaults.max_height), (1600, 1600));
+    assert_eq!((defaults.max_width, defaults.max_height), (1024, 1024));
+    let properties = &catalog::find("control.screenshot").unwrap()["inputSchema"]["properties"];
+    assert_eq!(properties["maxWidth"]["default"], defaults.max_width);
+    assert_eq!(properties["maxHeight"]["default"], defaults.max_height);
+    let partial = screenshot_options(&json!({"maxWidth":2048})).unwrap();
+    assert_eq!((partial.max_width, partial.max_height), (2048, 1024));
     for extra in [
         json!({"maxWidth":0}),
         json!({"maxWidth":2049}),

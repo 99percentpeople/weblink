@@ -102,6 +102,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn notification_consent_preserves_duration_without_changing_saved_policies() {
+        for minutes in [5, 15, 60] {
+            let (service, principal) = fixture();
+            let answer = pending(&service, &principal, "review", "shell.execute", "local");
+            let before = now();
+            service.decide("epoch", "review", minutes).unwrap();
+            assert!(answer.await.unwrap());
+            let mut s = service.state.lock().unwrap();
+            let grant = s.grants.values().next().unwrap();
+            let expires = grant.expires_at.unwrap();
+            let duration = u64::from(minutes) * 60_000;
+            assert!((before + duration..=now() + duration).contains(&expires));
+            assert!(Service::grant_live(&s, grant));
+            assert!(s.peer_policies.is_empty());
+            assert!(
+                Service::peer_decision(&s, &principal, "shell.execute") == policy::Decision::Ask
+            );
+            let id = grant.id.clone();
+            s.grants.get_mut(&id).unwrap().expires_at = Some(now() - 1);
+            drop(s);
+            service.expire();
+            assert!(service.state.lock().unwrap().grants.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_device_policy_revokes_temporary_consent_without_global_pause() {
+        for decision in [policy::Decision::Allow, policy::Decision::Deny] {
+            let (service, principal) = fixture();
+            let answer = pending(&service, &principal, "review", "shell.execute", "local");
+            service.decide("epoch", "review", 15).unwrap();
+            assert!(answer.await.unwrap());
+            let id = service
+                .state
+                .lock()
+                .unwrap()
+                .grants
+                .keys()
+                .next()
+                .unwrap()
+                .clone();
+            service
+                .set_peer_policy(
+                    "epoch",
+                    &peers::Identity::from(&principal),
+                    HashMap::from([("shell.execute".into(), decision)]),
+                )
+                .unwrap();
+            let mut s = service.state.lock().unwrap();
+            assert!(!s.grants.contains_key(&id));
+            assert!(!s.policies_suspended);
+            assert!(!s.mcp_suspended);
+            Service::policy_grant(&mut s, &principal, "shell.execute");
+            assert_eq!(
+                s.grants.len(),
+                usize::from(decision == policy::Decision::Allow)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn emergency_stop_clears_notification_reviews_and_temporary_consent() {
+        let (service, principal) = fixture();
+        let approved = pending(&service, &principal, "approved", "shell.execute", "local");
+        service.decide("epoch", "approved", 15).unwrap();
+        assert!(approved.await.unwrap());
+        let waiting = pending(&service, &principal, "waiting", "input.control", "local");
+        service.emergency_observer()();
+        service.expire();
+        assert!(waiting.await.is_err());
+        assert_eq!(
+            service.decide("epoch", "waiting", 15).unwrap_err(),
+            "REQUEST_EXPIRED"
+        );
+        let s = service.state.lock().unwrap();
+        assert!(s.grants.is_empty());
+        assert!(s.pending.is_empty());
+        assert!(s.policies_suspended);
+        assert!(s.mcp_suspended);
+    }
+
+    #[tokio::test]
     async fn grouped_consent_keeps_other_principals_targets_and_groups_pending() {
         let (service, principal) = fixture();
         let first = pending(&service, &principal, "first", "diagnostics.read", "local");

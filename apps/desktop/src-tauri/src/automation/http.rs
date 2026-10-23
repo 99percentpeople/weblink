@@ -130,7 +130,7 @@ async fn authorize(
         .headers()
         .get("authorization")
         .and_then(|h| h.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v.strip_prefix("Bearer ").unwrap_or(v))
         .and_then(|t| auth.service.authenticate(t));
     let Some(principal) = principal else {
         return StatusCode::UNAUTHORIZED.into_response();

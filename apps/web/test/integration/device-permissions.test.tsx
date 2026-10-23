@@ -190,6 +190,97 @@ function renderDevice(desktop = true) {
     </AppStateContext.Provider>
   ));
 }
+it.each(["allow", "deny", "ask"] as const)(
+  "saves %s as the device policy without request or grant lists",
+  async (decision) => {
+    fixture.get = () => ({ state: "trusted" });
+    resetClientConfig("peer");
+    setClientConfig("peer", {
+      automation: {
+        "shell.execute":
+          decision === "ask" ? "allow" : "ask",
+      },
+    });
+    const decide = vi.fn();
+    const revoke = vi.fn();
+    const principal = {
+      id: "peer",
+      kind: "peer",
+      label: "Peer",
+    };
+    render(() => (
+      <AppStateContext.Provider
+        value={
+          {
+            automation: {
+              desktop: true,
+              enabled: () => true,
+              decide,
+              revoke,
+              snapshot: () => ({
+                policiesSuspended: false,
+                pending: [
+                  {
+                    id: "review",
+                    principal,
+                    scope: "shell.execute",
+                    tool: "commands.start",
+                    arguments: { target: "local" },
+                  },
+                ],
+                grants: [
+                  {
+                    id: "grant",
+                    principal,
+                    scopes: ["shell.execute"],
+                    target: "local",
+                    expiresAt: Date.now() + 60000,
+                  },
+                ],
+              }),
+            },
+          } as unknown as AppStateContextProps
+        }
+      >
+        <ClientPermissions clientId="peer" />
+      </AppStateContext.Provider>
+    ));
+    expect(
+      screen.queryByText("automation.requests"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("automation.grants"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "automation.revoke",
+      }),
+    ).not.toBeInTheDocument();
+    const permission = () =>
+      screen.getByRole("button", {
+        name: (name) =>
+          name.startsWith(
+            "automation.permissions.terminal.title",
+          ),
+      });
+    await userEvent.click(permission());
+    await userEvent.click(
+      screen.getByRole("option", {
+        name:
+          decision === "allow"
+            ? "setting.permissions.allow_permanently"
+            : `setting.permissions.${decision}`,
+      }),
+    );
+    expect(
+      appState.options.clientConfigs.peer?.automation?.[
+        "shell.execute"
+      ],
+    ).toBe(decision);
+    expect(decide).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+  },
+);
 it("saves per-device scope policies immediately, resets them, and hides them on the Web controller", async () => {
   fixture.get = () => ({ state: "trusted" });
   resetClientConfig("peer");

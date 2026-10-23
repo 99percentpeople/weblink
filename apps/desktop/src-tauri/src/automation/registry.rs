@@ -1,5 +1,6 @@
 //! Local MCP credentials only. Remote devices have a separate identity and policy.
 use super::*;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sha2::{Digest, Sha256};
 use std::{
     io::Write,
@@ -172,17 +173,16 @@ impl Service {
             return Err("INVALID_ARGUMENTS".into());
         }
         let expires_at = expiration(expires_at)?;
+        // Encode 256 random bits compactly; the prefix is only a recognizable label.
+        let mut secret = [0u8; 32];
+        getrandom::fill(&mut secret).map_err(|_| "TOKEN_GENERATION_FAILED")?;
+        let token = format!("sk-{}", URL_SAFE_NO_PAD.encode(secret));
         let id = uuid::Uuid::new_v4().to_string();
-        let token = format!(
-            "{}{}",
-            uuid::Uuid::new_v4().simple(),
-            uuid::Uuid::new_v4().simple()
-        );
         let client = Client {
             id: id.clone(),
             label,
             token_hash: digest(&token),
-            prefix: token[..8].into(),
+            prefix: token[..11].into(),
             created_at: now(),
             expires_at,
         };
@@ -263,6 +263,81 @@ mod tests {
         s.mcp_enabled = true;
         s.epoch = "epoch".into();
     }
+    #[test]
+    fn new_credentials_use_compact_sk_tokens_and_authenticate_the_whole_secret() {
+        let service = Service::default();
+        start(&service);
+        let mut tokens = Vec::new();
+        for _ in 0..2 {
+            let saved = service
+                .create_client("epoch", "Agent".into(), None)
+                .unwrap();
+            let token = saved["token"].as_str().unwrap();
+            let payload = token.strip_prefix("sk-").unwrap();
+            assert_eq!(token.len(), 46);
+            assert!(payload
+                .bytes()
+                .all(|v| v.is_ascii_alphanumeric() || v == b'-' || v == b'_'));
+            assert_eq!(URL_SAFE_NO_PAD.decode(payload).unwrap().len(), 32);
+            let id = saved["id"].as_str().unwrap();
+            assert_eq!(service.authenticate(token).unwrap().id, id);
+            assert!(service.authenticate(payload).is_none());
+            let last = if token.ends_with('A') { 'B' } else { 'A' };
+            assert!(service
+                .authenticate(&format!("{}{last}", &token[..45]))
+                .is_none());
+            let summary = service.state.lock().unwrap().registry.clients[id].summary();
+            assert_eq!(summary["prefix"], &token[..11]);
+            assert!(summary.get("token").is_none());
+            assert!(!summary.to_string().contains(token));
+            tokens.push(token.to_owned());
+        }
+        assert_ne!(tokens[0], tokens[1]);
+    }
+
+    #[test]
+    fn legacy_hex_credentials_coexist_with_new_tokens_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tokens.json");
+        let legacy = "0123456789abcdef".repeat(4);
+        let mut registry = Registry::default();
+        registry.clients.insert(
+            "legacy".into(),
+            Client {
+                id: "legacy".into(),
+                label: "Existing agent".into(),
+                token_hash: digest(&legacy),
+                prefix: legacy[..8].into(),
+                created_at: now(),
+                expires_at: None,
+            },
+        );
+        write(&path, &registry).unwrap();
+        let service = Service::default();
+        service.load_registry(path.clone()).unwrap();
+        start(&service);
+        assert_eq!(service.authenticate(&legacy).unwrap().id, "legacy");
+        let saved = service
+            .create_client("epoch", "New agent".into(), None)
+            .unwrap();
+        let token = saved["token"].as_str().unwrap();
+        assert!(token.starts_with("sk-"));
+        service.shutdown();
+
+        let next = Service::default();
+        next.load_registry(path.clone()).unwrap();
+        start(&next);
+        assert_eq!(next.authenticate(&legacy).unwrap().id, "legacy");
+        assert_eq!(
+            next.authenticate(token).unwrap().id,
+            saved["id"].as_str().unwrap()
+        );
+        assert_eq!(read(&path).unwrap().clients["legacy"].prefix, &legacy[..8]);
+        let persisted = std::fs::read_to_string(&path).unwrap();
+        assert!(!persisted.contains(&legacy));
+        assert!(!persisted.contains(token));
+    }
+
     #[tokio::test]
     async fn restart_reuses_endpoint_and_credentials() {
         let dir = tempfile::tempdir().unwrap();

@@ -76,7 +76,9 @@ pub(crate) fn encode(
         let mut encoder = png::Encoder::new(&mut bytes, w, h);
         encoder.set_color(png::ColorType::Rgb);
         encoder.set_depth(png::BitDepth::Eight);
-        encoder.set_compression(png::Compression::Fast);
+        // One-shot MCP images favor transfer size over the thumbnail encoder's speed.
+        // Balanced uses adaptive row filtering and full DEFLATE, retaining every pixel.
+        encoder.set_compression(png::Compression::Balanced);
         let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
         writer.write_image_data(&rgb).map_err(|e| e.to_string())?;
     }

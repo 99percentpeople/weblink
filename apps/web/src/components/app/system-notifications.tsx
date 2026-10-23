@@ -31,6 +31,7 @@ import { createPreviewDialog } from "@/components/dialogs/preview-dialog";
 import { createCacheManager } from "@/libs/application/cache-service";
 import { fileOpenLabel } from "@/libs/utils/open-file";
 import { RemoteControlStatus } from "./remote-control-status";
+import { AutomationApprovalToasts } from "./automation-approval-toasts";
 
 export function SystemNotificationBridge(
   props: ParentProps,
@@ -334,6 +335,10 @@ export function SystemNotificationBridge(
   return (
     <NotificationsContext.Provider value={service}>
       {props.children}
+      <AutomationApprovalToasts
+        notifications={service}
+        showApplication={() => platform.application?.show()}
+      />
       <RemoteControlStatus
         notifications={service}
         showApplication={() => {

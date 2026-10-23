@@ -2,7 +2,9 @@
 use crate::{geometry::PixelRect, Result};
 use serde::Deserialize;
 
-pub const DEFAULT_MAX_DIMENSION: u32 = 1600;
+// Even an incompressible RGB image at the default square size fits the PNG budget.
+// Use a window/desktop crop for detail instead of enlarging every full-screen image.
+pub const DEFAULT_MAX_DIMENSION: u32 = 1024;
 pub const MAX_DIMENSION: u32 = 2048;
 pub const MAX_PNG_BYTES: usize = 4 * 1024 * 1024;
 

@@ -1,4 +1,3 @@
-import AutomationPermissions from "@/components/settings/automation-permissions";
 import { useAppState } from "@/libs/state/app-state-context";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
@@ -27,7 +26,11 @@ import {
   vi,
 } from "vitest";
 import AutomationSettings from "@/components/settings/automation-settings";
+import { copyText } from "@/libs/utils/copy-text";
 import type { AutomationRuntime } from "@/libs/state/create-automation";
+vi.mock("@/libs/utils/copy-text", () => ({
+  copyText: vi.fn(async () => true),
+}));
 const fixture = vi.hoisted(() => ({
   scope: "shell.execute",
   desktop: true,
@@ -263,74 +266,6 @@ it.each([false, true])(
     expect(fixture.configureMcp).toHaveBeenCalledWith(true);
   },
 );
-it("shows a separate privacy explanation for accessibility inspection", () => {
-  fixture.scope = "accessibility.read";
-  render(() => (
-    <AutomationPermissions
-      runtime={useAppState().automation!}
-      peerId="peer"
-    />
-  ));
-  expect(
-    screen.getByText(
-      "automation.permissions.read.description",
-    ),
-  ).toBeVisible();
-  expect(
-    screen.getByText(/automation.permissions.read.title/),
-  ).toBeVisible();
-  expect(
-    screen.getByRole("button", {
-      name: "automation.allow",
-    }),
-  ).toBeEnabled();
-});
-it("approves a paired device request without a second verification code", async () => {
-  render(() => (
-    <AutomationPermissions
-      runtime={useAppState().automation!}
-      peerId="peer"
-    />
-  ));
-  const allow = screen.getByRole("button", {
-    name: "automation.allow",
-  });
-  expect(allow).toBeEnabled();
-  expect(
-    screen.getByText(
-      "automation.permissions.terminal.description",
-    ),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("checkbox"),
-  ).not.toBeInTheDocument();
-  expect(allow).toBeEnabled();
-  fireEvent.click(allow);
-  expect(fixture.decide).toHaveBeenCalledWith(
-    "request",
-    15,
-  );
-});
-it("denies a paired device request without a separate automation stop button", () => {
-  render(() => (
-    <>
-      <AutomationSettings />
-      <AutomationPermissions
-        runtime={useAppState().automation!}
-        peerId="peer"
-      />
-    </>
-  ));
-  fireEvent.click(
-    screen.getByRole("button", { name: "automation.deny" }),
-  );
-  expect(fixture.decide).toHaveBeenCalledWith("request", 0);
-  expect(
-    screen.queryByRole("button", {
-      name: "automation.stop",
-    }),
-  ).not.toBeInTheDocument();
-});
 it("manages local tokens without a second approval list on desktop", () => {
   render(() => <AutomationSettings />);
   expect(
@@ -487,11 +422,12 @@ it("automatically edits and revokes tokens while automation is off", async () =>
     "saved",
   );
 });
-it("creates a token while disabled using the configured fixed endpoint", async () => {
+it("creates and copies a raw authorization header while disabled using the configured endpoint", async () => {
   fixture.mcpEnabled = false;
+  const token = `sk-${"a".repeat(43)}`;
   fixture.client.mockResolvedValueOnce({
     id: "offline",
-    token: "secret-token",
+    token,
     endpoint: "http://127.0.0.1:32100/mcp",
   });
   render(() => <AutomationSettings />);
@@ -512,11 +448,26 @@ it("creates a token while disabled using the configured fixed endpoint", async (
     }),
   );
   const secret = await screen.findByText(
-    /Bearer secret-token/,
+    (_, element) =>
+      element?.tagName === "PRE" &&
+      !!element.textContent?.includes(token),
   );
-  expect(secret.textContent).toContain(
-    "http://127.0.0.1:32100/mcp",
+  const expected = {
+    url: "http://127.0.0.1:32100/mcp",
+    headers: { Authorization: token },
+  };
+  expect(JSON.parse(secret.textContent!)).toEqual(expected);
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "common.action.copy",
+    }),
   );
+  await waitFor(() =>
+    expect(copyText).toHaveBeenCalledOnce(),
+  );
+  expect(
+    JSON.parse(vi.mocked(copyText).mock.calls[0][0]),
+  ).toEqual(expected);
   expect(
     screen.queryByText("automation.token_endpoint_pending"),
   ).not.toBeInTheDocument();
@@ -524,7 +475,11 @@ it("creates a token while disabled using the configured fixed endpoint", async (
     screen.getByRole("button", { name: "automation.hide" }),
   );
   expect(
-    screen.queryByText(/secret-token/),
+    screen.queryByText(
+      (_, element) =>
+        element?.tagName === "PRE" &&
+        !!element.textContent?.includes(token),
+    ),
   ).not.toBeInTheDocument();
 });
 it("automatically saves running listener settings for the next start", async () => {
@@ -823,71 +778,6 @@ it("persists the final valid listener draft when settings close without blur", a
       port: 123,
     }),
   );
-});
-
-it("keeps device approvals isolated from other devices and local MCP clients", () => {
-  const runtime = useAppState().automation!;
-  const snapshot = runtime.snapshot();
-  const request = snapshot.pending[0];
-  runtime.snapshot = () => ({
-    ...snapshot,
-    pending: [
-      {
-        ...request,
-        id: "chosen",
-        principal: {
-          ...request.principal,
-          id: "peer",
-          label: "Chosen device",
-        },
-      },
-      {
-        ...request,
-        id: "other",
-        principal: {
-          ...request.principal,
-          id: "other-peer",
-          label: "Other device",
-        },
-      },
-      {
-        ...request,
-        id: "token",
-        principal: {
-          id: "local-token",
-          label: "Local MCP client",
-          kind: "mcp",
-        },
-      },
-    ],
-  });
-  const view = render(() => (
-    <AutomationPermissions
-      runtime={runtime}
-      peerId="peer"
-    />
-  ));
-  expect(screen.getByText("Chosen device")).toBeVisible();
-  expect(
-    screen.queryByText("Other device"),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByText("Local MCP client"),
-  ).not.toBeInTheDocument();
-  view.unmount();
-  render(() => (
-    <AutomationPermissions
-      runtime={runtime}
-      peerId="other-peer"
-    />
-  ));
-  expect(
-    screen.queryByText("Local MCP client"),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByText("Chosen device"),
-  ).not.toBeInTheDocument();
-  expect(screen.getByText("Other device")).toBeVisible();
 });
 
 it.each([false, true])(

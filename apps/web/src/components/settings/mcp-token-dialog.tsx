@@ -8,7 +8,9 @@ import {
 import type { AutomationRuntime } from "@/libs/state/create-automation";
 import type { McpTokenSummary } from "@weblink/platform";
 import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-solid";
+import { Copy, RotateCcw } from "lucide-solid";
+import { toast } from "solid-sonner";
+import { copyText } from "@/libs/utils/copy-text";
 import {
   DialogBody,
   DialogDescription,
@@ -65,6 +67,7 @@ export default function McpTokenDialog(props: {
     endpoint: string;
   }>();
   const [creating, setCreating] = createSignal(false);
+  const [copying, setCopying] = createSignal(false);
   const [validation, setValidation] = createSignal("");
   const [saved, setSaved] = createSignal(false);
   let dirty = false;
@@ -161,6 +164,35 @@ export default function McpTokenDialog(props: {
   const endpoint = () =>
     props.runtime.snapshot().endpoint ||
     created()?.endpoint;
+  const configuration = () => {
+    const client = created();
+    return client
+      ? JSON.stringify(
+          {
+            url: endpoint() || undefined,
+            headers: {
+              Authorization: client.token,
+            },
+          },
+          null,
+          2,
+        )
+      : "";
+  };
+  const copy = async () => {
+    if (!created() || copying()) return;
+    setCopying(true);
+    try {
+      if (await copyText(configuration()))
+        toast.success(
+          t("common.notification.copy_success"),
+        );
+      else
+        toast.error(t("common.notification.copy_failed"));
+    } finally {
+      setCopying(false);
+    }
+  };
   return (
     <>
       <DialogHeader>
@@ -308,33 +340,20 @@ export default function McpTokenDialog(props: {
             </form>
           }
         >
-          {(client) => (
-            <>
-              <Show when={!endpoint()}>
-                <p
-                  role="status"
-                  class="text-muted-foreground mb-2 text-sm"
-                >
-                  {t("automation.token_endpoint_pending")}
-                </p>
-              </Show>
-              <pre
-                class="bg-muted max-h-64 select-all overflow-auto
-                  whitespace-pre-wrap break-all rounded-md p-3 text-xs"
-              >
-                {JSON.stringify(
-                  {
-                    url: endpoint() || undefined,
-                    headers: {
-                      Authorization: `Bearer ${client().token}`,
-                    },
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
-            </>
-          )}
+          <Show when={!endpoint()}>
+            <p
+              role="status"
+              class="text-muted-foreground mb-2 text-sm"
+            >
+              {t("automation.token_endpoint_pending")}
+            </p>
+          </Show>
+          <pre
+            class="bg-muted max-h-64 select-all overflow-auto
+              whitespace-pre-wrap break-all rounded-md p-3 text-xs"
+          >
+            {configuration()}
+          </pre>
         </Show>
       </DialogBody>
       <DialogFooter>
@@ -352,6 +371,16 @@ export default function McpTokenDialog(props: {
                 : "common.action.cancel",
           )}
         </Button>
+        <Show when={created()}>
+          <Button
+            type="button"
+            disabled={copying()}
+            onClick={() => void copy()}
+          >
+            <Copy class="size-4" />
+            {t("common.action.copy")}
+          </Button>
+        </Show>
         <Show when={!created() && !props.client}>
           <Button
             type="submit"

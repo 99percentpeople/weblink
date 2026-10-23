@@ -33,7 +33,10 @@ to a browser are rejected; OS input and Shell execution require a desktop target
 
 On desktop, create one MCP credential per client in Automation settings. Copy
 the displayed Streamable HTTP URL and Authorization header into the client's
-MCP configuration. The **MCP server** settings configure the listening host and
+MCP configuration. Generated configurations send the token directly as
+`Authorization: sk-...`; `Authorization: Bearer <token>` also remains supported.
+Both header forms accept existing tokens and enforce the same expiry, revocation,
+Host and Origin checks. The **MCP server** settings configure the listening host and
 port. Text fields save automatically on blur, including while MCP is running.
 Listener changes take effect the next time MCP is enabled, preserving
 the current endpoint, calls and grants until then. The UI distinguishes the
@@ -62,7 +65,11 @@ and editing use child dialogs; existing token settings save automatically, while
 creation remains an explicit action that generates a new credential. Restoring
 the default validity sets a 30-day deadline without changing the token name or
 secret. The compact list shows token summaries and actions. The full
-random token is displayed only at creation. Only a SHA-256 hash, a short prefix,
+random token is displayed only at creation. New tokens use `sk-` followed by
+43 unpadded Base64url characters encoding 32 bytes from the OS secure random
+source (46 characters total). Existing 64-character hexadecimal tokens remain
+valid; token authentication checks the complete secret without requiring the
+new prefix. Only a SHA-256 hash, a short display prefix,
 name, creation time and expiration are stored in `mcp-tokens.json` in the local
 app-data directory. Changes are written atomically before becoming active. The
 list, creation, editing and revocation remain available while MCP is disabled.
@@ -150,16 +157,27 @@ this authority. Losing trust resets all scopes to Deny; ordinary disconnection
 and automatic key repair retain the saved policy. The content reception and
 screen sharing switches remain prerequisite gates.
 
-Ask requests and current grants appear in the corresponding device dialog.
-Local MCP tokens remain under Automation, without a second request/grant list,
-and are independent of device policies. Toast review actions open the corresponding
-device settings for a verified peer. Resolved requests dismiss their notifications;
-a stale notification cannot navigate using an unverified claimed device ID.
-Temporary peer approvals last 5, 15, or 60 minutes, with 15 minutes selected initially. They
+Device permission pages contain only the saved policy controls, without request
+or active-grant lists. Ask requests use the shared control-request notification
+service: an actionable in-app notification while visible, or a system notification
+while in the background when enabled. Opening the system notification displays
+the same in-app approval without granting access. System actions allow 15 minutes
+or deny; the in-app duration menu also offers 5 and 60 minutes. The in-app review
+includes the permission description, tool arguments, reported source and configured
+host emergency stop shortcut. System previews omit tool arguments and respect the
+notification preview preference. Resolved requests dismiss their notifications;
+expired, disconnected or unverified requests cannot be approved from stale actions.
+If a system-notification answer fails while its request remains pending, the
+foreground approval remains available for an explicit retry; native callbacks
+are never replayed.
+Local MCP tokens remain under Automation and do not prompt for peer consent.
+Temporary peer approvals last 5, 15, or 60 minutes and do not change saved policies. They
 bind a caller identity, target, permission group and current connection lifetime.
 Consent resolves concurrent requests in that same group only. Explicit legacy
-Deny decisions remain excluded from the grant. Revocation ends the whole timed
-grant. Native execution still checks the exact tool scope. Existing
+Deny decisions remain excluded from the grant. Changing a device's permission
+setting invalidates affected grants immediately; emergency stop remains the shared
+way to end current access without changing saved settings. Native execution still
+checks the exact tool scope. Existing
 remote-control allowlists do not grant automation permissions. In the existing
 remote-device permissions screen, **Always allow** is a persistent remote-control
 policy with no expiry. It is separate from MCP tokens and automation scope grants.
@@ -294,10 +312,10 @@ desktopY = imageY * imageToDesktop.scaleY + imageToDesktop.offsetY
 
 Choose a monitor **or window** `sourceId` from `screen.sources`; a window source
 uses native window capture. This ID is different from an accessibility `elementId`.
-Screenshots default to fitting inside **1600 × 1600** pixels, preserving aspect
+Screenshots default to fitting inside **1024 × 1024** pixels, preserving aspect
 ratio without enlarging smaller sources. Optional `maxWidth` and `maxHeight`
-each accept 1–2048 pixels and independently default to 1600. For example, a
-1920 × 1080 monitor returns 1600 × 900 by default; requesting both limits as
+each accept 1–2048 pixels and independently default to 1024. For example, a
+1920 × 1080 monitor returns 1024 × 576 by default; requesting both limits as
 2048 retains its original resolution. Source-picker previews remain 640 × 360.
 
 Optional `rect: {left, top, width, height}` crops the selected monitor or window
@@ -319,9 +337,7 @@ thumbnail. To inspect a 600 × 400 area on a monitor left of the primary display
       "top": 100,
       "width": 600,
       "height": 400
-    },
-    "maxWidth": 2048,
-    "maxHeight": 2048
+    }
   }
 }
 ```
@@ -330,8 +346,11 @@ The returned `bounds` describe the cropped desktop rectangle; `imageToDesktop`
 includes both its offset and any scaling. Pointer input always remains in
 `desktopPhysicalPixels`: map image points with that transform and use the monitor
 `sourceId`/`geometryRevision` from `control.acquire`, even for a window screenshot.
-PNG output remains limited to 4 MiB so local and peer transports share the same
-budget. `RESULT_TOO_LARGE` requires a smaller region or output dimensions; the
+PNG uses balanced lossless DEFLATE compression with adaptive row filtering.
+The default size keeps even incompressible RGB images below the 4 MiB limit;
+prefer window or rectangle crops for small-text detail. Explicit larger sizes
+share the same 4 MiB budget on local and peer transports.
+`RESULT_TOO_LARGE` requires a smaller region or output dimensions; the
 service does not silently lower the requested resolution or switch to a lossy format.
 
 Pass a mapped screenshot point or a UIA node's physical center to `control.pointer`
