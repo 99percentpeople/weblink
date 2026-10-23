@@ -121,44 +121,61 @@ async function fixture(
 const scan = (volume: VfsVolume) =>
   scanDirectory(volume, new AbortController().signal);
 
-it("recovers original names and bytes from suffixed directory files with an empty metadata database", async () => {
-  const f = await fixture();
-  for (const name of [
-    "nppc64_12.dll",
-    "IObit Unlocker.lnk",
-    "普通文件.txt",
-  ]) {
-    const uploaded = await f.upload(
-      name,
-      `content:${name}`,
+it.each(["en-US", "zh-CN"])(
+  "recovers original names and bytes with %s directory ordering and an empty metadata database",
+  async (locale) => {
+    const f = await fixture();
+    const compare = new Intl.Collator(locale).compare;
+    vi.spyOn(f.volume, "list").mockImplementation(
+      async (path) =>
+        (await f.backing.list(path)).sort((a, b) =>
+          compare(a.name, b.name),
+        ),
     );
-    const identity = await uploaded.storageIdentity!();
-    const restarted = service(f.volume);
-    const restored = await cache(restarted, identity, true);
-    const file = (await restored.getInfo())!.file!;
-    expect(file.name).toBe(name);
-    expect(await file.text()).toBe(`content:${name}`);
-    expect(await restarted.database.all("files")).toEqual(
-      [],
-    );
+    for (const name of [
+      "nppc64_12.dll",
+      "IObit Unlocker.lnk",
+      "普通文件.txt",
+    ]) {
+      const uploaded = await f.upload(
+        name,
+        `content:${name}`,
+      );
+      const identity = await uploaded.storageIdentity!();
+      const restarted = service(f.volume);
+      const restored = await cache(
+        restarted,
+        identity,
+        true,
+      );
+      const file = (await restored.getInfo())!.file!;
+      expect(file.name).toBe(name);
+      expect(await file.text()).toBe(`content:${name}`);
+      expect(await restarted.database.all("files")).toEqual(
+        [],
+      );
+      expect(
+        await restarted.database.all("checkpoints"),
+      ).toEqual([]);
+    }
+    const entries = await scan(f.volume);
+    // Scanning preserves the volume's enumeration order. Recovery must retain
+    // every path/name pair regardless of the host's collation rules.
+    expect(entries).toHaveLength(3);
     expect(
-      await restarted.database.all("checkpoints"),
-    ).toEqual([]);
-  }
-  const entries = await scan(f.volume);
-  expect(
-    entries.map((entry) => entry.info!.fileName),
-  ).toEqual([
-    "IObit Unlocker.lnk",
-    "nppc64_12.dll",
-    "普通文件.txt",
-  ]);
-  expect(entries.map((entry) => entry.path)).toEqual([
-    "IObit Unlocker.lnk.weblink",
-    "nppc64_12.dll.weblink",
-    "普通文件.txt",
-  ]);
-});
+      Object.fromEntries(
+        entries.map((entry) => [
+          entry.path,
+          entry.info!.fileName,
+        ]),
+      ),
+    ).toEqual({
+      "IObit Unlocker.lnk.weblink": "IObit Unlocker.lnk",
+      "nppc64_12.dll.weblink": "nppc64_12.dll",
+      "普通文件.txt": "普通文件.txt",
+    });
+  },
+);
 
 it("preserves existing bytes and allocates distinct encoded names for concurrent imports", async () => {
   const f = await fixture();
