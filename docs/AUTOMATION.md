@@ -167,8 +167,8 @@ Device permission pages contain only the saved policy controls, without request
 or active-grant lists. Ask requests use the shared control-request notification
 service: an actionable in-app notification while visible, or a system notification
 while in the background when enabled. Opening the system notification displays
-the same in-app approval without granting access. System actions allow 15 minutes
-or deny; the in-app duration menu also offers 5 and 60 minutes. The in-app review
+the same in-app approval without granting access. Both surfaces offer Allow for
+this session or Deny, without a duration selector. The in-app review
 includes the permission description, tool arguments, reported source and configured
 host emergency stop shortcut. System previews omit tool arguments and respect the
 notification preview preference. Resolved requests dismiss their notifications;
@@ -177,7 +177,7 @@ If a system-notification answer fails while its request remains pending, the
 foreground approval remains available for an explicit retry; native callbacks
 are never replayed.
 Local MCP tokens remain under Automation and do not prompt for peer consent.
-Temporary peer approvals last 5, 15, or 60 minutes and do not change saved policies. They
+Peer approvals last until the current connection ends and do not change saved policies. They
 bind a caller identity, target, permission group and current connection lifetime.
 Consent resolves concurrent requests in that same group only. Explicit legacy
 Deny decisions remain excluded from the grant. Changing a device's permission

@@ -246,7 +246,8 @@ impl Service {
                     && g.scopes.iter().all(|scope| {
                         let decision = Self::peer_decision(s, &g.principal, scope);
                         decision != policy::Decision::Deny
-                            && (g.expires_at.is_some() || decision == policy::Decision::Allow)
+                            && (g.source == GrantSource::Consent
+                                || decision == policy::Decision::Allow)
                     })
             }
     }
@@ -550,6 +551,11 @@ mod tests {
                     principal: p.clone(),
                     scopes: vec!["shell.execute".into()],
                     expires_at: Some(now() + 60000),
+                    source: if p.kind == "mcp" {
+                        GrantSource::Token
+                    } else {
+                        GrantSource::Consent
+                    },
                 },
             );
             s.pending.insert(
@@ -598,6 +604,11 @@ mod tests {
                     principal: p.clone(),
                     scopes: vec!["shell.execute".into()],
                     expires_at: Some(now() + 60000),
+                    source: if p.kind == "mcp" {
+                        GrantSource::Token
+                    } else {
+                        GrantSource::Consent
+                    },
                 },
             );
             s.pending.insert(
@@ -670,6 +681,11 @@ mod tests {
                         principal: p.clone(),
                         scopes: vec!["diagnostics.read".into()],
                         expires_at: Some(now() + 60000),
+                        source: if p.kind == "mcp" {
+                            GrantSource::Token
+                        } else {
+                            GrantSource::Consent
+                        },
                     },
                 );
             }

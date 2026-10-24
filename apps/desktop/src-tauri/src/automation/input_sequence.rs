@@ -312,6 +312,7 @@ mod tests {
                 principal: p.clone(),
                 scopes: vec!["input.control".into()],
                 expires_at: Some(now() + 60000),
+                source: GrantSource::Consent,
             },
         );
         s.tickets.insert(

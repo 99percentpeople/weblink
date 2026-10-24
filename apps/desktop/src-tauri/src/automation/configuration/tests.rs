@@ -31,6 +31,11 @@ fn install(
             principal: principal.clone(),
             scopes: vec!["diagnostics.read".into()],
             expires_at: Some(now() + 60_000),
+            source: if principal.kind == "mcp" {
+                GrantSource::Token
+            } else {
+                GrantSource::Consent
+            },
         },
     );
     s.requests.insert(

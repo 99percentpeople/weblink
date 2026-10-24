@@ -78,7 +78,7 @@ export interface NativeAutomation {
   decide(
     epoch: string,
     id: string,
-    minutes: number,
+    accepted: boolean,
   ): Promise<void>;
   revoke(epoch: string, id?: string): Promise<void>;
   peer(

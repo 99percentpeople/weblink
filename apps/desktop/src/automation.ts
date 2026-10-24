@@ -63,8 +63,8 @@ export const nativeAutomation: NativeAutomation = {
       epoch,
       id,
     }),
-  decide: (epoch, id, minutes) =>
-    invoke("automation_decide", { epoch, id, minutes }),
+  decide: (epoch, id, accepted) =>
+    invoke("automation_decide", { epoch, id, accepted }),
   revoke: (epoch, id) =>
     invoke("automation_revoke", { epoch, id }),
   peer: (epoch, principal, label) =>

@@ -73,6 +73,7 @@ mod tests {
                     principal: p.clone(),
                     scopes: vec!["shell.execute".into()],
                     expires_at: Some(now() + 60000),
+                    source: GrantSource::Consent,
                 },
             );
             #[cfg(unix)]

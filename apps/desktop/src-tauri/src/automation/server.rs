@@ -381,6 +381,7 @@ mod tests {
                 principal,
                 scopes: vec!["diagnostics.read".into()],
                 expires_at: Some(now() + 60000),
+                source: GrantSource::Token,
             },
         );
         service

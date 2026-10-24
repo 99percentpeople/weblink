@@ -258,7 +258,7 @@ async fn reported_mcp_source_does_not_bypass_destination_peer_permissions() {
     })
     .await
     .unwrap();
-    service.decide("epoch", "request", 0).unwrap();
+    service.decide("epoch", "request", false).unwrap();
     assert_eq!(task.await.unwrap()["error"]["code"], "PERMISSION_DENIED");
     service
         .set_peer_policy(

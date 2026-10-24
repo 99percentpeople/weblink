@@ -901,9 +901,9 @@ export function createAutomation(
               ?.name ?? s.targetClientId,
         }));
     },
-    decide: async (id: string, minutes: number) => {
+    decide: async (id: string, accepted: boolean) => {
       if (native) {
-        await native.decide(epoch, id, minutes);
+        await native.decide(epoch, id, accepted);
         await readNativeSnapshot();
       }
     },

@@ -43,8 +43,7 @@ export function AutomationApprovalToasts(props: {
               ),
           )
       : [];
-  const allowLabel = (minutes: number) =>
-    t("automation.allow_minutes", { minutes });
+  const allowLabel = () => t("automation.allow_session");
   createEffect(
     mapArray(
       () => pending().map((request) => request.id),
@@ -71,11 +70,11 @@ export function AutomationApprovalToasts(props: {
         const id = `automation-approval:${requestId}`;
         let answering = false;
         let answered = false;
-        const decide = async (minutes: number) => {
+        const decide = async (accepted: boolean) => {
           if (answering || answered || !isCurrent()) return;
           answering = true;
           try {
-            await automation!.decide(requestId, minutes);
+            await automation!.decide(requestId, accepted);
             answered = true;
           } finally {
             answering = false;
@@ -133,7 +132,7 @@ export function AutomationApprovalToasts(props: {
                   : t("automation.requests"),
                 expiresAt: request.expiresAt,
                 actions: [
-                  { id: "approve", title: allowLabel(15) },
+                  { id: "approve", title: allowLabel() },
                   {
                     id: "decline",
                     title: t("automation.deny"),
@@ -148,9 +147,7 @@ export function AutomationApprovalToasts(props: {
                 )
                   return;
                 try {
-                  await decide(
-                    action.action === "approve" ? 15 : 0,
-                  );
+                  await decide(action.action === "approve");
                 } catch (error) {
                   toast.error(
                     t("automation.approval_failed"),
@@ -163,17 +160,10 @@ export function AutomationApprovalToasts(props: {
                   id,
                   title: () => t("automation.requests"),
                   description,
-                  acceptLabel: () => allowLabel(15),
+                  acceptLabel: allowLabel,
                   declineLabel: () => t("automation.deny"),
                   isCurrent,
-                  respond: (accepted) =>
-                    decide(accepted ? 15 : 0),
-                  choicesLabel: () =>
-                    t("automation.duration"),
-                  choices: [5, 60].map((minutes) => ({
-                    label: () => allowLabel(minutes),
-                    respond: () => decide(minutes),
-                  })),
+                  respond: decide,
                   errorMessage: () =>
                     t("automation.approval_failed"),
                 }),

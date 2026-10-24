@@ -55,6 +55,12 @@ pub struct Call {
     pub name: String,
     pub arguments: Value,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GrantSource {
+    Consent,
+    Policy,
+    Token,
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Grant {
@@ -63,6 +69,8 @@ struct Grant {
     principal: Principal,
     scopes: Vec<String>,
     expires_at: Option<u64>,
+    #[serde(skip)]
+    source: GrantSource,
 }
 struct Pending {
     principal: Principal,

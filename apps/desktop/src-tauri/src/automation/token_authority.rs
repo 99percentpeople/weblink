@@ -50,6 +50,7 @@ impl Service {
                 scopes,
                 // Validity follows the registry, including later expiry edits.
                 expires_at: None,
+                source: GrantSource::Token,
             },
         );
         Ok(())

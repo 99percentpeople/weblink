@@ -4,7 +4,7 @@ use crate::remote_control::{
 };
 use weblink_desktop_input::input::{Event, ScanCode};
 
-fn authority(timed: bool) -> Service {
+fn authority(session_consent: bool) -> Service {
     let principal = Principal {
         id: "client".into(),
         label: "Peer".into(),
@@ -33,7 +33,12 @@ fn authority(timed: bool) -> Service {
                     principal: principal.clone(),
                     target: "local".into(),
                     scopes: vec![scope.into()],
-                    expires_at: (timed && scope == "input.control").then(|| now() + 60_000),
+                    expires_at: None,
+                    source: if session_consent && scope == "input.control" {
+                        GrantSource::Consent
+                    } else {
+                        GrantSource::Policy
+                    },
                 },
             );
         }
@@ -170,9 +175,9 @@ fn local_switch_releases_input_and_holds_while_mcp_remains_enabled() {
 
 #[test]
 fn borrowed_blur_heartbeat_clears_lease_and_holds_but_preserves_all_permissions() {
-    for timed in [false, true] {
+    for session_consent in [false, true] {
         with_bound_borrowed_input(|control, lease, focus| {
-            let service = authority(timed);
+            let service = authority(session_consent);
             let events = [Event::Key {
                 key: ScanCode::new(0x1d, false).unwrap(),
                 down: true,

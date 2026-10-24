@@ -159,6 +159,11 @@ fn grant(p: &Principal) -> Grant {
         principal: p.clone(),
         scopes: vec!["diagnostics.read".into()],
         expires_at: Some(now() + 60000),
+        source: if p.kind == "mcp" {
+            GrantSource::Token
+        } else {
+            GrantSource::Consent
+        },
     }
 }
 #[tokio::test]
@@ -174,7 +179,7 @@ async fn duplicate_requests_cannot_clear_pending_approval_or_executing_ticket() 
         "DUPLICATE_REQUEST"
     );
     assert!(service.state.lock().unwrap().pending.contains_key("same"));
-    service.decide("epoch", "same", 5).unwrap();
+    service.decide("epoch", "same", true).unwrap();
     until(|| service.state.lock().unwrap().tickets.contains_key("same")).await;
     assert_eq!(
         service.clone().invoke(p, "same".into(), call()).await["error"]["code"],
@@ -229,7 +234,7 @@ async fn cancelled_pending_approval_is_audited_as_cancelled_and_does_not_touch_a
         assert_eq!(s.audit.last().unwrap()["status"], "CANCELLED");
     }
     // A deliberate denial still has its own result and audit status.
-    service.decide("epoch", "same", 0).unwrap();
+    service.decide("epoch", "same", false).unwrap();
     assert_eq!(second.await.unwrap()["error"]["code"], "PERMISSION_DENIED");
     let s = service.state.lock().unwrap();
     assert_eq!(s.audit.last().unwrap()["status"], "PERMISSION_DENIED");
@@ -249,7 +254,7 @@ async fn cancelling_between_approval_and_dispatch_cannot_resume_using_a_new_gran
             .contains_key("request")
     })
     .await;
-    service.decide("epoch", "request", 5).unwrap();
+    service.decide("epoch", "request", true).unwrap();
     // No await between approval and cancellation: the waiting future hasn't dispatched.
     {
         let mut s = service.state.lock().unwrap();
@@ -344,7 +349,7 @@ async fn reconnect_between_approval_and_dispatch_cannot_reuse_the_new_channels_a
             .contains_key("request")
     })
     .await;
-    service.decide("epoch", "request", 5).unwrap();
+    service.decide("epoch", "request", true).unwrap();
     // Complete a reconnect before the approved future can dispatch.
     let replacement = peers::Identity {
         generation: "connection-2".into(),
@@ -432,6 +437,7 @@ async fn grants_are_bound_to_target_and_revocation_drops_tickets() {
             principal: p.clone(),
             scopes: vec!["diagnostics.read".into()],
             expires_at: Some(now() + 60000),
+            source: GrantSource::Consent,
         },
     );
     let task = tokio::spawn(service.clone().invoke(
@@ -463,6 +469,7 @@ async fn grants_are_bound_to_target_and_revocation_drops_tickets() {
                 principal: pending.principal,
                 scopes: vec![pending.scope],
                 expires_at: Some(now() + 60000),
+                source: GrantSource::Consent,
             },
         );
         pending.answer.send(true).unwrap();

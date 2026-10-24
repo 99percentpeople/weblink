@@ -69,6 +69,7 @@ fn fixture(name: &str) -> Shared {
             principal: principal.clone(),
             scopes: vec!["screen.read".into()],
             expires_at: Some(now() + 60000),
+            source: GrantSource::Token,
         },
     );
     s.requests.insert(

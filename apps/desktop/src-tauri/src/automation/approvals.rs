@@ -1,8 +1,8 @@
-//! Timed consent is grouped by purpose while tickets retain exact tool scopes.
+//! Session consent is grouped by purpose while tickets retain exact tool scopes.
 use super::*;
 
 impl Service {
-    pub(super) fn decide(&self, epoch: &str, id: &str, minutes: u32) -> Result<(), String> {
+    pub(super) fn decide(&self, epoch: &str, id: &str, accepted: bool) -> Result<(), String> {
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
         let p = s.pending.remove(id).ok_or("REQUEST_EXPIRED")?;
@@ -16,7 +16,7 @@ impl Service {
             && Self::call_enabled(&s, &p.principal, &p.call)
             && Self::principal_active(&s, &p.principal)
             && scopes.contains(&p.scope)
-            && [5, 15, 60].contains(&minutes)
+            && accepted
             && p.deadline > Instant::now();
         if allow {
             let id = uuid::Uuid::new_v4().to_string();
@@ -27,7 +27,8 @@ impl Service {
                     id,
                     principal: p.principal.clone(),
                     scopes: scopes.clone(),
-                    expires_at: Some(now() + minutes as u64 * 60000),
+                    expires_at: None,
+                    source: GrantSource::Consent,
                 },
             );
         }
@@ -102,37 +103,108 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn notification_consent_preserves_duration_without_changing_saved_policies() {
-        for minutes in [5, 15, 60] {
-            let (service, principal) = fixture();
-            let answer = pending(&service, &principal, "review", "shell.execute", "local");
-            let before = now();
-            service.decide("epoch", "review", minutes).unwrap();
-            assert!(answer.await.unwrap());
-            let mut s = service.state.lock().unwrap();
+    async fn notification_consent_lasts_for_the_connection_without_changing_saved_policies() {
+        let (service, principal) = fixture();
+        let answer = pending(&service, &principal, "review", "shell.execute", "local");
+        service.decide("epoch", "review", true).unwrap();
+        assert!(answer.await.unwrap());
+        service.expire();
+        let previous = {
+            let s = service.state.lock().unwrap();
             let grant = s.grants.values().next().unwrap();
-            let expires = grant.expires_at.unwrap();
-            let duration = u64::from(minutes) * 60_000;
-            assert!((before + duration..=now() + duration).contains(&expires));
+            assert!(grant.expires_at.is_none());
+            assert!(grant.source == GrantSource::Consent);
             assert!(Service::grant_live(&s, grant));
             assert!(s.peer_policies.is_empty());
             assert!(
                 Service::peer_decision(&s, &principal, "shell.execute") == policy::Decision::Ask
             );
-            let id = grant.id.clone();
-            s.grants.get_mut(&id).unwrap().expires_at = Some(now() - 1);
-            drop(s);
-            service.expire();
+            grant.clone()
+        };
+        let old = peers::Identity::from(&principal);
+        service.disconnect_peer("epoch", &old).unwrap();
+        assert!(service.state.lock().unwrap().grants.is_empty());
+        let replacement = peers::Identity {
+            generation: "connection-2".into(),
+            ..old.clone()
+        };
+        service
+            .connect_peer("epoch", replacement.clone(), "Device".into())
+            .unwrap();
+        let s = service.state.lock().unwrap();
+        assert!(!Service::grant_live(&s, &previous));
+        let current = Service::peer_principal(&s, &replacement).unwrap();
+        assert!(Service::peer_decision(&s, &current, "shell.execute") == policy::Decision::Ask);
+        assert!(s.grants.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_consent_ends_on_shutdown_or_automation_disable() {
+        for shutdown in [false, true] {
+            let (service, principal) = fixture();
+            let answer = pending(&service, &principal, "review", "shell.execute", "local");
+            service.decide("epoch", "review", true).unwrap();
+            assert!(answer.await.unwrap());
+            if shutdown {
+                service.shutdown();
+            } else {
+                let mut s = service.state.lock().unwrap();
+                service.configure_locked(&mut s, false, false);
+                service.configure_locked(&mut s, false, true);
+            }
             assert!(service.state.lock().unwrap().grants.is_empty());
         }
     }
 
     #[tokio::test]
-    async fn changing_device_policy_revokes_temporary_consent_without_global_pause() {
+    async fn session_consent_and_saved_policy_revocation_remain_independent() {
+        for revoke_consent in [false, true] {
+            let (service, principal) = fixture();
+            service
+                .set_peer_policy(
+                    "epoch",
+                    &peers::Identity::from(&principal),
+                    HashMap::from([("diagnostics.read".into(), policy::Decision::Allow)]),
+                )
+                .unwrap();
+            let answer = pending(&service, &principal, "review", "shell.execute", "local");
+            service.decide("epoch", "review", true).unwrap();
+            assert!(answer.await.unwrap());
+            let mut s = service.state.lock().unwrap();
+            Service::policy_grant(&mut s, &principal, "diagnostics.read");
+            let consent = s
+                .grants
+                .values()
+                .find(|g| g.source == GrantSource::Consent)
+                .unwrap()
+                .id
+                .clone();
+            let policy = s
+                .grants
+                .values()
+                .find(|g| g.source == GrantSource::Policy)
+                .unwrap()
+                .id
+                .clone();
+            let (revoked, retained) = if revoke_consent {
+                (&consent, &policy)
+            } else {
+                (&policy, &consent)
+            };
+            service.revoke_grant(&mut s, revoked);
+            assert!(!s.grants.contains_key(revoked));
+            assert!(Service::grant_live(&s, &s.grants[retained]));
+            assert_eq!(s.policies_suspended, !revoke_consent);
+            assert_eq!(s.mcp_suspended, !revoke_consent);
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_device_policy_revokes_session_consent_without_global_pause() {
         for decision in [policy::Decision::Allow, policy::Decision::Deny] {
             let (service, principal) = fixture();
             let answer = pending(&service, &principal, "review", "shell.execute", "local");
-            service.decide("epoch", "review", 15).unwrap();
+            service.decide("epoch", "review", true).unwrap();
             assert!(answer.await.unwrap());
             let id = service
                 .state
@@ -163,17 +235,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn emergency_stop_clears_notification_reviews_and_temporary_consent() {
+    async fn emergency_stop_clears_notification_reviews_and_session_consent() {
         let (service, principal) = fixture();
         let approved = pending(&service, &principal, "approved", "shell.execute", "local");
-        service.decide("epoch", "approved", 15).unwrap();
+        service.decide("epoch", "approved", true).unwrap();
         assert!(approved.await.unwrap());
         let waiting = pending(&service, &principal, "waiting", "input.control", "local");
         service.emergency_observer()();
         service.expire();
         assert!(waiting.await.is_err());
         assert_eq!(
-            service.decide("epoch", "waiting", 15).unwrap_err(),
+            service.decide("epoch", "waiting", true).unwrap_err(),
             "REQUEST_EXPIRED"
         );
         let s = service.state.lock().unwrap();
@@ -196,7 +268,7 @@ mod tests {
         let mut remote = pending(&service, &principal, "remote", "diagnostics.read", "remote");
         let mut control = pending(&service, &principal, "control", "input.control", "local");
         let mut terminal = pending(&service, &principal, "terminal", "shell.execute", "local");
-        service.decide("epoch", "first", 15).unwrap();
+        service.decide("epoch", "first", true).unwrap();
         assert!(first.await.unwrap());
         assert!(screen.await.unwrap());
         for receiver in [&mut other_peer, &mut remote, &mut control, &mut terminal] {
@@ -227,7 +299,7 @@ mod tests {
             .unwrap();
         let first = pending(&service, &principal, "first", "diagnostics.read", "local");
         let denied = pending(&service, &principal, "denied", "screen.read", "local");
-        service.decide("epoch", "first", 5).unwrap();
+        service.decide("epoch", "first", true).unwrap();
         assert!(first.await.unwrap());
         assert!(!denied.await.unwrap());
         let s = service.state.lock().unwrap();
@@ -262,7 +334,7 @@ mod tests {
                 }
             }
             service
-                .decide("epoch", "first", if reason == "rejected" { 0 } else { 15 })
+                .decide("epoch", "first", reason != "rejected")
                 .unwrap();
             assert!(!answer.await.unwrap(), "{reason}");
             assert!(!sibling.await.unwrap(), "{reason}");

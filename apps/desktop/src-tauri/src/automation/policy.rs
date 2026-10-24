@@ -56,6 +56,7 @@ impl Service {
                 target: "local".into(),
                 scopes,
                 expires_at: None,
+                source: GrantSource::Policy,
             },
         );
     }
@@ -66,12 +67,22 @@ impl Service {
         let grants: Vec<_> = s
             .grants
             .values()
-            .filter(|g| g.expires_at.is_none())
+            .filter(|g| g.source != GrantSource::Consent)
             .map(|g| g.id.clone())
             .collect();
         for id in grants {
             self.revoke_locked(s, &id);
         }
+    }
+
+    pub(super) fn revoke_grant(&self, s: &mut State, id: &str) {
+        if s.grants
+            .get(id)
+            .is_some_and(|g| g.source != GrantSource::Consent)
+        {
+            self.pause_policies(s);
+        }
+        self.revoke_locked(s, id);
     }
 
     pub(super) fn set_peer_policy(

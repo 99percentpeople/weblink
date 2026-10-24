@@ -96,8 +96,7 @@ const request = (
   },
   expiresAt: Date.now() + 120000,
 });
-const allowLabel = (minutes = 15) =>
-  `automation.allow_minutes: ${minutes}`;
+const allowLabel = () => "automation.allow_session";
 beforeEach(() => {
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
@@ -182,9 +181,9 @@ function mount({
   };
 }
 
-it.each([0, 5, 15, 60])(
-  "responds through the in-app notification with %i minutes",
-  async (minutes) => {
+it.each([false, true])(
+  "responds through the in-app notification with session consent %s",
+  async (accepted) => {
     mount();
     const pending = request();
     setPending([pending]);
@@ -214,29 +213,22 @@ it.each([0, 5, 15, 60])(
     expect(
       screen.getByText(/Reported caller/),
     ).toBeVisible();
-    if (minutes === 0)
+    expect(
+      screen.queryByRole("button", {
+        name: "automation.duration",
+      }),
+    ).toBeNull();
+    if (accepted) fireEvent.click(allow);
+    else
       fireEvent.click(
         screen.getByRole("button", {
           name: "automation.deny",
         }),
       );
-    else if (minutes === 15) fireEvent.click(allow);
-    else {
-      await userEvent.click(
-        screen.getByRole("button", {
-          name: "automation.duration",
-        }),
-      );
-      await userEvent.click(
-        await screen.findByRole("menuitem", {
-          name: allowLabel(minutes),
-        }),
-      );
-    }
     await waitFor(() =>
       expect(fixture.decide).toHaveBeenCalledWith(
         pending.id,
-        minutes,
+        accepted,
       ),
     );
     expect(fixture.decide).toHaveBeenCalledOnce();
@@ -268,7 +260,7 @@ it("explains the read permission group before approving accessibility inspection
   fireEvent.click(allow);
   expect(fixture.decide).toHaveBeenCalledWith(
     pending.id,
-    15,
+    true,
   );
 });
 
@@ -376,7 +368,7 @@ it.each(["approve", "decline"])(
     await waitFor(() =>
       expect(fixture.decide).toHaveBeenCalledWith(
         pending.id,
-        action === "approve" ? 15 : 0,
+        action === "approve",
       ),
     );
     expect(fixture.decide).toHaveBeenCalledOnce();
@@ -431,7 +423,7 @@ it("allows a failed native decision to be retried in-app without replaying nativ
   );
   expect(fixture.decide).toHaveBeenLastCalledWith(
     pending.id,
-    15,
+    true,
   );
 });
 

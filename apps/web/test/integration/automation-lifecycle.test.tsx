@@ -202,6 +202,7 @@ beforeEach(() => {
     peer: vi.fn(async () => {}),
     peerPolicy: vi.fn(async () => {}),
     disconnect: vi.fn(async () => {}),
+    decide: vi.fn(async () => {}),
     call: vi.fn(async () => ({ ok: true, data: {} })),
     cancel: vi.fn(async () => {}),
     check: vi.fn(async () => {}),
@@ -216,6 +217,26 @@ beforeEach(() => {
     undefined,
   );
 });
+it.each([true, false])(
+  "forwards session approval %s as a boolean and refreshes authority",
+  async (accepted) => {
+    const view = mount();
+    await waitFor(() =>
+      expect(view.runtime.ready()).toBe(true),
+    );
+    const snapshots = vi.mocked(fixture.native.snapshot)
+      .mock.calls.length;
+    await view.runtime.decide("request", accepted);
+    expect(fixture.native.decide).toHaveBeenCalledWith(
+      "epoch",
+      "request",
+      accepted,
+    );
+    expect(
+      vi.mocked(fixture.native.snapshot).mock.calls.length,
+    ).toBeGreaterThan(snapshots);
+  },
+);
 it("uses the saved host emergency shortcut before starting local automation without a room", async () => {
   setAppState(
     "options",

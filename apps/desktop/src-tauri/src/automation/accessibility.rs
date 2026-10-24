@@ -207,6 +207,7 @@ mod tests {
                 principal: principal.clone(),
                 scopes: vec!["accessibility.read".into()],
                 expires_at: Some(now() + 60000),
+                source: GrantSource::Token,
             },
         );
         s.tickets.insert(

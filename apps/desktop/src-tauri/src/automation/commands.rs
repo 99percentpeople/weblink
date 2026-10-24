@@ -320,10 +320,10 @@ pub async fn automation_decide(
     service: State<'_, Shared>,
     epoch: String,
     id: String,
-    minutes: u32,
+    accepted: bool,
 ) -> Result<(), String> {
     blocking(window, service, move |_app, service| {
-        service.decide(&epoch, &id, minutes)
+        service.decide(&epoch, &id, accepted)
     })
     .await
 }
@@ -338,10 +338,7 @@ pub async fn automation_revoke(
         let mut s = service.state.lock().unwrap();
         Service::check(&s, &epoch)?;
         if let Some(id) = id {
-            if s.grants.get(&id).is_some_and(|g| g.expires_at.is_none()) {
-                service.pause_policies(&mut s);
-            }
-            service.revoke_locked(&mut s, &id);
+            service.revoke_grant(&mut s, &id);
         } else {
             service.stop_locked(&mut s);
         }
