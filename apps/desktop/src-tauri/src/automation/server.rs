@@ -100,7 +100,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    fn address(&self) -> Result<IpAddr, String> {
+    pub(super) fn address(&self) -> Result<IpAddr, String> {
         let host = self.host.trim();
         let host = if host.eq_ignore_ascii_case("localhost") {
             "127.0.0.1"
@@ -120,17 +120,11 @@ impl ServerConfig {
     }
 }
 
+#[cfg(test)]
 impl Service {
     pub(super) fn configure_server(&self, epoch: &str, config: ServerConfig) -> Result<(), String> {
-        let host = config.address()?;
-        let mut s = self.state.lock().unwrap();
-        Self::check(&s, epoch)?;
-        // Only persist desired settings. The active listener and its calls remain intact.
-        let mut registry = s.registry.clone();
-        registry.host = host;
-        registry.port = config.port;
-        Self::commit_registry(&mut s, registry)?;
-        Ok(())
+        self.change_registry(epoch, registry::Change::Server(config))
+            .map(|_| ())
     }
 }
 
@@ -257,21 +251,21 @@ mod tests {
             r#"{"version":1,"port":null,"clients":{}}"#,
             r#"{"version":1,"clients":{}}"#,
         ] {
-            let directory = tempfile::tempdir().unwrap();
-            let path = directory.path().join("tokens.json");
-            std::fs::write(&path, json).unwrap();
             let service = fixture();
-            service.load_registry(path).unwrap();
+            service
+                .load_registry(serde_json::from_str(json).unwrap())
+                .unwrap();
             assert_eq!(service.state.lock().unwrap().registry.port, 32100);
         }
     }
     #[test]
-    fn migrates_existing_port_and_keeps_credentials_when_saving_listener() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("tokens.json");
-        std::fs::write(&path, r#"{"version":1,"port":4321,"clients":{}}"#).unwrap();
+    fn restores_stored_port_and_keeps_credentials_when_saving_listener() {
         let service = fixture();
-        service.load_registry(path.clone()).unwrap();
+        service
+            .load_registry(
+                serde_json::from_str(r#"{"version":1,"port":4321,"clients":{}}"#).unwrap(),
+            )
+            .unwrap();
         {
             let s = service.state.lock().unwrap();
             assert_eq!(s.registry.host.to_string(), "127.0.0.1");
@@ -286,7 +280,7 @@ mod tests {
             .configure_server("epoch", config("::1", 65535))
             .unwrap();
         let restored = fixture();
-        restored.load_registry(path.clone()).unwrap();
+        restored.load_registry(service.stored_registry()).unwrap();
         {
             let s = restored.state.lock().unwrap();
             assert_eq!(s.registry.host.to_string(), "::1");
@@ -298,12 +292,12 @@ mod tests {
         assert!(restored
             .authenticate(token["token"].as_str().unwrap())
             .is_some());
-        assert!(!std::fs::read_to_string(path)
+        assert!(!serde_json::to_string(&service.stored_registry())
             .unwrap()
             .contains(token["token"].as_str().unwrap()));
     }
     #[test]
-    fn rejects_stale_changes_and_preserves_config_on_storage_failure() {
+    fn rejects_stale_changes_and_preserves_config_on_invalid_registry() {
         let service = fixture();
         assert_eq!(
             service
@@ -311,15 +305,12 @@ mod tests {
                 .unwrap_err(),
             "SESSION_CLOSED"
         );
-        let directory = tempfile::tempdir().unwrap();
-        {
-            let mut s = service.state.lock().unwrap();
-            s.mcp_enabled = false;
-            // A directory cannot be replaced with a credential registry file.
-            s.registry_path = Some(directory.path().to_path_buf());
-        }
+        let mut prepared = service
+            .prepare_registry("epoch", registry::Change::Server(config("::1", 1234)))
+            .unwrap();
+        prepared.registry.port = 0;
         assert!(service
-            .configure_server("epoch", config("::1", 1234))
+            .apply_registry("epoch", prepared.revision, prepared.registry)
             .is_err());
         let s = service.state.lock().unwrap();
         assert_eq!(s.registry.host.to_string(), "127.0.0.1");
@@ -369,10 +360,7 @@ mod tests {
     #[tokio::test]
     async fn live_settings_preserve_listener_and_grants_until_restart() {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("tokens.json");
         let service = fixture();
-        service.load_registry(path.clone()).unwrap();
         let token = service
             .create_client("epoch", "Offline agent".into(), None)
             .unwrap();
@@ -413,7 +401,7 @@ mod tests {
         assert_eq!(response.status(), reqwest::StatusCode::OK);
         service.shutdown();
         let restarted = fixture();
-        restarted.load_registry(path).unwrap();
+        restarted.load_registry(service.stored_registry()).unwrap();
         restarted.state.lock().unwrap().mcp_enabled = true;
         http::start(restarted.clone(), "epoch".into())
             .await

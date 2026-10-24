@@ -34,7 +34,8 @@ pub async fn automation_open(
     window: WebviewWindow,
     service: State<'_, Shared>,
     channel: Channel<Value>,
-) -> Result<String, String> {
+    registry: Option<registry::Registry>,
+) -> Result<Value, String> {
     // Capture before dispatch: a queued open from an unloaded page cannot revive it.
     let page = service.page.lock().unwrap().clone();
     blocking(window, service, move |app, service| {
@@ -42,12 +43,8 @@ pub async fn automation_open(
         if !page.live() {
             return Err("SESSION_CLOSED".into());
         }
-        service.load_registry(
-            app.path()
-                .app_local_data_dir()
-                .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?
-                .join("mcp-tokens.json"),
-        )?;
+        let registry = registry.unwrap_or_default();
+        registry::validate(&registry)?;
         service.shutdown();
         native::sync_input(&app, &service);
         let epoch = {
@@ -58,6 +55,8 @@ pub async fn automation_open(
             s.epoch = uuid::Uuid::new_v4().to_string();
             s.page = page;
             s.channel = Some(channel);
+            s.registry = registry.clone();
+            s.registry_revision = 0;
             s.epoch.clone()
         };
         let background = service.clone();
@@ -88,7 +87,7 @@ pub async fn automation_open(
                 }
             }
         });
-        Ok(epoch)
+        Ok(json!({"epoch":epoch,"registry":registry}))
     })
     .await
 }
@@ -186,9 +185,9 @@ pub async fn automation_server_configure(
     service: State<'_, Shared>,
     epoch: String,
     config: server::ServerConfig,
-) -> Result<(), String> {
+) -> Result<registry::Prepared, String> {
     blocking(window, service, move |_app, service| {
-        service.configure_server(&epoch, config)
+        service.prepare_registry(&epoch, registry::Change::Server(config))
     })
     .await
 }
@@ -217,9 +216,9 @@ pub async fn automation_client(
     epoch: String,
     label: String,
     expires_at: Option<u64>,
-) -> Result<Value, String> {
+) -> Result<registry::Prepared, String> {
     blocking(window, service, move |_app, service| {
-        service.create_client(&epoch, label, expires_at)
+        service.prepare_registry(&epoch, registry::Change::Create { label, expires_at })
     })
     .await
 }
@@ -231,11 +230,16 @@ pub async fn automation_client_update(
     id: String,
     label: String,
     expires_at: Option<u64>,
-) -> Result<(), String> {
-    blocking(window, service, move |app, service| {
-        service.update_client(&epoch, &id, label, expires_at)?;
-        native::sync_input(&app, &service);
-        Ok(())
+) -> Result<registry::Prepared, String> {
+    blocking(window, service, move |_app, service| {
+        service.prepare_registry(
+            &epoch,
+            registry::Change::Update {
+                id,
+                label,
+                expires_at,
+            },
+        )
     })
     .await
 }
@@ -245,9 +249,22 @@ pub async fn automation_client_remove(
     service: State<'_, Shared>,
     epoch: String,
     id: String,
+) -> Result<registry::Prepared, String> {
+    blocking(window, service, move |_app, service| {
+        service.prepare_registry(&epoch, registry::Change::Remove { id })
+    })
+    .await
+}
+#[tauri::command]
+pub async fn automation_registry_apply(
+    window: WebviewWindow,
+    service: State<'_, Shared>,
+    epoch: String,
+    revision: u64,
+    registry: registry::Registry,
 ) -> Result<(), String> {
     blocking(window, service, move |app, service| {
-        service.remove_client(&epoch, &id)?;
+        service.apply_registry(&epoch, revision, registry)?;
         native::sync_input(&app, &service);
         Ok(())
     })

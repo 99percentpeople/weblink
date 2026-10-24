@@ -15,6 +15,7 @@
     "allow-automation-client",
     "allow-automation-client-update",
     "allow-automation-client-remove",
+    "allow-automation-registry-apply",
     "allow-automation-disconnect",
     "allow-automation-peer",
     "allow-automation-peer-policy",

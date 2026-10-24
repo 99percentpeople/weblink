@@ -10,6 +10,15 @@ The current Linux host can launch the shell and exercise IPC, but its WebKit
 does not expose `RTCPeerConnection`; the app therefore displays the existing
 unsupported-browser page. Linux WebRTC support remains a separate platform task.
 
+On Windows, local `tauri dev` uses
+`app_local_data_dir()/profiles/local-dev` for WebView storage. All `tauri build`
+outputs, including CI development builds and stable releases, keep the default
+WebView directory. This isolates local development's localStorage settings, MCP
+credentials, browser identity and IndexedDB from built applications without
+splitting storage by release channel. The distinction follows Tauri development
+mode, not debug assertions. Existing profiles and old MCP credentials are not
+copied into the local development profile.
+
 ## Run and build
 
 Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): on

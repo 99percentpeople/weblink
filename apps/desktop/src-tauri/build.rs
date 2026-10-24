@@ -18,6 +18,7 @@ fn main() {
             "automation_client",
             "automation_client_update",
             "automation_client_remove",
+            "automation_registry_apply",
             "automation_disconnect",
             "automation_peer",
             "automation_peer_policy",

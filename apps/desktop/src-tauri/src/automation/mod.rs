@@ -95,7 +95,7 @@ struct State {
     endpoint: String,
     active_server: Option<server::ServerConfig>,
     registry: registry::Registry,
-    registry_path: Option<std::path::PathBuf>,
+    registry_revision: u64,
     peers: HashMap<String, Principal>,
     peer_policies: HashMap<String, policy::PeerPolicy>,
     policies_suspended: bool,

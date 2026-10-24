@@ -1,4 +1,5 @@
 import { AutomationError } from "@weblink/automation";
+import { createAutomationStorage } from "./automation-storage";
 import {
   Channel,
   invoke as tauriInvoke,
@@ -23,41 +24,45 @@ const invoke = async <T>(
     );
   }
 };
+const storage = createAutomationStorage(invoke);
 export const nativeAutomation: NativeAutomation = {
   open: (onRequest) => {
     const channel = new Channel<NativeAutomationEvent>();
     channel.onmessage = onRequest;
-    return invoke("automation_open", { channel });
+    return storage.open({ channel });
   },
   heartbeat: (epoch) =>
     invoke("automation_heartbeat", { epoch }),
-  close: (epoch) => invoke("automation_close", { epoch }),
+  close: (epoch) => storage.close(epoch),
   configure: (epoch, enabled) =>
     invoke("automation_configure", { epoch, enabled }),
   configureMcp: (epoch, enabled) =>
     invoke("automation_mcp_configure", { epoch, enabled }),
   configureServer: (epoch, config) =>
-    invoke("automation_server_configure", {
+    storage.change("automation_server_configure", {
       epoch,
       config,
     }),
   snapshot: (epoch) =>
     invoke("automation_snapshot", { epoch }),
   client: (epoch, label, expiresAt) =>
-    invoke("automation_client", {
+    storage.change("automation_client", {
       epoch,
       label,
       expiresAt,
     }),
   updateClient: (epoch, id, label, expiresAt) =>
-    invoke("automation_client_update", {
+    storage.change("automation_client_update", {
       epoch,
       id,
       label,
       expiresAt,
     }),
   removeClient: (epoch, id) =>
-    invoke("automation_client_remove", { epoch, id }),
+    storage.change("automation_client_remove", {
+      epoch,
+      id,
+    }),
   decide: (epoch, id, minutes) =>
     invoke("automation_decide", { epoch, id, minutes }),
   revoke: (epoch, id) =>

@@ -110,6 +110,7 @@ pub fn run() {
             automation::automation_client,
             automation::automation_client_update,
             automation::automation_client_remove,
+            automation::automation_registry_apply,
             automation::automation_disconnect,
             automation::automation_peer,
             automation::automation_peer_policy,
@@ -238,7 +239,7 @@ pub fn run() {
                 // Keep the application usable; without a tray no operation may hide it.
                 eprintln!("could not create Weblink tray: {error}");
             }
-            let dev_url = if cfg!(debug_assertions) {
+            let dev_url = if tauri::is_dev() {
                 app.config().build.dev_url.clone()
             } else {
                 None
@@ -264,6 +265,11 @@ pub fn run() {
             );
             let builder = WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                 .visible(!hidden).focused(!hidden);
+            let builder = if tauri::is_dev() {
+                builder.data_directory(app.path().app_local_data_dir()?.join("profiles").join("local-dev"))
+            } else {
+                builder
+            };
             // Native media/signaling keep their renderer-owned leases in tray mode.
             // The Tauri background_throttling option does not support Windows.
             #[cfg(windows)]

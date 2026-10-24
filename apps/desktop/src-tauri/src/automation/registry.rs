@@ -2,10 +2,6 @@
 use super::*;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sha2::{Digest, Sha256};
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -65,10 +61,16 @@ fn expiration(value: Option<u64>) -> Result<Option<u64>, String> {
     }
     Ok(value)
 }
-fn validate(r: &Registry) -> Result<(), String> {
+pub(super) fn validate(r: &Registry) -> Result<(), String> {
     if r.version != 1 || r.port == 0 || r.clients.len() > 64 {
         return Err("INVALID_AUTOMATION_REGISTRY".into());
     }
+    server::ServerConfig {
+        host: r.host.to_string(),
+        port: r.port,
+    }
+    .address()
+    .map_err(|_| "INVALID_AUTOMATION_REGISTRY")?;
     for (id, c) in &r.clients {
         if id != &c.id
             || id.is_empty()
@@ -85,54 +87,142 @@ fn validate(r: &Registry) -> Result<(), String> {
     }
     Ok(())
 }
-fn read(path: &Path) -> Result<Registry, String> {
-    use std::io::Read;
-    let file = match std::fs::File::open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Registry::default()),
-        Err(_) => return Err("AUTOMATION_STORAGE_UNAVAILABLE".into()),
-    };
-    let mut bytes = Vec::new();
-    file.take(512 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    if bytes.len() > 512 * 1024 {
-        return Err("INVALID_AUTOMATION_REGISTRY".into());
-    }
-    let registry = serde_json::from_slice(&bytes).map_err(|_| "INVALID_AUTOMATION_REGISTRY")?;
-    validate(&registry)?;
-    Ok(registry)
+#[derive(Serialize)]
+pub struct Prepared {
+    pub revision: u64,
+    pub registry: Registry,
+    pub result: Value,
 }
-fn write(path: &Path, registry: &Registry) -> Result<(), String> {
-    validate(registry)?;
-    let parent = path.parent().ok_or("AUTOMATION_STORAGE_UNAVAILABLE")?;
-    std::fs::create_dir_all(parent).map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    let mut temp =
-        tempfile::NamedTempFile::new_in(parent).map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    temp.write_all(&serde_json::to_vec(registry).map_err(|_| "INVALID_AUTOMATION_REGISTRY")?)
-        .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    temp.as_file()
-        .sync_all()
-        .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    temp.persist(path)
-        .map_err(|_| "AUTOMATION_STORAGE_UNAVAILABLE")?;
-    Ok(())
+pub(super) enum Change {
+    Server(server::ServerConfig),
+    Create {
+        label: String,
+        expires_at: Option<u64>,
+    },
+    Update {
+        id: String,
+        label: String,
+        expires_at: Option<u64>,
+    },
+    Remove {
+        id: String,
+    },
 }
 impl Service {
-    pub fn load_registry(&self, path: PathBuf) -> Result<(), String> {
+    // Prepare without changing active credentials. The renderer stores only
+    // `registry` in localStorage, then applies it through the same page epoch.
+    pub(super) fn prepare_registry(&self, epoch: &str, change: Change) -> Result<Prepared, String> {
+        let s = self.state.lock().unwrap();
+        Self::check(&s, epoch)?;
+        let mut registry = s.registry.clone();
+        let result = match change {
+            Change::Server(config) => {
+                registry.host = config.address()?;
+                registry.port = config.port;
+                Value::Null
+            }
+            Change::Create { label, expires_at } => {
+                let label = label.trim().to_string();
+                if registry.clients.len() >= 64 || label.is_empty() || label.len() > 128 {
+                    return Err("INVALID_ARGUMENTS".into());
+                }
+                let expires_at = expiration(expires_at)?;
+                let mut secret = [0u8; 32];
+                getrandom::fill(&mut secret).map_err(|_| "TOKEN_GENERATION_FAILED")?;
+                let token = format!("sk-{}", URL_SAFE_NO_PAD.encode(secret));
+                let id = uuid::Uuid::new_v4().to_string();
+                registry.clients.insert(
+                    id.clone(),
+                    Client {
+                        id: id.clone(),
+                        label,
+                        token_hash: digest(&token),
+                        prefix: token[..11].into(),
+                        created_at: now(),
+                        expires_at,
+                    },
+                );
+                let endpoint = if Self::current(&s) && !s.endpoint.is_empty() {
+                    s.endpoint.clone()
+                } else {
+                    server::endpoint(registry.host, registry.port)
+                };
+                json!({"id":id,"token":token,"endpoint":endpoint})
+            }
+            Change::Update {
+                id,
+                label,
+                expires_at,
+            } => {
+                let label = label.trim().to_string();
+                if label.is_empty() || label.len() > 128 {
+                    return Err("INVALID_ARGUMENTS".into());
+                }
+                let expires_at = expiration(expires_at)?;
+                let client = registry.clients.get_mut(&id).ok_or("CLIENT_NOT_FOUND")?;
+                client.label = label;
+                client.expires_at = expires_at;
+                Value::Null
+            }
+            Change::Remove { id } => {
+                registry.clients.remove(&id).ok_or("CLIENT_NOT_FOUND")?;
+                Value::Null
+            }
+        };
+        Ok(Prepared {
+            revision: s.registry_revision,
+            registry,
+            result,
+        })
+    }
+    pub(super) fn apply_registry(
+        &self,
+        epoch: &str,
+        revision: u64,
+        registry: Registry,
+    ) -> Result<(), String> {
+        validate(&registry)?;
         let mut s = self.state.lock().unwrap();
-        if s.registry_path.is_none() {
-            s.registry = read(&path)?;
-            s.registry_path = Some(path);
+        Self::check(&s, epoch)?;
+        if s.registry_revision != revision {
+            return Err("REGISTRY_CHANGED".into());
+        }
+        let revoked: Vec<_> = s
+            .registry
+            .clients
+            .iter()
+            .filter(|(id, old)| {
+                !old.active()
+                    || registry
+                        .clients
+                        .get(*id)
+                        .is_none_or(|new| !new.active() || new.token_hash != old.token_hash)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        s.registry = registry;
+        s.registry_revision += 1;
+        for id in revoked {
+            self.revoke_client(&mut s, &id);
         }
         Ok(())
     }
-    pub(super) fn commit_registry(s: &mut State, registry: Registry) -> Result<(), String> {
-        if let Some(path) = &s.registry_path {
-            write(path, &registry)?;
-        }
-        s.registry = registry;
+    #[cfg(test)]
+    pub(super) fn stored_registry(&self) -> Registry {
+        let json = serde_json::to_string(&self.state.lock().unwrap().registry).unwrap();
+        serde_json::from_str(&json).unwrap()
+    }
+    #[cfg(test)]
+    pub(super) fn load_registry(&self, registry: Registry) -> Result<(), String> {
+        validate(&registry)?;
+        self.state.lock().unwrap().registry = registry;
         Ok(())
+    }
+    #[cfg(test)]
+    pub(super) fn change_registry(&self, epoch: &str, change: Change) -> Result<Value, String> {
+        let prepared = self.prepare_registry(epoch, change)?;
+        self.apply_registry(epoch, prepared.revision, prepared.registry)?;
+        Ok(prepared.result)
     }
     pub(super) fn principal_active(s: &State, p: &Principal) -> bool {
         match p.kind.as_str() {
@@ -160,42 +250,16 @@ impl Service {
                     })
             }
     }
+    #[cfg(test)]
     pub(super) fn create_client(
         &self,
         epoch: &str,
         label: String,
         expires_at: Option<u64>,
     ) -> Result<Value, String> {
-        let mut s = self.state.lock().unwrap();
-        Self::check(&s, epoch)?;
-        let label = label.trim().to_string();
-        if s.registry.clients.len() >= 64 || label.is_empty() || label.len() > 128 {
-            return Err("INVALID_ARGUMENTS".into());
-        }
-        let expires_at = expiration(expires_at)?;
-        // Encode 256 random bits compactly; the prefix is only a recognizable label.
-        let mut secret = [0u8; 32];
-        getrandom::fill(&mut secret).map_err(|_| "TOKEN_GENERATION_FAILED")?;
-        let token = format!("sk-{}", URL_SAFE_NO_PAD.encode(secret));
-        let id = uuid::Uuid::new_v4().to_string();
-        let client = Client {
-            id: id.clone(),
-            label,
-            token_hash: digest(&token),
-            prefix: token[..11].into(),
-            created_at: now(),
-            expires_at,
-        };
-        let mut registry = s.registry.clone();
-        registry.clients.insert(id.clone(), client);
-        Self::commit_registry(&mut s, registry)?;
-        let endpoint = if Self::current(&s) && !s.endpoint.is_empty() {
-            s.endpoint.clone()
-        } else {
-            server::endpoint(s.registry.host, s.registry.port)
-        };
-        Ok(json!({"id":id,"token":token,"endpoint":endpoint}))
+        self.change_registry(epoch, Change::Create { label, expires_at })
     }
+    #[cfg(test)]
     pub(super) fn update_client(
         &self,
         epoch: &str,
@@ -203,34 +267,20 @@ impl Service {
         label: String,
         expires_at: Option<u64>,
     ) -> Result<(), String> {
-        let mut s = self.state.lock().unwrap();
-        Self::check(&s, epoch)?;
-        let label = label.trim().to_string();
-        if label.is_empty() || label.len() > 128 {
-            return Err("INVALID_ARGUMENTS".into());
-        }
-        let expires_at = expiration(expires_at)?;
-        let mut registry = s.registry.clone();
-        let client = registry.clients.get_mut(id).ok_or("CLIENT_NOT_FOUND")?;
-        let previous_expiry = client.expires_at;
-        client.label = label;
-        client.expires_at = expires_at;
-        Self::commit_registry(&mut s, registry)?;
-        // Renewal authenticates future requests; it must not revive authority
-        // that expired before the periodic cleanup (or during the disk write).
-        if previous_expiry.is_some_and(|at| at <= now()) {
-            self.revoke_client(&mut s, id);
-        }
-        Ok(())
+        self.change_registry(
+            epoch,
+            Change::Update {
+                id: id.into(),
+                label,
+                expires_at,
+            },
+        )
+        .map(|_| ())
     }
+    #[cfg(test)]
     pub(super) fn remove_client(&self, epoch: &str, id: &str) -> Result<(), String> {
-        let mut s = self.state.lock().unwrap();
-        Self::check(&s, epoch)?;
-        let mut registry = s.registry.clone();
-        registry.clients.remove(id).ok_or("CLIENT_NOT_FOUND")?;
-        Self::commit_registry(&mut s, registry)?;
-        self.revoke_client(&mut s, id);
-        Ok(())
+        self.change_registry(epoch, Change::Remove { id: id.into() })
+            .map(|_| ())
     }
     fn revoke_client(&self, s: &mut State, id: &str) {
         let ids: Vec<_> = s
@@ -262,6 +312,71 @@ mod tests {
         s.enabled = true;
         s.mcp_enabled = true;
         s.epoch = "epoch".into();
+    }
+    #[test]
+    fn prepared_credentials_are_inactive_until_saved_and_applied() {
+        let service = Service::default();
+        start(&service);
+        let prepared = service
+            .prepare_registry(
+                "epoch",
+                Change::Create {
+                    label: "Agent".into(),
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+        let token = prepared.result["token"].as_str().unwrap();
+        assert!(service.authenticate(token).is_none());
+        let stored = serde_json::to_string(&prepared.registry).unwrap();
+        assert!(!stored.contains(token));
+        assert!(stored.contains(&digest(token)));
+        let candidate = serde_json::from_str(&stored).unwrap();
+        service
+            .apply_registry("epoch", prepared.revision, candidate)
+            .unwrap();
+        assert!(service.authenticate(token).is_some());
+        assert_eq!(
+            service
+                .apply_registry("epoch", prepared.revision, prepared.registry)
+                .unwrap_err(),
+            "REGISTRY_CHANGED"
+        );
+    }
+    #[test]
+    fn stale_prepared_changes_cannot_restore_a_deleted_token_or_cross_pages() {
+        let service = Service::default();
+        start(&service);
+        let token = service
+            .create_client("epoch", "Agent".into(), None)
+            .unwrap();
+        let id = token["id"].as_str().unwrap();
+        let old = service
+            .prepare_registry(
+                "epoch",
+                Change::Update {
+                    id: id.into(),
+                    label: "Old edit".into(),
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+        service.remove_client("epoch", id).unwrap();
+        assert_eq!(
+            service
+                .apply_registry("epoch", old.revision, old.registry.clone())
+                .unwrap_err(),
+            "REGISTRY_CHANGED"
+        );
+        service.shutdown();
+        service.state.lock().unwrap().epoch = "new-page".into();
+        assert_eq!(
+            service
+                .apply_registry("epoch", old.revision, old.registry)
+                .unwrap_err(),
+            "SESSION_CLOSED"
+        );
+        assert!(service.stored_registry().clients.is_empty());
     }
     #[test]
     fn new_credentials_use_compact_sk_tokens_and_authenticate_the_whole_secret() {
@@ -297,8 +412,6 @@ mod tests {
 
     #[test]
     fn legacy_hex_credentials_coexist_with_new_tokens_after_restart() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens.json");
         let legacy = "0123456789abcdef".repeat(4);
         let mut registry = Registry::default();
         registry.clients.insert(
@@ -312,9 +425,8 @@ mod tests {
                 expires_at: None,
             },
         );
-        write(&path, &registry).unwrap();
         let service = Service::default();
-        service.load_registry(path.clone()).unwrap();
+        service.load_registry(registry).unwrap();
         start(&service);
         assert_eq!(service.authenticate(&legacy).unwrap().id, "legacy");
         let saved = service
@@ -325,25 +437,25 @@ mod tests {
         service.shutdown();
 
         let next = Service::default();
-        next.load_registry(path.clone()).unwrap();
+        next.load_registry(service.stored_registry()).unwrap();
         start(&next);
         assert_eq!(next.authenticate(&legacy).unwrap().id, "legacy");
         assert_eq!(
             next.authenticate(token).unwrap().id,
             saved["id"].as_str().unwrap()
         );
-        assert_eq!(read(&path).unwrap().clients["legacy"].prefix, &legacy[..8]);
-        let persisted = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            next.stored_registry().clients["legacy"].prefix,
+            &legacy[..8]
+        );
+        let persisted = serde_json::to_string(&next.stored_registry()).unwrap();
         assert!(!persisted.contains(&legacy));
         assert!(!persisted.contains(token));
     }
 
     #[tokio::test]
     async fn restart_reuses_endpoint_and_credentials() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens.json");
         let first = Arc::new(Service::default());
-        first.load_registry(path.clone()).unwrap();
         start(&first);
         first
             .configure_server(
@@ -362,7 +474,7 @@ mod tests {
         let token = first.create_client("epoch", "Agent".into(), None).unwrap();
         first.shutdown();
         let second = Arc::new(Service::default());
-        second.load_registry(path).unwrap();
+        second.load_registry(first.stored_registry()).unwrap();
         start(&second);
         tokio::time::timeout(Duration::from_secs(3), async {
             while http::start(second.clone(), "epoch".into()).await.is_err() {
@@ -382,17 +494,14 @@ mod tests {
     }
     #[test]
     fn credentials_persist_as_hashes_and_never_create_peer_authority() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens.json");
         let service = Service::default();
-        service.load_registry(path.clone()).unwrap();
         start(&service);
         let saved = service
             .create_client("epoch", "Local agent".into(), None)
             .unwrap();
         let token = saved["token"].as_str().unwrap();
         let id = saved["id"].as_str().unwrap();
-        let bytes = std::fs::read_to_string(&path).unwrap();
+        let bytes = serde_json::to_string(&service.stored_registry()).unwrap();
         assert!(!bytes.contains(token));
         assert!(bytes.contains(&digest(token)));
         let p = service.authenticate(token).unwrap();
@@ -407,7 +516,7 @@ mod tests {
         service.shutdown();
         assert!(service.authenticate(token).is_none());
         let next = Service::default();
-        next.load_registry(path.clone()).unwrap();
+        next.load_registry(service.stored_registry()).unwrap();
         start(&next);
         assert_eq!(next.authenticate(token).unwrap().id, id);
         next.update_client("epoch", id, "Renamed".into(), Some(now() + 86400000))
@@ -415,10 +524,10 @@ mod tests {
         assert_eq!(next.authenticate(token).unwrap().label, "Renamed");
         next.update_client("epoch", id, "Renamed".into(), None)
             .unwrap();
-        assert!(read(&path).unwrap().clients[id].expires_at.is_none());
+        assert!(next.stored_registry().clients[id].expires_at.is_none());
         next.remove_client("epoch", id).unwrap();
         assert!(next.authenticate(token).is_none());
-        assert!(read(&path).unwrap().clients.is_empty());
+        assert!(next.stored_registry().clients.is_empty());
     }
     #[test]
     fn expired_token_blocks_existing_grants_before_background_cleanup() {
@@ -518,7 +627,7 @@ mod tests {
         assert!(rx.blocking_recv().is_err());
     }
     #[test]
-    fn invalid_expiry_corrupt_storage_and_failed_writes_fail_closed() {
+    fn invalid_expiry_and_corrupt_registry_fail_closed() {
         let service = Service::default();
         start(&service);
         for expiry in [0, now() - 1, u64::MAX] {
@@ -526,19 +635,10 @@ mod tests {
                 .create_client("epoch", "Agent".into(), Some(expiry))
                 .is_err());
         }
-        assert!(service.state.lock().unwrap().registry.clients.is_empty());
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens.json");
-        std::fs::write(&path, b"corrupt").unwrap();
-        assert!(service.load_registry(path.clone()).is_err());
-        assert!(service.state.lock().unwrap().registry_path.is_none());
-        std::fs::remove_file(&path).unwrap();
-        service.load_registry(path.clone()).unwrap();
-        // A directory at the destination makes atomic replacement fail.
-        std::fs::create_dir(&path).unwrap();
-        assert!(service
-            .create_client("epoch", "Agent".into(), None)
-            .is_err());
+        assert!(serde_json::from_str::<Registry>("corrupt").is_err());
+        let mut invalid = Registry::default();
+        invalid.version = 2;
+        assert!(service.load_registry(invalid).is_err());
         assert!(service.state.lock().unwrap().registry.clients.is_empty());
     }
     #[test]

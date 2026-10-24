@@ -70,8 +70,14 @@ random token is displayed only at creation. New tokens use `sk-` followed by
 source (46 characters total). Existing 64-character hexadecimal tokens remain
 valid; token authentication checks the complete secret without requiring the
 new prefix. Only a SHA-256 hash, a short display prefix,
-name, creation time and expiration are stored in `mcp-tokens.json` in the local
-app-data directory. Changes are written atomically before becoming active. The
+name, creation time and expiration are stored alongside the desired Host/port in
+the current WebView's `localStorage` entry `mcp_registry`. The native service
+validates a proposed change; the renderer saves that record before native
+activation and serializes edits to prevent lost updates. A storage failure does
+not activate the change. If activation fails after saving, the page's automation
+session closes and the saved record is restored on the next open.
+No old `mcp-tokens.json` file is read, written or migrated. Clearing this storage
+resets MCP credentials and listener settings on the next open. The
 list, creation, editing and revocation remain available while MCP is disabled.
 Issuing a token authorizes forwarding and, when local automation is enabled,
 local tool calls without additional local approval, but never starts the listener;
