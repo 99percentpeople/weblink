@@ -34,7 +34,9 @@ import type {
   NativeCloseRequest,
   NativePictureInPicture,
   NativePipState,
+  NativeControlStatus,
 } from "@weblink/platform";
+import type { Principal } from "@weblink/automation";
 
 const fixture = vi.hoisted(() => ({
   permissions: undefined as AppPermissions | undefined,
@@ -53,7 +55,21 @@ const fixture = vi.hoisted(() => ({
   pipError: vi.fn(),
   setPeerMuted: vi.fn(),
   setPlay: vi.fn(),
+  revokeControl: vi.fn(),
+  releaseAutomationControl: vi.fn(),
+  screenControl: vi.fn(),
 }));
+const [automationController, setAutomationController] =
+  createSignal<Principal | null>(null);
+const [controlledPeers, setControlledPeers] = createSignal<
+  { id: string; name: string }[]
+>([]);
+const [hostControl, setHostControl] =
+  createSignal<NativeControlStatus>({
+    pending: [],
+    clientId: null,
+    closed: true,
+  });
 const [mutedMembers, setMutedMembers] = createSignal<
   string[]
 >([]);
@@ -67,10 +83,11 @@ const [currentRoomId, setCurrentRoomId] = createSignal<
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     remoteControl: {
-      status: () => ({ clientId: null }),
+      status: () => hostControl(),
+      revoke: fixture.revokeControl,
       screen: {},
     },
-    getScreenControl: () => undefined,
+    getScreenControl: fixture.screenControl,
   },
 }));
 vi.mock("@/i18n", () => ({
@@ -79,6 +96,12 @@ vi.mock("@/i18n", () => ({
 }));
 vi.mock("solid-sonner", () => ({
   toast: { error: fixture.pipError, dismiss: vi.fn() },
+}));
+vi.mock("@/components/icons", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/icons")
+  >()),
+  IconStop: () => <svg />,
 }));
 vi.mock("@/components/app/account-menu", () => ({
   AccountMenu: () => null,
@@ -134,6 +157,13 @@ vi.mock("@solidjs/router", () => ({
 vi.mock("@/libs/state/app-state", async () => ({
   appState: {
     profile: { clientId: "me", name: "Me" },
+    capabilities: {
+      localInput: {
+        mobile: false,
+        keyboardObserved: true,
+        gamepadCount: 0,
+      },
+    },
     options: (
       await import("@/libs/state/app-options")
     ).getDefaultAppOptions(),
@@ -160,6 +190,11 @@ vi.mock("@/libs/state/app-state", async () => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    automation: {
+      controller: automationController,
+      controlledPeers,
+      releaseControl: fixture.releaseAutomationControl,
+    },
     get permissions() {
       return fixture.permissions;
     },
@@ -321,6 +356,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   fixture.permissions = undefined;
   fixture.routeState = undefined;
+  setAutomationController(null);
+  setControlledPeers([]);
+  fixture.screenControl.mockReset();
+  fixture.releaseAutomationControl
+    .mockReset()
+    .mockResolvedValue(undefined);
+  setHostControl({
+    pending: [],
+    clientId: null,
+    closed: true,
+  });
   setMutedMembers([]);
   setAudibleMembers(["bob"]);
   setPlayingAudio(false);
@@ -429,6 +475,228 @@ function renderNativeWindow(withCloseDialog = false) {
   ));
   return { native, application, requestClose, respond };
 }
+
+describe("automation control status", () => {
+  it("shows each controlled device and releases only the selected automation lease", async () => {
+    renderNativeWindow();
+    setControlledPeers([
+      { id: "surface", name: "Surface Go 2" },
+      { id: "desktop", name: "Desktop" },
+    ]);
+    const statuses = screen.getAllByRole("status", {
+      name: "remote_control.controller_active",
+    });
+    expect(statuses).toHaveLength(2);
+    expect(statuses[0]).toHaveTextContent("Surface Go 2");
+    expect(statuses[1]).toHaveTextContent("Desktop");
+    setControlledPeers([
+      { id: "surface", name: "Surface renamed" },
+      { id: "desktop", name: "Desktop" },
+    ]);
+    expect(
+      screen.getAllByRole("status", {
+        name: "remote_control.controller_active",
+      })[0],
+    ).toBe(statuses[0]);
+    expect(statuses[0]).toHaveTextContent(
+      "Surface renamed",
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "remote_control.end",
+      })[0],
+    );
+    await waitFor(() =>
+      expect(
+        fixture.releaseAutomationControl,
+      ).toHaveBeenCalledWith("surface"),
+    );
+    expect(fixture.revokeControl).not.toHaveBeenCalled();
+    setControlledPeers([]);
+    expect(
+      screen.queryByRole("status", {
+        name: "remote_control.controller_active",
+      }),
+    ).toBeNull();
+  });
+  it("keeps the control visible and reports a failed release", async () => {
+    const warn = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+    fixture.releaseAutomationControl.mockRejectedValueOnce(
+      new Error("release failed"),
+    );
+    renderNativeWindow();
+    setControlledPeers([
+      { id: "surface", name: "Surface Go 2" },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "remote_control.end",
+      }),
+    );
+    await waitFor(() =>
+      expect(fixture.pipError).toHaveBeenCalledOnce(),
+    );
+    expect(
+      screen.getByRole("status", {
+        name: "remote_control.controller_active",
+      }),
+    ).toHaveTextContent("Surface Go 2");
+    expect(
+      screen.getByRole("button", {
+        name: "remote_control.end",
+      }),
+    ).toBeEnabled();
+    warn.mockRestore();
+  });
+  it("merges automation into the existing outgoing manual control for the same device", () => {
+    const cancel = vi.fn();
+    fixture.screenControl.mockImplementation(
+      (id: string) =>
+        id === "bob"
+          ? {
+              state: () => "active",
+              request: vi.fn(),
+              cancel,
+              addEventListener: vi.fn(),
+              removeEventListener: vi.fn(),
+            }
+          : undefined,
+    );
+    renderNativeWindow();
+    const bob = screen.getByRole("article", {
+      name: "Bob",
+    });
+    fireEvent.click(
+      within(bob).getByRole("button", {
+        name: "Pin source",
+      }),
+    );
+    setControlledPeers([{ id: "bob", name: "Bob" }]);
+    expect(
+      screen.getAllByRole("status", {
+        name: "remote_control.controller_active",
+      }),
+    ).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "remote_control.end",
+      }),
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      fixture.releaseAutomationControl,
+    ).not.toHaveBeenCalled();
+    setControlledPeers([]);
+    expect(
+      screen.getByRole("status", {
+        name: "remote_control.controller_active",
+      }),
+    ).toHaveTextContent("Bob");
+  });
+  it.each(["mcp", "peer"] as const)(
+    "shows an active %s controller outside a room and removes it when released",
+    (kind) => {
+      setCurrentRoomId(undefined);
+      renderNativeWindow();
+      const status = () =>
+        screen.queryByRole("status", {
+          name:
+            kind === "mcp"
+              ? "remote_control.host_active_short"
+              : "remote_control.host_active",
+        });
+      expect(status()).toBeNull();
+      setAutomationController({
+        id: "controller",
+        label: "Agent",
+        kind,
+      });
+      expect(status()).toHaveTextContent(
+        kind === "mcp"
+          ? "remote_control.host_active_short"
+          : "Agent",
+      );
+      if (kind === "mcp") {
+        expect(screen.queryByText(/Agent/)).toBeNull();
+        expect(
+          status()?.getAttribute("title"),
+        ).not.toContain("Agent");
+      }
+      expect(
+        screen.queryByRole("button", {
+          name: "common.action.revoke",
+        }),
+      ).toBeNull();
+      const original = status();
+      setHostControl({
+        pending: [],
+        closed: false,
+        clientId: "controller",
+        controllerKind: "automation",
+      });
+      setAutomationController({
+        id: "controller",
+        label: "Agent renamed",
+        kind,
+      });
+      expect(status()).toBe(original);
+      expect(status()).toHaveTextContent(
+        kind === "mcp"
+          ? "remote_control.host_active_short"
+          : "Agent renamed",
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "common.action.revoke",
+        }),
+      );
+      expect(fixture.revokeControl).toHaveBeenCalledOnce();
+      setAutomationController(null);
+      expect(status()).toBeNull();
+    },
+  );
+  it("keeps one manual-control status when automation borrows its lease", () => {
+    renderNativeWindow();
+    setHostControl({
+      pending: [],
+      closed: false,
+      clientId: "bob",
+      controllerKind: "remote",
+    });
+    setAutomationController({
+      id: "bob",
+      label: "Bob",
+      kind: "peer",
+    });
+    const status = screen.getByRole("status", {
+      name: "remote_control.host_active",
+    });
+    expect(status).toHaveTextContent("Bob");
+    expect(
+      screen.queryByText(/automation.title/),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "common.action.revoke",
+      }),
+    );
+    expect(fixture.revokeControl).toHaveBeenCalledOnce();
+    setAutomationController(null);
+    expect(status).toBeVisible();
+    setHostControl({
+      pending: [],
+      clientId: null,
+      closed: false,
+    });
+    expect(
+      screen.queryByRole("status", {
+        name: "remote_control.host_active",
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("native PiP window controls", () => {
   it("keeps close confirmation and cancellation in the compact window", async () => {

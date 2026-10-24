@@ -68,6 +68,7 @@ interface NativeSnapshot {
     exitCode: number | null;
     truncated: boolean;
   }[];
+  controller?: Principal | null;
   activeCalls?: string[];
 }
 const empty: NativeSnapshot = {
@@ -82,6 +83,7 @@ const empty: NativeSnapshot = {
   pending: [],
   audit: [],
   jobs: [],
+  controller: null,
 };
 export type AutomationRuntime = ReturnType<
   typeof createAutomation
@@ -777,6 +779,18 @@ export function createAutomation(
   const configureMcp = (value: boolean) =>
     configureFeature("mcp", value);
   createEffect(() => {
+    const controller =
+      ready() && enabled() ? nativeState.controller : null;
+    sessionService.setAutomationController(
+      controller?.kind === "peer" && controller.generation
+        ? {
+            id: controller.id,
+            generation: controller.generation,
+          }
+        : null,
+    );
+  });
+  createEffect(() => {
     Object.values(sessionService.sessions).forEach((s) => {
       sessionService.capabilities.get(s);
       sessionService.capabilities.generation(s);
@@ -874,6 +888,62 @@ export function createAutomation(
     },
     desktop: !!native,
     webSupported,
+    controller: () =>
+      native && ready() && enabled()
+        ? (nativeState.controller ?? null)
+        : null,
+    controlledPeers: () => {
+      revision();
+      if (!ready() || !active()) return [];
+      return [...links].flatMap(([session, link]) =>
+        link.connected &&
+        !link.lifetime.signal.aborted &&
+        sessionService.sessions[session.targetClientId] ===
+          session &&
+        session.isMessageChannelReady &&
+        bindings.get(session)?.generation ===
+          sessionService.capabilities.generation(session) &&
+        canConnect(session) &&
+        sessionService.capabilities.get(session)?.automation
+          ?.controlActive === true
+          ? [
+              {
+                id: session.targetClientId,
+                name:
+                  sessionService.clientViewData[
+                    session.targetClientId
+                  ]?.name ?? session.targetClientId,
+              },
+            ]
+          : [],
+      );
+    },
+    releaseControl: async (clientId: string) => {
+      const session = sessionService.sessions[clientId];
+      const link = links.get(session);
+      if (
+        !active() ||
+        !link?.connected ||
+        link.lifetime.signal.aborted ||
+        !session.isMessageChannelReady ||
+        !canConnect(session) ||
+        bindings.get(session)?.generation !==
+          sessionService.capabilities.generation(session)
+      )
+        throw new AutomationError("TARGET_DISCONNECTED");
+      const result = await link.call(
+        {
+          name: "control.release",
+          arguments: { target: "local" },
+        },
+        life.signal,
+      );
+      if (!result.ok)
+        throw new AutomationError(
+          result.error.code,
+          result.error.message,
+        );
+    },
     snapshot: () => {
       revision();
       return native

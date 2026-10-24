@@ -1,12 +1,11 @@
 import { Show } from "solid-js";
 import { MonitorUp, Volume2, VolumeX } from "lucide-solid";
-import { ClientAvatar } from "@/components/common/client-avatar";
 import { IconStop } from "@/components/icons";
 import { t } from "@/i18n";
+import { MeetingStatusLabel } from "./meeting-status-label";
 
 export function MeetingSharingStatus(props: {
   name: string;
-  avatar?: string;
   count: number;
   onStop(): void;
   audioAvailable: boolean;
@@ -27,20 +26,10 @@ export function MeetingSharingStatus(props: {
         class="size-4 shrink-0"
         aria-hidden="true"
       />
-      <ClientAvatar
-        class="size-6 shrink-0 text-[10px]"
+      <MeetingStatusLabel
         name={props.name}
-        avatar={props.avatar}
-        aria-hidden="true"
+        label={presenter()}
       />
-      <span
-        class="meeting-sharing-presenter min-w-0 truncate font-medium"
-        title={presenter()}
-        role="status"
-        aria-label={presenter()}
-      >
-        {props.name}
-      </span>
       <Show when={props.count > 1}>
         <span class="text-muted-foreground shrink-0 text-[11px] tabular-nums">
           ×{props.count}

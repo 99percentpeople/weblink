@@ -2183,7 +2183,7 @@ async function main() {
   noOverflow("long presenter in compact sharing header");
   assert(
     sharingStatus()!.querySelector<HTMLElement>(
-      ".meeting-sharing-presenter",
+      '[role="status"]',
     )!.clientWidth > 0,
     "compact sharing header hid the presenter entirely",
   );

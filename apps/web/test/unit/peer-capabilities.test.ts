@@ -23,6 +23,25 @@ import {
 } from "../support/rtc-transport";
 
 const disposers: (() => void)[] = [];
+it("accepts optional automation lease status without changing the protocol version", () => {
+  for (const value of [
+    {},
+    { controlActive: true },
+    { controlActive: false },
+  ]) {
+    expect(
+      validCurrentCapability("automation", value),
+    ).toBe(true);
+    expect(
+      advertiseCapabilities({ automation: value }),
+    ).toEqual({ "automation/1": value });
+  }
+  expect(
+    validCurrentCapability("automation", {
+      controlActive: "true",
+    }),
+  ).toBe(false);
+});
 afterEach(() => {
   disposers.splice(0).forEach((stop) => stop());
   vi.useRealTimers();

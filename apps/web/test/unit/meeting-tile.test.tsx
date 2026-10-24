@@ -24,6 +24,7 @@ import { setAppState } from "@/libs/state/app-state";
 import { getAvatarFallbackImage } from "@/libs/utils/avatar";
 import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 import type { NativeControlStatus } from "@weblink/platform";
+import type { Principal } from "@weblink/automation";
 import {
   MeetingMediaContext,
   type MeetingMediaContextValue,
@@ -45,6 +46,9 @@ const fixture = vi.hoisted(() => ({
   peerCapabilities:
     vi.fn<() => PeerCapabilities | undefined>(),
   hostStatus: vi.fn<() => NativeControlStatus>(),
+  automationController: vi.fn<() => Principal | null>(),
+  controlledPeers:
+    vi.fn<() => { id: string; name: string }[]>(),
   clipboard: {
     watch: vi.fn(() => () => {}),
     copy: vi.fn(),
@@ -55,6 +59,10 @@ vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     remoteClipboard: fixture.clipboard,
     peerCapabilities: fixture.peerCapabilities,
+    automation: {
+      controller: fixture.automationController,
+      controlledPeers: fixture.controlledPeers,
+    },
   }),
 }));
 vi.mock("@/libs/application/session-service", () => ({
@@ -110,6 +118,17 @@ vi.mock("@/components/icons", () => ({
 vi.mock("@/components/common/spinner", () => ({
   Spinner: () => null,
 }));
+vi.mock(
+  "@/components/common/automation-pointer-icon",
+  () => ({
+    AutomationPointerIcon: () => (
+      <svg
+        data-testid="automation-pointer"
+        aria-hidden="true"
+      />
+    ),
+  }),
+);
 vi.mock("@/libs/hooks/check-volume", () => ({
   createCheckVolume: () => () => false,
 }));
@@ -151,6 +170,10 @@ beforeEach(() => {
   fixture.screenControl = undefined;
   fixture.peerCapabilities.mockReset();
   fixture.hostStatus.mockReset();
+  fixture.automationController
+    .mockReset()
+    .mockReturnValue(null);
+  fixture.controlledPeers.mockReset().mockReturnValue([]);
   setAppState("profile", { clientId: "", name: "" });
   setAppState(
     "session",
@@ -449,6 +472,175 @@ it("shows control on the matching local screen and clears it when control ends",
     screen.queryByRole("img", { name: /Controlled by/ }),
   ).toBeNull();
 });
+
+it("uses the header's AI lease only for the matching remote screen and returns to manual control on release", () => {
+  setAppState("profile", { clientId: "self", name: "Bob" });
+  const [peers, setPeers] = createSignal<
+    { id: string; name: string }[]
+  >([]);
+  fixture.controlledPeers.mockImplementation(peers);
+  const [capabilities, setCapabilities] =
+    createSignal<PeerCapabilities>({});
+  fixture.peerCapabilities.mockImplementation(capabilities);
+  const occupancy = (
+    sourceId: string,
+    clientId = "self",
+  ): PeerCapabilities => ({
+    control: {
+      host: true,
+      request: true,
+      occupancy: {
+        state: "controlled",
+        sourceId,
+        clientId,
+      },
+    },
+  });
+  render(() => (
+    <MeetingTile
+      name="Host"
+      clientId="host"
+      sourceKind="screen"
+      controlSourceId="screen-2"
+      pinned={false}
+      compact
+    />
+  ));
+  setCapabilities(occupancy("screen-2"));
+  const indicator = screen.getByRole("img", {
+    name: "Controlled by Bob",
+  });
+  expect(
+    screen.queryByTestId("automation-pointer"),
+  ).toBeNull();
+  setPeers([{ id: "other-host", name: "Other host" }]);
+  expect(
+    screen.queryByTestId("automation-pointer"),
+  ).toBeNull();
+  setPeers([{ id: "host", name: "Host" }]);
+  expect(
+    screen.getByTestId("automation-pointer"),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("img", { name: "Controlled by Bob" }),
+  ).toBe(indicator);
+  setCapabilities(occupancy("screen-1"));
+  expect(
+    screen.queryByTestId("automation-pointer"),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+  setCapabilities(
+    occupancy("screen-2", "another-controller"),
+  );
+  expect(
+    screen.queryByTestId("automation-pointer"),
+  ).toBeNull();
+  setCapabilities(occupancy("screen-2"));
+  expect(
+    screen.getByTestId("automation-pointer"),
+  ).toBeTruthy();
+  setPeers([]);
+  expect(
+    screen.queryByTestId("automation-pointer"),
+  ).toBeNull();
+  expect(
+    screen.getByRole("img", { name: "Controlled by Bob" }),
+  ).toBeTruthy();
+  setCapabilities({});
+  expect(
+    screen.queryByRole("img", { name: /Controlled by/ }),
+  ).toBeNull();
+});
+
+it.each([
+  { kind: "peer", controllerKind: "remote" },
+  { kind: "peer", controllerKind: "automation" },
+  { kind: "mcp", controllerKind: "automation" },
+] as const)(
+  "shows local $kind control ($controllerKind) without revealing token identity",
+  ({ kind, controllerKind }) => {
+    const principal: Principal = {
+      id: "agent-id",
+      label: "Private token name",
+      kind,
+    };
+    const [active, setActive] =
+      createSignal<Principal | null>(principal);
+    fixture.automationController.mockImplementation(active);
+    const [status, setStatus] =
+      createSignal<NativeControlStatus>({
+        closed: false,
+        pending: [],
+        clientId: principal.id,
+        sourceId: "screen-2",
+        controllerKind,
+      });
+    fixture.hostStatus.mockImplementation(status);
+    render(() => (
+      <MeetingTile
+        name="My screen"
+        sourceKind="screen"
+        controlSourceId="screen-2"
+        local
+        compact
+        pinned={false}
+      />
+    ));
+    const label =
+      kind === "mcp"
+        ? "remote_control.host_active_short"
+        : `Controlled by ${principal.label}`;
+    const indicator = screen.getByRole("img", {
+      name: label,
+    });
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    if (kind === "mcp") {
+      expect(indicator.title).not.toContain(principal.id);
+      expect(indicator.title).not.toContain(
+        principal.label,
+      );
+    }
+    setStatus((previous) => ({
+      ...previous,
+      sourceId: "other-screen",
+    }));
+    expect(
+      screen.queryByTestId("automation-pointer"),
+    ).toBeNull();
+    setStatus((previous) => ({
+      ...previous,
+      sourceId: "screen-2",
+    }));
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    setActive(null);
+    expect(
+      screen.queryByTestId("automation-pointer"),
+    ).toBeNull();
+    if (controllerKind === "remote")
+      expect(
+        screen.getByRole("img", {
+          name: `Controlled by ${principal.id}`,
+        }),
+      ).toBeTruthy();
+    else
+      expect(
+        screen.queryByRole("img", { name: label }),
+      ).toBeNull();
+    setStatus((previous) => ({
+      ...previous,
+      closed: true,
+    }));
+    expect(
+      screen.queryByRole("img", { name: /Controlled by/ }),
+    ).toBeNull();
+  },
+);
 
 it("omits the tile action container when no actions are available", () => {
   const view = render(() => (

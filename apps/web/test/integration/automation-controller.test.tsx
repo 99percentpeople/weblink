@@ -94,6 +94,7 @@ vi.mock("@/libs/application/session-service", () => ({
       get: () => fixture.remoteCapabilities(),
     },
     setAutomationEnabled: fixture.advertise,
+    setAutomationController: vi.fn(),
     canReceive: () => true,
     canShareScreen: () => true,
   },
@@ -177,6 +178,87 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+it("tracks the receiver's actual input lease and releases it without changing MCP settings", async () => {
+  const [caps, setCaps] = createSignal<PeerCapabilities>({
+    automation: {},
+    identity: { receiveContent: true },
+  });
+  fixture.remoteCapabilities = caps;
+  setContext({ registerTool: vi.fn(async () => {}) });
+  vi.useFakeTimers();
+  const { runtime } = mount();
+  await runtime.configureMcp(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.controlledPeers()).toEqual([]);
+  setCaps({
+    ...caps(),
+    automation: { controlActive: true },
+  });
+  expect(runtime.controlledPeers()).toEqual([
+    { id: "desktop", name: "Desktop" },
+  ]);
+  await runtime.releaseControl("desktop");
+  expect(fixture.call).toHaveBeenLastCalledWith(
+    {
+      name: "control.release",
+      arguments: { target: "local" },
+    },
+    expect.any(AbortSignal),
+  );
+  expect(appState.options.mcpEnabled).toBe(true);
+  // The receiver confirms lease release; a successful call alone is not authority.
+  expect(runtime.controlledPeers()).toHaveLength(1);
+  setCaps({
+    ...caps(),
+    automation: { controlActive: false },
+  });
+  expect(runtime.controlledPeers()).toEqual([]);
+  setCaps({
+    ...caps(),
+    automation: { controlActive: true },
+  });
+  fixture.call.mockResolvedValueOnce({
+    ok: false,
+    error: {
+      code: "PERMISSION_DENIED",
+      message: "Permission denied",
+    },
+  });
+  await expect(
+    runtime.releaseControl("desktop"),
+  ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+  expect(runtime.controlledPeers()).toHaveLength(1);
+  fixture.closeLink?.();
+  expect(runtime.controlledPeers()).toEqual([]);
+  const calls = fixture.call.mock.calls.length;
+  await expect(
+    runtime.releaseControl("desktop"),
+  ).rejects.toMatchObject({ code: "TARGET_DISCONNECTED" });
+  expect(fixture.call).toHaveBeenCalledTimes(calls);
+});
+it("does not show a lease on an unopened or replaced connection, or after MCP is disabled", async () => {
+  fixture.remoteCapabilities = () => ({
+    automation: { controlActive: true },
+    identity: { receiveContent: true },
+  });
+  fixture.channelReady = false;
+  setContext({ registerTool: vi.fn(async () => {}) });
+  vi.useFakeTimers();
+  const { runtime } = mount();
+  await runtime.configureMcp(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.controlledPeers()).toEqual([]);
+  fixture.finishOpening?.();
+  expect(runtime.controlledPeers()).toHaveLength(1);
+  fixture.generation = "connection-2";
+  expect(runtime.controlledPeers()).toEqual([]);
+  await expect(
+    runtime.releaseControl("desktop"),
+  ).rejects.toMatchObject({ code: "TARGET_DISCONNECTED" });
+  expect(fixture.call).not.toHaveBeenCalled();
+  await runtime.configureMcp(false);
+  expect(runtime.controlledPeers()).toEqual([]);
 });
 it.each([undefined, false])(
   "waits for the destination to allow receiving before opening automation (receive=%s)",

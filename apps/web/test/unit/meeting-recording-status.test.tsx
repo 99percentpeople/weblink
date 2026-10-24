@@ -15,18 +15,6 @@ vi.mock("@/components/icons", () => ({
   IconPause: () => <svg />,
   IconPlayArrow: () => <svg />,
 }));
-vi.mock("@/components/common/client-avatar", () => ({
-  ClientAvatar: (props: {
-    name: string;
-    avatar?: string;
-  }) => (
-    <span
-      role="img"
-      aria-label={props.name}
-      data-avatar={props.avatar}
-    />
-  ),
-}));
 afterEach(cleanup);
 it("shows progress and delegates stop, then keeps the saving status without another stop action", () => {
   const [state, setState] = createSignal<RecordingStatus>({
@@ -50,19 +38,15 @@ it("shows progress and delegates stop, then keeps the saving status without anot
       onResume={resume}
     />
   ));
-  expect(screen.getByRole("status").textContent).toContain(
-    "recording.recording",
-  );
-  expect(screen.getByRole("status").textContent).toContain(
-    "Screen 2",
+  const status = screen.getByRole("status", {
+    name: "recording.recording · Alice · Screen 2",
+  });
+  expect(status.textContent).toBe("Alice");
+  expect(status.getAttribute("title")).toBe(
+    "recording.recording · Alice · Screen 2",
   );
   expect(screen.getByText("1:05")).toBeTruthy();
-  expect(screen.getByText("Screen 2")).toBeTruthy();
-  expect(
-    screen
-      .getByRole("img", { name: "Alice" })
-      .getAttribute("data-avatar"),
-  ).toBe("https://example.test/alice.png");
+  expect(screen.queryByRole("img")).toBeNull();
   fireEvent.click(
     screen.getByRole("button", { name: "recording.pause" }),
   );
@@ -71,9 +55,11 @@ it("shows progress and delegates stop, then keeps the saving status without anot
     ...previous,
     phase: "paused",
   }));
-  expect(screen.getByRole("status").textContent).toContain(
-    "recording.paused",
-  );
+  expect(
+    screen.getByRole("status", {
+      name: "recording.paused · Alice · Screen 2",
+    }),
+  ).toBe(status);
   expect(screen.getByText("1:05")).toBeTruthy();
   fireEvent.click(
     screen.getByRole("button", {
@@ -89,14 +75,13 @@ it("shows progress and delegates stop, then keeps the saving status without anot
     ...previous,
     phase: "saving" as const,
   }));
-  expect(screen.getByRole("status").textContent).toContain(
-    "recording.saving",
-  );
-  expect(screen.queryByRole("button")).toBeNull();
-  expect(screen.getByText("Screen 2")).toBeTruthy();
   expect(
-    screen.getByRole("img", { name: "Alice" }),
-  ).toBeTruthy();
+    screen.getByRole("status", {
+      name: "recording.saving · Alice · Screen 2",
+    }),
+  ).toBe(status);
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(status.textContent).toBe("Alice");
   view.unmount();
   expect(stop).toHaveBeenCalledOnce();
 });
@@ -116,6 +101,11 @@ it("allows cancelling while preparation is pending", () => {
       onResume={() => {}}
     />
   ));
+  expect(
+    screen.getByRole("status", {
+      name: "recording.preparing · Camera",
+    }).textContent,
+  ).toBe("Camera");
   expect(
     screen.queryByRole("button", {
       name: "recording.pause",

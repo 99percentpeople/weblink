@@ -30,7 +30,10 @@ export interface PeerCapabilities {
   identity?: { receiveContent: boolean };
   [service: string]: unknown;
   messaging?: Record<string, never>;
-  automation?: Record<string, never>;
+  automation?: {
+    /** This recipient currently holds an automation input lease on the sender. */
+    controlActive?: boolean;
+  };
   fileDrop?: { hover?: boolean; hoverUpdates?: boolean };
   files?: {
     content: boolean;
@@ -96,7 +99,10 @@ const validators: Record<
 > = {
   identity: (v) => flags(v, ["receiveContent"]),
   messaging: (v) => record(v),
-  automation: (v) => record(v),
+  automation: (v) =>
+    record(v) &&
+    (v.controlActive === undefined ||
+      typeof v.controlActive === "boolean"),
   fileDrop: (v) =>
     record(v) &&
     (v.hover === undefined ||

@@ -48,6 +48,54 @@ fn authority(session_consent: bool) -> Service {
 }
 
 #[test]
+fn controller_status_requires_a_live_mcp_input_lease() {
+    with_bound_owned_input(|control, _, _| {
+        let (service, principal) = super::super::tests::fixture();
+        let mut s = service.state.lock().unwrap();
+        Service::token_grant(&mut s, &principal, &json!("local")).unwrap();
+        assert!(controller(&s, control).is_none());
+        s.input_owners.push(principal.id.clone());
+        assert_eq!(
+            serde_json::to_value(controller(&s, control)).unwrap(),
+            serde_json::to_value(&principal).unwrap()
+        );
+        control.automation_release(&principal.id);
+        // The authority and owner bookkeeping can outlive the input lease.
+        assert!(!s.grants.is_empty());
+        assert!(!s.input_owners.is_empty());
+        assert!(controller(&s, control).is_none());
+    });
+}
+
+#[test]
+fn controller_status_requires_current_peer_authority() {
+    for reason in [
+        "disabled",
+        "disconnected",
+        "revoked",
+        "expired",
+        "remote-target",
+    ] {
+        with_bound_borrowed_input(|control, _, _| {
+            let service = authority(true);
+            let mut s = service.state.lock().unwrap();
+            assert_eq!(controller(&s, control).unwrap().label, "Peer");
+            match reason {
+                "disabled" => s.enabled = false,
+                "disconnected" => s.peers.clear(),
+                "revoked" => s.grants.clear(),
+                "expired" => s.grants.get_mut("input.control").unwrap().expires_at = Some(0),
+                "remote-target" => {
+                    s.grants.get_mut("input.control").unwrap().target = "remote".into()
+                }
+                _ => unreachable!(),
+            }
+            assert!(controller(&s, control).is_none(), "{reason}");
+        });
+    }
+}
+
+#[test]
 fn owned_window_blur_keeps_mcp_authority_and_releases_the_input_lease() {
     for cleanup_first in [false, true] {
         with_bound_owned_input(|control, lease, focus| {
@@ -87,6 +135,7 @@ fn owned_window_blur_keeps_mcp_authority_and_releases_the_input_lease() {
             assert_eq!(serde_json::to_value(&s.grants).unwrap(), grants);
             assert!(s.input_owners.is_empty());
             assert!(!control.automation_active("client"));
+            assert!(controller(&s, control).is_none());
             assert!(!service.input_holds.lock().unwrap().any(lease));
         });
     }

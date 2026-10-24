@@ -1,6 +1,7 @@
 import { Show } from "solid-js";
 import { Monitor, MousePointer2 } from "lucide-solid";
 import { Badge } from "@/components/ui/badge";
+import { AutomationPointerIcon } from "@/components/common/automation-pointer-icon";
 import {
   IconRecord,
   IconPause,
@@ -12,6 +13,7 @@ export interface VideoLabelProps {
   name: string;
   screen?: string;
   controller?: string;
+  automation?: boolean;
   speaking?: boolean;
   recording?: boolean;
   recordingPaused?: boolean;
@@ -25,9 +27,11 @@ export function VideoLabel(props: VideoLabelProps) {
         : "recording.recording",
     );
   const controller = () =>
-    t("remote_control.controlled_by", {
-      name: props.controller ?? "",
-    });
+    props.controller
+      ? t("remote_control.controlled_by", {
+          name: props.controller,
+        })
+      : t("remote_control.host_active_short");
   return (
     <Badge
       variant="secondary"
@@ -68,17 +72,27 @@ export function VideoLabel(props: VideoLabelProps) {
           </Show>
         </span>
       </Show>
-      <Show when={props.controller}>
+      <Show when={props.controller || props.automation}>
         <span
           role="img"
           aria-label={controller()}
           title={controller()}
           class="shrink-0"
         >
-          <MousePointer2
-            class="size-4"
-            aria-hidden="true"
-          />
+          <Show
+            when={props.automation}
+            fallback={
+              <MousePointer2
+                class="size-4"
+                aria-hidden="true"
+              />
+            }
+          >
+            <AutomationPointerIcon
+              class="size-4"
+              aria-hidden="true"
+            />
+          </Show>
         </span>
       </Show>
       <Show when={props.speaking}>

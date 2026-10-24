@@ -40,6 +40,7 @@ const fixture = vi.hoisted(() => ({
         signal: AbortSignal,
       ) => Promise<ToolResult>),
   advertise: vi.fn(),
+  setController: vi.fn(),
   remoteCall:
     vi.fn<
       (
@@ -81,6 +82,7 @@ vi.mock("@/libs/application/session-service", () => ({
     canReceive: () => fixture.receive,
     canShareScreen: () => true,
     setAutomationEnabled: fixture.advertise,
+    setAutomationController: fixture.setController,
   },
 }));
 vi.mock("@/libs/application/automation/handlers", () => ({
@@ -131,6 +133,50 @@ const mount = () => {
   });
   return { runtime, ...view };
 };
+it.each(["mcp", "peer"] as const)(
+  "observes native %s control and clears it on release or disable",
+  async (kind) => {
+    vi.useFakeTimers();
+    const principal = {
+      id: "token",
+      label: "Local agent",
+      kind,
+      ...(kind === "peer"
+        ? { generation: "connection-1" }
+        : {}),
+    };
+    let controller: typeof principal | null = null;
+    vi.mocked(fixture.native.snapshot).mockImplementation(
+      async () => ({ ...snapshot(), controller }),
+    );
+    const view = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(view.runtime.ready()).toBe(true);
+    await view.runtime.configure(true);
+    expect(view.runtime.controller()).toBeNull();
+    controller = principal;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(view.runtime.controller()).toEqual(principal);
+    expect(fixture.setController).toHaveBeenLastCalledWith(
+      kind === "peer"
+        ? { id: principal.id, generation: "connection-1" }
+        : null,
+    );
+    controller = null;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(view.runtime.controller()).toBeNull();
+    expect(fixture.setController).toHaveBeenLastCalledWith(
+      null,
+    );
+    controller = principal;
+    await view.runtime.configure(false);
+    expect(view.runtime.controller()).toBeNull();
+    expect(fixture.sessions).toEqual({});
+    expect(fixture.setController).toHaveBeenLastCalledWith(
+      null,
+    );
+  },
+);
 it("preserves call rows and text selection when unchanged native snapshots arrive", async () => {
   let status = "ok";
   vi.mocked(fixture.native.snapshot).mockImplementation(

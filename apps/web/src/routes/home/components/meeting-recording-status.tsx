@@ -6,10 +6,10 @@ import {
   IconRecord,
   IconStop,
 } from "@/components/icons";
-import { ClientAvatar } from "@/components/common/client-avatar";
 import { t } from "@/i18n";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import type { RecordingStatus } from "@/libs/state/create-recording";
+import { MeetingStatusLabel } from "./meeting-status-label";
 
 export function MeetingRecordingStatus(props: {
   state: RecordingStatus;
@@ -19,7 +19,9 @@ export function MeetingRecordingStatus(props: {
 }) {
   const label = () => t(`recording.${props.state.phase}`);
   const participantName = () =>
-    props.state.participantName ?? props.state.name;
+    props.state.participantName || props.state.name;
+  const description = () =>
+    `${label()} · ${props.state.name}`;
   const elapsed = () => {
     const seconds = Math.floor(props.state.elapsed / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -34,7 +36,7 @@ export function MeetingRecordingStatus(props: {
   return (
     <div
       class="meeting-status-pill max-w-[440px] max-md:max-w-60"
-      title={`${label()} · ${props.state.name}`}
+      title={description()}
     >
       <Switch
         fallback={
@@ -57,24 +59,10 @@ export function MeetingRecordingStatus(props: {
           />
         </Match>
       </Switch>
-      <div
-        role="status"
-        class="flex min-w-0 items-center gap-1.5 max-md:gap-1"
-        title={`${label()} · ${props.state.name}`}
-      >
-        <span class="sr-only">{label()}</span>
-        <ClientAvatar
-          class="size-6 shrink-0 text-[10px] max-md:size-5"
-          name={participantName()}
-          avatar={props.state.avatar}
-          role="img"
-          aria-label={participantName()}
-          title={participantName()}
-        />
-        <span class="min-w-0 truncate font-medium max-md:max-w-16">
-          {props.state.sourceLabel || props.state.name}
-        </span>
-      </div>
+      <MeetingStatusLabel
+        name={participantName()}
+        label={description()}
+      />
       <span class="shrink-0 tabular-nums">{elapsed()}</span>
       <span class="text-muted-foreground shrink-0 tabular-nums max-md:hidden">
         {formatBtyeSize(props.state.bytes)}

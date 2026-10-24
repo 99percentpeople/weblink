@@ -5,6 +5,20 @@ mod tests;
 pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
     sync_input_control(service, &app.state::<crate::remote_control::Shared>());
 }
+/// Report an actual input lease, not merely permission to acquire one.
+pub(super) fn controller(s: &State, control: &crate::remote_control::Service) -> Option<Principal> {
+    s.grants
+        .values()
+        .find(|grant| {
+            s.enabled
+                && grant.target == "local"
+                && grant.scopes.iter().any(|scope| scope == "input.control")
+                && s.input_owners.contains(&grant.principal.id)
+                && Service::grant_live(s, grant)
+                && control.automation_active(&grant.principal.id)
+        })
+        .map(|grant| grant.principal.clone())
+}
 fn retire_input_interruption(
     service: &Service,
     control: &crate::remote_control::Service,

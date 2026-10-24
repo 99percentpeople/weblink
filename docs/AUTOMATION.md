@@ -190,6 +190,15 @@ policy with no expiry. It is separate from MCP tokens and automation scope grant
 Native control snapshots identify whether the active grant came from remote
 control or automation. Device remote-control policy applies only to remote-control
 grants; automation grants retain their own scope checks and the shared local stop.
+The host header shows the active automation input lease, including local MCP control
+outside a room, without displaying token names. Permission alone does not show an active
+controller. Released or invalidated leases disappear on the next status refresh;
+borrowing an existing remote-control grant keeps a single controller indicator.
+The controller header shows each controlled device by name with a sparkle pointer.
+The recipient-specific `automation.controlActive` capability reports only that peer's
+live input lease on the current connection; clients without this optional field do
+not advertise an outgoing automation status. Stopping it releases that lease without
+changing token permissions or disabling automation.
 When the same verified device already controls the requested monitor,
 `control.acquire` borrows that manual grant instead of replacing it and returns
 `reused: true`. Both the device ID and shared connection generation must match,

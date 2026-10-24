@@ -197,11 +197,12 @@ pub async fn automation_snapshot(
     service: State<'_, Shared>,
     epoch: String,
 ) -> Result<Value, String> {
-    blocking(window, service, move |_app, service| {
+    blocking(window, service, move |app, service| {
     service.expire();
     let s = service.state.lock().unwrap();
     Service::check(&s, &epoch)?;
     let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"mcpEnabled":s.mcp_enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":(s.enabled && s.policies_suspended) || (s.mcp_enabled && s.mcp_suspended),"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
+    snapshot["controller"] = json!(native::controller(&s, &app.state::<crate::remote_control::Shared>()));
     let active = s.active_server.clone();
     drop(s);
     snapshot["endpoints"] = json!(server::endpoints(active.as_ref()));

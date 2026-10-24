@@ -4,6 +4,7 @@ import "./index.css";
 import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
 import { sessionService } from "@/libs/application/session-service";
 import { toast } from "solid-sonner";
+import { userErrorMessage } from "@/libs/user-error";
 import { createWindowSize } from "@solid-primitives/resize-observer";
 import { SharedFilesPanel } from "@/components/files/shared-files-panel";
 import {
@@ -99,27 +100,48 @@ export default function Home() {
     resolveRemoteKeyboardOptions(
       appState.options.remoteKeyboard,
     ).emergencyShortcut;
+  const revokeControl = async () => {
+    try {
+      await sessionService.remoteControl.revoke();
+    } catch (error) {
+      console.warn(
+        "Could not revoke remote control",
+        error,
+      );
+      toast.error(
+        t("remote_control.revoke_failed", {
+          shortcut: shortcutLabel(emergencyShortcut()),
+        }),
+      );
+    }
+  };
   const controller = createMemo(() => {
-    const id =
-      sessionService.remoteControl.status().clientId;
-    if (!id) return;
+    const status = sessionService.remoteControl.status();
+    const id = status.clientId;
+    if (
+      !id ||
+      status.closed ||
+      status.controllerKind === "automation"
+    ) {
+      const active = state.automation?.controller();
+      if (!active) return;
+      return {
+        name:
+          active.kind === "peer"
+            ? (appState.session.clientViewData[active.id]
+                ?.name ?? active.label)
+            : "",
+        automation: true,
+        revoke:
+          !status.closed && id === active.id
+            ? revokeControl
+            : undefined,
+      };
+    }
     return {
       name: appState.session.clientViewData[id]?.name ?? id,
-      async revoke() {
-        try {
-          await sessionService.remoteControl.revoke();
-        } catch (error) {
-          console.warn(
-            "Could not revoke remote control",
-            error,
-          );
-          toast.error(
-            t("remote_control.revoke_failed", {
-              shortcut: shortcutLabel(emergencyShortcut()),
-            }),
-          );
-        }
-      },
+      automation: state.automation?.controller()?.id === id,
+      revoke: revokeControl,
     };
   });
   const [search, setSearch] = useSearchParams();
@@ -169,12 +191,36 @@ export default function Home() {
       outgoingControl.state() === "active" ||
       outgoingControl.state() === "activating",
   );
+  const automationPeers = createMemo(
+    () => state.automation?.controlledPeers() ?? [],
+  );
+  const automationOnlyPeerIds = createMemo(() =>
+    automationPeers()
+      .filter(
+        (peer) =>
+          !hasOutgoingControl() ||
+          peer.id !== meeting.selected()?.participantId,
+      )
+      .map((peer) => peer.id),
+  );
+  const releaseAutomationControl = async (id: string) => {
+    try {
+      await state.automation?.releaseControl(id);
+    } catch (error) {
+      console.warn(
+        "Could not release automation control",
+        error,
+      );
+      toast.error(userErrorMessage(error));
+    }
+  };
   const hasHeaderStatus = createMemo(() =>
     Boolean(
       recording?.state() ||
       media.sharing() ||
       controller() ||
-      hasOutgoingControl(),
+      hasOutgoingControl() ||
+      automationOnlyPeerIds().length,
     ),
   );
   const keyboardCollapse = createMeetingKeyboardCollapse();
@@ -617,9 +663,6 @@ export default function Home() {
                   <Show when={media.sharing()}>
                     <MeetingSharingStatus
                       name={appState.profile.name}
-                      avatar={
-                        appState.profile.avatar ?? undefined
-                      }
                       count={
                         sources().filter(
                           (source) =>
@@ -641,6 +684,7 @@ export default function Home() {
                     {(active) => (
                       <MeetingControlStatus
                         name={active().name}
+                        automation={active().automation}
                         emergencyShortcut={emergencyShortcut()}
                         revoke={active().revoke}
                       />
@@ -649,7 +693,17 @@ export default function Home() {
                   <Show when={hasOutgoingControl()}>
                     <MeetingControlStatus
                       side="controller"
-                      name={meeting.selected()?.name ?? ""}
+                      name={
+                        meeting.selected()
+                          ?.participantName ??
+                        meeting.selected()?.name ??
+                        ""
+                      }
+                      automation={automationPeers().some(
+                        (peer) =>
+                          peer.id ===
+                          meeting.selected()?.participantId,
+                      )}
                       revoke={() =>
                         outgoingControl.control()?.cancel()
                       }
@@ -674,6 +728,22 @@ export default function Home() {
                       />
                     </MeetingControlStatus>
                   </Show>
+                  <For each={automationOnlyPeerIds()}>
+                    {(id) => (
+                      <MeetingControlStatus
+                        side="controller"
+                        name={
+                          automationPeers().find(
+                            (peer) => peer.id === id,
+                          )?.name ?? id
+                        }
+                        automation
+                        revoke={() =>
+                          releaseAutomationControl(id)
+                        }
+                      />
+                    )}
+                  </For>
                 </div>
               </div>
             </Show>

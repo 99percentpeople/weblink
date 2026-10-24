@@ -445,6 +445,7 @@ export const VideoDisplay = (
               name={props.label?.name ?? props.name}
               screen={props.label?.screen}
               controller={props.label?.controller}
+              automation={props.label?.automation}
               recording={props.label?.recording}
               recordingPaused={props.label?.recordingPaused}
               speaking={anySpeaking()}

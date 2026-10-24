@@ -106,39 +106,63 @@ export function MeetingTile(props: {
           .find((track) => track.kind === "video")?.id);
   const participantName = () =>
     props.participantName ?? props.name;
-  const controllerName = createMemo(() => {
+  const controller = createMemo(() => {
     if (
       props.sourceKind !== "screen" ||
       !props.controlSourceId
     )
       return;
     let controllerId: string | null | undefined;
+    let automation = false;
+    let automationName: string | undefined;
     if (props.local) {
       const status = sessionService.remoteControl.status();
       if (
         !status.closed &&
         status.sourceId === props.controlSourceId
-      )
+      ) {
         controllerId = status.clientId;
+        const active = app.automation?.controller();
+        if (
+          status.controllerKind === "automation" &&
+          active?.id !== controllerId
+        )
+          return;
+        if (active && active.id === controllerId) {
+          automation = true;
+          if (active.kind !== "peer")
+            return { name: "", automation };
+          automationName = active.label;
+        }
+      }
     } else if (props.clientId) {
       const occupancy = app.peerCapabilities(props.clientId)
         ?.control?.occupancy;
       if (
         occupancy?.state === "controlled" &&
         occupancy.sourceId === props.controlSourceId
-      )
+      ) {
         controllerId = occupancy.clientId;
+        automation =
+          controllerId === appState.profile.clientId &&
+          (app.automation
+            ?.controlledPeers()
+            .some((peer) => peer.id === props.clientId) ??
+            false);
+      }
     }
     if (!controllerId) return;
-    return (
+    const name =
       (controllerId === appState.profile.clientId
         ? appState.profile.name
         : (appState.session.clientViewData[controllerId]
             ?.name ??
           appState.message.clients.find(
             (client) => client.clientId === controllerId,
-          )?.name)) || controllerId
-    );
+          )?.name)) ||
+      automationName ||
+      controllerId;
+    return { name, automation };
   });
   const [displayRef, setDisplayRef] =
     createSignal<HTMLDivElement>();
@@ -246,7 +270,8 @@ export function MeetingTile(props: {
                 ? props.sourceLabel ||
                   t("common.media_selection_dialog.screen")
                 : undefined,
-            controller: controllerName(),
+            controller: controller()?.name,
+            automation: controller()?.automation,
             recording: isRecording(),
             recordingPaused:
               isRecording() &&

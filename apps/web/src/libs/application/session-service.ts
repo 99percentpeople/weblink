@@ -1,4 +1,5 @@
 import { scopes } from "@weblink/automation";
+import type { NativeAutomationPeer } from "@weblink/platform";
 import { PeerTrustService } from "./peer-trust";
 import { bootstrapMessage } from "../domain/device-identity/access";
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
@@ -97,8 +98,28 @@ export class SessionService {
   >();
   private readonly speedBusy = createSignal(false);
   private readonly automationEnabled = createSignal(false);
+  private readonly automationController =
+    createSignal<NativeAutomationPeer | null>(null);
   setAutomationEnabled(enabled: boolean): void {
     this.automationEnabled[1](enabled);
+    if (!enabled) this.automationController[1](null);
+  }
+  setAutomationController(
+    controller: NativeAutomationPeer | null,
+  ): void {
+    this.automationController[1](controller);
+  }
+  private automationControlActive(
+    session: PeerSession,
+  ): boolean {
+    const controller = this.automationController[0]();
+    return (
+      !!controller &&
+      controller.id === session.targetClientId &&
+      controller.generation ===
+        this.capabilities.generation(session) &&
+      this.canReceive(session.targetClientId)
+    );
   }
   readonly capabilities = new PeerCapabilitiesService(
     (session) => ({
@@ -109,7 +130,12 @@ export class SessionService {
       },
       messaging: {},
       ...(this.automationEnabled[0]()
-        ? { automation: {} }
+        ? {
+            automation: {
+              controlActive:
+                this.automationControlActive(session),
+            },
+          }
         : {}),
       fileDrop: platform.fileDrop?.hover
         ? { hover: true, hoverUpdates: true }
