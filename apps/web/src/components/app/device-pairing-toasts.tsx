@@ -58,11 +58,11 @@ export function DevicePairingToasts() {
               "device_trust.confirm_description",
             ),
             action: {
-              label: t("device_trust.accept"),
+              label: t("common.action.accept"),
               onClick: () => respond(true),
             },
             cancel: {
-              label: t("device_trust.reject"),
+              label: t("common.action.deny"),
               onClick: () => respond(false),
             },
           },

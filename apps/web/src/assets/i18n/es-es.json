@@ -50,7 +50,6 @@
     "start": "Iniciar prueba",
     "cancel": "Detener prueba",
     "accept": "Permitir prueba",
-    "decline": "Rechazar",
     "request": "{{name}} solicita una prueba de velocidad",
     "remote_running": "Prueba de velocidad con {{name}}",
     "upload": "Este dispositivo → par",
@@ -539,7 +538,6 @@
       "request_unresolved": "El navegador no ha confirmado el permiso. Revisa sus ajustes o los del sistema; el permiso se actualiza automáticamente al volver.",
       "browser_blocked": "Las notificaciones están bloqueadas. Abre los permisos de este sitio en el navegador y permite las notificaciones.",
       "new_message": "Mensaje nuevo",
-      "reply": "Enviar",
       "reply_placeholder": "Escribe una respuesta",
       "reply_failed": "La respuesta no se envió. El texto se ha conservado en el borrador de la conversación.",
       "delivery_failed": "Respuesta guardada, pero el envío falló. Abre la conversación para reintentarlo.",
@@ -636,8 +634,7 @@
       "stalled": "Conexión interrumpida, reintentando...",
       "error": "No se pudo cargar",
       "autoplay_blocked": "Tu navegador bloqueó la reproducción automática. Seleccione Reproducir video para continuar.",
-      "play": "Reproducir vídeo",
-      "retry": "Reintentar"
+      "play": "Reproducir vídeo"
     },
     "statistics": {
       "show_overlay": "Mostrar estadísticas de transmisión",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "Salir del modo PIP",
       "continue": "Continuar",
       "retry": "Reintentar",
-      "open": "Abrir"
+      "open": "Abrir",
+      "allow_session": "Permitir durante esta sesión",
+      "deny": "Denegar",
+      "accept": "Aceptar",
+      "revoke": "Revocar"
     },
     "notification": {
       "copy_success": "Copia exitosa",
@@ -861,7 +862,8 @@
       "copy_failed": "No se puede copiar. Verifique los permisos del portapapeles e inténtelo nuevamente.",
       "room_unprotected": "Esta sala no requiere contraseña.",
       "file_save_failed": "No se pudo guardar el archivo. Comprueba el destino y el espacio libre en disco e inténtalo de nuevo.",
-      "file_open_failed": "No se pudo abrir el archivo. Comprueba que esté disponible y que haya una aplicación predeterminada instalada."
+      "file_open_failed": "No se pudo abrir el archivo. Comprueba que esté disponible y que haya una aplicación predeterminada instalada.",
+      "approval_failed": "No se pudo procesar la solicitud de autorización. Inténtalo de nuevo."
     },
     "forward_dialog": {
       "title": "Artículos reenviados",
@@ -895,7 +897,6 @@
       "open_screen": "Abrir pantalla",
       "open_media_device": "Dispositivo de medios abierto",
       "current": "Actual",
-      "preview": "Vista previa",
       "apply_constraints": "Aplicar restricciones de medios",
       "apply_constraints_description": "Es posible que algunas restricciones no se admitan para cambiar dinámicamente; seleccione una nueva secuencia para aplicar",
       "microphone_constraints": "Restricciones del micrófono",
@@ -932,8 +933,7 @@
     },
     "error_boundary": {
       "title": "Se produjo un error",
-      "description": "Intente actualizar la página o comuníquese con el desarrollador; el mensaje de error es:",
-      "reset": "Restablecer"
+      "description": "Intente actualizar la página o comuníquese con el desarrollador; el mensaje de error es:"
     },
     "pagination": {
       "total": "Archivos {{count}}",
@@ -1230,11 +1230,9 @@
     "empty": "Importa archivos o recíbelos en una conversación",
     "local_file": "archivo local",
     "actions": "Acciones de archivo",
-    "action_preview": "Vista previa",
     "action_download": "Guardar en dispositivo",
     "action_save_as": "Guardar como…",
     "action_reveal": "Abrir ubicación del archivo",
-    "action_send": "Enviar",
     "action_details": "Detalles",
     "action_delete": "Eliminar archivo local",
     "choose": "Elija entre archivos",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "¿Permitir control remoto?",
     "request_description": "{{name}} quiere controlar el mouse y el teclado de esta computadora. La pantalla compartida asigna el puntero; El control no se limita a una aplicación o pantalla.",
-    "revoke_hint": "Utilice “Revocar control” o presione {{shortcut}} en esta computadora para finalizar el control.",
-    "decline": "Rechazar",
-    "allow": "Permitir control",
+    "revoke_hint": "Presione {{shortcut}} en esta computadora para finalizar el control.",
     "host_active": "{{name}} puede controlar esta computadora.",
     "controller_active": "Controlando {{name}}",
     "host_active_short": "Bajo control remoto",
     "controller_active_short": "Controlando",
-    "revoke": "Revocar control",
     "revoke_failed": "No se pudo revocar el control. Utilice {{shortcut}} en el host para detenerlo.",
-    "approval_failed": "La aprobación falló. Es posible que la solicitud haya caducado o que el control no esté disponible. Solicite el control nuevamente.",
     "reconnecting": "Reconexión del control",
     "surface": "Mando a distancia; presione {{shortcut}} para soltar el puntero y el teclado.",
     "request": "Solicitar control",
@@ -1513,9 +1507,6 @@
     "confirm_description": "Confirma para confiar en esta conexión y restaurar los permisos predeterminados.",
     "waiting_confirmation": "Esperando al otro dispositivo",
     "saving_pairing": "Guardando vinculación",
-    "accept": "Aceptar",
-    "reject": "Rechazar",
-    "cancel": "Cancelar",
     "failure": {
       "rejected": "Vinculación rechazada.",
       "cancelled": "Vinculación cancelada.",
@@ -1546,16 +1537,6 @@
     "unsupported": "Este navegador no admite WebMCP. No se puede activar.",
     "export": "Exportar diagnóstico",
     "requests": "Solicitudes de autorización",
-    "allow_session": "Permitir durante esta sesión",
-    "approval_failed": "No se pudo procesar la solicitud de autorización. Inténtalo de nuevo.",
-    "no_requests": "No hay solicitudes pendientes.",
-    "target": "Destino",
-    "shell_warning": "Permite ejecutar cualquier comando Shell con tu cuenta del sistema durante el período elegido. Los comandos pueden modificar archivos y el estado del sistema. Revocar el permiso no deshace los cambios realizados.",
-    "minutes": "minutos",
-    "allow": "Permitir sesión",
-    "deny": "Denegar",
-    "grants": "Permisos activos",
-    "revoke": "Revocar",
     "pair_description": "Gestiona las autorizaciones en los ajustes de permisos de cada dispositivo. Los permisos temporales caducan al desconectarse.",
     "peers": "Dispositivos conectados",
     "credentials_description": "Un token válido permite usar herramientas locales y conectar con otros clientes sin otra confirmación local. Cada dispositivo controlado gestiona sus propios permisos.",
@@ -1563,27 +1544,13 @@
     "client_name": "Nombre del token",
     "create_client": "Crear token",
     "hide": "Ocultar credencial",
-    "jobs": "Tareas de comandos",
     "audit": "Llamadas recientes",
-    "scopes": {
-      "diagnostics_read": "Leer diagnóstico",
-      "screen_read": "Leer pantallas y capturas",
-      "screen_manage": "Iniciar y detener el uso compartido",
-      "screen_configure": "Cambiar parámetros de transmisión",
-      "input_control": "Controlar teclado, ratón e interfaces de aplicaciones",
-      "shell_execute": "Ejecutar comandos Shell",
-      "accessibility_read": "Leer árboles de accesibilidad de aplicaciones"
-    },
     "reported_source": "Punto de entrada declarado (la identidad del dispositivo se verifica por separado)",
-    "input_warning": "El control del escritorio permite manejar terminales y aplicaciones, incluso mediante acciones de accesibilidad en todo el escritorio. No es un entorno Shell aislado.",
-    "accessibility_warning": "Los nombres de ventanas y las etiquetas de controles pueden contener información privada. El contenido de los campos de contraseña se oculta.",
     "diagnostics": "Diagnóstico",
     "export_description": "Exporta estadísticas de transmisión y un informe de diagnóstico sin datos sensibles.",
     "peer": "Dispositivo remoto",
     "arguments": "Parámetros de la solicitud",
-    "no_grants": "No hay permisos activos.",
     "no_peers": "No hay dispositivos de automatización conectados.",
-    "no_jobs": "No hay tareas de comandos.",
     "no_audit": "No hay llamadas recientes.",
     "server": "Servicio MCP",
     "server_description": "Conecta clientes MCP mediante Streamable HTTP.",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "Conservar los ajustes individuales existentes",
-    "review_request": "Revisar solicitud de autorización",
-    "job_status": {
-      "running": "En ejecución",
-      "completed": "Completada",
-      "cancelled": "Cancelada",
-      "timed_out": "Tiempo agotado"
-    },
     "call_status": {
       "ok": "Correcta",
       "error": "Fallida",

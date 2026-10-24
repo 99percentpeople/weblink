@@ -96,6 +96,18 @@ export type FileAction =
   | "send"
   | "details"
   | "delete";
+
+const fileActionKeys = {
+  share: "shared_files.share",
+  unshare: "shared_files.unshare",
+  download: "file_library.action_download",
+  save_as: "file_library.action_save_as",
+  reveal: "file_library.action_reveal",
+  send: "common.action.send",
+  details: "file_library.action_details",
+  delete: "file_library.action_delete",
+} satisfies Record<Exclude<FileAction, "preview">, string>;
+
 export function FileList(props: {
   files: LibraryFile[];
   selected: readonly string[];
@@ -254,12 +266,7 @@ export function FileList(props: {
                         >
                           {action === "preview"
                             ? fileOpenLabel()
-                            : t(
-                                action === "share" ||
-                                  action === "unshare"
-                                  ? `shared_files.${action}`
-                                  : `file_library.action_${action}`,
-                              )}
+                            : t(fileActionKeys[action])}
                         </DropdownMenuItem>
                       )}
                     </For>

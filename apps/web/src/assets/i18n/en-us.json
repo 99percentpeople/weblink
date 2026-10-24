@@ -19,9 +19,6 @@
     "confirm_description": "Confirm to trust this connection and restore default permissions.",
     "waiting_confirmation": "Waiting for the other device",
     "saving_pairing": "Saving pairing",
-    "accept": "Accept",
-    "reject": "Reject",
-    "cancel": "Cancel",
     "failure": {
       "rejected": "Pairing was rejected.",
       "cancelled": "Pairing was cancelled.",
@@ -77,7 +74,6 @@
     "start": "Start speed test",
     "cancel": "Stop test",
     "accept": "Allow test",
-    "decline": "Decline",
     "request": "{{name}} requests a speed test",
     "remote_running": "Speed test with {{name}}",
     "upload": "This device → peer",
@@ -566,7 +562,6 @@
       "request_unresolved": "The browser has not confirmed permission. Check your browser or system notification settings; permission updates automatically when you return.",
       "browser_blocked": "Notifications are blocked. Open this site’s permissions in your browser and allow notifications.",
       "new_message": "New message",
-      "reply": "Send",
       "reply_placeholder": "Type a reply",
       "reply_failed": "Reply was not sent. Your text has been kept in the conversation draft.",
       "delivery_failed": "Reply saved, but delivery failed. Open the conversation to retry.",
@@ -668,8 +663,7 @@
       "stalled": "Connection interrupted, retrying...",
       "error": "Failed to load",
       "autoplay_blocked": "Your browser blocked autoplay. Select Play video to continue.",
-      "play": "Play video",
-      "retry": "Retry"
+      "play": "Play video"
     },
     "statistics": {
       "show_overlay": "Show stream statistics",
@@ -877,7 +871,11 @@
       "exit_picture_in_picture": "Exit PIP Mode",
       "continue": "Continue",
       "retry": "Retry",
-      "open": "Open"
+      "open": "Open",
+      "allow_session": "Allow for this session",
+      "deny": "Deny",
+      "accept": "Accept",
+      "revoke": "Revoke"
     },
     "notification": {
       "copy_success": "Copy success",
@@ -893,7 +891,8 @@
       "copy_failed": "Unable to copy. Check clipboard permissions and try again.",
       "room_unprotected": "This room does not require a password.",
       "file_save_failed": "Could not save the file. Check the destination and available disk space, then try again.",
-      "file_open_failed": "Could not open the file. Check that it is available and that a default application is installed."
+      "file_open_failed": "Could not open the file. Check that it is available and that a default application is installed.",
+      "approval_failed": "Could not respond to the authorization request. Please retry."
     },
     "forward_dialog": {
       "title": "Forward items",
@@ -927,7 +926,6 @@
       "open_screen": "Open Screen",
       "open_media_device": "Open Media Device",
       "current": "Current",
-      "preview": "Preview",
       "apply_constraints": "Apply Media Constraints",
       "apply_constraints_description": "Some constraints may not be supported to change dynamically, please select a new stream to apply",
       "microphone_constraints": "Microphone Constraints",
@@ -964,8 +962,7 @@
     },
     "error_boundary": {
       "title": "Error Occurred",
-      "description": "Please try to refresh the page or contact the developer, the error message is:",
-      "reset": "Reset"
+      "description": "Please try to refresh the page or contact the developer, the error message is:"
     },
     "pagination": {
       "total": "{{count}} files",
@@ -1262,11 +1259,9 @@
     "empty": "Import files or receive them in a conversation",
     "local_file": "Local file",
     "actions": "File actions",
-    "action_preview": "Preview",
     "action_download": "Save to device",
     "action_save_as": "Save as…",
     "action_reveal": "Open file location",
-    "action_send": "Send",
     "action_details": "Details",
     "action_delete": "Delete local file",
     "choose": "Choose from files",
@@ -1382,16 +1377,12 @@
     },
     "request_title": "Allow remote control?",
     "request_description": "{{name}} wants to control this computer’s mouse and keyboard. The shared display maps the pointer; control is not confined to an application or display.",
-    "revoke_hint": "Use “Revoke control” or press {{shortcut}} on this computer to end control.",
-    "decline": "Decline",
-    "allow": "Allow control",
+    "revoke_hint": "Press {{shortcut}} on this computer to end control.",
     "host_active": "{{name}} can control this computer.",
     "controller_active": "Controlling {{name}}",
     "host_active_short": "Being controlled",
     "controller_active_short": "Controlling",
-    "revoke": "Revoke control",
     "revoke_failed": "Could not revoke control. Use {{shortcut}} on the host to stop it.",
-    "approval_failed": "Approval failed. The request may have expired or control is unavailable. Request control again.",
     "reconnecting": "Reconnecting control",
     "surface": "Remote control; press {{shortcut}} to release the pointer and keyboard.",
     "request": "Request control",
@@ -1546,16 +1537,6 @@
     "unsupported": "WebMCP is unavailable in this browser and cannot be enabled.",
     "export": "Export diagnostics",
     "requests": "Approval requests",
-    "allow_session": "Allow for this session",
-    "approval_failed": "Could not respond to the authorization request. Please retry.",
-    "no_requests": "No pending requests.",
-    "target": "Target",
-    "shell_warning": "This grants arbitrary Shell execution as your OS account for the selected duration. Commands can change files and system state; revocation cannot undo completed changes.",
-    "minutes": "minutes",
-    "allow": "Allow session",
-    "deny": "Deny",
-    "grants": "Active permissions",
-    "revoke": "Revoke",
     "pair_description": "Manage access in each device’s permission settings. Temporary grants end on disconnect.",
     "peers": "Connected devices",
     "credentials_description": "A valid token authorizes local tools and forwarding without another local approval. Remote devices manage their own permissions.",
@@ -1563,27 +1544,13 @@
     "client_name": "Token name",
     "create_client": "Create token",
     "hide": "Hide credential",
-    "jobs": "Command tasks",
     "audit": "Recent calls",
-    "scopes": {
-      "diagnostics_read": "Read diagnostics",
-      "screen_read": "Read screens and screenshots",
-      "screen_manage": "Start and stop sharing",
-      "screen_configure": "Change streaming parameters",
-      "input_control": "Control keyboard, mouse and application UI",
-      "shell_execute": "Execute Shell commands",
-      "accessibility_read": "Read application accessibility trees"
-    },
     "reported_source": "Reported entrypoint (device identity is verified separately)",
-    "input_warning": "Desktop control can operate terminals and applications, including through accessibility actions across the desktop. This is not a Shell sandbox.",
-    "accessibility_warning": "Window names and control labels may contain private information. Password controls are redacted.",
     "diagnostics": "Diagnostics",
     "export_description": "Export stream statistics and a redacted diagnostic report.",
     "peer": "Remote device",
     "arguments": "Request arguments",
-    "no_grants": "No active permissions.",
     "no_peers": "No connected automation devices.",
-    "no_jobs": "No command tasks.",
     "no_audit": "No recent calls.",
     "server": "MCP server",
     "server_description": "Connect MCP clients over Streamable HTTP.",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "Existing individual settings",
-    "review_request": "Review request",
-    "job_status": {
-      "running": "Running",
-      "completed": "Completed",
-      "cancelled": "Cancelled",
-      "timed_out": "Timed out"
-    },
     "call_status": {
       "ok": "Succeeded",
       "error": "Failed",

@@ -43,7 +43,7 @@ export function AutomationApprovalToasts(props: {
               ),
           )
       : [];
-  const allowLabel = () => t("automation.allow_session");
+  const allowLabel = () => t("common.action.allow_session");
   createEffect(
     mapArray(
       () => pending().map((request) => request.id),
@@ -135,7 +135,7 @@ export function AutomationApprovalToasts(props: {
                   { id: "approve", title: allowLabel() },
                   {
                     id: "decline",
-                    title: t("automation.deny"),
+                    title: t("common.action.deny"),
                   },
                 ],
               },
@@ -150,7 +150,9 @@ export function AutomationApprovalToasts(props: {
                   await decide(action.action === "approve");
                 } catch (error) {
                   toast.error(
-                    t("automation.approval_failed"),
+                    t(
+                      "common.notification.approval_failed",
+                    ),
                   );
                   throw error;
                 }
@@ -161,11 +163,14 @@ export function AutomationApprovalToasts(props: {
                   title: () => t("automation.requests"),
                   description,
                   acceptLabel: allowLabel,
-                  declineLabel: () => t("automation.deny"),
+                  declineLabel: () =>
+                    t("common.action.deny"),
                   isCurrent,
                   respond: decide,
                   errorMessage: () =>
-                    t("automation.approval_failed"),
+                    t(
+                      "common.notification.approval_failed",
+                    ),
                 }),
             }),
         );

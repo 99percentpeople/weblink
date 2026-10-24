@@ -289,7 +289,7 @@ describe("VideoDisplay playback error notifications", () => {
       {
         id: "video-playback-camera",
         action: {
-          label: "video.loading_state.retry",
+          label: "common.action.retry",
           onClick: expect.any(Function),
         },
       },
@@ -299,7 +299,7 @@ describe("VideoDisplay playback error notifications", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: "video.loading_state.retry",
+        name: "common.action.retry",
       }),
     ).toBeNull();
     expect(

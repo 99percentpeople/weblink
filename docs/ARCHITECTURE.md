@@ -52,6 +52,13 @@ Application source paths in the sections below are relative to `apps/web/`.
 
 ### UI
 
+Translation catalogs live in `src/assets/i18n/`. Reuse
+`common.action.*` for actions with the same meaning and
+`common.notification.*` for shared feedback. Keep feature-specific
+descriptions and distinct actions in their feature namespace;
+matching English words alone do not make two keys interchangeable.
+Translate complete messages with placeholders instead of joining fragments.
+
 - `src/app.tsx`: Application shell (providers, global UI,
   dialogs).
 - `src/constants.ts`: Project-wide constants shared across

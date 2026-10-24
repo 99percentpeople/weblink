@@ -218,7 +218,7 @@ export function createSpeedTestApproval(): SpeedTestApprovalController {
                   onClick: () => respondFromToast(true),
                 },
                 cancel: {
-                  label: t("speed_test.decline"),
+                  label: t("common.action.deny"),
                   onClick: () => respondFromToast(false),
                 },
                 onDismiss: () => {

@@ -337,7 +337,7 @@ const ErrorComponent = (props: {
           class="gap-2"
         >
           <IconResetWrench class="size-4" />
-          {t("common.error_boundary.reset")}
+          {t("common.action.reset")}
         </Button>
       </div>
     </div>

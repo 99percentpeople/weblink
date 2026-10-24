@@ -173,7 +173,7 @@ it("shows a non-modal actionable request once across status polls and expires it
   const view = mount();
   setStatus(request("expire-first"));
   const allow = await screen.findByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(
@@ -185,7 +185,7 @@ it("shows a non-modal actionable request once across status polls and expires it
   setStatus(request("expire-first"));
   expect(
     screen.getByRole("button", {
-      name: "remote_control.allow",
+      name: "common.action.allow_session",
     }),
   ).toBe(allow);
   expect(
@@ -213,7 +213,7 @@ it("shows a non-modal actionable request once across status polls and expires it
   expect(fixture.approve).not.toHaveBeenCalled();
   setStatus(request("expire-second"));
   await screen.findByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   view.unmount();
   expect(
@@ -233,7 +233,7 @@ it("locks both actions while approval is pending and cannot dismiss a replacemen
   mount();
   setStatus(request());
   const allow = await screen.findByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   fireEvent.click(allow);
   fireEvent.click(allow);
@@ -245,7 +245,7 @@ it("locks both actions while approval is pending and cannot dismiss a replacemen
   expect(allow).toBeDisabled();
   expect(
     screen.getByRole("button", {
-      name: "remote_control.decline",
+      name: "common.action.deny",
     }),
   ).toBeDisabled();
   setStatus(request("second"));
@@ -267,14 +267,16 @@ it("retains a failed request for retry and declines only that consent ID", async
   setStatus(request("retry"));
   fireEvent.click(
     await screen.findByRole("button", {
-      name: "remote_control.allow",
+      name: "common.action.allow_session",
     }),
   );
   expect(
     await screen.findByRole("alert"),
-  ).toHaveTextContent("remote_control.approval_failed");
+  ).toHaveTextContent(
+    "common.notification.approval_failed",
+  );
   const decline = screen.getByRole("button", {
-    name: "remote_control.decline",
+    name: "common.action.deny",
   });
   expect(decline).not.toBeDisabled();
   fireEvent.click(decline);
@@ -329,7 +331,7 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   ));
   expect(
     screen.queryByRole("button", {
-      name: "remote_control.revoke",
+      name: "common.action.revoke",
     }),
   ).toBeNull();
   setController({ name: "Alice", revoke });
@@ -339,11 +341,11 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
     }),
   ).toHaveTextContent("Alice");
   const button = screen.getByRole("button", {
-    name: "remote_control.revoke",
+    name: "common.action.revoke",
   });
   expect(button).toHaveAttribute(
     "title",
-    "remote_control.revoke · Ctrl + Alt + F8",
+    "common.action.revoke · Ctrl + Alt + F8",
   );
   fireEvent.click(button);
   fireEvent.click(button);
@@ -355,7 +357,7 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   setController(undefined);
   expect(
     screen.queryByRole("button", {
-      name: "remote_control.revoke",
+      name: "common.action.revoke",
     }),
   ).toBeNull();
   expect(
@@ -467,7 +469,7 @@ it("shows each concurrent request and lets the host choose the second without an
     pending: [alice, bob],
   });
   const buttons = await screen.findAllByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   expect(buttons).toHaveLength(2);
   fixture.approve.mockImplementation(async () => {
@@ -503,7 +505,7 @@ it("does not send a background notice after the same request already appeared as
   const view = mount({ native: true });
   setStatus(request("toast-first"));
   const allow = await screen.findByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   view.setVisible(false);
   setStatus(request("toast-first"));
@@ -512,7 +514,7 @@ it("does not send a background notice after the same request already appeared as
   expect(view.show).not.toHaveBeenCalled();
   expect(
     screen.getByRole("button", {
-      name: "remote_control.allow",
+      name: "common.action.allow_session",
     }),
   ).toBe(allow);
 });
@@ -548,8 +550,8 @@ it.each([true, false])(
     fireEvent.click(
       screen.getByRole("button", {
         name: accepted
-          ? "remote_control.allow"
-          : "remote_control.decline",
+          ? "common.action.allow_session"
+          : "common.action.deny",
       }),
     );
     expect(fixture.approve).toHaveBeenCalledOnce();
@@ -587,7 +589,7 @@ it("closes a notification-opened confirmation when its exact request expires", a
   );
   view.open("browser-expired");
   const allow = await screen.findByRole("button", {
-    name: "remote_control.allow",
+    name: "common.action.allow_session",
   });
   setStatus({ closed: false, clientId: null, pending: [] });
   await waitFor(() =>

@@ -176,7 +176,7 @@ describe("peer speed test panel", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "speed_test.decline",
+        name: "common.action.deny",
       }),
     );
     expect(decline).toHaveBeenCalledWith("peer");

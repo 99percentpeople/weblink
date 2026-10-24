@@ -78,11 +78,11 @@ export function RemoteControlStatus(props: {
                 actions: [
                   {
                     id: "approve",
-                    title: t("remote_control.allow"),
+                    title: t("common.action.allow_session"),
                   },
                   {
                     id: "decline",
-                    title: t("remote_control.decline"),
+                    title: t("common.action.deny"),
                   },
                 ],
               },
@@ -99,7 +99,9 @@ export function RemoteControlStatus(props: {
                     );
                   } catch (error) {
                     toast.error(
-                      t("remote_control.approval_failed"),
+                      t(
+                        "common.notification.approval_failed",
+                      ),
                     );
                     throw error;
                   }
@@ -112,9 +114,9 @@ export function RemoteControlStatus(props: {
                     t("remote_control.request_title"),
                   description: () => description(request),
                   acceptLabel: () =>
-                    t("remote_control.allow"),
+                    t("common.action.allow_session"),
                   declineLabel: () =>
-                    t("remote_control.decline"),
+                    t("common.action.deny"),
                   isCurrent,
                   respond: (accepted) =>
                     host.approve(consentId, accepted),
@@ -139,7 +141,9 @@ export function RemoteControlStatus(props: {
                     },
                   ],
                   errorMessage: () =>
-                    t("remote_control.approval_failed"),
+                    t(
+                      "common.notification.approval_failed",
+                    ),
                   onError: (error) =>
                     console.warn(
                       "Local remote-control confirmation failed",

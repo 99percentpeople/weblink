@@ -619,7 +619,7 @@ export function PeerSpeedTest(props: {
               app.declineSpeedTest(props.clientId)
             }
           >
-            {t("speed_test.decline")}
+            {t("common.action.deny")}
           </Button>
         </Show>
         <Show

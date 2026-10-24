@@ -253,7 +253,7 @@ it.each(["allow", "deny", "ask"] as const)(
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
-        name: "automation.revoke",
+        name: "common.action.revoke",
       }),
     ).not.toBeInTheDocument();
     const permission = () =>
@@ -389,7 +389,7 @@ it("offers accept/reject even when the local side is still trusted", () => {
   renderDevice();
   fireEvent.click(
     screen.getByRole("button", {
-      name: "device_trust.reject",
+      name: "common.action.deny",
     }),
   );
   expect(fixture.respond).toHaveBeenCalledWith(
@@ -399,7 +399,7 @@ it("offers accept/reject even when the local side is still trusted", () => {
   );
   fireEvent.click(
     screen.getByRole("button", {
-      name: "device_trust.accept",
+      name: "common.action.accept",
     }),
   );
   expect(fixture.respond).toHaveBeenCalledWith(
@@ -410,7 +410,7 @@ it("offers accept/reject even when the local side is still trusted", () => {
   setPairing({ id: "incoming", state: "committing" });
   expect(
     screen.queryByRole("button", {
-      name: "device_trust.accept",
+      name: "common.action.accept",
     }),
   ).not.toBeInTheDocument();
   expect(
@@ -429,7 +429,7 @@ it("supports cancellation, shows expiry, and disables requests offline", () => {
   renderDevice();
   fireEvent.click(
     screen.getByRole("button", {
-      name: "device_trust.cancel",
+      name: "common.action.cancel",
     }),
   );
   expect(fixture.cancel).toHaveBeenCalledWith(

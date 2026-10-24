@@ -147,8 +147,8 @@ export default function McpTokenSettings(props: {
                       disabled={
                         busy() || !props.runtime.ready()
                       }
-                      aria-label={`${t("automation.revoke")}: ${client.label}`}
-                      title={t("automation.revoke")}
+                      aria-label={`${t("common.action.revoke")}: ${client.label}`}
+                      title={t("common.action.revoke")}
                       onClick={() => void remove(client)}
                     >
                       <Trash2 class="size-4" />

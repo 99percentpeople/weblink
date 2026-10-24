@@ -175,7 +175,7 @@ export const VideoDisplay = (
           label: t(
             blocked
               ? "video.loading_state.play"
-              : "video.loading_state.retry",
+              : "common.action.retry",
           ),
           onClick: () => {
             if (

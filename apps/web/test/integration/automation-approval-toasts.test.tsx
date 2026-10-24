@@ -96,7 +96,7 @@ const request = (
   },
   expiresAt: Date.now() + 120000,
 });
-const allowLabel = () => "automation.allow_session";
+const allowLabel = () => "common.action.allow_session";
 beforeEach(() => {
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
@@ -222,7 +222,7 @@ it.each([false, true])(
     else
       fireEvent.click(
         screen.getByRole("button", {
-          name: "automation.deny",
+          name: "common.action.deny",
         }),
       );
     await waitFor(() =>
@@ -310,7 +310,9 @@ it("retries a failed decision and prevents duplicate or conflicting answers whil
   fireEvent.click(allow);
   expect(
     await screen.findByRole("alert"),
-  ).toHaveTextContent("automation.approval_failed");
+  ).toHaveTextContent(
+    "common.notification.approval_failed",
+  );
   let finish!: () => void;
   fixture.decide.mockImplementationOnce(
     () =>
@@ -321,7 +323,7 @@ it("retries a failed decision and prevents duplicate or conflicting answers whil
   fireEvent.click(allow);
   expect(allow).toBeDisabled();
   const deny = screen.getByRole("button", {
-    name: "automation.deny",
+    name: "common.action.deny",
   });
   expect(deny).toBeDisabled();
   fireEvent.click(allow);
@@ -357,7 +359,7 @@ it.each(["approve", "decline"])(
       body: "Device · automation.permissions.terminal.title",
       actions: [
         { id: "approve", title: allowLabel() },
-        { id: "decline", title: "automation.deny" },
+        { id: "decline", title: "common.action.deny" },
       ],
     });
     expect(
@@ -407,7 +409,9 @@ it("allows a failed native decision to be retried in-app without replaying nativ
   view.respond("approve");
   await waitFor(() =>
     expect(
-      screen.getByText("automation.approval_failed"),
+      screen.getByText(
+        "common.notification.approval_failed",
+      ),
     ).toBeInTheDocument(),
   );
   expect(fixture.decide).toHaveBeenCalledOnce();

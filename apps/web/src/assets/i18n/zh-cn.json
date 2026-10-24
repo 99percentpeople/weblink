@@ -19,9 +19,6 @@
     "confirm_description": "同意后信任当前连接，并恢复默认权限。",
     "waiting_confirmation": "等待对方确认",
     "saving_pairing": "正在保存配对",
-    "accept": "同意配对",
-    "reject": "拒绝",
-    "cancel": "取消",
     "failure": {
       "rejected": "对方已拒绝配对。",
       "cancelled": "配对已取消。",
@@ -77,7 +74,6 @@
     "start": "开始测速",
     "cancel": "停止测速",
     "accept": "同意测速",
-    "decline": "拒绝",
     "request": "{{name}} 请求与你测速",
     "remote_running": "正在与 {{name}} 测速",
     "upload": "本机 → 对端",
@@ -566,7 +562,6 @@
       "request_unresolved": "浏览器尚未确认通知权限。请检查浏览器或系统的通知设置，返回 Weblink 后会自动更新。",
       "browser_blocked": "通知已被阻止，请在浏览器的网站权限设置中，将此网站的通知改为允许。",
       "new_message": "收到新消息",
-      "reply": "发送",
       "reply_placeholder": "输入回复",
       "reply_failed": "回复未发送，内容已保留在对应会话草稿中。",
       "delivery_failed": "回复已保存，但发送失败，请打开会话重试。",
@@ -668,8 +663,7 @@
       "stalled": "连接中断，正在重试...",
       "error": "加载失败",
       "autoplay_blocked": "浏览器阻止了自动播放，请点击播放画面",
-      "play": "播放画面",
-      "retry": "重试"
+      "play": "播放画面"
     },
     "statistics": {
       "show_overlay": "显示串流统计叠加层",
@@ -877,7 +871,11 @@
       "exit_picture_in_picture": "退出画中画",
       "continue": "继续",
       "retry": "重试",
-      "open": "打开"
+      "open": "打开",
+      "allow_session": "允许本次会话",
+      "deny": "拒绝",
+      "accept": "同意",
+      "revoke": "撤销"
     },
     "clipboard_history": {
       "title": "剪贴板历史"
@@ -914,7 +912,6 @@
       "open_screen": "打开屏幕",
       "open_media_device": "打开媒体设备",
       "current": "当前",
-      "preview": "预览",
       "apply_constraints": "应用媒体约束",
       "apply_constraints_description": "某些约束可能不支持动态更改，请选择新的流以应用",
       "microphone_constraints": "麦克风约束",
@@ -947,7 +944,8 @@
       "copy_failed": "复制失败，请检查剪贴板权限后重试。",
       "room_unprotected": "此房间未设置密码。",
       "file_save_failed": "保存文件失败，请检查保存位置和磁盘剩余空间后重试。",
-      "file_open_failed": "无法打开文件，请检查文件是否可用及系统默认应用是否已安装。"
+      "file_open_failed": "无法打开文件，请检查文件是否可用及系统默认应用是否已安装。",
+      "approval_failed": "处理授权请求失败，请重试。"
     },
     "nav": {
       "settings": "设置",
@@ -967,8 +965,7 @@
     },
     "error_boundary": {
       "title": "发生错误",
-      "description": "请尝试刷新页面或联系开发者，错误信息如下：",
-      "reset": "重置"
+      "description": "请尝试刷新页面或联系开发者，错误信息如下："
     },
     "pagination": {
       "total": "共 {{count}} 个文件",
@@ -1262,11 +1259,9 @@
     "empty": "导入文件，或从会话中接收文件",
     "local_file": "本地文件",
     "actions": "文件操作",
-    "action_preview": "预览",
     "action_download": "保存到设备",
     "action_save_as": "另存为",
     "action_reveal": "打开位置",
-    "action_send": "发送",
     "action_details": "查看详情",
     "action_delete": "删除本地文件",
     "choose": "从文件列表选择",
@@ -1382,16 +1377,12 @@
     },
     "request_title": "允许远程控制？",
     "request_description": "{{name}} 请求控制本机的鼠标和键盘。共享屏幕仅用于映射鼠标位置，控制权限不限于某个应用或显示器。",
-    "revoke_hint": "点击“收回控制”或在本机按 {{shortcut}} 可结束控制。",
-    "decline": "拒绝",
-    "allow": "允许控制",
+    "revoke_hint": "在本机按 {{shortcut}} 可结束控制。",
     "host_active": "{{name}} 可以控制本机。",
     "controller_active": "正在控制 {{name}}",
     "host_active_short": "被控制中",
     "controller_active_short": "控制中",
-    "revoke": "收回控制",
     "revoke_failed": "无法收回控制，请在被控端按 {{shortcut}} 停止控制。",
-    "approval_failed": "批准失败，请求可能已过期或当前无法控制，请重新请求控制。",
     "reconnecting": "正在恢复控制连接",
     "surface": "远程控制；按 {{shortcut}} 释放光标和键盘。",
     "request": "请求控制",
@@ -1546,16 +1537,6 @@
     "unsupported": "当前浏览器不支持 WebMCP，无法启用。",
     "export": "导出诊断",
     "requests": "授权请求",
-    "allow_session": "允许本次会话",
-    "approval_failed": "处理授权请求失败，请重试。",
-    "no_requests": "暂无待处理请求。",
-    "target": "目标",
-    "shell_warning": "此权限允许在所选期限内，以当前系统账户执行任意 Shell 命令。命令可以修改文件和系统状态，撤销不能还原已发生的修改。",
-    "minutes": "分钟",
-    "allow": "允许本次会话",
-    "deny": "拒绝",
-    "grants": "有效授权",
-    "revoke": "撤销",
     "pair_description": "在对应设备的权限设置中管理授权。临时授权断线失效。",
     "peers": "连接设备",
     "credentials_description": "有效 Token 可直接调用本机工具和连接其他客户端，无需本机再次同意。远端权限由被控端管理。",
@@ -1563,27 +1544,13 @@
     "client_name": "Token 名称",
     "create_client": "创建 Token",
     "hide": "隐藏凭据",
-    "jobs": "命令任务",
     "audit": "近期调用",
-    "scopes": {
-      "diagnostics_read": "读取诊断",
-      "screen_read": "读取屏幕与截图",
-      "screen_manage": "开始与停止共享",
-      "screen_configure": "修改串流参数",
-      "input_control": "控制键鼠与应用界面",
-      "shell_execute": "执行 Shell 命令",
-      "accessibility_read": "读取应用可访问性树"
-    },
     "reported_source": "请求方报告的入口（设备身份另行核验）",
-    "input_warning": "桌面控制可以操作终端和其他应用，也可通过可访问性接口操作整个桌面的控件。这不是 Shell 沙箱。",
-    "accessibility_warning": "窗口名称和控件标签可能包含隐私信息。密码控件内容会被隐藏。",
     "diagnostics": "诊断",
     "export_description": "导出串流统计和经过脱敏处理的诊断报告。",
     "peer": "远端设备",
     "arguments": "请求参数",
-    "no_grants": "暂无有效授权。",
     "no_peers": "暂无已连接的自动化设备。",
-    "no_jobs": "暂无命令任务。",
     "no_audit": "暂无调用记录。",
     "server": "MCP 服务",
     "server_description": "通过 Streamable HTTP 连接 MCP 客户端。",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "保留原有分项设置",
-    "review_request": "查看授权请求",
-    "job_status": {
-      "running": "运行中",
-      "completed": "已完成",
-      "cancelled": "已取消",
-      "timed_out": "已超时"
-    },
     "call_status": {
       "ok": "成功",
       "error": "失败",

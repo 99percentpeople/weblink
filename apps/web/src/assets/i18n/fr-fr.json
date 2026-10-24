@@ -50,7 +50,6 @@
     "start": "Démarrer le test de vitesse",
     "cancel": "Arrêter l'essai",
     "accept": "Autoriser le test",
-    "decline": "Refuser",
     "request": "{{name}} demande un test de vitesse",
     "remote_running": "Test de vitesse avec {{name}}",
     "upload": "Cet appareil → homologue",
@@ -539,7 +538,6 @@
       "request_unresolved": "Le navigateur n'a pas confirmé l'autorisation. Vérifiez les paramètres de notification de votre navigateur ou de votre système ; l'autorisation est mise à jour automatiquement à votre retour.",
       "browser_blocked": "Les notifications sont bloquées. Ouvrez les autorisations de ce site dans votre navigateur et autorisez les notifications.",
       "new_message": "Nouveau message",
-      "reply": "Envoyer",
       "reply_placeholder": "Tapez une réponse",
       "reply_failed": "La réponse n'a pas été envoyée. Votre texte a été conservé dans le brouillon de conversation.",
       "delivery_failed": "Réponse enregistrée, mais la livraison a échoué. Ouvrez la conversation pour réessayer.",
@@ -636,8 +634,7 @@
       "stalled": "Connexion interrompue, nouvelle tentative...",
       "error": "Échec du chargement",
       "autoplay_blocked": "Votre navigateur a bloqué la lecture automatique. Sélectionnez Lire la vidéo pour continuer.",
-      "play": "Lire la vidéo",
-      "retry": "Réessayer"
+      "play": "Lire la vidéo"
     },
     "statistics": {
       "show_overlay": "Afficher les statistiques du flux",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "Quitter le mode PIP",
       "continue": "Continuer",
       "retry": "Réessayer",
-      "open": "Ouvrir"
+      "open": "Ouvrir",
+      "allow_session": "Autoriser pour cette session",
+      "deny": "Refuser",
+      "accept": "Accepter",
+      "revoke": "Révoquer"
     },
     "notification": {
       "copy_success": "Copie réussie",
@@ -861,7 +862,8 @@
       "copy_failed": "Impossible de copier. Vérifiez les autorisations du presse-papiers et réessayez.",
       "room_unprotected": "Cette salle ne nécessite pas de mot de passe.",
       "file_save_failed": "Impossible d’enregistrer le fichier. Vérifiez la destination et l’espace disque disponible, puis réessayez.",
-      "file_open_failed": "Impossible d’ouvrir le fichier. Vérifiez sa disponibilité et qu’une application par défaut est installée."
+      "file_open_failed": "Impossible d’ouvrir le fichier. Vérifiez sa disponibilité et qu’une application par défaut est installée.",
+      "approval_failed": "Impossible de traiter la demande d’autorisation. Veuillez réessayer."
     },
     "forward_dialog": {
       "title": "Transférer des éléments",
@@ -895,7 +897,6 @@
       "open_screen": "Écran ouvert",
       "open_media_device": "Périphérique multimédia ouvert",
       "current": "Actuel",
-      "preview": "Aperçu",
       "apply_constraints": "Appliquer des contraintes multimédias",
       "apply_constraints_description": "Certaines contraintes peuvent ne pas être prises en charge pour changer dynamiquement, veuillez sélectionner un nouveau flux à appliquer",
       "microphone_constraints": "Contraintes du microphone",
@@ -932,8 +933,7 @@
     },
     "error_boundary": {
       "title": "Une erreur s'est produite",
-      "description": "Veuillez essayer de rafraîchir la page ou de contacter le développeur, le message d'erreur est :",
-      "reset": "Réinitialiser"
+      "description": "Veuillez essayer de rafraîchir la page ou de contacter le développeur, le message d'erreur est :"
     },
     "pagination": {
       "total": "Fichiers {{count}}",
@@ -1230,11 +1230,9 @@
     "empty": "Importez des fichiers ou recevez-les dans une conversation",
     "local_file": "Fichier local",
     "actions": "Actions sur les fichiers",
-    "action_preview": "Aperçu",
     "action_download": "Enregistrer sur l'appareil",
     "action_save_as": "Enregistrer sous…",
     "action_reveal": "Ouvrir l’emplacement du fichier",
-    "action_send": "Envoyer",
     "action_details": "Détails",
     "action_delete": "Supprimer le fichier local",
     "choose": "Choisissez parmi les fichiers",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "Autoriser le contrôle à distance ?",
     "request_description": "{{name}} souhaite contrôler la souris et le clavier de cet ordinateur. L'affichage partagé mappe le pointeur ; le contrôle ne se limite pas à une application ou à un affichage.",
-    "revoke_hint": "Utilisez « Révoquer le contrôle » ou appuyez sur {{shortcut}} sur cet ordinateur pour mettre fin au contrôle.",
-    "decline": "Refuser",
-    "allow": "Autoriser le contrôle",
+    "revoke_hint": "Appuyez sur {{shortcut}} sur cet ordinateur pour mettre fin au contrôle.",
     "host_active": "{{name}} peut contrôler cet ordinateur.",
     "controller_active": "Contrôle de {{name}}",
     "host_active_short": "Sous contrôle distant",
     "controller_active_short": "Contrôle en cours",
-    "revoke": "Révoquer le contrôle",
     "revoke_failed": "Impossible de révoquer le contrôle. Utilisez {{shortcut}} sur l'hôte pour l'arrêter.",
-    "approval_failed": "L'approbation a échoué. La demande a peut-être expiré ou le contrôle n'est pas disponible. Demandez à nouveau le contrôle.",
     "reconnecting": "Reconnexion du contrôle",
     "surface": "Contrôle à distance; appuyez sur {{shortcut}} pour relâcher le pointeur et le clavier.",
     "request": "Demander le contrôle",
@@ -1513,9 +1507,6 @@
     "confirm_description": "Confirmez pour approuver cette connexion et rétablir les autorisations par défaut.",
     "waiting_confirmation": "En attente de l’autre appareil",
     "saving_pairing": "Enregistrement de l’association",
-    "accept": "Accepter",
-    "reject": "Refuser",
-    "cancel": "Annuler",
     "failure": {
       "rejected": "Association refusée.",
       "cancelled": "Association annulée.",
@@ -1546,16 +1537,6 @@
     "unsupported": "Ce navigateur ne prend pas en charge WebMCP. L’activation est impossible.",
     "export": "Exporter le diagnostic",
     "requests": "Demandes d’autorisation",
-    "allow_session": "Autoriser pour cette session",
-    "approval_failed": "Impossible de traiter la demande d’autorisation. Veuillez réessayer.",
-    "no_requests": "Aucune demande en attente.",
-    "target": "Cible",
-    "shell_warning": "Autorise toute commande Shell avec votre compte système pendant la durée choisie. Les commandes peuvent modifier les fichiers et l’état du système. Révoquer l’autorisation n’annule pas les modifications effectuées.",
-    "minutes": "minutes",
-    "allow": "Autoriser la session",
-    "deny": "Refuser",
-    "grants": "Autorisations actives",
-    "revoke": "Révoquer",
     "pair_description": "Gérez les autorisations dans les paramètres de chaque appareil. Les autorisations temporaires expirent à la déconnexion.",
     "peers": "Appareils connectés",
     "credentials_description": "Un jeton valide permet d’utiliser les outils locaux et de se connecter à d’autres clients sans nouvelle confirmation locale. Chaque appareil contrôlé gère ses propres permissions.",
@@ -1563,27 +1544,13 @@
     "client_name": "Nom du jeton",
     "create_client": "Créer un jeton",
     "hide": "Masquer l’identifiant secret",
-    "jobs": "Tâches de commande",
     "audit": "Appels récents",
-    "scopes": {
-      "diagnostics_read": "Lire les diagnostics",
-      "screen_read": "Lire les écrans et captures",
-      "screen_manage": "Démarrer et arrêter le partage",
-      "screen_configure": "Modifier les paramètres de diffusion",
-      "input_control": "Contrôler le clavier, la souris et les interfaces des applications",
-      "shell_execute": "Exécuter des commandes Shell",
-      "accessibility_read": "Lire les arbres d’accessibilité des applications"
-    },
     "reported_source": "Point d’entrée déclaré (l’identité de l’appareil est vérifiée séparément)",
-    "input_warning": "Le contrôle du bureau permet d’utiliser les terminaux et les applications, y compris via des actions d’accessibilité sur tout le bureau. Il ne s’agit pas d’un environnement Shell isolé.",
-    "accessibility_warning": "Les noms des fenêtres et les libellés des contrôles peuvent contenir des informations privées. Le contenu des champs de mot de passe est masqué.",
     "diagnostics": "Diagnostic",
     "export_description": "Exportez les statistiques de diffusion et un rapport de diagnostic sans données sensibles.",
     "peer": "Appareil distant",
     "arguments": "Paramètres de la demande",
-    "no_grants": "Aucune autorisation active.",
     "no_peers": "Aucun appareil d’automatisation connecté.",
-    "no_jobs": "Aucune tâche de commande.",
     "no_audit": "Aucun appel récent.",
     "server": "Service MCP",
     "server_description": "Connectez les clients MCP via Streamable HTTP.",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "Conserver les réglages individuels existants",
-    "review_request": "Examiner la demande d’autorisation",
-    "job_status": {
-      "running": "En cours",
-      "completed": "Terminée",
-      "cancelled": "Annulée",
-      "timed_out": "Délai dépassé"
-    },
     "call_status": {
       "ok": "Réussi",
       "error": "Échec",

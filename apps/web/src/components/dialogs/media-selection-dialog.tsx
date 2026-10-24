@@ -516,9 +516,7 @@ export const createMediaSelectionDialog = () => {
               muted={true}
               name={appState.profile.name}
               label={{
-                name: t(
-                  "common.media_selection_dialog.preview",
-                ),
+                name: t("common.action.preview"),
               }}
               avatar={appState.profile.avatar ?? undefined}
             />

@@ -174,7 +174,7 @@ it.each(["approve", "decline"])(
         silent: false,
         actions: [
           { id: "approve", title: "speed_test.accept" },
-          { id: "decline", title: "speed_test.decline" },
+          { id: "decline", title: "common.action.deny" },
         ],
       }),
     );

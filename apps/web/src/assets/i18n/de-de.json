@@ -50,7 +50,6 @@
     "start": "Geschwindigkeitstest starten",
     "cancel": "Test beenden",
     "accept": "Test zulassen",
-    "decline": "Ablehnen",
     "request": "{{name}} fordert einen Geschwindigkeitstest an",
     "remote_running": "Geschwindigkeitstest mit {{name}}",
     "upload": "Dieses Gerät → Peer",
@@ -539,7 +538,6 @@
       "request_unresolved": "Der Browser hat die Berechtigung nicht bestätigt. Überprüfen Sie die Benachrichtigungseinstellungen Ihres Browsers oder Systems. Die Berechtigung wird automatisch aktualisiert, wenn Sie zurückkehren.",
       "browser_blocked": "Benachrichtigungen sind blockiert. Öffnen Sie die Berechtigungen dieser Website in Ihrem Browser und erlauben Sie Benachrichtigungen.",
       "new_message": "Neue Nachricht",
-      "reply": "Senden",
       "reply_placeholder": "Geben Sie eine Antwort ein",
       "reply_failed": "Es wurde keine Antwort gesendet. Ihr Text wurde im Konversationsentwurf beibehalten.",
       "delivery_failed": "Antwort gespeichert, aber die Zustellung ist fehlgeschlagen. Öffnen Sie die Konversation, um es erneut zu versuchen.",
@@ -636,8 +634,7 @@
       "stalled": "Verbindung unterbrochen, erneuter Versuch...",
       "error": "Laden fehlgeschlagen",
       "autoplay_blocked": "Ihr Browser hat die automatische Wiedergabe blockiert. Wählen Sie Video abspielen, um fortzufahren.",
-      "play": "Video abspielen",
-      "retry": "Erneut versuchen"
+      "play": "Video abspielen"
     },
     "statistics": {
       "show_overlay": "Stream-Statistiken anzeigen",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "Verlassen Sie den PIP-Modus",
       "continue": "Fortfahren",
       "retry": "Erneut versuchen",
-      "open": "Öffnen"
+      "open": "Öffnen",
+      "allow_session": "Für diese Sitzung erlauben",
+      "deny": "Ablehnen",
+      "accept": "Annehmen",
+      "revoke": "Widerrufen"
     },
     "notification": {
       "copy_success": "Kopiererfolg",
@@ -861,7 +862,8 @@
       "copy_failed": "Kopieren nicht möglich. Überprüfen Sie die Berechtigungen für die Zwischenablage und versuchen Sie es erneut.",
       "room_unprotected": "Für diesen Raum ist kein Passwort erforderlich.",
       "file_save_failed": "Die Datei konnte nicht gespeichert werden. Prüfe den Speicherort und den freien Speicherplatz und versuche es erneut.",
-      "file_open_failed": "Die Datei konnte nicht geöffnet werden. Prüfen Sie, ob sie verfügbar und eine Standardanwendung installiert ist."
+      "file_open_failed": "Die Datei konnte nicht geöffnet werden. Prüfen Sie, ob sie verfügbar und eine Standardanwendung installiert ist.",
+      "approval_failed": "Die Berechtigungsanfrage konnte nicht verarbeitet werden. Bitte erneut versuchen."
     },
     "forward_dialog": {
       "title": "Artikel weiterleiten",
@@ -895,7 +897,6 @@
       "open_screen": "Bildschirm öffnen",
       "open_media_device": "Öffnen Sie das Mediengerät",
       "current": "Aktuell",
-      "preview": "Vorschau",
       "apply_constraints": "Wenden Sie Medienbeschränkungen an",
       "apply_constraints_description": "Die dynamische Änderung einiger Einschränkungen wird möglicherweise nicht unterstützt. Bitte wählen Sie einen neuen Stream zur Anwendung aus",
       "microphone_constraints": "Mikrofonbeschränkungen",
@@ -932,8 +933,7 @@
     },
     "error_boundary": {
       "title": "Es ist ein Fehler aufgetreten",
-      "description": "Versuchen Sie bitte, die Seite zu aktualisieren oder wenden Sie sich an den Entwickler. Die Fehlermeldung lautet:",
-      "reset": "Zurücksetzen"
+      "description": "Versuchen Sie bitte, die Seite zu aktualisieren oder wenden Sie sich an den Entwickler. Die Fehlermeldung lautet:"
     },
     "pagination": {
       "total": "{{count}}-Dateien",
@@ -1230,11 +1230,9 @@
     "empty": "Importieren Sie Dateien oder empfangen Sie sie in einer Konversation",
     "local_file": "Lokale Datei",
     "actions": "Dateiaktionen",
-    "action_preview": "Vorschau",
     "action_download": "Auf Gerät speichern",
     "action_save_as": "Speichern unter…",
     "action_reveal": "Dateispeicherort öffnen",
-    "action_send": "Senden",
     "action_details": "Details",
     "action_delete": "Lokale Datei löschen",
     "choose": "Wählen Sie aus Dateien",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "Fernsteuerung zulassen?",
     "request_description": "{{name}} möchte die Maus und Tastatur dieses Computers steuern. Die gemeinsame Anzeige bildet den Zeiger ab; Die Steuerung ist nicht auf eine Anwendung oder ein Display beschränkt.",
-    "revoke_hint": "Verwenden Sie „Kontrolle widerrufen“ oder drücken Sie {{shortcut}} auf diesem Computer, um die Kontrolle zu beenden.",
-    "decline": "Ablehnen",
-    "allow": "Kontrolle zulassen",
+    "revoke_hint": "Drücken Sie {{shortcut}} auf diesem Computer, um die Kontrolle zu beenden.",
     "host_active": "{{name}} kann diesen Computer steuern.",
     "controller_active": "Steuerung von {{name}}",
     "host_active_short": "Wird ferngesteuert",
     "controller_active_short": "Fernsteuerung aktiv",
-    "revoke": "Kontrolle entziehen",
     "revoke_failed": "Die Kontrolle konnte nicht widerrufen werden. Verwenden Sie {{shortcut}} auf dem Host, um es zu stoppen.",
-    "approval_failed": "Die Genehmigung ist fehlgeschlagen. Möglicherweise ist die Anforderung abgelaufen oder die Steuerung ist nicht verfügbar. Fordern Sie die Kontrolle erneut an.",
     "reconnecting": "Steuerung wieder herstellen",
     "surface": "Fernsteuerung; Drücken Sie {{shortcut}}, um den Zeiger und die Tastatur freizugeben.",
     "request": "Steuerung anfordern",
@@ -1513,9 +1507,6 @@
     "confirm_description": "Bestätigen, um dieser Verbindung zu vertrauen und die Standardberechtigungen wiederherzustellen.",
     "waiting_confirmation": "Warten auf das andere Gerät",
     "saving_pairing": "Kopplung wird gespeichert",
-    "accept": "Annehmen",
-    "reject": "Ablehnen",
-    "cancel": "Abbrechen",
     "failure": {
       "rejected": "Kopplung abgelehnt.",
       "cancelled": "Kopplung abgebrochen.",
@@ -1546,16 +1537,6 @@
     "unsupported": "Dieser Browser unterstützt WebMCP nicht. Die Funktion kann nicht aktiviert werden.",
     "export": "Diagnose exportieren",
     "requests": "Berechtigungsanfragen",
-    "allow_session": "Für diese Sitzung erlauben",
-    "approval_failed": "Die Berechtigungsanfrage konnte nicht verarbeitet werden. Bitte erneut versuchen.",
-    "no_requests": "Keine offenen Anfragen.",
-    "target": "Ziel",
-    "shell_warning": "Erlaubt während der gewählten Dauer beliebige Shell-Befehle mit Ihrem Systemkonto. Befehle können Dateien und Systemeinstellungen ändern. Ein Widerruf macht ausgeführte Änderungen nicht rückgängig.",
-    "minutes": "Minuten",
-    "allow": "Sitzung erlauben",
-    "deny": "Ablehnen",
-    "grants": "Aktive Berechtigungen",
-    "revoke": "Widerrufen",
     "pair_description": "Berechtigungen in den Einstellungen des jeweiligen Geräts verwalten. Temporäre Freigaben enden bei einer Trennung.",
     "peers": "Verbundene Geräte",
     "credentials_description": "Ein gültiges Token erlaubt lokale Werkzeugaufrufe und Verbindungen zu anderen Clients ohne erneute lokale Zustimmung. Ferngesteuerte Geräte verwalten ihre eigenen Berechtigungen.",
@@ -1563,27 +1544,13 @@
     "client_name": "Token-Name",
     "create_client": "Token erstellen",
     "hide": "Zugangsdaten ausblenden",
-    "jobs": "Befehlsaufträge",
     "audit": "Letzte Aufrufe",
-    "scopes": {
-      "diagnostics_read": "Diagnose lesen",
-      "screen_read": "Bildschirme und Screenshots lesen",
-      "screen_manage": "Freigabe starten und stoppen",
-      "screen_configure": "Streaming-Parameter ändern",
-      "input_control": "Tastatur, Maus und Anwendungen steuern",
-      "shell_execute": "Shell-Befehle ausführen",
-      "accessibility_read": "Barrierefreiheitsbäume von Anwendungen lesen"
-    },
     "reported_source": "Gemeldeter Zugangspunkt (Geräteidentität wird separat geprüft)",
-    "input_warning": "Die Desktopsteuerung kann Terminals und Anwendungen bedienen, auch über Barrierefreiheitsaktionen auf dem gesamten Desktop. Dies ist keine Shell-Sandbox.",
-    "accessibility_warning": "Fensternamen und Beschriftungen können private Informationen enthalten. Inhalte von Passwortfeldern werden ausgeblendet.",
     "diagnostics": "Diagnose",
     "export_description": "Streaming-Statistiken und einen Diagnosebericht ohne sensible Angaben exportieren.",
     "peer": "Entferntes Gerät",
     "arguments": "Anfrageparameter",
-    "no_grants": "Keine aktiven Berechtigungen.",
     "no_peers": "Keine verbundenen Automatisierungsgeräte.",
-    "no_jobs": "Keine Befehlsaufträge.",
     "no_audit": "Keine letzten Aufrufe.",
     "server": "MCP-Dienst",
     "server_description": "MCP-Clients über Streamable HTTP verbinden.",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "Bestehende Einzeleinstellungen beibehalten",
-    "review_request": "Berechtigungsanfrage prüfen",
-    "job_status": {
-      "running": "Läuft",
-      "completed": "Abgeschlossen",
-      "cancelled": "Abgebrochen",
-      "timed_out": "Zeitüberschreitung"
-    },
     "call_status": {
       "ok": "Erfolgreich",
       "error": "Fehlgeschlagen",

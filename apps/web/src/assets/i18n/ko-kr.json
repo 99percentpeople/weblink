@@ -50,7 +50,6 @@
     "start": "속도 테스트 시작",
     "cancel": "테스트 중지",
     "accept": "테스트 허용",
-    "decline": "거절",
     "request": "{{name}}가 속도 테스트를 요청합니다.",
     "remote_running": "{{name}}를 사용한 속도 테스트",
     "upload": "이 기기 → 피어",
@@ -539,7 +538,6 @@
       "request_unresolved": "브라우저가 권한을 확인하지 않았습니다. 브라우저 또는 시스템 알림 설정을 확인하세요. 돌아오면 권한이 자동으로 업데이트됩니다.",
       "browser_blocked": "알림이 차단되었습니다. 브라우저에서 이 사이트의 권한을 열고 알림을 허용하세요.",
       "new_message": "새 메시지",
-      "reply": "보내기",
       "reply_placeholder": "답장을 입력하세요",
       "reply_failed": "답장이 전송되지 않았습니다. 귀하의 텍스트는 대화 초안에 보관되었습니다.",
       "delivery_failed": "답장이 저장되었으나 전송에 실패했습니다. 다시 시도하려면 대화를 여세요.",
@@ -636,8 +634,7 @@
       "stalled": "연결이 중단되었습니다. 다시 시도하는 중...",
       "error": "로드하지 못했습니다.",
       "autoplay_blocked": "브라우저가 자동 재생을 차단했습니다. 계속하려면 비디오 재생을 선택하세요.",
-      "play": "비디오 재생",
-      "retry": "다시 시도"
+      "play": "비디오 재생"
     },
     "statistics": {
       "show_overlay": "스트림 통계 표시",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "PIP 모드 종료",
       "continue": "계속",
       "retry": "다시 시도",
-      "open": "열기"
+      "open": "열기",
+      "allow_session": "이 세션 동안 허용",
+      "deny": "거부",
+      "accept": "수락",
+      "revoke": "취소"
     },
     "notification": {
       "copy_success": "복사 성공",
@@ -861,7 +862,8 @@
       "copy_failed": "복사할 수 없습니다. 클립보드 권한을 확인하고 다시 시도하세요.",
       "room_unprotected": "이 방에는 비밀번호가 필요하지 않습니다.",
       "file_save_failed": "파일을 저장할 수 없습니다. 저장 위치와 디스크 여유 공간을 확인한 후 다시 시도하세요.",
-      "file_open_failed": "파일을 열 수 없습니다. 파일을 사용할 수 있는지, 기본 앱이 설치되어 있는지 확인하세요."
+      "file_open_failed": "파일을 열 수 없습니다. 파일을 사용할 수 있는지, 기본 앱이 설치되어 있는지 확인하세요.",
+      "approval_failed": "권한 요청을 처리하지 못했습니다. 다시 시도해 주세요."
     },
     "forward_dialog": {
       "title": "항목 전달",
@@ -895,7 +897,6 @@
       "open_screen": "화면 열기",
       "open_media_device": "오픈 미디어 장치",
       "current": "현재의",
-      "preview": "미리보기",
       "apply_constraints": "미디어 제약 조건 적용",
       "apply_constraints_description": "일부 제약조건은 동적으로 변경하는 것이 지원되지 않을 수 있습니다. 적용할 새 스트림을 선택하세요.",
       "microphone_constraints": "마이크 제약",
@@ -932,8 +933,7 @@
     },
     "error_boundary": {
       "title": "오류가 발생했습니다",
-      "description": "페이지를 새로 고치거나 개발자에게 문의하세요. 오류 메시지는 다음과 같습니다.",
-      "reset": "초기화"
+      "description": "페이지를 새로 고치거나 개발자에게 문의하세요. 오류 메시지는 다음과 같습니다."
     },
     "pagination": {
       "total": "{{count}} 파일",
@@ -1230,11 +1230,9 @@
     "empty": "파일을 가져오거나 대화에서 받기",
     "local_file": "로컬 파일",
     "actions": "파일 작업",
-    "action_preview": "미리보기",
     "action_download": "장치에 저장",
     "action_save_as": "다른 이름으로 저장",
     "action_reveal": "파일 위치 열기",
-    "action_send": "보내기",
     "action_details": "세부 정보",
     "action_delete": "로컬 파일 삭제",
     "choose": "파일에서 선택",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "원격 제어를 허용하시겠습니까?",
     "request_description": "{{name}}는 이 컴퓨터의 마우스와 키보드를 제어하려고 합니다. 공유 디스플레이는 포인터를 매핑합니다. 제어는 애플리케이션이나 디스플레이에만 국한되지 않습니다.",
-    "revoke_hint": "제어를 종료하려면 \"제어 취소\"를 사용하거나 이 컴퓨터에서 {{shortcut}}를 누르세요.",
-    "decline": "거절",
-    "allow": "제어 허용",
+    "revoke_hint": "제어를 종료하려면 이 컴퓨터에서 {{shortcut}}를 누르세요.",
     "host_active": "{{name}}는 이 컴퓨터를 제어할 수 있습니다.",
     "controller_active": "{{name}} 제어",
     "host_active_short": "원격 제어 중",
     "controller_active_short": "원격 조작 중",
-    "revoke": "제어권 취소",
     "revoke_failed": "제어를 취소할 수 없습니다. 이를 중지하려면 호스트에서 {{shortcut}}를 사용하세요.",
-    "approval_failed": "승인에 실패했습니다. 요청이 만료되었거나 제어가 불가능할 수 있습니다. 제어권을 다시 요청하세요.",
     "reconnecting": "제어 재연결 중",
     "surface": "원격 제어; {{shortcut}}를 눌러 포인터와 키보드를 놓습니다.",
     "request": "제어 요청",
@@ -1513,9 +1507,6 @@
     "confirm_description": "수락하면 현재 연결을 신뢰하고 기본 권한을 복원합니다.",
     "waiting_confirmation": "상대 기기의 확인 대기 중",
     "saving_pairing": "페어링 저장 중",
-    "accept": "수락",
-    "reject": "거절",
-    "cancel": "취소",
     "failure": {
       "rejected": "페어링이 거절되었습니다.",
       "cancelled": "페어링이 취소되었습니다.",
@@ -1546,16 +1537,6 @@
     "unsupported": "이 브라우저는 WebMCP를 지원하지 않아 활성화할 수 없습니다.",
     "export": "진단 내보내기",
     "requests": "승인 요청",
-    "allow_session": "이 세션 동안 허용",
-    "approval_failed": "권한 요청을 처리하지 못했습니다. 다시 시도해 주세요.",
-    "no_requests": "대기 중인 요청이 없습니다.",
-    "target": "대상",
-    "shell_warning": "선택한 기간 동안 현재 시스템 계정으로 임의의 Shell 명령을 실행할 수 있습니다. 명령은 파일과 시스템 상태를 변경할 수 있으며, 권한을 취소해도 이미 완료된 변경 사항은 되돌릴 수 없습니다.",
-    "minutes": "분",
-    "allow": "이 세션 허용",
-    "deny": "거부",
-    "grants": "유효한 권한",
-    "revoke": "취소",
     "pair_description": "각 기기의 권한 설정에서 승인을 관리합니다. 임시 권한은 연결이 끊어지면 만료됩니다.",
     "peers": "연결된 기기",
     "credentials_description": "유효한 토큰으로 로컬 도구를 호출하고 다른 클라이언트에 연결할 수 있으며, 로컬에서 다시 승인할 필요가 없습니다. 원격 권한은 제어 대상 기기에서 관리합니다.",
@@ -1563,27 +1544,13 @@
     "client_name": "토큰 이름",
     "create_client": "토큰 생성",
     "hide": "인증 정보 숨기기",
-    "jobs": "명령 작업",
     "audit": "최근 호출",
-    "scopes": {
-      "diagnostics_read": "진단 정보 읽기",
-      "screen_read": "화면 및 스크린샷 읽기",
-      "screen_manage": "공유 시작 및 중지",
-      "screen_configure": "스트리밍 매개변수 변경",
-      "input_control": "키보드, 마우스 및 앱 인터페이스 제어",
-      "shell_execute": "Shell 명령 실행",
-      "accessibility_read": "앱 접근성 트리 읽기"
-    },
     "reported_source": "신고된 접속 경로(기기 신원은 별도로 확인)",
-    "input_warning": "데스크톱 제어는 접근성 기능을 포함해 데스크톱 전체의 터미널과 앱을 조작할 수 있습니다. Shell 샌드박스가 아닙니다.",
-    "accessibility_warning": "창 이름과 컨트롤 레이블에 개인 정보가 포함될 수 있습니다. 비밀번호 필드의 내용은 숨겨집니다.",
     "diagnostics": "진단",
     "export_description": "스트리밍 통계와 민감한 정보를 제외한 진단 보고서를 내보냅니다.",
     "peer": "원격 기기",
     "arguments": "요청 매개변수",
-    "no_grants": "유효한 권한이 없습니다.",
     "no_peers": "연결된 자동화 기기가 없습니다.",
-    "no_jobs": "명령 작업이 없습니다.",
     "no_audit": "최근 호출이 없습니다.",
     "server": "MCP 서비스",
     "server_description": "Streamable HTTP로 MCP 클라이언트를 연결합니다.",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "기존 개별 설정 유지",
-    "review_request": "승인 요청 검토",
-    "job_status": {
-      "running": "실행 중",
-      "completed": "완료됨",
-      "cancelled": "취소됨",
-      "timed_out": "시간 초과"
-    },
     "call_status": {
       "ok": "성공",
       "error": "실패",

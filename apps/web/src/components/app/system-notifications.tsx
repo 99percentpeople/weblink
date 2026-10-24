@@ -164,7 +164,7 @@ export function SystemNotificationBridge(
           body: content.body,
           expiresAt: Date.now() + 10 * 60_000,
           reply: {
-            title: t("setting.notifications.reply"),
+            title: t("common.action.send"),
             placeholder: t(
               "setting.notifications.reply_placeholder",
             ),
@@ -249,7 +249,7 @@ export function SystemNotificationBridge(
               },
               {
                 id: "decline",
-                title: t("speed_test.decline"),
+                title: t("common.action.deny"),
               },
             ],
           },

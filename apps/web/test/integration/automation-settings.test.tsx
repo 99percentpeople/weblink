@@ -415,7 +415,7 @@ it("automatically edits and revokes tokens while automation is off", async () =>
   );
   fireEvent.click(
     screen.getByRole("button", {
-      name: "automation.revoke: Saved local token",
+      name: "common.action.revoke: Saved local token",
     }),
   );
   expect(fixture.removeClient).toHaveBeenCalledWith(

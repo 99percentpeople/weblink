@@ -76,10 +76,10 @@ export function ClientPairing(props: { clientId: string }) {
             variant="outline"
             onClick={() => respond(false)}
           >
-            {t("device_trust.reject")}
+            {t("common.action.deny")}
           </Button>
           <Button onClick={() => respond(true)}>
-            {t("device_trust.accept")}
+            {t("common.action.accept")}
           </Button>
         </div>
       </Show>
@@ -96,7 +96,7 @@ export function ClientPairing(props: { clientId: string }) {
                 );
             }}
           >
-            {t("device_trust.cancel")}
+            {t("common.action.cancel")}
           </Button>
         </div>
       </Show>

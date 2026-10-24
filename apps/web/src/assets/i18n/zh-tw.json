@@ -45,7 +45,6 @@
     "start": "開始測速",
     "cancel": "停止測速",
     "accept": "同意測速",
-    "decline": "拒絕",
     "request": "{{name}} 請求與你測速",
     "remote_running": "正在與 {{name}} 測速",
     "upload": "本機 → 對端",
@@ -534,7 +533,6 @@
       "request_unresolved": "瀏覽器尚未確認通知權限。請檢查瀏覽器或系統的通知設定，返回 Weblink 後會自動更新。",
       "browser_blocked": "通知已被封鎖，請在瀏覽器的網站權限設定中，將此網站的通知改為允許。",
       "new_message": "收到新訊息",
-      "reply": "傳送",
       "reply_placeholder": "輸入回覆",
       "reply_failed": "回覆未傳送，內容已保留在對應會話草稿中。",
       "delivery_failed": "回覆已儲存，但傳送失敗，請開啟會話重試。",
@@ -636,8 +634,7 @@
       "stalled": "連接中斷，正在重試...",
       "error": "載入失敗",
       "autoplay_blocked": "瀏覽器阻止了自動播放，請點擊播放畫面",
-      "play": "播放畫面",
-      "retry": "重試"
+      "play": "播放畫面"
     },
     "statistics": {
       "show_overlay": "顯示串流統計疊加層",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "退出子母畫面",
       "continue": "繼續",
       "retry": "重試",
-      "open": "開啟"
+      "open": "開啟",
+      "allow_session": "允許本次工作階段",
+      "deny": "拒絕",
+      "accept": "同意",
+      "revoke": "撤銷"
     },
     "clipboard_history": {
       "title": "剪貼簿歷史"
@@ -882,7 +883,6 @@
       "open_screen": "打開螢幕",
       "open_media_device": "打開媒體設備",
       "current": "當前",
-      "preview": "預覽",
       "apply_constraints": "應用媒體約束",
       "apply_constraints_description": "某些約束可能不支持動態更改，請選擇新的流以應用",
       "microphone_constraints": "麥克風約束",
@@ -915,7 +915,8 @@
       "copy_failed": "複製失敗，請檢查剪貼簿權限後重試。",
       "room_unprotected": "此房間未設定密碼。",
       "file_save_failed": "儲存檔案失敗，請檢查儲存位置和磁碟剩餘空間後重試。",
-      "file_open_failed": "無法開啟檔案，請檢查檔案是否可用及系統預設應用程式是否已安裝。"
+      "file_open_failed": "無法開啟檔案，請檢查檔案是否可用及系統預設應用程式是否已安裝。",
+      "approval_failed": "處理授權請求失敗，請重試。"
     },
     "nav": {
       "settings": "設定",
@@ -935,8 +936,7 @@
     },
     "error_boundary": {
       "title": "發生錯誤",
-      "description": "請嘗試刷新頁面或聯繫開發者，錯誤信息如下：",
-      "reset": "重置"
+      "description": "請嘗試刷新頁面或聯繫開發者，錯誤信息如下："
     },
     "pagination": {
       "total": "共 {{count}} 個檔案",
@@ -1230,11 +1230,9 @@
     "empty": "匯入檔案，或從對話中接收檔案",
     "local_file": "本機檔案",
     "actions": "檔案操作",
-    "action_preview": "預覽",
     "action_download": "儲存到裝置",
     "action_save_as": "另存為",
     "action_reveal": "開啟所在位置",
-    "action_send": "傳送",
     "action_details": "查看詳情",
     "action_delete": "刪除本機檔案",
     "choose": "從檔案清單選擇",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "允許遠端控制？",
     "request_description": "{{name}} 請求控制本機的滑鼠和鍵盤。共享螢幕僅用於映射滑鼠位置，控制權限不限於某個應用程式或顯示器。",
-    "revoke_hint": "點擊「收回控制」或在本機按 {{shortcut}} 可結束控制。",
-    "decline": "拒絕",
-    "allow": "允許控制",
+    "revoke_hint": "在本機按 {{shortcut}} 可結束控制。",
     "host_active": "{{name}} 可以控制本機",
     "controller_active": "正在控制 {{name}}",
     "host_active_short": "被控制中",
     "controller_active_short": "控制中",
-    "revoke": "收回控制",
     "revoke_failed": "無法收回控制，請在被控端按 {{shortcut}} 停止控制。",
-    "approval_failed": "批准失敗，請求可能已過期或目前無法控制，請重新請求控制。",
     "reconnecting": "正在恢復控制連線",
     "surface": "遠端控制；按 {{shortcut}} 釋放游標和鍵盤。",
     "request": "請求控制",
@@ -1513,9 +1507,6 @@
     "confirm_description": "同意後信任目前連線，並恢復預設權限。",
     "waiting_confirmation": "等待對方確認",
     "saving_pairing": "正在儲存配對",
-    "accept": "同意配對",
-    "reject": "拒絕",
-    "cancel": "取消",
     "failure": {
       "rejected": "對方已拒絕配對。",
       "cancelled": "配對已取消。",
@@ -1546,16 +1537,6 @@
     "unsupported": "目前瀏覽器不支援 WebMCP，無法啟用。",
     "export": "匯出診斷",
     "requests": "授權請求",
-    "allow_session": "允許本次工作階段",
-    "approval_failed": "處理授權請求失敗，請重試。",
-    "no_requests": "暫無待處理的請求。",
-    "target": "目標",
-    "shell_warning": "此權限允許在所選期限內，以目前系統帳戶執行任意 Shell 命令。命令可以修改檔案和系統狀態，撤銷權限無法還原已完成的變更。",
-    "minutes": "分鐘",
-    "allow": "允許本次工作階段",
-    "deny": "拒絕",
-    "grants": "有效授權",
-    "revoke": "撤銷",
     "pair_description": "在對應裝置的權限設定中管理授權。臨時授權於斷線時失效。",
     "peers": "已連線裝置",
     "credentials_description": "有效 Token 可直接呼叫本機工具和連接其他客戶端，無需本機再次同意。遠端權限由受控端管理。",
@@ -1563,27 +1544,13 @@
     "client_name": "Token 名稱",
     "create_client": "建立 Token",
     "hide": "隱藏憑證",
-    "jobs": "命令工作",
     "audit": "近期呼叫",
-    "scopes": {
-      "diagnostics_read": "讀取診斷",
-      "screen_read": "讀取螢幕與截圖",
-      "screen_manage": "開始與停止分享",
-      "screen_configure": "修改串流參數",
-      "input_control": "控制鍵盤、滑鼠與應用程式介面",
-      "shell_execute": "執行 Shell 命令",
-      "accessibility_read": "讀取應用程式無障礙樹"
-    },
     "reported_source": "請求方回報的入口（裝置身分另行驗證）",
-    "input_warning": "桌面控制可操作終端機和其他應用程式，也可透過無障礙介面操作整個桌面的控制項。這不是 Shell 沙箱。",
-    "accessibility_warning": "視窗名稱和控制項標籤可能包含私人資訊。密碼控制項的內容會被隱藏。",
     "diagnostics": "診斷",
     "export_description": "匯出串流統計與已遮蔽敏感資訊的診斷報告。",
     "peer": "遠端裝置",
     "arguments": "請求參數",
-    "no_grants": "暫無有效授權。",
     "no_peers": "暫無已連線的自動化裝置。",
-    "no_jobs": "暫無命令工作。",
     "no_audit": "暫無呼叫紀錄。",
     "server": "MCP 服務",
     "server_description": "透過 Streamable HTTP 連接 MCP 客戶端。",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "保留原有個別設定",
-    "review_request": "查看授權請求",
-    "job_status": {
-      "running": "執行中",
-      "completed": "已完成",
-      "cancelled": "已取消",
-      "timed_out": "已逾時"
-    },
     "call_status": {
       "ok": "成功",
       "error": "失敗",

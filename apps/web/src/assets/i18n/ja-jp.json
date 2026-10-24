@@ -50,7 +50,6 @@
     "start": "速度テストを開始",
     "cancel": "テストを停止",
     "accept": "テストを許可",
-    "decline": "拒否",
     "request": "{{name}} が速度テストをリクエストしています",
     "remote_running": "{{name}} との速度テスト",
     "upload": "このデバイス → 相手",
@@ -539,7 +538,6 @@
       "request_unresolved": "ブラウザーがまだ許可を確認していません。ブラウザーまたはシステムの通知設定を確認してください。戻ると自動的に更新されます。",
       "browser_blocked": "通知がブロックされています。ブラウザーでこのサイトの権限を開き、通知を許可してください。",
       "new_message": "新着メッセージ",
-      "reply": "送信",
       "reply_placeholder": "返信を入力",
       "reply_failed": "返信は送信されませんでした。入力内容は会話の下書きに保存されています。",
       "delivery_failed": "返信は保存されましたが、配信に失敗しました。会話を開いて再試行してください。",
@@ -636,8 +634,7 @@
       "stalled": "接続が中断されました。再試行しています...",
       "error": "ロードに失敗しました",
       "autoplay_blocked": "ブラウザが自動再生をブロックしました。続行するには、「ビデオを再生」を選択します。",
-      "play": "ビデオを再生する",
-      "retry": "再試行"
+      "play": "ビデオを再生する"
     },
     "statistics": {
       "show_overlay": "ストリーム統計を表示する",
@@ -845,7 +842,11 @@
       "exit_picture_in_picture": "PIP モードを終了する",
       "continue": "続行",
       "retry": "再試行",
-      "open": "開く"
+      "open": "開く",
+      "allow_session": "このセッション中は許可",
+      "deny": "拒否",
+      "accept": "承認",
+      "revoke": "取り消す"
     },
     "notification": {
       "copy_success": "コピー成功",
@@ -861,7 +862,8 @@
       "copy_failed": "コピーできません。クリップボードのアクセス許可を確認して、再試行してください。",
       "room_unprotected": "このルームにはパスワードは必要ありません。",
       "file_save_failed": "ファイルを保存できませんでした。保存先とディスクの空き容量を確認して、もう一度お試しください。",
-      "file_open_failed": "ファイルを開けませんでした。ファイルが利用可能で、既定のアプリがインストールされているか確認してください。"
+      "file_open_failed": "ファイルを開けませんでした。ファイルが利用可能で、既定のアプリがインストールされているか確認してください。",
+      "approval_failed": "承認リクエストを処理できませんでした。もう一度お試しください。"
     },
     "forward_dialog": {
       "title": "転送アイテム",
@@ -895,7 +897,6 @@
       "open_screen": "画面を開く",
       "open_media_device": "オープンメディアデバイス",
       "current": "現在",
-      "preview": "プレビュー",
       "apply_constraints": "メディア制約を適用する",
       "apply_constraints_description": "一部の制約は動的変更がサポートされていない可能性があります。適用する新しいストリームを選択してください",
       "microphone_constraints": "マイクの制約",
@@ -932,8 +933,7 @@
     },
     "error_boundary": {
       "title": "エラーが発生しました",
-      "description": "ページを更新するか、開発者に連絡してください。エラー メッセージは次のとおりです。",
-      "reset": "リセット"
+      "description": "ページを更新するか、開発者に連絡してください。エラー メッセージは次のとおりです。"
     },
     "pagination": {
       "total": "{{count}} ファイル",
@@ -1230,11 +1230,9 @@
     "empty": "ファイルをインポートするか、会話で受信します",
     "local_file": "ローカルファイル",
     "actions": "ファイルアクション",
-    "action_preview": "プレビュー",
     "action_download": "デバイスに保存",
     "action_save_as": "名前を付けて保存",
     "action_reveal": "ファイルの場所を開く",
-    "action_send": "送信",
     "action_details": "詳細",
     "action_delete": "ローカルファイルを削除する",
     "choose": "ファイルから選択",
@@ -1350,16 +1348,12 @@
     },
     "request_title": "遠隔操作を許可しますか?",
     "request_description": "{{name}} は、このコンピュータのマウスとキーボードを制御したいと考えています。共有ディスプレイはポインタをマップします。制御はアプリケーションやディスプレイに限定されません。",
-    "revoke_hint": "制御を終了するには、「制御の取り消し」を使用するか、このコンピュータで {{shortcut}} を押します。",
-    "decline": "拒否",
-    "allow": "制御を許可する",
+    "revoke_hint": "制御を終了するには、このコンピュータで {{shortcut}} を押してください。",
     "host_active": "{{name}} はこのコンピューターを制御できます。",
     "controller_active": "{{name}}の制御",
     "host_active_short": "リモート操作されています",
     "controller_active_short": "リモート操作中",
-    "revoke": "コントロールを取り消す",
     "revoke_failed": "制御を取り消すことができませんでした。ホスト上で {{shortcut}} を使用して停止します。",
-    "approval_failed": "承認に失敗しました。リクエストの有効期限が切れているか、制御が利用できない可能性があります。再度制御を要求してください。",
     "reconnecting": "コントロールの再接続",
     "surface": "リモート操作; {{shortcut}} を押してポインタとキーボードを放します。",
     "request": "操作権限をリクエスト",
@@ -1513,9 +1507,6 @@
     "confirm_description": "承認すると現在の接続を信頼し、権限を初期設定に戻します。",
     "waiting_confirmation": "相手の確認を待っています",
     "saving_pairing": "ペアリングを保存中",
-    "accept": "承認",
-    "reject": "拒否",
-    "cancel": "キャンセル",
     "failure": {
       "rejected": "ペアリングが拒否されました。",
       "cancelled": "ペアリングをキャンセルしました。",
@@ -1546,16 +1537,6 @@
     "unsupported": "このブラウザーは WebMCP に対応していないため、有効にできません。",
     "export": "診断をエクスポート",
     "requests": "承認リクエスト",
-    "allow_session": "このセッション中は許可",
-    "approval_failed": "承認リクエストを処理できませんでした。もう一度お試しください。",
-    "no_requests": "保留中のリクエストはありません。",
-    "target": "対象",
-    "shell_warning": "選択した期間中、現在のシステムアカウントで任意の Shell コマンドを実行できます。コマンドはファイルやシステムの状態を変更できます。権限を取り消しても、実行済みの変更は元に戻りません。",
-    "minutes": "分",
-    "allow": "このセッションを許可",
-    "deny": "拒否",
-    "grants": "有効な権限",
-    "revoke": "取り消す",
     "pair_description": "各デバイスの権限設定で管理します。一時的な権限は切断時に失効します。",
     "peers": "接続中のデバイス",
     "credentials_description": "有効なトークンがあれば、ローカルでの再確認なしにツールを呼び出し、他のクライアントに接続できます。リモート権限は操作対象のデバイスが管理します。",
@@ -1563,27 +1544,13 @@
     "client_name": "トークン名",
     "create_client": "トークンを作成",
     "hide": "認証情報を隠す",
-    "jobs": "コマンドタスク",
     "audit": "最近の呼び出し",
-    "scopes": {
-      "diagnostics_read": "診断情報の読み取り",
-      "screen_read": "画面とスクリーンショットの読み取り",
-      "screen_manage": "共有の開始と停止",
-      "screen_configure": "配信パラメーターの変更",
-      "input_control": "キーボード、マウス、アプリ画面の操作",
-      "shell_execute": "Shell コマンドの実行",
-      "accessibility_read": "アプリのアクセシビリティツリーの読み取り"
-    },
     "reported_source": "申告されたアクセス元（デバイスの身元は別途確認）",
-    "input_warning": "デスクトップ制御では、アクセシビリティ機能を含め、デスクトップ全体のターミナルやアプリを操作できます。Shell サンドボックスではありません。",
-    "accessibility_warning": "ウィンドウ名やコントロールのラベルには個人情報が含まれる場合があります。パスワード欄の内容は非表示になります。",
     "diagnostics": "診断",
     "export_description": "配信統計と機密情報を除いた診断レポートをエクスポートします。",
     "peer": "リモートデバイス",
     "arguments": "リクエスト引数",
-    "no_grants": "有効な権限はありません。",
     "no_peers": "接続中の自動化デバイスはありません。",
-    "no_jobs": "コマンドタスクはありません。",
     "no_audit": "最近の呼び出しはありません。",
     "server": "MCP サービス",
     "server_description": "Streamable HTTP で MCP クライアントを接続します。",
@@ -1622,13 +1589,6 @@
       }
     },
     "mixed_permissions": "既存の個別設定を維持",
-    "review_request": "承認リクエストを確認",
-    "job_status": {
-      "running": "実行中",
-      "completed": "完了",
-      "cancelled": "キャンセル済み",
-      "timed_out": "タイムアウト"
-    },
     "call_status": {
       "ok": "成功",
       "error": "失敗",

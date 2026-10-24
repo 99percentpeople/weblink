@@ -641,7 +641,7 @@ function TaskRow(props: {
               app.declineSpeedTest(props.task.peerId)
             }
           >
-            {t("speed_test.decline")}
+            {t("common.action.deny")}
           </Button>
         </div>
       </Show>

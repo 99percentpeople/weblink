@@ -24,7 +24,7 @@ export function MeetingControlStatus(props: {
     t(
       props.side === "controller"
         ? "remote_control.end"
-        : "remote_control.revoke",
+        : "common.action.revoke",
     );
   const title = (text: string) =>
     props.side === "controller"

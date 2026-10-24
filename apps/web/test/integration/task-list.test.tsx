@@ -570,7 +570,7 @@ describe("unified task list controls", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "speed_test.decline",
+        name: "common.action.deny",
       }),
     );
     expect(decline).toHaveBeenCalledWith("peer");
