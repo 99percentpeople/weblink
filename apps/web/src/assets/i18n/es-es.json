@@ -1530,7 +1530,7 @@
     "title": "Automatización",
     "policies_paused": "Las llamadas con token y los permisos permanentes están en pausa. Desactiva y activa MCP para reanudar las llamadas, o la automatización para reanudar los permisos de dispositivos.",
     "device_permissions_description": "Solo se aplica a dispositivos de confianza y respeta los permisos de recepción de contenido y de pantalla compartida.",
-    "description": "Conecta herramientas de IA mediante MCP o WebMCP.",
+    "description": "Conecta herramientas de IA mediante MCP o WebMCP. Los diagnósticos de transmisión están siempre disponibles; el acceso se gestiona en los permisos de cada dispositivo.",
     "enable": "Activar automatización",
     "desktop": "Permitir que los clientes MCP y los dispositivos remotos autorizados automaticen este equipo.",
     "browser": "Controla equipos de escritorio mediante WebMCP. El dispositivo de destino gestiona los permisos.",

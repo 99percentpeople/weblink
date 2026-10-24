@@ -281,7 +281,7 @@ it.each(["allow", "deny", "ask"] as const)(
     expect(revoke).not.toHaveBeenCalled();
   },
 );
-it("saves per-device scope policies immediately, resets them, and hides them on the Web controller", async () => {
+it("saves per-device policies and keeps read permissions available in browsers", async () => {
   fixture.get = () => ({ state: "trusted" });
   resetClientConfig("peer");
   const view = renderDevice();
@@ -318,6 +318,21 @@ it("saves per-device scope policies immediately, resets them, and hides them on 
   view.unmount();
   renderDevice(false);
   expect(screen.queryByText(label)).not.toBeInTheDocument();
+  const read = screen.getByRole("button", {
+    name: (name) =>
+      name.startsWith("automation.permissions.read.title"),
+  });
+  await userEvent.click(read);
+  await userEvent.click(
+    screen.getByRole("option", {
+      name: "setting.permissions.allow_permanently",
+    }),
+  );
+  expect(
+    appState.options.clientConfigs.peer?.automation?.[
+      "diagnostics.read"
+    ],
+  ).toBe("allow");
 });
 it("groups every automation scope by purpose and locks it for an untrusted device", () => {
   fixture.get = () => ({ state: "untrusted" });

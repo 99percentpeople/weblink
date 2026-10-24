@@ -63,16 +63,21 @@ it("publishes actual input ownership only to its trusted peer on the current con
     };
     return { session, events, send, automation };
   };
-  service.setAutomationEnabled(true);
   const controller = bind("controller");
   const observer = bind("observer");
   await flushRtc();
+  expect(controller.automation()).toBeUndefined();
+  service.setDiagnosticsReady(true);
+  await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: false,
   });
   expect(observer.automation()).toEqual({
+    diagnostics: true,
     controlActive: false,
   });
+  service.setAutomationEnabled(true);
   observer.send.mockClear();
   const generation = service.capabilities.generation(
     controller.session,
@@ -83,6 +88,7 @@ it("publishes actual input ownership only to its trusted peer on the current con
   });
   await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: true,
   });
   expect(observer.send).not.toHaveBeenCalled();
@@ -90,6 +96,7 @@ it("publishes actual input ownership only to its trusted peer on the current con
   service.setAutomationController(null);
   await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: false,
   });
   service.setAutomationController({
@@ -98,16 +105,19 @@ it("publishes actual input ownership only to its trusted peer on the current con
   });
   await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: true,
   });
   setAllowed(false);
   await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: false,
   });
   setAllowed(true);
   await flushRtc();
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: true,
   });
 
@@ -124,9 +134,16 @@ it("publishes actual input ownership only to its trusted peer on the current con
     service.capabilities.generation(controller.session),
   ).not.toBe(generation);
   expect(controller.automation()).toEqual({
+    diagnostics: true,
     controlActive: false,
   });
   service.setAutomationEnabled(false);
+  await flushRtc();
+  expect(controller.automation()).toEqual({
+    diagnostics: true,
+    controlActive: false,
+  });
+  service.setDiagnosticsReady(false);
   await flushRtc();
   expect(controller.automation()).toBeNull();
 });

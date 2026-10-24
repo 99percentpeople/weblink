@@ -224,6 +224,11 @@ mod tests {
     #[tokio::test]
     async fn permanent_policy_executes_without_prompt_and_deny_cancels_existing_tickets() {
         let (service, p) = fixture();
+        {
+            let mut s = service.state.lock().unwrap();
+            s.enabled = false;
+            s.mcp_enabled = false;
+        }
         service
             .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
             .unwrap();
@@ -259,6 +264,11 @@ mod tests {
     #[tokio::test]
     async fn editing_an_ask_policy_resolves_only_that_peers_pending_request() {
         let (service, p) = fixture();
+        {
+            let mut s = service.state.lock().unwrap();
+            s.enabled = false;
+            s.mcp_enabled = false;
+        }
         let task = tokio::spawn(service.clone().invoke(p.clone(), "request".into(), call()));
         until(|| {
             service

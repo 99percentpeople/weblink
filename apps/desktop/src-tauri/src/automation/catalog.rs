@@ -1,5 +1,15 @@
 use serde_json::Value;
 use std::sync::OnceLock;
+pub fn diagnostic(name: &str) -> bool {
+    matches!(
+        name,
+        "diagnostics.snapshot"
+            | "diagnostics.history"
+            | "diagnostics.export"
+            | "diagnostics.start"
+            | "diagnostics.stop"
+    )
+}
 pub fn permission_scopes(scope: &str) -> &'static [String] {
     static GROUPS: OnceLock<std::collections::BTreeMap<String, Vec<String>>> = OnceLock::new();
     GROUPS

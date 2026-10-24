@@ -94,6 +94,7 @@ vi.mock("@/libs/application/session-service", () => ({
       get: () => fixture.remoteCapabilities(),
     },
     setAutomationEnabled: fixture.advertise,
+    setDiagnosticsReady: vi.fn(),
     setAutomationController: vi.fn(),
     canReceive: () => true,
     canShareScreen: () => true,
@@ -152,6 +153,12 @@ const mount = () => {
   return { runtime, ...view };
 };
 beforeEach(() => {
+  setAppState(
+    "options",
+    "clientConfigs",
+    "desktop",
+    undefined,
+  );
   fixture.generation = "connection-1";
   vi.stubGlobal("crypto", webcrypto);
   setAppState("options", "mcpEnabled", false);
@@ -170,6 +177,77 @@ beforeEach(() => {
   fixture.createChannel
     .mockReset()
     .mockResolvedValue(fixture.channel);
+});
+it("serves browser diagnostics by default with saved device permission and rejects OS tools and forwarding", async () => {
+  setAppState("options", "clientConfigs", "desktop", {
+    automation: { "diagnostics.read": "allow" },
+  });
+  const { runtime } = mount();
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  const connection = fixture.incoming!;
+  for (const name of [
+    "diagnostics.snapshot",
+    "diagnostics.history",
+    "diagnostics.export",
+    "diagnostics.start",
+    "diagnostics.stop",
+  ])
+    expect(
+      await connection(
+        { name, arguments: { target: "local" } },
+        new AbortController().signal,
+      ),
+    ).toEqual({ ok: true, data: { local: true } });
+  await runtime.configureMcp(false);
+  expect(fixture.incoming).toBe(connection);
+  expect(runtime.enabled()).toBe(false);
+  expect(runtime.mcpEnabled()).toBe(false);
+  expect(
+    await connection(
+      {
+        name: "screen.sources",
+        arguments: { target: "local" },
+      },
+      new AbortController().signal,
+    ),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "UNSUPPORTED" },
+  });
+  expect(
+    await connection(
+      {
+        name: "diagnostics.snapshot",
+        arguments: { target: "desktop" },
+      },
+      new AbortController().signal,
+    ),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "PERMISSION_DENIED" },
+  });
+  setAppState(
+    "options",
+    "clientConfigs",
+    "desktop",
+    "automation",
+    { "diagnostics.read": "deny" },
+  );
+  expect(
+    await connection(
+      {
+        name: "diagnostics.snapshot",
+        arguments: { target: "local" },
+      },
+      new AbortController().signal,
+    ),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "PERMISSION_DENIED" },
+  });
+  expect(runtime.snapshot().pending).toEqual([]);
 });
 afterEach(() => {
   cleanup();
@@ -458,7 +536,7 @@ it("recovers an established channel from its close event without retrying failed
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
   expect(runtime.peers()).toEqual([]);
 });
-it("WebMCP routes directly to the desktop and rejects incoming automation without local approvals", async () => {
+it("WebMCP routes to the desktop and reads local diagnostics while peer reads require consent", async () => {
   const tools = new Map<
     string,
     {
@@ -506,20 +584,27 @@ it("WebMCP routes directly to the desktop and rejects incoming automation withou
       .get("diagnostics.snapshot")!
       .execute({ target: "local" }),
   ).toMatchObject({
-    ok: false,
-    error: { code: "UNSUPPORTED" },
+    ok: true,
+    data: { local: true },
   });
   expect(runtime.snapshot().pending).toEqual([]);
-  const incoming = await fixture.incoming!(
+  const incoming = fixture.incoming!(
     {
       name: "diagnostics.snapshot",
       arguments: { target: "local" },
     },
     new AbortController().signal,
   );
-  expect(incoming).toMatchObject({
-    ok: false,
-    error: { code: "UNSUPPORTED" },
+  await waitFor(() =>
+    expect(runtime.snapshot().pending).toHaveLength(1),
+  );
+  await runtime.decide(
+    runtime.snapshot().pending[0].id,
+    true,
+  );
+  expect(await incoming).toMatchObject({
+    ok: true,
+    data: { local: true },
   });
   await runtime.configureMcp(false);
   expect(tools.size).toBe(0);
@@ -620,7 +705,7 @@ it.each([
 );
 
 it.each([undefined, null, {}, { registerTool: true }])(
-  "rejects unavailable WebMCP without advertising automation: %j",
+  "keeps peer diagnostics available without WebMCP: %j",
   async (context) => {
     setContext(context);
     const { runtime } = mount();
@@ -636,7 +721,7 @@ it.each([undefined, null, {}, { registerTool: true }])(
     expect(fixture.advertise).not.toHaveBeenCalledWith(
       true,
     );
-    expect(fixture.incoming).toBeUndefined();
+    expect(fixture.incoming).toBeDefined();
   },
 );
 it("does not restore enabled state in an unsupported browser or erase the saved preference", async () => {

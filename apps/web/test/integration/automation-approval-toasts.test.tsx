@@ -38,6 +38,7 @@ const fixture = vi.hoisted(() => ({
   canReceive: vi.fn(),
   enabled: true,
   ready: true,
+  desktop: true,
   preview: true,
 }));
 vi.mock("@/i18n", () => ({
@@ -49,7 +50,9 @@ vi.mock("@/i18n", () => ({
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
     automation: {
-      desktop: true,
+      get desktop() {
+        return fixture.desktop;
+      },
       enabled: () => fixture.enabled,
       ready: () => fixture.ready,
       decide: fixture.decide,
@@ -104,6 +107,7 @@ beforeEach(() => {
   fixture.decide.mockReset().mockResolvedValue(undefined);
   fixture.canReceive.mockReset().mockReturnValue(true);
   fixture.enabled = fixture.ready = fixture.preview = true;
+  fixture.desktop = true;
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
@@ -443,6 +447,31 @@ it("keeps foreground approval available when system notifications are disabled",
   await screen.findByRole("button", { name: allowLabel() });
 });
 
+it.each([false, true])(
+  "reviews diagnostics with automation disabled on desktop=%s",
+  async (desktop) => {
+    fixture.desktop = desktop;
+    fixture.enabled = false;
+    mount();
+    const diagnostic = {
+      ...request(),
+      scope: "diagnostics.read" as const,
+      tool: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    };
+    setPending([diagnostic]);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: allowLabel(),
+      }),
+    );
+    expect(fixture.decide).toHaveBeenCalledWith(
+      diagnostic.id,
+      true,
+    );
+  },
+);
+
 it.each([
   "expired",
   "resolved",
@@ -466,7 +495,7 @@ it.each([
     if (reason === "resolved") setPending([]);
     if (reason === "untrusted")
       fixture.canReceive.mockReturnValue(false);
-    if (reason === "disabled") fixture.enabled = false;
+    if (reason === "disabled") setPending([]);
     if (reason === "closed") fixture.ready = false;
     if (reason === "reconnected")
       setPending([

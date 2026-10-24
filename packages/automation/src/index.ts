@@ -62,6 +62,15 @@ export interface Schema {
   maximum?: number;
 }
 export const tools = catalog as unknown as ToolDefinition[];
+/** Diagnostics stay available independently of OS automation. */
+export const isDiagnosticTool = (name: string): boolean =>
+  [
+    "diagnostics.snapshot",
+    "diagnostics.history",
+    "diagnostics.export",
+    "diagnostics.start",
+    "diagnostics.stop",
+  ].includes(name);
 export const scopes: readonly Scope[] = [
   "diagnostics.read",
   "screen.read",

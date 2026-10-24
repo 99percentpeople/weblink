@@ -98,11 +98,15 @@ export class SessionService {
   >();
   private readonly speedBusy = createSignal(false);
   private readonly automationEnabled = createSignal(false);
+  private readonly diagnosticsReady = createSignal(false);
   private readonly automationController =
     createSignal<NativeAutomationPeer | null>(null);
   setAutomationEnabled(enabled: boolean): void {
     this.automationEnabled[1](enabled);
     if (!enabled) this.automationController[1](null);
+  }
+  setDiagnosticsReady(ready: boolean): void {
+    this.diagnosticsReady[1](ready);
   }
   setAutomationController(
     controller: NativeAutomationPeer | null,
@@ -129,10 +133,12 @@ export class SessionService {
         ),
       },
       messaging: {},
-      ...(this.automationEnabled[0]()
+      ...(this.diagnosticsReady[0]()
         ? {
             automation: {
+              diagnostics: true,
               controlActive:
+                this.automationEnabled[0]() &&
                 this.automationControlActive(session),
             },
           }

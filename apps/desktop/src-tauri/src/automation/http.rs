@@ -21,7 +21,7 @@ impl ServerHandler for Handler {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(concat!(
             "Weblink automation. Explicit targets. A valid MCP token authorizes forwarding and device discovery. ",
-            "Other local calls also require local automation to be enabled. Remote calls follow the destination device's permissions. ",
+            "Local diagnostic tools are always available; other local calls require local automation to be enabled. Remote calls follow the destination device's permissions. ",
             "Calls never approve their own remote permissions. ",
             "For desktop input, use a live native monitor track (sessions.list or screen.start), call control.acquire once, ",
             "then call control.pointer/key/text directly. No bindWindow or accessibility focus call is needed. ",

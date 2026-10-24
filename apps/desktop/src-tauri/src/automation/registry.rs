@@ -242,7 +242,7 @@ impl Service {
             && if g.principal.kind == "mcp" {
                 s.mcp_enabled && !s.mcp_suspended
             } else {
-                s.enabled
+                (s.enabled || Self::diagnostic_grant(g))
                     && g.scopes.iter().all(|scope| {
                         let decision = Self::peer_decision(s, &g.principal, scope);
                         decision != policy::Decision::Deny

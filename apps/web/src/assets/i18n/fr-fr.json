@@ -1530,7 +1530,7 @@
     "title": "Automatisation",
     "policies_paused": "Les appels par jeton et les autorisations permanentes sont suspendus. Désactivez puis réactivez MCP pour reprendre les appels, ou l’automatisation pour reprendre les autorisations des appareils.",
     "device_permissions_description": "S’applique uniquement aux appareils de confiance et reste soumis aux permissions de réception de contenu et de partage d’écran.",
-    "description": "Connectez des outils d’IA via MCP ou WebMCP.",
+    "description": "Connectez des outils d’IA via MCP ou WebMCP. Les diagnostics de diffusion sont toujours disponibles. L’accès se gère dans les permissions de chaque appareil.",
     "enable": "Activer l’automatisation",
     "desktop": "Autoriser les clients MCP et les appareils distants autorisés à automatiser cet ordinateur.",
     "browser": "Contrôlez des ordinateurs via WebMCP. L’appareil cible gère les permissions.",

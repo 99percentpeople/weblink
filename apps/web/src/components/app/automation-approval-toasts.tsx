@@ -20,7 +20,7 @@ import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keybo
 import { showRequestToast } from "@/components/ui/request-toast";
 import { t } from "@/i18n";
 
-/** Peer consent uses the shared notification channels; native authority validates every answer. */
+/** Peer consent uses the shared notification channels and connection-scoped authority. */
 export function AutomationApprovalToasts(props: {
   notifications: Pick<
     NotificationService,
@@ -30,9 +30,7 @@ export function AutomationApprovalToasts(props: {
 }) {
   const { automation } = useAppState();
   const pending = () =>
-    automation?.desktop &&
-    automation.enabled() &&
-    automation.ready()
+    automation?.ready()
       ? automation
           .snapshot()
           .pending.filter(
@@ -88,15 +86,17 @@ export function AutomationApprovalToasts(props: {
             <span class="block">
               {groupDescription(permissionGroup(scope))}
             </span>
-            <span class="block">
-              {t("remote_control.revoke_hint", {
-                shortcut: shortcutLabel(
-                  resolveRemoteKeyboardOptions(
-                    appState.options.remoteKeyboard,
-                  ).emergencyShortcut,
-                ),
-              })}
-            </span>
+            <Show when={automation?.desktop}>
+              <span class="block">
+                {t("remote_control.revoke_hint", {
+                  shortcut: shortcutLabel(
+                    resolveRemoteKeyboardOptions(
+                      appState.options.remoteKeyboard,
+                    ).emergencyShortcut,
+                  ),
+                })}
+              </span>
+            </Show>
             <details>
               <summary class="cursor-pointer">
                 {t("automation.arguments")}

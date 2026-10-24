@@ -82,6 +82,7 @@ vi.mock("@/libs/application/session-service", () => ({
     canReceive: () => fixture.receive,
     canShareScreen: () => true,
     setAutomationEnabled: fixture.advertise,
+    setDiagnosticsReady: vi.fn(),
     setAutomationController: fixture.setController,
   },
 }));
@@ -1137,7 +1138,7 @@ it("admits automation only after shared paired-device access succeeds and revoke
   expect(fixture.native.call).toHaveBeenCalledTimes(1);
 });
 
-it("keeps the peer channel while either independent feature needs it", async () => {
+it("keeps diagnostics available when both automation and MCP switches are off", async () => {
   peer();
   const { runtime } = mount();
   await waitFor(() => expect(runtime.ready()).toBe(true));
@@ -1161,19 +1162,29 @@ it("keeps the peer channel while either independent feature needs it", async () 
   expect(runtime.mcpEnabled()).toBe(true);
   expect(runtime.peers()).toHaveLength(1);
   expect(await incoming()).toMatchObject({
-    ok: false,
-    error: { code: "DISABLED" },
+    ok: true,
   });
-  expect(fixture.native.call).toHaveBeenCalledTimes(2);
+  expect(fixture.native.call).toHaveBeenCalledTimes(3);
   expect(fixture.native.disconnect).not.toHaveBeenCalled();
   await runtime.configure(true);
   expect((await incoming()).ok).toBe(true);
   expect(fixture.native.peer).toHaveBeenCalledTimes(1);
   await runtime.configure(false);
   await runtime.configureMcp(false);
-  await waitFor(() =>
-    expect(runtime.peers()).toHaveLength(0),
-  );
+  expect(runtime.peers()).toHaveLength(1);
+  expect((await incoming()).ok).toBe(true);
+  expect(
+    await fixture.incoming!(
+      {
+        name: "screen.sources",
+        arguments: { target: "local" },
+      },
+      new AbortController().signal,
+    ),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "DISABLED" },
+  });
   expect(appState.options.automationEnabled).toBe(false);
   expect(appState.options.mcpEnabled).toBe(false);
 });

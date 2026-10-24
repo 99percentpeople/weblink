@@ -6,19 +6,33 @@ server. **Settings → Automation** has two independent switches on desktop:
 - **Enable automation** permits MCP clients and authorized remote devices to
   operate this computer. It does not start the MCP API.
 - **Enable MCP** starts the MCP API. With local automation off, clients can still
-  use `devices.list` and forward calls to directly connected desktops. Other local
-  tools return `DISABLED`. Incoming peer calls require local automation regardless
-  of the MCP switch, plus the existing destination-device permissions.
+  use `devices.list`, local diagnostics and forward calls to directly connected
+  devices. Other local tools return `DISABLED`. Incoming OS automation calls
+  require local automation, plus the existing destination-device permissions.
 
-Browsers expose only **Enable MCP** for WebMCP registration. They do not accept
-incoming automation or execute local tools other than device discovery.
+Stream diagnostics are available by default on both desktops and browsers,
+independently of either switch or browser WebMCP support. Paired devices can call
+`diagnostics.snapshot`, `history`, `export`, `start` and `stop` through the existing
+`automation/1` channel. The receiving client's **Reading and diagnostics** policy
+still controls access: Ask uses a session approval; Always allow and Deny remain
+saved per device. Trust, content reception and connection generation checks apply.
+The additive `automation/1.diagnostics` flag advertises this ability without
+changing the shared protocol version.
+
+Browsers expose only **Enable MCP** for WebMCP registration. They accept incoming
+diagnostic calls, with the same device permissions and notification approvals as
+desktop, and reject all incoming OS automation and forwarding. A browser's local
+WebMCP client can read its own diagnostics without peer approval.
+
 Both switches start disabled and persist independently.
 Native startup waits for its authority channel before restoring each switch.
 A failed MCP bind reports the error without clearing the saved preference or
-stopping local automation. Disabling automation cancels local calls, approvals,
-command jobs and input leases while keeping MCP forwarding alive. Disabling MCP
+stopping local automation. Disabling automation cancels local OS automation calls,
+approvals, command jobs and input leases while keeping diagnostics and MCP
+forwarding alive. Disabling MCP
 cancels token calls and stops its listener while retaining incoming peer authority.
-The automation peer channel remains available while either switch is enabled.
+The diagnostic peer channel remains available while the application is running.
+The HTTP MCP listener and browser tool registration still follow the MCP switch.
 
 ## Quick start
 
@@ -41,9 +55,9 @@ The automation peer channel remains available while either switch is enabled.
    }
    ```
 
-4. Enable **automation** on this desktop if the client should use its local
-   tools. Leave it off when this desktop should only discover and forward calls
-   to other devices. Enabling MCP alone does not allow local OS control.
+4. Enable **automation** on this desktop if the client should use its local OS
+   tools. Discovery, diagnostics and forwarding work with automation off.
+   Enabling MCP alone does not allow local OS control.
 5. Ask the client to list devices. Every tool takes an explicit `target`:
 
    ```json
@@ -54,7 +68,7 @@ The automation peer channel remains available while either switch is enabled.
    ```
 
 To operate a remote desktop, connect both Weblink devices in the same room and
-complete [device pairing](DEVICE_TRUST.md). Enable automation on the destination,
+complete [device pairing](DEVICE_TRUST.md). For OS tools, enable automation on the destination,
 then use its ID from `devices.list` as the tool's `target`. Its device settings
 decide whether Reading and diagnostics, Sharing and control, or Terminal and
 commands require approval. A notification approval lasts for that connection;
@@ -71,7 +85,8 @@ coordinates. Query `commands.capabilities` before choosing Shell signals.
 
 In a browser that provides `document.modelContext`, enable **MCP** in Automation
 settings, connect to a paired desktop with automation enabled, and use that
-desktop's ID as the target. The browser registers the shared tools with WebMCP;
+desktop's ID as the target. For diagnostics only, the destination can also be a
+browser and needs neither automation nor MCP enabled. The browser registers the shared tools with WebMCP;
 it does not start an HTTP listener, issue local tokens, or execute OS input and
 Shell jobs locally. The switch is unavailable when the browser lacks WebMCP.
 
@@ -81,9 +96,9 @@ A supporting browser uses the [WebMCP `document.modelContext` API](https://webma
 stays off and disabled when WebMCP is unavailable, without erasing the saved
 preference. MCP becomes active only after tool registration succeeds;
 registration failure, disabling MCP or closing the page aborts the
-registrations. The browser is a controller, with no local
-Token management or permission approval screen. Incoming peer automation calls
-to a browser are rejected; OS input and Shell execution require a desktop target.
+registrations. The browser has no local token management. Its device permission
+settings and notification approvals authorize incoming diagnostic requests even
+without WebMCP. OS input and Shell execution require a desktop target.
 
 On desktop, create one MCP credential per client in Automation settings. Copy
 the displayed Streamable HTTP URL and Authorization header into the client's
@@ -128,8 +143,9 @@ not activate the change. If activation fails after saving, the page's automation
 session closes and the saved record is restored on the next open.
 Clearing this storage resets MCP credentials and listener settings on the next open. The
 list, creation, editing and revocation remain available while MCP is disabled.
-Issuing a token authorizes forwarding and, when local automation is enabled,
-local tool calls without additional local approval, but never starts the listener;
+Issuing a token authorizes discovery, diagnostics and forwarding, plus local OS
+tool calls when automation is enabled, without additional local approval, but
+never starts the listener;
 its connection configuration uses the saved endpoint when the server is off. Tokens survive disabling/restarting, while
 runtime grants and pending calls do not. Expired tokens remain visible and can
 be renewed or revoked. Every HTTP request and final native effect checks token
@@ -140,7 +156,8 @@ or pending calls, including between background cleanup ticks.
 These tokens authenticate local MCP clients only. They do not pair remote
 devices, appear in remote-device permission lists, or authorize a remote device.
 A valid token needs no extra local approval to connect to another client.
-Local tool calls also require the automation switch, except for `devices.list`.
+Local OS tool calls also require the automation switch; `devices.list` and the
+five diagnostic tools do not.
 The destination still enforces its own device permissions. Requests require
 the accepted socket's concrete IP and port in Host, including on wildcard
 listeners; arbitrary DNS names and forwarded headers never authorize a request.

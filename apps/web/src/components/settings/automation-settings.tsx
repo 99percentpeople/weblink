@@ -128,7 +128,7 @@ export default function AutomationSettings() {
             <McpServerSettings runtime={r()} />
             <McpTokenSettings runtime={r()} />
           </Show>
-          <Show when={r().active()}>
+          <Show when={r().ready()}>
             <SettingHeading
               description={t("automation.pair_description")}
             >

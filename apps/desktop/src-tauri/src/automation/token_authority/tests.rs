@@ -68,7 +68,8 @@ async fn token_dispatches_local_and_multiple_remote_targets_without_consent() {
         assert_eq!(task.await.unwrap()["ok"], true);
     }
     let s = service.state.lock().unwrap();
-    assert_eq!(s.grants.len(), 2);
+    // Local diagnostics, local OS automation and remote forwarding are independent.
+    assert_eq!(s.grants.len(), 3);
     let forwarding = s.grants.values().find(|g| g.target == "*").unwrap();
     assert!(!forwarding.covers_target(&json!("local")));
     assert!(s.grants.values().all(|g| g.expires_at.is_none()));

@@ -26,6 +26,8 @@ const disposers: (() => void)[] = [];
 it("accepts optional automation lease status without changing the protocol version", () => {
   for (const value of [
     {},
+    { diagnostics: true },
+    { diagnostics: false, controlActive: false },
     { controlActive: true },
     { controlActive: false },
   ]) {

@@ -91,6 +91,7 @@ struct Invocation {
     generation: String,
     mcp: bool,
     local: bool,
+    diagnostic: bool,
 }
 #[derive(Default)]
 struct State {
@@ -179,10 +180,7 @@ impl Service {
         }
     }
     fn current(s: &State) -> bool {
-        (s.enabled || s.mcp_enabled)
-            && !s.epoch.is_empty()
-            && s.page.live()
-            && !s.emergency.pending()
+        !s.epoch.is_empty() && s.page.live() && !s.emergency.pending()
     }
     pub fn shutdown(&self) {
         let mut s = self.state.lock().unwrap();
@@ -304,6 +302,7 @@ impl Service {
                     generation: generation.clone(),
                     mcp: principal.kind == "mcp",
                     local: call.arguments["target"] == "local",
+                    diagnostic: catalog::diagnostic(&call.name),
                 },
             );
             RequestCleanup {
@@ -366,7 +365,12 @@ impl Service {
                 return Err("PERMISSION_DENIED".into());
             }
             if principal.kind == "mcp" {
-                Self::token_grant(&mut s, &principal, &call.arguments["target"])?;
+                Self::token_grant_for(
+                    &mut s,
+                    &principal,
+                    &call.arguments["target"],
+                    catalog::diagnostic(&call.name),
+                )?;
             }
             let decision = Self::peer_decision(&s, &principal, &scope);
             if decision == policy::Decision::Deny {
@@ -382,6 +386,10 @@ impl Service {
                     g.principal.id == principal.id
                         && g.principal.kind == principal.kind
                         && g.scopes.contains(&scope)
+                        && (principal.kind != "mcp"
+                            || call.arguments["target"] != "local"
+                            || !catalog::diagnostic(&call.name)
+                            || g.scopes.len() == 1)
                         && g.covers_target(&call.arguments["target"])
                         && Self::grant_live(&s, g)
                 })

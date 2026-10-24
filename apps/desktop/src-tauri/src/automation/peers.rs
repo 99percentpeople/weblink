@@ -14,6 +14,11 @@ mod tests {
     #[tokio::test]
     async fn reconnect_reuses_device_id_but_not_authority_and_stale_cleanup_is_harmless() {
         let (service, _) = crate::automation::tests::fixture();
+        {
+            let mut s = service.state.lock().unwrap();
+            s.enabled = false;
+            s.mcp_enabled = false;
+        }
         let old = Identity {
             id: "paired-device".into(),
             generation: "connection-1".into(),
@@ -108,8 +113,7 @@ impl Service {
     ) -> Result<(), String> {
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
-        if !s.enabled
-            || (s.peers.len() >= 32 && !s.peers.contains_key(&peer.id))
+        if (s.peers.len() >= 32 && !s.peers.contains_key(&peer.id))
             || peer.id.is_empty()
             || peer.id.len() > 128
             || label.len() > 128

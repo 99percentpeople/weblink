@@ -44,6 +44,7 @@ fn install(
             generation: id.into(),
             mcp: principal.kind == "mcp",
             local: target == "local",
+            diagnostic: true,
         },
     );
     s.tickets.insert(
@@ -73,20 +74,32 @@ async fn independent_switches_gate_native_dispatch_and_discovery() {
                 s.peers.insert(peer.id.clone(), peer.clone());
                 s.peer_policies.insert(
                     peer.id.clone(),
-                    HashMap::from([("diagnostics.read".into(), policy::Decision::Allow)]),
+                    HashMap::from([
+                        ("diagnostics.read".into(), policy::Decision::Allow),
+                        ("screen.read".into(), policy::Decision::Allow),
+                    ]),
                 );
             }
             assert_eq!(service.authenticate("test-token").is_some(), mcp_enabled);
             for (principal, name, target, allowed) in [
+                (token.clone(), "diagnostics.snapshot", "local", mcp_enabled),
+                (token.clone(), "devices.list", "local", mcp_enabled),
+                (token.clone(), "diagnostics.snapshot", "remote", mcp_enabled),
+                (peer.clone(), "diagnostics.snapshot", "local", true),
                 (
                     token.clone(),
-                    "diagnostics.snapshot",
+                    "screen.sources",
                     "local",
                     enabled && mcp_enabled,
                 ),
-                (token.clone(), "devices.list", "local", mcp_enabled),
-                (token.clone(), "diagnostics.snapshot", "remote", mcp_enabled),
-                (peer.clone(), "diagnostics.snapshot", "local", enabled),
+                (peer.clone(), "screen.sources", "local", enabled),
+                (
+                    token.clone(),
+                    "commands.capabilities",
+                    "local",
+                    enabled && mcp_enabled,
+                ),
+                (peer.clone(), "commands.capabilities", "local", enabled),
             ] {
                 let task = tokio::spawn(service.clone().invoke(
                     principal,
@@ -142,12 +155,18 @@ fn disabling_local_automation_keeps_mcp_forwarding_and_cancels_only_local_work()
     let mut local = install(&mut s, token.clone(), "local", "local");
     let mut remote = install(&mut s, token, "remote", "remote");
     let mut incoming = install(&mut s, peer, "peer", "local");
+    for id in ["local", "peer"] {
+        s.grants.get_mut(id).unwrap().scopes = vec!["screen.read".into()];
+        s.tickets.get_mut(id).unwrap().call.name = "screen.sources".into();
+        s.requests.get_mut(id).unwrap().diagnostic = false;
+    }
     s.requests.insert(
         "undispatched".into(),
         Invocation {
             generation: "g".into(),
             mcp: false,
             local: true,
+            diagnostic: false,
         },
     );
     service.configure_locked(&mut s, false, false);
@@ -190,6 +209,7 @@ fn disabling_mcp_preserves_incoming_peer_authority_and_cancels_all_token_work() 
             generation: "g".into(),
             mcp: true,
             local: false,
+            diagnostic: false,
         },
     );
     service.configure_locked(&mut s, true, false);
@@ -209,6 +229,29 @@ fn disabling_mcp_preserves_incoming_peer_authority_and_cancels_all_token_work() 
     assert!(matches!(
         incoming.try_recv(),
         Err(oneshot::error::TryRecvError::Empty)
+    ));
+}
+
+#[test]
+fn diagnostic_authority_survives_automation_disable_and_peers_need_no_switches() {
+    let (service, token) = fixture();
+    let peer = peer();
+    let mut s = service.state.lock().unwrap();
+    s.peers.insert(peer.id.clone(), peer.clone());
+    let mut local = install(&mut s, token, "local", "local");
+    let mut incoming = install(&mut s, peer, "peer", "local");
+    service.configure_locked(&mut s, false, false);
+    assert!(Service::check_call(&s, "epoch", "local").is_ok());
+    assert!(Service::check_call(&s, "epoch", "peer").is_ok());
+    assert!(matches!(
+        incoming.try_recv(),
+        Err(oneshot::error::TryRecvError::Empty)
+    ));
+    service.configure_locked(&mut s, true, false);
+    assert!(Service::check_call(&s, "epoch", "peer").is_ok());
+    assert!(matches!(
+        local.try_recv(),
+        Err(oneshot::error::TryRecvError::Closed)
     ));
 }
 

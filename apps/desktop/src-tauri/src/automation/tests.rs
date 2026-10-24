@@ -199,6 +199,7 @@ fn stale_cleanup_never_removes_a_reused_id() {
             generation: "new".into(),
             mcp: true,
             local: true,
+            diagnostic: true,
         },
     );
     drop(RequestCleanup {

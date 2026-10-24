@@ -1530,7 +1530,7 @@
     "title": "Automation",
     "policies_paused": "Token calls and always-allow policies are paused. Toggle MCP to resume token calls, or automation to resume remote-device policies.",
     "device_permissions_description": "Requires a trusted device and remains subject to content reception and screen sharing permissions.",
-    "description": "Connect AI tools through MCP or WebMCP.",
+    "description": "Connect AI tools through MCP or WebMCP. Stream diagnostics are always available, with access managed in each device’s permissions.",
     "enable": "Enable automation",
     "desktop": "Allow MCP clients and authorized remote devices to automate this computer.",
     "browser": "Control desktops through WebMCP, with permissions managed on the target device.",

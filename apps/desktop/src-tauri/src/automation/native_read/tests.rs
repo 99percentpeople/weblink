@@ -78,6 +78,7 @@ fn fixture(name: &str) -> Shared {
             generation: "generation".into(),
             mcp: true,
             local: true,
+            diagnostic: false,
         },
     );
     s.tickets.insert(
@@ -205,6 +206,7 @@ fn cancellation_does_not_release_the_worker_slot_or_validate_a_reused_request_id
                     generation: "replacement".into(),
                     mcp: true,
                     local: true,
+                    diagnostic: false,
                 },
             );
             s.tickets.get_mut("ticket").unwrap().used = false;

@@ -7,14 +7,15 @@ mod tests;
 impl Service {
     pub(super) fn call_enabled(s: &State, principal: &Principal, call: &Call) -> bool {
         match principal.kind.as_str() {
-            "peer" => s.enabled,
+            "peer" => s.enabled || catalog::diagnostic(&call.name),
             // Device discovery is needed to address remote targets even when this
             // machine does not accept automation. It grants no native operations.
             "mcp" => {
                 s.mcp_enabled
                     && (s.enabled
                         || call.arguments["target"] != "local"
-                        || call.name == "devices.list")
+                        || call.name == "devices.list"
+                        || catalog::diagnostic(&call.name))
             }
             _ => false,
         }
@@ -48,7 +49,7 @@ impl Service {
                 if mcp {
                     g.principal.kind == "mcp"
                 } else {
-                    g.target == "local"
+                    g.target == "local" && !Self::diagnostic_grant(g)
                 }
             })
             .map(|g| g.id.clone())
@@ -60,13 +61,17 @@ impl Service {
         let requests: Vec<_> = s
             .requests
             .iter()
-            .filter(|(_, r)| if mcp { r.mcp } else { r.local })
+            .filter(|(_, r)| if mcp { r.mcp } else { r.local && !r.diagnostic })
             .map(|(id, _)| id.clone())
             .collect();
         for id in requests {
             Self::cancel_request(s, &id);
         }
-        // Keep peer identities and policies while forwarding uses the same links.
-        // No local call can use them until local automation is enabled again.
+        // Diagnostics retain their authority and requests across automation toggles.
+    }
+
+    pub(super) fn diagnostic_grant(g: &Grant) -> bool {
+        g.scopes.iter().any(|scope| scope == "diagnostics.read")
+            && (g.principal.kind == "peer" || g.scopes.len() == 1)
     }
 }

@@ -1530,7 +1530,7 @@
     "title": "Automatisierung",
     "policies_paused": "Token-Aufrufe und dauerhafte Freigaben sind pausiert. MCP aus- und einschalten, um Token-Aufrufe fortzusetzen; Automatisierung aus- und einschalten, um Gerätefreigaben fortzusetzen.",
     "device_permissions_description": "Gilt nur für vertrauenswürdige Geräte. Berechtigungen zum Empfang von Inhalten und zur Bildschirmfreigabe gelten weiterhin.",
-    "description": "KI-Werkzeuge über MCP oder WebMCP verbinden.",
+    "description": "KI-Werkzeuge über MCP oder WebMCP verbinden. Streamdiagnosen sind immer verfügbar. Der Zugriff wird in den Geräteberechtigungen verwaltet.",
     "enable": "Automatisierung aktivieren",
     "desktop": "MCP-Clients und autorisierten entfernten Geräten erlauben, diesen Computer zu automatisieren.",
     "browser": "Desktops über WebMCP steuern. Das Zielgerät verwaltet die Berechtigungen.",

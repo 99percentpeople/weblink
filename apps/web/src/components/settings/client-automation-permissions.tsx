@@ -25,7 +25,7 @@ export default function ClientAutomationPermissions(props: {
     appState.options.clientConfigs[props.clientId]
       ?.automation;
   return (
-    <Show when={runtime?.desktop && runtime}>
+    <Show when={runtime}>
       {(automation) => (
         <>
           <SettingGroup
@@ -47,7 +47,12 @@ export default function ClientAutomationPermissions(props: {
                 {t("automation.policies_paused")}
               </p>
             </Show>
-            <For each={permissionGroupIds}>
+            <For
+              each={permissionGroupIds.filter(
+                (group) =>
+                  runtime?.desktop || group === "read",
+              )}
+            >
               {(group) => (
                 <PermissionSelect<AutomationDecision>
                   label={groupLabel(group)}

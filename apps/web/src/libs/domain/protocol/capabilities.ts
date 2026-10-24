@@ -31,6 +31,8 @@ export interface PeerCapabilities {
   [service: string]: unknown;
   messaging?: Record<string, never>;
   automation?: {
+    /** Diagnostic tools are available independently of automation switches. */
+    diagnostics?: boolean;
     /** This recipient currently holds an automation input lease on the sender. */
     controlActive?: boolean;
   };
@@ -101,6 +103,8 @@ const validators: Record<
   messaging: (v) => record(v),
   automation: (v) =>
     record(v) &&
+    (v.diagnostics === undefined ||
+      typeof v.diagnostics === "boolean") &&
     (v.controlActive === undefined ||
       typeof v.controlActive === "boolean"),
   fileDrop: (v) =>

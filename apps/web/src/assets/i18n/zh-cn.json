@@ -1530,7 +1530,7 @@
     "title": "自动化",
     "policies_paused": "Token 调用和始终允许已暂停。关闭并重新开启 MCP 可恢复 Token 调用；关闭并重新开启自动化可恢复远端设备策略。",
     "device_permissions_description": "仅对可信设备生效，仍受接收内容和分享画面权限限制。",
-    "description": "通过 MCP 或 WebMCP 连接 AI 工具。",
+    "description": "通过 MCP 或 WebMCP 连接 AI 工具。串流诊断默认可用，访问权限在各客户端的权限设置中管理。",
     "enable": "启用自动化",
     "desktop": "允许 MCP 客户端和已授权的远端设备自动化操作本机。",
     "browser": "通过 WebMCP 控制桌面端，权限由目标设备管理。",

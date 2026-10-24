@@ -16,6 +16,7 @@ import {
   AutomationError,
   failure,
   parseCall,
+  isDiagnosticTool,
   tools,
   type Approval,
   type Audit,
@@ -40,6 +41,7 @@ import type { PeerSession } from "@/libs/domain/session";
 import { sessionService } from "@/libs/application/session-service";
 import { AutomationAudit } from "@/libs/application/automation/audit";
 import { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
+import { DiagnosticPeerPermissions } from "@/libs/application/automation/diagnostic-permissions";
 import {
   automationHandlers,
   diagnosticSources,
@@ -103,6 +105,12 @@ export function createAutomation(
   const [ready, setReady] = createSignal(false);
   const changed = () => setRevision((v) => v + 1);
   const audit = new AutomationAudit(changed);
+  const diagnosticPermissions =
+    new DiagnosticPeerPermissions(changed);
+  const browserPrincipals = new Map<
+    AutomationPeerLink,
+    Principal
+  >();
   const presentation = new PresentationDiagnostics();
   const diagnostics = new AutomationDiagnostics(() =>
     diagnosticSources(state, presentation, platform),
@@ -148,8 +156,21 @@ export function createAutomation(
         ?.automation,
     );
   const syncPolicy = (link: AutomationPeerLink) => {
+    if (!native) {
+      const principal = browserPrincipals.get(link);
+      if (principal)
+        diagnosticPermissions.update(
+          link,
+          principal,
+          readAutomationPolicy(
+            appState.options.clientConfigs[principal.id]
+              ?.automation,
+          )["diagnostics.read"] ?? "ask",
+        );
+      return Promise.resolve();
+    }
     const authority = authorities.get(link);
-    if (!authority || !native) return Promise.resolve();
+    if (!authority) return Promise.resolve();
     const policy = policyFor(authority.session);
     const key = JSON.stringify(policy);
     if (key !== authority.policy) {
@@ -262,6 +283,9 @@ export function createAutomation(
             throw e;
           }
           changed();
+        } else {
+          browserPrincipals.set(link, p);
+          await syncPolicy(link);
         }
         return p;
       })();
@@ -327,6 +351,7 @@ export function createAutomation(
     if (
       !native &&
       call.name !== "devices.list" &&
+      !isDiagnosticTool(call.name) &&
       call.name !== "commands.capabilities"
     )
       throw new AutomationError("UNSUPPORTED");
@@ -355,7 +380,11 @@ export function createAutomation(
       270000,
     );
     try {
-      if (!(p.kind === "webmcp" ? mcpEnabled() : enabled()))
+      if (
+        !(p.kind === "webmcp"
+          ? mcpEnabled()
+          : enabled() || isDiagnosticTool(call.name))
+      )
         throw new AutomationError("DISABLED");
       if (p.kind === "webmcp")
         call = {
@@ -390,9 +419,16 @@ export function createAutomation(
           signal.removeEventListener("abort", cancel);
         }
       }
-      // WebMCP is a controller. Authority is enforced by the destination desktop.
-      // A browser never accepts incoming peer automation calls.
-      if (p.kind !== "webmcp" || native)
+      // Browsers accept only diagnostic calls authorized by their verified peer.
+      if (
+        native ||
+        (p.kind !== "webmcp" &&
+          !(
+            p.kind === "peer" &&
+            isDiagnosticTool(call.name) &&
+            call.arguments.target === "local"
+          ))
+      )
         throw new AutomationError("UNSUPPORTED");
       signal.throwIfAborted();
       const data = await route(call, signal);
@@ -480,7 +516,7 @@ export function createAutomation(
       !generation ||
       channel.readyState === "closed" ||
       channel.readyState === "closing" ||
-      !active() ||
+      !ready() ||
       sessionService.sessions[session.targetClientId] !==
         session ||
       !session.isMessageChannelReady ||
@@ -493,7 +529,10 @@ export function createAutomation(
     const link: AutomationPeerLink = new AutomationPeerLink(
       channel,
       async (call, signal) => {
-        if (!native || !enabled())
+        if (
+          (!native || !enabled()) &&
+          !isDiagnosticTool(call.name)
+        )
           return failure(
             new AutomationError(
               native ? "DISABLED" : "UNSUPPORTED",
@@ -515,14 +554,45 @@ export function createAutomation(
           return failure(
             new AutomationError("PERMISSION_DENIED"),
           );
-        return invoke(
-          await principal(link, session, generation),
-          call,
+        const operation = combineAbortSignals([
           signal,
-        );
+          link.lifetime.signal,
+        ]);
+        try {
+          parseCall(call);
+          if (!native && call.arguments.target !== "local")
+            throw new AutomationError("PERMISSION_DENIED");
+          const caller = await principal(
+            link,
+            session,
+            generation,
+          );
+          const check = !native
+            ? await diagnosticPermissions.authorize(
+                link,
+                call,
+                operation.signal,
+              )
+            : () => {};
+          const result = await invoke(
+            caller,
+            call,
+            operation.signal,
+          );
+          await principal(link, session, generation);
+          check();
+          return result;
+        } catch (error) {
+          if (native) throw error;
+          return failure(error);
+        } finally {
+          operation.dispose();
+        }
       },
       changed,
       () => {
+        diagnosticPermissions.disconnect(link);
+        browserPrincipals.delete(link);
         const promise = peerPrincipals.get(link);
         // Keep this session occupied until cleanup completes. Reopening the
         // automation channel within the same connection must not let late
@@ -546,12 +616,12 @@ export function createAutomation(
   const sync = () => {
     const sessions = Object.values(sessionService.sessions);
     for (const [session, b] of bindings)
-      if (!active() || !sessions.includes(session)) {
+      if (!ready() || !sessions.includes(session)) {
         b.abort.abort();
         bindings.delete(session);
         links.get(session)?.close();
       }
-    if (!active()) return;
+    if (!ready()) return;
     for (const session of sessions) {
       let b = bindings.get(session);
       if (!b) {
@@ -661,6 +731,7 @@ export function createAutomation(
         setError(String(e));
         setEnabled(false);
         setMcpEnabled(false);
+        setReady(false);
         sessionService.setAutomationEnabled(false);
         for (const link of [...links.values()])
           link.close();
@@ -755,12 +826,6 @@ export function createAutomation(
       if (mcp) setMcpEnabled(value);
       else setEnabled(value);
       sessionService.setAutomationEnabled(active());
-      if (!active()) {
-        for (const c of calls.values()) c.abort();
-        for (const link of [...links.values()])
-          link.close();
-      }
-      if (!enabled()) diagnostics.detail(0);
       untrack(sync);
       setAppState(
         "options",
@@ -799,7 +864,10 @@ export function createAutomation(
       JSON.stringify(policyFor(s));
     });
     active();
+    ready();
     untrack(sync);
+    // Subscribe to incoming channels before peers can discover this capability.
+    sessionService.setDiagnosticsReady(ready());
   });
   onMount(() => {
     diagnostics.start();
@@ -865,6 +933,7 @@ export function createAutomation(
     for (const b of bindings.values()) b.abort.abort();
     for (const l of [...links.values()]) l.close();
     sessionService.setAutomationEnabled(false);
+    sessionService.setDiagnosticsReady(false);
     if (native && epoch)
       void native.close(epoch).catch(() => {});
   });
@@ -953,7 +1022,7 @@ export function createAutomation(
             enabled: enabled(),
             mcpEnabled: mcpEnabled(),
             grants: [],
-            pending: [],
+            pending: diagnosticPermissions.approvals(),
             audit: audit.entries.slice(),
           };
     },
@@ -975,6 +1044,8 @@ export function createAutomation(
       if (native) {
         await native.decide(epoch, id, accepted);
         await readNativeSnapshot();
+      } else {
+        diagnosticPermissions.decide(id, accepted);
       }
     },
     revoke: async (id?: string) => {
