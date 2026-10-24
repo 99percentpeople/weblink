@@ -1,3 +1,4 @@
+import { createUuid } from "../../domain/ids";
 import {
   AutomationError,
   failure,
@@ -263,7 +264,7 @@ export class AutomationPeerLink {
       if (raw.length > MAX)
         throw new AutomationError("RESULT_TOO_LARGE");
       const text = encode(raw),
-        id = crypto.randomUUID(),
+        id = createUuid(),
         count = Math.ceil(text.length / 12000);
       const deadline = Date.now() + 30000;
       for (let index = 0; index < count; index++) {
@@ -309,7 +310,7 @@ export class AutomationPeerLink {
     this.lifetime.signal.throwIfAborted();
     if (this.pending.size >= 4)
       throw new AutomationError("BUSY");
-    const id = crypto.randomUUID();
+    const id = createUuid();
     return new Promise((resolve) => {
       const cancel = () => {
         const pending = this.pending.get(id);

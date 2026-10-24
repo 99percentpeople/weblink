@@ -7,6 +7,8 @@ import {
   vi,
 } from "vitest";
 import { webcrypto } from "node:crypto";
+import { useSoftwareCrypto } from "../helpers/crypto";
+import { generateP256KeyPair } from "@/libs/domain/utils/crypto-compat";
 import { PeerTrustService } from "@/libs/application/peer-trust";
 import {
   deviceIdentity,
@@ -62,13 +64,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 const newIdentity = async () =>
-  deviceIdentity(
-    await crypto.subtle.generateKey(
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["sign", "verify"],
-    ),
-  );
+  deviceIdentity(await generateP256KeyPair());
 async function endpoint() {
   let identity = await newIdentity();
   let pin: DevicePin | undefined;
@@ -300,6 +296,56 @@ function preserved(h: Awaited<ReturnType<typeof connect>>) {
   expect(h.pairedA).not.toHaveBeenCalled();
   expect(h.pairedB).not.toHaveBeenCalled();
 }
+it("pairs and reconnects software and native identities without subtle or randomUUID", async () => {
+  const b = await endpoint();
+  useSoftwareCrypto();
+  const a = await endpoint();
+  const h = await connect(a, b);
+  expect(h.trustA.trusted("b")).toBe(true);
+  expect(h.trustB.trusted("a")).toBe(true);
+  await settled(a, b);
+  h.close();
+  const again = await connect(a, b);
+  preserved(again);
+  again.close();
+  vi.stubGlobal("crypto", webcrypto);
+  preserved(await connect(a, b));
+});
+it("manually repairs and reconnects software identities without secure-context APIs", async () => {
+  useSoftwareCrypto();
+  const { a, b, h } = await paired();
+  h.close();
+  b.identity = await newIdentity();
+  b.keys = {};
+  b.pin = undefined;
+  const changed = await connect(a, b);
+  expect(changed.trustA.get("b")?.state).toBe("untrusted");
+  await repair(changed);
+  await settled(a, b);
+  changed.close();
+  preserved(await connect(a, b));
+});
+it("rejects replayed credential MACs with software crypto", async () => {
+  useSoftwareCrypto();
+  const { a, b, h } = await paired();
+  h.close();
+  const first = await connect(a, b);
+  const stale = first.right.frames.find(
+    (f) => f.kind === "proof",
+  )!.credentialProofs;
+  first.close();
+  const replay = await connect(a, b, (frame) =>
+    frame.kind === "proof"
+      ? { ...frame, credentialProofs: stale }
+      : frame,
+  );
+  expect(replay.trustA.get("b")?.state).toBe("untrusted");
+  expect(
+    replay.left.frames.some(
+      (f) => f.kind === "credential-offer",
+    ),
+  ).toBe(false);
+});
 it.each(["all", "offer", "ack"])(
   "resumes the first exchange after losing %s credential traffic without resetting permissions",
   async (lost) => {

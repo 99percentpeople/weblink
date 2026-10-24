@@ -1,3 +1,5 @@
+import { createUuid } from "../ids";
+import { validateP256PublicKey } from "../utils/crypto-compat";
 import {
   bytes,
   fingerprint,
@@ -153,13 +155,7 @@ export class ManualPairing {
     )
       throw new Error("Invalid pairing endpoint");
     // Validate only the public-key format, not possession of a private key.
-    await crypto.subtle.importKey(
-      "raw",
-      bytes(frame.key),
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["verify"],
-    );
+    await validateP256PublicKey(bytes(frame.key));
     if (this.active()) this.remoteKey = frame.key;
   }
   private async receive(frame: Record<string, unknown>) {
@@ -177,7 +173,7 @@ export class ManualPairing {
       if (this.active()) {
         this.wireRequest = frame.request;
         this.change({
-          id: crypto.randomUUID(),
+          id: createUuid(),
           state: "incoming",
         });
       }

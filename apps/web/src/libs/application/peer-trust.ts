@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { createUuid } from "../domain/ids";
 import type { PeerSession } from "../domain/session";
 import {
   IDENTITY_CHANNEL,
@@ -496,7 +497,7 @@ export class PeerTrustService {
       const attempt = {};
       manualAttempt = attempt;
       b.pairing = {
-        id: crypto.randomUUID(),
+        id: createUuid(),
         state: "outgoing",
       };
       this.revision[1]((v) => v + 1);

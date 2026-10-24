@@ -497,6 +497,9 @@ automatic first pairing, persistent key storage, changed-key isolation, default
 permission restoration after manual repair, content
 revocation, media restoration, normal disconnects, automatic recovery from a
 surviving peer-issued key and renewal of expired keys without resetting permissions.
+Run `bun run --cwd apps/web test:e2e:device-trust-http` for the same flows on a
+non-secure HTTP origin without `crypto.subtle` or `crypto.randomUUID`. The runner
+maps a test hostname to its loopback server; no LAN device or browser profile is used.
 Focused identity, pairing-key and peer-trust tests cover replay, DTLS binding,
 stale asynchronous decisions, issuer-only renewal, lost acknowledgements,
 storage failures, concurrent persistence, interrupted first exchanges, atomic

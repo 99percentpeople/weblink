@@ -1,3 +1,4 @@
+import { createUuid } from "../ids";
 import {
   fingerprint,
   IDENTITY_CHANNEL,
@@ -125,7 +126,7 @@ export class DeviceHandshake {
       kind: "hello",
       client: this.options.client,
       target: this.options.target,
-      nonce: crypto.randomUUID(),
+      nonce: createUuid(),
       key: identity.publicKey,
       transport: this.options.localTransport,
       credentials: this.credentials ? true : undefined,

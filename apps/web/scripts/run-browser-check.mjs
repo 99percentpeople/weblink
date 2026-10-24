@@ -72,19 +72,23 @@ const defaultEntry = notificationsTest
                         : transferTest
                           ? "test/e2e/smoke/transfer-workflow.html"
                           : "test/e2e/smoke/speed-test.html";
-const entry = process.argv.includes("--device-trust")
-  ? "test/e2e/smoke/device-trust.html"
-  : process.argv.includes("--automation")
-    ? "test/e2e/smoke/automation.html"
-    : recordingTest
-      ? "test/e2e/smoke/recording.html"
-      : process.argv.includes("--vfs")
-        ? "test/e2e/smoke/vfs.html"
-        : clipboardTest
-          ? "test/e2e/smoke/clipboard.html"
-          : clipboardCacheTest
-            ? "test/e2e/smoke/clipboard-cache.html"
-            : defaultEntry;
+const httpDeviceTrust = process.argv.includes(
+  "--device-trust-http",
+);
+const entry =
+  process.argv.includes("--device-trust") || httpDeviceTrust
+    ? "test/e2e/smoke/device-trust.html"
+    : process.argv.includes("--automation")
+      ? "test/e2e/smoke/automation.html"
+      : recordingTest
+        ? "test/e2e/smoke/recording.html"
+        : process.argv.includes("--vfs")
+          ? "test/e2e/smoke/vfs.html"
+          : clipboardTest
+            ? "test/e2e/smoke/clipboard.html"
+            : clipboardCacheTest
+              ? "test/e2e/smoke/clipboard-cache.html"
+              : defaultEntry;
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -135,6 +139,9 @@ async function main() {
       },
       server: {
         host: "127.0.0.1",
+        allowedHosts: httpDeviceTrust
+          ? ["weblink-http.test"]
+          : undefined,
         port: 0,
         hmr: false,
         open: false,
@@ -180,8 +187,20 @@ async function main() {
               process.argv.includes("--repeating")
             ? "?repeating=1"
             : "";
-    const url = `http://127.0.0.1:${address.port}/${entry}${query}`;
-    const probe = await fetch(url);
+    const localUrl = `http://127.0.0.1:${address.port}/${entry}${query}`;
+    const url = httpDeviceTrust
+      ? localUrl.replace("127.0.0.1", "weblink-http.test")
+      : localUrl;
+    const probe = await fetch(
+      localUrl,
+      httpDeviceTrust
+        ? {
+            headers: {
+              Host: `weblink-http.test:${address.port}`,
+            },
+          }
+        : undefined,
+    );
     if (!probe.ok)
       throw new Error(`Test page HTTP ${probe.status}`);
     browser = spawn(
@@ -193,6 +212,12 @@ async function main() {
         "--disable-dev-shm-usage",
         "--disable-extensions",
         "--disable-background-networking",
+        ...(httpDeviceTrust
+          ? [
+              "--host-resolver-rules=MAP weblink-http.test 127.0.0.1",
+              "--no-proxy-server",
+            ]
+          : []),
         ...(nativeScreenTest || recordingTest
           ? [
               "--use-fake-device-for-media-stream",

@@ -1,3 +1,4 @@
+import { createUuid } from "../../domain/ids";
 import type {
   Audit,
   Principal,
@@ -16,7 +17,7 @@ export class AutomationAudit {
     status: string,
   ): void {
     this.entries.push({
-      id: crypto.randomUUID(),
+      id: createUuid(),
       at: this.now(),
       principal: principal.label,
       tool: call.name,

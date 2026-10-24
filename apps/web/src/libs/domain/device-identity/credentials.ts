@@ -1,4 +1,9 @@
 import { base64, bytes } from "./crypto";
+import { createUuid } from "../ids";
+import {
+  hmacSha256,
+  verifyHmacSha256,
+} from "../utils/crypto-compat";
 import { InvalidIdentityProof } from "./errors";
 import {
   bindCredential,
@@ -51,15 +56,6 @@ const message = (transcript: string) =>
       transcript,
     ]),
   );
-async function key(credential: PairingCredential) {
-  return crypto.subtle.importKey(
-    "raw",
-    bytes(credential.secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
 function validCredential(
   value: unknown,
 ): value is PairingCredential {
@@ -188,9 +184,8 @@ export class CredentialExchange {
       candidates(this.snapshot).map(async (c) => ({
         id: c.id,
         mac: base64(
-          await crypto.subtle.sign(
-            "HMAC",
-            await key(c),
+          await hmacSha256(
+            bytes(c.secret),
             message(transcript),
           ),
         ),
@@ -220,11 +215,10 @@ export class CredentialExchange {
       for (const c of candidates(this.snapshot)) {
         if (c.id !== proof.id) continue;
         if (
-          !(await crypto.subtle.verify(
-            "HMAC",
-            await key(c),
-            bytes(proof.mac),
+          !(await verifyHmacSha256(
+            bytes(c.secret),
             message(transcript),
+            bytes(proof.mac),
           ))
         )
           throw new InvalidIdentityProof(
@@ -304,7 +298,7 @@ export class CredentialExchange {
           this.remoteReceived !== issued.id)
       ) {
         const fields = {
-          id: crypto.randomUUID(),
+          id: createUuid(),
           secret: base64(
             crypto.getRandomValues(new Uint8Array(32))
               .buffer,

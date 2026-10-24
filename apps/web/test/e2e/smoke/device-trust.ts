@@ -21,6 +21,10 @@ import {
   type DeviceIdentity,
 } from "../../../src/libs/domain/device-identity/crypto";
 import { bootstrapMessage } from "../../../src/libs/domain/device-identity/access";
+import {
+  generateP256KeyPair,
+  type P256KeyPair,
+} from "../../../src/libs/domain/utils/crypto-compat";
 import { bindCredential } from "../../../src/libs/domain/device-identity/credential-binding";
 import type {
   CredentialStore,
@@ -77,13 +81,7 @@ class Sender implements SignalingService {
   }
 }
 const newIdentity = async () =>
-  deviceIdentity(
-    await crypto.subtle.generateKey(
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["sign", "verify"],
-    ),
-  );
+  deviceIdentity(await generateP256KeyPair());
 async function connection(
   a: DeviceIdentity,
   b: DeviceIdentity,
@@ -338,6 +336,15 @@ async function checkDataOnlyPairing(
   }
 }
 async function main() {
+  const softwareCrypto =
+    location.hostname === "weblink-http.test";
+  if (softwareCrypto)
+    assert(
+      !isSecureContext &&
+        !crypto.subtle &&
+        !crypto.randomUUID,
+      "HTTP test must lack secure-context crypto APIs",
+    );
   const local = await deviceIdentityStore.identity();
   assert(
     await verify(
@@ -354,7 +361,7 @@ async function main() {
       r.onerror = () => reject(r.error);
     },
   );
-  const pair = await new Promise<CryptoKeyPair>(
+  const pair = await new Promise<P256KeyPair>(
     (resolve, reject) => {
       const r = db
         .transaction("identity")
@@ -365,10 +372,17 @@ async function main() {
     },
   );
   db.close();
-  assert(
-    pair.privateKey.extractable === false,
-    "private key is non-extractable",
-  );
+  if (softwareCrypto)
+    assert(
+      "format" in pair && pair.format === "p256-software",
+      "software key is persisted on HTTP",
+    );
+  else
+    assert(
+      !("format" in pair) &&
+        pair.privateKey.extractable === false,
+      "native private key is non-extractable",
+    );
   const reloaded = await deviceIdentity(pair);
   assert(
     reloaded.publicKey === local.publicKey &&
@@ -697,6 +711,7 @@ async function main() {
   window.__SPEED_TEST_REPORT__ = {
     ok: true,
     transport: "Chromium real WebRTC",
+    crypto: softwareCrypto ? "software on HTTP" : "native",
     persistentPrivateKey: true,
     automaticFirstPairing: true,
     dataOnlyPoliteInitiation: true,

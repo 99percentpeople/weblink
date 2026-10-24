@@ -1,3 +1,10 @@
+import {
+  openP256KeyPair,
+  sha256,
+  verifyP256,
+  type P256KeyPair,
+} from "../utils/crypto-compat";
+
 /** Device keys sign fresh connection transcripts; they are never encryption keys. */
 export interface DeviceIdentity {
   publicKey: string;
@@ -14,11 +21,7 @@ const encoded = (text: string) =>
 export async function fingerprint(
   key: string,
 ): Promise<string> {
-  return [
-    ...new Uint8Array(
-      await crypto.subtle.digest("SHA-256", bytes(key)),
-    ),
-  ]
+  return [...new Uint8Array(await sha256(bytes(key)))]
     .map((v) => v.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -30,38 +33,23 @@ export async function verify(
   try {
     if (key.length !== 88 || signature.length !== 88)
       return false;
-    const publicKey = await crypto.subtle.importKey(
-      "raw",
+    return await verifyP256(
       bytes(key),
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["verify"],
-    );
-    return await crypto.subtle.verify(
-      { name: "ECDSA", hash: "SHA-256" },
-      publicKey,
-      bytes(signature),
       encoded(message),
+      bytes(signature),
     );
   } catch {
     return false;
   }
 }
 export async function deviceIdentity(
-  pair: CryptoKeyPair,
+  pair: P256KeyPair,
 ): Promise<DeviceIdentity> {
+  const signer = await openP256KeyPair(pair);
   return {
-    publicKey: base64(
-      await crypto.subtle.exportKey("raw", pair.publicKey),
-    ),
+    publicKey: base64(signer.publicKey),
     sign: async (message) =>
-      base64(
-        await crypto.subtle.sign(
-          { name: "ECDSA", hash: "SHA-256" },
-          pair.privateKey,
-          encoded(message),
-        ),
-      ),
+      base64(await signer.sign(encoded(message))),
   };
 }
 export const joinTranscript = (

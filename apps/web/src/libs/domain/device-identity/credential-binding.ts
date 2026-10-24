@@ -1,3 +1,4 @@
+import { sha256 } from "../utils/crypto-compat";
 import {
   base64,
   bytes,
@@ -39,9 +40,7 @@ const transcript = (
     credential.binding?.secretHash,
   ]);
 const secretHash = async (secret: string) =>
-  base64(
-    await crypto.subtle.digest("SHA-256", bytes(secret)),
-  );
+  base64(await sha256(bytes(secret)));
 
 export async function bindCredential(
   credential: BoundCredential & { secret: string },

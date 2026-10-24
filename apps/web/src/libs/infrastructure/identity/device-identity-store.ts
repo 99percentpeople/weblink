@@ -1,4 +1,8 @@
 import {
+  generateP256KeyPair,
+  type P256KeyPair,
+} from "@/libs/domain/utils/crypto-compat";
+import {
   deviceIdentity,
   type DeviceIdentity,
 } from "@/libs/domain/device-identity/crypto";
@@ -143,14 +147,10 @@ let identity: Promise<DeviceIdentity> | undefined;
 export const deviceIdentityStore: DeviceIdentityStore = {
   identity() {
     return (identity ??= (async () => {
-      let pair = await read<CryptoKeyPair>("local");
+      let pair = await read<P256KeyPair>("local");
       if (!pair?.publicKey || !pair.privateKey) {
-        const generated = await crypto.subtle.generateKey(
-          { name: "ECDSA", namedCurve: "P-256" },
-          false,
-          ["sign", "verify"],
-        );
-        pair = await update<CryptoKeyPair>(
+        const generated = await generateP256KeyPair();
+        pair = await update<P256KeyPair>(
           "local",
           (existing) =>
             existing?.publicKey && existing.privateKey

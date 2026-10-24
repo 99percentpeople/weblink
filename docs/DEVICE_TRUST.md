@@ -1,8 +1,19 @@
 # Device pairing and content permissions
 
-Each local browser profile or desktop WebView profile owns a non-extractable
-ECDSA P-256 private key in IndexedDB for signaling ownership and connection
-binding. Paired devices also issue a pairing key to each other. These are the
+Each local browser profile or desktop WebView profile owns an ECDSA P-256
+private key in IndexedDB for signaling ownership and connection binding.
+Web Crypto is preferred and creates non-extractable native keys, checking
+public-key export and signing support before persisting a newly generated pair. When an API
+or algorithm is unavailable (including LAN HTTP), a lazily loaded Noble
+implementation provides P-256, SHA-256 and HMAC-SHA-256 with the same public-key,
+signature and credential formats. Software key bytes are stored in the same
+profile's IndexedDB and can also be used by Web Crypto when it becomes available.
+Randomness always comes from `crypto.getRandomValues`. Invalid data and failed
+verification do not trigger fallback. Existing non-extractable native keys are
+preserved if Web Crypto becomes unavailable; they cannot be converted or silently
+replaced. This compatibility does not make HTTP a secure context for other browser APIs.
+
+Paired devices also issue a pairing key to each other. These are the
 credentials used directly for peer authentication, not separate recovery tokens.
 Device identity is independent of account identity, local MCP bearer tokens, and
 temporary automation scope grants. There is no SSO or account-wide trust propagation.
