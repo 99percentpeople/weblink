@@ -266,13 +266,13 @@ dates, empty notes and tag/version mismatches before any production deployment.
 After completing the setup above (replace the example version as needed):
 
 ```sh
-bun scripts/release-metadata.mjs v1.2.0
+bun scripts/release-metadata.mjs v1.3.0
 git push origin public
-git tag -a v1.2.0 -m "Weblink 1.2.0"
-git push origin v1.2.0
+git tag -a v1.3.0 -m "Weblink 1.3.0"
+git push origin v1.3.0
 ```
 
-For subsequent releases, replace `v1.2.0` with the matching version. Inspect the
+For subsequent releases, replace `v1.3.0` with the matching version. Inspect the
 tag-triggered **CI** Actions run and its **Deploy production release** job before
 treating the release as deployed. A failed `Checks` job prevents the production
 build and upload. A failed deployment can be retried through the existing Actions

@@ -4,6 +4,16 @@ Long-lived documentation is organized by responsibility. Temporary validation
 notes, refactor checklists and one-off test logs should not be committed under
 `docs/`.
 
+## Setup and features
+
+- [English overview](../README.md) / [中文介绍](../README_CN.md) — features,
+  Web/desktop differences and getting started.
+- [CHANGELOG.md](../CHANGELOG.md) — changes in each application release.
+- [DEVICE_TRUST.md](DEVICE_TRUST.md) — device pairing, identity recovery,
+  content permissions and signaling ownership.
+- [AUTOMATION.md](AUTOMATION.md#quick-start) — MCP/WebMCP setup, local tokens,
+  remote consent, screenshots, input, accessibility and Shell tools.
+
 ## Architecture and development
 
 - [WORKSPACE.md](WORKSPACE.md) — repository layout, Bun workspace commands and

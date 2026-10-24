@@ -12,14 +12,68 @@ server. **Settings → Automation** has two independent switches on desktop:
 
 Browsers expose only **Enable MCP** for WebMCP registration. They do not accept
 incoming automation or execute local tools other than device discovery.
-Both switches start disabled and persist independently. An existing combined
-preference migrates to both switches only when the MCP preference is absent.
+Both switches start disabled and persist independently.
 Native startup waits for its authority channel before restoring each switch.
 A failed MCP bind reports the error without clearing the saved preference or
 stopping local automation. Disabling automation cancels local calls, approvals,
 command jobs and input leases while keeping MCP forwarding alive. Disabling MCP
 cancels token calls and stops its listener while retaining incoming peer authority.
 The automation peer channel remains available while either switch is enabled.
+
+## Quick start
+
+### Desktop MCP client
+
+1. Open **Settings → Automation** on a Windows desktop and enable **MCP**.
+2. Under **Local MCP tokens**, create a named token for the client and choose
+   its expiry. Copy its secret or connection configuration from the creation
+   dialog; the full secret is shown only once.
+3. Configure the MCP client with the generated URL and Authorization header.
+   A server entry using the default listener looks like this (the client's
+   enclosing configuration format may differ):
+
+   ```json
+   {
+     "url": "http://127.0.0.1:32100/mcp",
+     "headers": {
+       "Authorization": "Bearer <YOUR_MCP_TOKEN>"
+     }
+   }
+   ```
+
+4. Enable **automation** on this desktop if the client should use its local
+   tools. Leave it off when this desktop should only discover and forward calls
+   to other devices. Enabling MCP alone does not allow local OS control.
+5. Ask the client to list devices. Every tool takes an explicit `target`:
+
+   ```json
+   {
+     "name": "devices.list",
+     "arguments": { "target": "local" }
+   }
+   ```
+
+To operate a remote desktop, connect both Weblink devices in the same room and
+complete [device pairing](DEVICE_TRUST.md). Enable automation on the destination,
+then use its ID from `devices.list` as the tool's `target`. Its device settings
+decide whether Reading and diagnostics, Sharing and control, or Terminal and
+commands require approval. A notification approval lasts for that connection;
+Always allow and Deny remain saved policies. The destination does not need to
+expose its own HTTP MCP API for peer calls.
+
+For pointer or keyboard input, start a native monitor stream with `screen.start`
+and acquire it with `control.acquire`. Input then operates the current desktop;
+`control.bindWindow` is optional. Screenshots can inspect an entire source, a
+window or a rectangle; use the returned image-to-desktop transform for pointer
+coordinates. Query `commands.capabilities` before choosing Shell signals.
+
+### Browser WebMCP client
+
+In a browser that provides `document.modelContext`, enable **MCP** in Automation
+settings, connect to a paired desktop with automation enabled, and use that
+desktop's ID as the target. The browser registers the shared tools with WebMCP;
+it does not start an HTTP listener, issue local tokens, or execute OS input and
+Shell jobs locally. The switch is unavailable when the browser lacks WebMCP.
 
 ## Connecting
 
@@ -34,8 +88,8 @@ to a browser are rejected; OS input and Shell execution require a desktop target
 On desktop, create one MCP credential per client in Automation settings. Copy
 the displayed Streamable HTTP URL and Authorization header into the client's
 MCP configuration. Generated configurations send the token directly as
-`Authorization: sk-...`; `Authorization: Bearer <token>` also remains supported.
-Both header forms accept existing tokens and enforce the same expiry, revocation,
+`Authorization: sk-...`; `Authorization: Bearer <token>` is also accepted.
+Both header forms enforce the same expiry, revocation,
 Host and Origin checks. The **MCP server** settings configure the listening host and
 port. Text fields save automatically on blur, including while MCP is running.
 Listener changes take effect the next time MCP is enabled, preserving
@@ -53,9 +107,7 @@ as its default; remote clients substitute an address from the connection list.
 The service uses HTTP, without TLS termination or DNS hostname aliases.
 The default port is `32100`; valid ports range from 1 to 65535. Port `0` is
 rejected. Restore defaults resets the listener to `127.0.0.1:32100`, using the
-same deferred application path. Host and port persist across restarts. Existing
-registries without a host retain their saved nonzero port and default to
-loopback. Legacy unallocated (`null`) ports use the fixed default.
+same deferred application path. Host and port persist across restarts.
 A port conflict is an explicit startup error; it never silently changes a saved
 port. Changing the endpoint preserves tokens, but clients must update their URL.
 
@@ -65,19 +117,16 @@ and editing use child dialogs; existing token settings save automatically, while
 creation remains an explicit action that generates a new credential. Restoring
 the default validity sets a 30-day deadline without changing the token name or
 secret. The compact list shows token summaries and actions. The full
-random token is displayed only at creation. New tokens use `sk-` followed by
+random token is displayed only at creation. Tokens use `sk-` followed by
 43 unpadded Base64url characters encoding 32 bytes from the OS secure random
-source (46 characters total). Existing 64-character hexadecimal tokens remain
-valid; token authentication checks the complete secret without requiring the
-new prefix. Only a SHA-256 hash, a short display prefix,
+source (46 characters total). Only a SHA-256 hash, a short display prefix,
 name, creation time and expiration are stored alongside the desired Host/port in
 the current WebView's `localStorage` entry `mcp_registry`. The native service
 validates a proposed change; the renderer saves that record before native
 activation and serializes edits to prevent lost updates. A storage failure does
 not activate the change. If activation fails after saving, the page's automation
 session closes and the saved record is restored on the next open.
-No old `mcp-tokens.json` file is read, written or migrated. Clearing this storage
-resets MCP credentials and listener settings on the next open. The
+Clearing this storage resets MCP credentials and listener settings on the next open. The
 list, creation, editing and revocation remain available while MCP is disabled.
 Issuing a token authorizes forwarding and, when local automation is enabled,
 local tool calls without additional local approval, but never starts the listener;
@@ -151,9 +200,8 @@ Permissions are presented as three independent groups:
 - **Terminal and commands**: Shell execution, output and task management.
 
 `packages/automation/src/permission-groups.json` defines these groups for both
-TS and Rust. Tool names and exact internal scopes remain compatible. Existing
-mixed per-scope policies are retained and shown as individual legacy settings;
-selecting a group decision explicitly updates its member scopes together.
+TS and Rust. Selecting a group decision updates its member scopes together;
+native execution still checks the specific tool's required scope.
 Remote automation permissions live in each device's permission dialog (both the
 client details and Settings → Clients and rooms). Each group supports **Ask**,
 **Always allow**, and **Deny**, with Ask as the default. These policies persist in
@@ -179,7 +227,7 @@ are never replayed.
 Local MCP tokens remain under Automation and do not prompt for peer consent.
 Peer approvals last until the current connection ends and do not change saved policies. They
 bind a caller identity, target, permission group and current connection lifetime.
-Consent resolves concurrent requests in that same group only. Explicit legacy
+Consent resolves concurrent requests in that same group only. Explicit
 Deny decisions remain excluded from the grant. Changing a device's permission
 setting invalidates affected grants immediately; emergency stop remains the shared
 way to end current access without changing saved settings. Native execution still

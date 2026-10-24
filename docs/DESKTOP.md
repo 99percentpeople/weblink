@@ -16,8 +16,24 @@ outputs, including CI development builds and stable releases, keep the default
 WebView directory. This isolates local development's localStorage settings, MCP
 credentials, browser identity and IndexedDB from built applications without
 splitting storage by release channel. The distinction follows Tauri development
-mode, not debug assertions. Existing profiles and old MCP credentials are not
-copied into the local development profile.
+mode, not debug assertions. Existing profile data is not copied into the local
+development profile.
+
+## Automation and device permissions
+
+Windows desktop can expose a Streamable HTTP MCP server and execute authorized
+local or remote automation. **Settings → Automation** separates enabling the MCP
+API from allowing tools to operate this computer. Both switches default to off;
+a controller can expose MCP for forwarding without enabling its own local input
+or Shell access. The default endpoint is `http://127.0.0.1:32100/mcp`.
+
+MCP clients authenticate with locally issued tokens. Calls arriving from another
+Weblink device instead use that device's paired identity and permission groups;
+requests are approved through the shared notification flow. Approved peer access
+lasts for the current connection, while saved Always allow/Deny policies remain
+device-specific. The host emergency-stop shortcut also stops automated input and
+commands. See [automation setup and tool contracts](AUTOMATION.md#quick-start)
+and [device pairing](DEVICE_TRUST.md).
 
 ## Run and build
 

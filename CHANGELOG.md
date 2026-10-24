@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-10-24
+
+Weblink 1.3 adds verified device pairing and MCP/WebMCP automation for local and remote desktops, with clearer permissions, consistent control indicators, and more reliable screen streaming.
+
+### Device pairing and permissions
+
+- **Device identity:** authenticate browser and desktop profiles with signed connection proofs and renewable pairing keys. First-use pairing verifies and saves the device identity; subsequent connections must prove continuity with it. A display name, client ID or room password alone cannot replace a remembered identity.
+- **Pairing repair:** request re-pairing from the device's permission settings and let the other device explicitly accept or reject through the existing notification flow. Identity changes and invalid proofs block application traffic until trust is restored. Partial key loss can recover automatically when surviving credentials verify the same device; ordinary connection failures preserve saved permissions.
+- **Independent permissions:** manage receiving content, sharing screens, providing file lists, remote control and automation per device. Automation permissions are grouped into Reading and diagnostics, Sharing and control, and Terminal and commands. Requests use in-app or system notifications; approval lasts for the current connection, while Always allow and Deny follow saved settings.
+- **Connection ownership:** signed signaling joins prevent an unverified duplicate client ID from replacing a verified room member. Update the pinned signaling submodules when self-hosting. Signaling retains legacy-client support without treating an invalid identity proof as a legacy connection.
+- **LAN compatibility:** verify device identity and pairing on LAN HTTP using compatible P-256, SHA-256 and HMAC implementations when Web Crypto APIs or algorithms are unavailable. This does not remove browser secure-context requirements for media capture, clipboard access or other protected APIs.
+
+### MCP and WebMCP automation
+
+- **One tool catalog:** discover connected devices and streams, inspect or configure screen sharing, capture screenshots, control input, inspect Windows accessibility trees, run Shell tasks and collect diagnostics. Desktop provides a Streamable HTTP MCP endpoint, defaulting to `http://127.0.0.1:32100/mcp`; supporting browsers can register WebMCP tools and control connected desktop targets.
+- **Separate switches:** Enable automation allows authorized tools to operate this computer. Enable MCP exposes the API and can remain enabled for discovery and forwarding while local automation is off. Browsers expose only the MCP switch and do not execute local OS input or Shell commands. Both switches default to off.
+- **Local MCP tokens:** create named `sk-` credentials with configurable expiry or no expiry, copy the connection configuration at creation, and edit or revoke them later. Tokens authorize the local MCP entrypoint; remote targets still enforce their own paired-device permissions. Token expiration remains independent of session-based peer approvals.
+- **Settings and approvals:** manage automation in Settings and per-device permissions, with approval requests in the existing notification system. Show reachable listener addresses and keep token management available while the MCP API is disabled.
+
+### Automated input and screenshots
+
+- **Direct desktop input:** after acquiring a monitor control lease, keyboard input goes to the foreground window and pointer input uses absolute physical desktop coordinates. Window binding is optional. An AI controller on the same verified device can borrow an existing manual-control grant instead of replacing it.
+- **Session lifetime and emergency stop:** switching Weblink to the background keeps automation active. A bound target window losing focus or closing releases held input and ends that input lease without revoking saved permissions or MCP tokens. The existing host emergency-stop shortcut also stops automation, cancels pending approvals and command process trees.
+- **Keyboard input:** send text, scan-code keys, chords and bounded sequences, with held keys and buttons released when their lease ends. Bound-window input reports focus loss when the window closes or can no longer receive input, including after Alt+F4.
+- **Readable, bounded screenshots:** return PNG image content directly to MCP clients. Full-screen screenshots fit within 1024 × 1024 by default, with optional dimensions up to 2048 per axis. Capture a window or an absolute desktop rectangle for small-text detail. Lossless compression and a 4 MiB image budget limit payload size; image-to-desktop metadata keeps pointer coordinates consistent after cropping or resizing.
+- **Consistent indicators:** show active AI control on both controller and host headers with a sparkle pointer and device name. Matching screen labels use the same icon, and borrowed manual control keeps a single status. Sharing, recording and control statuses consistently show an icon and name without avatars; local MCP status does not display token names.
+
+### Shell commands
+
+- **Background jobs:** run a command and wait briefly for its result, or start it in the background. Support up to ten concurrent jobs per device, bounded output retention, and cursor-based reads of stdout and stderr.
+- **Input and signals:** `commands.send` writes stdin, closes it with EOF, or sends a supported signal. `commands.capabilities` queries the addressed device for its actual backend, stdin/EOF support and signal list. Jobs remain pipe-based, with no PTY; Windows supports process-tree termination with `SIGTERM` and `SIGKILL`, not Ctrl+C console interruption.
+- **Windows encoding:** prefer `pwsh.exe`, falling back to `powershell.exe` only when the preferred executable is missing. Default console, pipeline and cmdlet encoding to UTF-8. Script failures are not retried in another shell. Shell execution uses the app account's privileges and is not a sandbox.
+
+### Streaming, connections and storage
+
+- **Shared native encoding:** reuse compatible native encoders across viewers and accelerate late-viewer startup with retained-frame/keyframe delivery. Clean up failed shared encoders atomically so stale instances cannot block recovery.
+- **Codec recovery:** retry compatible native codecs after receiver decode failures and renegotiate Media Foundation output-format changes. Improve video playback and offline-peer reconnection, retain valid RTC configuration, and refresh ICE configuration before replacement connections.
+- **Stable file storage:** retain storage ownership while the library refreshes so active file operations keep using their selected storage.
+- **Local configuration:** keep MCP token hashes and listener settings in the current WebView's localStorage, with native validation and execution. Local `tauri dev` uses an isolated WebView profile; built development and stable applications retain the existing profile location.
+
+### Upgrading
+
+- Use 1.3.0 on both endpoints for the new device-pairing and automation flows. Peers must complete identity verification before protected application traffic is allowed; old clients without automation capability cannot use MCP tools over WebRTC. See [device pairing](docs/DEVICE_TRUST.md).
+- Update self-hosted signaling from the revisions pinned by this release, then follow the existing [deployment instructions](docs/DEPLOYMENT.md). Legacy signaling support does not bypass endpoint permissions.
+- Local `tauri dev` now uses a separate profile from built applications. Existing built-app storage locations and file-library contents are unchanged.
+- Read the [automation setup guide](docs/AUTOMATION.md#quick-start) before enabling MCP or granting remote automation permissions.
+
 ## [1.2.0] - 2026-10-18
 
 Weblink 1.2 introduces local and remote video recording, a unified file library backed by browser storage or real directories, and more efficient Windows screen encoding.

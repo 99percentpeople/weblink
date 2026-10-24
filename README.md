@@ -7,7 +7,7 @@
   <h3>Share more. Install less.</h3>
 
   <p>
-    A WebRTC workspace for chat, file sharing, voice, video, and remote control.
+    A WebRTC workspace for chat, file sharing, voice, video, remote control, and AI automation.
     Use it in your browser or with the desktop app.
   </p>
 
@@ -73,6 +73,7 @@ See [desktop setup and builds](docs/DESKTOP.md) for prerequisites and source bui
 | Screen sharing                                  | Browser capture, where supported                         | Native display/window capture and supported system audio       |
 | Recording                                       | One local or remote source, with pause and resume        | Same controls, including native shared screens                 |
 | Remote control                                  | Control a compatible desktop host                        | Control another host or allow control of this computer         |
+| AI automation                                   | WebMCP controller in supporting browsers                 | MCP API, local automation and remote desktop tools             |
 | Picture-in-picture                              | Available browser PiP APIs                               | Resizable, always-on-top native window                         |
 | System integration                              | PWA installation and share target where supported        | Tray, launch at login, close behavior and native notifications |
 
@@ -94,6 +95,25 @@ on browser support and permissions; use HTTPS or localhost for browser capture.
 - Message, control-request, speed-test, and completed-transfer notifications,
   with configurable previews and sound. Windows notifications support inline
   replies and request approval.
+
+### Device pairing and permissions
+
+- Verify each device's identity before exchanging application data. First-use
+  pairing is automatic after a valid signed proof; later connections must prove
+  continuity with the saved device identity and pairing keys.
+- If identity verification fails, application access is blocked and a warning
+  opens the device's permission settings. Request re-pairing there and let the
+  other device explicitly approve it through a notification.
+- Manage receiving content, screen sharing, shared-file lists, remote control
+  and automation separately for each device. Joining a room does not grant
+  remote-control or Shell permission.
+- Approve remote automation for the current connection, or save Always allow or
+  Deny for its permission group. Normal reconnection preserves saved settings
+  and verifies the device again before applying them.
+
+Pairing belongs to the local browser or desktop profile. It is separate from
+MCP client tokens and is not shared through an account. See
+[device pairing and content permissions](docs/DEVICE_TRUST.md).
 
 ### File library and transfers
 
@@ -148,6 +168,9 @@ support and permission; reopening the page may require authorization again.
 - On compatible NVIDIA devices, prefer native NVENC for H.264/HEVC, with Media
   Foundation fallback if it is unavailable or fails. Intel and AMD use their
   available Media Foundation encoders. Statistics identify the active encoder.
+- Compatible viewers share native encoders, with keyframe delivery for viewers
+  joining an active stream. Receiver decode failures can trigger another
+  supported codec, and Media Foundation output changes are renegotiated.
 - Local preview reuses readback buffers and follows new-frame notifications.
   Hiding it pauses local presentation while remote streaming continues.
 - Inspect stream statistics, ICE routes and connection state, and run peer
@@ -202,6 +225,45 @@ active control grant. Their file transfers share a per-operation size limit of
 requests, remember a client's permission, and revoke control locally.
 See [remote-control behavior](docs/DESKTOP.md#attended-remote-control).
 
+### AI automation with MCP and WebMCP
+
+Connect an MCP client to a Windows desktop to inspect screens and accessibility
+trees, control keyboard and mouse input, manage screen sharing, run Shell jobs,
+and read diagnostics. Calls can target that desktop or a directly connected,
+paired desktop; each destination enforces its own permissions.
+
+1. On the desktop providing the MCP endpoint, open **Settings → Automation**,
+   enable **MCP**, and create a **Local MCP token** for the client.
+2. Copy the URL and Authorization header from the token creation dialog into
+   the MCP client. The default endpoint is `http://127.0.0.1:32100/mcp`.
+3. Enable **automation** on each desktop that may be operated. A desktop used
+   only to discover and forward calls can keep its own automation switch off.
+4. For remote control, join the same room, complete device pairing, and approve
+   the requested automation group on the target. `devices.list` supplies the
+   peer IDs used by the tools.
+
+The two switches are independent and default to off. A supporting browser has
+only the MCP switch for WebMCP registration; it can control connected desktops
+but cannot execute local OS input or Shell commands. WebMCP is unavailable in
+browsers that do not provide `document.modelContext`.
+
+- Screenshots return PNG image content, fitting within 1024 × 1024 by default.
+  Use a window or rectangle crop for detail, or request up to 2048 pixels per
+  axis. Pointer coordinates always use the physical desktop coordinate system.
+- Keyboard input targets the foreground window by default. Optional window
+  binding ends the input lease when that window loses focus or closes. Moving
+  Weblink itself into the background keeps the automation session active.
+- Shell jobs support stdin, EOF, output cursors and target-specific signals,
+  with up to ten concurrent jobs per device. Windows prefers PowerShell 7
+  (`pwsh`), falls back to Windows PowerShell when absent, and defaults to UTF-8.
+  Jobs use pipes rather than a PTY and run with the app account's privileges.
+- Active AI control uses a sparkle pointer in the header and matching screen
+  labels. The host's configured emergency-stop shortcut also stops automation.
+  MCP token expiry remains independent of remote session approvals.
+
+See [automation setup, tools and permissions](docs/AUTOMATION.md#quick-start)
+for a connection example, tool arguments and execution limits.
+
 ## Connections and local data
 
 ```mermaid
@@ -226,6 +288,12 @@ message delivery. History, file metadata and preferences stay in the local brows
 or desktop WebView profile. File contents live in IndexedDB or the selected local
 directories. Browser and desktop profiles are separate and are not automatically
 synchronized. Access to a peer's shared files requires that peer to be connected.
+
+Settings and desktop MCP token hashes/listener configuration use localStorage;
+device identity, pairing keys and chat data use the profile's IndexedDB storage.
+Clearing profile storage removes that profile's identity and saved configuration.
+Local desktop development uses a separate WebView profile from built applications;
+development builds and stable builds share the existing built-app profile.
 
 ## Shared code and versions
 
@@ -304,6 +372,8 @@ for the repository layout and [testing](docs/TESTING.md) for focused checks.
 - [Documentation](docs/README.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Desktop behavior and development](docs/DESKTOP.md)
+- [Device pairing and permissions](docs/DEVICE_TRUST.md)
+- [MCP and WebMCP automation](docs/AUTOMATION.md)
 - [P2P protocol](docs/P2P_PROTOCOL.md)
 - [File-transfer protocol](docs/FILE_TRANSFERS.md)
 - [Deployment](docs/DEPLOYMENT.md)
@@ -317,7 +387,3 @@ for the repository layout and [testing](docs/TESTING.md) for focused checks.
   <strong>Weblink</strong><br />
   Control your desktop and share files from your browser.
 </div>
-
-## Automation
-
-WebMCP in supporting browsers and a local standard MCP server on desktop share a tool catalog for controlled input, Shell tasks and streaming diagnostics. Enable it in Settings → Automation. See [automation and permissions](docs/AUTOMATION.md).
