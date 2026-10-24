@@ -322,9 +322,10 @@ pub async fn automation_decide(
     epoch: String,
     id: String,
     accepted: bool,
+    remember: Option<bool>,
 ) -> Result<(), String> {
     blocking(window, service, move |_app, service| {
-        service.decide(&epoch, &id, accepted)
+        service.decide_remembered(&epoch, &id, accepted, remember.unwrap_or(false))
     })
     .await
 }

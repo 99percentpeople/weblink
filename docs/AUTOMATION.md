@@ -233,7 +233,10 @@ or active-grant lists. Ask requests use the shared control-request notification
 service: an actionable in-app notification while visible, or a system notification
 while in the background when enabled. Opening the system notification displays
 the same in-app approval without granting access. Both surfaces offer Allow for
-this session or Deny, without a duration selector. The in-app review
+this session or Deny, without a duration selector. The in-app split button also
+offers **Always allow** and **Always deny**. These choices save the requesting
+device's policy for the displayed permission group and settle the current request
+in the same decision. Other devices and permission groups are unchanged. The in-app review
 includes the permission description, tool arguments, reported source and configured
 host emergency stop shortcut. System previews omit tool arguments and respect the
 notification preview preference. Resolved requests dismiss their notifications;
@@ -242,7 +245,7 @@ If a system-notification answer fails while its request remains pending, the
 foreground approval remains available for an explicit retry; native callbacks
 are never replayed.
 Local MCP tokens remain under Automation and do not prompt for peer consent.
-Peer approvals last until the current connection ends and do not change saved policies. They
+Session-only peer approvals last until the current connection ends and do not change saved policies. They
 bind a caller identity, target, permission group and current connection lifetime.
 Consent resolves concurrent requests in that same group only. Explicit
 Deny decisions remain excluded from the grant. Changing a device's permission

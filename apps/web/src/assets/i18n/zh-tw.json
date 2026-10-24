@@ -844,6 +844,9 @@
       "retry": "重試",
       "open": "開啟",
       "allow_session": "允許本次工作階段",
+      "always_allow": "永久允許",
+      "always_deny": "永久拒絕",
+      "more_approval_options": "更多核准選項",
       "deny": "拒絕",
       "accept": "同意",
       "revoke": "撤銷"

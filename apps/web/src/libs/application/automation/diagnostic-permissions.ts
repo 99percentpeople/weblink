@@ -129,14 +129,24 @@ export class DiagnosticPeerPermissions {
     return check;
   }
 
-  decide(id: string, accepted: boolean): void {
+  decide(
+    id: string,
+    accepted: boolean,
+    remember = false,
+  ): void {
     const pending = this.pending.get(id);
     if (
       !pending ||
       pending.approval.expiresAt <= Date.now()
     )
       throw new AutomationError("REQUEST_EXPIRED");
-    if (accepted) pending.authority.approved = true;
+    if (remember) {
+      pending.authority.decision = accepted
+        ? "allow"
+        : "deny";
+      pending.authority.approved = false;
+      pending.authority.revision++;
+    } else if (accepted) pending.authority.approved = true;
     for (const current of [...this.pending.values()])
       if (current.authority === pending.authority)
         current.finish(

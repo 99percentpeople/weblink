@@ -873,6 +873,9 @@
       "retry": "重试",
       "open": "打开",
       "allow_session": "允许本次会话",
+      "always_allow": "永久允许",
+      "always_deny": "永久拒绝",
+      "more_approval_options": "更多批准选项",
       "deny": "拒绝",
       "accept": "同意",
       "revoke": "撤销"

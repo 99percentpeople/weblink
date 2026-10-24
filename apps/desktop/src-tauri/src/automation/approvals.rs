@@ -1,12 +1,63 @@
-//! Session consent is grouped by purpose while tickets retain exact tool scopes.
+//! Consent is grouped by purpose while tickets retain exact tool scopes.
 use super::*;
 
 impl Service {
+    #[cfg(test)]
     pub(super) fn decide(&self, epoch: &str, id: &str, accepted: bool) -> Result<(), String> {
+        self.decide_remembered(epoch, id, accepted, false)
+    }
+
+    pub(super) fn decide_remembered(
+        &self,
+        epoch: &str,
+        id: &str,
+        accepted: bool,
+        remember: bool,
+    ) -> Result<(), String> {
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
         let p = s.pending.remove(id).ok_or("REQUEST_EXPIRED")?;
         let group = catalog::permission_scopes(&p.scope);
+        if remember {
+            if p.principal.kind != "peer"
+                || p.call.arguments["target"] != "local"
+                || !Self::current(&s)
+                || !Self::call_enabled(&s, &p.principal, &p.call)
+                || !Self::principal_active(&s, &p.principal)
+                || p.deadline <= Instant::now()
+                || Self::peer_decision(&s, &p.principal, &p.scope) == policy::Decision::Deny
+            {
+                let _ = p.answer.send(false);
+                return Err("REQUEST_EXPIRED".into());
+            }
+            let decision = if accepted {
+                policy::Decision::Allow
+            } else {
+                policy::Decision::Deny
+            };
+            let policy = s.peer_policies.entry(p.principal.id.clone()).or_default();
+            let changed: Vec<_> = group
+                .iter()
+                .filter(|scope| policy.get(*scope).copied().unwrap_or_default() != decision)
+                .cloned()
+                .collect();
+            for scope in group {
+                policy.insert(scope.clone(), decision);
+            }
+            let grants: Vec<_> = s
+                .grants
+                .values()
+                .filter(|grant| {
+                    grant.principal.kind == "peer"
+                        && grant.principal.id == p.principal.id
+                        && grant.scopes.iter().any(|scope| changed.contains(scope))
+                })
+                .map(|grant| grant.id.clone())
+                .collect();
+            for id in grants {
+                self.revoke_locked(&mut s, &id);
+            }
+        }
         let scopes: Vec<String> = group
             .iter()
             .filter(|scope| Self::peer_decision(&s, &p.principal, scope) != policy::Decision::Deny)
@@ -136,6 +187,103 @@ mod tests {
         let current = Service::peer_principal(&s, &replacement).unwrap();
         assert!(Service::peer_decision(&s, &current, "shell.execute") == policy::Decision::Ask);
         assert!(s.grants.is_empty());
+    }
+
+    #[tokio::test]
+    async fn remembered_decisions_settle_the_group_and_survive_renderer_policy_sync() {
+        for accepted in [true, false] {
+            let (service, principal) = fixture();
+            service
+                .set_peer_policy(
+                    "epoch",
+                    &peers::Identity::from(&principal),
+                    HashMap::from([
+                        ("screen.read".into(), policy::Decision::Deny),
+                        ("shell.execute".into(), policy::Decision::Deny),
+                    ]),
+                )
+                .unwrap();
+            let first = pending(&service, &principal, "first", "diagnostics.read", "local");
+            let sibling = pending(&service, &principal, "sibling", "screen.read", "local");
+            let _unrelated = pending(&service, &principal, "unrelated", "shell.execute", "local");
+            service
+                .decide_remembered("epoch", "first", accepted, true)
+                .unwrap();
+            assert_eq!(first.await.unwrap(), accepted);
+            assert_eq!(sibling.await.unwrap(), accepted);
+            let (saved, grant_ids) = {
+                let s = service.state.lock().unwrap();
+                let policy = s.peer_policies.get(&principal.id).unwrap();
+                for scope in catalog::permission_scopes("diagnostics.read") {
+                    assert!(
+                        policy.get(scope)
+                            == Some(&if accepted {
+                                policy::Decision::Allow
+                            } else {
+                                policy::Decision::Deny
+                            })
+                    );
+                }
+                assert!(policy.get("shell.execute") == Some(&policy::Decision::Deny));
+                assert!(s.pending.contains_key("unrelated"));
+                (policy.clone(), s.grants.keys().cloned().collect::<Vec<_>>())
+            };
+            service
+                .set_peer_policy("epoch", &peers::Identity::from(&principal), saved)
+                .unwrap();
+            let s = service.state.lock().unwrap();
+            assert_eq!(s.grants.len(), grant_ids.len());
+            assert!(grant_ids.iter().all(|id| s.grants.contains_key(id)));
+        }
+    }
+
+    #[tokio::test]
+    async fn stale_remembered_answers_never_change_device_policy() {
+        for reason in [
+            "expired",
+            "disconnected",
+            "disabled",
+            "forwarded",
+            "local-token",
+        ] {
+            let (service, mut principal) = fixture();
+            if reason == "local-token" {
+                principal.kind = "mcp".into();
+            }
+            let answer = pending(
+                &service,
+                &principal,
+                "first",
+                "diagnostics.read",
+                if reason == "forwarded" {
+                    "remote"
+                } else {
+                    "local"
+                },
+            );
+            {
+                let mut s = service.state.lock().unwrap();
+                match reason {
+                    "expired" => {
+                        s.pending.get_mut("first").unwrap().deadline =
+                            Instant::now() - Duration::from_secs(1)
+                    }
+                    "disconnected" => s.peers.clear(),
+                    "disabled" => s.enabled = false,
+                    _ => {}
+                }
+            }
+            assert!(
+                service
+                    .decide_remembered("epoch", "first", true, true)
+                    .is_err(),
+                "{reason}"
+            );
+            assert!(!answer.await.unwrap(), "{reason}");
+            let s = service.state.lock().unwrap();
+            assert!(s.peer_policies.is_empty(), "{reason}");
+            assert!(s.grants.is_empty(), "{reason}");
+        }
     }
 
     #[tokio::test]

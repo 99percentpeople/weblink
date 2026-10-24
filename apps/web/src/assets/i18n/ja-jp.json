@@ -844,6 +844,9 @@
       "retry": "再試行",
       "open": "開く",
       "allow_session": "このセッション中は許可",
+      "always_allow": "常に許可",
+      "always_deny": "常に拒否",
+      "more_approval_options": "その他の承認オプション",
       "deny": "拒否",
       "accept": "承認",
       "revoke": "取り消す"

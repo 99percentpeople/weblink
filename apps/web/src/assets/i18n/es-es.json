@@ -844,6 +844,9 @@
       "retry": "Reintentar",
       "open": "Abrir",
       "allow_session": "Permitir durante esta sesión",
+      "always_allow": "Permitir siempre",
+      "always_deny": "Rechazar siempre",
+      "more_approval_options": "Más opciones de aprobación",
       "deny": "Denegar",
       "accept": "Aceptar",
       "revoke": "Revocar"

@@ -1,4 +1,5 @@
 import ClientAutomationPermissions from "./client-automation-permissions";
+import { Show } from "solid-js";
 import { t } from "@/i18n";
 import { appState } from "@/libs/state/app-state";
 import { sessionService } from "@/libs/application/session-service";
@@ -10,10 +11,12 @@ import {
   SettingSection,
 } from "./setting-layout";
 import { ClientPairing } from "./client-pairing";
+import { useAppState } from "@/libs/state/app-state-context";
 export function ClientPermissions(props: {
   clientId: string;
 }) {
   type Decision = "ask" | "allow" | "deny";
+  const capabilities = useAppState().runtimeCapabilities;
   const config = () =>
     appState.options.clientConfigs[props.clientId];
   const trust = () =>
@@ -99,28 +102,32 @@ export function ClientPermissions(props: {
               });
           }}
         />
-        <PermissionSelect<Decision>
-          disabled={!trusted()}
-          label={t("app_menu.settings_remote_control")}
-          options={["ask", "allow", "deny"]}
-          value={
-            trusted()
-              ? (config()?.remoteControl ?? "ask")
-              : "deny"
-          }
-          optionLabel={(decision) =>
-            decision === "allow"
-              ? t("setting.permissions.allow_permanently")
-              : t(`setting.permissions.${decision}`)
-          }
-          onChange={(decision) => {
-            if (trusted())
-              setClientConfig(props.clientId, {
-                remoteControl:
-                  decision === "ask" ? undefined : decision,
-              });
-          }}
-        />
+        <Show when={capabilities?.()?.remoteInput}>
+          <PermissionSelect<Decision>
+            disabled={!trusted()}
+            label={t("app_menu.settings_remote_control")}
+            options={["ask", "allow", "deny"]}
+            value={
+              trusted()
+                ? (config()?.remoteControl ?? "ask")
+                : "deny"
+            }
+            optionLabel={(decision) =>
+              decision === "allow"
+                ? t("setting.permissions.allow_permanently")
+                : t(`setting.permissions.${decision}`)
+            }
+            onChange={(decision) => {
+              if (trusted())
+                setClientConfig(props.clientId, {
+                  remoteControl:
+                    decision === "ask"
+                      ? undefined
+                      : decision,
+                });
+            }}
+          />
+        </Show>
       </SettingGroup>
       <ClientAutomationPermissions
         clientId={props.clientId}

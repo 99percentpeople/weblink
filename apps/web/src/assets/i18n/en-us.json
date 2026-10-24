@@ -873,6 +873,9 @@
       "retry": "Retry",
       "open": "Open",
       "allow_session": "Allow for this session",
+      "always_allow": "Always allow",
+      "always_deny": "Always deny",
+      "more_approval_options": "More approval options",
       "deny": "Deny",
       "accept": "Accept",
       "revoke": "Revoke"

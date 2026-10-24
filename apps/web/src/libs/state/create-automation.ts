@@ -1,5 +1,10 @@
 import { appState, setAppState } from "./app-state";
-import { readAutomationPolicy } from "@weblink/automation";
+import {
+  readAutomationPolicy,
+  setGroupDecision,
+  permissionGroup,
+} from "@weblink/automation";
+import { setClientConfig } from "./permission-options";
 import { createUuid } from "@/libs/domain/ids";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
@@ -1040,7 +1045,68 @@ export function createAutomation(
               ?.name ?? s.targetClientId,
         }));
     },
-    decide: async (id: string, accepted: boolean) => {
+    decide: async (
+      id: string,
+      accepted: boolean,
+      remember = false,
+    ) => {
+      if (remember) {
+        if (native) await readNativeSnapshot();
+        const request = (
+          native
+            ? nativeState.pending
+            : diagnosticPermissions.approvals()
+        ).find((request) => request.id === id);
+        const session =
+          request &&
+          sessionService.sessions[request.principal.id];
+        const link = session && links.get(session);
+        const current = () =>
+          !!request &&
+          !!session &&
+          !!link &&
+          !life.signal.aborted &&
+          !link.lifetime.signal.aborted &&
+          request.principal.kind === "peer" &&
+          request.arguments.target === "local" &&
+          sessionService.sessions[request.principal.id] ===
+            session &&
+          sessionService.capabilities.generation(
+            session,
+          ) === request.principal.generation &&
+          sessionService.canReceive(request.principal.id);
+        if (
+          !current() ||
+          !request ||
+          !session ||
+          !link ||
+          request.expiresAt <= Date.now()
+        )
+          throw new AutomationError("REQUEST_EXPIRED");
+        await principal(
+          link,
+          session,
+          request.principal.generation!,
+        );
+        if (!current() || request.expiresAt <= Date.now())
+          throw new AutomationError("REQUEST_EXPIRED");
+        if (native)
+          await native.decide(epoch, id, accepted, true);
+        else
+          diagnosticPermissions.decide(id, accepted, true);
+        if (!current())
+          throw new AutomationError("TARGET_DISCONNECTED");
+        setClientConfig(request.principal.id, {
+          automation: setGroupDecision(
+            policyFor(session),
+            permissionGroup(request.scope),
+            accepted ? "allow" : "deny",
+          ),
+        });
+        await syncPolicy(link);
+        if (native) await readNativeSnapshot();
+        return;
+      }
       if (native) {
         await native.decide(epoch, id, accepted);
         await readNativeSnapshot();

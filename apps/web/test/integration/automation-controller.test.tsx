@@ -257,6 +257,82 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+it.each([true, false])(
+  "remembers browser diagnostic permission %s for the current device",
+  async (accepted) => {
+    setAppState("options", "clientConfigs", "desktop", {
+      automation: { "shell.execute": "deny" },
+    });
+    const { runtime } = mount();
+    await waitFor(() =>
+      expect(fixture.incoming).toBeDefined(),
+    );
+    const request = {
+      name: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    };
+    const pending = fixture.incoming!(
+      request,
+      new AbortController().signal,
+    );
+    await waitFor(() =>
+      expect(runtime.snapshot().pending).toHaveLength(1),
+    );
+    await runtime.decide(
+      runtime.snapshot().pending[0].id,
+      accepted,
+      true,
+    );
+    expect((await pending).ok).toBe(accepted);
+    expect(
+      appState.options.clientConfigs.desktop?.automation,
+    ).toEqual({
+      "diagnostics.read": accepted ? "allow" : "deny",
+      "screen.read": accepted ? "allow" : "deny",
+      "accessibility.read": accepted ? "allow" : "deny",
+      "shell.execute": "deny",
+    });
+    expect(
+      (
+        await fixture.incoming!(
+          request,
+          new AbortController().signal,
+        )
+      ).ok,
+    ).toBe(accepted);
+    expect(runtime.snapshot().pending).toEqual([]);
+  },
+);
+
+it("does not save browser permissions from an expired notification", async () => {
+  const { runtime } = mount();
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  const operation = fixture.incoming!(
+    {
+      name: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    },
+    new AbortController().signal,
+  );
+  await waitFor(() =>
+    expect(runtime.snapshot().pending).toHaveLength(1),
+  );
+  const request = runtime.snapshot().pending[0];
+  vi.spyOn(Date, "now").mockReturnValue(
+    request.expiresAt + 1,
+  );
+  await expect(
+    runtime.decide(request.id, true, true),
+  ).rejects.toMatchObject({ code: "REQUEST_EXPIRED" });
+  expect(
+    appState.options.clientConfigs.desktop?.automation,
+  ).toBeUndefined();
+  fixture.closeLink?.();
+  await operation;
+});
 it("tracks the receiver's actual input lease and releases it without changing MCP settings", async () => {
   const [caps, setCaps] = createSignal<PeerCapabilities>({
     automation: {},

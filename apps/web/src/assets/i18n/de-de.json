@@ -844,6 +844,9 @@
       "retry": "Erneut versuchen",
       "open": "Öffnen",
       "allow_session": "Für diese Sitzung erlauben",
+      "always_allow": "Immer erlauben",
+      "always_deny": "Immer ablehnen",
+      "more_approval_options": "Weitere Genehmigungsoptionen",
       "deny": "Ablehnen",
       "accept": "Annehmen",
       "revoke": "Widerrufen"

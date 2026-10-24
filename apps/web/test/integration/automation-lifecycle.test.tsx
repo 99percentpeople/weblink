@@ -315,6 +315,92 @@ it("uses the saved host emergency shortcut before starting local automation with
     );
   }
 });
+
+it.each([true, false])(
+  "saves a remembered native decision %s only for the requesting permission group",
+  async (accepted) => {
+    peer();
+    setAppState("options", "clientConfigs", "peer", {
+      automation: { "shell.execute": "deny" },
+    });
+    const request = {
+      id: "remember",
+      principal: {
+        id: "peer",
+        label: "Peer",
+        kind: "peer" as const,
+        generation: "connection-1",
+      },
+      scope: "diagnostics.read" as const,
+      tool: "diagnostics.snapshot",
+      arguments: { target: "local" },
+      expiresAt: Date.now() + 120000,
+    };
+    vi.mocked(fixture.native.snapshot).mockImplementation(
+      async () => ({ ...snapshot(), pending: [request] }),
+    );
+    const { runtime } = mount();
+    await waitFor(() => expect(runtime.ready()).toBe(true));
+    await runtime.decide(request.id, accepted, true);
+    expect(fixture.native.decide).toHaveBeenCalledWith(
+      "epoch",
+      request.id,
+      accepted,
+      true,
+    );
+    expect(
+      appState.options.clientConfigs.peer?.automation,
+    ).toEqual({
+      "diagnostics.read": accepted ? "allow" : "deny",
+      "screen.read": accepted ? "allow" : "deny",
+      "accessibility.read": accepted ? "allow" : "deny",
+      "shell.execute": "deny",
+    });
+    expect(
+      fixture.native.peerPolicy,
+    ).toHaveBeenLastCalledWith(
+      "epoch",
+      expect.objectContaining({
+        id: "peer",
+        generation: "connection-1",
+      }),
+      appState.options.clientConfigs.peer?.automation,
+    );
+  },
+);
+
+it("does not save a native permanent choice after the device reconnects during the answer", async () => {
+  peer();
+  const request = {
+    id: "remember",
+    principal: {
+      id: "peer",
+      label: "Peer",
+      kind: "peer" as const,
+      generation: "connection-1",
+    },
+    scope: "diagnostics.read" as const,
+    tool: "diagnostics.snapshot",
+    arguments: { target: "local" },
+    expiresAt: Date.now() + 120000,
+  };
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async () => ({ ...snapshot(), pending: [request] }),
+  );
+  vi.mocked(fixture.native.decide).mockImplementation(
+    async () => {
+      fixture.generation = "connection-2";
+    },
+  );
+  const { runtime } = mount();
+  await waitFor(() => expect(runtime.ready()).toBe(true));
+  await expect(
+    runtime.decide(request.id, true, true),
+  ).rejects.toMatchObject({ code: "TARGET_DISCONNECTED" });
+  expect(
+    appState.options.clientConfigs.peer?.automation,
+  ).toBeUndefined();
+});
 it("does not reenable automation when shortcut setup finishes after a newer disable", async () => {
   const view = mount();
   await waitFor(() =>

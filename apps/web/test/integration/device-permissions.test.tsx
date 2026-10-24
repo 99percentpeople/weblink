@@ -183,6 +183,9 @@ function renderDevice(desktop = true) {
       value={
         {
           automation: { desktop, enabled: () => false },
+          runtimeCapabilities: () => ({
+            remoteInput: desktop,
+          }),
         } as AppStateContextProps
       }
     >
@@ -318,6 +321,18 @@ it("saves per-device policies and keeps read permissions available in browsers",
   view.unmount();
   renderDevice(false);
   expect(screen.queryByText(label)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: (name) =>
+        name.startsWith("app_menu.settings_remote_control"),
+    }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", {
+      name: (name) =>
+        name.startsWith("device_trust.share_screen"),
+    }),
+  ).toBeInTheDocument();
   const read = screen.getByRole("button", {
     name: (name) =>
       name.startsWith("automation.permissions.read.title"),

@@ -268,6 +268,63 @@ it("explains the read permission group before approving accessibility inspection
   );
 });
 
+it.each([
+  { desktop: true, accepted: true },
+  { desktop: true, accepted: false },
+  { desktop: false, accepted: true },
+  { desktop: false, accepted: false },
+])(
+  "remembers a dropdown decision on desktop=$desktop accepted=$accepted",
+  async ({ desktop, accepted }) => {
+    fixture.desktop = desktop;
+    mount();
+    const pending = {
+      ...request(),
+      scope: "diagnostics.read" as const,
+      tool: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    };
+    setPending([pending]);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "common.action.more_approval_options",
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", {
+        name: accepted
+          ? "common.action.always_allow"
+          : "common.action.always_deny",
+      }),
+    );
+    await waitFor(() =>
+      expect(fixture.decide).toHaveBeenCalledWith(
+        pending.id,
+        accepted,
+        true,
+      ),
+    );
+    expect(fixture.decide).toHaveBeenCalledOnce();
+  },
+);
+
+it("ignores permanent choices from a stale permission notification", async () => {
+  mount();
+  setPending([request()]);
+  await userEvent.click(
+    await screen.findByRole("button", {
+      name: "common.action.more_approval_options",
+    }),
+  );
+  fixture.canReceive.mockReturnValue(false);
+  await userEvent.click(
+    await screen.findByRole("menuitem", {
+      name: "common.action.always_allow",
+    }),
+  );
+  expect(fixture.decide).not.toHaveBeenCalled();
+});
+
 it("keeps one notification across snapshot refreshes and dismisses resolved requests and unmounts", async () => {
   const view = mount();
   const pending = request();

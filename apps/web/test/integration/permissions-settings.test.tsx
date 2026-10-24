@@ -71,6 +71,7 @@ vi.mock(
       typeof import("@/libs/state/app-state-context")
     >()),
     useAppState: () => ({
+      runtimeCapabilities: () => ({ remoteInput: true }),
       activeRoomConversationId: () =>
         appState.roomStatus.roomId,
     }),

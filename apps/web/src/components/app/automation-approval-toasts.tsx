@@ -68,11 +68,21 @@ export function AutomationApprovalToasts(props: {
         const id = `automation-approval:${requestId}`;
         let answering = false;
         let answered = false;
-        const decide = async (accepted: boolean) => {
+        const decide = async (
+          accepted: boolean,
+          remember = false,
+        ) => {
           if (answering || answered || !isCurrent()) return;
           answering = true;
           try {
-            await automation!.decide(requestId, accepted);
+            if (remember)
+              await automation!.decide(
+                requestId,
+                accepted,
+                true,
+              );
+            else
+              await automation!.decide(requestId, accepted);
             answered = true;
           } finally {
             answering = false;
@@ -167,6 +177,22 @@ export function AutomationApprovalToasts(props: {
                     t("common.action.deny"),
                   isCurrent,
                   respond: decide,
+                  choicesLabel: () =>
+                    t(
+                      "common.action.more_approval_options",
+                    ),
+                  choices: [
+                    {
+                      label: () =>
+                        t("common.action.always_allow"),
+                      respond: () => decide(true, true),
+                    },
+                    {
+                      label: () =>
+                        t("common.action.always_deny"),
+                      respond: () => decide(false, true),
+                    },
+                  ],
                   errorMessage: () =>
                     t(
                       "common.notification.approval_failed",

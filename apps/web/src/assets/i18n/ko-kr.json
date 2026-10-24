@@ -844,6 +844,9 @@
       "retry": "다시 시도",
       "open": "열기",
       "allow_session": "이 세션 동안 허용",
+      "always_allow": "항상 허용",
+      "always_deny": "항상 거부",
+      "more_approval_options": "추가 승인 옵션",
       "deny": "거부",
       "accept": "수락",
       "revoke": "취소"
