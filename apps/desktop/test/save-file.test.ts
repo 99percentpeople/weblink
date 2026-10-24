@@ -56,7 +56,9 @@ it("writes a large file in bounded binary chunks with exact offsets and content"
   await expect(
     saveNativeFile(new Blob([bytes]), "received.zip"),
   ).resolves.toBe(true);
-  expect(Buffer.concat(chunks)).toEqual(Buffer.from(bytes));
+  expect(
+    Buffer.concat(chunks).equals(Buffer.from(bytes)),
+  ).toBe(true);
 });
 
 it("treats picker cancellation as a normal result and sends no file bytes", async () => {

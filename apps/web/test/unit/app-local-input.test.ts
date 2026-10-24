@@ -108,14 +108,16 @@ it("handles denied API access and removes discovery listeners at app disposal", 
 it("observes gamepads in picture-in-picture and cleans up its window listeners", () => {
   const read = gamepads();
   const pip = new EventTarget();
-  Object.defineProperty(
-    window,
-    "documentPictureInPicture",
-    { configurable: true, value: pip },
-  );
+  vi.stubGlobal("documentPictureInPicture", pip);
   const frame = document.createElement("iframe");
   document.body.append(frame);
   const view = frame.contentWindow!;
+  // Vitest bridges Node signals only on the main window.
+  // Use a DOM controller for listeners in the iframe too.
+  vi.stubGlobal(
+    "AbortController",
+    (view as Window & typeof globalThis).AbortController,
+  );
   const pipRead = vi.fn(() => [pad()]);
   Object.defineProperty(view.navigator, "getGamepads", {
     configurable: true,
@@ -143,10 +145,6 @@ it("observes gamepads in picture-in-picture and cleans up its window listeners",
     window.dispatchEvent(new Event("focus"));
     expect(read).not.toHaveBeenCalled();
   } finally {
-    Reflect.deleteProperty(
-      window,
-      "documentPictureInPicture",
-    );
     frame.remove();
   }
 });

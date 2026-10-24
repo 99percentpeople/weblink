@@ -6,12 +6,13 @@ import {
   expect,
   it,
   vi,
+  type Mock,
 } from "vitest";
 import { createDocumentPictureInPicture } from "@/libs/hooks/document-picture-in-picture";
 import { createPictureInPicture } from "@/libs/hooks/picture-in-picture";
 
 let element: HTMLVideoElement | null;
-let exit: ReturnType<typeof vi.fn>;
+let exit: Mock<() => Promise<void>>;
 const dispose: (() => void)[] = [];
 beforeEach(() => {
   element = null;

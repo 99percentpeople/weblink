@@ -426,7 +426,9 @@ describe("PeerSession lifecycle", () => {
     }) as unknown as RTCPeerConnection;
     vi.stubGlobal(
       "RTCPeerConnection",
-      vi.fn(() => pc),
+      vi.fn(function () {
+        return pc;
+      }),
     );
     const session = new PeerSession(sender, {
       polite: false,
@@ -535,7 +537,9 @@ describe("PeerSession lifecycle", () => {
     }));
     vi.stubGlobal(
       "RTCPeerConnection",
-      vi.fn(() => replacement),
+      vi.fn(function () {
+        return replacement;
+      }),
     );
     const listenError = new Error("listen failed");
     vi.spyOn(session, "listen").mockRejectedValueOnce(

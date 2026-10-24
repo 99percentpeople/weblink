@@ -206,8 +206,10 @@ it("uses scoped binary writes with bounded messages and Unicode-safe paths", asy
     0, 1_048_576, 2_097_152,
   ]);
   expect(
-    Buffer.concat(writes.map((write) => write.data)),
-  ).toEqual(Buffer.from(bytes));
+    Buffer.concat(writes.map((write) => write.data)).equals(
+      Buffer.from(bytes),
+    ),
+  ).toBe(true);
   expect(commands.at(-1)).toBe("vfs_sync");
 });
 

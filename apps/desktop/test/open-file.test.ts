@@ -73,9 +73,11 @@ it("stages legacy files in bounded chunks and opens only after all bytes have ar
   await openNativeFile(file);
   expect(commands).not.toContain("file_save_begin");
   expect(commands.at(-1)).toBe("file_save_finish");
-  expect(Buffer.concat(chunks)).toEqual(
-    Buffer.from(await file.arrayBuffer()),
-  );
+  expect(
+    Buffer.concat(chunks).equals(
+      Buffer.from(await file.arrayBuffer()),
+    ),
+  ).toBe(true);
 });
 
 it("removes partial temporary copies on failure without opening or showing a save picker", async () => {

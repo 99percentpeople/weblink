@@ -598,8 +598,11 @@ describe("room attachment transfer lifecycle", () => {
       session,
       message.fid!,
     );
-    const cancelled =
-      expect(pending).rejects.toThrow(/cancelled/i);
+    const cancelled = expect(pending).rejects.toMatchObject(
+      {
+        name: "AbortError",
+      },
+    );
     await flushRtc();
     expect(cache.getFile).toHaveBeenCalled();
     f.service.closeSession(session);
@@ -620,8 +623,11 @@ describe("room attachment transfer lifecycle", () => {
       session,
       message.fid!,
     );
-    const cancelled =
-      expect(pending).rejects.toThrow(/cancelled/i);
+    const cancelled = expect(pending).rejects.toMatchObject(
+      {
+        name: "AbortError",
+      },
+    );
     await flushRtc();
     const sent = f.transport.sendCalls.find(
       ({ message }) => message.type === "send-file",

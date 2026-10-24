@@ -22,6 +22,7 @@ import {
   expect,
   it,
   vi,
+  type Mock,
 } from "vitest";
 import {
   appState,
@@ -198,7 +199,7 @@ const sharedStream = (track = new FakeTrack()) =>
 const windows: {
   frame: HTMLIFrameElement;
   window: Window;
-  close: ReturnType<typeof vi.fn>;
+  close: Mock<() => void>;
 }[] = [];
 function newPipWindow(): Window {
   const frame = document.createElement("iframe");

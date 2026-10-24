@@ -40,7 +40,9 @@ async function harness() {
   });
   vi.stubGlobal(
     "RTCPeerConnection",
-    vi.fn(() => pc),
+    vi.fn(function () {
+      return pc;
+    }),
   );
   const sendSignal = vi.fn(
     async (_signal: RawSignal) => {},

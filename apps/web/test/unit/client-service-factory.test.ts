@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => {
   const service = { close: vi.fn() };
   return {
     service,
-    create: vi.fn(() => service),
+    create: vi.fn(function () {
+      return service;
+    }),
     lockName: vi.fn(() => "room-lock"),
     wait: vi.fn(
       async (_name: string, _signal: AbortSignal) => true,
