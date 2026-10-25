@@ -564,10 +564,14 @@ connection, rejects stale group output, and resumes on a keyframe with a common
 monotonic timestamp. A sole viewer, or an entire group moving to the same bandwidth
 bucket, changes bitrate in place without resetting output admission or waiting for
 a new keyframe. Pending feedback is collected for all viewers before regrouping.
-Upward changes that would split or merge workers wait for the same destination
-bucket to remain requested for 500 ms. This lets staggered transport feedback
-converge without repeatedly recreating encoders; reductions and resume from zero
-are immediate, and a whole group can still change bitrate in place immediately.
+Upward migrations that cannot be applied in place wait for the same destination
+bucket to remain requested for 500 ms. Independent workers adjust their rates in
+place immediately and merge only after their destination worker and matching
+budget remain stable for two seconds. Brief convergence therefore does not retire
+a worker that would need reopening when budgets diverge again. The pool retains
+a reusable destination if another worker leaves during this grace period.
+Reductions and resume from zero remain immediate; recording taps retain their
+worker and are not delayed by the merge grace period.
 Hardware frame timestamps follow capture time, not worker submission time, so
 queueing, conversion retries and driver readiness do not rewrite the media cadence.
 Static refreshes advance on the frame's preparation time and timestamps remain

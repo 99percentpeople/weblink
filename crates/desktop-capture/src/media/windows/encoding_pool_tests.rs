@@ -301,6 +301,88 @@ fn different_formats_do_not_share_and_live_settings_preserve_consumers() {
 }
 
 #[test]
+fn transient_budget_convergence_keeps_both_workers_and_applies_cuts_immediately() {
+    let pool = Arc::new(Pool::default());
+    let first = acquire(&pool, "first", false);
+    let second = acquire(&pool, "second", false);
+    let original = second.encoder().unwrap();
+    let now = Instant::now();
+    let set = |consumer: &Consumer, target, ms| {
+        pool.state
+            .lock()
+            .unwrap()
+            .slots
+            .get_mut(&consumer.token)
+            .unwrap()
+            .target = target;
+        pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(ms))
+            .unwrap();
+    };
+    set(&first, 160_000, 0);
+    let lower = first.encoder().unwrap();
+    assert!(!Arc::ptr_eq(&original, &lower));
+    for ms in [100, 500, 900, 1_300, 1_700] {
+        set(&second, 160_000, ms);
+        assert!(
+            Arc::ptr_eq(&original, &second.encoder().unwrap()),
+            "A temporary matching budget must not retire a working encoder"
+        );
+        assert_eq!(
+            pool.state.lock().unwrap().slots[&second.token].key.bitrate,
+            150_000,
+            "Waiting to merge must not postpone the lower network budget"
+        );
+        set(&second, 300_000, ms + 200);
+        assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+        assert!(Arc::ptr_eq(&lower, &first.encoder().unwrap()));
+        assert_eq!(pool.active().len(), 2);
+    }
+    set(&second, 160_000, 2_100);
+    set(&second, 160_000, 4_101);
+    assert_eq!(
+        pool.active().len(),
+        1,
+        "Stable matching budgets eventually share one worker"
+    );
+    assert!(Arc::ptr_eq(&lower, &second.encoder().unwrap()));
+    pool.close();
+}
+
+#[test]
+fn a_departing_merge_destination_leaves_the_remaining_worker_reusable() {
+    let pool = Arc::new(Pool::default());
+    let first = acquire(&pool, "first", false);
+    let second = acquire(&pool, "second", false);
+    let original = second.encoder().unwrap();
+    let now = Instant::now();
+    for (consumer, ms) in [(&first, 0), (&second, 10)] {
+        pool.state
+            .lock()
+            .unwrap()
+            .slots
+            .get_mut(&consumer.token)
+            .unwrap()
+            .target = 160_000;
+        pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(ms))
+            .unwrap();
+    }
+    first.close();
+    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+    let state = pool.state.lock().unwrap();
+    let slot = &state.slots[&second.token];
+    assert_eq!(state.groups.len(), 1);
+    assert!(Arc::ptr_eq(
+        &original,
+        &state.groups[&slot.key].upgrade().unwrap()
+    ));
+    drop(state);
+    pool.reconcile_at(Arc::new(|| {}), now + Duration::from_secs(3))
+        .unwrap();
+    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+    pool.close();
+}
+
+#[test]
 fn live_bitrate_changes_keep_the_recording_tap_on_its_original_worker() {
     let pool = Arc::new(Pool::default());
     let viewer = acquire(&pool, "viewer", false);
@@ -329,5 +411,86 @@ fn live_bitrate_changes_keep_the_recording_tap_on_its_original_worker() {
     assert!(Arc::ptr_eq(&original, &viewer.encoder().unwrap()));
     assert!(Arc::ptr_eq(&original, &slow.encoder().unwrap()));
     assert_eq!(pool.active().len(), 1);
+    pool.close();
+}
+
+#[test]
+fn a_merge_destination_changing_budget_restarts_convergence_without_reopening_workers() {
+    let pool = Arc::new(Pool::default());
+    let first = acquire(&pool, "first", false);
+    let second = acquire(&pool, "second", false);
+    let original = second.encoder().unwrap();
+    let now = Instant::now();
+    let set = |consumer: &Consumer, target, ms| {
+        pool.state
+            .lock()
+            .unwrap()
+            .slots
+            .get_mut(&consumer.token)
+            .unwrap()
+            .target = target;
+        pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(ms))
+            .unwrap();
+    };
+    set(&first, 160_000, 0);
+    let lower = first.encoder().unwrap();
+    set(&second, 160_000, 10);
+    set(&first, 100_000, 1_500);
+    set(&first, 160_000, 1_600);
+    set(&first, 160_000, 2_500);
+    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&lower, &first.encoder().unwrap()));
+    assert_eq!(pool.active().len(), 2);
+    set(&first, 160_000, 3_601);
+    assert_eq!(pool.active().len(), 1);
+    assert!(Arc::ptr_eq(&original, &first.encoder().unwrap()));
+    pool.close();
+}
+
+#[test]
+fn a_shared_group_converges_without_splitting_its_members_during_the_grace_period() {
+    let pool = Arc::new(Pool::default());
+    let first = acquire(&pool, "first", false);
+    let second = acquire(&pool, "second", false);
+    let third = acquire(&pool, "third", false);
+    let original = second.encoder().unwrap();
+    let now = Instant::now();
+    pool.state
+        .lock()
+        .unwrap()
+        .slots
+        .get_mut(&first.token)
+        .unwrap()
+        .target = 160_000;
+    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
+    let lower = first.encoder().unwrap();
+    for consumer in [&second, &third] {
+        pool.state
+            .lock()
+            .unwrap()
+            .slots
+            .get_mut(&consumer.token)
+            .unwrap()
+            .target = 160_000;
+    }
+    pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(10))
+        .unwrap();
+    assert_eq!(pool.active().len(), 2);
+    for consumer in [&second, &third] {
+        assert!(Arc::ptr_eq(&original, &consumer.encoder().unwrap()));
+        assert_eq!(
+            pool.state.lock().unwrap().slots[&consumer.token]
+                .key
+                .bitrate,
+            150_000
+        );
+    }
+    pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(2_011))
+        .unwrap();
+    assert_eq!(pool.active().len(), 1);
+    for consumer in [&first, &second, &third] {
+        assert!(Arc::ptr_eq(&lower, &consumer.encoder().unwrap()));
+    }
+    assert_eq!(pool.state.lock().unwrap().groups.len(), 1);
     pool.close();
 }

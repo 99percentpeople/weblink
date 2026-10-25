@@ -14,6 +14,10 @@ mod tests;
 // BWE feedback from different transports does not arrive atomically. Delay only
 // upward migrations; the current lower bitrate is safe while peers catch up.
 const UPGRADE_GRACE: Duration = Duration::from_millis(500);
+// Reusing an existing worker changes the bitstream and waits for a keyframe.
+// Keep independent workers through brief budget convergence, adjusting their
+// rates in place immediately. Merge only after the destination stays stable.
+const MERGE_GRACE: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
@@ -28,6 +32,7 @@ struct Slot {
     recording: bool,
     target: u64,
     upgrade: Option<(u32, Instant)>,
+    merge: Option<(u32, u64, Instant)>,
     key: Key,
     encoder: Arc<hardware::Encoder>,
     output: Option<Arc<Output>>,
@@ -45,6 +50,44 @@ struct Retired {
     last: bool,
 }
 impl State {
+    fn refresh_groups(&mut self) {
+        // Multiple workers may temporarily have the same key while a merge is
+        // pending. Keep the current destination while it still owns that key.
+        let slots = &self.slots;
+        self.groups.retain(|key, group| {
+            group.upgrade().is_some_and(|group| {
+                group.error().is_none()
+                    && slots
+                        .values()
+                        .any(|s| s.key == *key && Arc::ptr_eq(&s.encoder, &group))
+            })
+        });
+        let mut slots: Vec<_> = slots.values().collect();
+        slots.sort_by_key(|slot| slot.encoder.group_id);
+        for slot in slots {
+            if slot.encoder.error().is_some() {
+                continue;
+            }
+            if slot.recording {
+                // A recording tap cannot move to another worker.
+                self.groups
+                    .insert(slot.key.clone(), Arc::downgrade(&slot.encoder));
+            } else {
+                self.groups
+                    .entry(slot.key.clone())
+                    .or_insert_with(|| Arc::downgrade(&slot.encoder));
+            }
+        }
+    }
+    fn reconfigure(&mut self, encoder: &Arc<hardware::Encoder>, key: &Key) {
+        encoder.set_bitrate(key.bitrate);
+        for member in self.slots.values_mut() {
+            if Arc::ptr_eq(&member.encoder, encoder) {
+                member.key = key.clone();
+            }
+        }
+        self.refresh_groups();
+    }
     fn remove(&mut self, token: u64) -> Option<Retired> {
         let slot = self.slots.remove(&token)?;
         let last = !self
@@ -52,11 +95,7 @@ impl State {
             .values()
             .any(|other| Arc::ptr_eq(&slot.encoder, &other.encoder));
         if last {
-            self.groups.retain(|_, group| {
-                group
-                    .upgrade()
-                    .is_some_and(|group| !Arc::ptr_eq(&group, &slot.encoder))
-            });
+            self.refresh_groups();
         }
         Some(Retired { token, slot, last })
     }
@@ -165,6 +204,7 @@ impl Pool {
                 recording,
                 target,
                 upgrade: None,
+                merge: None,
                 key,
                 encoder,
                 output: output.clone(),
@@ -342,16 +382,11 @@ impl Pool {
                 .filter(|e| e.error().is_none());
             if recording {
                 state.slots.get_mut(&token).unwrap().upgrade = None;
+                state.slots.get_mut(&token).unwrap().merge = None;
                 // A recording's tap is bound to this worker. Reconfigure it in
                 // place; viewers sharing it can move after their budgets change.
                 if !unchanged {
-                    old.set_bitrate(key.bitrate);
-                    state.groups.remove(&old_key);
-                    for member in state.slots.values_mut() {
-                        if Arc::ptr_eq(&member.encoder, &old) {
-                            member.key = key.clone();
-                        }
-                    }
+                    state.reconfigure(&old, &key);
                 }
                 state.groups.insert(key, Arc::downgrade(&old));
                 continue;
@@ -362,6 +397,7 @@ impl Pool {
                     .is_none_or(|encoder| Arc::ptr_eq(encoder, &old))
             {
                 state.slots.get_mut(&token).unwrap().upgrade = None;
+                state.slots.get_mut(&token).unwrap().merge = None;
                 continue;
             }
             let moves_together = state
@@ -372,12 +408,39 @@ impl Pool {
                     s.key.profile == key.profile
                         && bitrate_bucket(s.target, s.options.max_bitrate) == key.bitrate
                 });
-            let migrates = !moves_together
-                || existing
-                    .as_ref()
-                    .is_some_and(|encoder| !Arc::ptr_eq(encoder, &old));
+            let merge_destination = existing.as_ref().filter(|encoder| {
+                !Arc::ptr_eq(encoder, &old)
+                    && !state
+                        .slots
+                        .values()
+                        .any(|s| s.recording && Arc::ptr_eq(&s.encoder, encoder))
+            });
+            if let Some(destination) = merge_destination
+                .filter(|_| moves_together && old_key.bitrate > 0 && key.bitrate > 0)
+            {
+                let slot = state.slots.get_mut(&token).unwrap();
+                slot.upgrade = None;
+                let since = match slot.merge {
+                    Some((rate, group, since))
+                        if rate == key.bitrate && group == destination.group_id =>
+                    {
+                        since
+                    }
+                    _ => {
+                        slot.merge = Some((key.bitrate, destination.group_id, now));
+                        now
+                    }
+                };
+                if now.saturating_duration_since(since) < MERGE_GRACE {
+                    if !unchanged {
+                        state.reconfigure(&old, &key);
+                    }
+                    continue;
+                }
+            }
             let slot = state.slots.get_mut(&token).unwrap();
-            if migrates && old_key.bitrate > 0 && key.bitrate > old_key.bitrate {
+            slot.merge = None;
+            if !moves_together && old_key.bitrate > 0 && key.bitrate > old_key.bitrate {
                 let since = match slot.upgrade {
                     Some((target, since)) if target == key.bitrate => since,
                     _ => {
@@ -395,14 +458,7 @@ impl Pool {
             } else if moves_together {
                 // Keep the bitstream and all output generations intact when
                 // the entire group changes rate, including a sole viewer.
-                old.set_bitrate(key.bitrate);
-                state.groups.remove(&old_key);
-                state.groups.insert(key.clone(), Arc::downgrade(&old));
-                for member in state.slots.values_mut() {
-                    if Arc::ptr_eq(&member.encoder, &old) {
-                        member.key = key.clone();
-                    }
-                }
+                state.reconfigure(&old, &key);
                 old.clone()
             } else {
                 self.get_or_create(&mut state, &key, &backend, &options, wake.clone())?
@@ -423,11 +479,9 @@ impl Pool {
                 .values()
                 .any(|slot| Arc::ptr_eq(&slot.encoder, encoder))
         });
-        state.groups.retain(|_, group| {
-            group
-                .upgrade()
-                .is_some_and(|group| !retired.iter().any(|old| Arc::ptr_eq(old, &group)))
-        });
+        if !retired.is_empty() {
+            state.refresh_groups();
+        }
         drop(state);
         for encoder in retired {
             encoder.close();
@@ -442,14 +496,12 @@ impl Pool {
                 slot.target = slot.options.max_bitrate;
             }
             slot.key.profile = EncodingProfile::new(&slot.backend, &slot.options, slot.preview);
+            slot.upgrade = None;
+            slot.merge = None;
             // Pending options are coalesced by the shared worker.
             slot.encoder.update_options(slot.options.clone());
         }
-        state.groups = state
-            .slots
-            .values()
-            .map(|s| (s.key.clone(), Arc::downgrade(&s.encoder)))
-            .collect();
+        state.refresh_groups();
         Ok(())
     }
     pub fn close(&self) {
