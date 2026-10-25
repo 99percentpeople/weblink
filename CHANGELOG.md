@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.1] - Unreleased
+## [1.3.1] - 2026-10-25
 
 Weblink 1.3.1 adds native encoder presets and MCP video-preference tools, reduces duplicate screen-encoding work, and expands diagnostics for investigating dropped frames and freezes.
 
