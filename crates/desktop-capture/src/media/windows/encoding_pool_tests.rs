@@ -136,19 +136,20 @@ fn viewers_changing_bandwidth_together_keep_their_shared_encoder() {
 }
 
 #[test]
-fn staggered_recovery_keeps_the_shared_encoder_until_all_feedback_arrives() {
+fn staggered_recovery_applies_each_budget_and_rejoins_the_existing_encoder() {
     let pool = Arc::new(Pool::default());
     let first = acquire(&pool, "first", false);
     let second = acquire(&pool, "second", false);
-    let original = first.encoder().unwrap();
-    let now = std::time::Instant::now();
+    let first_output = first.output.as_ref().unwrap().clone();
+    let second_output = second.output.as_ref().unwrap().clone();
     {
         let mut state = pool.state.lock().unwrap();
         for slot in state.slots.values_mut() {
             slot.target = 160_000;
         }
     }
-    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
+    pool.reconcile(Arc::new(|| {})).unwrap();
+    let original = second.encoder().unwrap();
     pool.state
         .lock()
         .unwrap()
@@ -156,12 +157,26 @@ fn staggered_recovery_keeps_the_shared_encoder_until_all_feedback_arrives() {
         .get_mut(&first.token)
         .unwrap()
         .target = 300_000;
-    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
+    pool.reconcile(Arc::new(|| {})).unwrap();
     assert_eq!(
         pool.active().len(),
-        1,
-        "Do not split on staggered upward feedback"
+        2,
+        "The faster viewer must recover without waiting for the slower viewer"
     );
+    let recovered = first.encoder().unwrap();
+    assert!(!Arc::ptr_eq(&original, &recovered));
+    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+    {
+        let state = pool.state.lock().unwrap();
+        assert_eq!(
+            state.slots[&first.token].key.bitrate,
+            bitrate_bucket(300_000, 300_000)
+        );
+        assert_eq!(
+            state.slots[&second.token].key.bitrate,
+            bitrate_bucket(160_000, 300_000)
+        );
+    }
     pool.state
         .lock()
         .unwrap()
@@ -169,101 +184,16 @@ fn staggered_recovery_keeps_the_shared_encoder_until_all_feedback_arrives() {
         .get_mut(&second.token)
         .unwrap()
         .target = 300_000;
-    pool.reconcile_at(Arc::new(|| {}), now + std::time::Duration::from_millis(50))
-        .unwrap();
+    pool.reconcile(Arc::new(|| {})).unwrap();
     assert_eq!(pool.active().len(), 1);
-    assert!(Arc::ptr_eq(&original, &first.encoder().unwrap()));
-    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&recovered, &first.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&recovered, &second.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&first_output, first.output.as_ref().unwrap()));
+    assert!(Arc::ptr_eq(&second_output, second.output.as_ref().unwrap()));
     assert_eq!(
         pool.state.lock().unwrap().slots[&first.token].key.bitrate,
         bitrate_bucket(300_000, 300_000)
     );
-    pool.close();
-}
-
-#[test]
-fn sustained_recovery_splits_after_grace_but_reductions_and_resume_are_immediate() {
-    let pool = Arc::new(Pool::default());
-    let first = acquire(&pool, "first", false);
-    let second = acquire(&pool, "second", false);
-    let now = std::time::Instant::now();
-    let set = |consumer: &Consumer, target| {
-        pool.state
-            .lock()
-            .unwrap()
-            .slots
-            .get_mut(&consumer.token)
-            .unwrap()
-            .target = target;
-    };
-    set(&first, 160_000);
-    set(&second, 160_000);
-    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
-    let original = second.encoder().unwrap();
-    set(&first, 300_000);
-    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
-    assert_eq!(pool.active().len(), 1);
-    pool.reconcile_at(Arc::new(|| {}), now + std::time::Duration::from_secs(1))
-        .unwrap();
-    assert_eq!(
-        pool.active().len(),
-        2,
-        "A persistently faster viewer must regain its bitrate"
-    );
-    assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
-    set(&first, 0);
-    pool.reconcile_at(
-        Arc::new(|| {}),
-        now + std::time::Duration::from_millis(1001),
-    )
-    .unwrap();
-    assert_eq!(
-        pool.state.lock().unwrap().slots[&first.token].key.bitrate,
-        0
-    );
-    set(&first, 160_000);
-    pool.reconcile_at(
-        Arc::new(|| {}),
-        now + std::time::Duration::from_millis(1002),
-    )
-    .unwrap();
-    assert_eq!(
-        pool.active().len(),
-        1,
-        "Resuming from zero must not wait for migration grace"
-    );
-    assert!(Arc::ptr_eq(&original, &first.encoder().unwrap()));
-    pool.close();
-}
-
-#[test]
-fn a_budget_dip_cancels_pending_upward_migration() {
-    let pool = Arc::new(Pool::default());
-    let first = acquire(&pool, "first", false);
-    let second = acquire(&pool, "second", false);
-    let now = Instant::now();
-    for slot in pool.state.lock().unwrap().slots.values_mut() {
-        slot.target = 160_000;
-    }
-    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
-    let original = first.encoder().unwrap();
-    for (ms, target) in [(0, 300_000), (450, 160_000), (500, 300_000), (600, 300_000)] {
-        pool.state
-            .lock()
-            .unwrap()
-            .slots
-            .get_mut(&first.token)
-            .unwrap()
-            .target = target;
-        pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(ms))
-            .unwrap();
-        assert_eq!(pool.active().len(), 1);
-        assert!(Arc::ptr_eq(&original, &first.encoder().unwrap()));
-        assert!(Arc::ptr_eq(&original, &second.encoder().unwrap()));
-    }
-    pool.reconcile_at(Arc::new(|| {}), now + Duration::from_millis(1000))
-        .unwrap();
-    assert_eq!(pool.active().len(), 2);
     pool.close();
 }
 

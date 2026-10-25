@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - Unreleased
+
+Weblink 1.3.1 adds native encoder presets and MCP video-preference tools, reduces duplicate screen-encoding work, and expands diagnostics for investigating dropped frames and freezes.
+
+### Native screen encoding
+
+- **Three encoding presets:** choose Balanced, Quality first or Latency first for supported Media Foundation and NVENC hardware encoders, and native software VP8, VP9, H.264 and AV1. Remember the choice separately for each encoder, including automatic selection. Preset changes apply to the next share; unsupported backend choices retain the balanced fallback. Browser encoders remain controlled by WebRTC.
+- **Reuse frame conversions:** share compatible BGRA-to-NV12 conversions across hardware encoders, avoid copying encoded output without consumers, and bound the NVENC texture-registration cache when inputs come from multiple conversion pools.
+- **Shared bitrate updates:** collect pending viewer bandwidth feedback before regrouping. A sole viewer or a whole group moving to the same bitrate bucket updates its encoder in place, preserving output continuity. Independent viewers split or rejoin on the next reconciliation without an extra upward-migration delay.
+- **Capture-based timestamps:** preserve capture timing through encoder queueing and retries, with monotonic timestamps across group changes and static-frame refreshes.
+
+### MCP settings and stream diagnostics
+
+- **Saved video preferences:** add `screen.settings.get` and `screen.settings.update` to inspect supported encoders, codecs, presets and capture backends, and update selected video settings through the same preference store as Settings. Validate the complete patch before saving. Responses distinguish requested live updates from changes that apply to the next share; `screen.configure` remains available for temporary changes to one active track.
+- **Diagnostics without OS automation:** make stream diagnostics available on desktop and browser peers independently of their automation and WebMCP switches. Remote access still requires device trust and the Reading and diagnostics permission. The local HTTP MCP listener still requires Enable MCP and a valid token.
+- **More useful timing data:** report source-frame cadence, source age and copy time separately from encoder work. Add receiver processing time, jitter-buffer targets, decoder power-efficiency information when available, and page visibility to help distinguish capture, encoding, decoding and background presentation behavior. Unavailable measurements remain unavailable rather than being reported as zero.
+
+### Permissions, localization and maintenance
+
+- **Remember approval decisions:** add Always allow and Always deny to in-app automation approval notifications, saving the requesting device's policy for that permission group while resolving the current request. Session-only approval remains available.
+- **Browser permission settings:** hide incoming remote-input controls when the local runtime cannot provide them, while retaining diagnostic permissions.
+- **Localization:** add preset labels, concise preset descriptions and remembered-approval actions in all eight supported languages.
+- **Windows installer icons:** use the application icon for both the NSIS installer and uninstaller.
+- **Test tooling:** update the web and desktop Vitest dependencies to the patched 4.1.12 release.
+
 ## [1.3.0] - 2026-10-24
 
 Weblink 1.3 adds verified device pairing and MCP/WebMCP automation for local and remote desktops, with clearer permissions, consistent control indicators, and more reliable screen streaming.

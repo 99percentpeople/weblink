@@ -5,15 +5,10 @@ use crate::Result;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, Weak},
-    time::{Duration, Instant},
 };
 #[cfg(test)]
 #[path = "encoding_pool_tests.rs"]
 mod tests;
-
-// BWE feedback from different transports does not arrive atomically. Delay only
-// upward migrations; the current lower bitrate is safe while peers catch up.
-const UPGRADE_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
@@ -27,7 +22,6 @@ struct Slot {
     preview: bool,
     recording: bool,
     target: u64,
-    upgrade: Option<(u32, Instant)>,
     key: Key,
     encoder: Arc<hardware::Encoder>,
     output: Option<Arc<Output>>,
@@ -164,7 +158,6 @@ impl Pool {
                 preview,
                 recording,
                 target,
-                upgrade: None,
                 key,
                 encoder,
                 output: output.clone(),
@@ -300,9 +293,6 @@ impl Pool {
         result
     }
     pub fn reconcile(&self, wake: crate::surface::gpu::Wake) -> Result<()> {
-        self.reconcile_at(wake, Instant::now())
-    }
-    fn reconcile_at(&self, wake: crate::surface::gpu::Wake, now: Instant) -> Result<()> {
         let mut retired = Vec::new();
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut tokens: Vec<_> = state.slots.keys().copied().collect();
@@ -341,7 +331,6 @@ impl Pool {
                 .and_then(Weak::upgrade)
                 .filter(|e| e.error().is_none());
             if recording {
-                state.slots.get_mut(&token).unwrap().upgrade = None;
                 // A recording's tap is bound to this worker. Reconfigure it in
                 // place; viewers sharing it can move after their budgets change.
                 if !unchanged {
@@ -361,7 +350,6 @@ impl Pool {
                     .as_ref()
                     .is_none_or(|encoder| Arc::ptr_eq(encoder, &old))
             {
-                state.slots.get_mut(&token).unwrap().upgrade = None;
                 continue;
             }
             let moves_together = state
@@ -372,24 +360,6 @@ impl Pool {
                     s.key.profile == key.profile
                         && bitrate_bucket(s.target, s.options.max_bitrate) == key.bitrate
                 });
-            let migrates = !moves_together
-                || existing
-                    .as_ref()
-                    .is_some_and(|encoder| !Arc::ptr_eq(encoder, &old));
-            let slot = state.slots.get_mut(&token).unwrap();
-            if migrates && old_key.bitrate > 0 && key.bitrate > old_key.bitrate {
-                let since = match slot.upgrade {
-                    Some((target, since)) if target == key.bitrate => since,
-                    _ => {
-                        slot.upgrade = Some((key.bitrate, now));
-                        now
-                    }
-                };
-                if now.saturating_duration_since(since) < UPGRADE_GRACE {
-                    continue;
-                }
-            }
-            slot.upgrade = None;
             let encoder = if let Some(existing) = existing {
                 existing
             } else if moves_together {
